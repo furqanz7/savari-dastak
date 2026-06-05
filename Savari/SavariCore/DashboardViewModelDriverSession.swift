@@ -20,7 +20,6 @@ extension DashboardViewModelRealtime {
                 self?.handleRideRequestPayload(payload, driverId: driverId)
             }
 
-            await fetchRequestedRideBacklog(driverId: driverId)
             await MainActor.run { self.isRealtimeActive = true }
             await publishCurrentDriverLocation(driverId: driverId)
 
@@ -107,29 +106,6 @@ extension DashboardViewModelRealtime {
     private func removeIncomingRideIfNeeded(rideId: String) {
         if let index = incomingRideRequests.firstIndex(where: { ($0["id"] as? String) == rideId }) {
             incomingRideRequests.remove(at: index)
-        }
-    }
-
-    private func fetchRequestedRideBacklog(driverId: String) async {
-        do {
-            let response = try await SupabaseManager.shared.client
-                .from("rides")
-                .select()
-                .eq("status", value: "requested")
-                .execute()
-
-            if let rows = jsonArray(from: response.data) {
-                await MainActor.run {
-                    for row in rows {
-                        if uuidStringsMatch(row["passenger_id"] as? String, driverId) {
-                            continue
-                        }
-                        addIncomingRideIfNeeded(row)
-                    }
-                }
-            }
-        } catch {
-            SavariLog.debug("[VM] initial fetch requested rides failed:", error)
         }
     }
 

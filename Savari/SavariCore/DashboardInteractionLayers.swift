@@ -47,7 +47,6 @@ struct DashboardBottomControlsLayer: View {
                 } else {
                     DriverControls(
                         isOnline: vm.isOnline,
-                        activeDriverCount: vm.drivers.count,
                         onGoOnline: onGoOnline
                     )
                 }

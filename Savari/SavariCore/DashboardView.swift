@@ -91,26 +91,35 @@ struct DashboardView: View {
         )
     }
     
+    @ViewBuilder
     private var topBar: some View {
-        DashboardTopBar(
-            role: role,
-            vm: vm,
-            inlineCompleter: inlineCompleter,
-            destinationText: $destinationText,
-            showingInlineSearch: $showingInlineSearch,
-            inlineQuery: $inlineQuery,
-            inlineChosenMapItem: $inlineChosenMapItem,
-            showMapPickerSheet: $showMapPickerSheet,
-            inlineFieldIsFocused: $inlineFieldIsFocused,
-            isSigningOut: isSigningOut,
-            onSignOut: { Task { await signOut() } },
-            onInlineQueryChanged: scheduleInlineSearch,
-            onClearInlineQuery: clearInlineQuery,
-            onMapPickerDismiss: handleMapPickerDismiss,
-            onMapItemPicked: handleMapItemPicked,
-            onCancelPassengerFlow: cancelPassengerFlow,
-            onCompletionSelected: { item in Task { await handleInlineSelection(item: item) } }
-        )
+        if isDriver {
+            DriverDashboardTopBar(
+                vm: vm,
+                isSigningOut: isSigningOut,
+                onSignOut: { Task { await signOut() } }
+            )
+        } else {
+            DashboardTopBar(
+                role: role,
+                vm: vm,
+                inlineCompleter: inlineCompleter,
+                destinationText: $destinationText,
+                showingInlineSearch: $showingInlineSearch,
+                inlineQuery: $inlineQuery,
+                inlineChosenMapItem: $inlineChosenMapItem,
+                showMapPickerSheet: $showMapPickerSheet,
+                inlineFieldIsFocused: $inlineFieldIsFocused,
+                isSigningOut: isSigningOut,
+                onSignOut: { Task { await signOut() } },
+                onInlineQueryChanged: scheduleInlineSearch,
+                onClearInlineQuery: clearInlineQuery,
+                onMapPickerDismiss: handleMapPickerDismiss,
+                onMapItemPicked: handleMapItemPicked,
+                onCancelPassengerFlow: cancelPassengerFlow,
+                onCompletionSelected: { item in Task { await handleInlineSelection(item: item) } }
+            )
+        }
     }
 
     private var isPassenger: Bool {

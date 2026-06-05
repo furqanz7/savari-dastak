@@ -10,7 +10,14 @@ struct DashboardDriverOverlayLayer: View {
 
     @ViewBuilder
     private var incomingRequests: some View {
-        if !vm.rideAccepted, !vm.incomingRideRequests.isEmpty {
+        if vm.isOnline, !vm.rideAccepted, vm.incomingRideRequests.isEmpty {
+            VStack {
+                Spacer()
+                DriverWaitingPanel(isRealtimeActive: vm.isRealtimeActive)
+                    .padding(.horizontal)
+                    .padding(.bottom, 96)
+            }
+        } else if !vm.rideAccepted, !vm.incomingRideRequests.isEmpty {
             VStack {
                 Spacer()
                 DriverIncomingRequestsPanel(

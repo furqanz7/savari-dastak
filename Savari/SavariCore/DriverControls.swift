@@ -2,28 +2,37 @@ import SwiftUI
 
 struct DriverControls: View {
     let isOnline: Bool
-    let activeDriverCount: Int
     let onGoOnline: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: onGoOnline) {
-                HStack {
-                    Image(systemName: "checkmark.circle")
-                    Text(isOnline ? "Online" : "Go Online")
+            if isOnline {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("Online")
+                        .font(.system(size: 15, weight: .semibold))
+                    Spacer()
+                    Text("Waiting")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-            }
-            .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
-            .frame(maxWidth: 220)
-            .disabled(isOnline)
-
-            Spacer().frame(width: 8)
-
-            VStack(alignment: .trailing) {
-                Text("Active drivers: \(activeDriverCount)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Material.ultraThin)
+                .cornerRadius(16)
+            } else {
+                Button(action: onGoOnline) {
+                    HStack {
+                        Image(systemName: "power.circle.fill")
+                        Text("Go Online")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
             }
         }
+        .frame(maxWidth: 360)
     }
 }
