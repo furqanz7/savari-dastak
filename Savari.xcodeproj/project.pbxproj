@@ -106,6 +106,7 @@
 				SavariCore/RideFormatting.swift,
 				SavariCore/RideRowFormatter.swift,
 				SavariCore/RideService.swift,
+				SavariCore/RideServiceDriverLifecycle.swift,
 				SavariCore/DashboardSessionLifecycle.swift,
 				sawari1.mp4,
 				sawari2.mp4,
