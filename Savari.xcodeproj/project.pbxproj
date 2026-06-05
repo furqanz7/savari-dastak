@@ -44,8 +44,9 @@
 		D1DCAA9C2E9A90CD009CC0EB /* Exceptions for "Savari" folder in "Savari" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Assets.xcassets,
-				LoginDriverSetupStep.swift,
+					Assets.xcassets,
+					LoginDriverSetupAssets.swift,
+					LoginDriverSetupStep.swift,
 				LoginMediaPickers.swift,
 				LoginRoleSelectionStep.swift,
 				LoginSignInStep.swift,
