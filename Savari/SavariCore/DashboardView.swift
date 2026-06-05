@@ -48,54 +48,35 @@ struct DashboardView: View {
     }
     
     var body: some View {
-        ZStack {
-            DashboardMapLayer(
-                role: role,
-                vm: vm,
-                mapPosition: $mapPosition,
-                didCenterToUser: $didCenterToUser,
-                isTrackingUser: $isTrackingUser,
-                pickupCoordinate: pickupCoordinate,
-                destCoordinate: destCoordinate
-            )
-            DashboardPassengerRideOverlayLayer(
-                vm: vm,
-                onUsePreview: {
-                    withAnimation(.spring()) {
-                        vm.passengerFlow = .confirming
-                    }
-                },
-                onConfirm: {
-                    Task { await performPassengerRequestFlow() }
-                    vm.passengerFlow = .matching
-                },
-                onCancel: {
-                    Task {
-                        await vm.cancelRideRequest()
-                        await MainActor.run {
-                            vm.passengerFlow = .idle
-                        }
+        DashboardContentLayer(
+            role: role,
+            vm: vm,
+            mapPosition: $mapPosition,
+            didCenterToUser: $didCenterToUser,
+            isTrackingUser: $isTrackingUser,
+            pickupCoordinate: pickupCoordinate,
+            destCoordinate: destCoordinate,
+            showingInlineSearch: showingInlineSearch,
+            onUsePreview: {
+                withAnimation(.spring()) {
+                    vm.passengerFlow = .confirming
+                }
+            },
+            onConfirmPassengerRide: {
+                Task { await performPassengerRequestFlow() }
+                vm.passengerFlow = .matching
+            },
+            onCancelPassengerRideRequest: {
+                Task {
+                    await vm.cancelRideRequest()
+                    await MainActor.run {
+                        vm.passengerFlow = .idle
                     }
                 }
-            )
-            
-            DashboardInlineSearchDismissLayer(
-                isPresented: vm.passengerFlow == .searching && showingInlineSearch,
-                onDismiss: cancelInlineSearch
-            )
-            
-            DashboardManualDragLayer(isTrackingUser: $isTrackingUser)
-            
-            DashboardBottomControlsLayer(
-                isPassenger: isPassenger,
-                vm: vm,
-                onGoOnline: handleGoOnlineTapped
-            )
-            
-            if isDriver {
-                DashboardDriverOverlayLayer(vm: vm)
-            }
-        }
+            },
+            onDismissInlineSearch: cancelInlineSearch,
+            onGoOnline: handleGoOnlineTapped
+        )
         .safeAreaInset(edge: .top) {
             topBar
                 .allowsHitTesting(vm.passengerFlow != .matching)
@@ -103,28 +84,11 @@ struct DashboardView: View {
                 .padding(.horizontal)
                 .padding(.top, 6)
         }
-        .onAppear {
-            GPSLocationPusher.shared.start()
-            Task {
-                // start view model realtime subscriptions
-                await vm.start()
-            }
-            
-            if let lastCoordinate = SavariSessionStore.lastCoordinate {
-                mapPosition = .region(MKCoordinateRegion(center: lastCoordinate, span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
-            } else {
-                mapPosition = .automatic
-            }
-            Task {
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
-                if !didCenterToUser {
-                    if let first = vm.drivers.first {
-                        mapPosition = .region(MKCoordinateRegion(center: first.coordinate, span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)))
-                    }
-                }
-            }
-        }
-        .onDisappear { vm.stopAll() }
+        .dashboardSessionLifecycle(
+            vm: vm,
+            mapPosition: $mapPosition,
+            didCenterToUser: $didCenterToUser
+        )
     }
     
     private var topBar: some View {
