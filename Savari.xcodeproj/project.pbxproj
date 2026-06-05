@@ -45,6 +45,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Assets.xcassets,
+				LoginFlowSteps.swift,
 				LoginFlowView.swift,
 				RoutingService.swift,
 				SavariLog.swift,
