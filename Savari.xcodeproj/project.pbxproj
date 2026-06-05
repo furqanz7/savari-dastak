@@ -396,6 +396,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "$(inherited) -framework AppIntents";
 				PRODUCT_BUNDLE_IDENTIFIER = furqan.Savari;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -439,6 +440,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = "$(inherited) -framework AppIntents";
 				PRODUCT_BUNDLE_IDENTIFIER = furqan.Savari;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
