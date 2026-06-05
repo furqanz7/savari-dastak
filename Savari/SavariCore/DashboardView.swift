@@ -176,8 +176,8 @@ struct DashboardView: View {
             // passenger / driver controls
             VStack { Spacer()
                 HStack(spacing: 12) {
-                    if role.lowercased().contains("passenger") {
-                        passengerControls
+                    if isPassenger {
+                        DashboardPassengerControls(vm: vm)
                     } else {
                         DriverControls(
                             isOnline: vm.isOnline,
@@ -189,59 +189,8 @@ struct DashboardView: View {
                 .padding()
             }
             
-            if role.lowercased().contains("driver"),
-               !vm.rideAccepted,
-               !vm.incomingRideRequests.isEmpty {
-                VStack {
-                    Spacer()
-                    DriverIncomingRequestsPanel(
-                        requests: vm.incomingRideRequests,
-                        onAccept: vm.acceptIncomingRide
-                    )
-                        .padding(.horizontal)
-                        .padding(.bottom, 96)
-                }
-            }
-            
-            if role.lowercased().contains("driver"), vm.rideAccepted, let active = vm.activeRideRow {
-                VStack {
-                    Spacer()
-                    DriverActiveRidePanel(
-                        active: active,
-                        boardingCodeVerified: vm.boardingCodeVerified,
-                        onArrive: { rideId in
-                            guard let driverId = SavariSessionStore.authToken else { return }
-                            Task {
-                                let ok = await vm.driverArrived(rideId: rideId, driverId: driverId)
-                                if !ok {
-                                    SavariLog.debug("arrive failed")
-                                }
-                            }
-                        },
-                        onEnterCode: {
-                            vm.driverBoardingCodeEntry = ""
-                            vm.driverFlow = .awaitingOTP
-                        },
-                        onStartRide: { rideId in
-                            Task {
-                                let ok = await vm.startRideNow(rideId: rideId)
-                                if !ok {
-                                    SavariLog.debug("start failed")
-                                }
-                            }
-                        },
-                        onEndRide: { rideId in
-                            Task {
-                                let ok = await vm.endRideNow(rideId: rideId)
-                                if !ok {
-                                    SavariLog.debug("end failed")
-                                }
-                            }
-                        }
-                    )
-                    .padding(.bottom, 80)
-                    .padding(.horizontal)
-                }
+            if isDriver {
+                DashboardDriverOverlayLayer(vm: vm)
             }
         }
         .safeAreaInset(edge: .top) {
@@ -297,6 +246,14 @@ struct DashboardView: View {
         )
     }
 
+    private var isPassenger: Bool {
+        role.lowercased().contains("passenger")
+    }
+
+    private var isDriver: Bool {
+        role.lowercased().contains("driver")
+    }
+
     @MainActor
     private func signOut() async {
         guard !isSigningOut else { return }
@@ -322,52 +279,15 @@ struct DashboardView: View {
         isSigningOut = false
     }
     
-    // MARK: - Passenger controls
-    private var passengerControls: some View {
-        HStack(spacing: 12) {
-            
-             if vm.rideAccepted {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("Driver on the way", systemImage: "location")
-                    if vm.rideAccepted, let eta = vm.assignedDriverETASeconds {
-                        Text("Driver ETA \(eta/60)m")
-                    }
-                }
-                .padding(10)
-                .background(Material.ultraThin)
-                .cornerRadius(12)
-            }
-            
-            if let code = vm.activeRideRow?["boarding_code"] as? String, role.lowercased().contains("passenger") {
-                
-                VStack {
-                    BoardingCodeView(
-                        code: code,
-                        ttlSeconds: vm.activeRideRow?["boarding_code_ttl"] as? Int
-                    )
-                    
-                    Button("I've boarded") {
-                        // removed: vm.showRideSheet = false
-                    }
-                    .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
-                }
-                .padding(.top, 12)
-            } else {
-                // existing small order UI
-            }
-        }
-    }
-    
     private func handleGoOnlineTapped() {
-        if !vm.isOnline, let driverId = SavariSessionStore.authToken {
-            vm.goOnline(driverId: driverId)
-        }
         SavariLog.debug("[UI] Go Online button tapped; vm.rideAccepted = \(vm.rideAccepted)")
         if vm.rideAccepted {
             return
         }
         if let driverId = SavariSessionStore.authToken, !driverId.isEmpty {
-            vm.goOnline(driverId: driverId)
+            if !vm.isOnline {
+                vm.goOnline(driverId: driverId)
+            }
         } else {
             SavariLog.debug("[UI] No authToken found in UserDefaults; goOnline won't run")
         }
