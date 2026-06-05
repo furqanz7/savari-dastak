@@ -32,8 +32,7 @@ final class GPSLocationPusher: NSObject, ObservableObject, CLLocationManagerDele
         guard let loc = locations.last else { return }
         let coord = loc.coordinate
         DispatchQueue.main.async { self.current = coord
-            UserDefaults.standard.set(coord.latitude, forKey: "lastLat")
-            UserDefaults.standard.set(coord.longitude, forKey: "lastLon")
+            SavariSessionStore.setLastCoordinate(coord)
         }
 
         let now = Date()
@@ -44,9 +43,9 @@ final class GPSLocationPusher: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     private func publishCoordinateIfDriver(_ coord: CLLocationCoordinate2D) async {
-        guard let role = UserDefaults.standard.string(forKey: "lastRole"),
+        guard let role = SavariSessionStore.lastRole,
               role.lowercased().contains("driver") else { return }
-        guard let driverId = UserDefaults.standard.string(forKey: "authToken") else { return }
+        guard let driverId = SavariSessionStore.authToken else { return }
         await RideService.shared.upsertDriverLocation(driverId: driverId, lat: coord.latitude, lon: coord.longitude)
     }
 }

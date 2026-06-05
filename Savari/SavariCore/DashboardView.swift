@@ -9,9 +9,9 @@ import Combine
 struct DashboardView: View {
     let role: String
     @StateObject private var vm: DashboardViewModelRealtime
-    @AppStorage("authToken") private var authToken: String?
-    @AppStorage("lastRole") private var lastRole: String?
-    @AppStorage("isOnboardingComplete") private var isOnboardingComplete: Bool = false
+    @AppStorage(SavariDefaultsKey.authToken) private var authToken: String?
+    @AppStorage(SavariDefaultsKey.lastRole) private var lastRole: String?
+    @AppStorage(SavariDefaultsKey.isOnboardingComplete) private var isOnboardingComplete: Bool = false
     @State private var mapPosition: MapCameraPosition = .automatic
     @State private var didCenterToUser: Bool = false
     @State private var isSigningOut: Bool = false
@@ -369,7 +369,7 @@ struct DashboardView: View {
                             
                             Button(action: {
                                 // mark arrived
-                                if let id = active["id"] as? String, let driverId = UserDefaults.standard.string(forKey: "authToken") {
+                                if let id = active["id"] as? String, let driverId = SavariSessionStore.authToken {
                                     Task {
                                         let ok = await vm.driverArrived(rideId: id, driverId: driverId)
                                         if !ok { SavariLog.debug("arrive failed") }
@@ -435,10 +435,8 @@ struct DashboardView: View {
                 await vm.start()
             }
             
-            if let lastLat = UserDefaults.standard.value(forKey: "lastLat") as? Double,
-               let lastLon = UserDefaults.standard.value(forKey: "lastLon") as? Double,
-               lastLat != 0 {
-                mapPosition = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: lastLat, longitude: lastLon), span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
+            if let lastCoordinate = SavariSessionStore.lastCoordinate {
+                mapPosition = .region(MKCoordinateRegion(center: lastCoordinate, span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
             } else {
                 mapPosition = .automatic
             }
@@ -654,10 +652,9 @@ struct DashboardView: View {
         lastRole = nil
         isOnboardingComplete = false
 
+        SavariSessionStore.clearLastCoordinate()
         let defaults = UserDefaults.standard
         [
-            "lastLat",
-            "lastLon",
             "savariSmokeSelfAcceptStatus",
             "savariSmokeSelfAcceptRideId",
             "savariSmokeSelfAcceptAccepted",
@@ -707,14 +704,14 @@ struct DashboardView: View {
     private var driverControls: some View {
         HStack(spacing: 12) {
             Button(action: {
-                if !vm.isOnline, let driverId = UserDefaults.standard.string(forKey: "authToken") {
+                if !vm.isOnline, let driverId = SavariSessionStore.authToken {
                     vm.goOnline(driverId: driverId)
                 }
                 SavariLog.debug("[UI] Go Online button tapped; vm.rideAccepted = \(vm.rideAccepted)")
                 if vm.rideAccepted {
                     // already on a ride / on duty
                 } else {
-                    if let driverId = UserDefaults.standard.string(forKey: "authToken"), !driverId.isEmpty {
+                    if let driverId = SavariSessionStore.authToken, !driverId.isEmpty {
                         vm.goOnline(driverId: driverId)
                     } else {
                         SavariLog.debug("[UI] No authToken found in UserDefaults; goOnline won't run")
@@ -802,7 +799,7 @@ struct DashboardView: View {
         guard
             let pickup = pickupCoordinate,
             let dest = destCoordinate,
-            let passengerId = UserDefaults.standard.string(forKey: "authToken")
+            let passengerId = SavariSessionStore.authToken
         else { return }
 
         let finalTransport = vm.chosenTransportOption ?? "Auto"

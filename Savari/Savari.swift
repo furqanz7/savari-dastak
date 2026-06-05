@@ -11,7 +11,7 @@ import UIKit
 
 @main
 struct Savari: App {
-    @AppStorage("authToken") var authToken: String?
+    @AppStorage(SavariDefaultsKey.authToken) var authToken: String?
 
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
@@ -48,9 +48,9 @@ struct Savari: App {
 
 // RootView: if already logged in, go to dashboard; otherwise show RoleSelection -> LoginFlow
 struct RootView: View {
-    @AppStorage("authToken") var authToken: String?
-    @AppStorage("isOnboardingComplete") var isOnboardingComplete: Bool = false
-    @AppStorage("lastRole") var lastRole: String?
+    @AppStorage(SavariDefaultsKey.authToken) var authToken: String?
+    @AppStorage(SavariDefaultsKey.isOnboardingComplete) var isOnboardingComplete: Bool = false
+    @AppStorage(SavariDefaultsKey.lastRole) var lastRole: String?
     @State private var showSplash: Bool = true
 
     var body: some View {

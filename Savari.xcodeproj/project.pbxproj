@@ -50,6 +50,7 @@
 				SavariLog.swift,
 				Savari.swift,
 				SavariSmokeTestRunner.swift,
+				SavariSessionStore.swift,
 				SavariButton.swift,
 				SavariCore/DashboardRideFlowComponents.swift,
 				SavariCore/DashboardView.swift,

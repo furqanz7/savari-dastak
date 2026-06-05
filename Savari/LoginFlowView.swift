@@ -14,10 +14,10 @@ import Supabase
 
 struct LoginFlowView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("lastRole") private var lastRole: String?
-    @AppStorage("authToken") private var authToken: String?
+    @AppStorage(SavariDefaultsKey.lastRole) private var lastRole: String?
+    @AppStorage(SavariDefaultsKey.authToken) private var authToken: String?
     @State private var pendingAuthToken: String? = nil
-    @AppStorage("isOnboardingComplete") private var isOnboardingComplete: Bool = false
+    @AppStorage(SavariDefaultsKey.isOnboardingComplete) private var isOnboardingComplete: Bool = false
 
 
     // MARK: - Step Flow
@@ -45,8 +45,8 @@ struct LoginFlowView: View {
     @State private var selfieImage: UIImage? = nil
 
     init(role: String? = nil) {
-        if let _ = UserDefaults.standard.string(forKey: "authToken"),
-           UserDefaults.standard.bool(forKey: "isOnboardingComplete") {
+        if SavariSessionStore.authToken != nil,
+           SavariSessionStore.isOnboardingComplete {
             _step = State(initialValue: .completed)
         } else {
             _step = State(initialValue: .roleSelection)
@@ -124,7 +124,7 @@ struct LoginFlowView: View {
                                                 step = .driverSetup
                                             } else {
                                                 if let pending = pendingAuthToken { authToken = pending }
-                                                UserDefaults.standard.set(true, forKey: "isOnboardingComplete")
+                                                SavariSessionStore.setOnboardingComplete(true)
                                                 step = .completed
                                             }
                                         }
@@ -172,7 +172,7 @@ struct LoginFlowView: View {
                                     },
                                     onComplete: {
                                         if let pending = pendingAuthToken { authToken = pending }
-                                        UserDefaults.standard.set(true, forKey: "isOnboardingComplete")
+                                        SavariSessionStore.setOnboardingComplete(true)
                                         step = .completed
                                     }
                                 )
@@ -400,11 +400,7 @@ struct UserInfoStep: View {
                             vehicleNumber: nil
                         )
                         await MainActor.run {
-                            if role == "Driver" {
-                                UserDefaults.standard.set("Driver", forKey: "lastRole")
-                            } else {
-                                UserDefaults.standard.set("Passenger", forKey: "lastRole")
-                            }
+                            SavariSessionStore.setLastRole(role == "Driver" ? "Driver" : "Passenger")
                             onContinue()
                         }
                     } catch {

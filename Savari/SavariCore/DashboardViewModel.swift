@@ -91,7 +91,7 @@ final class DashboardViewModelRealtime: ObservableObject {
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] coord in
                     guard let self = self else { return }
-                    if let auth = UserDefaults.standard.string(forKey: "authToken"), let uuid = UUID(uuidString: auth) {
+                    if let auth = SavariSessionStore.authToken, let uuid = UUID(uuidString: auth) {
                         if let idx = self.drivers.firstIndex(where: { $0.id == uuid }) {
                             self.drivers[idx].coordinate = coord
                         } else {
@@ -131,9 +131,7 @@ final class DashboardViewModelRealtime: ObservableObject {
             
             SavariLog.debug("[VM] goOnline called for driverId:", driverId)
             // mark role so GPSLocationPusher.publishCoordinateIfDriver will allow publishing
-            UserDefaults.standard.set("driver", forKey: "lastRole")
-            // ensure authToken present for GPS pusher
-            UserDefaults.standard.set(driverId, forKey: "authToken")
+            SavariSessionStore.setLoggedIn(userId: driverId, role: "driver")
             
             // Cancel any existing publish task or subscription (safe cleanup)
             driverPublishTask?.cancel()
@@ -162,7 +160,7 @@ final class DashboardViewModelRealtime: ObservableObject {
                             }
                             // if assigned to me, auto-load the active ride row
                             if status == "assigned", let assignedId = new["assigned_driver_id"] as? String,
-                               uuidStringsMatch(assignedId, UserDefaults.standard.string(forKey: "authToken")) {
+                               uuidStringsMatch(assignedId, SavariSessionStore.authToken) {
                                 Task { await self.loadActiveRideRowIfNeeded(rideId: id) }
                             }
                         }
@@ -221,9 +219,8 @@ final class DashboardViewModelRealtime: ObservableObject {
         driverPublishTask?.cancel()
         driverPublishTask = nil
         
-        UserDefaults.standard.removeObject(forKey: "lastRole")
-        // Optionally keep authToken for login persistence, or remove if you want sign-out:
-        // UserDefaults.standard.removeObject(forKey: "authToken")
+        SavariSessionStore.setLastRole(nil)
+        // Keep authToken for login persistence; full sign-out clears it from DashboardView.
         
         Task { @MainActor in
             self.isRealtimeActive = false
@@ -264,7 +261,7 @@ final class DashboardViewModelRealtime: ObservableObject {
     }
 
     private func driverMapLabel(for uuid: UUID) -> String {
-        if uuidStringsMatch(uuid.uuidString, UserDefaults.standard.string(forKey: "authToken")) {
+        if uuidStringsMatch(uuid.uuidString, SavariSessionStore.authToken) {
             return "You"
         }
         return "Driver"
@@ -438,7 +435,7 @@ final class DashboardViewModelRealtime: ObservableObject {
     // Convenience: accept using an incoming ride dictionary (from realtime/polling)
     func acceptIncomingRide(_ incomingRide: [String: Any]) {
         guard let rideId = incomingRide["id"] as? String,
-              let driverId = UserDefaults.standard.string(forKey: "authToken") else { return }
+              let driverId = SavariSessionStore.authToken else { return }
         if uuidStringsMatch(incomingRide["passenger_id"] as? String, driverId) {
             SavariLog.debug("accept blocked: driver cannot accept their own passenger ride")
             return

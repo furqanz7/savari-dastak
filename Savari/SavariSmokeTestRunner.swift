@@ -222,9 +222,7 @@ enum SavariSmokeTestRunner {
     }
 
     private static func setLocalLogin(userId: UUID, role: String) {
-        UserDefaults.standard.set(userId.uuidString, forKey: "authToken")
-        UserDefaults.standard.set(role, forKey: "lastRole")
-        UserDefaults.standard.set(true, forKey: "isOnboardingComplete")
+        SavariSessionStore.setLoggedIn(userId: userId.uuidString, role: role)
     }
 
     private static func runSelfAcceptCheck() async {
@@ -240,9 +238,7 @@ enum SavariSmokeTestRunner {
             let userIdString = userId.uuidString
             let originalProfile = try? await SupabaseManager.shared.fetchProfile(for: userId)
 
-            UserDefaults.standard.set(userIdString, forKey: "authToken")
-            UserDefaults.standard.set("Driver", forKey: "lastRole")
-            UserDefaults.standard.set(true, forKey: "isOnboardingComplete")
+            SavariSessionStore.setLoggedIn(userId: userIdString, role: "Driver")
 
             try await SupabaseManager.shared.upsertUserProfile(
                 userId: userId,
