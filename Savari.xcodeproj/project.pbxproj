@@ -45,11 +45,16 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Assets.xcassets,
-				LoginFlowSteps.swift,
+				LoginDriverSetupStep.swift,
+				LoginMediaPickers.swift,
+				LoginRoleSelectionStep.swift,
+				LoginSignInStep.swift,
+				LoginUserInfoStep.swift,
 				LoginFlowView.swift,
 				RoutingService.swift,
 				SavariLog.swift,
 				Savari.swift,
+				SavariCardStyle.swift,
 				SavariSmokeTestRunner.swift,
 				SavariSessionStore.swift,
 				SavariButton.swift,
