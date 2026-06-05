@@ -372,7 +372,7 @@ struct DashboardView: View {
                                 if let id = active["id"] as? String, let driverId = UserDefaults.standard.string(forKey: "authToken") {
                                     Task {
                                         let ok = await vm.driverArrived(rideId: id, driverId: driverId)
-                                        if !ok { print("arrive failed") }
+                                        if !ok { SavariLog.debug("arrive failed") }
                                     }
                                 }
                             }) {
@@ -395,7 +395,7 @@ struct DashboardView: View {
                                     if let id = active["id"] as? String {
                                         Task {
                                             let ok = await vm.startRideNow(rideId: id)
-                                            if !ok { print("start failed") }
+                                            if !ok { SavariLog.debug("start failed") }
                                         }
                                     }
                                 }.disabled((active["status"] as? String) == "in_progress")
@@ -405,7 +405,7 @@ struct DashboardView: View {
                                     if let id = active["id"] as? String {
                                         Task {
                                             let ok = await vm.endRideNow(rideId: id)
-                                            if !ok { print("end failed") }
+                                            if !ok { SavariLog.debug("end failed") }
                                         }
                                     }
                                 }
@@ -846,14 +846,14 @@ struct DashboardView: View {
                 if !vm.isOnline, let driverId = UserDefaults.standard.string(forKey: "authToken") {
                     vm.goOnline(driverId: driverId)
                 }
-                print("[UI] Go Online button tapped; vm.rideAccepted = \(vm.rideAccepted)")
+                SavariLog.debug("[UI] Go Online button tapped; vm.rideAccepted = \(vm.rideAccepted)")
                 if vm.rideAccepted {
                     // already on a ride / on duty
                 } else {
                     if let driverId = UserDefaults.standard.string(forKey: "authToken"), !driverId.isEmpty {
                         vm.goOnline(driverId: driverId)
                     } else {
-                        print("[UI] No authToken found in UserDefaults; goOnline won't run")
+                        SavariLog.debug("[UI] No authToken found in UserDefaults; goOnline won't run")
                     }
                 }
             }) {
@@ -981,7 +981,7 @@ struct DashboardView: View {
                 let resp = try await search.start()
                 resolvedMapItem = resp.mapItems.first
             } catch {
-                print("[Inline] completion -> search.start error:", error.localizedDescription)
+                SavariLog.debug("[Inline] completion -> search.start error:", error.localizedDescription)
             }
         }
         
@@ -998,7 +998,7 @@ struct DashboardView: View {
         }
         
         guard let mi = resolvedMapItem else {
-            print("[Inline] couldn't resolve mapItem for selection")
+            SavariLog.debug("[Inline] couldn't resolve mapItem for selection")
             return
         }
         
@@ -1039,7 +1039,7 @@ struct DashboardView: View {
                     }
                 }
             } catch {
-                print("[Inline] routing failed:", error.localizedDescription)
+                SavariLog.debug("[Inline] routing failed:", error.localizedDescription)
                 // fallback: simply center on destination
                 await MainActor.run {
                     mapPosition = .region(MKCoordinateRegion(center: mi.placemark.coordinate, span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))

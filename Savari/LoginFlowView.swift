@@ -253,18 +253,18 @@ struct SignInStep: View {
                             Task(priority: TaskPriority.userInitiated) {
                                 do {
                                     let user = try await SupabaseManager.shared.signInWithApple(idToken: idToken)
-                                    print("✅ Apple user signed in:", user.id)
+                                    SavariLog.debug("✅ Apple user signed in:", user.id)
                                     
                                     await MainActor.run {
                                         onSignIn(user.id.uuidString)
                                     }
                                 } catch {
-                                    print("❌ Supabase Apple sign-in error:", error.localizedDescription)
+                                    SavariLog.debug("❌ Supabase Apple sign-in error:", error.localizedDescription)
                                 }
                             }
                         }
                     case .failure(let error):
-                        print("Apple Sign-In failed:", error.localizedDescription)
+                        SavariLog.debug("Apple Sign-In failed:", error.localizedDescription)
                     }
                 }
             )
@@ -294,25 +294,25 @@ struct SignInStep: View {
         
         GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController) { result, error in
             if let error = error {
-                print("❌ Google Sign-In failed:", error.localizedDescription)
+                SavariLog.debug("❌ Google Sign-In failed:", error.localizedDescription)
                 return
             }
             
             guard let idToken = result?.user.idToken?.tokenString else {
-                print("❌ No ID token from Google")
+                SavariLog.debug("❌ No ID token from Google")
                 return
             }
             
             Task(priority: TaskPriority.userInitiated) {
                 do {
                     let user = try await SupabaseManager.shared.signInWithGoogle(idToken: idToken)
-                    print("✅ Supabase Google user signed in:", user.id)
+                    SavariLog.debug("✅ Supabase Google user signed in:", user.id)
                     
                     await MainActor.run {
                         onSignIn(user.id.uuidString)
                     }
                 } catch {
-                    print("❌ Supabase Google sign-in error:", error.localizedDescription)
+                    SavariLog.debug("❌ Supabase Google sign-in error:", error.localizedDescription)
                 }
             }
         }
@@ -385,7 +385,7 @@ struct UserInfoStep: View {
                 focusedField = nil
                 Task.detached(priority: TaskPriority.userInitiated) {
                     guard let token = userId, let userUUID = UUID(uuidString: token) else {
-                        print("⚠️ No Supabase user ID found")
+                        SavariLog.debug("⚠️ No Supabase user ID found")
                         return
                     }
 
@@ -408,7 +408,7 @@ struct UserInfoStep: View {
                             onContinue()
                         }
                     } catch {
-                        print("❌ Failed to upsert profile:", error.localizedDescription)
+                        SavariLog.debug("❌ Failed to upsert profile:", error.localizedDescription)
                     }
                 }
             }
@@ -626,7 +626,7 @@ struct DriverSetupStep: View {
                                 withAnimation(.spring()) { onComplete() }
                             }
                         } catch {
-                            print("❌ Driver onboarding upload failed:", error.localizedDescription)
+                            SavariLog.debug("❌ Driver onboarding upload failed:", error.localizedDescription)
                         }
                     }
                 }

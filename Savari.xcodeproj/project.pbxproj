@@ -47,7 +47,9 @@
 				Assets.xcassets,
 				LoginFlowView.swift,
 				RoutingService.swift,
+				SavariLog.swift,
 				Savari.swift,
+				SavariSmokeTestRunner.swift,
 				SavariButton.swift,
 				SavariCore/DashboardView.swift,
 				SavariCore/DashboardViewModel.swift,
@@ -210,7 +212,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
-				LastUpgradeCheck = 2600;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					D1540FDF2E97F75A00977B1D = {
 						CreatedOnToolsVersion = 26.0.1;
@@ -432,6 +434,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = RBLBKM3W74;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -455,6 +458,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -494,6 +498,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = RBLBKM3W74;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -510,6 +515,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;

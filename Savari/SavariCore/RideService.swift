@@ -65,9 +65,9 @@ final class RideService {
             if let arr = jsonArray(from: data), let id = arr.first?["id"] as? String {
                 return id
             }
-            print("[RideService] createRideRequest returned unexpected response:", String(data: data, encoding: .utf8) ?? "<binary>")
+            SavariLog.debug("[RideService] createRideRequest returned unexpected response:", String(data: data, encoding: .utf8) ?? "<binary>")
         } catch {
-            print("[RideService] createRideRequest error:", error)
+            SavariLog.debug("[RideService] createRideRequest error:", error)
         }
         return nil
     }
@@ -91,7 +91,7 @@ final class RideService {
             if let arr = jsonArray(from: resp.data) { return !arr.isEmpty }
             return false
         } catch {
-            print("[RideService] acceptRide rpc error:", error)
+            SavariLog.debug("[RideService] acceptRide rpc error:", error)
             return false
         }
     }
@@ -108,7 +108,7 @@ final class RideService {
             if let b = jsonBool(from: resp.data) { return b }
             if let dict = jsonObject(from: resp.data), let ok = dict["ok"] as? Bool { return ok }
         } catch {
-            print("[RideService] driverCancelAssignedRide error:", error)
+            SavariLog.debug("[RideService] driverCancelAssignedRide error:", error)
         }
         return false
     }
@@ -124,7 +124,7 @@ final class RideService {
             if let b = jsonBool(from: resp.data) { return b }
             if let dict = jsonObject(from: resp.data), let ok = dict["ok"] as? Bool { return ok }
         } catch {
-            print("[RideService] applyWaitingChargeNow rpc error:", error)
+            SavariLog.debug("[RideService] applyWaitingChargeNow rpc error:", error)
         }
         return false
     }
@@ -142,7 +142,7 @@ final class RideService {
                 .upsert([payload])
                 .execute()
         } catch {
-            print("[RideService] upsertDriverLocation error:", error)
+            SavariLog.debug("[RideService] upsertDriverLocation error:", error)
         }
     }
 
@@ -170,7 +170,7 @@ extension RideService {
                 .execute()
             return true
         } catch {
-            print("markArrived error:", error)
+            SavariLog.debug("markArrived error:", error)
             return false
         }
     }
@@ -187,7 +187,7 @@ extension RideService {
                 .execute()
             return true
         } catch {
-            print("startRide error:", error)
+            SavariLog.debug("startRide error:", error)
             return false
         }
     }
@@ -206,7 +206,7 @@ extension RideService {
                 .execute()
             return true
         } catch {
-            print("endRideAndUnlockFare error:", error)
+            SavariLog.debug("endRideAndUnlockFare error:", error)
             return false
         }
     }

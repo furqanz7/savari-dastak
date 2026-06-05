@@ -37,7 +37,7 @@ final class SupabaseManager {
         do {
             try await client.auth.signOut()
         } catch {
-            print("❌ Supabase sign-out error:", error.localizedDescription)
+            SavariLog.debug("❌ Supabase sign-out error:", error.localizedDescription)
         }
 
         GIDSignIn.sharedInstance.signOut()
@@ -177,9 +177,9 @@ extension SupabaseManager {
         driverDocs: [String]?,
         selfiePath: String?
     ) async throws {
-        print("📦 Vehicle document paths:", vehicleDocs ?? [])
-        print("📦 Driver document paths:", driverDocs ?? [])
-        print("📸 Selfie path:", selfiePath ?? "none")
+        SavariLog.debug("📦 Vehicle document paths:", vehicleDocs ?? [])
+        SavariLog.debug("📦 Driver document paths:", driverDocs ?? [])
+        SavariLog.debug("📸 Selfie path:", selfiePath ?? "none")
 
         let payload = DriverOnboardingPayload(
             profile_id: profileId.uuidString,
@@ -199,12 +199,12 @@ extension SupabaseManager {
                 .execute()
 
             if let json = String(data: response.data, encoding: .utf8) {
-                print("✅ Driver onboarding inserted:", json)
+                SavariLog.debug("✅ Driver onboarding inserted:", json)
             } else {
-                print("⚠️ Upsert succeeded but no readable data.")
+                SavariLog.debug("⚠️ Upsert succeeded but no readable data.")
             }
         } catch {
-            print("❌ Driver onboarding failed:", error)
+            SavariLog.debug("❌ Driver onboarding failed:", error)
             throw error
         }
     }
@@ -230,7 +230,7 @@ extension SupabaseManager {
 
             try await bucket.upload(path, data: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
             paths.append(path)
-            print("⬆️ Uploaded driver document:", path)
+            SavariLog.debug("⬆️ Uploaded driver document:", path)
         }
 
         return paths
@@ -247,7 +247,7 @@ extension SupabaseManager {
 
         try await bucket.upload(path, data: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
 
-        print("⬆️ Uploaded driver document:", path)
+        SavariLog.debug("⬆️ Uploaded driver document:", path)
         return path
     }
 }

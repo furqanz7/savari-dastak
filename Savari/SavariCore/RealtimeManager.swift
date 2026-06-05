@@ -102,7 +102,7 @@ nonisolated final class RealtimeManager {
                         }
                     }
                 } catch {
-                    print("[RealtimeManager] realtime driver_locations stream ended:", error)
+                    SavariLog.debug("[RealtimeManager] realtime driver_locations stream ended:", error)
                 }
             }
 
@@ -114,7 +114,7 @@ nonisolated final class RealtimeManager {
                 }
             }
         } catch {
-            print("[RealtimeManager] Realtime subscribe using SDK failed — falling back to polling:", error)
+            SavariLog.debug("[RealtimeManager] Realtime subscribe using SDK failed — falling back to polling:", error)
         }
 
         // Polling fallback (your existing polling code)
@@ -154,7 +154,7 @@ nonisolated final class RealtimeManager {
                 }
             }
         } catch {
-            print("[RealtimeManager] polling fetch error:", error.localizedDescription)
+            SavariLog.debug("[RealtimeManager] polling fetch error:", error.localizedDescription)
         }
     }
 
@@ -177,7 +177,7 @@ nonisolated final class RealtimeManager {
     func subscribeRideRequests(onUpdate: @escaping ([String:Any]) -> Void) async -> () -> Void {
         let realtimeV2 = await MainActor.run { SupabaseManager.shared.client.realtimeV2 }
         do {
-            print("[RealtimeManager] attempting SDK subscribe to rides")
+            SavariLog.debug("[RealtimeManager] attempting SDK subscribe to rides")
             let channel = realtimeV2.channel("public:rides")
             let decoder = JSONDecoder()
 
@@ -187,7 +187,7 @@ nonisolated final class RealtimeManager {
                         switch change {
                         case .insert(let insertion):
                             if let row = try? insertion.decodeRecord(as: RideRow.self, decoder: decoder) {
-                                print("[RealtimeManager][SDK DEBUG] change payload:", insertion.record)
+                                SavariLog.debug("[RealtimeManager][SDK DEBUG] change payload:", insertion.record)
                                     var dict = try JSONSerialization.jsonObject(with: JSONEncoder().encode(row)) as? [String:Any] ?? [:]
                                     // normalize: copy dest_* into drop_* if needed
                                     if dict["drop_lat"] == nil, let dlat = dict["dest_lat"] { dict["drop_lat"] = dlat }
@@ -205,7 +205,7 @@ nonisolated final class RealtimeManager {
                                         let payload = dict
                                         await MainActor.run { onUpdate(["new": payload]) }
                                     } catch {
-                                        print("[RealtimeManager][SDK] unable to normalize insert payload:", error)
+                                        SavariLog.debug("[RealtimeManager][SDK] unable to normalize insert payload:", error)
                                     }
                                 }
                         case .update(let update):
@@ -226,18 +226,18 @@ nonisolated final class RealtimeManager {
                             let old = try deletion.decodeOldRecord(as: RideRow.self, decoder: decoder)
                             if let data = try? JSONEncoder().encode(old),
                                let dict = try? JSONSerialization.jsonObject(with: data) as? [String:Any] {
-                                print("[RealtimeManager][SDK] delete:", dict["id"] ?? "(no id)")
+                                SavariLog.debug("[RealtimeManager][SDK] delete:", dict["id"] ?? "(no id)")
                                 await MainActor.run { onUpdate(["old": dict]) }
                             }
                         }
                     }
                 } catch {
-                    print("[RealtimeManager] realtime rides stream ended:", error)
+                    SavariLog.debug("[RealtimeManager] realtime rides stream ended:", error)
                 }
             }
 
             try await channel.subscribeWithError()
-            print("[RealtimeManager] SDK subscribeWithError succeeded for rides")
+            SavariLog.debug("[RealtimeManager] SDK subscribeWithError succeeded for rides")
             return {
                 Task {
                     streamTask.cancel()
@@ -245,8 +245,8 @@ nonisolated final class RealtimeManager {
                 }
             }
         } catch {
-            print("[RealtimeManager] subscribeRideRequests via SDK failed:", error)
-            print("[RealtimeManager] falling back to polling for rides")
+            SavariLog.debug("[RealtimeManager] subscribeRideRequests via SDK failed:", error)
+            SavariLog.debug("[RealtimeManager] falling back to polling for rides")
         }
 
         // fallback polling (unchanged)
@@ -256,22 +256,22 @@ nonisolated final class RealtimeManager {
             var seen = Set<String>()
             while !Task.isCancelled {
                 do {
-                    print("[RealtimeManager][polling] querying rides...")
+                    SavariLog.debug("[RealtimeManager][polling] querying rides...")
                     let resp = try await SupabaseManager.shared.client.from("rides").select().execute()
                     if let rows = Self.jsonArray(from: resp.data) {
-                        print("[RealtimeManager][polling] found \(rows.count) rows")
+                        SavariLog.debug("[RealtimeManager][polling] found \(rows.count) rows")
                         for row in rows {
                             if let id = row["id"] as? String, !seen.contains(id) {
                                 seen.insert(id)
-                                print("[RealtimeManager][polling] new ride id:", id, "status:", row["status"] ?? "nil")
+                                SavariLog.debug("[RealtimeManager][polling] new ride id:", id, "status:", row["status"] ?? "nil")
                                 await MainActor.run { onUpdate(["new": row]) }
                             }
                         }
                     } else {
-                        print("[RealtimeManager][polling] response.data not [[String:Any]]; raw:", resp.data)
+                        SavariLog.debug("[RealtimeManager][polling] response.data not [[String:Any]]; raw:", resp.data)
                     }
                 } catch {
-                    print("[RealtimeManager] ride polling error:", error)
+                    SavariLog.debug("[RealtimeManager] ride polling error:", error)
                 }
                 try? await Task.sleep(nanoseconds: UInt64(self.pollingInterval * 1_000_000_000))
             }
@@ -299,7 +299,7 @@ nonisolated final class RealtimeManager {
                         for row in arr { await MainActor.run { onRideUpdate(row) } }
                     }
                 } catch {
-                    print("polling rides error:", error)
+                    SavariLog.debug("polling rides error:", error)
                 }
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
@@ -342,7 +342,7 @@ extension RealtimeManager {
                         }
                     }
                 } catch {
-                    print("[RealtimeManager] single-driver stream ended:", error)
+                    SavariLog.debug("[RealtimeManager] single-driver stream ended:", error)
                 }
             }
             
@@ -354,7 +354,7 @@ extension RealtimeManager {
                 }
             }
         } catch {
-            print("[RealtimeManager] single driver subscribe via SDK failed:", error)
+            SavariLog.debug("[RealtimeManager] single driver subscribe via SDK failed:", error)
         }
         
         // fallback polling unchanged...
@@ -371,7 +371,7 @@ extension RealtimeManager {
                         await MainActor.run { onUpdate(d) }
                     }
                 } catch {
-                    print("[RealtimeManager] single-driver polling error:", error)
+                    SavariLog.debug("[RealtimeManager] single-driver polling error:", error)
                 }
                 try? await Task.sleep(nanoseconds: UInt64(localInterval * 1_000_000_000))
             }

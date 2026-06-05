@@ -125,11 +125,11 @@ final class DashboardViewModelRealtime: ObservableObject {
                 return false
             }
             if alreadyOnline {
-                print("[VM] already online — ignoring goOnline")
+                SavariLog.debug("[VM] already online — ignoring goOnline")
                 return
             }
             
-            print("[VM] goOnline called for driverId:", driverId)
+            SavariLog.debug("[VM] goOnline called for driverId:", driverId)
             // mark role so GPSLocationPusher.publishCoordinateIfDriver will allow publishing
             UserDefaults.standard.set("driver", forKey: "lastRole")
             // ensure authToken present for GPS pusher
@@ -145,7 +145,7 @@ final class DashboardViewModelRealtime: ObservableObject {
             rideRequestsCancel = await RealtimeManager.shared.subscribeRideRequests { [weak self] payload in
                 guard let self = self else { return }
                 if let new = payload["new"] as? [String:Any] {
-                    print("[VM][DEBUG] ride payload new:", new)
+                    SavariLog.debug("[VM][DEBUG] ride payload new:", new)
                     let status = (new["status"] as? String) ?? ""
                     if status == "requested" {
                         if uuidStringsMatch(new["passenger_id"] as? String, driverId) { return }
@@ -190,7 +190,7 @@ final class DashboardViewModelRealtime: ObservableObject {
                     }
                 }
             } catch {
-                print("[VM] initial fetch requested rides failed:", error)
+                SavariLog.debug("[VM] initial fetch requested rides failed:", error)
             }
             
             // Update UI state
@@ -200,10 +200,10 @@ final class DashboardViewModelRealtime: ObservableObject {
             
             // Immediately publish current location if available
             if let coord = GPSLocationPusher.shared.current {
-                print("[VM] immediate upsert coord:", coord)
+                SavariLog.debug("[VM] immediate upsert coord:", coord)
                 await RideService.shared.upsertDriverLocation(driverId: driverId, lat: coord.latitude, lon: coord.longitude)
             } else {
-                print("[VM] GPSLocationPusher.current is nil at goOnline")
+                SavariLog.debug("[VM] GPSLocationPusher.current is nil at goOnline")
             }
             
             // Start a periodic task that ensures we keep the driver row alive while online.
@@ -212,7 +212,7 @@ final class DashboardViewModelRealtime: ObservableObject {
     }
     
     func stopOnline() {
-        print("[VM] stopOnline called")
+        SavariLog.debug("[VM] stopOnline called")
         rideRequestsCancel?()
         rideRequestsCancel = nil
         incomingRideRequests.removeAll()
@@ -242,7 +242,7 @@ final class DashboardViewModelRealtime: ObservableObject {
                 await MainActor.run { self.drivers = rows }
             }
         } catch {
-            print("fetchInitialDrivers error:", error)
+            SavariLog.debug("fetchInitialDrivers error:", error)
         }
     }
     
@@ -325,7 +325,7 @@ final class DashboardViewModelRealtime: ObservableObject {
                 await MainActor.run { self.activeRideRow = dict }
             }
         } catch {
-            print("loadActiveRideRowIfNeeded error:", error)
+            SavariLog.debug("loadActiveRideRowIfNeeded error:", error)
         }
     }
     
@@ -386,7 +386,7 @@ final class DashboardViewModelRealtime: ObservableObject {
                 }
             }
         } catch {
-            print("verifyBoardingCodeAndBoard error:", error)
+            SavariLog.debug("verifyBoardingCodeAndBoard error:", error)
         }
         return false
     }
@@ -440,7 +440,7 @@ final class DashboardViewModelRealtime: ObservableObject {
         guard let rideId = incomingRide["id"] as? String,
               let driverId = UserDefaults.standard.string(forKey: "authToken") else { return }
         if uuidStringsMatch(incomingRide["passenger_id"] as? String, driverId) {
-            print("accept blocked: driver cannot accept their own passenger ride")
+            SavariLog.debug("accept blocked: driver cannot accept their own passenger ride")
             return
         }
         Task {
@@ -457,7 +457,7 @@ final class DashboardViewModelRealtime: ObservableObject {
                 await MainActor.run { self.rideAccepted = true }
             } else {
                 // race: another driver accepted first; show toast and refresh list
-                print("accept failed (likely accepted by someone else)")
+                SavariLog.debug("accept failed (likely accepted by someone else)")
                 // optional: re-fetch requested rides or signal UI
                 Task {
                     // re-fetch a few requested rides to update local state
@@ -488,7 +488,7 @@ final class DashboardViewModelRealtime: ObservableObject {
             let resp = try await SupabaseManager.shared.client.rpc("driver_cancel_ride", params: params).execute()
             if let b = jsonBool(from: resp.data) { return b }
         } catch {
-            print("driverCancelAssignedRide error:", error)
+            SavariLog.debug("driverCancelAssignedRide error:", error)
         }
         return false
     }
@@ -496,7 +496,7 @@ final class DashboardViewModelRealtime: ObservableObject {
     func cancelRideRequest() async {
         let rideId = selectedRide.orderID
         if rideId.isEmpty {
-            print("[CancelRide] No rideId found")
+            SavariLog.debug("[CancelRide] No rideId found")
             return
         }
 
@@ -510,9 +510,9 @@ final class DashboardViewModelRealtime: ObservableObject {
                 .update(payload)
                 .eq("id", value: rideId)
                 .execute()
-            print("[CancelRide] Ride cancelled:", rideId)
+            SavariLog.debug("[CancelRide] Ride cancelled:", rideId)
         } catch {
-            print("[CancelRide] Error:", error.localizedDescription)
+            SavariLog.debug("[CancelRide] Error:", error.localizedDescription)
         }
     }
     

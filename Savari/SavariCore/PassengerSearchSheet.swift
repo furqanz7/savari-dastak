@@ -89,7 +89,7 @@ final class LocationCompleter: NSObject, ObservableObject, MKLocalSearchComplete
         search.start { [weak self] resp, err in
             guard let self = self else { return }
             if let err = err {
-                print("[LocationCompleter][DirectSearch] error:", err.localizedDescription)
+                SavariLog.debug("[LocationCompleter][DirectSearch] error:", err.localizedDescription)
                 return
             }
             guard let mapItems = resp?.mapItems, !mapItems.isEmpty else {
@@ -104,7 +104,7 @@ final class LocationCompleter: NSObject, ObservableObject, MKLocalSearchComplete
                                    mapItem: $0,
                                    completion: nil)
                 }
-                print("[LocationCompleter][DirectSearch] found \(mapItems.count) items for '\(query)'")
+                SavariLog.debug("[LocationCompleter][DirectSearch] found \(mapItems.count) items for '\(query)'")
             }
         }
     }
@@ -118,13 +118,13 @@ final class LocationCompleter: NSObject, ObservableObject, MKLocalSearchComplete
             }
             // prefer real completions when available
             self.completions = mapped
-            print("[LocationCompleter] got \(results.count) suggestions for '\(completer.queryFragment)'")
+            SavariLog.debug("[LocationCompleter] got \(results.count) suggestions for '\(completer.queryFragment)'")
         }
     }
 
     func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
         let ns = error as NSError
-        print("[LocationCompleter] didFailWithError domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)")
+        SavariLog.debug("[LocationCompleter] didFailWithError domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)")
         DispatchQueue.main.async { self.suggestions = []; self.completions = [] }
 
         // Determine a reasonable region without comparing MKCoordinateRegion directly
@@ -146,7 +146,7 @@ final class LocationCompleter: NSObject, ObservableObject, MKLocalSearchComplete
         let search = MKLocalSearch(request: req)
         search.start { resp, err in
             if let err = err {
-                print("[LocationCompleter] fallback MKLocalSearch error:", err.localizedDescription)
+                SavariLog.debug("[LocationCompleter] fallback MKLocalSearch error:", err.localizedDescription)
                 return
             }
             guard let mapItems = resp?.mapItems, !mapItems.isEmpty else { return }
@@ -158,7 +158,7 @@ final class LocationCompleter: NSObject, ObservableObject, MKLocalSearchComplete
                                    completion: nil)
                 }
                 self.completions = fallback
-                print("[LocationCompleter] fallback found \(mapItems.count) items")
+                SavariLog.debug("[LocationCompleter] fallback found \(mapItems.count) items")
             }
         }
     }
