@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We use your location to find nearby rides.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>We use the camera to verify your driver profile.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We use your photos to upload required documents.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We use your location to find nearby rides.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.641531743267-sqjqo13qr097f9pm07vsp8teepbu36k3</string>
+			</array>
+		</dict>
+	</array>
+	<key>CLIENT_ID</key>
+	<string>641531743267-sqjqo13qr097f9pm07vsp8teepbu36k3.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.641531743267-sqjqo13qr097f9pm07vsp8teepbu36k3</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>furqan.Savari</string>
+</dict>
+</plist>

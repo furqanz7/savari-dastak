@@ -1,0 +1,6 @@
+.DS_Store
+supabase/.temp/
+**/xcuserdata/
+*.xcuserstate
+*.xcbkptlist
+DerivedData/
