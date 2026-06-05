@@ -101,6 +101,11 @@
 				sawari5.mp4,
 				SplashView.swift,
 				SupabaseManager.swift,
+				SupabaseManagerAuth.swift,
+				SupabaseManagerDriverOnboarding.swift,
+				SupabaseManagerPayments.swift,
+				SupabaseManagerProfiles.swift,
+				SupabaseManagerStorage.swift,
 			);
 			target = D1540FDF2E97F75A00977B1D /* Savari */;
 		};
