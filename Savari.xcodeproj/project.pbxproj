@@ -82,6 +82,8 @@
 				SavariCore/MapPickerView.swift,
 				SavariCore/Models.swift,
 				SavariCore/RealtimeManager.swift,
+				SavariCore/RealtimeDriverLocations.swift,
+				SavariCore/RealtimeRideRequests.swift,
 				SavariCore/RideFormatting.swift,
 				SavariCore/RideService.swift,
 				sawari1.mp4,
