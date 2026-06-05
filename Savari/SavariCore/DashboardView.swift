@@ -317,7 +317,15 @@ struct DashboardView: View {
             // passenger / driver controls
             VStack { Spacer()
                 HStack(spacing: 12) {
-                    if role.lowercased().contains("passenger") { passengerControls } else { driverControls }
+                    if role.lowercased().contains("passenger") {
+                        passengerControls
+                    } else {
+                        DriverControls(
+                            isOnline: vm.isOnline,
+                            activeDriverCount: vm.drivers.count,
+                            onGoOnline: handleGoOnlineTapped
+                        )
+                    }
                 }
                 .padding()
             }
@@ -327,95 +335,51 @@ struct DashboardView: View {
                !vm.incomingRideRequests.isEmpty {
                 VStack {
                     Spacer()
-                    driverIncomingRequestsPanel
+                    DriverIncomingRequestsPanel(
+                        requests: vm.incomingRideRequests,
+                        onAccept: vm.acceptIncomingRide
+                    )
                         .padding(.horizontal)
                         .padding(.bottom, 96)
                 }
             }
             
-            // Driver active-ride panel (shows once driver accepted)
             if role.lowercased().contains("driver"), vm.rideAccepted, let active = vm.activeRideRow {
                 VStack {
                     Spacer()
-                    VStack(spacing: 12) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("Ride: \(active["id"] as? String ?? "—")").font(.headline)
-                                if let pax = active["passenger_id"] as? String { Text("Passenger: \(String(pax.prefix(6)))").font(.caption) }
-                                Text("Pickup").font(.caption2)
-                                if let plat = active["pickup_lat"] as? Double, let plon = active["pickup_lon"] as? Double {
-                                    Text(String(format: "%.5f, %.5f", plat, plon)).font(.caption2)
+                    DriverActiveRidePanel(
+                        active: active,
+                        boardingCodeVerified: vm.boardingCodeVerified,
+                        onArrive: { rideId in
+                            guard let driverId = SavariSessionStore.authToken else { return }
+                            Task {
+                                let ok = await vm.driverArrived(rideId: rideId, driverId: driverId)
+                                if !ok {
+                                    SavariLog.debug("arrive failed")
                                 }
                             }
-                            Spacer()
-                            VStack(alignment: .trailing) {
-                                Text("Fare ₹\(fareString(for: active))").bold()
-                                Text("Status: \(active["status"] as? String ?? "—")").font(.caption2).foregroundColor(.secondary)
+                        },
+                        onEnterCode: {
+                            vm.driverBoardingCodeEntry = ""
+                            vm.driverFlow = .awaitingOTP
+                        },
+                        onStartRide: { rideId in
+                            Task {
+                                let ok = await vm.startRideNow(rideId: rideId)
+                                if !ok {
+                                    SavariLog.debug("start failed")
+                                }
+                            }
+                        },
+                        onEndRide: { rideId in
+                            Task {
+                                let ok = await vm.endRideNow(rideId: rideId)
+                                if !ok {
+                                    SavariLog.debug("end failed")
+                                }
                             }
                         }
-                        
-                        HStack(spacing: 12) {
-                            Button("Navigate") {
-                                // open Apple Maps to pickup
-                                if let plat = active["pickup_lat"] as? Double, let plon = active["pickup_lon"] as? Double {
-                                    let coord = CLLocationCoordinate2D(latitude: plat, longitude: plon)
-                                    let placemark = MKPlacemark(coordinate: coord)
-                                    let mapItem = MKMapItem(placemark: placemark)
-                                    mapItem.name = "Pickup"
-                                    mapItem.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
-                                }
-                            }
-                            .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
-                            
-                            Button(action: {
-                                // mark arrived
-                                if let id = active["id"] as? String, let driverId = SavariSessionStore.authToken {
-                                    Task {
-                                        let ok = await vm.driverArrived(rideId: id, driverId: driverId)
-                                        if !ok { SavariLog.debug("arrive failed") }
-                                    }
-                                }
-                            }) {
-                                Text("Arrive")
-                            }
-                            .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
-                            
-                            // OTP sheet trigger: changed to driverFlow
-                            Button("Enter Code") {
-                                vm.driverBoardingCodeEntry = ""
-                                vm.driverFlow = .awaitingOTP
-                            }
-                            .buttonStyle(LiquidGlassButtonStyle())
-                        }
-                        
-                        // Show small control row when OTP verified or boarded
-                        if vm.boardingCodeVerified || (active["status"] as? String) == "boarded" || (active["status"] as? String) == "in_progress" {
-                            HStack(spacing: 12) {
-                                Button("Start Ride") {
-                                    if let id = active["id"] as? String {
-                                        Task {
-                                            let ok = await vm.startRideNow(rideId: id)
-                                            if !ok { SavariLog.debug("start failed") }
-                                        }
-                                    }
-                                }.disabled((active["status"] as? String) == "in_progress")
-                                    .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
-                                
-                                Button("End Ride & Unlock Fare") {
-                                    if let id = active["id"] as? String {
-                                        Task {
-                                            let ok = await vm.endRideNow(rideId: id)
-                                            if !ok { SavariLog.debug("end failed") }
-                                        }
-                                    }
-                                }
-                                .buttonStyle(LiquidGlassButtonStyle())
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Material.ultraThin)
-                    .cornerRadius(16)
+                    )
                     .padding(.bottom, 80)
                     .padding(.horizontal)
                 }
@@ -700,82 +664,19 @@ struct DashboardView: View {
         }
     }
     
-    // MARK: - Driver controls
-    private var driverControls: some View {
-        HStack(spacing: 12) {
-            Button(action: {
-                if !vm.isOnline, let driverId = SavariSessionStore.authToken {
-                    vm.goOnline(driverId: driverId)
-                }
-                SavariLog.debug("[UI] Go Online button tapped; vm.rideAccepted = \(vm.rideAccepted)")
-                if vm.rideAccepted {
-                    // already on a ride / on duty
-                } else {
-                    if let driverId = SavariSessionStore.authToken, !driverId.isEmpty {
-                        vm.goOnline(driverId: driverId)
-                    } else {
-                        SavariLog.debug("[UI] No authToken found in UserDefaults; goOnline won't run")
-                    }
-                }
-            }) {
-                HStack { Image(systemName: "checkmark.circle"); Text(vm.isOnline ? "Online" : "Go Online") }
-            }
-            .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
-            .frame(maxWidth: 220)
-            .disabled(vm.isOnline)
-            
-            Spacer().frame(width: 8)
-            VStack(alignment: .trailing) { Text("Active drivers: \(vm.drivers.count)").font(.caption).foregroundColor(.secondary) }
+    private func handleGoOnlineTapped() {
+        if !vm.isOnline, let driverId = SavariSessionStore.authToken {
+            vm.goOnline(driverId: driverId)
         }
-    }
-
-    private var driverIncomingRequestsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Ride requests", systemImage: "bell.badge.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                Spacer()
-                Text("\(vm.incomingRideRequests.count)")
-                    .font(.caption.bold())
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color.green.opacity(0.18)))
-            }
-
-            ForEach(Array(vm.incomingRideRequests.prefix(3).enumerated()), id: \.offset) { _, ride in
-                driverIncomingRequestRow(ride)
-            }
+        SavariLog.debug("[UI] Go Online button tapped; vm.rideAccepted = \(vm.rideAccepted)")
+        if vm.rideAccepted {
+            return
         }
-        .padding(14)
-        .background(Material.ultraThin)
-        .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.18), radius: 14, y: 8)
-    }
-
-    private func driverIncomingRequestRow(_ ride: [String: Any]) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Ride \(rideShortId(ride))")
-                    .font(.system(size: 14, weight: .semibold))
-                Text("\(rideDistanceString(for: ride)) • \(rideVehicleType(for: ride))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            Text("₹\(fareString(for: ride))")
-                .font(.system(size: 14, weight: .semibold))
-
-            Button("Accept") {
-                vm.acceptIncomingRide(ride)
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
+        if let driverId = SavariSessionStore.authToken, !driverId.isEmpty {
+            vm.goOnline(driverId: driverId)
+        } else {
+            SavariLog.debug("[UI] No authToken found in UserDefaults; goOnline won't run")
         }
-        .padding(10)
-        .background(Color.primary.opacity(0.06))
-        .cornerRadius(12)
     }
     
     private func cancelInlineSearch() {
@@ -915,53 +816,6 @@ struct DashboardView: View {
                 destCoordinate = mi.placemark.coordinate
             }
         }
-    }
-    
-    // very simple fare estimator – replace with your pricing logic
-    private func estimateFare(distanceMeters: CLLocationDistance, transport: String) -> Double {
-        let km = distanceMeters / 1000.0
-        switch transport {
-        case "Bike": return max(30.0, 10.0 + km * 8.0)
-        default: return max(50.0, 20.0 + km * 12.0)
-        }
-    }
-    
-    // New helper: format fare string from activeRideRow dictionary
-    private func fareString(for active: [String: Any]) -> String {
-        if let d = doubleValue(active["estimated_fare"]) {
-            return String(format: "%.2f", d)
-        }
-        if let d = active["fare"] as? Double {
-            return String(format: "%.2f", d)
-        }
-        if let s = active["fare"] as? String, let d = Double(s) {
-            return String(format: "%.2f", d)
-        }
-        return String(format: "%.2f", 0.0)
-    }
-
-    private func rideShortId(_ ride: [String: Any]) -> String {
-        guard let id = ride["id"] as? String, !id.isEmpty else { return "NEW" }
-        return String(id.prefix(8)).uppercased()
-    }
-
-    private func rideVehicleType(for ride: [String: Any]) -> String {
-        (ride["vehicle_type"] as? String) ?? "Ride"
-    }
-
-    private func rideDistanceString(for ride: [String: Any]) -> String {
-        guard let meters = doubleValue(ride["estimated_distance_meters"]), meters > 0 else {
-            return "Distance pending"
-        }
-        return String(format: "%.1f km", meters / 1000.0)
-    }
-
-    private func doubleValue(_ value: Any?) -> Double? {
-        if let double = value as? Double { return double }
-        if let int = value as? Int { return Double(int) }
-        if let number = value as? NSNumber { return number.doubleValue }
-        if let string = value as? String { return Double(string) }
-        return nil
     }
     
     private func cancelPassengerFlow() {
