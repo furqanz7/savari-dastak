@@ -56,3 +56,43 @@ struct SavariButton: View {
         .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
     }
 }
+
+struct LiquidGlassButtonStyle: ButtonStyle {
+    var isPrimary: Bool = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundColor(isPrimary ? Color(UIColor.systemBackground) : .primary)
+            .background(
+                ZStack {
+                    if isPrimary {
+                        Capsule()
+                            .fill(Color.primary.opacity(0.95))
+                    } else {
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                    }
+
+                    Capsule()
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(configuration.isPressed ? 0.18 : 0.28),
+                                    Color.white.opacity(0.04)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1
+                        )
+                }
+            )
+            .shadow(
+                color: .black.opacity(configuration.isPressed ? 0.18 : 0.28),
+                radius: configuration.isPressed ? 8 : 14,
+                y: configuration.isPressed ? 4 : 10
+            )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.28, dampingFraction: 0.82), value: configuration.isPressed)
+    }
+}

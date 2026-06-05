@@ -4,7 +4,7 @@ import MapKit
 
 enum RideFormat {
     /// Formats a distance value (in meters) into a user-friendly string.
-    /// Matches formatting used in DashboardView.DistanceETABox and MapPickerView.
+    /// Matches formatting used in DistanceETABox and MapPickerView.
     static func distance(_ distanceMeters: CLLocationDistance) -> String {
         if distanceMeters < 1000 {
             let meters = Int(round(distanceMeters))
@@ -20,7 +20,7 @@ enum RideFormat {
     }
 
     /// Formats an estimated time of arrival (ETA) in seconds into a user-friendly string.
-    /// Matches formatting used in DashboardView.DistanceETABox and MapPickerView.
+    /// Matches formatting used in DistanceETABox and MapPickerView.
     static func eta(_ etaSeconds: TimeInterval) -> String {
         if etaSeconds < 60 {
             return "1 min"
