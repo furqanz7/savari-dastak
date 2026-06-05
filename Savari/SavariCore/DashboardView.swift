@@ -312,91 +312,37 @@ struct DashboardView: View {
         }
     }
     
-    // REPLACE your current handleInlineSelection(...) with this
     private func handleInlineSelection(item: LocationCompleter.CompletionItem) async {
-        // 1) resolve mapItem
-        var resolvedMapItem: MKMapItem? = nil
-        
-        if let mapItem = item.mapItem {
-            resolvedMapItem = mapItem
-        } else if let comp = item.completion {
-            let req = MKLocalSearch.Request(completion: comp)
-            let search = MKLocalSearch(request: req)
-            do {
-                let resp = try await search.start()
-                resolvedMapItem = resp.mapItems.first
-            } catch {
-                SavariLog.debug("[Inline] completion -> search.start error:", error.localizedDescription)
-            }
-        }
-        
-        // fallback natural-language search
-        if resolvedMapItem == nil {
-            let q = "\(item.title) \(item.subtitle)".trimmingCharacters(in: .whitespacesAndNewlines)
-            let req = MKLocalSearch.Request()
-            req.naturalLanguageQuery = q
-            if let r = inlineCompleter.region { req.region = r }
-            let s = MKLocalSearch(request: req)
-            if let resp = try? await s.start(), let mi = resp.mapItems.first {
-                resolvedMapItem = mi
-            }
-        }
-        
-        guard let mi = resolvedMapItem else {
-            SavariLog.debug("[Inline] couldn't resolve mapItem for selection")
+        guard let selection = await DashboardDestinationSelectionResolver.resolve(
+            item: item,
+            searchRegion: inlineCompleter.region,
+            pickup: GPSLocationPusher.shared.current
+        ) else {
             return
         }
-        
-        // 2) set destination text & chosen map item
+
         await MainActor.run {
-            inlineChosenMapItem = mi
-            destCoordinate = mi.placemark.coordinate
-            destinationText = mi.name ?? "\(mi.placemark.title ?? "")"
+            inlineChosenMapItem = selection.mapItem
+            destinationText = selection.destinationText
             showingInlineSearch = false
             inlineQuery = ""
             inlineCompleter.update(query: "")
             vm.passengerFlow = .preview
-            showingInlineSearch = false
             inlineFieldIsFocused = false
-        }
-        
-        // 3) compute route & ETA from current pickup -> destination and update VM + map
-        if let pickup = GPSLocationPusher.shared.current {
-            do {
-                let routeResult = try await RoutingService.shared.calculateRoute(from: pickup, to: mi.placemark.coordinate)
-                
-                await MainActor.run {
-                    // update VM (so other UI pieces read it)
-                    vm.selectedRide.routeCoordinates = routeResult.coordinates
-                    vm.selectedRide.distanceMeters = routeResult.distanceMeters
-                    vm.selectedRide.etaSeconds = Int(routeResult.expectedTravelTime)
-                    vm.selectedRide.etaDate = RoutingService.etaDate(from: routeResult.expectedTravelTime)
-                    vm.updateFareEstimates(distanceMeters: routeResult.distanceMeters)
-                    
-                    // set pickup & dest markers shown on the map
-                    pickupCoordinate = pickup
-                    destCoordinate = mi.placemark.coordinate
-                    
-                    // animate camera to fit both points with padding using helper
-                    let region = MapCameraHelpers.regionFitting([pickup, mi.placemark.coordinate])
-                    withAnimation(.easeInOut) {
-                        mapPosition = .region(region)
-                    }
-                }
-            } catch {
-                SavariLog.debug("[Inline] routing failed:", error.localizedDescription)
-                // fallback: simply center on destination
-                await MainActor.run {
-                    mapPosition = .region(MKCoordinateRegion(center: mi.placemark.coordinate, span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
-                    pickupCoordinate = GPSLocationPusher.shared.current
-                    destCoordinate = mi.placemark.coordinate
-                }
+
+            pickupCoordinate = selection.pickupCoordinate
+            destCoordinate = selection.destinationCoordinate
+
+            if let route = selection.route {
+                vm.selectedRide.routeCoordinates = route.coordinates
+                vm.selectedRide.distanceMeters = route.distanceMeters
+                vm.selectedRide.etaSeconds = route.etaSeconds
+                vm.selectedRide.etaDate = route.etaDate
+                vm.updateFareEstimates(distanceMeters: route.distanceMeters)
             }
-        } else {
-            // no pickup available — just center on destination
-            await MainActor.run {
-                mapPosition = .region(MKCoordinateRegion(center: mi.placemark.coordinate, span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
-                destCoordinate = mi.placemark.coordinate
+
+            withAnimation(.easeInOut) {
+                mapPosition = .region(selection.mapRegion)
             }
         }
     }

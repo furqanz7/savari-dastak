@@ -58,6 +58,7 @@
 				SavariSmokeTestRunner.swift,
 				SavariSessionStore.swift,
 				SavariButton.swift,
+				SavariCore/DashboardDestinationSelection.swift,
 				SavariCore/DashboardDriverPanels.swift,
 				SavariCore/DashboardMapContent.swift,
 				SavariCore/DashboardMapLayer.swift,
