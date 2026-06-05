@@ -17,7 +17,7 @@ enum PassengerFlowState {
     case completed
 }
 
-private func uuidStringsMatch(_ lhs: String?, _ rhs: String?) -> Bool {
+func uuidStringsMatch(_ lhs: String?, _ rhs: String?) -> Bool {
     guard let lhs, let rhs else { return false }
     if let leftUUID = UUID(uuidString: lhs), let rightUUID = UUID(uuidString: rhs) {
         return leftUUID == rightUUID
@@ -54,8 +54,8 @@ final class DashboardViewModelRealtime: ObservableObject {
     enum DriverFlow: String { case idle, awaitingOTP, verified, inProgress, completed }
     @Published var driverFlow: DriverFlow = .idle
     
-    private var waitTimer: Timer? = nil
-    private var assignedDriverUnsub: (() -> Void)? = nil
+    var waitTimer: Timer? = nil
+    var assignedDriverUnsub: (() -> Void)? = nil
     private var rideRequestsCancel: (() -> Void)? = nil
     private var realtimeCancel: (() -> Void)? = nil
     private var tickTimer: AnyCancellable? = nil
@@ -64,7 +64,7 @@ final class DashboardViewModelRealtime: ObservableObject {
     
     private let role: String
 
-    private func jsonObject(from data: Data) -> [String: Any]? {
+    func jsonObject(from data: Data) -> [String: Any]? {
         try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
@@ -72,7 +72,7 @@ final class DashboardViewModelRealtime: ObservableObject {
         try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
     }
 
-    private func jsonBool(from data: Data) -> Bool? {
+    func jsonBool(from data: Data) -> Bool? {
         try? JSONDecoder().decode(Bool.self, from: data)
     }
     
@@ -227,7 +227,7 @@ final class DashboardViewModelRealtime: ObservableObject {
         }
     }
     
-    private var rideUpdateCancel: (() -> Void)? = nil
+    var rideUpdateCancel: (() -> Void)? = nil
     
     func stopSubscribingMyRide() { rideUpdateCancel?(); rideUpdateCancel = nil }
     
@@ -325,273 +325,4 @@ final class DashboardViewModelRealtime: ObservableObject {
             SavariLog.debug("loadActiveRideRowIfNeeded error:", error)
         }
     }
-    
-    func driverArrived(rideId: String, driverId: String) async -> Bool {
-        let ok = await RideService.shared.markArrived(rideId: rideId, driverId: driverId)
-        if ok {
-            await MainActor.run {
-                var row = self.activeRideRow ?? [:]
-                row["status"] = "arrived"
-                self.activeRideRow = row
-                self.waitSeconds = 0
-                self.waitChargeApplied = false
-            }
-            // start local timer
-            await MainActor.run {
-                self.waitTimer?.invalidate()
-                self.waitTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] t in
-                    guard let self = self else { return }
-                    self.waitSeconds += 1
-                    // if wait passes 120s and not applied -> call RPC once
-                    if self.waitSeconds > 120 && !self.waitChargeApplied {
-                        self.waitChargeApplied = true
-                        Task {
-                            _ = await RideService.shared.applyWaitingChargeNow(rideId: rideId)
-                            // update activeRideRow to fetch latest waiting_charge
-                            await self.loadActiveRideRowIfNeeded(rideId: rideId)
-                        }
-                    }
-                }
-            }
-        }
-        return ok
-    }
-    
-    func verifyBoardingCodeAndBoard(rideId: String, code: String) async -> Bool {
-        do {
-            // fetch the ride row (we expect boarding_code stored)
-            let fetch = try await SupabaseManager.shared.client
-                .from("rides")
-                .select("id,boarding_code")
-                .eq("id", value: rideId)
-                .single()
-                .execute()
-            
-            if let dict = jsonObject(from: fetch.data), let expected = dict["boarding_code"] as? String {
-                if expected == code {
-                    let payload: [String: AnyEncodable] = [
-                        "status": AnyEncodable("boarded")
-                    ]
-                    _ = try await SupabaseManager.shared.client
-                        .from("rides")
-                        .update(payload)
-                        .eq("id", value: rideId)
-                        .execute()
-                    return true
-                } else {
-                    return false
-                }
-            }
-        } catch {
-            SavariLog.debug("verifyBoardingCodeAndBoard error:", error)
-        }
-        return false
-    }
-    
-    func startRideNow(rideId: String) async -> Bool {
-        let ok = await RideService.shared.startRide(rideId: rideId)
-        if ok { await MainActor.run { var copy = activeRideRow ?? [:]; copy["status"] = "in_progress"; self.activeRideRow = copy
-        }
-            do { self.waitTimer?.invalidate()
-                self.waitTimer = nil
-                self.waitSeconds = 0
-            }
-            do {
-                self.assignedDriverUnsub?()
-                self.assignedDriverUnsub = nil
-                self.assignedDriver = nil
-            }
-        }
-        return ok
-    }
-    
-    func endRideNow(rideId: String) async -> Bool {
-        let ok = await RideService.shared.endRideAndUnlockFare(rideId: rideId)
-        if ok {
-            await MainActor.run {
-                var copy = self.activeRideRow ?? [:]
-                copy["status"] = "completed"
-                self.activeRideRow = copy
-            }
-            do {
-                self.assignedDriverUnsub?()
-                self.assignedDriverUnsub = nil
-                self.assignedDriver = nil
-            }
-        }
-        return ok
-    }
-    
-    // driver accepts a ride using atomic RPC
-    func acceptRide(rideId: String, driverId: String) async -> Bool {
-        let ok = await RideService.shared.acceptRide(rideId: rideId, driverId: driverId)
-        if ok {
-            await loadActiveRideRowIfNeeded(rideId: rideId)
-            await MainActor.run { self.rideAccepted = true }
-        }
-        return ok
-    }
-    
-    // Convenience: accept using an incoming ride dictionary (from realtime/polling)
-    func acceptIncomingRide(_ incomingRide: [String: Any]) {
-        guard let rideId = incomingRide["id"] as? String,
-              let driverId = SavariSessionStore.authToken else { return }
-        if uuidStringsMatch(incomingRide["passenger_id"] as? String, driverId) {
-            SavariLog.debug("accept blocked: driver cannot accept their own passenger ride")
-            return
-        }
-        Task {
-            // Optimistically remove from list
-            await MainActor.run {
-                if let idx = self.incomingRideRequests.firstIndex(where: { ($0["id"] as? String) == rideId }) {
-                    self.incomingRideRequests.remove(at: idx)
-                }
-            }
-            
-            let ok = await RideService.shared.acceptRide(rideId: rideId, driverId: driverId)
-            if ok {
-                await self.loadActiveRideRowIfNeeded(rideId: rideId)
-                await MainActor.run { self.rideAccepted = true }
-            } else {
-                // race: another driver accepted first; show toast and refresh list
-                SavariLog.debug("accept failed (likely accepted by someone else)")
-                // optional: re-fetch requested rides or signal UI
-                Task {
-                    // re-fetch a few requested rides to update local state
-                    // ... same fetch as in goOnline ...
-                }
-            }
-            let currentLocation = GPSLocationPusher.shared.current
-            await MainActor.run {
-                self.incomingRideRequests.sort { lhs, rhs in
-                    func distanceToPickup(_ row: [String:Any]) -> Double {
-                        guard let plat = row["pickup_lat"] as? Double, let plon = row["pickup_lon"] as? Double,
-                              let my = currentLocation else { return Double.greatestFiniteMagnitude }
-                        return distanceMetersBetween(my, CLLocationCoordinate2D(latitude: plat, longitude: plon))
-                    }
-                    return distanceToPickup(lhs) < distanceToPickup(rhs)
-                }
-            }
-        }
-    }
-    
-    func driverCancelAssignedRide(rideId: String, driverId: String, reason: String = "") async -> Bool {
-        do {
-            let params: [String: AnyEncodable] = [
-                "p_ride_id": AnyEncodable(rideId),
-                "p_driver_id": AnyEncodable(driverId),
-                "p_reason": AnyEncodable(reason)
-            ]
-            let resp = try await SupabaseManager.shared.client.rpc("driver_cancel_ride", params: params).execute()
-            if let b = jsonBool(from: resp.data) { return b }
-        } catch {
-            SavariLog.debug("driverCancelAssignedRide error:", error)
-        }
-        return false
-    }
-    @MainActor
-    func cancelRideRequest() async {
-        let rideId = selectedRide.orderID
-        if rideId.isEmpty {
-            SavariLog.debug("[CancelRide] No rideId found")
-            return
-        }
-
-        do {
-            let payload: [String: AnyEncodable] = [
-                "status": AnyEncodable("cancelled"),
-                "cancelled_at": AnyEncodable(Date().iso8601String)
-            ]
-            _ = try await SupabaseManager.shared.client
-                .from("rides")
-                .update(payload)
-                .eq("id", value: rideId)
-                .execute()
-            SavariLog.debug("[CancelRide] Ride cancelled:", rideId)
-        } catch {
-            SavariLog.debug("[CancelRide] Error:", error.localizedDescription)
-        }
-    }
-    
-    func updateFareEstimates(distanceMeters: CLLocationDistance) {
-        let km = distanceMeters / 1000
-
-        fareAuto = max(50, 20 + km * 12)
-        fareBike = max(30, 10 + km * 8)
-
-        // Default selection (Apple-style)
-        if chosenTransportOption == nil {
-            chosenTransportOption = "Auto"
-            selectedRide.amount = fareAuto ?? 0
-        }
-    }
 }
-    
-    // --- Wiring changes for DashboardViewModelRealtime.subscribeToMyRide ---
-    extension DashboardViewModelRealtime {
-        func subscribeToMyRide(rideId: String) async {
-            // unsubscribe any existing ride subscription
-            rideUpdateCancel?(); rideUpdateCancel = nil
-            
-            // Subscribe to the rides table for updates (existing helper)
-            rideUpdateCancel = await RealtimeManager.shared.subscribeRideRequests { [weak self] payload in
-                guard let self = self else { return }
-                if let new = payload["new"] as? [String:Any], let id = new["id"] as? String, id == rideId {
-                    Task { @MainActor in
-                        // store latest row
-                        self.activeRideRow = new
-                        
-                        // If an assigned driver has been set, subscribe to that driver's location
-                        if let assigned = (new["assigned_driver_id"] as? String) ?? (new["driver_id"] as? String) {
-                            // mark ride accepted (passenger sees driver on the way)
-                            self.passengerFlow = .accepted
-                            
-                            // cancel any previous assigned-driver subscription
-                            self.assignedDriverUnsub?()
-                            self.assignedDriverUnsub = nil
-                            
-                            // subscribe to the assigned driver's location and keep the unsubscribe handle
-                            Task {
-                                self.assignedDriverUnsub = await RealtimeManager.shared.subscribeDriverLocation(driverId: assigned) { driver in
-                                    Task { @MainActor in
-                                        // update assignedDriver model used by the UI
-                                        self.assignedDriver = driver
-                                        
-                                        // compute ETA driver -> pickup if pickup coords present on the active ride row
-                                        if let plat = self.activeRideRow?["pickup_lat"] as? Double,
-                                           let plon = self.activeRideRow?["pickup_lon"] as? Double {
-                                            let pickupCoord = CLLocationCoordinate2D(latitude: plat, longitude: plon)
-                                            let meters = distanceMetersBetween(driver.coordinate, pickupCoord)
-                                            self.assignedDriverETASeconds = secondsFromMeters(meters, avgSpeedMetersPerSec: 8.0)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // react to status transitions (arrived, boarded, in_progress, completed, cancelled)
-                        if let status = new["status"] as? String {
-                            switch status {
-                            case "arrived":
-                                // driver has arrived — UI will show arrival state
-                                self.passengerFlow = .enRoute
-                            case "boarded":
-                                self.boardingCodeVerified = true
-                            case "in_progress":
-                                self.passengerFlow = .enRoute
-                            case "completed", "cancelled":
-                                // cleanup assigned driver subscription
-                                self.assignedDriverUnsub?()
-                                self.assignedDriverUnsub = nil
-                                self.assignedDriver = nil
-                                self.rideAccepted = false
-                                // optionally clear activeRideRow if you want
-                            default:
-                                break
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }

@@ -65,6 +65,8 @@
 				SavariCore/DashboardView.swift,
 				"SavariCore/DashboardView+Previews.swift",
 				SavariCore/DashboardViewModel.swift,
+				SavariCore/DashboardViewModelDriverActions.swift,
+				SavariCore/DashboardViewModelPassengerActions.swift,
 				SavariCore/GPSLocationPusher.swift,
 				SavariCore/LocationCompleter.swift,
 				SavariCore/MapComponents.swift,
