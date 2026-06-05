@@ -79,49 +79,18 @@ struct DashboardView: View {
                 }
             )
             
-            // only intercept taps while inline search is open
-            if vm.passengerFlow == .searching && showingInlineSearch {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        // close inline search when tapping outside
-                        showingInlineSearch = false
-                        inlineFieldIsFocused = false
-                        inlineQuery = ""
-                        inlineCompleter.update(query: "")
-                        cancelInlineSearch()
-                    }
-                    .zIndex(1)
-            }
+            DashboardInlineSearchDismissLayer(
+                isPresented: vm.passengerFlow == .searching && showingInlineSearch,
+                onDismiss: cancelInlineSearch
+            )
             
-            // Transparent drag layer to detect manual map interaction and disable tracking
-            Color.clear
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 5)
-                    .onChanged { _ in
-                        if isTrackingUser {
-                            isTrackingUser = false
-                        }
-                    }
-                )
-                .allowsHitTesting(false)
+            DashboardManualDragLayer(isTrackingUser: $isTrackingUser)
             
-            // passenger / driver controls
-            VStack { Spacer()
-                HStack(spacing: 12) {
-                    if isPassenger {
-                        DashboardPassengerControls(vm: vm)
-                    } else {
-                        DriverControls(
-                            isOnline: vm.isOnline,
-                            activeDriverCount: vm.drivers.count,
-                            onGoOnline: handleGoOnlineTapped
-                        )
-                    }
-                }
-                .padding()
-            }
+            DashboardBottomControlsLayer(
+                isPassenger: isPassenger,
+                vm: vm,
+                onGoOnline: handleGoOnlineTapped
+            )
             
             if isDriver {
                 DashboardDriverOverlayLayer(vm: vm)
