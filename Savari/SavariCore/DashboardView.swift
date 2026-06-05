@@ -42,15 +42,10 @@ struct DashboardView: View {
     // cancelable task for async searches (so we can cancel in-flight work)
     @State private var inlineSearchTask: Task<Void, Never>? = nil
     
-    // keep a reference if you use MKLocalSearch directly (optional)
-    @State private var activeMKSearch: MKLocalSearch? = nil
-    
     @FocusState private var inlineFieldIsFocused: Bool
     
     @Environment(\.colorScheme) private var colorScheme
-    
-    private let searchBarHeight: CGFloat = 44
-    
+
     init(role: String) {
         self.role = role
         let route = Route(start: CLLocationCoordinate2D(latitude: 28.6139, longitude: 77.2090),
@@ -331,191 +326,26 @@ struct DashboardView: View {
         .onDisappear { vm.stopAll() }
     }
     
-    // create a small computed property for the top bar (includes dropdown)
     private var topBar: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Text("Savari.").font(.largeTitle.monospacedDigit()).foregroundColor(.primary)
-                Spacer()
-                Circle()
-                    .fill(vm.isRealtimeActive ? Color.green : Color.secondary.opacity(0.6))
-                    .frame(width: 12, height: 12)
-
-                Menu {
-                    Button(role: .destructive) {
-                        Task { await signOut() }
-                    } label: {
-                        Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
-                } label: {
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .frame(width: 36, height: 36)
-                        .background(Material.ultraThin)
-                        .clipShape(Circle())
-                }
-                .disabled(isSigningOut)
-            }
-            
-            // the search pill and map button
-            HStack(spacing: 6) {
-                HStack(spacing: 12) {
-                    Image(systemName: "magnifyingglass")
-                    Group {
-                        if role.lowercased().contains("passenger") {
-                            if vm.passengerFlow == .searching && showingInlineSearch {
-                                TextField("Where to?", text: $inlineQuery)
-                                    .textFieldStyle(.plain)
-                                    .padding(.vertical, 10)
-                                    .padding(.trailing, 6)
-                                    .focused($inlineFieldIsFocused)
-                                    .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { inlineFieldIsFocused = true } }
-                                    .onChange(of: inlineQuery) { new in
-                                        inlineSearchTask?.cancel()
-                                        if let pickup = GPSLocationPusher.shared.current {
-                                            inlineCompleter.region = MKCoordinateRegion(
-                                                center: pickup,
-                                                span: MKCoordinateSpan(latitudeDelta: 0.25, longitudeDelta: 0.25)
-                                            )
-                                        }
-                                        inlineSearchTask = Task {
-                                            try? await Task.sleep(nanoseconds: 150_000_000)
-                                            if Task.isCancelled { return }
-                                            inlineCompleter.update(query: new)
-                                        }
-                                    }
-                                    .onSubmit {
-                                        if let first = inlineCompleter.completions.first { Task { await handleInlineSelection(item: first) } }
-                                    }
-                            } else {
-                                Button {
-                                    vm.passengerFlow = .searching
-                                    showingInlineSearch = true
-                                } label: {
-                                    HStack {
-                                        Text(destinationText.isEmpty ? "Where to?" : destinationText)
-                                            .font(.system(size: 16, weight: .semibold))
-                                            .foregroundColor(destinationText.isEmpty ? .secondary : .primary)
-                                        Spacer()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if vm.passengerFlow == .searching && showingInlineSearch && !inlineQuery.isEmpty {
-                        Button(action: {
-                            inlineQuery = ""
-                            inlineCompleter.update(query: "")
-                        }) {
-                            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 10)
-                .frame(height: searchBarHeight)
-                .frame(maxWidth: .infinity)
-                .background(Material.ultraThin)
-                .cornerRadius(14)
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.08)))
-                .frame(maxWidth: 520)
-                
-                Button(action: {
-                    if vm.passengerFlow == .idle {
-                        vm.passengerFlow = .searching
-                    }
-                    showingInlineSearch = false
-                    inlineQuery = ""
-                    inlineCompleter.update(query: "")
-                    showMapPickerSheet = true
-                }) {
-                    Image(systemName: "map")
-                        .font(.system(size: 16, weight: .semibold))
-                        .padding(10)
-                        .background(Material.ultraThin)
-                        .cornerRadius(10)
-                }
-                .sheet(isPresented: $showMapPickerSheet, onDismiss: {
-                    if vm.passengerFlow == .searching {
-                            vm.passengerFlow = .idle
-                        }
-                        showingInlineSearch = false
-                        inlineQuery = ""
-                        inlineCompleter.update(query: "")
-                    }) {
-                    MapPickerView(selectedItem: $inlineChosenMapItem) { item in
-                        Task {
-                            await handleInlineSelection(
-                                item: .init(title: item.name ?? item.placemark.title ?? "Picked",
-                                            subtitle: item.placemark.title ?? "",
-                                            mapItem: item,
-                                            completion: nil)
-                            )
-                        }
-                    }
-                }
-                
-                // after the map button, show Cancel when inline is active
-                if role.lowercased().contains("passenger"),
-                   vm.passengerFlow == .searching
-                   || vm.passengerFlow == .preview
-                   || vm.passengerFlow == .confirming {
-                    Button("Cancel") {
-                        // Fully clear inline search UI and any temporary destination state
-                        cancelPassengerFlow()
-                        cancelInlineSearch()
-                        destinationText = ""
-                        inlineChosenMapItem = nil
-                        destCoordinate = nil
-                        vm.selectedRide.routeCoordinates = []
-                        pickupCoordinate = nil
-                    }
-                    .foregroundColor(.primary)
-                    .padding(.leading, 6)
-                }
-            }
-            
-            // ---- RESULTS DROPDOWN (restore this so search results are visible) ----
-            if vm.passengerFlow == .searching && showingInlineSearch {
-                VStack(spacing: 8) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            if inlineCompleter.completions.isEmpty && inlineQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                                HStack {
-                                    Text("Type to search destinations or long-press on the map")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                }
-                                .padding(.horizontal)
-                                .padding(.vertical, 10)
-                            } else {
-                                ForEach(inlineCompleter.completions) { item in
-                                    Button(action: { Task { await handleInlineSelection(item: item) } }) {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(item.title).font(.body)
-                                            if !item.subtitle.isEmpty { Text(item.subtitle).font(.caption).foregroundColor(.secondary) }
-                                        }
-                                        .padding(.horizontal)
-                                        .padding(.vertical, 10)
-                                    }
-                                    Divider().padding(.leading)
-                                }
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 260)
-                    .background(Material.ultraThin)
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.06)))
-                    .padding(.horizontal, 4)
-                }
-                .padding(.top, 4)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
+        DashboardTopBar(
+            role: role,
+            vm: vm,
+            inlineCompleter: inlineCompleter,
+            destinationText: $destinationText,
+            showingInlineSearch: $showingInlineSearch,
+            inlineQuery: $inlineQuery,
+            inlineChosenMapItem: $inlineChosenMapItem,
+            showMapPickerSheet: $showMapPickerSheet,
+            inlineFieldIsFocused: $inlineFieldIsFocused,
+            isSigningOut: isSigningOut,
+            onSignOut: { Task { await signOut() } },
+            onInlineQueryChanged: scheduleInlineSearch,
+            onClearInlineQuery: clearInlineQuery,
+            onMapPickerDismiss: handleMapPickerDismiss,
+            onMapItemPicked: handleMapItemPicked,
+            onCancelPassengerFlow: cancelPassengerFlow,
+            onCompletionSelected: { item in Task { await handleInlineSelection(item: item) } }
+        )
     }
 
     @MainActor
@@ -595,19 +425,54 @@ struct DashboardView: View {
     }
     
     private func cancelInlineSearch() {
-        // 1) Cancel any running Swift concurrency Task
         inlineSearchTask?.cancel()
         inlineSearchTask = nil
         
-        // 2) Cancel any MKLocalSearch in-flight (if you keep a reference)
-        activeMKSearch?.cancel()
-        activeMKSearch = nil
-        
-        // 3) Clear UI state
         showingInlineSearch = false
         inlineFieldIsFocused = false
         inlineQuery = ""
-        inlineCompleter.update(query: "")    // tell completer to clear results
+        inlineCompleter.update(query: "")
+    }
+
+    private func scheduleInlineSearch(_ query: String) {
+        inlineSearchTask?.cancel()
+        if let pickup = GPSLocationPusher.shared.current {
+            inlineCompleter.region = MKCoordinateRegion(
+                center: pickup,
+                span: MKCoordinateSpan(latitudeDelta: 0.25, longitudeDelta: 0.25)
+            )
+        }
+
+        inlineSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            if Task.isCancelled { return }
+            inlineCompleter.update(query: query)
+        }
+    }
+
+    private func clearInlineQuery() {
+        inlineQuery = ""
+        inlineCompleter.update(query: "")
+    }
+
+    private func handleMapPickerDismiss() {
+        if vm.passengerFlow == .searching {
+            vm.passengerFlow = .idle
+        }
+        cancelInlineSearch()
+    }
+
+    private func handleMapItemPicked(_ item: MKMapItem) {
+        Task {
+            await handleInlineSelection(
+                item: .init(
+                    title: item.name ?? item.placemark.title ?? "Picked",
+                    subtitle: item.placemark.title ?? "",
+                    mapItem: item,
+                    completion: nil
+                )
+            )
+        }
     }
     
     // MARK: - Passenger flow helper (sequence)
