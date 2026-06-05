@@ -196,7 +196,7 @@ extension RealtimeManager {
         }
     }
 
-    private static func driver(from row: DriverRow, color: Color) -> Driver? {
+    nonisolated private static func driver(from row: DriverRow, color: Color) -> Driver? {
         guard let uuid = UUID(uuidString: row.driver_id) else {
             return nil
         }

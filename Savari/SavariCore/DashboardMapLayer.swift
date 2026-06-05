@@ -33,7 +33,7 @@ struct DashboardMapLayer: View {
                 didCenterToUser = true
             }
         }
-        .onChange(of: vm.passengerFlow) { flow in
+        .onChange(of: vm.passengerFlow) { _, flow in
             guard flow == .accepted, let driver = vm.assignedDriver else {
                 return
             }

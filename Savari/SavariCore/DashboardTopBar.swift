@@ -86,7 +86,7 @@ struct DashboardTopBar: View {
                                 inlineFieldIsFocused.wrappedValue = true
                             }
                         }
-                        .onChange(of: inlineQuery) { new in
+                        .onChange(of: inlineQuery) { _, new in
                             onInlineQueryChanged(new)
                         }
                         .onSubmit {

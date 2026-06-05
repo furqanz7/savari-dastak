@@ -37,7 +37,8 @@ extension RealtimeManager {
                             if let oldRow {
                                 payload["old"] = Self.normalizedDictionary(from: oldRow)
                             }
-                            await MainActor.run { onUpdate(payload) }
+                            let updatePayload = payload
+                            await MainActor.run { onUpdate(updatePayload) }
                         case .delete(let deletion):
                             let old = try deletion.decodeOldRecord(as: RideRow.self, decoder: decoder)
                             let payload = Self.normalizedDictionary(from: old)
@@ -98,7 +99,7 @@ extension RealtimeManager {
         }
     }
 
-    private static func normalizedDictionary(from row: RideRow) -> [String: Any] {
+    nonisolated private static func normalizedDictionary(from row: RideRow) -> [String: Any] {
         guard let data = try? JSONEncoder().encode(row),
               var dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return [:]
@@ -107,14 +108,14 @@ extension RealtimeManager {
         return dict
     }
 
-    private static func normalizedRawRidePayload(_ rawPayload: [String: Any]) throws -> [String: Any] {
+    nonisolated private static func normalizedRawRidePayload(_ rawPayload: [String: Any]) throws -> [String: Any] {
         let data = try JSONSerialization.data(withJSONObject: rawPayload)
         var dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
         normalizeRideDestinationFields(&dict)
         return dict
     }
 
-    private static func normalizeRideDestinationFields(_ dict: inout [String: Any]) {
+    nonisolated private static func normalizeRideDestinationFields(_ dict: inout [String: Any]) {
         if dict["drop_lat"] == nil, let destinationLatitude = dict["dest_lat"] {
             dict["drop_lat"] = destinationLatitude
         }

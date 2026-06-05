@@ -1,6 +1,6 @@
 import Foundation
 
-func realtimeUUIDStringsMatch(_ lhs: String?, _ rhs: String?) -> Bool {
+nonisolated func realtimeUUIDStringsMatch(_ lhs: String?, _ rhs: String?) -> Bool {
     guard let lhs, let rhs else { return false }
     if let leftUUID = UUID(uuidString: lhs), let rightUUID = UUID(uuidString: rhs) {
         return leftUUID == rightUUID
@@ -15,11 +15,11 @@ nonisolated final class RealtimeManager {
     var pollingTask: Task<Void, Never>?
     let pollingInterval: TimeInterval = 2.0
 
-    static func jsonObject(from data: Data) -> [String: Any]? {
+    nonisolated static func jsonObject(from data: Data) -> [String: Any]? {
         try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
-    static func jsonArray(from data: Data) -> [[String: Any]]? {
+    nonisolated static func jsonArray(from data: Data) -> [[String: Any]]? {
         try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
     }
 
