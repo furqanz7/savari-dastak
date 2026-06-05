@@ -73,6 +73,7 @@
 				SavariCore/GPSLocationPusher.swift,
 				SavariCore/LocationCompleter.swift,
 				SavariCore/MapComponents.swift,
+				SavariCore/MapPickerRepresentable.swift,
 				SavariCore/MapPickerView.swift,
 				SavariCore/Models.swift,
 				SavariCore/RealtimeManager.swift,
