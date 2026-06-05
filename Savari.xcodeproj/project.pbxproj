@@ -47,6 +47,8 @@
 					Assets.xcassets,
 					LoginDriverSetupAssets.swift,
 					LoginDriverSetupStep.swift,
+					LoginFlowMediaSheets.swift,
+					LoginFlowStepContent.swift,
 				LoginMediaPickers.swift,
 				LoginRoleSelectionStep.swift,
 				LoginSignInStep.swift,

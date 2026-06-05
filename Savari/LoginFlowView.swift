@@ -14,7 +14,6 @@ struct LoginFlowView: View {
     @State private var pendingAuthToken: String? = nil
     @AppStorage(SavariDefaultsKey.isOnboardingComplete) private var isOnboardingComplete: Bool = false
 
-
     // MARK: - Step Flow
     @State private var step: LoginStep = .roleSelection
     
@@ -78,104 +77,27 @@ struct LoginFlowView: View {
                             .font(.system(size: 48, weight: .thin))
                             .foregroundColor(colorScheme == .dark ? .white : .black)
                         
-                        // MARK: - Step View
-                        Group {
-                            switch step {
-                            case .roleSelection:
-                                RoleSelectionStep(role: $role, lastRole: $lastRole) {
-                                    step = .signIn
-                                }
-                                
-                            case .signIn:
-                                SignInStep(onSignIn: { token in
-                                    pendingAuthToken = token
-                                    
-                                    // Reset any previous flow state to avoid auto-skipping
-                                    name = ""
-                                    age = ""
-                                    sex = ""
-                                    phoneNumber = ""
-                                    
-                                    vehicleNumber = ""
-                                    vehicleDocsCaptured.removeAll()
-                                    driverDocsCaptured.removeAll()
-                                    selfieImage = nil
-                                    
-                                    // Always go to User Info after sign-in
-                                    step = .userInfo
-                                })
-                                
-                            case .userInfo:
-                                UserInfoStep(
-                                    name: $name,
-                                    age: $age,
-                                    sex: $sex,
-                                    phoneNumber: $phoneNumber,
-                                    role: role ?? "Passenger",
-                                    userId: pendingAuthToken ?? authToken
-                                ) {
-                                    // This is now handled in UserInfoStep continue button
-                                    if role == "Driver" {
-                                                step = .driverSetup
-                                            } else {
-                                                if let pending = pendingAuthToken { authToken = pending }
-                                                SavariSessionStore.setOnboardingComplete(true)
-                                                step = .completed
-                                            }
-                                        }
-                                
-                            case .driverSetup:
-                                let selfieCapturedBinding = Binding<Bool>(
-                                    get: { selfieImage != nil },
-                                    set: { newValue in
-                                        if newValue == false {
-                                            selfieImage = nil
-                                        }
-                                        // when set to true, the actual image will be provided by the camera capture handler
-                                    }
-                                )
-                                
-                                DriverSetupStep(
-                                    userId: pendingAuthToken ?? authToken,
-                                    vehicleNumber: $vehicleNumber,
-                                    vehicleDocsCaptured: $vehicleDocsCaptured,
-                                    driverDocsCaptured: $driverDocsCaptured,
-                                    selfieCaptured: selfieCapturedBinding,
-                                    selfieImage: $selfieImage,
-                                    onCaptureVehicle: {
-                                        photoPickerFor = .vehicle
-                                        #if targetEnvironment(simulator)
-                                        vehicleDocsCaptured.append(simulatorCaptureImage(title: "Vehicle"))
-                                        #else
-                                        showingDocCamera = true
-                                        #endif
-                                    },
-                                    captureDriverDocs: {
-                                        photoPickerFor = .driver
-                                        #if targetEnvironment(simulator)
-                                        driverDocsCaptured.append(simulatorCaptureImage(title: "Driver"))
-                                        #else
-                                        showingDocCamera = true
-                                        #endif
-                                    },
-                                    takeSelfie: {
-                                        #if targetEnvironment(simulator)
-                                        selfieImage = simulatorCaptureImage(title: "Selfie")
-                                        #else
-                                        showingCamera = true
-                                        #endif
-                                    },
-                                    onComplete: {
-                                        if let pending = pendingAuthToken { authToken = pending }
-                                        SavariSessionStore.setOnboardingComplete(true)
-                                        step = .completed
-                                    }
-                                )
-                                
-                            case .completed:
-                                DashboardView(role: role ?? "Passenger")
-                            }
-                        }
+                        LoginFlowStepContent(
+                            step: $step,
+                            role: $role,
+                            lastRole: $lastRole,
+                            name: $name,
+                            age: $age,
+                            sex: $sex,
+                            phoneNumber: $phoneNumber,
+                            vehicleNumber: $vehicleNumber,
+                            vehicleDocsCaptured: $vehicleDocsCaptured,
+                            driverDocsCaptured: $driverDocsCaptured,
+                            selfieImage: $selfieImage,
+                            pendingAuthToken: pendingAuthToken,
+                            authToken: authToken,
+                            onSignIn: handleSignIn,
+                            onCaptureVehicle: captureVehicleDocument,
+                            onCaptureDriverDocs: captureDriverDocuments,
+                            onTakeSelfie: takeSelfie,
+                            onPassengerComplete: completeOnboarding,
+                            onDriverComplete: completeOnboarding
+                        )
                         .padding(.horizontal, 32)
                     }
                     Spacer()
@@ -191,37 +113,69 @@ struct LoginFlowView: View {
                 silentlyRequestPermissions()
             }
         }
-        // Camera / Picker overlays
-        .sheet(isPresented: $showingPhotoPicker) {
-            PhotoPicker { images in
-                switch photoPickerFor {
-                case .vehicle: vehicleDocsCaptured.append(contentsOf: images)
-                case .driver: driverDocsCaptured.append(contentsOf: images)
-                case .none: break
-                }
-            }
-        }
-        .fullScreenCover(isPresented: $showingDocCamera) {
-            CameraView { image in
-                if let image = image {
-                    switch photoPickerFor {
-                    case .vehicle: vehicleDocsCaptured.append(image)
-                    case .driver: driverDocsCaptured.append(image)
-                    case .none: break
-                    }
-                }
-                showingDocCamera = false
-            }
-        }
-        .fullScreenCover(isPresented: $showingCamera) {
-            CameraView { image in
-                if let image = image { selfieImage = image }
-                showingCamera = false
-            }
-        }
+        .loginFlowMediaSheets(
+            showingPhotoPicker: $showingPhotoPicker,
+            photoPickerFor: $photoPickerFor,
+            showingDocCamera: $showingDocCamera,
+            showingCamera: $showingCamera,
+            vehicleDocsCaptured: $vehicleDocsCaptured,
+            driverDocsCaptured: $driverDocsCaptured,
+            selfieImage: $selfieImage
+        )
     }
 
     // MARK: - Helpers
+    private func handleSignIn(token: String) {
+        pendingAuthToken = token
+        resetOnboardingState()
+        step = .userInfo
+    }
+
+    private func resetOnboardingState() {
+        name = ""
+        age = ""
+        sex = ""
+        phoneNumber = ""
+        vehicleNumber = ""
+        vehicleDocsCaptured.removeAll()
+        driverDocsCaptured.removeAll()
+        selfieImage = nil
+    }
+
+    private func captureVehicleDocument() {
+        photoPickerFor = .vehicle
+        #if targetEnvironment(simulator)
+        vehicleDocsCaptured.append(simulatorCaptureImage(title: "Vehicle"))
+        #else
+        showingDocCamera = true
+        #endif
+    }
+
+    private func captureDriverDocuments() {
+        photoPickerFor = .driver
+        #if targetEnvironment(simulator)
+        driverDocsCaptured.append(simulatorCaptureImage(title: "Driver"))
+        #else
+        showingDocCamera = true
+        #endif
+    }
+
+    private func takeSelfie() {
+        #if targetEnvironment(simulator)
+        selfieImage = simulatorCaptureImage(title: "Selfie")
+        #else
+        showingCamera = true
+        #endif
+    }
+
+    private func completeOnboarding() {
+        if let pending = pendingAuthToken {
+            authToken = pending
+        }
+        SavariSessionStore.setOnboardingComplete(true)
+        step = .completed
+    }
+
     private func silentlyRequestPermissions() {
         locationManager.requestWhenInUseAuthorization()
     }
