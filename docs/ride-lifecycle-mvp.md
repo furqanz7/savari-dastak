@@ -48,12 +48,13 @@ expired
 - Exactly one driver owns the ride.
 - Passenger sees assigned driver movement.
 - Driver sees navigation to pickup.
+- Current database migrations use `assigned` for this state. The product language should normalize this to `accepted` later, but the MVP supports both names.
 
 ### arrived
 
 - Driver has reached pickup.
 - Client should disable the `Arrive` action until the driver's current GPS point is within the configured threshold.
-- Backend should eventually enforce the same threshold before accepting the status transition.
+- Backend must enforce the same threshold before accepting the status transition.
 
 ### boarded
 

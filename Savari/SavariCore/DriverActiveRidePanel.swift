@@ -56,7 +56,11 @@ struct DriverActiveRidePanel: View {
 
     private var canArrive: Bool {
         isAtPickup &&
-        (normalizedStatus == "accepted" || normalizedStatus == "driver_en_route")
+        (
+            normalizedStatus == "assigned" ||
+            normalizedStatus == "accepted" ||
+            normalizedStatus == "driver_en_route"
+        )
     }
 
     private var canEnterCode: Bool {

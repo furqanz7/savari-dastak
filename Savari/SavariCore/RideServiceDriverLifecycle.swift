@@ -3,22 +3,23 @@ import Supabase
 
 extension RideService {
     func markArrived(rideId: String, driverId: String) async -> Bool {
-        let payload: [String: AnyEncodable] = [
-            "status": AnyEncodable("arrived"),
-            "arrived_at": AnyEncodable(Date().iso8601String),
-            "driver_id": AnyEncodable(driverId)
+        let params: [String: AnyEncodable] = [
+            "p_ride_id": AnyEncodable(rideId),
+            "p_driver_id": AnyEncodable(driverId),
+            "p_arrival_threshold_m": AnyEncodable(100.0)
         ]
         do {
-            _ = try await SupabaseManager.shared.client
-                .from("rides")
-                .update(payload)
-                .eq("id", value: rideId)
+            let resp = try await SupabaseManager.shared.client
+                .rpc("mark_driver_arrived", params: params)
                 .execute()
-            return true
+
+            if let bool = try? JSONDecoder().decode(Bool.self, from: resp.data) {
+                return bool
+            }
         } catch {
             SavariLog.debug("markArrived error:", error)
-            return false
         }
+        return false
     }
 
     func startRide(rideId: String) async -> Bool {
