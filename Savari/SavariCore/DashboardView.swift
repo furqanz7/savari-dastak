@@ -60,112 +60,27 @@ struct DashboardView: View {
     
     var body: some View {
         ZStack {
-            // --- Map (only MapContent inside builder) ---
             Map(position: $mapPosition) {
-                ForEach(vm.drivers) { driver in
-                    Annotation("", coordinate: driver.coordinate) {
-                        DriverAnnotationView(driver: driver)
-                            .accessibilityLabel(driver.name)
-                            .onTapGesture {
-                                withAnimation {
-                                    mapPosition = .region(
-                                        MKCoordinateRegion(center: driver.coordinate,
-                                                           span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02))
-                                    )
-                                }
-                            }
-                    }
-                }
-                
-                // <-- ADD HERE: native polyline overlay as MapContent
-                if showRouteOverlay && !vm.selectedRide.routeCoordinates.isEmpty {
-                    MapPolyline(coordinates: vm.selectedRide.routeCoordinates)
-                        .stroke(Color.blue, lineWidth: 4)
-                }
-                
-                // Passenger-only markers
-                if role.lowercased().contains("passenger") {
-                    // pickup marker
-                    if let pickup = pickupCoordinate {
-                        Annotation("", coordinate: pickup) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "circle.fill").resizable().frame(width: 18, height: 18).foregroundColor(.blue)
-                                Text("You").font(.caption2).padding(6).background(Material.ultraThin).cornerRadius(6)
-                            }
-                            .accessibilityLabel("Pickup")
+                DashboardMapContent(
+                    role: role,
+                    drivers: vm.drivers,
+                    selectedRide: vm.selectedRide,
+                    assignedDriver: vm.assignedDriver,
+                    activeRideRow: vm.activeRideRow,
+                    pickupCoordinate: pickupCoordinate,
+                    destCoordinate: destCoordinate,
+                    showRouteOverlay: showRouteOverlay,
+                    onDriverTap: { coordinate in
+                        withAnimation {
+                            mapPosition = .region(
+                                MKCoordinateRegion(
+                                    center: coordinate,
+                                    span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+                                )
+                            )
                         }
                     }
-                    
-                    // destination marker
-                    if let dest = destCoordinate {
-                        Annotation("", coordinate: dest) {
-                            VStack(spacing: 4) {
-                                ZStack {
-                                    Circle().fill(Color.red).frame(width: 34, height: 34).shadow(radius: 3)
-                                    Image(systemName: "mappin").foregroundColor(.white)
-                                }
-                                Text("Destination").font(.caption2).padding(6).background(Material.ultraThin).cornerRadius(6)
-                            }
-                            .accessibilityLabel("Destination")
-                        }
-                    }
-                }
-                
-                // live user location marker (follows GPSLocationPusher.shared.current)
-                if let userCoord = GPSLocationPusher.shared.current {
-                    Annotation("", coordinate: userCoord) {
-                        VStack(spacing: 4) {
-                            // Apple-like circular marker with subtle halo + small user icon
-                            ZStack {
-                                Circle()
-                                    .fill(Color.white.opacity(0.9))
-                                    .frame(width: 40, height: 40)
-                                    .shadow(radius: 6)
-                                Circle()
-                                    .stroke(Color.blue.opacity(0.4), lineWidth: 2)
-                                    .frame(width: 48, height: 48)
-                                Image(systemName: "person.fill")
-                                    .foregroundColor(.blue)
-                                    .font(.system(size: 18, weight: .semibold))
-                            }
-                            Text("You").font(.caption2).padding(6).background(Material.ultraThin).cornerRadius(6)
-                        }
-                        .accessibilityLabel("You")
-                    }
-                }
-                
-                // show assigned driver distinctly
-                if let ad = vm.assignedDriver, role.lowercased().contains("passenger") {
-                    Annotation("", coordinate: ad.coordinate) {
-                        VStack {
-                            ZStack {
-                                Circle().fill(Color.green).frame(width: 48, height: 48).shadow(radius: 3)
-                                Image(systemName: "car.fill").foregroundColor(.white)
-                            }
-                            Text("Driver").font(.caption2).padding(6).background(Material.ultraThin).cornerRadius(6)
-                        }
-                        .fixedSize()
-                        .accessibilityLabel("Assigned driver")
-                    }
-                }
-                
-                // Driver: show passenger pickup pin when on a job
-                if role.lowercased().contains("driver"),
-                   let active = vm.activeRideRow,
-                   let plat = active["pickup_lat"] as? Double,
-                   let plon = active["pickup_lon"] as? Double {
-                    let pickup = CLLocationCoordinate2D(latitude: plat, longitude: plon)
-                    Annotation("", coordinate: pickup) {
-                        VStack(spacing: 4) {
-                            ZStack {
-                                Circle().fill(Color.blue).frame(width: 34, height: 34).shadow(radius: 3)
-                                Image(systemName: "person.fill").foregroundColor(.white)
-                            }
-                            Text("Pickup").font(.caption2).padding(6).background(Material.ultraThin).cornerRadius(6)
-                        }
-                        .accessibilityLabel("Pickup")
-                    }
-                }
+                )
             }
             .ignoresSafeArea()
             .onReceive(GPSLocationPusher.shared.$current.compactMap { $0 }) { coord in
