@@ -20,9 +20,6 @@ struct DashboardView: View {
     @State private var destinationText: String = ""
     // Removed @State private var chosenTransport
     
-    @State private var followAssignedDriver: Bool = true
-    @State private var showRouteOverlay: Bool = true
-    
     // Inline search state
     @State private var showingInlineSearch: Bool = false
     @StateObject private var inlineCompleter = LocationCompleter()
@@ -43,9 +40,6 @@ struct DashboardView: View {
     @State private var inlineSearchTask: Task<Void, Never>? = nil
     
     @FocusState private var inlineFieldIsFocused: Bool
-    
-    @Environment(\.colorScheme) private var colorScheme
-
     init(role: String) {
         self.role = role
         let route = Route(start: CLLocationCoordinate2D(latitude: 28.6139, longitude: 77.2090),
@@ -64,7 +58,7 @@ struct DashboardView: View {
                     activeRideRow: vm.activeRideRow,
                     pickupCoordinate: pickupCoordinate,
                     destCoordinate: destCoordinate,
-                    showRouteOverlay: showRouteOverlay,
+                    showRouteOverlay: true,
                     onDriverTap: { coordinate in
                         withAnimation {
                             mapPosition = .region(
@@ -104,51 +98,6 @@ struct DashboardView: View {
                     )
                 }
             }
-            // Put this near the end of your view modifiers in `body` (e.g. after .onReceive or inside .onAppear area)
-            .onChange(of: destCoordinate.map { CGPoint(x: $0.latitude, y: $0.longitude) }) { _ in
-                Task {
-                    // only compute when both pickup (user) and dest exist
-                    guard let dest = destCoordinate else { return }
-                    // prefer pickupCoordinate if set, else current GPS
-                    let pickup = pickupCoordinate ?? GPSLocationPusher.shared.current
-                    guard let pickupCoord = pickup else { return }
-                    
-                    do {
-                        let routeResult = try await RoutingService.shared.calculateRoute(from: pickupCoord, to: dest)
-                        await MainActor.run {
-                            // update VM + map overlay + local coords
-                            vm.selectedRide.routeCoordinates = routeResult.coordinates
-                            vm.selectedRide.distanceMeters = routeResult.distanceMeters
-                            vm.selectedRide.etaSeconds = Int(routeResult.expectedTravelTime)
-                            vm.selectedRide.etaDate = RoutingService.etaDate(from: routeResult.expectedTravelTime)
-                            vm.updateFareEstimates(distanceMeters: routeResult.distanceMeters)
-                            pickupCoordinate = pickupCoord
-                            destCoordinate = dest
-                            
-                            // animate camera to fit both points with padding using helper
-                            let region = MapCameraHelpers.regionFitting([pickupCoord, dest])
-                            withAnimation(.easeInOut) {
-                                mapPosition = .region(region)
-                            }
-                        }
-                    } catch {
-                        // fallback: set basic fields from straight-line estimate
-                        await MainActor.run {
-                            let a = CLLocation(latitude: pickupCoord.latitude, longitude: pickupCoord.longitude)
-                            let b = CLLocation(latitude: dest.latitude, longitude: dest.longitude)
-                            let dist = a.distance(from: b)
-                            vm.selectedRide.distanceMeters = dist
-                            vm.selectedRide.etaSeconds = Int(dist / 8.0) // fallback speed ~8 m/s
-                            pickupCoordinate = pickupCoord
-                            destCoordinate = dest
-                            withAnimation(.easeInOut) {
-                                mapPosition = .region(MKCoordinateRegion(center: dest, span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
-                            }
-                        }
-                    }
-                }
-            }
-            
             // PREVIEW: floating distance + continue pill ONLY
             if vm.passengerFlow == .preview {
                 VStack {
