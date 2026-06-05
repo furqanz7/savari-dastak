@@ -63,6 +63,7 @@
 				SavariCore/DashboardMapLayer.swift,
 				SavariCore/DashboardDriverOverlayLayer.swift,
 				SavariCore/DashboardPassengerControls.swift,
+				SavariCore/DashboardPassengerRideOverlayLayer.swift,
 				SavariCore/DashboardRideFlowComponents.swift,
 				SavariCore/DashboardTopBar.swift,
 				SavariCore/DashboardView.swift,

@@ -58,52 +58,26 @@ struct DashboardView: View {
                 pickupCoordinate: pickupCoordinate,
                 destCoordinate: destCoordinate
             )
-            // PREVIEW: floating distance + continue pill ONLY
-            if vm.passengerFlow == .preview {
-                VStack {
-                    Spacer()
-                    DistanceETABox(
-                        distanceMeters: vm.selectedRide.distanceMeters,
-                        etaSeconds: TimeInterval(vm.selectedRide.etaSeconds)
-                    ) {
-                        withAnimation(.spring()) {
-                            vm.passengerFlow = .confirming
+            DashboardPassengerRideOverlayLayer(
+                vm: vm,
+                onUsePreview: {
+                    withAnimation(.spring()) {
+                        vm.passengerFlow = .confirming
+                    }
+                },
+                onConfirm: {
+                    Task { await performPassengerRequestFlow() }
+                    vm.passengerFlow = .matching
+                },
+                onCancel: {
+                    Task {
+                        await vm.cancelRideRequest()
+                        await MainActor.run {
+                            vm.passengerFlow = .idle
                         }
                     }
-                    .padding(.bottom, 28)
                 }
-                .zIndex(7)
-            }
-
-            // CONFIRM / MATCHING / ACCEPTED: real card
-            if vm.passengerFlow == .confirming
-                || vm.passengerFlow == .matching
-                || vm.passengerFlow == .accepted {
-
-                VStack {
-                    Spacer()
-                    RideFlowCard(
-                        flow: vm.passengerFlow,
-                        vm: vm,
-                        onConfirm: {
-                            Task { await performPassengerRequestFlow() }
-                            vm.passengerFlow = .matching
-                        },
-                        onCancel: {
-                            Task {
-                                await vm.cancelRideRequest()
-                                await MainActor.run {
-                                    vm.passengerFlow = .idle
-                                }
-                            }
-                        }
-                    )
-                    .frame(maxHeight: vm.passengerFlow == .confirming ? 360 : 220)
-                    .padding(.horizontal)
-                    .padding(.bottom, 24)
-                }
-                .zIndex(6)
-            }
+            )
             
             // only intercept taps while inline search is open
             if vm.passengerFlow == .searching && showingInlineSearch {
