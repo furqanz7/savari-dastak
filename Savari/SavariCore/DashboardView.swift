@@ -49,55 +49,15 @@ struct DashboardView: View {
     
     var body: some View {
         ZStack {
-            Map(position: $mapPosition) {
-                DashboardMapContent(
-                    role: role,
-                    drivers: vm.drivers,
-                    selectedRide: vm.selectedRide,
-                    assignedDriver: vm.assignedDriver,
-                    activeRideRow: vm.activeRideRow,
-                    pickupCoordinate: pickupCoordinate,
-                    destCoordinate: destCoordinate,
-                    showRouteOverlay: true,
-                    onDriverTap: { coordinate in
-                        withAnimation {
-                            mapPosition = .region(
-                                MKCoordinateRegion(
-                                    center: coordinate,
-                                    span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
-                                )
-                            )
-                        }
-                    }
-                )
-            }
-            .ignoresSafeArea()
-            .onReceive(GPSLocationPusher.shared.$current.compactMap { $0 }) { coord in
-                if isTrackingUser || !didCenterToUser {
-                    withAnimation(.easeInOut) {
-                        mapPosition = .region(
-                            MKCoordinateRegion(center: coord,
-                                               span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02))
-                        )
-                    }
-                    didCenterToUser = true
-                }
-            }
-            .onChange(of: vm.passengerFlow) { flow in
-                guard
-                    flow == .accepted,
-                    let driver = vm.assignedDriver
-                else { return }
-
-                withAnimation(.easeInOut(duration: 0.6)) {
-                    mapPosition = .region(
-                        MKCoordinateRegion(
-                            center: driver.coordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                        )
-                    )
-                }
-            }
+            DashboardMapLayer(
+                role: role,
+                vm: vm,
+                mapPosition: $mapPosition,
+                didCenterToUser: $didCenterToUser,
+                isTrackingUser: $isTrackingUser,
+                pickupCoordinate: pickupCoordinate,
+                destCoordinate: destCoordinate
+            )
             // PREVIEW: floating distance + continue pill ONLY
             if vm.passengerFlow == .preview {
                 VStack {
