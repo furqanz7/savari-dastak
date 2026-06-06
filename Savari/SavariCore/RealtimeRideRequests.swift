@@ -17,7 +17,7 @@ extension RealtimeManager {
                         switch change {
                         case .insert(let insertion):
                             if let row = try? insertion.decodeRecord(as: RideRow.self, decoder: decoder) {
-                                SavariLog.debug("[RealtimeManager][SDK DEBUG] change payload:", insertion.record)
+                                SavariLog.debug("[RealtimeManager][SDK] insert:", row.id)
                                 let payload = Self.normalizedDictionary(from: row)
                                 await MainActor.run { onUpdate(["new": payload]) }
                             } else {

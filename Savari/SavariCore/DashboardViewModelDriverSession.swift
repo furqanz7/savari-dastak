@@ -106,8 +106,8 @@ extension DashboardViewModelRealtime {
             return
         }
 
-        SavariLog.debug("[VM][DEBUG] ride payload new:", new)
         let status = (new["status"] as? String) ?? ""
+        SavariLog.debug("[VM] ride payload:", new["id"] ?? "(no id)", "status:", status)
 
         if status == "requested" {
             if !isVisibleRequestedRide(new, driverId: driverId) {
