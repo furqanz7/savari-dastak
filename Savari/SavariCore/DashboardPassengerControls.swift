@@ -2,9 +2,10 @@ import SwiftUI
 
 struct DashboardPassengerControls: View {
     @ObservedObject var vm: DashboardViewModelRealtime
+    let onCancelMidTrip: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        VStack(spacing: 10) {
             passengerStatus
         }
     }
@@ -19,7 +20,7 @@ struct DashboardPassengerControls: View {
                         code: code,
                         ttlSeconds: vm.activeRideRow?["boarding_code_ttl"] as? Int
                     )
-                    Text("Share this code with your driver")
+                    Text("Share this PIN with your driver")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -28,9 +29,36 @@ struct DashboardPassengerControls: View {
         case "boarded":
             statusChip("Boarding confirmed", systemImage: "checkmark.circle.fill", color: .green)
         case "in_progress":
-            statusChip("Trip in progress", systemImage: "location.fill", color: .blue)
+            VStack(spacing: 10) {
+                statusChip("Trip in progress", systemImage: "location.fill", color: .blue)
+                Button(role: .destructive, action: onCancelMidTrip) {
+                    Label("Cancel trip", systemImage: "xmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .buttonStyle(LiquidGlassButtonStyle())
+            }
         case "completed":
             statusChip("Ride completed", systemImage: "checkmark.circle.fill", color: .green)
+        case "ride_finished":
+            statusChip(
+                "Ride finished - Pay ₹\(RideRowFormatter.fareString(for: vm.activeRideRow ?? [:]))",
+                systemImage: "indianrupeesign.circle.fill",
+                color: .orange
+            )
+        case "passenger_cancelled_in_trip":
+            statusChip(
+                "Trip cancelled - Pay ₹\(RideRowFormatter.fareString(for: vm.activeRideRow ?? [:]))",
+                systemImage: "indianrupeesign.circle.fill",
+                color: .orange
+            )
+        case "payment_collected":
+            statusChip(
+                "Payment collected",
+                systemImage: "checkmark.circle.fill",
+                color: .green
+            )
         default:
             EmptyView()
         }

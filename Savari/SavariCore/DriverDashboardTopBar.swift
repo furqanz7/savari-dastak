@@ -45,16 +45,20 @@ struct DriverDashboardTopBar: View {
     }
 
     private var statusColor: Color {
-        if vm.rideAccepted {
+        if hasActiveRide {
             return .blue
         }
         return vm.isOnline ? .green : .secondary
     }
 
     private var statusText: String {
-        if vm.rideAccepted {
+        if hasActiveRide {
             return "Active ride"
         }
         return vm.isOnline ? "Online and waiting" : "Offline"
+    }
+
+    private var hasActiveRide: Bool {
+        vm.rideAccepted || vm.activeRideRow != nil
     }
 }

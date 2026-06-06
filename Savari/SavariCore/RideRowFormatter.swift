@@ -2,11 +2,14 @@ import Foundation
 
 enum RideRowFormatter {
     static func fareString(for ride: [String: Any]) -> String {
-        if let estimatedFare = doubleValue(ride["estimated_fare"]) {
-            return String(format: "%.2f", estimatedFare)
+        if let cancellationFare = doubleValue(ride["cancellation_fare"]) {
+            return String(format: "%.2f", cancellationFare)
         }
         if let fare = doubleValue(ride["fare"]) {
             return String(format: "%.2f", fare)
+        }
+        if let estimatedFare = doubleValue(ride["estimated_fare"]) {
+            return String(format: "%.2f", estimatedFare)
         }
         return String(format: "%.2f", 0.0)
     }

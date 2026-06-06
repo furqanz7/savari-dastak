@@ -97,7 +97,7 @@ struct RideStatusCard: View {
             if let boardingCode, !boardingCode.isEmpty {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Boarding code")
+                        Text("Boarding PIN")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Text(boardingCode)

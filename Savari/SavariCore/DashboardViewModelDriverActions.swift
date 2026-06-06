@@ -15,6 +15,7 @@ extension DashboardViewModelRealtime {
                 self.driverFlow = .awaitingOTP
                 self.driverBoardingCodeEntry = ""
                 self.driverBoardingCodeError = nil
+                self.startDriverActiveRidePolling(rideId: rideId)
             }
 
             await MainActor.run {
@@ -65,18 +66,19 @@ extension DashboardViewModelRealtime {
                         self.driverBoardingCodeError = nil
                         self.waitTimer?.invalidate()
                         self.waitTimer = nil
+                        self.startDriverActiveRidePolling(rideId: rideId)
                     }
                     return true
                 }
                 await MainActor.run {
-                    self.driverBoardingCodeError = "Code does not match"
+                    self.driverBoardingCodeError = "PIN does not match"
                 }
                 return false
             }
         } catch {
             SavariLog.debug("verifyBoardingCodeAndBoard error:", error)
             await MainActor.run {
-                self.driverBoardingCodeError = "Could not verify code"
+                self.driverBoardingCodeError = "Could not verify PIN"
             }
         }
         return false
@@ -96,33 +98,100 @@ extension DashboardViewModelRealtime {
                 self.assignedDriverUnsub?()
                 self.assignedDriverUnsub = nil
                 self.assignedDriver = nil
+                self.startDriverActiveRidePolling(rideId: rideId)
             }
         }
         return ok
     }
 
     func endRideNow(rideId: String) async -> Bool {
-        let ok = await RideService.shared.endRideAndUnlockFare(rideId: rideId)
+        guard let driverId = SavariSessionStore.authToken else {
+            SavariLog.debug("endRideNow blocked: missing driver id")
+            return false
+        }
+
+        let ok = await RideService.shared.completeRideAtDropoff(rideId: rideId, driverId: driverId)
         if ok {
             await MainActor.run {
-                var copy = self.activeRideRow ?? [:]
-                copy["status"] = "completed"
-                self.activeRideRow = copy
-                self.rideAccepted = false
-                self.activeRideRow = nil
-                self.boardingCodeVerified = false
-                self.driverBoardingCodeEntry = ""
-                self.driverBoardingCodeError = nil
-                self.driverFlow = .idle
+                var row = self.activeRideRow ?? [:]
+                row["status"] = "ride_finished"
+                row["fare"] = row["fare"] ?? row["estimated_fare"]
+                row["fare_unlocked"] = true
+                row["ended_at"] = Date().iso8601String
+                self.activeRideRow = row
+                self.driverFlow = .collectPayment
                 self.waitTimer?.invalidate()
                 self.waitTimer = nil
                 self.waitSeconds = 0
-                self.assignedDriverUnsub?()
-                self.assignedDriverUnsub = nil
-                self.assignedDriver = nil
+                self.startDriverActiveRidePolling(rideId: rideId)
             }
         }
         return ok
+    }
+
+    func collectRidePayment(rideId: String) async -> Bool {
+        guard let driverId = SavariSessionStore.authToken else {
+            SavariLog.debug("collectRidePayment blocked: missing driver id")
+            return false
+        }
+
+        let payload: [String: AnyEncodable] = [
+            "status": AnyEncodable("payment_collected"),
+            "fare_unlocked": AnyEncodable(true),
+            "payment_collected_at": AnyEncodable(Date().iso8601String),
+            "ended_at": AnyEncodable(Date().iso8601String)
+        ]
+
+        for status in ["passenger_cancelled_in_trip", "ride_finished", "completed"] {
+            do {
+                _ = try await SupabaseManager.shared.client
+                    .from("rides")
+                    .update(payload)
+                    .eq("id", value: rideId)
+                    .or("driver_id.eq.\(driverId),assigned_driver_id.eq.\(driverId)")
+                    .eq("status", value: status)
+                    .select()
+                    .single()
+                    .execute()
+
+                await MainActor.run {
+                    self.resetDriverRideToWaiting()
+                }
+                return true
+            } catch {
+                SavariLog.debug("collectRidePayment attempt failed for \(status):", error)
+            }
+        }
+
+        return false
+    }
+
+    @MainActor
+    func acknowledgePassengerCancellationBeforeTrip() {
+        resetDriverRideToWaiting()
+    }
+
+    @MainActor
+    func resetDriverRideToWaiting() {
+        rideAccepted = false
+        activeRideRow = nil
+        boardingCodeVerified = false
+        driverBoardingCodeEntry = ""
+        driverBoardingCodeError = nil
+        driverFlow = .idle
+        waitTimer?.invalidate()
+        waitTimer = nil
+        waitSeconds = 0
+        assignedDriverUnsub?()
+        assignedDriverUnsub = nil
+        assignedDriver = nil
+        cancelDriverActiveRidePolling()
+        if isOnline {
+            startDriverIdleOfflineCountdownIfNeeded()
+            if let driverId = SavariSessionStore.authToken {
+                startDriverRequestBacklogPolling(driverId: driverId)
+            }
+        }
     }
 
     func acceptRide(rideId: String, driverId: String) async -> Bool {
@@ -136,6 +205,9 @@ extension DashboardViewModelRealtime {
                 self.driverBoardingCodeEntry = ""
                 self.driverBoardingCodeError = nil
                 self.incomingRideRequests.removeAll()
+                self.cancelDriverIdleOfflineCountdown()
+                self.cancelDriverRequestBacklogPolling()
+                self.startDriverActiveRidePolling(rideId: rideId)
             }
         }
         return ok
@@ -166,6 +238,9 @@ extension DashboardViewModelRealtime {
                     self.driverBoardingCodeEntry = ""
                     self.driverBoardingCodeError = nil
                     self.incomingRideRequests.removeAll()
+                    self.cancelDriverIdleOfflineCountdown()
+                    self.cancelDriverRequestBacklogPolling()
+                    self.startDriverActiveRidePolling(rideId: rideId)
                 }
             } else {
                 SavariLog.debug("accept failed (likely accepted by someone else)")

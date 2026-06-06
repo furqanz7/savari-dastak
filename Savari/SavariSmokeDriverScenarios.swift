@@ -82,7 +82,8 @@ extension SavariSmokeTestRunner {
                 return
             }
 
-            let ended = await RideService.shared.endRideAndUnlockFare(rideId: rideId)
+            await moveDriverToDropoffIfAvailable(rideId: rideId, driverId: driverId.uuidString)
+            let ended = await RideService.shared.completeRideAtDropoff(rideId: rideId, driverId: driverId.uuidString)
             UserDefaults.standard.set(ended, forKey: "savariSmokeDriverLifecycleEnded")
             if !ended {
                 await diagnoseEndRideFailure(rideId: rideId)
@@ -105,6 +106,41 @@ extension SavariSmokeTestRunner {
             "savariSmokeDriverLifecycleEndErrorDescription",
             "savariSmokeDriverLifecycleEndDiagnosticBody"
         ].forEach { UserDefaults.standard.removeObject(forKey: $0) }
+    }
+
+    private static func moveDriverToDropoffIfAvailable(rideId: String, driverId: String) async {
+        do {
+            let response = try await SupabaseManager.shared.client
+                .from("rides")
+                .select("drop_lat,drop_lon")
+                .eq("id", value: rideId)
+                .single()
+                .execute()
+
+            guard
+                let row = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+                let latitude = doubleValue(row["drop_lat"]),
+                let longitude = doubleValue(row["drop_lon"])
+            else {
+                return
+            }
+
+            await RideService.shared.upsertDriverLocation(
+                driverId: driverId,
+                lat: latitude,
+                lon: longitude
+            )
+        } catch {
+            UserDefaults.standard.set(error.localizedDescription, forKey: "savariSmokeDriverLifecycleDropoffError")
+        }
+    }
+
+    private static func doubleValue(_ value: Any?) -> Double? {
+        if let double = value as? Double { return double }
+        if let int = value as? Int { return Double(int) }
+        if let number = value as? NSNumber { return number.doubleValue }
+        if let string = value as? String { return Double(string) }
+        return nil
     }
 
     private static func diagnoseEndRideFailure(rideId: String) async {

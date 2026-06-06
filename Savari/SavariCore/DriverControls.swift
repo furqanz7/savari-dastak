@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DriverControls: View {
     let isOnline: Bool
+    let isRideActive: Bool
     let onGoOnline: () -> Void
 
     var body: some View {
@@ -13,7 +14,7 @@ struct DriverControls: View {
                     Text("Online")
                         .font(.system(size: 15, weight: .semibold))
                     Spacer()
-                    Text("Waiting")
+                    Text(isRideActive ? "Ride active" : "Waiting")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

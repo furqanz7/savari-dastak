@@ -23,7 +23,7 @@ struct BoardingCodeView: View {
     let ttlSeconds: Int?
     var body: some View {
         VStack(spacing: 12) {
-            Text("Boarding Code").font(.headline)
+            Text("Boarding PIN").font(.headline)
             Text(code).font(.system(size: 36, weight: .bold)).padding(8).background(.ultraThinMaterial).cornerRadius(12)
             if let ttl = ttlSeconds {
                 Text("Expires in \(ttl) sec").font(.caption).foregroundColor(.secondary)
@@ -137,4 +137,3 @@ struct PrimaryButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
     }
 }
-

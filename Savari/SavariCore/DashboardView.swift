@@ -69,9 +69,6 @@ struct DashboardView: View {
             onCancelPassengerRideRequest: {
                 Task {
                     await vm.cancelRideRequest()
-                    await MainActor.run {
-                        vm.passengerFlow = .idle
-                    }
                 }
             },
             onDismissInlineSearch: cancelInlineSearch,

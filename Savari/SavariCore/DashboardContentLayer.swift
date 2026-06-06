@@ -46,6 +46,7 @@ struct DashboardContentLayer: View {
             DashboardBottomControlsLayer(
                 isPassenger: isPassenger,
                 vm: vm,
+                onCancelPassengerRideRequest: onCancelPassengerRideRequest,
                 onGoOnline: onGoOnline
             )
 

@@ -12,6 +12,7 @@ struct DriverActiveRidePanel: View {
     @ObservedObject private var locationPusher = GPSLocationPusher.shared
 
     private let arrivalThresholdMeters: CLLocationDistance = 100
+    private let completionThresholdMeters: CLLocationDistance = 100
 
     private var rideId: String? {
         active["id"] as? String
@@ -54,6 +55,12 @@ struct DriverActiveRidePanel: View {
         return distanceMetersBetween(current, pickup) <= arrivalThresholdMeters
     }
 
+    private var isAtDropoff: Bool {
+        guard let current = locationPusher.current,
+              let dropoff = dropoffCoordinate else { return false }
+        return distanceMetersBetween(current, dropoff) <= completionThresholdMeters
+    }
+
     private var canArrive: Bool {
         isAtPickup &&
         (
@@ -74,7 +81,7 @@ struct DriverActiveRidePanel: View {
     }
 
     private var canEndRide: Bool {
-        normalizedStatus == "in_progress"
+        normalizedStatus == "in_progress" && isAtDropoff
     }
 
     var body: some View {
@@ -85,6 +92,7 @@ struct DriverActiveRidePanel: View {
                 fareSummary
             }
 
+            phaseSummary
             targetSummary
             driverActions
 
@@ -147,11 +155,35 @@ struct DriverActiveRidePanel: View {
                     .font(.caption2)
                     .foregroundColor(canArrive ? .green : .secondary)
                     .multilineTextAlignment(.trailing)
+            } else if normalizedStatus == "in_progress" {
+                Text(completionHint)
+                    .font(.caption2)
+                    .foregroundColor(canEndRide ? .green : .secondary)
+                    .multilineTextAlignment(.trailing)
             }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 10)
         .background(Color.primary.opacity(0.05))
+        .cornerRadius(10)
+    }
+
+    private var phaseSummary: some View {
+        HStack(spacing: 8) {
+            Image(systemName: phaseIcon)
+                .font(.system(size: 13, weight: .semibold))
+
+            Text(phaseTitle)
+                .font(.system(size: 14, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+
+            Spacer()
+        }
+        .foregroundColor(phaseColor)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(phaseColor.opacity(0.12))
         .cornerRadius(10)
     }
 
@@ -172,7 +204,7 @@ struct DriverActiveRidePanel: View {
             .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
 
             Button(action: onEnterCode) {
-                actionLabel("Code", systemImage: "number")
+                actionLabel("PIN", systemImage: "number")
             }
                 .disabled(!canEnterCode)
                 .buttonStyle(LiquidGlassButtonStyle())
@@ -210,8 +242,8 @@ struct DriverActiveRidePanel: View {
     }
 
     private var dropoffCoordinate: CLLocationCoordinate2D? {
-        guard let latitude = coordinateValue(for: "drop_lat"),
-              let longitude = coordinateValue(for: "drop_lon") else { return nil }
+        guard let latitude = coordinateValue(for: ["drop_lat", "dest_lat"]),
+              let longitude = coordinateValue(for: ["drop_lon", "dest_lon"]) else { return nil }
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
@@ -223,11 +255,79 @@ struct DriverActiveRidePanel: View {
         return "Needs \(formatDistance(arrivalThresholdMeters)); now \(formatDistance(distance))"
     }
 
+    private var completionHint: String {
+        guard dropoffCoordinate != nil else { return "Drop-off unavailable" }
+        guard locationPusher.current != nil else { return "GPS required" }
+        guard let distance = currentTargetDistance else { return "Distance unavailable" }
+        if canEndRide { return "Ready to complete" }
+        return "Needs \(formatDistance(completionThresholdMeters)); now \(formatDistance(distance))"
+    }
+
+    private var phaseTitle: String {
+        switch normalizedStatus {
+        case "assigned", "accepted", "driver_en_route":
+            return "Head to pickup"
+        case "arrived":
+            return "Confirm boarding"
+        case "boarded":
+            return "Ready to start trip"
+        case "in_progress":
+            return "Trip in progress - Drive to drop-off"
+        case "passenger_cancelled_in_trip":
+            return "Passenger cancelled - Collect payment"
+        case "completed":
+            return "Ride completed"
+        default:
+            return "Ride active"
+        }
+    }
+
+    private var phaseIcon: String {
+        switch normalizedStatus {
+        case "assigned", "accepted", "driver_en_route":
+            return "location.fill"
+        case "arrived":
+            return "number.square.fill"
+        case "boarded":
+            return "play.circle.fill"
+        case "in_progress":
+            return "car.fill"
+        case "passenger_cancelled_in_trip":
+            return "indianrupeesign.circle.fill"
+        case "completed":
+            return "checkmark.circle.fill"
+        default:
+            return "circle.fill"
+        }
+    }
+
+    private var phaseColor: Color {
+        switch normalizedStatus {
+        case "in_progress":
+            return .blue
+        case "passenger_cancelled_in_trip":
+            return .orange
+        case "completed":
+            return .green
+        default:
+            return .primary
+        }
+    }
+
     private func coordinateValue(for key: String) -> Double? {
         if let value = active[key] as? Double { return value }
         if let value = active[key] as? Int { return Double(value) }
         if let value = active[key] as? NSNumber { return value.doubleValue }
         if let value = active[key] as? String { return Double(value) }
+        return nil
+    }
+
+    private func coordinateValue(for keys: [String]) -> Double? {
+        for key in keys {
+            if let value = coordinateValue(for: key) {
+                return value
+            }
+        }
         return nil
     }
 

@@ -51,7 +51,7 @@ final class DashboardViewModelRealtime: ObservableObject {
     @Published var passengerFlow: PassengerFlowState = .idle
     
     // Added driver flow state machine
-    enum DriverFlow: String { case idle, awaitingOTP, verified, inProgress, completed }
+    enum DriverFlow: String { case idle, awaitingOTP, verified, inProgress, passengerCancelled, collectPayment }
     @Published var driverFlow: DriverFlow = .idle
     
     var waitTimer: Timer? = nil
@@ -59,6 +59,9 @@ final class DashboardViewModelRealtime: ObservableObject {
     var rideRequestsCancel: (() -> Void)? = nil
     var realtimeCancel: (() -> Void)? = nil
     var passengerRidePollingTask: Task<Void, Never>? = nil
+    var driverIdleOfflineTask: Task<Void, Never>? = nil
+    var driverRequestBacklogPollingTask: Task<Void, Never>? = nil
+    var driverActiveRidePollingTask: Task<Void, Never>? = nil
     var assignedDriverId: String? = nil
     var tickTimer: AnyCancellable? = nil
     var gpsCancellable: AnyCancellable?
@@ -116,6 +119,12 @@ final class DashboardViewModelRealtime: ObservableObject {
         rideUpdateCancel = nil
         passengerRidePollingTask?.cancel()
         passengerRidePollingTask = nil
+        driverIdleOfflineTask?.cancel()
+        driverIdleOfflineTask = nil
+        driverRequestBacklogPollingTask?.cancel()
+        driverRequestBacklogPollingTask = nil
+        driverActiveRidePollingTask?.cancel()
+        driverActiveRidePollingTask = nil
         assignedDriverUnsub?()
         assignedDriverUnsub = nil
         realtimeCancel?()

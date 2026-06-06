@@ -32,6 +32,8 @@ extension RideService {
                 .from("rides")
                 .update(payload)
                 .eq("id", value: rideId)
+                .select()
+                .single()
                 .execute()
             return true
         } catch {
@@ -40,21 +42,23 @@ extension RideService {
         }
     }
 
-    func endRideAndUnlockFare(rideId: String) async -> Bool {
-        let payload: [String: AnyEncodable] = [
-            "status": AnyEncodable("completed"),
-            "ended_at": AnyEncodable(Date().iso8601String),
-            "fare_unlocked": AnyEncodable(true)
+    func completeRideAtDropoff(rideId: String, driverId: String) async -> Bool {
+        let params: [String: AnyEncodable] = [
+            "p_ride_id": AnyEncodable(rideId),
+            "p_driver_id": AnyEncodable(driverId),
+            "p_dropoff_threshold_m": AnyEncodable(100.0)
         ]
         do {
-            _ = try await SupabaseManager.shared.client
-                .from("rides")
-                .update(payload)
-                .eq("id", value: rideId)
+            let response = try await SupabaseManager.shared.client
+                .rpc("complete_ride", params: params)
                 .execute()
-            return true
+
+            if let completed = try? JSONDecoder().decode(Bool.self, from: response.data) {
+                return completed
+            }
+            return false
         } catch {
-            SavariLog.debug("endRideAndUnlockFare error:", error)
+            SavariLog.debug("completeRideAtDropoff error:", error)
             return false
         }
     }

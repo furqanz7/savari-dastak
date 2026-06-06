@@ -10,14 +10,16 @@ struct DashboardDriverOverlayLayer: View {
 
     @ViewBuilder
     private var incomingRequests: some View {
-        if vm.isOnline, !vm.rideAccepted, vm.incomingRideRequests.isEmpty {
+        let hasActiveRide = vm.rideAccepted || vm.activeRideRow != nil
+
+        if vm.isOnline, !hasActiveRide, vm.incomingRideRequests.isEmpty {
             VStack {
                 Spacer()
                 DriverWaitingPanel(isRealtimeActive: vm.isRealtimeActive)
                     .padding(.horizontal)
                     .padding(.bottom, 96)
             }
-        } else if !vm.rideAccepted, !vm.incomingRideRequests.isEmpty {
+        } else if !hasActiveRide, !vm.incomingRideRequests.isEmpty {
             VStack {
                 Spacer()
                 DriverIncomingRequestsPanel(
@@ -32,37 +34,60 @@ struct DashboardDriverOverlayLayer: View {
 
     @ViewBuilder
     private var activeRide: some View {
-        if vm.rideAccepted, let active = vm.activeRideRow {
+        if let active = vm.activeRideRow {
+            let status = (active["status"] as? String)?.lowercased() ?? ""
             VStack {
                 Spacer()
-                if vm.driverFlow == .awaitingOTP, let rideId = active["id"] as? String {
-                    DriverBoardingCodeEntryPanel(
-                        vm: vm,
-                        onCancel: {
-                            vm.driverFlow = .idle
-                            vm.driverBoardingCodeEntry = ""
-                            vm.driverBoardingCodeError = nil
-                        },
-                        onVerify: {
-                            handleVerifyCode(rideId: rideId)
+                if isPassengerCancelledBeforeTrip(active, status: status) || vm.driverFlow == .passengerCancelled {
+                    DriverPassengerCancelledPanel(
+                        onBackToWaiting: vm.acknowledgePassengerCancellationBeforeTrip
+                    )
+                    .padding(.horizontal)
+                    .padding(.bottom, 80)
+                } else if status == "passenger_cancelled_in_trip" || status == "ride_finished" || status == "completed" || vm.driverFlow == .collectPayment {
+                    DriverCollectPaymentPanel(
+                        active: active,
+                        onPaymentCollected: {
+                            handlePaymentCollected(active: active)
                         }
                     )
                     .padding(.horizontal)
-                    .padding(.bottom, 8)
-                }
+                    .padding(.bottom, 80)
+                } else {
+                    if vm.driverFlow == .awaitingOTP, let rideId = active["id"] as? String {
+                        DriverBoardingCodeEntryPanel(
+                            vm: vm,
+                            onCancel: {
+                                vm.driverFlow = .idle
+                                vm.driverBoardingCodeEntry = ""
+                                vm.driverBoardingCodeError = nil
+                            },
+                            onVerify: {
+                                handleVerifyCode(rideId: rideId)
+                            }
+                        )
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                    }
 
-                DriverActiveRidePanel(
-                    active: active,
-                    boardingCodeVerified: vm.boardingCodeVerified,
-                    onArrive: handleArrive,
-                    onEnterCode: handleEnterCode,
-                    onStartRide: handleStartRide,
-                    onEndRide: handleEndRide
-                )
-                .padding(.bottom, 80)
-                .padding(.horizontal)
+                    DriverActiveRidePanel(
+                        active: active,
+                        boardingCodeVerified: vm.boardingCodeVerified,
+                        onArrive: handleArrive,
+                        onEnterCode: handleEnterCode,
+                        onStartRide: handleStartRide,
+                        onEndRide: handleEndRide
+                    )
+                    .padding(.bottom, 80)
+                    .padding(.horizontal)
+                }
             }
         }
+    }
+
+    private func isPassengerCancelledBeforeTrip(_ active: [String: Any], status: String) -> Bool {
+        guard status == "cancelled" else { return false }
+        return ((active["cancelled_by"] as? String)?.lowercased() ?? "") == "passenger"
     }
 
     private func handleArrive(rideId: String) {
@@ -94,7 +119,7 @@ struct DashboardDriverOverlayLayer: View {
             await MainActor.run {
                 vm.isVerifyingBoardingCode = false
                 if !ok, vm.driverBoardingCodeError == nil {
-                    vm.driverBoardingCodeError = "Code does not match"
+                    vm.driverBoardingCodeError = "PIN does not match"
                 }
             }
         }
@@ -117,6 +142,149 @@ struct DashboardDriverOverlayLayer: View {
             }
         }
     }
+
+    private func handlePaymentCollected(active: [String: Any]) {
+        guard let rideId = active["id"] as? String else { return }
+        Task {
+            let ok = await vm.collectRidePayment(rideId: rideId)
+            if !ok {
+                SavariLog.debug("payment collection update failed")
+            }
+        }
+    }
+}
+
+private struct DriverPassengerCancelledPanel: View {
+    let onBackToWaiting: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundColor(.orange)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Passenger cancelled")
+                        .font(.system(size: 17, weight: .semibold))
+                    Text("This ride is closed. Return to waiting for the next request.")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
+
+            Button(action: onBackToWaiting) {
+                Label("Back to waiting", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+            }
+            .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
+        }
+        .padding(16)
+        .background(Material.ultraThin)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.18), radius: 14, y: 8)
+    }
+}
+
+private struct DriverCollectPaymentPanel: View {
+    let active: [String: Any]
+    let onPaymentCollected: () -> Void
+
+    private var status: String {
+        (active["status"] as? String)?.lowercased() ?? ""
+    }
+
+    private var isCancellation: Bool {
+        status == "passenger_cancelled_in_trip"
+    }
+
+    private var title: String {
+        isCancellation ? "Passenger cancelled" : "Ride finished"
+    }
+
+    private var subtitle: String {
+        isCancellation
+            ? "Stop safely and collect the fare."
+            : "Collect the fare before returning to waiting."
+    }
+
+    private var cancellationDistance: String? {
+        guard isCancellation else { return nil }
+        guard let meters = doubleValue(active["cancellation_distance_m"]) else { return nil }
+        if meters >= 1000 {
+            return String(format: "%.1f km", meters / 1000)
+        }
+        return "\(Int(meters.rounded())) m"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "indianrupeesign.circle.fill")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundColor(.orange)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 17, weight: .semibold))
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
+
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Amount due")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("₹\(RideRowFormatter.fareString(for: active))")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                }
+
+                Spacer()
+
+                if let cancellationDistance {
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text("Trip covered")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(cancellationDistance)
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color.orange.opacity(0.12))
+            .cornerRadius(12)
+
+            Button(action: onPaymentCollected) {
+                Label("Payment collected", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+            }
+            .buttonStyle(LiquidGlassButtonStyle(isPrimary: true))
+        }
+        .padding(16)
+        .background(Material.ultraThin)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.18), radius: 14, y: 8)
+    }
+
+    private func doubleValue(_ value: Any?) -> Double? {
+        if let double = value as? Double { return double }
+        if let int = value as? Int { return Double(int) }
+        if let number = value as? NSNumber { return number.doubleValue }
+        if let string = value as? String { return Double(string) }
+        return nil
+    }
 }
 
 private struct DriverBoardingCodeEntryPanel: View {
@@ -131,7 +299,7 @@ private struct DriverBoardingCodeEntryPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("Confirm boarding", systemImage: "number.square.fill")
+                Label("Passenger PIN", systemImage: "number.square.fill")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
                 Button(action: onCancel) {
@@ -140,10 +308,10 @@ private struct DriverBoardingCodeEntryPanel: View {
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close code entry")
+                .accessibilityLabel("Close PIN entry")
             }
 
-            TextField("Enter passenger code", text: $vm.driverBoardingCodeEntry)
+            TextField("Enter passenger PIN", text: $vm.driverBoardingCodeEntry)
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
                 .font(.system(size: 22, weight: .semibold, design: .rounded))
@@ -170,7 +338,7 @@ private struct DriverBoardingCodeEntryPanel: View {
                     if vm.isVerifyingBoardingCode {
                         ProgressView()
                     }
-                    Text(vm.isVerifyingBoardingCode ? "Verifying" : "Verify code")
+                    Text(vm.isVerifyingBoardingCode ? "Verifying" : "Verify PIN")
                         .font(.system(size: 15, weight: .semibold))
                 }
                 .frame(maxWidth: .infinity)

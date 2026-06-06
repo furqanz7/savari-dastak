@@ -36,6 +36,7 @@ struct DashboardManualDragLayer: View {
 struct DashboardBottomControlsLayer: View {
     let isPassenger: Bool
     @ObservedObject var vm: DashboardViewModelRealtime
+    let onCancelPassengerRideRequest: () -> Void
     let onGoOnline: () -> Void
 
     var body: some View {
@@ -43,10 +44,14 @@ struct DashboardBottomControlsLayer: View {
             Spacer()
             HStack(spacing: 12) {
                 if isPassenger {
-                    DashboardPassengerControls(vm: vm)
+                    DashboardPassengerControls(
+                        vm: vm,
+                        onCancelMidTrip: onCancelPassengerRideRequest
+                    )
                 } else {
                     DriverControls(
                         isOnline: vm.isOnline,
+                        isRideActive: vm.rideAccepted || vm.activeRideRow != nil,
                         onGoOnline: onGoOnline
                     )
                 }
