@@ -313,6 +313,7 @@ struct DashboardView: View {
         vm.selectedRide.routeCoordinates = []
         
         // 4. Clear ride preview
+        vm.selectedRide.orderID = ""
         vm.selectedRide.distanceMeters = nil
         vm.selectedRide.etaSeconds = 0
         vm.selectedRide.amount = 0

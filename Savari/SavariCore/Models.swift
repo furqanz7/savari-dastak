@@ -37,12 +37,12 @@ final class Ride: ObservableObject, Identifiable {
     @Published var orderID: String
     @Published var amount: Double
     @Published var etaSeconds: Int
-    @Published var etaDate: Date? // new: absolute ETA
-    @Published var distanceMeters: Double? // new
+    @Published var etaDate: Date?
+    @Published var distanceMeters: Double?
     @Published var routeCoordinates: [CLLocationCoordinate2D] = []
     let role: String
 
-    init(orderID: String = "TEMP", amount: Double = 120.0, etaSeconds: Int = 300, role: String = "Passenger") {
+    init(orderID: String = "", amount: Double = 120.0, etaSeconds: Int = 300, role: String = "Passenger") {
         self.orderID = orderID
         self.amount = amount
         self.etaSeconds = etaSeconds
