@@ -70,7 +70,7 @@ extension DashboardViewModelRealtime {
 
     private func driverMapLabel(for uuid: UUID) -> String {
         if uuidStringsMatch(uuid.uuidString, SavariSessionStore.authToken) {
-            return "You"
+            return "Current driver"
         }
         return "Driver"
     }

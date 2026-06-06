@@ -23,7 +23,7 @@ extension DashboardViewModelRealtime {
             if let index = drivers.firstIndex(where: { $0.id == uuid }) {
                 drivers[index].coordinate = coordinate
             } else {
-                let driver = Driver(id: uuid, coordinate: coordinate, name: "You", color: .mint)
+                let driver = Driver(id: uuid, coordinate: coordinate, name: "Current driver", color: .mint)
                 drivers.insert(driver, at: 0)
             }
             return

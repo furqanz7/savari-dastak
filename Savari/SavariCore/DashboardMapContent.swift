@@ -131,13 +131,13 @@ struct DashboardMapContent: MapContent {
                             .foregroundColor(.blue)
                             .font(.system(size: 18, weight: .semibold))
                     }
-                    Text("You")
+                    Text("Current location")
                         .font(.caption2)
                         .padding(6)
                         .background(Material.ultraThin)
                         .cornerRadius(6)
                 }
-                .accessibilityLabel("You")
+                .accessibilityLabel("Current location")
             }
         }
     }
@@ -155,14 +155,14 @@ struct DashboardMapContent: MapContent {
                         Image(systemName: "car.fill")
                             .foregroundColor(.white)
                     }
-                    Text("Your driver")
+                    Text("Driver")
                         .font(.caption2)
                         .padding(6)
                         .background(Material.ultraThin)
                         .cornerRadius(6)
                 }
                 .fixedSize()
-                .accessibilityLabel("Assigned driver")
+                .accessibilityLabel("Driver location")
             }
         }
     }
