@@ -23,7 +23,7 @@ extension SupabaseManager {
         do {
             try await client.auth.signOut()
         } catch {
-            SavariLog.debug("❌ Supabase sign-out error:", error.localizedDescription)
+            SavariLog.debug("[Auth] Supabase sign-out error:", error.localizedDescription)
         }
 
         GIDSignIn.sharedInstance.signOut()

@@ -18,9 +18,9 @@ struct Savari: App {
     init() {
         if let clientID = Bundle.main.object(forInfoDictionaryKey: "CLIENT_ID") as? String {
             GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
-            SavariLog.debug("✅ Google Client ID configured: \(clientID)")
+            SavariLog.debug("[Auth] Google Client ID configured")
         } else {
-            SavariLog.debug("❌ Failed to find CLIENT_ID in Info.plist")
+            SavariLog.debug("[Auth] Missing CLIENT_ID in Info.plist")
         }
     }
 

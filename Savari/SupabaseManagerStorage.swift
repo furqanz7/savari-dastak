@@ -14,7 +14,7 @@ extension SupabaseManager {
 
             try await bucket.upload(path, data: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
             paths.append(path)
-            SavariLog.debug("⬆️ Uploaded driver document:", path)
+            SavariLog.debug("[Storage] uploaded driver document:", prefix, index + 1)
         }
 
         return paths
@@ -30,7 +30,7 @@ extension SupabaseManager {
 
         try await bucket.upload(path, data: data, options: FileOptions(contentType: "image/jpeg", upsert: true))
 
-        SavariLog.debug("⬆️ Uploaded driver document:", path)
+        SavariLog.debug("[Storage] uploaded driver document:", filename)
         return path
     }
 }

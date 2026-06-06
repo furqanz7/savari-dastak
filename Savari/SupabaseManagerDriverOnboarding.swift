@@ -21,9 +21,12 @@ extension SupabaseManager {
         driverDocs: [String]?,
         selfiePath: String?
     ) async throws {
-        SavariLog.debug("📦 Vehicle document paths:", vehicleDocs ?? [])
-        SavariLog.debug("📦 Driver document paths:", driverDocs ?? [])
-        SavariLog.debug("📸 Selfie path:", selfiePath ?? "none")
+        SavariLog.debug(
+            "[DriverOnboarding] documents prepared:",
+            "vehicle=\(vehicleDocs?.count ?? 0)",
+            "driver=\(driverDocs?.count ?? 0)",
+            "selfie=\(selfiePath == nil ? "missing" : "present")"
+        )
 
         let payload = DriverOnboardingPayload(
             profile_id: profileId.uuidString,
@@ -42,13 +45,9 @@ extension SupabaseManager {
                 .select()
                 .execute()
 
-            if let json = String(data: response.data, encoding: .utf8) {
-                SavariLog.debug("✅ Driver onboarding inserted:", json)
-            } else {
-                SavariLog.debug("⚠️ Upsert succeeded but no readable data.")
-            }
+            SavariLog.debug("[DriverOnboarding] upsert succeeded:", response.data.count, "bytes")
         } catch {
-            SavariLog.debug("❌ Driver onboarding failed:", error)
+            SavariLog.debug("[DriverOnboarding] upsert failed:", error)
             throw error
         }
     }
