@@ -67,7 +67,7 @@ extension RealtimeManager {
         var pollingTaskLocal: Task<Void, Never>?
         pollingTaskLocal = Task.detached { [weak self] in
             guard let self else { return }
-            var seen = Set<String>()
+            var seenSignatures: [String: String] = [:]
             while !Task.isCancelled {
                 do {
                     SavariLog.debug("[RealtimeManager][polling] querying rides...")
@@ -77,12 +77,23 @@ extension RealtimeManager {
                         .execute()
                     if let rows = Self.jsonArray(from: response.data) {
                         SavariLog.debug("[RealtimeManager][polling] found \(rows.count) rows")
+                        var currentIds = Set<String>()
                         for row in rows {
-                            if let id = row["id"] as? String, !seen.contains(id) {
-                                seen.insert(id)
-                                SavariLog.debug("[RealtimeManager][polling] new ride id:", id, "status:", row["status"] ?? "nil")
+                            if let id = row["id"] as? String {
+                                currentIds.insert(id)
+                                let signature = Self.ridePollingSignature(for: row)
+                                guard seenSignatures[id] != signature else {
+                                    continue
+                                }
+                                seenSignatures[id] = signature
+                                SavariLog.debug("[RealtimeManager][polling] changed ride id:", id, "status:", row["status"] ?? "nil")
                                 await MainActor.run { onUpdate(["new": row]) }
                             }
+                        }
+
+                        for removedId in Set(seenSignatures.keys).subtracting(currentIds) {
+                            seenSignatures.removeValue(forKey: removedId)
+                            await MainActor.run { onUpdate(["old": ["id": removedId]]) }
                         }
                     } else {
                         SavariLog.debug("[RealtimeManager][polling] response.data not [[String:Any]]; raw:", response.data)
@@ -97,6 +108,20 @@ extension RealtimeManager {
         return {
             pollingTaskLocal?.cancel()
         }
+    }
+
+    nonisolated private static func ridePollingSignature(for row: [String: Any]) -> String {
+        [
+            row["status"],
+            row["driver_id"],
+            row["assigned_driver_id"],
+            row["boarding_code"],
+            row["updated_at"]
+        ]
+            .map { value in
+                value.map { String(describing: $0) } ?? ""
+            }
+            .joined(separator: "|")
     }
 
     nonisolated private static func normalizedDictionary(from row: RideRow) -> [String: Any] {

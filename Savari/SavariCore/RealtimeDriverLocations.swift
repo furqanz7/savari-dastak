@@ -113,6 +113,9 @@ extension RealtimeManager {
             }
 
             try await channel.subscribeWithError()
+            if let currentDriver = await Self.fetchDriverLocation(driverId: driverId, color: .mint) {
+                await MainActor.run { onUpdate(currentDriver) }
+            }
             return {
                 Task {
                     streamTask.cancel()
@@ -155,6 +158,34 @@ extension RealtimeManager {
 
         return {
             pollingTask?.cancel()
+        }
+    }
+
+    nonisolated private static func fetchDriverLocation(driverId: String, color: Color) async -> Driver? {
+        do {
+            let response = try await SupabaseManager.shared.client
+                .from("driver_locations")
+                .select()
+                .eq("driver_id", value: driverId)
+                .single()
+                .execute()
+
+            guard let row = jsonObject(from: response.data),
+                  let latitude = row["latitude"] as? Double,
+                  let longitude = row["longitude"] as? Double,
+                  let uuid = UUID(uuidString: driverId) else {
+                return nil
+            }
+
+            return Driver(
+                id: uuid,
+                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                name: "Driver",
+                color: color
+            )
+        } catch {
+            SavariLog.debug("[RealtimeManager] initial driver location fetch failed:", error)
+            return nil
         }
     }
 

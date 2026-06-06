@@ -21,6 +21,14 @@ extension DashboardViewModelRealtime {
                 .update(payload)
                 .eq("id", value: rideId)
                 .execute()
+            stopSubscribingMyRide()
+            assignedDriverUnsub?()
+            assignedDriverUnsub = nil
+            assignedDriverId = nil
+            assignedDriver = nil
+            assignedDriverETASeconds = nil
+            rideAccepted = false
+            rideRequested = false
             SavariLog.debug("[CancelRide] Ride cancelled:", rideId)
         } catch {
             SavariLog.debug("[CancelRide] Error:", error.localizedDescription)
@@ -40,8 +48,7 @@ extension DashboardViewModelRealtime {
     }
 
     func subscribeToMyRide(rideId: String) async {
-        rideUpdateCancel?()
-        rideUpdateCancel = nil
+        stopSubscribingMyRide()
 
         rideUpdateCancel = await RealtimeManager.shared.subscribeRideRequests { [weak self] payload in
             guard let self,
@@ -52,25 +59,74 @@ extension DashboardViewModelRealtime {
             }
 
             Task { @MainActor in
-                self.activeRideRow = new
-                self.subscribeToAssignedDriverIfNeeded(from: new)
-                self.applyPassengerRideStatus(new["status"] as? String)
+                self.handlePassengerRideRow(new)
+            }
+        }
+
+        await fetchPassengerRideSnapshot(rideId: rideId)
+        startPassengerRidePolling(rideId: rideId)
+    }
+
+    private func fetchPassengerRideSnapshot(rideId: String) async {
+        do {
+            let response = try await SupabaseManager.shared.client
+                .from("rides")
+                .select()
+                .eq("id", value: rideId)
+                .single()
+                .execute()
+
+            if let row = jsonObject(from: response.data) {
+                await MainActor.run {
+                    self.handlePassengerRideRow(row)
+                }
+            }
+        } catch {
+            SavariLog.debug("[PassengerRide] snapshot fetch failed:", error)
+        }
+    }
+
+    private func startPassengerRidePolling(rideId: String) {
+        passengerRidePollingTask?.cancel()
+        passengerRidePollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if Task.isCancelled { return }
+                await self?.fetchPassengerRideSnapshot(rideId: rideId)
             }
         }
     }
 
+    @MainActor
+    private func handlePassengerRideRow(_ rideRow: [String: Any]) {
+        activeRideRow = rideRow
+        subscribeToAssignedDriverIfNeeded(from: rideRow)
+        applyPassengerRideStatus(rideRow["status"] as? String)
+    }
+
+    @MainActor
     private func subscribeToAssignedDriverIfNeeded(from rideRow: [String: Any]) {
         guard let assigned = (rideRow["assigned_driver_id"] as? String) ?? (rideRow["driver_id"] as? String) else {
             return
         }
 
-        passengerFlow = .accepted
+        rideAccepted = true
+        if passengerFlow != .enRoute {
+            passengerFlow = .accepted
+        }
+
+        if assignedDriverId == assigned, assignedDriverUnsub != nil {
+            return
+        }
+
+        assignedDriverId = assigned
         assignedDriverUnsub?()
         assignedDriverUnsub = nil
 
-        Task {
-            self.assignedDriverUnsub = await RealtimeManager.shared.subscribeDriverLocation(driverId: assigned) { driver in
+        Task { [weak self] in
+            let unsubscribe = await RealtimeManager.shared.subscribeDriverLocation(driverId: assigned) { driver in
                 Task { @MainActor in
+                    guard let self else { return }
                     self.assignedDriver = driver
 
                     if let pickupLatitude = self.activeRideRow?["pickup_lat"] as? Double,
@@ -81,20 +137,40 @@ extension DashboardViewModelRealtime {
                     }
                 }
             }
+
+            await MainActor.run {
+                self?.assignedDriverUnsub = unsubscribe
+            }
         }
     }
 
+    @MainActor
     private func applyPassengerRideStatus(_ status: String?) {
-        switch status {
+        switch status?.lowercased() {
+        case "requested":
+            passengerFlow = .matching
+        case "assigned", "accepted", "driver_en_route":
+            rideAccepted = true
+            if passengerFlow != .enRoute {
+                passengerFlow = .accepted
+            }
         case "arrived", "in_progress":
+            rideAccepted = true
             passengerFlow = .enRoute
         case "boarded":
+            rideAccepted = true
             boardingCodeVerified = true
+            passengerFlow = .enRoute
         case "completed", "cancelled":
             assignedDriverUnsub?()
             assignedDriverUnsub = nil
+            assignedDriverId = nil
             assignedDriver = nil
+            assignedDriverETASeconds = nil
             rideAccepted = false
+            rideRequested = false
+            stopSubscribingMyRide()
+            passengerFlow = status?.lowercased() == "completed" ? .completed : .idle
         default:
             break
         }

@@ -34,6 +34,7 @@ final class DashboardViewModelRealtime: ObservableObject {
     @Published var incomingRideRequests: [[String:Any]] = []
     @Published var activeRideRow: [String:Any]? = nil
     @Published var driverBoardingCodeEntry: String = ""
+    @Published var driverBoardingCodeError: String? = nil
     @Published var isVerifyingBoardingCode: Bool = false
     @Published var boardingCodeVerified: Bool = false
     // Passenger-mode options
@@ -57,6 +58,8 @@ final class DashboardViewModelRealtime: ObservableObject {
     var assignedDriverUnsub: (() -> Void)? = nil
     var rideRequestsCancel: (() -> Void)? = nil
     var realtimeCancel: (() -> Void)? = nil
+    var passengerRidePollingTask: Task<Void, Never>? = nil
+    var assignedDriverId: String? = nil
     var tickTimer: AnyCancellable? = nil
     var gpsCancellable: AnyCancellable?
     var driverPublishTask: Task<Void, Never>? = nil
@@ -91,7 +94,12 @@ final class DashboardViewModelRealtime: ObservableObject {
     
     var rideUpdateCancel: (() -> Void)? = nil
     
-    func stopSubscribingMyRide() { rideUpdateCancel?(); rideUpdateCancel = nil }
+    func stopSubscribingMyRide() {
+        rideUpdateCancel?()
+        rideUpdateCancel = nil
+        passengerRidePollingTask?.cancel()
+        passengerRidePollingTask = nil
+    }
     
     deinit { stopAll() }
     
@@ -104,6 +112,12 @@ final class DashboardViewModelRealtime: ObservableObject {
     func stopAll() {
         tickTimer?.cancel()
         gpsCancellable?.cancel()
+        rideUpdateCancel?()
+        rideUpdateCancel = nil
+        passengerRidePollingTask?.cancel()
+        passengerRidePollingTask = nil
+        assignedDriverUnsub?()
+        assignedDriverUnsub = nil
         realtimeCancel?()
         realtimeCancel = nil
         if role.lowercased().contains("driver") { GPSLocationPusher.shared.stop() }

@@ -38,14 +38,14 @@ struct DashboardMapLayer: View {
                 return
             }
 
-            withAnimation(.easeInOut(duration: 0.6)) {
-                mapPosition = .region(
-                    MKCoordinateRegion(
-                        center: driver.coordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                    )
-                )
+            focusAcceptedPassengerRide(on: driver)
+        }
+        .onChange(of: vm.assignedDriver) { _, driver in
+            guard vm.passengerFlow == .accepted, let driver else {
+                return
             }
+
+            focusAcceptedPassengerRide(on: driver)
         }
     }
 
@@ -58,5 +58,46 @@ struct DashboardMapLayer: View {
                 )
             )
         }
+    }
+
+    private func focusAcceptedPassengerRide(on driver: Driver) {
+        let region: MKCoordinateRegion
+        if let pickupCoordinate {
+            region = regionFitting([pickupCoordinate, driver.coordinate])
+        } else {
+            region = MKCoordinateRegion(
+                center: driver.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            )
+        }
+
+        withAnimation(.easeInOut(duration: 0.6)) {
+            mapPosition = .region(region)
+        }
+    }
+
+    private func regionFitting(_ coordinates: [CLLocationCoordinate2D]) -> MKCoordinateRegion {
+        let latitudes = coordinates.map(\.latitude)
+        let longitudes = coordinates.map(\.longitude)
+        guard let minLatitude = latitudes.min(),
+              let maxLatitude = latitudes.max(),
+              let minLongitude = longitudes.min(),
+              let maxLongitude = longitudes.max() else {
+            return MKCoordinateRegion(
+                center: coordinates.first ?? CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            )
+        }
+
+        let center = CLLocationCoordinate2D(
+            latitude: (minLatitude + maxLatitude) / 2,
+            longitude: (minLongitude + maxLongitude) / 2
+        )
+        let span = MKCoordinateSpan(
+            latitudeDelta: max(0.01, (maxLatitude - minLatitude) * 1.8),
+            longitudeDelta: max(0.01, (maxLongitude - minLongitude) * 1.8)
+        )
+
+        return MKCoordinateRegion(center: center, span: span)
     }
 }

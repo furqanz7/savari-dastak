@@ -36,6 +36,7 @@ nonisolated final class RealtimeManager {
         let dest_lon: Double?
         let boarding_code: String?
         let status: String?
+        let created_at: String?
 
         var pickupLatValue: Double? { pickup_lat }
         var pickupLonValue: Double? { pickup_lon }

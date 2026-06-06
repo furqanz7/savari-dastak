@@ -295,6 +295,15 @@ struct DashboardView: View {
         
         // 1. Reset flow
         vm.passengerFlow = .idle
+        vm.stopSubscribingMyRide()
+        vm.assignedDriverUnsub?()
+        vm.assignedDriverUnsub = nil
+        vm.assignedDriverId = nil
+        vm.assignedDriver = nil
+        vm.assignedDriverETASeconds = nil
+        vm.activeRideRow = nil
+        vm.rideAccepted = false
+        vm.rideRequested = false
         
         // 2. Clear search
         cancelInlineSearch()

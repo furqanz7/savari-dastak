@@ -36,22 +36,15 @@ struct RideFlowCard: View {
             )
 
         case .accepted:
-            if let driver = vm.assignedDriver {
-                RideStatusCard(
-                    state: .accepted(
-                        driver: driver,
-                        etaSeconds: vm.assignedDriverETASeconds ?? 0
-                    ),
-                    onCancel: onCancel,
-                    onContact: {}
-                )
-            } else {
-                RideStatusCard(
-                    state: .matching,
-                    onCancel: onCancel,
-                    onContact: {}
-                )
-            }
+            RideStatusCard(
+                state: .accepted(
+                    driverName: vm.assignedDriver?.name ?? "Driver assigned",
+                    etaSeconds: vm.assignedDriverETASeconds,
+                    boardingCode: vm.activeRideRow?["boarding_code"] as? String
+                ),
+                onCancel: onCancel,
+                onContact: {}
+            )
 
         default:
             EmptyView()

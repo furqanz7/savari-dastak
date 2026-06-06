@@ -21,6 +21,7 @@ extension DashboardViewModelRealtime {
             }
 
             await MainActor.run { self.isRealtimeActive = true }
+            await fetchRequestedRideBacklog(driverId: driverId)
             await publishCurrentDriverLocation(driverId: driverId)
 
             driverPublishTask?.cancel()
@@ -61,6 +62,14 @@ extension DashboardViewModelRealtime {
     }
 
     nonisolated private func handleRideRequestPayload(_ payload: [String: Any], driverId: String) {
+        if let old = payload["old"] as? [String: Any],
+           let oldRideId = old["id"] as? String {
+            Task { @MainActor in
+                self.removeIncomingRideIfNeeded(rideId: oldRideId)
+            }
+            return
+        }
+
         guard let new = payload["new"] as? [String: Any] else {
             return
         }
@@ -69,11 +78,13 @@ extension DashboardViewModelRealtime {
         let status = (new["status"] as? String) ?? ""
 
         if status == "requested" {
-            if uuidStringsMatch(new["passenger_id"] as? String, driverId) {
+            if !isVisibleRequestedRide(new, driverId: driverId) {
                 return
             }
             Task { @MainActor in
-                self.addIncomingRideIfNeeded(new)
+                if !self.rideAccepted {
+                    self.addIncomingRideIfNeeded(new)
+                }
             }
             return
         }
@@ -92,6 +103,29 @@ extension DashboardViewModelRealtime {
         }
     }
 
+    private func fetchRequestedRideBacklog(driverId: String) async {
+        do {
+            let response = try await SupabaseManager.shared.client
+                .from("rides")
+                .select()
+                .eq("status", value: "requested")
+                .execute()
+
+            guard let rows = jsonArray(from: response.data) else {
+                SavariLog.debug("[VM] requested ride backlog response was not an array")
+                return
+            }
+
+            await MainActor.run {
+                for row in rows where self.isVisibleRequestedRide(row, driverId: driverId) {
+                    self.addIncomingRideIfNeeded(row)
+                }
+            }
+        } catch {
+            SavariLog.debug("[VM] requested ride backlog fetch failed:", error)
+        }
+    }
+
     @MainActor
     private func addIncomingRideIfNeeded(_ row: [String: Any]) {
         guard let rideId = row["id"] as? String else {
@@ -107,6 +141,18 @@ extension DashboardViewModelRealtime {
         if let index = incomingRideRequests.firstIndex(where: { ($0["id"] as? String) == rideId }) {
             incomingRideRequests.remove(at: index)
         }
+    }
+
+    nonisolated private func isVisibleRequestedRide(_ row: [String: Any], driverId: String) -> Bool {
+        guard (row["status"] as? String) == "requested" else {
+            return false
+        }
+
+        if uuidStringsMatch(row["passenger_id"] as? String, driverId) {
+            return false
+        }
+
+        return true
     }
 
     private func publishCurrentDriverLocation(driverId: String) async {

@@ -4,7 +4,7 @@ import UIKit
 struct RideStatusCard: View {
     enum RideStatus {
         case matching
-        case accepted(driver: Driver, etaSeconds: Int)
+        case accepted(driverName: String, etaSeconds: Int?, boardingCode: String?)
     }
 
     let state: RideStatus
@@ -23,8 +23,8 @@ struct RideStatusCard: View {
             case .matching:
                 matchingContent
 
-            case .accepted(let driver, let eta):
-                acceptedContent(driver: driver, eta: eta)
+            case .accepted(let driverName, let eta, let boardingCode):
+                acceptedContent(driverName: driverName, eta: eta, boardingCode: boardingCode)
             }
         }
         .padding(20)
@@ -77,7 +77,7 @@ struct RideStatusCard: View {
         }
     }
 
-    private func acceptedContent(driver: Driver, eta: Int) -> some View {
+    private func acceptedContent(driverName: String, eta: Int?, boardingCode: String?) -> some View {
         VStack(spacing: 14) {
             VStack(spacing: 4) {
                 Image(systemName: "checkmark.circle.fill")
@@ -87,12 +87,31 @@ struct RideStatusCard: View {
                 Text("Driver found")
                     .font(.system(size: 17, weight: .semibold))
 
-                Text(driver.name)
+                Text(driverName)
                     .font(.system(size: 14))
                     .foregroundColor(.secondary)
             }
 
             Divider().opacity(0.4)
+
+            if let boardingCode, !boardingCode.isEmpty {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Boarding code")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(boardingCode)
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                    }
+                    Spacer()
+                    Image(systemName: "number.square.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.green)
+                }
+                .padding(12)
+                .background(Color.green.opacity(0.12))
+                .cornerRadius(14)
+            }
 
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -100,8 +119,13 @@ struct RideStatusCard: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    Text("~\(eta / 60) min")
-                        .font(.system(size: 16, weight: .semibold))
+                    if let eta, eta > 0 {
+                        Text("~\(max(1, eta / 60)) min")
+                            .font(.system(size: 16, weight: .semibold))
+                    } else {
+                        Text("Updating")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
                 }
 
                 Spacer()

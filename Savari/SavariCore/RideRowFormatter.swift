@@ -21,7 +21,9 @@ enum RideRowFormatter {
     }
 
     static func distanceString(for ride: [String: Any]) -> String {
-        guard let meters = doubleValue(ride["estimated_distance_meters"]), meters > 0 else {
+        let meters = doubleValue(ride["estimated_distance_m"])
+            ?? doubleValue(ride["estimated_distance_meters"])
+        guard let meters, meters > 0 else {
             return "Distance pending"
         }
         return String(format: "%.1f km", meters / 1000.0)

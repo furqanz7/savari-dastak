@@ -12,6 +12,9 @@ extension DashboardViewModelRealtime {
                 self.activeRideRow = row
                 self.waitSeconds = 0
                 self.waitChargeApplied = false
+                self.driverFlow = .awaitingOTP
+                self.driverBoardingCodeEntry = ""
+                self.driverBoardingCodeError = nil
             }
 
             await MainActor.run {
@@ -51,12 +54,29 @@ extension DashboardViewModelRealtime {
                         .update(payload)
                         .eq("id", value: rideId)
                         .execute()
+                    await MainActor.run {
+                        var row = self.activeRideRow ?? [:]
+                        row["status"] = "boarded"
+                        self.activeRideRow = row
+                        self.boardingCodeVerified = true
+                        self.driverFlow = .verified
+                        self.driverBoardingCodeEntry = ""
+                        self.driverBoardingCodeError = nil
+                        self.waitTimer?.invalidate()
+                        self.waitTimer = nil
+                    }
                     return true
+                }
+                await MainActor.run {
+                    self.driverBoardingCodeError = "Code does not match"
                 }
                 return false
             }
         } catch {
             SavariLog.debug("verifyBoardingCodeAndBoard error:", error)
+            await MainActor.run {
+                self.driverBoardingCodeError = "Could not verify code"
+            }
         }
         return false
     }
@@ -71,6 +91,7 @@ extension DashboardViewModelRealtime {
                 self.waitTimer?.invalidate()
                 self.waitTimer = nil
                 self.waitSeconds = 0
+                self.driverFlow = .inProgress
                 self.assignedDriverUnsub?()
                 self.assignedDriverUnsub = nil
                 self.assignedDriver = nil
@@ -86,6 +107,15 @@ extension DashboardViewModelRealtime {
                 var copy = self.activeRideRow ?? [:]
                 copy["status"] = "completed"
                 self.activeRideRow = copy
+                self.rideAccepted = false
+                self.activeRideRow = nil
+                self.boardingCodeVerified = false
+                self.driverBoardingCodeEntry = ""
+                self.driverBoardingCodeError = nil
+                self.driverFlow = .idle
+                self.waitTimer?.invalidate()
+                self.waitTimer = nil
+                self.waitSeconds = 0
                 self.assignedDriverUnsub?()
                 self.assignedDriverUnsub = nil
                 self.assignedDriver = nil
@@ -98,7 +128,14 @@ extension DashboardViewModelRealtime {
         let ok = await RideService.shared.acceptRide(rideId: rideId, driverId: driverId)
         if ok {
             await loadActiveRideRowIfNeeded(rideId: rideId)
-            await MainActor.run { self.rideAccepted = true }
+            await MainActor.run {
+                self.rideAccepted = true
+                self.boardingCodeVerified = false
+                self.driverFlow = .idle
+                self.driverBoardingCodeEntry = ""
+                self.driverBoardingCodeError = nil
+                self.incomingRideRequests.removeAll()
+            }
         }
         return ok
     }
@@ -121,7 +158,14 @@ extension DashboardViewModelRealtime {
             let ok = await RideService.shared.acceptRide(rideId: rideId, driverId: driverId)
             if ok {
                 await self.loadActiveRideRowIfNeeded(rideId: rideId)
-                await MainActor.run { self.rideAccepted = true }
+                await MainActor.run {
+                    self.rideAccepted = true
+                    self.boardingCodeVerified = false
+                    self.driverFlow = .idle
+                    self.driverBoardingCodeEntry = ""
+                    self.driverBoardingCodeError = nil
+                    self.incomingRideRequests.removeAll()
+                }
             } else {
                 SavariLog.debug("accept failed (likely accepted by someone else)")
             }
