@@ -25,7 +25,9 @@ struct DashboardPassengerControls: View {
                 }
                 .padding(.top, 12)
             }
-        case "boarded", "in_progress":
+        case "boarded":
+            statusChip("Boarding confirmed", systemImage: "checkmark.circle.fill", color: .green)
+        case "in_progress":
             statusChip("Trip in progress", systemImage: "location.fill", color: .blue)
         case "completed":
             statusChip("Ride completed", systemImage: "checkmark.circle.fill", color: .green)

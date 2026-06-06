@@ -51,8 +51,20 @@ extension DashboardViewModelRealtime {
         stopSubscribingMyRide()
 
         rideUpdateCancel = await RealtimeManager.shared.subscribeRideRequests { [weak self] payload in
-            guard let self,
-                  let new = payload["new"] as? [String: Any],
+            guard let self else {
+                return
+            }
+
+            if let old = payload["old"] as? [String: Any],
+               let id = old["id"] as? String,
+               id == rideId {
+                Task { @MainActor in
+                    self.handlePassengerRideDeleted(old)
+                }
+                return
+            }
+
+            guard let new = payload["new"] as? [String: Any],
                   let id = new["id"] as? String,
                   id == rideId else {
                 return
@@ -83,6 +95,27 @@ extension DashboardViewModelRealtime {
             }
         } catch {
             SavariLog.debug("[PassengerRide] snapshot fetch failed:", error)
+            await fetchPassengerRideHistorySnapshot(rideId: rideId)
+        }
+    }
+
+    private func fetchPassengerRideHistorySnapshot(rideId: String) async {
+        do {
+            let response = try await SupabaseManager.shared.client
+                .from("ride_history")
+                .select()
+                .eq("id", value: rideId)
+                .single()
+                .execute()
+
+            if var row = jsonObject(from: response.data) {
+                row["status"] = (row["status"] as? String) ?? "completed"
+                await MainActor.run {
+                    self.handlePassengerRideRow(row)
+                }
+            }
+        } catch {
+            SavariLog.debug("[PassengerRide] history snapshot fetch failed:", error)
         }
     }
 
@@ -102,6 +135,15 @@ extension DashboardViewModelRealtime {
         activeRideRow = rideRow
         subscribeToAssignedDriverIfNeeded(from: rideRow)
         applyPassengerRideStatus(rideRow["status"] as? String)
+    }
+
+    @MainActor
+    private func handlePassengerRideDeleted(_ oldRideRow: [String: Any]) {
+        let deletedStatus = (oldRideRow["status"] as? String)?.lowercased()
+        let currentStatus = (activeRideRow?["status"] as? String)?.lowercased()
+        if deletedStatus == "completed" || isCompletablePassengerStatus(currentStatus) {
+            handlePassengerRideCompleted(row: oldRideRow)
+        }
     }
 
     @MainActor
@@ -162,6 +204,10 @@ extension DashboardViewModelRealtime {
             boardingCodeVerified = true
             passengerFlow = .enRoute
         case "completed", "cancelled":
+            if status?.lowercased() == "completed" {
+                handlePassengerRideCompleted(row: activeRideRow)
+                return
+            }
             assignedDriverUnsub?()
             assignedDriverUnsub = nil
             assignedDriverId = nil
@@ -173,6 +219,31 @@ extension DashboardViewModelRealtime {
             passengerFlow = status?.lowercased() == "completed" ? .completed : .idle
         default:
             break
+        }
+    }
+
+    @MainActor
+    private func handlePassengerRideCompleted(row: [String: Any]?) {
+        var completedRow = row ?? activeRideRow ?? [:]
+        completedRow["status"] = "completed"
+        activeRideRow = completedRow
+        assignedDriverUnsub?()
+        assignedDriverUnsub = nil
+        assignedDriverId = nil
+        assignedDriver = nil
+        assignedDriverETASeconds = nil
+        rideAccepted = false
+        rideRequested = false
+        stopSubscribingMyRide()
+        passengerFlow = .completed
+    }
+
+    nonisolated private func isCompletablePassengerStatus(_ status: String?) -> Bool {
+        switch status {
+        case "assigned", "accepted", "driver_en_route", "arrived", "boarded", "in_progress":
+            return true
+        default:
+            return false
         }
     }
 }

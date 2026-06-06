@@ -24,7 +24,8 @@ extension RideService {
 
     func startRide(rideId: String) async -> Bool {
         let payload: [String: AnyEncodable] = [
-            "status": AnyEncodable("in_progress")
+            "status": AnyEncodable("in_progress"),
+            "started_at": AnyEncodable(Date().iso8601String)
         ]
         do {
             _ = try await SupabaseManager.shared.client

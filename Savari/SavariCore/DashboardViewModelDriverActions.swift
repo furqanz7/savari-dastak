@@ -47,7 +47,8 @@ extension DashboardViewModelRealtime {
             if let dict = jsonObject(from: fetch.data), let expected = dict["boarding_code"] as? String {
                 if expected == code {
                     let payload: [String: AnyEncodable] = [
-                        "status": AnyEncodable("boarded")
+                        "status": AnyEncodable("boarded"),
+                        "boarded_at": AnyEncodable(Date().iso8601String)
                     ]
                     _ = try await SupabaseManager.shared.client
                         .from("rides")
