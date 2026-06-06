@@ -135,35 +135,14 @@ extension DashboardViewModelRealtime {
             return false
         }
 
-        let payload: [String: AnyEncodable] = [
-            "status": AnyEncodable("payment_collected"),
-            "fare_unlocked": AnyEncodable(true),
-            "payment_collected_at": AnyEncodable(Date().iso8601String),
-            "ended_at": AnyEncodable(Date().iso8601String)
-        ]
-
-        for status in ["passenger_cancelled_in_trip", "ride_finished", "completed"] {
-            do {
-                _ = try await SupabaseManager.shared.client
-                    .from("rides")
-                    .update(payload)
-                    .eq("id", value: rideId)
-                    .or("driver_id.eq.\(driverId),assigned_driver_id.eq.\(driverId)")
-                    .eq("status", value: status)
-                    .select()
-                    .single()
-                    .execute()
-
-                await MainActor.run {
-                    self.resetDriverRideToWaiting()
-                }
-                return true
-            } catch {
-                SavariLog.debug("collectRidePayment attempt failed for \(status):", error)
+        let ok = await RideService.shared.collectRidePayment(rideId: rideId, driverId: driverId)
+        if ok {
+            await MainActor.run {
+                self.resetDriverRideToWaiting()
             }
         }
 
-        return false
+        return ok
     }
 
     @MainActor

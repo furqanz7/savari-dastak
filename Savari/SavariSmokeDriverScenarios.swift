@@ -87,8 +87,16 @@ extension SavariSmokeTestRunner {
             UserDefaults.standard.set(ended, forKey: "savariSmokeDriverLifecycleEnded")
             if !ended {
                 await diagnoseEndRideFailure(rideId: rideId)
+                UserDefaults.standard.set("failed_end", forKey: "savariSmokeDriverLifecycleStatus")
+                return
             }
-            UserDefaults.standard.set(ended ? "completed" : "failed_end", forKey: "savariSmokeDriverLifecycleStatus")
+
+            let paymentCollected = await RideService.shared.collectRidePayment(rideId: rideId, driverId: driverId.uuidString)
+            UserDefaults.standard.set(paymentCollected, forKey: "savariSmokeDriverLifecyclePaymentCollected")
+            UserDefaults.standard.set(
+                paymentCollected ? "payment_collected" : "failed_collect_payment",
+                forKey: "savariSmokeDriverLifecycleStatus"
+            )
         } catch {
             UserDefaults.standard.set("failed", forKey: "savariSmokeDriverLifecycleStatus")
             UserDefaults.standard.set(error.localizedDescription, forKey: "savariSmokeDriverLifecycleError")
@@ -101,6 +109,7 @@ extension SavariSmokeTestRunner {
             "savariSmokeDriverLifecycleArrived",
             "savariSmokeDriverLifecycleStarted",
             "savariSmokeDriverLifecycleEnded",
+            "savariSmokeDriverLifecyclePaymentCollected",
             "savariSmokeDriverLifecycleError",
             "savariSmokeDriverLifecycleEndError",
             "savariSmokeDriverLifecycleEndErrorDescription",
@@ -149,7 +158,7 @@ extension SavariSmokeTestRunner {
         UserDefaults.standard.removeObject(forKey: "savariSmokeDriverLifecycleEndDiagnosticBody")
 
         let payload: [String: AnyEncodable] = [
-            "status": AnyEncodable("completed"),
+            "status": AnyEncodable("ride_finished"),
             "ended_at": AnyEncodable(Date().iso8601String),
             "fare_unlocked": AnyEncodable(true)
         ]
