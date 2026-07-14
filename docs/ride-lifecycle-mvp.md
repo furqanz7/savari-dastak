@@ -1,5 +1,7 @@
 # Savari Ride Lifecycle MVP
 
+> Superseded by [Savari And Dastak Launch Design](superpowers/specs/2026-07-15-savari-dastak-launch-design.md). Retained only as historical MVP context.
+
 ## Product Goal
 
 Savari's first real milestone is not broad feature coverage. It is one complete ride that two authenticated users can finish end to end:
