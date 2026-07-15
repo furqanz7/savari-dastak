@@ -308,13 +308,13 @@ In `eligibility.test.ts`, write failing cases for a missing attestation, a stale
 
 The customer chooses one merchant-supported delivery method for a parcel or merchant order; the server uses the matching rate card and locks that method into the quote/order, so an upfront delivery fee cannot change merely because a different partner method later appears.
 
-`submit-partner-application` accepts one active method and issued evidence URLs. It permits walking/bicycle without vehicle evidence and requires bike/auto evidence, but it never writes `approved`. `submit-merchant-application` accepts merchant location, licence evidence when a pharmacy is requested, and issued private evidence URLs; it never writes merchant/pharmacy approval. Dastak owner approval is the sole route to operational membership.
+`submit-partner-application` accepts one active method and evidence paths uploaded through the caller's narrow `dastak-partner/<auth-user-id>/...` Storage RLS scope. It permits walking/bicycle without vehicle evidence and requires bike/auto evidence, but it never writes `approved`. Merchant and pharmacy evidence upload authorization is added only after their ownership records exist; `submit-merchant-application` must not infer ownership from a path UUID or role. Owner review uses 300-second URLs from `issue-evidence-url`. Dastak owner approval is the sole route to operational membership.
 
 - [ ] **Step 4: Create deliveries and private event data with no client DML**
 
 The `public.deliveries` row has customer, partner, merchant optional, kind, status, pickup/dropoff, rate snapshot, delivery fee, item subtotal, partner payout, payment/refund state, state version, and timestamp columns. `private.delivery_events` records immutable transition payloads and `private.delivery_positions` stores precise partner trace points.
 
-Enable RLS. Grant customers, assigned partners, and merchant owner only the exact `SELECT` path necessary for an active delivery. Revoke all client DML from public delivery, merchant, profile, approval, event, position, and rate tables. The only direct client write allowed in this product is an object upload to the narrow private evidence path issued by the function from foundation.
+Enable RLS. Grant customers, assigned partners, and merchant owner only the exact `SELECT` path necessary for an active delivery. Revoke all client DML from public delivery, merchant, profile, approval, event, position, and rate tables. The only direct client write allowed in this product is an object upload through an ownership-checked private Storage RLS path.
 
 - [ ] **Step 5: Add security test coverage and run it**
 

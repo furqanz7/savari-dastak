@@ -355,7 +355,7 @@ and recorded_at >= now() - interval '90 seconds'
 and ST_Contains(active_zone.boundary, driver_position.point)
 ```
 
-`submit-driver-application` creates or updates a pending application with exactly one vehicle choice and evidence URLs issued by `issue-evidence-url`; it cannot set `approved`. Owner approval is the only action that creates an approved `savari_driver` membership. `report-driver-location` is an authenticated Edge Function which replaces only the caller's most recent position. It is never a direct table upsert.
+`submit-driver-application` creates or updates a pending application with exactly one vehicle choice and evidence paths uploaded through the caller's narrow `savari-driver/<auth-user-id>/...` Storage RLS scope; it cannot set `approved`. Owner review uses 300-second URLs from `issue-evidence-url`. Owner approval is the only action that creates an approved `savari_driver` membership. `report-driver-location` is an authenticated Edge Function which replaces only the caller's most recent position. It is never a direct table upsert.
 
 - [ ] **Step 4: Implement route quote with Apple Maps Server API**
 

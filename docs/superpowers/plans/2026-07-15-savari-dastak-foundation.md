@@ -610,21 +610,28 @@ git commit -m "feat: bootstrap isolated marketplace backends"
 ### Task 5: Establish read-only client data, audit, evidence storage, and service zones
 
 **Files:**
-- Create: `Backends/Savari/supabase/migrations/20260715091500_security_audit_zones.sql`
-- Create: `Backends/Dastak/supabase/migrations/20260715091500_security_audit_zones.sql`
+- Create via `supabase migration new security_audit_zones`: `Backends/Savari/supabase/migrations/<generated>_security_audit_zones.sql`
+- Create via `supabase migration new security_audit_zones`: `Backends/Dastak/supabase/migrations/<generated>_security_audit_zones.sql`
 - Create: `Backends/Savari/supabase/tests/database/002_security_audit_zones.pgtap.sql`
+- Create: `Backends/Savari/supabase/tests/database/002_security_audit_zones.test.ts`
 - Create: `Backends/Dastak/supabase/tests/database/002_security_audit_zones.pgtap.sql`
+- Create: `Backends/Dastak/supabase/tests/database/002_security_audit_zones.test.ts`
 - Create: `Backends/Savari/supabase/functions/issue-evidence-url/index.ts`
+- Create: `Backends/Savari/supabase/functions/issue-evidence-url/handler.ts`
+- Create: `Backends/Savari/supabase/functions/tests/issue-evidence-url/handler.test.ts`
 - Create: `Backends/Dastak/supabase/functions/issue-evidence-url/index.ts`
+- Create: `Backends/Dastak/supabase/functions/issue-evidence-url/handler.ts`
+- Create: `Backends/Dastak/supabase/functions/tests/issue-evidence-url/handler.test.ts`
 - Create: `scripts/test-backend-security.sh`
+- Create: `scripts/assert-no-client-dml.sql`
 
 **Interfaces:**
 - Consumes: account membership and an authenticated actor.
-- Produces: owner-managed `service_zones`, append-only `audit.events`, private evidence URL issuance, and no client mutation grants on business tables.
+- Produces: server-managed `service_zones`, append-only `audit.events`, path-scoped private evidence uploads, 300-second evidence download URLs, and no client mutation grants on business tables.
 
 - [ ] **Step 1: Write RLS and audit tests before adding policies**
 
-In each `002_security_audit_zones.pgtap.sql`, assert the security baseline:
+In each `002_security_audit_zones.pgtap.sql`, assert the security baseline. The seven structural checks below are the minimum, not the whole test: also prove active-only zone reads, no authenticated zone/audit/safety-case DML, the audit update/delete guard, correct bucket visibility, and the product-specific evidence-object policy set.
 
 ```sql
 begin;
@@ -689,6 +696,9 @@ create table public.service_zones (
   created_at timestamptz not null default now()
 );
 
+create index service_zones_boundary_gix
+on public.service_zones using gist (boundary);
+
 alter table audit.events enable row level security;
 alter table private.safety_cases enable row level security;
 alter table public.service_zones enable row level security;
@@ -698,11 +708,13 @@ revoke insert, update, delete on public.service_zones from anon, authenticated;
 grant select on public.service_zones to authenticated;
 ```
 
-Expose owner changes only through Edge Functions that write the before/after JSON in the same database transaction.
+Add an `active`-only authenticated `SELECT` policy for `service_zones`. Grant the service role only the explicit access later server functions need. Enforce `audit.events` append-only behavior with a trigger that rejects every `UPDATE` and `DELETE`, including accidental service-role writes. Future owner changes remain Edge Function-only and must write zone changes plus before/after audit JSON in one database transaction.
 
 - [ ] **Step 4: Define private storage buckets and URL issuance**
 
-Create private buckets `savari-evidence` and `dastak-evidence`, plus a public-read `dastak-catalogue` bucket only in Dastak. `issue-evidence-url` accepts `{ bucket, objectPath, operation }`, verifies actor ownership or owner membership, and returns a signed URL with a 300-second expiry. Reject every path not matching one of these forms:
+Create private buckets `savari-evidence` and `dastak-evidence`, plus a public-read `dastak-catalogue` bucket only in Dastak. Evidence upload uses the authenticated Storage API with narrow `storage.objects` `INSERT`, `SELECT`, and `UPDATE` policies for upsert support; do not issue a signed upload URL because Supabase signed upload URLs are fixed at two hours. At foundation scope, grant only the exact self-owned application roots `savari-driver/<auth-user-id>/<filename>` in Savari and `dastak-partner/<auth-user-id>/<filename>` in Dastak. Require exactly three path segments and a non-empty filename.
+
+`issue-evidence-url` accepts `{ bucket, objectPath, operation: "download" }`, authenticates before payload-specific errors, verifies exact path ownership or active owner membership, and returns a signed download URL with an expiry of exactly 300 seconds. Keep the handler testable through injected authentication, owner-membership lookup, and signing operations. Add Deno tests for missing/invalid authentication, invalid bucket/path/operation, self-owned access, another user's denial, owner access, exact 300-second signing, and storage error mapping. Configure `[functions.issue-evidence-url] verify_jwt = true` in each backend. Reject every path not matching one of these forms:
 
 ```text
 savari-driver/<auth-user-id>/<filename>
@@ -713,21 +725,22 @@ prescription/<order-id>/<filename>
 receipt/<delivery-id>/<filename>
 ```
 
-No client receives a bucket-wide list policy, public sensitive bucket, or a signed URL longer than five minutes.
+The merchant, pharmacy, prescription, and receipt roots are owner-download-only in this foundation task because their ownership relations do not exist yet. Extend authorization only when the corresponding domain tables are created; do not infer ownership from a role or path UUID. No client receives a bucket-wide list policy, a public sensitive bucket, or a signed URL longer than five minutes.
 
 - [ ] **Step 5: Create a repeatable no-direct-mutation security check**
 
-Implement `scripts/test-backend-security.sh` to execute the pgTAP test files and then query grants:
+Implement `scripts/test-backend-security.sh` so it resolves the repository root from the script location, validates the backend argument, executes both pgTAP files with CLI v2.90-compatible positional paths, and checks local grants with an explicit `--local`. `scripts/assert-no-client-dml.sql` must raise an exception if `authenticated` has `INSERT`, `UPDATE`, or `DELETE` on anything except the intentionally RLS-scoped `storage.objects` upload path; printing a query result without enforcing it is not a test.
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-backend="$1"
-cd "Backends/$backend"
+backend="${1:?usage: scripts/test-backend-security.sh Savari|Dastak}"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root/Backends/$backend"
 supabase db test supabase/tests/database/001_identity.pgtap.sql --local
 supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql --local
-supabase db query "select table_name, privilege_type from information_schema.role_table_grants where grantee = 'authenticated' and privilege_type in ('INSERT','UPDATE','DELETE') order by table_name;"
+supabase db query --local --file "$repo_root/scripts/assert-no-client-dml.sql"
 ```
 
 Expected final query: only explicitly approved future client-owned upload metadata rows, never accounts, roles, zones, audits, jobs, payments, or payouts.
@@ -739,10 +752,14 @@ Run:
 ```bash
 scripts/test-backend-security.sh Savari
 scripts/test-backend-security.sh Dastak
+deno test --allow-env Backends/Savari/supabase/functions/tests/
+deno test --allow-env Backends/Dastak/supabase/functions/tests/
+deno test --allow-read Backends/Savari/supabase/tests/database/002_security_audit_zones.test.ts
+deno test --allow-read Backends/Dastak/supabase/tests/database/002_security_audit_zones.test.ts
 git diff --check
 ```
 
-Expected: pgTAP passes in both backends and the grants review has no unauthorized mutation privilege.
+Expected when the local Supabase stack is available: pgTAP passes in both backends and the grants review has no unauthorized mutation privilege. Until Docker/Postgres is available, run and record the Deno, formatting, shell syntax, static SQL-contract, and diff checks, and leave the local migration/pgTAP gate explicitly pending rather than claiming it passed.
 
 ```bash
 git add Backends scripts

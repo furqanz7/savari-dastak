@@ -217,8 +217,8 @@ Savari and Dastak payments stay in their own product projects. A single private 
 
 ### 7.3 Storage and documents
 
-- Driver, partner, merchant, pharmacy, prescription, receipt, age-check, and payout evidence use private storage buckets with narrow RLS policies and short-lived signed access URLs.
-- Existing Savari Driver document storage uses the owner path `driver_docs/<auth.uid()>/<filename>` and must retain private-bucket, user-folder, `SELECT`, `INSERT`, and `UPDATE` coverage for upsert support.
+- Driver, partner, merchant, pharmacy, prescription, receipt, age-check, and payout evidence use private storage buckets with narrow authenticated upload RLS policies and short-lived signed download URLs.
+- The archived prototype retains its historical `driver_docs/<auth.uid()>/<filename>` contract only under `Legacy/`. The new Savari backend uses `savari-evidence/savari-driver/<auth.uid()>/<filename>` with private-bucket, user-folder, `SELECT`, `INSERT`, and `UPDATE` coverage for upsert support.
 - Merchant catalogue images can use a separate public-read bucket. Sensitive evidence never shares that bucket.
 
 ### 7.4 Location and privacy
