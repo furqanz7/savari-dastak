@@ -1,0 +1,2 @@
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured
+#include? "Secrets.xcconfig"

@@ -21,6 +21,7 @@ final class AuthenticationCoordinator {
     }
 
     func signInWithApple(identityToken: String, nonce: String) async throws {
+        route = .signedOut
         try await client.signInWithApple(identityToken: identityToken, nonce: nonce)
         route = try await client.restoreAccount()
     }
@@ -29,6 +30,7 @@ final class AuthenticationCoordinator {
         idToken: String,
         configuration: GoogleOAuthConfiguration = GoogleOAuthConfiguration(bundle: .main)
     ) async throws {
+        route = .signedOut
         _ = try configuration.validatedReversedClientID()
         try await client.signInWithGoogle(idToken: idToken)
         route = try await client.restoreAccount()
@@ -39,12 +41,18 @@ final class AuthenticationCoordinator {
         phoneNumber: String,
         key: IdempotencyKey
     ) async throws {
+        let validatedPhoneNumber = try E164PhoneNumber(phoneNumber).rawValue
         try await client.bootstrapAccount(
             displayName: displayName,
-            phoneNumber: phoneNumber,
+            phoneNumber: validatedPhoneNumber,
             key: key
         )
-        route = try await client.restoreAccount()
+        do {
+            route = try await client.restoreAccount()
+        } catch {
+            route = .signedOut
+            throw error
+        }
     }
 
     func signOut() async throws {

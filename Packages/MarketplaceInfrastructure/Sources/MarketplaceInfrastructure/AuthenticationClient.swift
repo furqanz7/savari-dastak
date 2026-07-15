@@ -22,6 +22,7 @@ public protocol AuthenticationClient: Sendable {
 
 public enum AuthenticationClientError: Error, Equatable, Sendable {
     case googleOAuthNotConfigured
+    case invalidE164PhoneNumber
     case unexpectedPhoneVerificationState
 }
 
@@ -60,8 +61,8 @@ public struct GoogleOAuthConfiguration: Equatable, Sendable {
 protocol SupabaseAuthenticationOperations: Sendable {
     func signInWithApple(identityToken: String, nonce: String) async throws
     func signInWithGoogle(idToken: String) async throws
-    func hasProviderSession() async -> Bool
-    func hasAccountProfile() async throws -> Bool
+    func currentAccountID() async -> UUID?
+    func accountProfileID(for accountID: UUID) async throws -> UUID?
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,
@@ -90,10 +91,13 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
     }
 
     public func restoreAccount() async throws -> AccountRoute {
-        guard await operations.hasProviderSession() else {
+        guard let accountID = await operations.currentAccountID() else {
             return .signedOut
         }
-        return try await operations.hasAccountProfile() ? .active : .needsProfile
+        guard let profileAccountID = try await operations.accountProfileID(for: accountID) else {
+            return .needsProfile
+        }
+        return profileAccountID == accountID ? .active : .needsProfile
     }
 
     public func bootstrapAccount(
@@ -101,9 +105,10 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
         phoneNumber: String,
         key: IdempotencyKey
     ) async throws {
+        let validatedPhoneNumber = try E164PhoneNumber(phoneNumber).rawValue
         let result = try await operations.bootstrapAccount(
             displayName: displayName,
-            phoneNumber: phoneNumber,
+            phoneNumber: validatedPhoneNumber,
             key: key
         )
         guard result.phoneState == .unverified else {
@@ -116,7 +121,7 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
     }
 }
 
-private extension SupabaseAuthenticationClient {
+extension SupabaseAuthenticationClient {
     actor LiveOperations: SupabaseAuthenticationOperations {
         private struct AccountIdentity: Decodable {
             let id: UUID
@@ -128,6 +133,21 @@ private extension SupabaseAuthenticationClient {
             supabaseClient = SupabaseClient(
                 supabaseURL: configuration.supabaseURL,
                 supabaseKey: configuration.publishableKey
+            )
+        }
+
+        init(
+            configuration: BackendConfiguration,
+            session: URLSession,
+            accessToken: String
+        ) {
+            supabaseClient = SupabaseClient(
+                supabaseURL: configuration.supabaseURL,
+                supabaseKey: configuration.publishableKey,
+                options: SupabaseClientOptions(
+                    auth: .init(accessToken: { accessToken }),
+                    global: .init(session: session)
+                )
             )
         }
 
@@ -150,25 +170,25 @@ private extension SupabaseAuthenticationClient {
             )
         }
 
-        func hasProviderSession() async -> Bool {
+        func currentAccountID() async -> UUID? {
             do {
-                _ = try await supabaseClient.auth.session
-                return true
+                return try await supabaseClient.auth.session.user.id
             } catch AuthError.sessionMissing {
-                return false
+                return nil
             } catch {
-                return false
+                return nil
             }
         }
 
-        func hasAccountProfile() async throws -> Bool {
+        func accountProfileID(for accountID: UUID) async throws -> UUID? {
             let accounts: [AccountIdentity] = try await supabaseClient
                 .from("accounts")
                 .select("id")
+                .eq("id", value: accountID.uuidString)
                 .limit(1)
                 .execute()
                 .value
-            return !accounts.isEmpty
+            return accounts.first?.id
         }
 
         func bootstrapAccount(

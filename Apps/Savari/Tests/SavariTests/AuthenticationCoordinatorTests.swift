@@ -28,7 +28,12 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         let coordinator = AuthenticationCoordinator(client: gateway)
 
         do {
-            try await coordinator.signInWithGoogle(idToken: "google-token")
+            try await coordinator.signInWithGoogle(
+                idToken: "google-token",
+                configuration: GoogleOAuthConfiguration(
+                    reversedClientID: GoogleOAuthConfiguration.notConfiguredClientID
+                )
+            )
             XCTFail("Expected placeholder Google OAuth configuration to fail closed")
         } catch let error as AuthenticationClientError {
             XCTAssertEqual(error, .googleOAuthNotConfigured)
@@ -54,25 +59,143 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         let bootstrapCallCount = await gateway.bootstrapCallCount()
         XCTAssertEqual(bootstrapCallCount, 1)
     }
+
+    func testProviderExchangeFailureFromActiveRouteResetsToSignedOut() async throws {
+        let gateway = FakeAuthenticationClient(
+            restoredRoute: .active,
+            shouldFailAppleSignIn: true
+        )
+        let coordinator = AuthenticationCoordinator(client: gateway)
+
+        await coordinator.restore()
+        XCTAssertEqual(coordinator.route, .active)
+
+        do {
+            try await coordinator.signInWithApple(identityToken: "apple-token", nonce: "nonce")
+            XCTFail("Expected the provider exchange to fail")
+        } catch {
+            XCTAssertEqual(coordinator.route, .signedOut)
+        }
+    }
+
+    func testProfileLookupFailureAfterProviderExchangeResetsToSignedOut() async throws {
+        let gateway = FakeAuthenticationClient(restoredRoute: .active)
+        let coordinator = AuthenticationCoordinator(client: gateway)
+
+        await coordinator.restore()
+        XCTAssertEqual(coordinator.route, .active)
+        await gateway.setRestoreFailure()
+
+        do {
+            try await coordinator.signInWithApple(identityToken: "apple-token", nonce: "nonce")
+            XCTFail("Expected the profile lookup to fail")
+        } catch {
+            XCTAssertEqual(coordinator.route, .signedOut)
+        }
+    }
+
+    func testProfileBootstrapFailureKeepsNeedsProfileRoute() async throws {
+        let gateway = FakeAuthenticationClient(
+            restoredRoute: .needsProfile,
+            shouldFailBootstrap: true
+        )
+        let coordinator = AuthenticationCoordinator(client: gateway)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "profile-failure-123"))
+
+        await coordinator.restore()
+        XCTAssertEqual(coordinator.route, .needsProfile)
+
+        do {
+            try await coordinator.completeProfile(
+                displayName: "Test User",
+                phoneNumber: "+919876543210",
+                key: key
+            )
+            XCTFail("Expected profile bootstrap to fail")
+        } catch {
+            XCTAssertEqual(coordinator.route, .needsProfile)
+        }
+    }
+
+    func testProfileRestoreFailureAfterBootstrapResetsToSignedOut() async throws {
+        let gateway = FakeAuthenticationClient(restoredRoute: .needsProfile)
+        let coordinator = AuthenticationCoordinator(client: gateway)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "profile-restore-failure-123"))
+
+        await coordinator.restore()
+        XCTAssertEqual(coordinator.route, .needsProfile)
+        await gateway.setRestoreFailure()
+
+        do {
+            try await coordinator.completeProfile(
+                displayName: "Test User",
+                phoneNumber: "+919876543210",
+                key: key
+            )
+            XCTFail("Expected the post-bootstrap profile restore to fail")
+        } catch {
+            XCTAssertEqual(coordinator.route, .signedOut)
+        }
+    }
+
+    func testProfileCompletionRejectsMalformedE164BeforeCallingClient() async throws {
+        let gateway = FakeAuthenticationClient(restoredRoute: .needsProfile)
+        let coordinator = AuthenticationCoordinator(client: gateway)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "invalid-phone-123"))
+
+        await coordinator.restore()
+        XCTAssertEqual(coordinator.route, .needsProfile)
+
+        do {
+            try await coordinator.completeProfile(
+                displayName: "Test User",
+                phoneNumber: "+91 9876543210",
+                key: key
+            )
+            XCTFail("Expected malformed E.164 input to fail")
+        } catch let error as AuthenticationClientError {
+            XCTAssertEqual(error, .invalidE164PhoneNumber)
+        }
+
+        let bootstrapCallCount = await gateway.bootstrapCallCount()
+        XCTAssertEqual(bootstrapCallCount, 0)
+        XCTAssertEqual(coordinator.route, .needsProfile)
+    }
 }
 
 private actor FakeAuthenticationClient: AuthenticationClient {
     let restoredRoute: AccountRoute
+    private let shouldFailAppleSignIn: Bool
+    private let shouldFailBootstrap: Bool
+    private var shouldFailRestore = false
     private var googleCalls = 0
     private var bootstrapCalls = 0
 
-    init(restoredRoute: AccountRoute) {
+    init(
+        restoredRoute: AccountRoute,
+        shouldFailAppleSignIn: Bool = false,
+        shouldFailBootstrap: Bool = false
+    ) {
         self.restoredRoute = restoredRoute
+        self.shouldFailAppleSignIn = shouldFailAppleSignIn
+        self.shouldFailBootstrap = shouldFailBootstrap
     }
 
-    func signInWithApple(identityToken: String, nonce: String) async throws {}
+    func signInWithApple(identityToken: String, nonce: String) async throws {
+        guard !shouldFailAppleSignIn else {
+            throw TestAuthenticationError.providerExchangeFailed
+        }
+    }
 
     func signInWithGoogle(idToken: String) async throws {
         googleCalls += 1
     }
 
     func restoreAccount() async throws -> AccountRoute {
-        restoredRoute
+        guard !shouldFailRestore else {
+            throw TestAuthenticationError.profileLookupFailed
+        }
+        return restoredRoute
     }
 
     func bootstrapAccount(
@@ -81,6 +204,9 @@ private actor FakeAuthenticationClient: AuthenticationClient {
         key: IdempotencyKey
     ) async throws {
         bootstrapCalls += 1
+        guard !shouldFailBootstrap else {
+            throw TestAuthenticationError.profileBootstrapFailed
+        }
     }
 
     func signOut() async throws {}
@@ -92,4 +218,14 @@ private actor FakeAuthenticationClient: AuthenticationClient {
     func bootstrapCallCount() -> Int {
         bootstrapCalls
     }
+
+    func setRestoreFailure() {
+        shouldFailRestore = true
+    }
+}
+
+private enum TestAuthenticationError: Error, Sendable {
+    case providerExchangeFailed
+    case profileLookupFailed
+    case profileBootstrapFailed
 }

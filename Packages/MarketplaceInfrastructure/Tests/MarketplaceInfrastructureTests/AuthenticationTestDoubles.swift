@@ -32,24 +32,25 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
         let key: IdempotencyKey
     }
 
-    private let providerSessionExists: Bool
-    private let accountExists: Bool
+    private let currentAccountID: UUID?
+    private let profileAccountID: UUID?
     private let bootstrapResult: AccountBootstrapResult
     private var appleCredentials: AppleCredentials?
     private var googleIDToken: String?
     private var bootstrapRequest: BootstrapRequest?
+    private var profileLookupAccountID: UUID?
     private var signOutCallCount = 0
 
     init(
-        providerSessionExists: Bool = true,
-        accountExists: Bool = false,
+        currentAccountID: UUID? = UUID(),
+        profileAccountID: UUID? = nil,
         bootstrapResult: AccountBootstrapResult = AccountBootstrapResult(
             accountID: UUID(),
             phoneState: .unverified
         )
     ) {
-        self.providerSessionExists = providerSessionExists
-        self.accountExists = accountExists
+        self.currentAccountID = currentAccountID
+        self.profileAccountID = profileAccountID
         self.bootstrapResult = bootstrapResult
     }
 
@@ -61,12 +62,13 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
         googleIDToken = idToken
     }
 
-    func hasProviderSession() async -> Bool {
-        providerSessionExists
+    func currentAccountID() async -> UUID? {
+        currentAccountID
     }
 
-    func hasAccountProfile() async throws -> Bool {
-        accountExists
+    func accountProfileID(for accountID: UUID) async throws -> UUID? {
+        profileLookupAccountID = accountID
+        return profileAccountID
     }
 
     func bootstrapAccount(
@@ -96,6 +98,10 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
 
     func recordedBootstrapRequest() -> BootstrapRequest? {
         bootstrapRequest
+    }
+
+    func recordedProfileLookupAccountID() -> UUID? {
+        profileLookupAccountID
     }
 
     func recordedSignOutCallCount() -> Int {

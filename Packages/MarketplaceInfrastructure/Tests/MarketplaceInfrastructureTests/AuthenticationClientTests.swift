@@ -1,34 +1,135 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import MarketplaceFoundation
 import XCTest
 @testable import MarketplaceInfrastructure
 
 final class AuthenticationClientTests: XCTestCase {
-    func testRestoreWithoutProviderSessionReturnsSignedOut() async throws {
-        let operations = RecordingAuthenticationOperations(providerSessionExists: false)
+    func testRestoreWithoutCurrentAccountReturnsSignedOut() async throws {
+        let operations = RecordingAuthenticationOperations(currentAccountID: nil)
         let client = SupabaseAuthenticationClient(operations: operations)
 
         let route = try await client.restoreAccount()
 
         XCTAssertEqual(route, .signedOut)
+        let profileLookupAccountID = await operations.recordedProfileLookupAccountID()
+        XCTAssertNil(profileLookupAccountID)
     }
 
-    func testRestoreWithProviderSessionAndNoAccountReturnsNeedsProfile() async throws {
-        let operations = RecordingAuthenticationOperations(accountExists: false)
+    func testRestoreWithCurrentAccountAndNoProfileReturnsNeedsProfile() async throws {
+        let accountID = UUID()
+        let operations = RecordingAuthenticationOperations(
+            currentAccountID: accountID,
+            profileAccountID: nil
+        )
         let client = SupabaseAuthenticationClient(operations: operations)
 
         let route = try await client.restoreAccount()
 
         XCTAssertEqual(route, .needsProfile)
+        let profileLookupAccountID = await operations.recordedProfileLookupAccountID()
+        XCTAssertEqual(profileLookupAccountID, accountID)
     }
 
-    func testRestoreWithAccountReturnsActive() async throws {
-        let operations = RecordingAuthenticationOperations(accountExists: true)
+    func testRestoreWithMatchingCurrentAccountAndProfileReturnsActive() async throws {
+        let accountID = UUID()
+        let operations = RecordingAuthenticationOperations(
+            currentAccountID: accountID,
+            profileAccountID: accountID
+        )
         let client = SupabaseAuthenticationClient(operations: operations)
 
         let route = try await client.restoreAccount()
 
         XCTAssertEqual(route, .active)
+        let profileLookupAccountID = await operations.recordedProfileLookupAccountID()
+        XCTAssertEqual(profileLookupAccountID, accountID)
+    }
+
+    func testRestoreWithMismatchedProfileDoesNotBecomeActive() async throws {
+        let currentAccountID = UUID()
+        let operations = RecordingAuthenticationOperations(
+            currentAccountID: currentAccountID,
+            profileAccountID: UUID()
+        )
+        let client = SupabaseAuthenticationClient(operations: operations)
+
+        let route = try await client.restoreAccount()
+
+        XCTAssertEqual(route, .needsProfile)
+        let profileLookupAccountID = await operations.recordedProfileLookupAccountID()
+        XCTAssertEqual(profileLookupAccountID, currentAccountID)
+    }
+
+    func testLiveProfileLookupFiltersAccountsByCurrentAccountID() async throws {
+        let accountID = UUID()
+        let session = makeCapturingSession(
+            responses: [
+                .init(
+                    statusCode: 200,
+                    body: #"[{"id":"\#(accountID.uuidString)"}]"#.data(using: .utf8)!
+                )
+            ]
+        )
+        let operations = SupabaseAuthenticationClient.LiveOperations(
+            configuration: testBackendConfiguration,
+            session: session,
+            accessToken: "session-access-token"
+        )
+
+        let profileAccountID = try await operations.accountProfileID(for: accountID)
+
+        XCTAssertEqual(profileAccountID, accountID)
+        let request = try XCTUnwrap(
+            CapturingURLProtocol.capture.recordedRequests().first {
+                $0.url?.path == "/rest/v1/accounts"
+            }
+        )
+        let queryItems = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(queryItems.first(where: { $0.name == "select" })?.value, "id")
+        XCTAssertEqual(queryItems.first(where: { $0.name == "id" })?.value, "eq.\(accountID.uuidString)")
+        XCTAssertEqual(queryItems.first(where: { $0.name == "limit" })?.value, "1")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer session-access-token")
+    }
+
+    func testLiveBootstrapUsesSessionAuthorizationAndIdempotencyBoundary() async throws {
+        let accountID = UUID()
+        let session = makeCapturingSession(
+            responses: [
+                .init(
+                    statusCode: 200,
+                    body: #"{"accountId":"\#(accountID.uuidString)","phoneState":"unverified"}"#.data(using: .utf8)!
+                )
+            ]
+        )
+        let operations = SupabaseAuthenticationClient.LiveOperations(
+            configuration: testBackendConfiguration,
+            session: session,
+            accessToken: "session-access-token"
+        )
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "bootstrap-live-123"))
+
+        let result = try await operations.bootstrapAccount(
+            displayName: "Test User",
+            phoneNumber: "+919876543210",
+            key: key
+        )
+
+        XCTAssertEqual(result.accountID, accountID)
+        let request = try XCTUnwrap(
+            CapturingURLProtocol.capture.recordedRequests().first {
+                $0.url?.path == "/functions/v1/bootstrap-account"
+            }
+        )
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer session-access-token")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Idempotency-Key"), key.rawValue)
+        XCTAssertEqual(
+            try JSONDecoder().decode(CapturedBootstrapRequest.self, from: try capturedRequestBody(request)),
+            .init(displayName: "Test User", phoneNumber: "+919876543210")
+        )
     }
 
     func testProviderTokensAreForwardedWithoutBecomingPhoneProof() async throws {
@@ -91,6 +192,34 @@ final class AuthenticationClientTests: XCTestCase {
         }
     }
 
+    func testBootstrapRejectsMalformedE164PhoneNumbersBeforeCallingOperations() async throws {
+        let operations = RecordingAuthenticationOperations()
+        let client = SupabaseAuthenticationClient(operations: operations)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "bootstrap-invalid-phone"))
+
+        for phoneNumber in ["+12", "919876543210", "+019876543210", "+91 9876543210", "+9198765432100000"] {
+            do {
+                try await client.bootstrapAccount(
+                    displayName: "Test User",
+                    phoneNumber: phoneNumber,
+                    key: key
+                )
+                XCTFail("Expected \(phoneNumber) to fail E.164 validation")
+            } catch let error as AuthenticationClientError {
+                XCTAssertEqual(error, .invalidE164PhoneNumber)
+            }
+        }
+
+        let request = await operations.recordedBootstrapRequest()
+        XCTAssertNil(request)
+    }
+
+    func testE164PhoneNumberAcceptsCanonicalInternationalNumber() throws {
+        let phoneNumber = try E164PhoneNumber("+14155552671")
+
+        XCTAssertEqual(phoneNumber.rawValue, "+14155552671")
+    }
+
     func testTrackedGoogleOAuthPlaceholderFailsClosed() {
         let configuration = GoogleOAuthConfiguration(
             reversedClientID: GoogleOAuthConfiguration.notConfiguredClientID
@@ -99,6 +228,39 @@ final class AuthenticationClientTests: XCTestCase {
         XCTAssertThrowsError(try configuration.validatedReversedClientID()) { error in
             XCTAssertEqual(error as? AuthenticationClientError, .googleOAuthNotConfigured)
         }
+    }
+
+    func testGoogleOAuthDefaultsAreOverridableAndWiredToEveryAppTarget() throws {
+        let gitignore = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(".gitignore"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(gitignore.contains("**/Secrets.xcconfig"))
+
+        try assertGoogleOAuthDefaults(
+            product: "Savari",
+            projectName: "Savari",
+            defaultsReference: "A1A1A1A1A1A1A1A1A1A1A1A1",
+            configurationIDs: [
+                "A56DCBF2CD11538AE1F64796",
+                "D8C955244EB6128D29D56334",
+                "2D75231A2B05595624883B7E",
+                "86449F7B4DA0A64EE246D938"
+            ]
+        )
+        try assertGoogleOAuthDefaults(
+            product: "Dastak",
+            projectName: "Dastak",
+            defaultsReference: "B1B1B1B1B1B1B1B1B1B1B1B1",
+            configurationIDs: [
+                "ED43ADBFE16D15C5D02BCA18",
+                "4E266F22C0A8C2ECED8E3D7D",
+                "DCEF7FB9A8873D63C9060101",
+                "E11F1F52EB0092983CC97DEE",
+                "9434B02D42CC14FB30B03B98",
+                "2513EF7003A23747F3DDAF62"
+            ]
+        )
     }
 
     func testSignOutUsesProviderSessionOnly() async throws {
@@ -139,4 +301,169 @@ final class AuthenticationClientTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
     }
+
+    private var testBackendConfiguration: BackendConfiguration {
+        BackendConfiguration(
+            product: "test-product",
+            supabaseURL: URL(string: "https://example.supabase.co")!,
+            publishableKey: "publishable-key"
+        )
+    }
+
+    private func assertGoogleOAuthDefaults(
+        product: String,
+        projectName: String,
+        defaultsReference: String,
+        configurationIDs: [String]
+    ) throws {
+        let defaultsURL = repositoryRoot
+            .appendingPathComponent("Apps")
+            .appendingPathComponent(product)
+            .appendingPathComponent("Configuration/Defaults.xcconfig")
+        let defaults = try String(contentsOf: defaultsURL, encoding: .utf8)
+        let defaultValue = try XCTUnwrap(
+            defaults.range(of: "GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured")
+        )
+        let secretsInclude = try XCTUnwrap(defaults.range(of: #"#include? "Secrets.xcconfig""#))
+        XCTAssertLessThan(defaultValue.lowerBound, secretsInclude.lowerBound)
+
+        let projectURL = repositoryRoot
+            .appendingPathComponent("Apps")
+            .appendingPathComponent(product)
+            .appendingPathComponent("\(projectName).xcodeproj/project.pbxproj")
+        let project = try String(contentsOf: projectURL, encoding: .utf8)
+        XCTAssertTrue(project.contains("\(defaultsReference) /* Defaults.xcconfig */"))
+
+        for configurationID in configurationIDs {
+            let block = try XCTUnwrap(
+                buildConfigurationBlock(id: configurationID, in: project),
+                "Missing build configuration \(configurationID)"
+            )
+            XCTAssertTrue(
+                block.contains("baseConfigurationReference = \(defaultsReference) /* Defaults.xcconfig */;"),
+                configurationID
+            )
+            XCTAssertFalse(block.contains("GOOGLE_REVERSED_CLIENT_ID"), configurationID)
+        }
+    }
+
+    private func buildConfigurationBlock(id: String, in project: String) -> String? {
+        guard let start = project.range(of: "\t\t\(id) /*") else {
+            return nil
+        }
+        let remainder = project[start.lowerBound...]
+        guard let end = remainder.range(of: "\n\t\t};") else {
+            return nil
+        }
+        return String(remainder[..<end.lowerBound])
+    }
+}
+
+private struct CapturedBootstrapRequest: Decodable, Equatable {
+    let displayName: String
+    let phoneNumber: String
+}
+
+private struct CapturedHTTPResponse {
+    let statusCode: Int
+    let body: Data
+}
+
+private final class RequestCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests = [URLRequest]()
+    private var responses = [CapturedHTTPResponse]()
+
+    func reset(responses: [CapturedHTTPResponse]) {
+        lock.lock()
+        defer { lock.unlock() }
+        requests = []
+        self.responses = responses
+    }
+
+    func record(_ request: URLRequest) -> CapturedHTTPResponse {
+        lock.lock()
+        defer { lock.unlock() }
+        requests.append(request)
+        guard !responses.isEmpty else {
+            return CapturedHTTPResponse(statusCode: 500, body: Data())
+        }
+        return responses.removeFirst()
+    }
+
+    func recordedRequests() -> [URLRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests
+    }
+}
+
+private final class CapturingURLProtocol: URLProtocol, @unchecked Sendable {
+    static let capture = RequestCapture()
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        let capturedResponse = Self.capture.record(request)
+        guard let url = request.url else {
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: capturedResponse.statusCode,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: capturedResponse.body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private func makeCapturingSession(responses: [CapturedHTTPResponse]) -> URLSession {
+    CapturingURLProtocol.capture.reset(responses: responses)
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [CapturingURLProtocol.self]
+    return URLSession(configuration: configuration)
+}
+
+private func capturedRequestBody(_ request: URLRequest) throws -> Data {
+    if let body = request.httpBody {
+        return body
+    }
+    guard let stream = request.httpBodyStream else {
+        throw RequestCaptureError.missingBody
+    }
+
+    stream.open()
+    defer { stream.close() }
+    var body = Data()
+    var buffer = [UInt8](repeating: 0, count: 1_024)
+    while stream.hasBytesAvailable {
+        let count = buffer.withUnsafeMutableBufferPointer {
+            stream.read($0.baseAddress!, maxLength: $0.count)
+        }
+        guard count >= 0 else {
+            throw stream.streamError ?? RequestCaptureError.unreadableBody
+        }
+        guard count > 0 else {
+            break
+        }
+        body.append(contentsOf: buffer.prefix(count))
+    }
+    return body
+}
+
+private enum RequestCaptureError: Error {
+    case missingBody
+    case unreadableBody
 }

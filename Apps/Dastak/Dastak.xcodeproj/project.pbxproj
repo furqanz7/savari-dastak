@@ -48,6 +48,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		B1B1B1B1B1B1B1B1B1B1B1B1 /* Defaults.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Defaults.xcconfig; sourceTree = "<group>"; };
 		06C142CB347F221ACF0D27CD /* DastakMerchantTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakMerchantTests.swift; sourceTree = "<group>"; };
 		4B4B4B4B4B4B4B4B4B4B4B4B /* AuthenticationCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthenticationCoordinatorTests.swift; sourceTree = "<group>"; };
 		6B6B6B6B6B6B6B6B6B6B6B6B /* DastakAuthenticationCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakAuthenticationCoordinator.swift; sourceTree = "<group>"; };
@@ -142,6 +143,15 @@
 			path = Sources;
 			sourceTree = "<group>";
 		};
+		B2B2B2B2B2B2B2B2B2B2B2B2 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				B1B1B1B1B1B1B1B1B1B1B1B1 /* Defaults.xcconfig */,
+			);
+			name = Configuration;
+			path = Configuration;
+			sourceTree = "<group>";
+		};
 		4E475333315343BD50AD62A2 /* DastakAdmin */ = {
 			isa = PBXGroup;
 			children = (
@@ -215,6 +225,7 @@
 				0ACFAC0E041AEE72689D15B3 /* Sources */,
 				AE3CA0F12C7DC21E452D56F6 /* Tests */,
 				6F6F6F6F6F6F6F6F6F6F6F6F /* Supporting */,
+				B2B2B2B2B2B2B2B2B2B2B2B2 /* Configuration */,
 			);
 			sourceTree = "<group>";
 		};
@@ -632,6 +643,7 @@
 		};
 		2513EF7003A23747F3DDAF62 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1B1B1B1B1B1B1B1B1B1B1B1 /* Defaults.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -639,7 +651,6 @@
 				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
 				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
@@ -654,6 +665,7 @@
 		};
 		4E266F22C0A8C2ECED8E3D7D /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1B1B1B1B1B1B1B1B1B1B1B1 /* Defaults.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -661,7 +673,6 @@
 				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
 				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
@@ -712,6 +723,7 @@
 		};
 		9434B02D42CC14FB30B03B98 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1B1B1B1B1B1B1B1B1B1B1B1 /* Defaults.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -719,7 +731,6 @@
 				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
 				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
@@ -807,6 +818,7 @@
 		};
 		DCEF7FB9A8873D63C9060101 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1B1B1B1B1B1B1B1B1B1B1B1 /* Defaults.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -814,7 +826,6 @@
 				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
 				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
@@ -828,6 +839,7 @@
 		};
 		E11F1F52EB0092983CC97DEE /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1B1B1B1B1B1B1B1B1B1B1B1 /* Defaults.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -835,7 +847,6 @@
 				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
 				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
@@ -869,6 +880,7 @@
 		};
 		ED43ADBFE16D15C5D02BCA18 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1B1B1B1B1B1B1B1B1B1B1B1 /* Defaults.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -876,7 +888,6 @@
 				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
 				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
