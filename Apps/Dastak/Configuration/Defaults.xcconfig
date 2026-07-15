@@ -1,3 +1,4 @@
+DEVELOPMENT_TEAM = RBLBKM3W74
 GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured
 MARKETPLACE_PRODUCT = Dastak
 MARKETPLACE_SUPABASE_URL = https:/$()/not-configured.invalid
