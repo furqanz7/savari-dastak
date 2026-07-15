@@ -4,3 +4,4 @@ supabase/.temp/
 *.xcuserstate
 *.xcbkptlist
 DerivedData/
+.worktrees/
