@@ -268,7 +268,7 @@ Add tests for 24-hour automatic release, duplicate bridge event no-op, and a pos
 ```bash
 cd Backends/Savari
 deno test --allow-env supabase/functions/tests/settlement/rolling_holdback.test.ts
-supabase db test --local --file supabase/tests/database/030_settlement.pgtap.sql
+supabase db test supabase/tests/database/030_settlement.pgtap.sql --local
 ```
 
 Expected: FAIL because settlement tables and release logic do not exist.
@@ -328,7 +328,7 @@ Store every reversal/adjustment as a new row linked to the original ledger row. 
 ```bash
 cd Backends/Savari
 supabase db reset --local
-supabase db test --local --file supabase/tests/database/030_settlement.pgtap.sql
+supabase db test supabase/tests/database/030_settlement.pgtap.sql --local
 deno test --allow-env supabase/functions/tests/settlement
 git add Backends/Savari Packages/MarketplaceInfrastructure
 git commit -m "feat: add cross product settlement coordinator"

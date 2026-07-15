@@ -210,7 +210,7 @@ rollback;
 
 ```bash
 cd Backends/Dastak
-supabase db test --local --file supabase/tests/database/020_dastak_core.pgtap.sql
+supabase db test supabase/tests/database/020_dastak_core.pgtap.sql --local
 deno test --allow-env supabase/functions/tests/restricted_catalogue/eligibility.test.ts
 ```
 
@@ -323,8 +323,8 @@ Enable RLS. Grant customers, assigned partners, and merchant owner only the exac
 ```bash
 cd Backends/Dastak
 supabase db reset --local
-supabase db test --local --file supabase/tests/database/020_dastak_core.pgtap.sql
-supabase db test --local --file supabase/tests/database/021_dastak_security.pgtap.sql
+supabase db test supabase/tests/database/020_dastak_core.pgtap.sql --local
+supabase db test supabase/tests/database/021_dastak_security.pgtap.sql --local
 deno test --allow-env supabase/functions/tests/restricted_catalogue/eligibility.test.ts
 ```
 
@@ -408,7 +408,7 @@ Create private availability and position tables. An eligible partner must be app
 ```bash
 cd Backends/Dastak
 supabase db reset --local
-supabase db test --local --file supabase/tests/database/022_partner_dispatch.pgtap.sql
+supabase db test supabase/tests/database/022_partner_dispatch.pgtap.sql --local
 deno test --allow-env supabase/functions/tests/parcel supabase/functions/tests/dispatch
 ```
 
@@ -488,7 +488,7 @@ Run:
 ```bash
 cd Backends/Dastak
 supabase db reset --local
-supabase db test --local --file supabase/tests/database/023_merchant_refunds.pgtap.sql
+supabase db test supabase/tests/database/023_merchant_refunds.pgtap.sql --local
 deno test --allow-env supabase/functions/tests/merchant
 ```
 

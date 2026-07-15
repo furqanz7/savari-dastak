@@ -237,8 +237,8 @@ Create Realtime policies on `realtime.messages` so a user can receive a `ride:<u
 Add database tests that assert a nonparticipant cannot subscribe to active job topics. Run:
 
 ```bash
-cd Backends/Savari && supabase db test --local --file supabase/tests/database/040_realtime_notifications.pgtap.sql
-cd ../Dastak && supabase db test --local --file supabase/tests/database/040_realtime_notifications.pgtap.sql
+cd Backends/Savari && supabase db test supabase/tests/database/040_realtime_notifications.pgtap.sql --local
+cd ../Dastak && supabase db test supabase/tests/database/040_realtime_notifications.pgtap.sql --local
 swift test --package-path ../../Packages/MarketplaceInfrastructure
 ```
 

@@ -485,7 +485,7 @@ rollback;
 From each product backend after `supabase start` succeeds, run:
 
 ```bash
-supabase db test --local --file supabase/tests/database/001_identity.pgtap.sql
+supabase db test supabase/tests/database/001_identity.pgtap.sql --local
 ```
 
 Expected: FAIL because the `accounts` and `account_memberships` relations do not yet exist.
@@ -551,7 +551,7 @@ for select to authenticated using (id = auth.uid());
 
 The first bootstrap cannot insert a deduplication record before an account exists because `private.request_deduplication.account_id` references `public.accounts`. Solve this with one atomic database function, `public.bootstrap_account(p_account_id uuid, p_display_name text, p_phone_number text, p_idempotency_key text, p_request_digest text)`, called only by the server-only `service_role` client.
 
-The database function is `SECURITY INVOKER`, sets `search_path = ''`, and fully qualifies every relation. Revoke `EXECUTE` from `PUBLIC`, `anon`, and `authenticated`, then grant it only to `service_role`. It must acquire a transaction advisory lock for the `(account_id, function_name, idempotency_key)` tuple, return the stored response for an identical replay, reject a different digest with `idempotency_conflict`, reject a new key once the account exists with `account_already_exists`, and otherwise insert the account, `customer` membership, and deduplication response in the same transaction. Do not expose `private` through the Data API or add a `SECURITY DEFINER` function.
+The database function is `SECURITY INVOKER`, sets `search_path = ''`, and fully qualifies every relation. Revoke `EXECUTE` from `PUBLIC`, `anon`, and `authenticated`, then grant it only to `service_role`. It must acquire a transaction advisory lock for the `(account_id, function_name)` pair before checking either the account or deduplication record, so concurrent first requests with different idempotency keys cannot race into a primary-key failure. It returns the stored response for an identical replay, rejects a different digest with `idempotency_conflict`, rejects a new key once the account exists with `account_already_exists`, and otherwise inserts the account, `customer` membership, and deduplication response in the same transaction. Do not expose `private` through the Data API or add a `SECURITY DEFINER` function.
 
 The Edge Function verifies the caller's bearer token with Supabase Auth, validates and normalizes the body, then invokes only this narrow RPC through a server-only `service_role` client. It must not receive a generic table client or direct access to the `private` schema. It rejects a missing name with `validation_failed`, an invalid E.164 number with `invalid_phone_number`, and a second bootstrap request with `account_already_exists`.
 
@@ -596,7 +596,7 @@ Run for both backends:
 
 ```bash
 supabase db reset --local
-supabase db test --local --file supabase/tests/database/001_identity.pgtap.sql
+supabase db test supabase/tests/database/001_identity.pgtap.sql --local
 deno test --allow-env supabase/functions/tests/
 ```
 
@@ -645,7 +645,7 @@ rollback;
 - [ ] **Step 2: Run the failing security tests**
 
 ```bash
-supabase db test --local --file supabase/tests/database/002_security_audit_zones.pgtap.sql
+supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql --local
 ```
 
 Expected: FAIL because audit tables, zones, and restrictive grants have not been created.
@@ -725,8 +725,8 @@ set -euo pipefail
 
 backend="$1"
 cd "Backends/$backend"
-supabase db test --local --file supabase/tests/database/001_identity.pgtap.sql
-supabase db test --local --file supabase/tests/database/002_security_audit_zones.pgtap.sql
+supabase db test supabase/tests/database/001_identity.pgtap.sql --local
+supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql --local
 supabase db query "select table_name, privilege_type from information_schema.role_table_grants where grantee = 'authenticated' and privilege_type in ('INSERT','UPDATE','DELETE') order by table_name;"
 ```
 

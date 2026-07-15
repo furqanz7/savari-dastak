@@ -204,8 +204,8 @@ Create `011_ride_state_machine.pgtap.sql` asserting that a transition from `requ
 
 ```bash
 cd Backends/Savari
-supabase db test --local --file supabase/tests/database/010_ride_core.pgtap.sql
-supabase db test --local --file supabase/tests/database/011_ride_state_machine.pgtap.sql
+supabase db test supabase/tests/database/010_ride_core.pgtap.sql --local
+supabase db test supabase/tests/database/011_ride_state_machine.pgtap.sql --local
 ```
 
 Expected: FAIL because no ride tables or transition function exist.
@@ -287,8 +287,8 @@ Enable RLS on `public.rides`; give authenticated users `SELECT` only when `passe
 ```bash
 cd Backends/Savari
 supabase db reset --local
-supabase db test --local --file supabase/tests/database/010_ride_core.pgtap.sql
-supabase db test --local --file supabase/tests/database/011_ride_state_machine.pgtap.sql
+supabase db test supabase/tests/database/010_ride_core.pgtap.sql --local
+supabase db test supabase/tests/database/011_ride_state_machine.pgtap.sql --local
 git add supabase
 git commit -m "feat: add Savari ride state machine"
 ```
@@ -383,7 +383,7 @@ Take `routes[0].distanceMeters` and `routes[0].durationSeconds`, reject a non-20
 ```bash
 cd Backends/Savari
 supabase db reset --local
-supabase db test --local --file supabase/tests/database/012_dispatch.pgtap.sql
+supabase db test supabase/tests/database/012_dispatch.pgtap.sql --local
 deno test --allow-env supabase/functions/tests/quote-ride supabase/functions/tests/dispatch-sweep
 ```
 
@@ -447,7 +447,7 @@ Add pgTAP coverage for no `authenticated` mutation grant on `public.rides` and n
 ```bash
 cd Backends/Savari
 deno test --allow-env supabase/functions/tests/ride-lifecycle/lifecycle.test.ts
-supabase db test --local --file supabase/tests/database/013_lifecycle_privacy.pgtap.sql
+supabase db test supabase/tests/database/013_lifecycle_privacy.pgtap.sql --local
 ```
 
 Expected: FAIL because action handlers and privacy projections do not exist.
@@ -492,7 +492,7 @@ Publish a private Realtime Broadcast topic `ride:<ride-id>` with `{ rideID, stat
 ```bash
 cd Backends/Savari
 supabase db reset --local
-supabase db test --local --file supabase/tests/database/013_lifecycle_privacy.pgtap.sql
+supabase db test supabase/tests/database/013_lifecycle_privacy.pgtap.sql --local
 deno test --allow-env supabase/functions/tests/ride-lifecycle
 git add supabase
 git commit -m "feat: add verified Savari ride lifecycle"
