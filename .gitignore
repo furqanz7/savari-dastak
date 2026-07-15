@@ -5,3 +5,4 @@ supabase/.temp/
 *.xcbkptlist
 DerivedData/
 .worktrees/
+.superpowers/

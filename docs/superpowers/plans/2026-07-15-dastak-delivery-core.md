@@ -18,7 +18,7 @@
 - Dastak drivers/partners do not become Savari drivers implicitly. Cross-product eligibility is modeled only in the bridge plan.
 - Merchant orders are assigned only after the merchant accepts and marks them ready. Do not offer a partner a job while the merchant is preparing it.
 - Medicine supports approved licensed pharmacies, required prescription evidence, invoice evidence, and no controlled-drug fulfilment flow.
-- Paan Corner/tobacco must remain entirely disabled in the iOS product: no customer category, product listing, basket, checkout, merchant fulfilment, or partner handoff. Record a disabled catalog category only for future policy review.
+- Paan Corner supports only owner-approved, non-electronic tobacco products. A customer must provide a current server-recorded 18+ self-attestation and versioned terms acknowledgement; the merchant and delivery locations must be outside owner-maintained 91.44m school/college exclusion zones; the merchant and each product require owner-approved compliance evidence; and the Delivery Partner must complete a visual age check before handoff. E-cigarettes and vaping products are excluded. The final iOS release requires documented applicable legal/distribution review and current Apple App Review risk review; this is not a guarantee of approval. Do not add a generic category activation switch or a concealed flow.
 - Clients have no direct write privileges on orders, deliveries, merchant status, partner availability, payment/refund state, evidence review, or payouts.
 
 ---
@@ -57,6 +57,12 @@ final class DeliveryStatusTests: XCTestCase {
     func testParcelRequiresPickupBeforeDelivery() {
         XCTAssertFalse(DeliveryStatus.assigned.canTransition(to: .delivered))
         XCTAssertTrue(DeliveryStatus.pickedUp.canTransition(to: .inTransit))
+    }
+
+    func testRestrictedHandoffRequiresReturnBeforeRefund() {
+        XCTAssertTrue(DeliveryStatus.inTransit.canTransition(to: .returningToMerchant))
+        XCTAssertFalse(DeliveryStatus.inTransit.canTransition(to: .refundPending))
+        XCTAssertTrue(DeliveryStatus.returningToMerchant.canTransition(to: .refundPending))
     }
 }
 ```
@@ -97,10 +103,11 @@ public enum DeliveryStatus: String, Codable, Sendable {
     case cancelled
     case refundPending = "refund_pending"
     case refunded
+    case returningToMerchant = "returning_to_merchant"
 }
 ```
 
-`canTransition(to:)` must allow `paid -> assigned` for a parcel, `paid -> merchantAccepted -> ready -> assigned` for a merchant order, and require `pickedUp -> inTransit -> delivered` for both. Model delivery kind separately as `.parcel` or `.merchantOrder`; do not add product-specific booleans to the status enum.
+`canTransition(to:)` must allow `paid -> assigned` for a parcel, `paid -> merchantAccepted -> ready -> assigned` for a merchant order, and require `pickedUp -> inTransit -> delivered` for both. A restricted handoff failure must move `inTransit -> returningToMerchant -> refundPending`, never directly to `delivered`. Model delivery kind separately as `.parcel` or `.merchantOrder`; do not add product-specific booleans to the status enum.
 
 - [ ] **Step 4: Define typed input contracts**
 
@@ -160,12 +167,15 @@ Expected: tests pass and the package depends on `MarketplaceFoundation`, not `Sa
 - Create: `Backends/Dastak/supabase/migrations/20260715111000_create_dastak_security.sql`
 - Create: `Backends/Dastak/supabase/functions/submit-partner-application/index.ts`
 - Create: `Backends/Dastak/supabase/functions/submit-merchant-application/index.ts`
+- Create: `Backends/Dastak/supabase/functions/attest-restricted-catalogue-eligibility/index.ts`
+- Create: `Backends/Dastak/supabase/functions/get-restricted-catalogue/index.ts`
+- Create: `Backends/Dastak/supabase/functions/tests/restricted_catalogue/eligibility.test.ts`
 - Create: `Backends/Dastak/supabase/tests/database/020_dastak_core.pgtap.sql`
 - Create: `Backends/Dastak/supabase/tests/database/021_dastak_security.pgtap.sql`
 
 **Interfaces:**
 - Consumes: Dastak accounts, membership, service zones, audit, and private evidence storage from foundation.
-- Produces: owner-approved `delivery_partner_profiles`, `merchant_profiles`, `pharmacy_profiles`, public catalog reads, and participant-only delivery reads.
+- Produces: owner-approved `delivery_partner_profiles`, `merchant_profiles`, `pharmacy_profiles`, ordinary public catalog reads, server-filtered restricted catalog reads, and participant-only delivery reads.
 
 - [ ] **Step 1: Write failing Dastak schema tests**
 
@@ -173,7 +183,7 @@ Create `020_dastak_core.pgtap.sql`:
 
 ```sql
 begin;
-select plan(12);
+select plan(18);
 select has_table('public', 'delivery_partner_profiles');
 select has_table('public', 'merchant_profiles');
 select has_table('public', 'merchant_products');
@@ -186,6 +196,12 @@ select has_column('public', 'merchant_products', 'availability');
 select has_column('public', 'merchant_products', 'category');
 select has_table('public', 'dastak_rate_cards');
 select has_column('public', 'dastak_rate_cards', 'per_kilometre_paise');
+select has_table('public', 'restricted_product_exclusion_zones');
+select has_table('private', 'restricted_product_attestations');
+select has_table('private', 'restricted_product_policy_versions');
+select has_column('public', 'merchant_profiles', 'restricted_product_approval_state');
+select has_column('public', 'merchant_products', 'restricted_product_approval_state');
+select has_column('public', 'merchant_products', 'restricted_tobacco_kind');
 select * from finish();
 rollback;
 ```
@@ -195,9 +211,10 @@ rollback;
 ```bash
 cd Backends/Dastak
 supabase db test --local --file supabase/tests/database/020_dastak_core.pgtap.sql
+deno test --allow-env supabase/functions/tests/restricted_catalogue/eligibility.test.ts
 ```
 
-Expected: FAIL because Dastak delivery tables do not exist.
+Expected: FAIL because Dastak delivery tables and restricted catalog handlers do not exist.
 
 - [ ] **Step 3: Build owner-approved business profiles and catalog rules**
 
@@ -209,9 +226,11 @@ create type public.delivery_kind as enum ('parcel', 'merchant_order');
 create type public.delivery_status as enum (
   'payment_pending', 'paid', 'merchant_accepted', 'ready', 'assigned',
   'en_route_to_pickup', 'picked_up', 'in_transit', 'delivered',
-  'cancelled', 'refund_pending', 'refunded'
+  'cancelled', 'returning_to_merchant', 'refund_pending', 'refunded'
 );
 create type public.catalog_category as enum ('general', 'otc_medicine', 'prescription_medicine', 'paan_corner');
+create type public.restricted_product_approval_state as enum ('not_applicable', 'pending', 'approved', 'rejected', 'suspended');
+create type public.restricted_tobacco_kind as enum ('cigarette', 'bidi', 'cigar', 'smoking_tobacco', 'other_lawful_tobacco');
 
 create table public.dastak_rate_cards (
   id uuid primary key default gen_random_uuid(),
@@ -244,12 +263,50 @@ create table public.merchant_profiles (
   location extensions.geometry(Point, 4326) not null,
   supported_delivery_methods public.delivery_method[] not null,
   approval_state text not null check (approval_state in ('pending', 'approved', 'rejected', 'suspended')),
+  restricted_product_approval_state public.restricted_product_approval_state not null default 'not_applicable',
+  restricted_product_compliance_evidence_path text,
   is_pharmacy boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+create table public.restricted_product_exclusion_zones (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  boundary extensions.geometry(Polygon, 4326) not null,
+  reason text not null check (reason in ('school', 'college')),
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table private.restricted_product_attestations (
+  account_id uuid primary key references public.accounts(id) on delete cascade,
+  terms_version text not null,
+  attested_at timestamptz not null default now(),
+  revoked_at timestamptz
+);
+
+create table private.restricted_product_policy_versions (
+  version text primary key,
+  active boolean not null default false,
+  published_at timestamptz not null default now()
+);
+
+create unique index restricted_product_policy_versions_one_active
+  on private.restricted_product_policy_versions (active)
+  where active;
+
+alter table public.restricted_product_exclusion_zones enable row level security;
+revoke all on public.restricted_product_exclusion_zones from anon, authenticated;
+revoke all on private.restricted_product_attestations, private.restricted_product_policy_versions from anon, authenticated;
 ```
 
-`merchant_products` belongs to an approved merchant, stores integer paise prices and availability, and is read-only to customers only when its merchant and product are active. `paan_corner` products are never customer-readable, regardless of merchant approval. The customer chooses one merchant-supported delivery method for a parcel or merchant order; the server uses the matching rate card and locks that method into the quote/order, so an upfront delivery fee cannot change merely because a different partner method later appears.
+`merchant_products` belongs to an approved merchant, stores integer paise prices and availability, and is read-only to customers only when its merchant and product are active. Add `restricted_product_approval_state` and nullable `restricted_tobacco_kind` to this table. A `paan_corner` product requires an approved merchant and product state plus a non-null allowed tobacco kind; this enum intentionally excludes e-cigarettes and vaping products. Products outside `paan_corner` must use `not_applicable` and a null tobacco kind.
+
+Ordinary products may use the narrow customer read policy. `paan_corner` products must never be exposed through a broad table `SELECT`. `attest-restricted-catalogue-eligibility` records only the authenticated customer's 18+ confirmation and the one active server policy version; it does not trust a client DOB or grant a bypass. `get-restricted-catalogue` accepts a delivery point, verifies a current unrevoked attestation, an active owner-approved merchant/product, and that both merchant and delivery points do not intersect an active school/college exclusion zone. It returns a minimal price/catalog snapshot, not table rows. Store the 91.44m legal buffer in the owner-maintained zone polygon, and audit every policy-version and zone revision.
+
+In `eligibility.test.ts`, write failing cases for a missing attestation, a stale policy version, an excluded merchant/delivery point, an unapproved merchant/product, and an excluded vaping product. Include one compliant attested, approved, out-of-zone case. Run it with `deno test --allow-env supabase/functions/tests/restricted_catalogue/eligibility.test.ts` after the failing schema test and again after implementation.
+
+The customer chooses one merchant-supported delivery method for a parcel or merchant order; the server uses the matching rate card and locks that method into the quote/order, so an upfront delivery fee cannot change merely because a different partner method later appears.
 
 `submit-partner-application` accepts one active method and issued evidence URLs. It permits walking/bicycle without vehicle evidence and requires bike/auto evidence, but it never writes `approved`. `submit-merchant-application` accepts merchant location, licence evidence when a pharmacy is requested, and issued private evidence URLs; it never writes merchant/pharmacy approval. Dastak owner approval is the sole route to operational membership.
 
@@ -261,13 +318,14 @@ Enable RLS. Grant customers, assigned partners, and merchant owner only the exac
 
 - [ ] **Step 5: Add security test coverage and run it**
 
-`021_dastak_security.pgtap.sql` must assert that `authenticated` has no DML grant on `public.deliveries`, cannot read `private.delivery_events`, and cannot read a `paan_corner` product through a customer policy. Run:
+`021_dastak_security.pgtap.sql` must assert that `authenticated` has no DML grant on `public.deliveries`, cannot read `private.delivery_events` or `private.restricted_product_attestations`, and cannot read a `paan_corner` product through a broad customer policy. The only restricted catalog path is the function that evaluates attestation, approved merchant/product state, and exclusion zones. Run:
 
 ```bash
 cd Backends/Dastak
 supabase db reset --local
 supabase db test --local --file supabase/tests/database/020_dastak_core.pgtap.sql
 supabase db test --local --file supabase/tests/database/021_dastak_security.pgtap.sql
+deno test --allow-env supabase/functions/tests/restricted_catalogue/eligibility.test.ts
 ```
 
 Expected: all schema and security assertions pass.
@@ -339,7 +397,7 @@ Create private availability and position tables. An eligible partner must be app
 
 `create-parcel` validates sender/dropoff in an active zone, declared contents length `1...300`, non-negative declared value, and a server-calculated fee. It creates `payment_pending`; only a provider-confirmed server call can transition it to `paid`. It generates a six-digit pickup code and delivery code using Web Crypto, stores salted digests only, and gives each raw code only to its rightful customer/recipient snapshot.
 
-`verify-parcel-pickup-code` requires the assigned partner and moves `en_route_to_pickup -> picked_up -> in_transit`. `verify-delivery-code` requires the assigned partner and recipient code, records delivery handoff evidence, then moves `in_transit -> delivered`.
+`verify-parcel-pickup-code` requires the assigned partner and moves `en_route_to_pickup -> picked_up -> in_transit`. `verify-delivery-code` requires the assigned partner and recipient code, records delivery handoff evidence, then moves `in_transit -> delivered`; it must reject a `paan_corner` merchant order with `restricted_handoff_required` so the Task 4 restricted handoff function is the sole completion path.
 
 `report-delivery-safety-incident` accepts an active/recent delivery ID, incident type, and report text, writes a durable `private.safety_cases` reference without changing delivery state, and is paired with a functional app action that opens `tel:112`. It must not claim live staffed emergency response.
 
@@ -372,8 +430,11 @@ git commit -m "feat: add Dastak parcel dispatch"
 - Create: `Backends/Dastak/supabase/functions/merchant-mark-order-ready/index.ts`
 - Create: `Backends/Dastak/supabase/functions/request-order-refund/index.ts`
 - Create: `Backends/Dastak/supabase/functions/upload-prescription-evidence/index.ts`
+- Create: `Backends/Dastak/supabase/functions/verify-restricted-handoff/index.ts`
+- Create: `Backends/Dastak/supabase/functions/confirm-restricted-return/index.ts`
 - Create: `Backends/Dastak/supabase/functions/tests/merchant/order_lifecycle.test.ts`
 - Create: `Backends/Dastak/supabase/functions/tests/merchant/category_controls.test.ts`
+- Create: `Backends/Dastak/supabase/functions/tests/merchant/restricted_handoff.test.ts`
 - Create: `Backends/Dastak/supabase/tests/database/023_merchant_refunds.pgtap.sql`
 
 **Interfaces:**
@@ -382,7 +443,7 @@ git commit -m "feat: add Dastak parcel dispatch"
 
 - [ ] **Step 1: Write failing merchant and category tests**
 
-Create a test that attempts to create an order with a client-supplied price of 1 paise for a 100-rupee product and expects the stored snapshot to use the server product price. Create a test asserting `merchant_accepted` does not dispatch a partner, while `ready` does. Create a category test asserting unapproved pharmacy and missing required prescription both return `prescription_required`, and `paan_corner` returns `category_unavailable`.
+Create a test that attempts to create an order with a client-supplied price of 1 paise for a 100-rupee product and expects the stored snapshot to use the server product price. Create a test asserting `merchant_accepted` does not dispatch a partner, while `ready` does. Create category tests asserting unapproved pharmacy and missing required prescription both return `prescription_required`; a restricted catalog/order without a current attestation returns `adult_attestation_required`; a merchant or delivery point in an exclusion zone returns `restricted_location_prohibited`; an unapproved restricted merchant/product or prohibited tobacco kind returns `restricted_product_unavailable`; and an approved attested order outside the zones succeeds.
 
 - [ ] **Step 2: Run the failing merchant tests**
 
@@ -390,6 +451,7 @@ Create a test that attempts to create an order with a client-supplied price of 1
 cd Backends/Dastak
 deno test --allow-env supabase/functions/tests/merchant/order_lifecycle.test.ts
 deno test --allow-env supabase/functions/tests/merchant/category_controls.test.ts
+deno test --allow-env supabase/functions/tests/merchant/restricted_handoff.test.ts
 ```
 
 Expected: FAIL because merchant order handlers do not exist.
@@ -398,7 +460,7 @@ Expected: FAIL because merchant order handlers do not exist.
 
 Add `public.merchant_orders`, `public.merchant_order_lines`, and `private.refund_decisions`. Insert each line from the current server product price and availability in one transaction. Store item subtotal, delivery fee, partner payout, merchant commission, and margin as immutable paise snapshots.
 
-Add `requires_prescription boolean` to products, `prescription_evidence_path` to orders, and `pharmacy_licence_evidence_path` to pharmacy profiles. A merchant profile may publish prescription products only when `is_pharmacy = true` and owner approval plus licence evidence exists. Refuse products whose category is `paan_corner` from all customer and merchant order creation paths.
+Add `requires_prescription boolean` to products, `prescription_evidence_path` to orders, and `pharmacy_licence_evidence_path` to pharmacy profiles. A merchant profile may publish prescription products only when `is_pharmacy = true` and owner approval plus licence evidence exists. For a `paan_corner` order, `create-merchant-order` must server-check the authenticated customer's current restricted-product attestation and terms version, the active owner-approved merchant and product compliance state, the allowed non-electronic tobacco kind, and both merchant and delivery points against active exclusion zones. The client supplies neither an age result, a product price, a compliance result, nor a zone result to trust.
 
 - [ ] **Step 4: Implement merchant state and refund decisions**
 
@@ -409,15 +471,17 @@ Add `requires_prescription boolean` to products, `prescription_evidence_path` to
 ```text
 paid -> full refund eligible
 merchant_accepted or ready -> only merchant_failure or owner_approved eligible
-assigned, en_route_to_pickup, picked_up, in_transit -> item and delivery fee remain unless fault is merchant_fault or dastak_fault
+assigned, en_route_to_pickup, picked_up, in_transit, returning_to_merchant -> item and delivery fee remain unless fault is merchant_fault or dastak_fault
 delivered -> owner review only
 ```
 
 It cannot silently edit `delivery_fee_paise`, `item_subtotal_paise`, or a provider payment record.
 
+`verify-restricted-handoff` requires the assigned partner, the recipient delivery code, and a recorded visual age-check result. It can complete a `paan_corner` handoff only when the visual check passes. A failed or uncertain check never hands over the item: the server records an immutable reason, moves the delivery to `returning_to_merchant`, and instructs the partner to return it. `confirm-restricted-return` requires the approved merchant actor, records the return evidence, then moves the order to `refund_pending` for the existing stage-based decision path. Neither function changes money directly.
+
 - [ ] **Step 5: Verify merchant, pharmacy, and Paan controls**
 
-`023_merchant_refunds.pgtap.sql` must assert a pgtap customer role cannot insert merchant order lines directly, no active customer select policy reveals `paan_corner`, and only owner functions can transition refund decisions beyond `refund_pending`.
+`023_merchant_refunds.pgtap.sql` must assert a pgtap customer role cannot insert merchant order lines directly, no active broad customer select policy reveals `paan_corner`, and only owner functions can transition refund decisions beyond `refund_pending`. The Deno tests must prove the restricted server path rejects missing attestation, excluded locations, unapproved merchants/products, and non-allowed tobacco kinds; permits the compliant path; and prevents delivery handoff when the partner visual check fails.
 
 Run:
 
@@ -545,7 +609,9 @@ merchant price tampering request -> server product price retained
 refund before merchant acceptance -> full eligibility
 refund after merchant acceptance -> only merchant failure or owner path
 unapproved pharmacy or missing prescription -> no fulfilment
-paan_corner product/order request -> category_unavailable
+paan_corner without attestation, approved merchant/product, or valid location -> typed restricted error
+compliant paan_corner order -> partner visual check required before handoff
+failed/uncertain restricted visual check -> returning_to_merchant -> refund_pending, never delivered
 partner completion -> customer snapshot reaches delivered with a newer state version
 ```
 
@@ -577,7 +643,7 @@ git add Backends/Dastak Apps/Dastak scripts README.md
 git commit -m "test: add Dastak delivery acceptance suite"
 ```
 
-Expected: separate customer, merchant, and partner transitions are verified, including the no-wait readiness rule and disabled tobacco category.
+Expected: separate customer, merchant, and partner transitions are verified, including the no-wait readiness rule and server-enforced restricted tobacco controls.
 
 ## Dastak Core Completion Gate
 
@@ -586,5 +652,6 @@ Expected: separate customer, merchant, and partner transitions are verified, inc
 - A merchant order cannot dispatch until merchant-ready state.
 - Prices, commissions, payout values, payment/refund state, and partner assignment are server snapshots.
 - Pharmacy evidence paths and category eligibility are enforced server-side.
-- Tobacco/Paan Corner is unavailable in all iOS customer and merchant flows.
+- Paan Corner is available only through the server-enforced adult attestation, exclusion-zone, owner-approved merchant/product, and partner visual handoff path; no e-cigarette or vaping product can enter that path.
+- Paan Corner is not included in a release until the documented legal, distribution, and current Apple App Review risk gate has passed.
 - Dastak targets can perform only typed function calls and pass the multi-role acceptance suite.

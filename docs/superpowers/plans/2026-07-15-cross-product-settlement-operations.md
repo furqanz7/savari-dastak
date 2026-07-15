@@ -19,7 +19,7 @@
 - Cash and direct UPI Savari rides create no platform commission. Savari in-app rides use a configurable default 10% commission. Dastak product economics are configured snapshots.
 - Razorpay webhook verification, not a client callback, is the final authority for payment and transfer success.
 - Owner apps are separate iOS targets. The one owner account in each product must have a server membership and a sign-in no older than 15 minutes for sensitive actions.
-- Paan Corner stays disabled; no owner control may activate tobacco sales in an iOS build.
+- Paan Corner is a high-risk Dastak capability governed by the Dastak core's adult attestation, exclusion-zone, merchant/product approval, and partner visual handoff rules. Owner operations may approve or suspend individual restricted merchants/products only with evidence and an immutable audit record; they must not provide a generic category activation switch or bypass the release gate.
 
 ---
 
@@ -459,9 +459,9 @@ Create `private.operational_alerts` and extend the foundation `private.safety_ca
 
 - [ ] **Step 4: Implement product-specific owner endpoints**
 
-Savari endpoints handle driver/vehicle evidence approval, zone/rate/commission revisions, suspension override, ride refund approval, live ride snapshot, and incident resolution. Dastak endpoints handle partner/merchant/pharmacy approval, product availability/category controls excluding Paan activation, delivery margin/commission revision, order refund approval, and incident resolution.
+Savari endpoints handle driver/vehicle evidence approval, zone/rate/commission revisions, suspension override, ride refund approval, live ride snapshot, and incident resolution. Dastak endpoints handle partner/merchant/pharmacy approval, product availability/category controls, restricted merchant/product compliance approval or suspension, restricted policy-version and exclusion-zone revision, delivery margin/commission revision, order refund approval, and incident resolution.
 
-The Paan category action must be `keep_disabled`; no endpoint may accept `activate_paan_corner` or write a value that makes it customer-visible in iOS.
+Restricted owner actions may approve, suspend, or revise an individual merchant, product, evidence record, or exclusion zone only after `requireRecentOwner`, a non-empty reason, an expected version, and an audit event. No endpoint may accept `activate_paan_corner`, set a global visibility flag, or bypass the Dastak server eligibility checks.
 
 - [ ] **Step 5: Create narrow separate admin clients and tests**
 
@@ -562,7 +562,7 @@ Expected: cross-product work is possible only through a signed, limited bridge a
 - Dastak and Savari retain separate product/payment stores; the Savari private Settlement Coordinator contains only payout identity and ledger state.
 - Razorpay order creation, webhooks, transfer release, failure, refund, and adjustment all execute server-side and pass sandbox replay tests.
 - Owner actions are separately scoped, recently authenticated, reasoned, and immutable-audited.
-- Paan/tobacco remains disabled even in owner operations.
+- Restricted tobacco owner operations are limited to audited per-merchant, per-product, evidence, and exclusion-zone controls; no owner operation can bypass the Dastak release gate or eligibility checks.
 
 ## Source Checks Before Live Configuration
 

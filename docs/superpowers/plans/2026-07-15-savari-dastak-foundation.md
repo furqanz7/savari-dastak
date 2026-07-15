@@ -17,7 +17,7 @@
 - Clients may read their authorized state, but cannot directly `INSERT`, `UPDATE`, or `DELETE` rides, deliveries, payments, payouts, approvals, or audit records.
 - Sensitive evidence uses private storage. Preserve the old prototype document path only in the archived implementation; the new canonical paths are defined by the product-specific backend plans.
 - UI and UX design is out of scope. Build functional application shells and testable client contracts only.
-- Do not activate, display, or accept orders for tobacco/Paan Corner in an iOS build. Apple currently prohibits apps that facilitate tobacco sales. Keep it as a disabled future category only.
+- Paan Corner is a Dastak product scope, not a disabled placeholder. Later Dastak work may support only owner-approved, non-electronic tobacco products through server-verified 18+ self-attestation, a versioned terms acknowledgement, merchant and delivery locations outside owner-maintained 91.44m school/college exclusion zones, merchant/product compliance evidence, and a Delivery Partner visual handoff check. It is a high-risk iOS release capability: no generic activation switch or concealed flow, and no pilot or TestFlight release until the Dastak release gate has documented applicable legal, distribution, and current Apple App Review risk review.
 - Every state-changing Edge Function accepts an idempotency key and returns a typed error code rather than a raw database error.
 
 ## Planned Structure

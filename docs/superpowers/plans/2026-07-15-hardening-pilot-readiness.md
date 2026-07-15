@@ -18,7 +18,7 @@
 - Push notifications contain no phone number, precise coordinate, boarding code, payment credential, prescription, or sensitive merchant item detail.
 - The archived prototype never receives an update, migration, TestFlight build, or production secret.
 - All deployment, sandbox, and smoke tests target non-production until the explicit pilot gate passes.
-- Paan/tobacco stays absent from the iOS pilot and TestFlight build even if database placeholders exist.
+- Paan Corner may be included in the iOS pilot and TestFlight build only after its complete restricted-product release checklist is signed off. When included, it must be a real, fully tested capability with no concealed path, generic activation switch, or policy bypass; the checklist records applicable legal/distribution review and current Apple App Review risk review, not a guarantee of approval.
 
 ---
 
@@ -472,11 +472,11 @@ git commit -m "ci: add marketplace quality gates"
 
 - [ ] **Step 1: Write the TestFlight checklist**
 
-`testflight-checklist.md` must require one build each for Savari, Savari Admin, Dastak, Dastak Merchant, and Dastak Admin with correct bundle ID, App Store Connect record, Apple/Google sign-in redirect, Maps capability, APNs environment, privacy manifest, localization, and no Paan category. It must require two-sided testers: one passenger/driver pair and one customer/partner/merchant pair.
+`testflight-checklist.md` must require one build each for Savari, Savari Admin, Dastak, Dastak Merchant, and Dastak Admin with correct bundle ID, App Store Connect record, Apple/Google sign-in redirect, Maps capability, APNs environment, privacy manifest, and localization. For a Paan Corner-enabled build, it must additionally require the documented restricted-product release decision, 18+ attestation/terms version test, merchant and delivery exclusion-zone rejection test, owner-approved merchant/product evidence test, prohibited vaping product rejection test, partner visual-check success and failure/return tests, and no sensitive age detail in push/logging. It must require two-sided testers: one passenger/driver pair and one customer/partner/merchant pair.
 
 - [ ] **Step 2: Write pilot data and safety gates**
 
-`vaniyambadi-pilot-gate.md` must require an active polygon verified on a physical device, a small manually approved driver/partner/merchant/pharmacy cohort, current documents, safe payout profiles, sandbox-to-live Razorpay verification, owner account recent-sign-in test, emergency `112` action test, and a successful refund/adjustment reconciliation rehearsal.
+`vaniyambadi-pilot-gate.md` must require an active polygon verified on a physical device, a small manually approved driver/partner/merchant/pharmacy cohort, current documents, safe payout profiles, sandbox-to-live Razorpay verification, owner account recent-sign-in test, emergency `112` action test, and a successful refund/adjustment reconciliation rehearsal. When Paan Corner is enabled, it must also require current merchant/product evidence, owner-maintained 91.44m school/college exclusion-zone coverage, age/terms and visual-handoff evidence, applicable legal/distribution review, and a documented current Apple App Review risk decision.
 
 - [ ] **Step 3: Document incident and rollback actions**
 
@@ -515,4 +515,4 @@ git commit -m "docs: add marketplace pilot release gates"
 - Two-sided real-device TestFlight tests prove background/relaunch/reconnect/idempotency recovery.
 - Exact location retention, signed evidence URL expiry, contact redaction, logging redaction, and account link consent are verified.
 - Vaniyambadi zone, operations runbooks, manual approvals, refunds, payouts, safety cases, and production secrets are signed off by the owner.
-- Dastak's iOS builds contain no tobacco/Paan order or fulfilment capability.
+- Any Paan Corner-enabled Dastak iOS build passes the complete restricted-product release checklist, including age/terms, location, merchant/product evidence, visual-handoff failure/return, and current legal/distribution/App Review risk records. An unmet release gate blocks Paan Corner from that release; it does not justify a concealed capability.

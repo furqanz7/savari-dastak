@@ -162,8 +162,8 @@ Standalone Dastak does not offer "Collect with my Savari ride." The feature is n
 
 - Dastak is designed for lawful goods that fit the declared transport method. Sender declares contents and value. High-value or special goods have owner-configured controls.
 - Medicine supports both OTC and prescription orders through owner-approved licensed pharmacies. The product captures and verifies prescription evidence when required, keeps invoice and fulfilment records, and excludes controlled drugs without an approved compliance flow.
-- Paan Corner is a Dastak category. Tobacco delivery requires an 18+ self-confirmation, school/college location restrictions, terms acknowledgement, and Delivery Partner visual age check at handoff.
-- Medicine and Paan Corner remain product scope. Before production activation, the owner must complete applicable business, distribution, evidence, and policy verification. This is a release gate, not a scope removal.
+- Paan Corner is a Dastak category for owner-approved, non-electronic tobacco products. Tobacco delivery requires a current 18+ self-confirmation, a versioned terms acknowledgement, merchant and delivery locations outside owner-maintained 91.44m school/college exclusion zones, and a Delivery Partner visual age check before handoff. E-cigarettes and vaping products are not in scope.
+- Medicine and Paan Corner remain product scope. Before Paan Corner is released, the owner must complete merchant and product compliance evidence review, exclusion-zone coverage, age and handoff test evidence, applicable business/distribution review, and a documented current Apple App Review risk review. This is a release gate, not a scope removal or a guarantee of App Review approval. It must not be implemented as a concealed or generic runtime-activated capability.
 
 ## 6. Payments, Payouts, And Settlement
 
@@ -279,7 +279,7 @@ Pilot launch gates:
 - Vaniyambadi service area configured and verified.
 - Small manually approved group of drivers, Delivery Partners, merchants, and pharmacies.
 - Apple and Google sign-in, APNs, Maps, and Razorpay Route production configuration verified.
-- Current regulatory, distribution, and App Review checks completed for pharmacy and Paan Corner activation.
+- Current regulatory, distribution, and App Review risk checks completed for pharmacy and Paan Corner activation, including the adult, exclusion-zone, and handoff controls.
 - All owner controls, audit events, refund paths, safety reporting, and payout reconciliation tested in non-production.
 - TestFlight builds installed and validated by two-sided testers.
 
