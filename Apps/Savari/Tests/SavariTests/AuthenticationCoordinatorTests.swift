@@ -24,19 +24,17 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.route, .active)
     }
 
-    func testGooglePlaceholderFailsBeforeTokenReachesClient() async throws {
+    func testMissingOAuthCallbackFailsBeforeTokenReachesClient() async throws {
         let gateway = FakeAuthenticationClient(restoredRoute: .needsProfile)
         let coordinator = AuthenticationCoordinator(client: gateway)
 
         do {
             try await coordinator.signInWithGoogle(
-                configuration: GoogleOAuthConfiguration(
-                    reversedClientID: GoogleOAuthConfiguration.notConfiguredClientID
-                )
+                configuration: OAuthCallbackConfiguration(scheme: "")
             )
-            XCTFail("Expected placeholder Google OAuth configuration to fail closed")
+            XCTFail("Expected missing OAuth callback configuration to fail closed")
         } catch let error as AuthenticationClientError {
-            XCTAssertEqual(error, .googleOAuthNotConfigured)
+            XCTAssertEqual(error, .oauthCallbackNotConfigured)
         }
 
         let callCount = await gateway.googleSignInCallCount()

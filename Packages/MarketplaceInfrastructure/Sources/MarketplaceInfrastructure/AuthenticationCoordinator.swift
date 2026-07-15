@@ -102,7 +102,7 @@ public final class AuthenticationCoordinator: ObservableObject {
     }
 
     public func signInWithGoogle(
-        configuration: GoogleOAuthConfiguration = GoogleOAuthConfiguration(bundle: .main)
+        configuration: OAuthCallbackConfiguration = OAuthCallbackConfiguration(bundle: .main)
     ) async throws {
         route = .signedOut
         let callbackURL = try configuration.callbackURL()
@@ -206,7 +206,7 @@ extension AuthenticationClientError {
             return "Display name is required and must be 80 characters or fewer."
         case .unexpectedPhoneVerificationState:
             return "Profile completion returned an invalid phone state."
-        case .googleOAuthNotConfigured:
+        case .oauthCallbackNotConfigured:
             return "Authentication is not configured."
         }
     }

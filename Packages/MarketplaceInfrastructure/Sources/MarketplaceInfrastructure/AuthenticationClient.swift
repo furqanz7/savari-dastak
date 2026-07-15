@@ -24,19 +24,17 @@ public protocol AuthenticationClient: Sendable {
 public enum AuthenticationClientError: Error, Equatable, Sendable {
     case bootstrapAmbiguousFailure
     case bootstrapRejected(statusCode: Int, code: String?, message: String)
-    case googleOAuthNotConfigured
     case invalidE164PhoneNumber
     case invalidProfileDisplayName
+    case oauthCallbackNotConfigured
     case unexpectedPhoneVerificationState
 }
 
-public struct GoogleOAuthConfiguration: Equatable, Sendable {
-    public static let notConfiguredClientID = "com.googleusercontent.apps.not-configured"
+public struct OAuthCallbackConfiguration: Equatable, Sendable {
+    public let scheme: String
 
-    public let reversedClientID: String
-
-    public init(reversedClientID: String) {
-        self.reversedClientID = reversedClientID
+    public init(scheme: String) {
+        self.scheme = scheme
     }
 
     public init(bundle: Bundle) {
@@ -44,27 +42,24 @@ public struct GoogleOAuthConfiguration: Equatable, Sendable {
         let schemes = urlTypes?
             .compactMap { $0["CFBundleURLSchemes"] as? [String] }
             .flatMap { $0 }
-        reversedClientID = schemes?
-            .first(where: { $0.hasPrefix("com.googleusercontent.apps.") })
-            ?? Self.notConfiguredClientID
+        scheme = schemes?.first ?? ""
     }
 
-    public func validatedReversedClientID() throws -> String {
-        let normalized = reversedClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+    public func validatedScheme() throws -> String {
+        let normalized = scheme.trimmingCharacters(in: .whitespacesAndNewlines)
         guard
             !normalized.isEmpty,
-            normalized != Self.notConfiguredClientID,
-            normalized.hasPrefix("com.googleusercontent.apps.")
+            URL(string: "\(normalized)://login-callback")?.scheme == normalized
         else {
-            throw AuthenticationClientError.googleOAuthNotConfigured
+            throw AuthenticationClientError.oauthCallbackNotConfigured
         }
         return normalized
     }
 
     public func callbackURL() throws -> URL {
-        let clientID = try validatedReversedClientID()
-        guard let url = URL(string: "\(clientID)://login-callback") else {
-            throw AuthenticationClientError.googleOAuthNotConfigured
+        let scheme = try validatedScheme()
+        guard let url = URL(string: "\(scheme)://login-callback") else {
+            throw AuthenticationClientError.oauthCallbackNotConfigured
         }
         return url
     }

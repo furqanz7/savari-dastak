@@ -312,14 +312,21 @@ final class AuthenticationClientTests: XCTestCase {
         XCTAssertEqual(phoneNumber.rawValue, "+14155552671")
     }
 
-    func testTrackedGoogleOAuthPlaceholderFailsClosed() {
-        let configuration = GoogleOAuthConfiguration(
-            reversedClientID: GoogleOAuthConfiguration.notConfiguredClientID
-        )
+    func testMissingOAuthCallbackSchemeFailsClosed() {
+        let configuration = OAuthCallbackConfiguration(scheme: "")
 
-        XCTAssertThrowsError(try configuration.validatedReversedClientID()) { error in
-            XCTAssertEqual(error as? AuthenticationClientError, .googleOAuthNotConfigured)
+        XCTAssertThrowsError(try configuration.validatedScheme()) { error in
+            XCTAssertEqual(error as? AuthenticationClientError, .oauthCallbackNotConfigured)
         }
+    }
+
+    func testOAuthCallbackAcceptsRegisteredBundleIdentifierScheme() throws {
+        let configuration = OAuthCallbackConfiguration(scheme: "com.dastak.merchant")
+
+        XCTAssertEqual(
+            try configuration.callbackURL(),
+            URL(string: "com.dastak.merchant://login-callback")
+        )
     }
 
     @MainActor
@@ -328,16 +335,14 @@ final class AuthenticationClientTests: XCTestCase {
         let coordinator = AuthenticationCoordinator(client: client)
 
         try await coordinator.signInWithGoogle(
-            configuration: GoogleOAuthConfiguration(
-                reversedClientID: "com.googleusercontent.apps.configured"
-            )
+            configuration: OAuthCallbackConfiguration(scheme: "com.dastak.app")
         )
 
         XCTAssertEqual(coordinator.route, .needsProfile)
         let redirectURL = await client.recordedGoogleRedirectURL()
         XCTAssertEqual(
             redirectURL,
-            URL(string: "com.googleusercontent.apps.configured://login-callback")
+            URL(string: "com.dastak.app://login-callback")
         )
     }
 
@@ -348,7 +353,7 @@ final class AuthenticationClientTests: XCTestCase {
         )
     }
 
-    func testGoogleOAuthDefaultsAreOverridableAndWiredToEveryAppTarget() throws {
+    func testSavariGoogleOAuthDefaultIsOverridableAndWiredToEveryAppTarget() throws {
         let gitignore = try String(
             contentsOf: repositoryRoot.appendingPathComponent(".gitignore"),
             encoding: .utf8
@@ -366,19 +371,19 @@ final class AuthenticationClientTests: XCTestCase {
                 "86449F7B4DA0A64EE246D938"
             ]
         )
-        try assertGoogleOAuthDefaults(
-            product: "Dastak",
-            projectName: "Dastak",
-            defaultsReference: "B1B1B1B1B1B1B1B1B1B1B1B1",
-            configurationIDs: [
-                "ED43ADBFE16D15C5D02BCA18",
-                "4E266F22C0A8C2ECED8E3D7D",
-                "DCEF7FB9A8873D63C9060101",
-                "E11F1F52EB0092983CC97DEE",
-                "9434B02D42CC14FB30B03B98",
-                "2513EF7003A23747F3DDAF62"
-            ]
-        )
+    }
+
+    func testDastakRegistersEachBundleIdentifierAsItsOAuthCallbackScheme() throws {
+        let defaultsURL = repositoryRoot
+            .appendingPathComponent("Apps/Dastak/Configuration/Defaults.xcconfig")
+        let defaults = try String(contentsOf: defaultsURL, encoding: .utf8)
+        let infoPlistURL = repositoryRoot
+            .appendingPathComponent("Apps/Dastak/Supporting/Info.plist")
+        let infoPlist = try String(contentsOf: infoPlistURL, encoding: .utf8)
+
+        XCTAssertFalse(defaults.contains("GOOGLE_REVERSED_CLIENT_ID"))
+        XCTAssertTrue(infoPlist.contains("<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>"))
+        XCTAssertFalse(infoPlist.contains("$(GOOGLE_REVERSED_CLIENT_ID)"))
     }
 
     func testSignOutUsesProviderSessionOnly() async throws {
