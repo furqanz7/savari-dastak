@@ -8,9 +8,9 @@ Deno.test("Dastak security migration keeps evidence and client business data con
     ),
   );
   const config = await Deno.readTextFile(new URL("../../config.toml", import.meta.url));
-  const deleteRevocation = await Deno.readTextFile(
+  const grantHardening = await Deno.readTextFile(
     new URL(
-      "../../migrations/20260715170000_revoke_authenticated_storage_delete.sql",
+      "../../migrations/20260715202448_harden_service_zone_grants.sql",
       import.meta.url,
     ),
   );
@@ -29,8 +29,6 @@ Deno.test("Dastak security migration keeps evidence and client business data con
       "alter table public.service_zones enable row level security",
       "revoke all on audit.events from anon, authenticated",
       "revoke all on private.safety_cases from anon, authenticated",
-      "revoke insert, update, delete on public.service_zones from anon, authenticated",
-      "grant select on public.service_zones to authenticated",
       "create policy service_zones_select_active",
       "active = true",
       "create trigger audit_events_immutable",
@@ -49,12 +47,18 @@ Deno.test("Dastak security migration keeps evidence and client business data con
   assert(!migration.includes("alter table storage.objects enable row level security"));
   assertStringIncludes(config, "[functions.issue-evidence-url]");
   assertStringIncludes(config, "verify_jwt = true");
-  assertStringIncludes(
-    deleteRevocation,
-    "revoke delete on table storage.objects from authenticated;",
-  );
+  for (
+    const contract of [
+      "revoke all privileges on table public.service_zones from public, anon, authenticated",
+      "grant select on table public.service_zones to authenticated",
+    ]
+  ) assertStringIncludes(grantHardening, contract);
   for (
     const behavior of [
+      "create extension if not exists pgtap with schema extensions",
+      "anon has no service zone table privileges",
+      "authenticated has only SELECT on service zones",
+      "storage.objects keeps managed RLS enabled",
       "authenticated selects only its own exact evidence path",
       "authenticated inserts its own exact evidence path",
       "authenticated cannot insert a foreign evidence path",

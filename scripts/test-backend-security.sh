@@ -21,6 +21,55 @@ esac
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root/Backends/$backend"
 
-supabase db test supabase/tests/database/001_identity.pgtap.sql "$scope"
-supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql "$scope"
-supabase db query "$scope" --file "$repo_root/scripts/assert-no-client-dml.sql"
+profile_args=()
+if [[ -n "${SUPABASE_PROFILE:-}" ]]; then
+  profile_args=(--profile "$SUPABASE_PROFILE")
+fi
+
+run_linked_pgtap() {
+  local test_file="$1"
+  local output
+  local pooler_url
+
+  pooler_url="$(< supabase/.temp/pooler-url)"
+  if output="$(
+    PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "$pooler_url" \
+      -X -qAt -v ON_ERROR_STOP=1 -f "$test_file" 2>&1
+  )"; then
+    printf '%s\n' "$output"
+  else
+    local status=$?
+    printf '%s\n' "$output" >&2
+    return "$status"
+  fi
+
+  if rg -q '^[[:space:]]*(not ok|# Looks like)' <<< "$output"; then
+    printf 'pgTAP assertions failed in %s\n' "$test_file" >&2
+    return 1
+  fi
+}
+
+if [[ "$scope" == "--linked" ]]; then
+  for command_name in psql rg; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+      printf 'Missing required linked-test prerequisite: %s\n' "$command_name" >&2
+      exit 127
+    fi
+  done
+  if [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then
+    printf 'SUPABASE_DB_PASSWORD is required for linked database tests.\n' >&2
+    exit 64
+  fi
+  if [[ ! -f supabase/.temp/pooler-url ]]; then
+    printf '%s is not linked to a Supabase project.\n' "$backend" >&2
+    exit 1
+  fi
+
+  run_linked_pgtap supabase/tests/database/001_identity.pgtap.sql
+  run_linked_pgtap supabase/tests/database/002_security_audit_zones.pgtap.sql
+else
+  supabase db test supabase/tests/database/001_identity.pgtap.sql "$scope"
+  supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql "$scope"
+fi
+
+supabase db query "$scope" --file "$repo_root/scripts/assert-no-client-dml.sql" "${profile_args[@]}"

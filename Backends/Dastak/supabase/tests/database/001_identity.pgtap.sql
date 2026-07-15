@@ -1,13 +1,21 @@
 begin;
 
+create extension if not exists pgtap with schema extensions;
+set local search_path = public, extensions;
+
 select plan(26);
 
 select has_schema('private');
-select has_table('public', 'accounts');
-select has_table('private', 'account_memberships');
-select has_column('public', 'accounts', 'phone_number');
-select has_column('public', 'accounts', 'phone_verification_state');
-select has_table('private', 'request_deduplication');
+select has_table('public', 'accounts', 'public.accounts exists');
+select has_table('private', 'account_memberships', 'private.account_memberships exists');
+select has_column('public', 'accounts', 'phone_number', 'accounts phone_number exists');
+select has_column(
+  'public',
+  'accounts',
+  'phone_verification_state',
+  'accounts phone_verification_state exists'
+);
+select has_table('private', 'request_deduplication', 'private.request_deduplication exists');
 select has_function(
   'public',
   'bootstrap_account',
@@ -21,7 +29,7 @@ select is(
     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.proname = 'bootstrap_account'
-      and p.oid::regprocedure::text = 'bootstrap_account(uuid,text,text,text,text)'
+      and p.oid = 'public.bootstrap_account(uuid,text,text,text,text)'::regprocedure
   ),
   false,
   'public.bootstrap_account is security invoker'
@@ -58,7 +66,7 @@ select is(
     select exists (
       select 1
       from pg_catalog.aclexplode(
-        pg_catalog.coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))
+        coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))
       ) as privilege
       where privilege.grantee = 0
         and privilege.privilege_type = 'EXECUTE'
@@ -67,7 +75,7 @@ select is(
     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.proname = 'bootstrap_account'
-      and p.oid::regprocedure::text = 'bootstrap_account(uuid,text,text,text,text)'
+      and p.oid = 'public.bootstrap_account(uuid,text,text,text,text)'::regprocedure
   ),
   false,
   'PUBLIC cannot execute bootstrap_account'

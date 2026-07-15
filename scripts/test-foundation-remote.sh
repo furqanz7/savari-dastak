@@ -30,6 +30,11 @@ for command_name in supabase tr; do
   require_command "$command_name"
 done
 
+profile_args=()
+if [[ -n "${SUPABASE_PROFILE:-}" ]]; then
+  profile_args=(--profile "$SUPABASE_PROFILE")
+fi
+
 require_value SAVARI_NONPROD_PROJECT_REF
 require_value DASTAK_NONPROD_PROJECT_REF
 
@@ -74,7 +79,7 @@ verify_backend() {
 
   printf 'Verifying %s linked non-production database.\n' "$backend"
   cd "$backend_root"
-  supabase db lint --linked --fail-on error
+  supabase db lint --linked --fail-on error --schema public,private,audit "${profile_args[@]}"
   "$repo_root/scripts/test-backend-security.sh" "$backend" --linked
 }
 

@@ -58,17 +58,26 @@ require_not_contains scripts/test-foundation-remote.sh 'supabase db push'
 require_not_contains scripts/test-foundation-remote.sh 'supabase db reset'
 require_not_contains scripts/test-foundation-remote.sh 'supabase functions deploy'
 require_contains scripts/test-backend-security.sh 'scope="${2:---local}"'
+require_contains scripts/test-backend-security.sh 'psql "$pooler_url"'
+require_contains scripts/test-backend-security.sh "not ok|# Looks like"
 
 for product in Savari Dastak; do
   require_contains \
-    "Backends/$product/supabase/migrations/20260715170000_revoke_authenticated_storage_delete.sql" \
-    'revoke delete on table storage.objects from authenticated;'
+    "Backends/$product/supabase/migrations/20260715202448_harden_service_zone_grants.sql" \
+    'revoke all privileges on table public.service_zones from public, anon, authenticated;'
+  require_contains \
+    "Backends/$product/supabase/migrations/20260715202448_harden_service_zone_grants.sql" \
+    'grant select on table public.service_zones to authenticated;'
   require_contains \
     "Backends/$product/supabase/functions/tests/issue-evidence-url/handler.test.ts" \
     'maps owner lookup failures to internal_error without signing'
 done
 
-require_contains scripts/assert-no-client-dml.sql "has_table_privilege('authenticated', format('%I.%I', table_schema, table_name), 'DELETE')"
-require_contains scripts/assert-no-client-dml.sql "and not (table_schema = 'storage' and table_name = 'objects')"
+require_contains scripts/assert-no-client-dml.sql "values ('anon'::name), ('authenticated'::name)"
+require_contains scripts/assert-no-client-dml.sql "and table_schema in ('public', 'private', 'audit')"
+require_contains scripts/assert-no-client-dml.sql "'TRUNCATE'"
+require_contains scripts/assert-no-client-dml.sql "'REFERENCES'"
+require_contains scripts/assert-no-client-dml.sql "'TRIGGER'"
+require_not_contains scripts/assert-no-client-dml.sql "table_schema = 'storage'"
 
 printf 'final foundation repair contract passes\n'

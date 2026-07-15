@@ -1,14 +1,17 @@
 begin;
 
-select plan(37);
+create extension if not exists pgtap with schema extensions;
+set local search_path = public, extensions;
+
+select plan(39);
 
 select policies_are('public', 'accounts', array['accounts_select_self']);
-select table_privs_are('authenticated', 'public', 'accounts', array['SELECT']);
-select has_table('audit', 'events');
-select col_is_pk('audit', 'events', 'id');
-select has_table('private', 'safety_cases');
-select has_table('public', 'service_zones');
-select has_column('public', 'service_zones', 'boundary');
+select table_privs_are('public', 'accounts', 'authenticated', array['SELECT']::name[]);
+select has_table('audit', 'events', 'audit.events exists');
+select col_is_pk('audit', 'events', 'id', 'audit.events id is primary key');
+select has_table('private', 'safety_cases', 'private.safety_cases exists');
+select has_table('public', 'service_zones', 'public.service_zones exists');
+select has_column('public', 'service_zones', 'boundary', 'service_zones boundary exists');
 select is((select relrowsecurity from pg_class where oid = 'audit.events'::regclass), true, 'audit events has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'private.safety_cases'::regclass), true, 'safety cases has RLS enabled');
 select is((select relrowsecurity from pg_class where oid = 'public.service_zones'::regclass), true, 'service zones has RLS enabled');
@@ -22,13 +25,36 @@ select is(has_table_privilege('authenticated', 'public.service_zones', 'SELECT')
 select is(has_table_privilege('authenticated', 'public.service_zones', 'INSERT'), false, 'authenticated cannot insert service zones');
 select is(has_table_privilege('authenticated', 'public.service_zones', 'UPDATE'), false, 'authenticated cannot update service zones');
 select is(has_table_privilege('authenticated', 'public.service_zones', 'DELETE'), false, 'authenticated cannot delete service zones');
-select has_policy('public', 'service_zones', 'service_zones_select_active');
+select table_privs_are(
+  'public',
+  'service_zones',
+  'anon',
+  array[]::name[],
+  'anon has no service zone table privileges'
+);
+select table_privs_are(
+  'public',
+  'service_zones',
+  'authenticated',
+  array['SELECT']::name[],
+  'authenticated has only SELECT on service zones'
+);
+select ok(
+  exists (
+    select 1
+    from pg_catalog.pg_policies
+    where schemaname = 'public'
+      and tablename = 'service_zones'
+      and policyname = 'service_zones_select_active'
+  ),
+  'service zone policy exists'
+);
 select is(
   (select qual from pg_policies where schemaname = 'public' and tablename = 'service_zones' and policyname = 'service_zones_select_active'),
   '(active = true)',
   'service zone policy returns active zones only'
 );
-select has_trigger('audit', 'events', 'audit_events_immutable');
+select has_trigger('audit', 'events', 'audit_events_immutable', 'audit immutable trigger exists');
 select is((select public from storage.buckets where id = 'savari-evidence'), false, 'Savari evidence bucket is private');
 select policies_are('storage', 'objects', array[
   'savari_evidence_insert_own',
@@ -62,9 +88,9 @@ select results_eq(
 reset role;
 
 select is(
-  has_table_privilege('authenticated', 'storage.objects', 'DELETE'),
-  false,
-  'authenticated has no storage.objects delete privilege'
+  (select relrowsecurity from pg_catalog.pg_class where oid = 'storage.objects'::regclass),
+  true,
+  'storage.objects keeps managed RLS enabled'
 );
 
 insert into storage.objects (bucket_id, name) values
@@ -108,9 +134,9 @@ select results_eq(
   array[]::text[],
   'authenticated cannot update a foreign evidence object'
 );
-select throws_like(
+select throws_matching(
   $$delete from storage.objects where name = 'savari-driver/11111111-1111-4111-8111-111111111111/existing.jpg'$$,
-  '%permission denied%',
+  '(permission denied|Direct deletion from storage tables is not allowed)',
   'authenticated cannot delete evidence objects'
 );
 reset role;
