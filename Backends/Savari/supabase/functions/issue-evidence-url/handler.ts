@@ -39,9 +39,8 @@ export async function handleIssueEvidenceUrl(request: Request, dependencies: Dep
   const path = parsePath(body.objectPath);
   if (!path) return validationError();
 
-  if (path.root === selfOwnedRoot) {
-    if (path.ownerId !== actor.accountId) return accessDenied();
-  } else {
+  const isSelfOwned = path.root === selfOwnedRoot && path.ownerId === actor.accountId;
+  if (!isSelfOwned) {
     try {
       if (!await dependencies.isActiveOwner(actor.accountId)) return accessDenied();
     } catch {

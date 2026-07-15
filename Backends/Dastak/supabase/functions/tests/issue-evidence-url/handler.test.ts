@@ -117,6 +117,56 @@ Deno.test("evidence URL denies another user's evidence object", async () => {
   assertError(response, 403, "access_denied");
 });
 
+Deno.test("evidence URL permits an active owner to download another user's Dastak partner object", async () => {
+  let ownerLookupAccountId: string | undefined;
+  const response = await handleIssueEvidenceUrl(
+    request({
+      body: {
+        bucket: "dastak-evidence",
+        objectPath: `dastak-partner/${otherAccountId}/delivery-photo.jpg`,
+        operation: "download",
+      },
+    }),
+    dependencies({
+      isActiveOwner: (id) => {
+        ownerLookupAccountId = id;
+        return Promise.resolve(true);
+      },
+    }),
+  );
+
+  assertEquals(ownerLookupAccountId, accountId);
+  assertEquals(response.status, 200);
+});
+
+Deno.test("evidence URL denies an inactive or suspended owner for an owner-only root", async () => {
+  let ownerLookupAccountId: string | undefined;
+  let signingCalls = 0;
+  const response = await handleIssueEvidenceUrl(
+    request({
+      body: {
+        bucket: "dastak-evidence",
+        objectPath: "prescription/44444444-4444-4444-8444-444444444444/order.pdf",
+        operation: "download",
+      },
+    }),
+    dependencies({
+      isActiveOwner: (id) => {
+        ownerLookupAccountId = id;
+        return Promise.resolve(false);
+      },
+      signDownload: () => {
+        signingCalls += 1;
+        return Promise.resolve("https://example.test/unexpected");
+      },
+    }),
+  );
+
+  assertEquals(ownerLookupAccountId, accountId);
+  assertEquals(signingCalls, 0);
+  assertError(response, 403, "access_denied");
+});
+
 Deno.test("evidence URL permits an active owner to download foundation-only object roots", async () => {
   let ownerLookupAccountId: string | undefined;
   const response = await handleIssueEvidenceUrl(
