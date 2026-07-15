@@ -170,6 +170,60 @@ final class AuthenticationClientTests: XCTestCase {
         )
     }
 
+    func testBootstrapMapsNestedHTTPErrorToDefinitiveRejection() async throws {
+        let session = makeCapturingSession(
+            responses: [
+                .init(
+                    statusCode: 400,
+                    body: #"{"error":{"code":"validation_failed","message":"Display name is invalid."}}"#
+                        .data(using: .utf8)!
+                )
+            ]
+        )
+        let operations = SupabaseAuthenticationClient.LiveOperations(
+            configuration: testBackendConfiguration,
+            session: session,
+            accessToken: "session-access-token"
+        )
+        let client = SupabaseAuthenticationClient(operations: operations)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "bootstrap-definitive"))
+
+        do {
+            try await client.bootstrapAccount(
+                displayName: "Test User",
+                phoneNumber: "+919876543210",
+                key: key
+            )
+            XCTFail("Expected a definitive API rejection")
+        } catch let error as AuthenticationClientError {
+            XCTAssertEqual(
+                error,
+                .bootstrapRejected(
+                    statusCode: 400,
+                    code: "validation_failed",
+                    message: "Display name is invalid."
+                )
+            )
+        }
+    }
+
+    func testBootstrapMapsTransportFailureToAmbiguousFailure() async throws {
+        let operations = RecordingAuthenticationOperations(bootstrapError: .transport)
+        let client = SupabaseAuthenticationClient(operations: operations)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "bootstrap-ambiguous"))
+
+        do {
+            try await client.bootstrapAccount(
+                displayName: "Test User",
+                phoneNumber: "+919876543210",
+                key: key
+            )
+            XCTFail("Expected an ambiguous bootstrap failure")
+        } catch let error as AuthenticationClientError {
+            XCTAssertEqual(error, .bootstrapAmbiguousFailure)
+        }
+    }
+
     func testProviderTokensAreForwardedWithoutBecomingPhoneProof() async throws {
         let operations = RecordingAuthenticationOperations()
         let client = SupabaseAuthenticationClient(operations: operations)

@@ -29,6 +29,10 @@ actor FakeAuthenticationClient: AuthenticationClient {
 }
 
 actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
+    enum BootstrapError: Error, Sendable {
+        case transport
+    }
+
     struct AppleCredentials: Equatable {
         let identityToken: String
         let nonce: String
@@ -43,6 +47,7 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
     private let currentAccountID: UUID?
     private let profileAccountID: UUID?
     private let bootstrapResult: AccountBootstrapResult
+    private let bootstrapError: BootstrapError?
     private var appleCredentials: AppleCredentials?
     private var googleIDToken: String?
     private var googleRedirectURL: URL?
@@ -56,11 +61,13 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
         bootstrapResult: AccountBootstrapResult = AccountBootstrapResult(
             accountID: UUID(),
             phoneState: .unverified
-        )
+        ),
+        bootstrapError: BootstrapError? = nil
     ) {
         self.currentAccountID = currentAccountID
         self.profileAccountID = profileAccountID
         self.bootstrapResult = bootstrapResult
+        self.bootstrapError = bootstrapError
     }
 
     func signInWithApple(identityToken: String, nonce: String) async throws {
@@ -94,6 +101,9 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
             phoneNumber: phoneNumber,
             key: key
         )
+        if let bootstrapError {
+            throw bootstrapError
+        }
         return bootstrapResult
     }
 

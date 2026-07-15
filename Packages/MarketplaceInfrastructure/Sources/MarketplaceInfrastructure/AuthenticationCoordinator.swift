@@ -5,8 +5,34 @@ import MarketplaceFoundation
 @MainActor
 public final class AuthenticationCoordinator: ObservableObject {
     @Published public private(set) var route: AccountRoute = .signedOut
+    @Published public private(set) var isProfileSubmissionInFlight = false
+    @Published public private(set) var profileSubmissionError: AuthenticationClientError?
+
+    private struct ProfilePayload: Equatable {
+        let displayName: String
+        let phoneNumber: String
+
+        init(displayName: String, phoneNumber: String) throws {
+            let normalizedName = displayName
+                .split(whereSeparator: { $0.isWhitespace })
+                .joined(separator: " ")
+            guard (1...80).contains(normalizedName.count) else {
+                throw AuthenticationClientError.invalidProfileDisplayName
+            }
+
+            let normalizedPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.displayName = normalizedName
+            self.phoneNumber = try E164PhoneNumber(normalizedPhone).rawValue
+        }
+    }
+
+    private struct PendingProfileSubmission {
+        let payload: ProfilePayload
+        let key: IdempotencyKey
+    }
 
     private let client: any AuthenticationClient
+    private var pendingProfileSubmission: PendingProfileSubmission?
 
     public init(client: any AuthenticationClient) {
         self.client = client
@@ -37,25 +63,102 @@ public final class AuthenticationCoordinator: ObservableObject {
 
     public func completeProfile(
         displayName: String,
-        phoneNumber: String,
-        key: IdempotencyKey
+        phoneNumber: String
     ) async throws {
-        let validatedPhoneNumber = try E164PhoneNumber(phoneNumber).rawValue
-        try await client.bootstrapAccount(
-            displayName: displayName,
-            phoneNumber: validatedPhoneNumber,
-            key: key
-        )
+        guard !isProfileSubmissionInFlight else { return }
+
+        let payload: ProfilePayload
+        do {
+            payload = try ProfilePayload(displayName: displayName, phoneNumber: phoneNumber)
+        } catch let error as AuthenticationClientError {
+            profileSubmissionError = error
+            throw error
+        }
+
+        let submission: PendingProfileSubmission
+        if let pendingProfileSubmission, pendingProfileSubmission.payload == payload {
+            submission = pendingProfileSubmission
+        } else {
+            let key = IdempotencyKey(rawValue: UUID().uuidString)!
+            submission = PendingProfileSubmission(payload: payload, key: key)
+            pendingProfileSubmission = submission
+        }
+
+        profileSubmissionError = nil
+        isProfileSubmissionInFlight = true
+        defer { isProfileSubmissionInFlight = false }
+
+        do {
+            try await client.bootstrapAccount(
+                displayName: payload.displayName,
+                phoneNumber: payload.phoneNumber,
+                key: submission.key
+            )
+        } catch {
+            let typedError = error as? AuthenticationClientError ?? .bootstrapAmbiguousFailure
+            guard typedError == .bootstrapAmbiguousFailure else {
+                pendingProfileSubmission = nil
+                profileSubmissionError = typedError
+                throw typedError
+            }
+            try await reconcileAmbiguousProfileSubmission(orThrow: typedError)
+            return
+        }
+
         do {
             route = try await client.restoreAccount()
         } catch {
-            route = .signedOut
+            let error = AuthenticationClientError.bootstrapAmbiguousFailure
+            profileSubmissionError = error
             throw error
         }
+
+        guard route == .active else {
+            let error = AuthenticationClientError.bootstrapAmbiguousFailure
+            profileSubmissionError = error
+            throw error
+        }
+        pendingProfileSubmission = nil
     }
 
     public func signOut() async throws {
         try await client.signOut()
+        pendingProfileSubmission = nil
+        profileSubmissionError = nil
         route = .signedOut
+    }
+
+    private func reconcileAmbiguousProfileSubmission(
+        orThrow error: AuthenticationClientError
+    ) async throws {
+        if let restoredRoute = try? await client.restoreAccount() {
+            route = restoredRoute
+            if restoredRoute == .active {
+                pendingProfileSubmission = nil
+                profileSubmissionError = nil
+                return
+            }
+        }
+        profileSubmissionError = error
+        throw error
+    }
+}
+
+extension AuthenticationClientError {
+    var profileSubmissionMessage: String {
+        switch self {
+        case .bootstrapAmbiguousFailure:
+            return "Profile completion could not be confirmed. Retry the same details."
+        case let .bootstrapRejected(_, _, message):
+            return message
+        case .invalidE164PhoneNumber:
+            return "Use a valid E.164 phone number."
+        case .invalidProfileDisplayName:
+            return "Display name is required and must be 80 characters or fewer."
+        case .unexpectedPhoneVerificationState:
+            return "Profile completion returned an invalid phone state."
+        case .googleOAuthNotConfigured:
+            return "Authentication is not configured."
+        }
     }
 }

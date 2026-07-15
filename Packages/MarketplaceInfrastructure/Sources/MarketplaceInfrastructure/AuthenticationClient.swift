@@ -22,8 +22,11 @@ public protocol AuthenticationClient: Sendable {
 }
 
 public enum AuthenticationClientError: Error, Equatable, Sendable {
+    case bootstrapAmbiguousFailure
+    case bootstrapRejected(statusCode: Int, code: String?, message: String)
     case googleOAuthNotConfigured
     case invalidE164PhoneNumber
+    case invalidProfileDisplayName
     case unexpectedPhoneVerificationState
 }
 
@@ -120,11 +123,30 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
         key: IdempotencyKey
     ) async throws {
         let validatedPhoneNumber = try E164PhoneNumber(phoneNumber).rawValue
-        let result = try await operations.bootstrapAccount(
-            displayName: displayName,
-            phoneNumber: validatedPhoneNumber,
-            key: key
-        )
+        let result: AccountBootstrapResult
+        do {
+            result = try await operations.bootstrapAccount(
+                displayName: displayName,
+                phoneNumber: validatedPhoneNumber,
+                key: key
+            )
+        } catch let error as AuthenticationClientError {
+            throw error
+        } catch let error as FunctionsError {
+            switch error {
+            case let .httpError(statusCode, data):
+                let payload = try? JSONDecoder().decode(BootstrapErrorEnvelope.self, from: data)
+                throw AuthenticationClientError.bootstrapRejected(
+                    statusCode: statusCode,
+                    code: payload?.error.code,
+                    message: payload?.error.message ?? "Profile completion was rejected."
+                )
+            case .relayError:
+                throw AuthenticationClientError.bootstrapAmbiguousFailure
+            }
+        } catch {
+            throw AuthenticationClientError.bootstrapAmbiguousFailure
+        }
         guard result.phoneState == .unverified else {
             throw AuthenticationClientError.unexpectedPhoneVerificationState
         }
@@ -133,6 +155,15 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
     public func signOut() async throws {
         try await operations.signOut()
     }
+}
+
+private struct BootstrapErrorEnvelope: Decodable {
+    struct Payload: Decodable {
+        let code: String
+        let message: String
+    }
+
+    let error: Payload
 }
 
 extension SupabaseAuthenticationClient {

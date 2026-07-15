@@ -47,12 +47,10 @@ final class AuthenticationCoordinatorTests: XCTestCase {
     func testProfileCompletionUsesServerRouteBeforeBecomingActive() async throws {
         let gateway = FakeAuthenticationClient(restoredRoute: .active)
         let coordinator = AuthenticationCoordinator(client: gateway)
-        let key = try XCTUnwrap(IdempotencyKey(rawValue: "profile-123"))
 
         try await coordinator.completeProfile(
             displayName: "Test User",
-            phoneNumber: "+919876543210",
-            key: key
+            phoneNumber: "+919876543210"
         )
 
         XCTAssertEqual(coordinator.route, .active)
@@ -100,7 +98,6 @@ final class AuthenticationCoordinatorTests: XCTestCase {
             shouldFailBootstrap: true
         )
         let coordinator = AuthenticationCoordinator(client: gateway)
-        let key = try XCTUnwrap(IdempotencyKey(rawValue: "profile-failure-123"))
 
         await coordinator.restore()
         XCTAssertEqual(coordinator.route, .needsProfile)
@@ -108,8 +105,7 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         do {
             try await coordinator.completeProfile(
                 displayName: "Test User",
-                phoneNumber: "+919876543210",
-                key: key
+                phoneNumber: "+919876543210"
             )
             XCTFail("Expected profile bootstrap to fail")
         } catch {
@@ -117,10 +113,9 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         }
     }
 
-    func testProfileRestoreFailureAfterBootstrapResetsToSignedOut() async throws {
+    func testProfileRestoreFailureAfterBootstrapKeepsNeedsProfileRoute() async throws {
         let gateway = FakeAuthenticationClient(restoredRoute: .needsProfile)
         let coordinator = AuthenticationCoordinator(client: gateway)
-        let key = try XCTUnwrap(IdempotencyKey(rawValue: "profile-restore-failure-123"))
 
         await coordinator.restore()
         XCTAssertEqual(coordinator.route, .needsProfile)
@@ -129,19 +124,17 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         do {
             try await coordinator.completeProfile(
                 displayName: "Test User",
-                phoneNumber: "+919876543210",
-                key: key
+                phoneNumber: "+919876543210"
             )
             XCTFail("Expected the post-bootstrap profile restore to fail")
         } catch {
-            XCTAssertEqual(coordinator.route, .signedOut)
+            XCTAssertEqual(coordinator.route, .needsProfile)
         }
     }
 
     func testProfileCompletionRejectsMalformedE164BeforeCallingClient() async throws {
         let gateway = FakeAuthenticationClient(restoredRoute: .needsProfile)
         let coordinator = AuthenticationCoordinator(client: gateway)
-        let key = try XCTUnwrap(IdempotencyKey(rawValue: "invalid-phone-123"))
 
         await coordinator.restore()
         XCTAssertEqual(coordinator.route, .needsProfile)
@@ -149,8 +142,7 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         do {
             try await coordinator.completeProfile(
                 displayName: "Test User",
-                phoneNumber: "+91 9876543210",
-                key: key
+                phoneNumber: "+91 9876543210"
             )
             XCTFail("Expected malformed E.164 input to fail")
         } catch let error as AuthenticationClientError {

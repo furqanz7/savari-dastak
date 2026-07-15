@@ -157,11 +157,14 @@ private struct AuthenticationRouteView: View {
             Text("Profile contact only. Not used for sign-in, recovery, or payments.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button("Complete profile") {
+            Button(coordinator.isProfileSubmissionInFlight ? "Completing profile" : "Complete profile") {
                 Task { await completeProfile() }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(
+                displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || coordinator.isProfileSubmissionInFlight
+            )
         }
     }
 
@@ -224,16 +227,15 @@ private struct AuthenticationRouteView: View {
 
     @MainActor
     private func completeProfile() async {
-        guard let key = IdempotencyKey(rawValue: UUID().uuidString) else { return }
         do {
             errorMessage = nil
             try await coordinator.completeProfile(
                 displayName: displayName,
-                phoneNumber: phoneNumber,
-                key: key
+                phoneNumber: phoneNumber
             )
         } catch {
-            errorMessage = "Profile completion failed. Use an E.164 phone number."
+            errorMessage = coordinator.profileSubmissionError?.profileSubmissionMessage
+                ?? "Profile completion failed."
         }
     }
 
