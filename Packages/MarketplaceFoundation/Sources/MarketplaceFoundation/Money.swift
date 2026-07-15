@@ -8,7 +8,7 @@ public struct Money: Codable, Equatable, Hashable, Sendable {
     }
 
     public init(rupees: Decimal) {
-        self.paise = NSDecimalNumber(decimal: rupees * 100).rounding(
+        let roundedPaise = NSDecimalNumber(decimal: rupees * 100).rounding(
             accordingToBehavior: NSDecimalNumberHandler(
                 roundingMode: .plain,
                 scale: 0,
@@ -17,7 +17,15 @@ public struct Money: Codable, Equatable, Hashable, Sendable {
                 raiseOnUnderflow: true,
                 raiseOnDivideByZero: true
             )
-        ).intValue
+        )
+        let minimumPaise = NSDecimalNumber(value: Int.min)
+        let maximumPaise = NSDecimalNumber(value: Int.max)
+        precondition(
+            roundedPaise.compare(minimumPaise) != .orderedAscending &&
+                roundedPaise.compare(maximumPaise) != .orderedDescending,
+            "Money amount is outside the Int paise range."
+        )
+        self.paise = roundedPaise.intValue
     }
 
     public var rupees: Decimal {
