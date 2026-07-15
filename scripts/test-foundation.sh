@@ -15,10 +15,17 @@ if grep -R -n -E 'DastakDomain' Packages/SavariDomain \
   exit 1
 fi
 
-deno test --allow-env Backends/Savari/supabase/functions/tests/
-deno test --allow-env Backends/Dastak/supabase/functions/tests/
-deno test --allow-read Backends/Savari/supabase/tests/database/001_identity_lock.test.ts Backends/Savari/supabase/tests/database/002_security_audit_zones.test.ts
-deno test --allow-read Backends/Dastak/supabase/tests/database/001_identity_lock.test.ts Backends/Dastak/supabase/tests/database/002_security_audit_zones.test.ts
+for backend in Savari Dastak; do
+  config="Backends/$backend/supabase/functions/deno.json"
+  functions="Backends/$backend/supabase/functions"
+  database_tests="Backends/$backend/supabase/tests/database"
+
+  deno test --config "$config" --no-lock --allow-env "$functions/tests/"
+  deno test --config "$config" --no-lock --allow-read "$database_tests/"
+  find "$functions" -name '*.ts' -print0 | xargs -0 deno check --config "$config" --no-lock
+  deno fmt --config "$config" --check "$functions" "$database_tests"
+done
+
 scripts/test-backend-security.sh Savari
 scripts/test-backend-security.sh Dastak
 

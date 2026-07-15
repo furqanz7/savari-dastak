@@ -21,15 +21,17 @@ xcodebuild -workspace SavariDastak.xcworkspace -scheme Savari -configuration Deb
 Always run backend commands from the relevant product directory under `Backends/`, never from the repository root or `Legacy/`.
 
 ```sh
-# Savari backend
+# Savari backend (run independently from the repository root)
 cd Backends/Savari
 supabase start
 supabase link --project-ref <savari-non-production-project-ref>
+cd ../..
 
-# Dastak backend
+# Dastak backend (run independently from the repository root)
 cd Backends/Dastak
 supabase start
 supabase link --project-ref <dastak-non-production-project-ref>
+cd ../..
 
 # Whole foundation gate from repository root
 scripts/test-foundation.sh
