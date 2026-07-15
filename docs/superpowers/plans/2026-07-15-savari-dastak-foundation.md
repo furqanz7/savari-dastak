@@ -441,15 +441,19 @@ Expected: client unit tests prove the required route behavior; the provider and 
 - Create: `Backends/Savari/supabase/config.toml`
 - Create: `Backends/Savari/supabase/migrations/20260715090000_bootstrap_identity.sql`
 - Create: `Backends/Savari/supabase/functions/bootstrap-account/index.ts`
+- Create: `Backends/Savari/supabase/functions/bootstrap-account/handler.ts`
 - Create: `Backends/Savari/supabase/functions/_shared/http.ts`
 - Create: `Backends/Savari/supabase/functions/_shared/auth.ts`
 - Create: `Backends/Savari/supabase/functions/deno.json`
+- Create: `Backends/Savari/supabase/functions/tests/bootstrap-account/handler.test.ts`
 - Create: `Backends/Dastak/supabase/config.toml`
 - Create: `Backends/Dastak/supabase/migrations/20260715090000_bootstrap_identity.sql`
 - Create: `Backends/Dastak/supabase/functions/bootstrap-account/index.ts`
+- Create: `Backends/Dastak/supabase/functions/bootstrap-account/handler.ts`
 - Create: `Backends/Dastak/supabase/functions/_shared/http.ts`
 - Create: `Backends/Dastak/supabase/functions/_shared/auth.ts`
 - Create: `Backends/Dastak/supabase/functions/deno.json`
+- Create: `Backends/Dastak/supabase/functions/tests/bootstrap-account/handler.test.ts`
 - Create: `Backends/Savari/supabase/tests/database/001_identity.pgtap.sql`
 - Create: `Backends/Dastak/supabase/tests/database/001_identity.pgtap.sql`
 
@@ -470,6 +474,7 @@ select has_table('private', 'account_memberships');
 select has_column('public', 'accounts', 'phone_number');
 select has_column('public', 'accounts', 'phone_verification_state');
 select has_table('private', 'request_deduplication');
+-- Also assert that public.bootstrap_account is executable only by service_role.
 
 select * from finish();
 rollback;
@@ -528,16 +533,27 @@ create table private.request_deduplication (
 );
 
 alter table public.accounts enable row level security;
-revoke all on table private.account_memberships from anon, authenticated;
-revoke all on table private.request_deduplication from anon, authenticated;
+alter table private.account_memberships enable row level security;
+alter table private.request_deduplication enable row level security;
+revoke all on schema private from public, anon, authenticated;
+revoke all on table public.accounts from anon, authenticated;
+revoke all on table private.account_memberships from public, anon, authenticated;
+revoke all on table private.request_deduplication from public, anon, authenticated;
 grant select on public.accounts to authenticated;
-revoke insert, update, delete on public.accounts from anon, authenticated;
+grant usage on schema private to service_role;
+grant select, insert, update on table public.accounts to service_role;
+grant select, insert, update on table private.account_memberships to service_role;
+grant select, insert, update on table private.request_deduplication to service_role;
 
 create policy accounts_select_self on public.accounts
 for select to authenticated using (id = auth.uid());
 ```
 
-The `bootstrap-account` function uses the authenticated JWT to insert the account and `customer` membership through a server-only client. It rejects a missing name with `validation_failed`, an invalid E.164 number with `invalid_phone_number`, and a second bootstrap request with `account_already_exists`.
+The first bootstrap cannot insert a deduplication record before an account exists because `private.request_deduplication.account_id` references `public.accounts`. Solve this with one atomic database function, `public.bootstrap_account(p_account_id uuid, p_display_name text, p_phone_number text, p_idempotency_key text, p_request_digest text)`, called only by the server-only `service_role` client.
+
+The database function is `SECURITY INVOKER`, sets `search_path = ''`, and fully qualifies every relation. Revoke `EXECUTE` from `PUBLIC`, `anon`, and `authenticated`, then grant it only to `service_role`. It must acquire a transaction advisory lock for the `(account_id, function_name, idempotency_key)` tuple, return the stored response for an identical replay, reject a different digest with `idempotency_conflict`, reject a new key once the account exists with `account_already_exists`, and otherwise insert the account, `customer` membership, and deduplication response in the same transaction. Do not expose `private` through the Data API or add a `SECURITY DEFINER` function.
+
+The Edge Function verifies the caller's bearer token with Supabase Auth, validates and normalizes the body, then invokes only this narrow RPC through a server-only `service_role` client. It must not receive a generic table client or direct access to the `private` schema. It rejects a missing name with `validation_failed`, an invalid E.164 number with `invalid_phone_number`, and a second bootstrap request with `account_already_exists`.
 
 - [ ] **Step 4: Implement typed Edge Function support and account bootstrap**
 
@@ -560,7 +576,9 @@ export const json = (body: unknown, status = 200) =>
   });
 ```
 
-`bootstrap-account/index.ts` must require `X-Idempotency-Key`, retrieve `user.id` from the bearer token, and insert a row in `private.request_deduplication` before the account transaction. A repeat with the same key and same request returns the stored response; a different request body returns `409 idempotency_conflict`.
+Configure `[functions.bootstrap-account] verify_jwt = true` in each product's `config.toml`. `bootstrap-account/index.ts` must require `X-Idempotency-Key`, verify the bearer token and retrieve `user.id`, normalize the request deterministically before hashing it, and call the narrow database RPC through a server-only client. A repeat with the same key and same request returns the stored response; a different request body returns `409 idempotency_conflict`.
+
+Keep the HTTP handler testable with injected authentication and bootstrap operations. Add Deno unit tests for missing authorization, invalid payloads, missing idempotency keys, duplicate/conflict error mapping, and the successful server-only RPC payload. The database replay test remains an integration test and must run against the local Supabase stack once available.
 
 - [ ] **Step 5: Configure provider and secret boundaries manually in both non-production dashboards**
 
@@ -582,7 +600,7 @@ supabase db test --local --file supabase/tests/database/001_identity.pgtap.sql
 deno test --allow-env supabase/functions/tests/
 ```
 
-Expected: all migration and unit tests pass. Add an integration test that sends a duplicate `bootstrap-account` request and asserts the second response returns the original account ID. Then run the Savari and Dastak `AuthenticationCoordinatorTests` against a test account to verify a provider session routes to `needsProfile`, bootstrap creates the account, and a restored session routes to `active`.
+Expected: all migration and unit tests pass. Add a database integration test that calls `public.bootstrap_account` twice with the same identity/key/body and asserts the second result returns the original account ID; call it again with the same key and a changed digest and assert `idempotency_conflict`. Then run the Savari and Dastak `AuthenticationCoordinatorTests` against a test account to verify a provider session routes to `needsProfile`, bootstrap creates the account, and a restored session routes to `active`.
 
 ```bash
 git add Backends
