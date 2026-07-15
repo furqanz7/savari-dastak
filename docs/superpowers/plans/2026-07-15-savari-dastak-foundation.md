@@ -482,7 +482,7 @@ rollback;
 
 - [ ] **Step 2: Run the database tests before the migration exists**
 
-From each product backend after `supabase start` succeeds, run:
+Inside each product's hosted CI backend job, after its ephemeral `supabase start` succeeds, run:
 
 ```bash
 supabase db test supabase/tests/database/001_identity.pgtap.sql --local
@@ -578,7 +578,7 @@ export const json = (body: unknown, status = 200) =>
 
 Configure `[functions.bootstrap-account] verify_jwt = true` in each product's `config.toml`. `bootstrap-account/index.ts` must require `X-Idempotency-Key`, verify the bearer token and retrieve `user.id`, normalize the request deterministically before hashing it, and call the narrow database RPC through a server-only client. A repeat with the same key and same request returns the stored response; a different request body returns `409 idempotency_conflict`.
 
-Keep the HTTP handler testable with injected authentication and bootstrap operations. Add Deno unit tests for missing authorization, invalid payloads, missing idempotency keys, duplicate/conflict error mapping, and the successful server-only RPC payload. The database replay test remains an integration test and must run against the local Supabase stack once available.
+Keep the HTTP handler testable with injected authentication and bootstrap operations. Add Deno unit tests for missing authorization, invalid payloads, missing idempotency keys, duplicate/conflict error mapping, and the successful server-only RPC payload. The database replay test remains an integration test and must pass in hosted CI's ephemeral stack and against the linked non-production database.
 
 - [ ] **Step 5: Configure provider and secret boundaries manually in both non-production dashboards**
 
@@ -592,12 +592,17 @@ Do not store the service role key in an `.xcconfig`, git-tracked file, iOS targe
 
 - [ ] **Step 6: Verify identity bootstrap and commit**
 
-Run for both backends:
+Run the reset commands inside each hosted CI backend job, then run the guarded linked non-production gate after separately approved migration deployment:
 
 ```bash
 supabase db reset --local
 supabase db test supabase/tests/database/001_identity.pgtap.sql --local
 deno test --allow-env supabase/functions/tests/
+
+REMOTE_FOUNDATION_CONFIRM=nonproduction-only \
+SAVARI_NONPROD_PROJECT_REF=<savari-non-production-project-ref> \
+DASTAK_NONPROD_PROJECT_REF=<dastak-non-production-project-ref> \
+scripts/test-foundation-remote.sh
 ```
 
 Expected: all migration and unit tests pass. Add a database integration test that calls `public.bootstrap_account` twice with the same identity/key/body and asserts the second result returns the original account ID; call it again with the same key and a changed digest and assert `idempotency_conflict`. Then run the Savari and Dastak `AuthenticationCoordinatorTests` against a test account to verify a provider session routes to `needsProfile`, bootstrap creates the account, and a restored session routes to `active`.
@@ -650,6 +655,8 @@ rollback;
 ```
 
 - [ ] **Step 2: Run the failing security tests**
+
+Run this inside the hosted CI backend stack:
 
 ```bash
 supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql --local
@@ -729,18 +736,19 @@ The merchant, pharmacy, prescription, and receipt roots are owner-download-only 
 
 - [ ] **Step 5: Create a repeatable no-direct-mutation security check**
 
-Implement `scripts/test-backend-security.sh` so it resolves the repository root from the script location, validates the backend argument, executes both pgTAP files with CLI v2.90-compatible positional paths, and checks local grants with an explicit `--local`. `scripts/assert-no-client-dml.sql` must raise an exception if `authenticated` has `INSERT`, `UPDATE`, or `DELETE` on anything except the intentionally RLS-scoped `storage.objects` upload path; printing a query result without enforcing it is not a test.
+Implement `scripts/test-backend-security.sh` so it resolves the repository root from the script location, validates the backend and scope arguments, defaults safely to `--local`, executes both pgTAP files with CLI v2.90-compatible positional paths, and checks grants against that same scope. Hosted CI uses `--local` inside an ephemeral stack; the owner-approved non-production gate passes `--linked` explicitly. `scripts/assert-no-client-dml.sql` must raise an exception if `authenticated` has `INSERT`, `UPDATE`, or `DELETE` on anything except the intentionally RLS-scoped `storage.objects` upload path; printing a query result without enforcing it is not a test.
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-backend="${1:?usage: scripts/test-backend-security.sh Savari|Dastak}"
+backend="${1:?usage: scripts/test-backend-security.sh Savari|Dastak [--local|--linked]}"
+scope="${2:---local}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root/Backends/$backend"
-supabase db test supabase/tests/database/001_identity.pgtap.sql --local
-supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql --local
-supabase db query --local --file "$repo_root/scripts/assert-no-client-dml.sql"
+supabase db test supabase/tests/database/001_identity.pgtap.sql "$scope"
+supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql "$scope"
+supabase db query "$scope" --file "$repo_root/scripts/assert-no-client-dml.sql"
 ```
 
 Expected final query: only explicitly approved future client-owned upload metadata rows, never accounts, roles, zones, audits, jobs, payments, or payouts.
@@ -750,36 +758,43 @@ Expected final query: only explicitly approved future client-owned upload metada
 Run:
 
 ```bash
-scripts/test-backend-security.sh Savari
-scripts/test-backend-security.sh Dastak
 deno test --allow-env Backends/Savari/supabase/functions/tests/
 deno test --allow-env Backends/Dastak/supabase/functions/tests/
 deno test --allow-read Backends/Savari/supabase/tests/database/002_security_audit_zones.test.ts
 deno test --allow-read Backends/Dastak/supabase/tests/database/002_security_audit_zones.test.ts
+REMOTE_FOUNDATION_CONFIRM=nonproduction-only \
+SAVARI_NONPROD_PROJECT_REF=<savari-non-production-project-ref> \
+DASTAK_NONPROD_PROJECT_REF=<dastak-non-production-project-ref> \
+scripts/test-foundation-remote.sh
 git diff --check
 ```
 
-Expected when the local Supabase stack is available: pgTAP passes in both backends and the grants review has no unauthorized mutation privilege. Until Docker/Postgres is available, run and record the Deno, formatting, shell syntax, static SQL-contract, and diff checks, and leave the local migration/pgTAP gate explicitly pending rather than claiming it passed.
+Expected: static Deno and SQL-contract checks run on the developer Mac without Docker. The same pgTAP and grant assertions run inside hosted CI's ephemeral database and against both explicitly linked non-production projects before the foundation gate passes.
 
 ```bash
 git add Backends scripts
 git commit -m "feat: secure marketplace foundation"
 ```
 
-### Task 6: Add project-level automation and a reproducible foundation gate
+### Task 6: Add project-level automation and reproducible source and database gates
 
 **Files:**
 - Create: `.github/workflows/foundation.yml`
 - Create: `scripts/test-foundation.sh`
+- Create: `scripts/test-foundation-remote.sh`
 - Modify: `README.md`
 
 **Interfaces:**
-- Consumes: both local Supabase projects, Deno, Swift toolchain, and Xcode.
-- Produces: one command that rejects a workspace, package, migration, or function regression before higher-level product work begins.
+- Consumes: Deno, the Swift toolchain, Xcode, hosted CI database stacks, and two separately linked non-production Supabase projects.
+- Produces: a Docker-free Mac source gate, isolated database integration jobs in hosted CI, and a guarded linked non-production database gate.
 
 - [ ] **Step 1: Write the foundation gate script**
 
-Create `scripts/test-foundation.sh`:
+Create `scripts/test-foundation.sh` as the Docker-free Mac gate. It runs package tests, product-isolation checks, frozen Deno function and static migration tests, formatting/checking, and all five unsigned iOS builds. It must not require Docker, start a local Supabase stack, or claim that static SQL tests replace pgTAP execution.
+
+Create `scripts/test-foundation-remote.sh` as a separate guarded database gate. It requires `REMOTE_FOUNDATION_CONFIRM=nonproduction-only`, explicit and different `SAVARI_NONPROD_PROJECT_REF` and `DASTAK_NONPROD_PROJECT_REF` values, rejects the archived prototype ref, verifies each backend's existing linked ref, then runs linked database lint, pgTAP, and grant assertions. It does not link, push, deploy, provision, reset, or otherwise mutate project configuration. Because a project ref does not encode its dashboard environment, the owner must approve both refs as non-production before running the gate.
+
+The Docker-free source gate retains this structure:
 
 ```bash
 #!/usr/bin/env bash
@@ -800,8 +815,6 @@ deno test --allow-env Backends/Savari/supabase/functions/tests/
 deno test --allow-env Backends/Dastak/supabase/functions/tests/
 deno test --allow-read Backends/Savari/supabase/tests/database/001_identity_lock.test.ts Backends/Savari/supabase/tests/database/002_security_audit_zones.test.ts
 deno test --allow-read Backends/Dastak/supabase/tests/database/001_identity_lock.test.ts Backends/Dastak/supabase/tests/database/002_security_audit_zones.test.ts
-scripts/test-backend-security.sh Savari
-scripts/test-backend-security.sh Dastak
 
 for scheme in Savari SavariAdmin Dastak DastakMerchant DastakAdmin; do
   xcodebuild \
@@ -820,27 +833,35 @@ done
 scripts/test-foundation.sh
 ```
 
-Expected: FAIL only if a prerequisite is absent. Report the exact missing prerequisite; do not weaken the script, install system software without owner approval, or treat an unavailable local Supabase stack as a pass.
+Expected: the developer-Mac gate passes without Docker or a local Supabase stack. It validates source, package, function, static SQL, formatting, and iOS build contracts; hosted CI and linked non-production checks remain responsible for executable database integration.
 
-- [ ] **Step 3: Add CI jobs that mirror the local gate**
+- [ ] **Step 3: Add CI jobs that extend the Mac gate with database integration**
 
-Create `.github/workflows/foundation.yml` with four required jobs: `swift-packages`, `savari-backend`, `dastak-backend`, and `ios-build`. Use `ubuntu-24.04` for each isolated backend job and `macos-26` for Swift/iOS jobs. Select Xcode `26.6`, pin Supabase CLI `2.90.0` through `supabase/setup-cli@v2`, and pin Deno `2.8.2` through `denoland/setup-deno@v2`. Each backend job starts only its own backend directory, runs its migrations, pgTAP/grant gate, Deno function tests, static migration tests, checks, and formatting, then stops its local stack. The iOS job builds all five schemes with the generic iOS Simulator destination and signing disabled. The Swift job runs both tested shared packages and parses both domain package manifests.
+Create `.github/workflows/foundation.yml` with four required jobs: `swift-packages`, `savari-backend`, `dastak-backend`, and `ios-build`. Use `ubuntu-24.04` for each isolated backend job and `macos-26` for Swift/iOS jobs. Select Xcode `26.6`, pin Supabase CLI `2.90.0` through `supabase/setup-cli@v2`, and pin Deno `2.8.2` through `denoland/setup-deno@v2`. Each backend job starts only its own ephemeral Supabase stack on the hosted runner, runs its migrations, pgTAP/grant gate, Deno function tests, static migration tests, checks, and formatting, then stops that stack. No developer-Mac Docker installation is required. The iOS job builds all five schemes with the generic iOS Simulator destination and signing disabled. The Swift job runs both tested shared packages and parses both domain package manifests.
 
 - [ ] **Step 4: Document exact local commands and project selection**
 
 Add this block to `README.md`:
 
 ```bash
-# Savari backend
+# Link Savari only after its non-production project is approved
 cd Backends/Savari
-supabase start
+supabase link --project-ref <savari-non-production-project-ref>
+cd ../..
 
-# Dastak backend
+# Link Dastak only after its separate non-production project is approved
 cd Backends/Dastak
-supabase start
+supabase link --project-ref <dastak-non-production-project-ref>
+cd ../..
 
-# Whole foundation gate from repository root
+# Docker-free developer-Mac gate
 scripts/test-foundation.sh
+
+# Guarded linked non-production database gate
+REMOTE_FOUNDATION_CONFIRM=nonproduction-only \
+SAVARI_NONPROD_PROJECT_REF=<savari-non-production-project-ref> \
+DASTAK_NONPROD_PROJECT_REF=<dastak-non-production-project-ref> \
+scripts/test-foundation-remote.sh
 ```
 
 State that `supabase link` must be executed independently inside each backend after the owner creates the corresponding non-production project, that the two project refs must differ, and that neither backend may be linked to the archived prototype project `mxpszppootpltifzvjla`.
@@ -851,10 +872,14 @@ Run:
 
 ```bash
 scripts/test-foundation.sh
+REMOTE_FOUNDATION_CONFIRM=nonproduction-only \
+SAVARI_NONPROD_PROJECT_REF=<savari-non-production-project-ref> \
+DASTAK_NONPROD_PROJECT_REF=<dastak-non-production-project-ref> \
+scripts/test-foundation-remote.sh
 git diff --check
 ```
 
-Expected when all prerequisites are available: every local package, static contract, security, function, and Debug build check passes. On this machine the script must retain and report the pending Docker/Postgres failure while its independently runnable package, Deno, shell, workflow, and iOS checks are verified separately.
+Expected: the Mac gate passes without Docker. After separately approved project creation, linking, and migration deployment, the remote gate verifies both distinct owner-approved non-production databases and refuses missing, mismatched, identical, or archived project refs. It never performs the linking or deployment itself and cannot infer an environment from a project ref.
 
 ```bash
 git add .github README.md scripts
@@ -866,7 +891,8 @@ git commit -m "ci: add marketplace foundation gate"
 Do not start the Savari or Dastak core plans until all of the following are true:
 
 - The old prototype is excluded from the launch workspace and no new changes target it.
-- Savari and Dastak local backends each reset, migrate, and pass their own pgTAP and Deno tests.
+- Hosted CI resets and migrates isolated Savari and Dastak stacks and passes each pgTAP, grant, and Deno gate.
+- Both distinct linked non-production backends have their migrations applied and pass linked lint, pgTAP, and grant verification.
 - The two product package dependency graphs do not import one another.
 - Apple and Google sign-in are configured in non-production for each product.
 - Accounts can be bootstrapped with a required but explicitly unverified phone number.

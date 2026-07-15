@@ -13,6 +13,15 @@ require_contains() {
   fi
 }
 
+require_not_contains() {
+  local path="$1"
+  local rejected="$2"
+  if grep -F -q -- "$rejected" "$path"; then
+    printf 'RED: %s contains forbidden contract: %s\n' "$path" "$rejected" >&2
+    exit 1
+  fi
+}
+
 require_contains Packages/MarketplaceInfrastructure/Package.swift 'exact: "2.37.0"'
 
 require_contains Apps/Savari/Sources/Savari/SavariApp.swift 'MarketplaceAuthenticationShell'
@@ -34,11 +43,21 @@ for product in Savari Dastak; do
 done
 
 require_contains scripts/test-foundation.sh 'for backend in Savari Dastak'
-require_contains scripts/test-foundation.sh 'supabase start'
-require_contains scripts/test-foundation.sh 'supabase db reset --local'
-require_contains scripts/test-foundation.sh '"$repo_root/scripts/test-backend-security.sh" "$backend"'
-require_contains scripts/test-foundation.sh 'trap cleanup_backend EXIT INT TERM'
-require_contains scripts/test-foundation.sh 'supabase stop --no-backup'
+require_not_contains scripts/test-foundation.sh 'docker'
+require_not_contains scripts/test-foundation.sh 'supabase start'
+require_not_contains scripts/test-foundation.sh 'supabase db reset --local'
+require_contains scripts/test-foundation-remote.sh 'REMOTE_FOUNDATION_CONFIRM'
+require_contains scripts/test-foundation-remote.sh 'nonproduction-only'
+require_contains scripts/test-foundation-remote.sh 'SAVARI_NONPROD_PROJECT_REF'
+require_contains scripts/test-foundation-remote.sh 'DASTAK_NONPROD_PROJECT_REF'
+require_contains scripts/test-foundation-remote.sh 'supabase/.temp/project-ref'
+require_contains scripts/test-foundation-remote.sh 'supabase db lint --linked --fail-on error'
+require_contains scripts/test-foundation-remote.sh '"$repo_root/scripts/test-backend-security.sh" "$backend" --linked'
+require_not_contains scripts/test-foundation-remote.sh 'supabase link'
+require_not_contains scripts/test-foundation-remote.sh 'supabase db push'
+require_not_contains scripts/test-foundation-remote.sh 'supabase db reset'
+require_not_contains scripts/test-foundation-remote.sh 'supabase functions deploy'
+require_contains scripts/test-backend-security.sh 'scope="${2:---local}"'
 
 for product in Savari Dastak; do
   require_contains \

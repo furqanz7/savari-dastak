@@ -21,20 +21,26 @@ xcodebuild -workspace SavariDastak.xcworkspace -scheme Savari -configuration Deb
 Always run backend commands from the relevant product directory under `Backends/`, never from the repository root or `Legacy/`.
 
 ```sh
-# Savari backend (run independently from the repository root)
+# Link Savari only after its non-production project is approved
 cd Backends/Savari
-supabase start
 supabase link --project-ref <savari-non-production-project-ref>
 cd ../..
 
-# Dastak backend (run independently from the repository root)
+# Link Dastak only after its separate non-production project is approved
 cd Backends/Dastak
-supabase start
 supabase link --project-ref <dastak-non-production-project-ref>
 cd ../..
 
-# Whole foundation gate from repository root
+# Mac source, package, function, and iOS gate; Docker is not required
 scripts/test-foundation.sh
+
+# Linked non-production database gate; this does not push migrations
+REMOTE_FOUNDATION_CONFIRM=nonproduction-only \
+SAVARI_NONPROD_PROJECT_REF=<savari-non-production-project-ref> \
+DASTAK_NONPROD_PROJECT_REF=<dastak-non-production-project-ref> \
+scripts/test-foundation-remote.sh
 ```
 
 After the owner creates the corresponding non-production project, execute `supabase link` independently from each backend directory. The Savari and Dastak project refs must differ. Neither backend may be linked to the archived prototype project `mxpszppootpltifzvjla`.
+
+`scripts/test-foundation.sh` runs without Docker on the developer Mac. GitHub Actions keeps the isolated container-backed migration and pgTAP jobs on hosted runners. `scripts/test-foundation-remote.sh` verifies the two explicitly named, already-linked databases through lint, pgTAP, and grant checks. It never links a project, pushes a migration, deploys a function, provisions an owner, or resets a database. Supabase project refs do not identify their environment to the script, so both refs must be owner-approved non-production projects before it is run; every remote mutation remains a separately approved task.
