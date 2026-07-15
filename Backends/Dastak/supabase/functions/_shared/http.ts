@@ -4,6 +4,8 @@ export type ApiErrorCode =
   | "invalid_phone_number"
   | "account_already_exists"
   | "idempotency_conflict"
+  | "access_denied"
+  | "evidence_url_unavailable"
   | "internal_error";
 
 export type ApiError = { error: { code: ApiErrorCode; message: string } };
