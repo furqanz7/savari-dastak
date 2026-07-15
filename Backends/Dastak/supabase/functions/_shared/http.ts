@@ -1,0 +1,15 @@
+export type ApiErrorCode =
+  | "authentication_required"
+  | "validation_failed"
+  | "invalid_phone_number"
+  | "account_already_exists"
+  | "idempotency_conflict"
+  | "internal_error";
+
+export type ApiError = { error: { code: ApiErrorCode; message: string } };
+
+export const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });

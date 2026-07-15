@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "strict": true
+  },
+  "fmt": {
+    "lineWidth": 100
+  },
+  "tasks": {
+    "check": "deno check bootstrap-account/index.ts tests/bootstrap-account/handler.test.ts",
+    "test": "deno test --allow-env tests/"
+  }
+}
