@@ -291,14 +291,21 @@ git commit -m "feat: add marketplace foundation packages"
 ### Task 3: Add Apple/Google sign-in, mandatory phone completion, and bootstrap-only owner provisioning
 
 **Files:**
+- Modify: `Packages/MarketplaceInfrastructure/Package.swift`
 - Create: `Packages/MarketplaceInfrastructure/Sources/MarketplaceInfrastructure/AuthenticationClient.swift`
 - Create: `Packages/MarketplaceInfrastructure/Sources/MarketplaceInfrastructure/AccountBootstrapClient.swift`
 - Create: `Packages/MarketplaceInfrastructure/Tests/MarketplaceInfrastructureTests/AuthenticationClientTests.swift`
 - Create: `Packages/MarketplaceInfrastructure/Tests/MarketplaceInfrastructureTests/AuthenticationTestDoubles.swift`
-- Create: `Apps/Savari/Savari/Auth/SavariAuthenticationCoordinator.swift`
-- Create: `Apps/Dastak/Dastak/Auth/DastakAuthenticationCoordinator.swift`
-- Create: `Apps/Savari/SavariTests/AuthenticationCoordinatorTests.swift`
-- Create: `Apps/Dastak/DastakTests/AuthenticationCoordinatorTests.swift`
+- Create: `Apps/Savari/Sources/Savari/Auth/SavariAuthenticationCoordinator.swift`
+- Create: `Apps/Dastak/Sources/Dastak/Auth/DastakAuthenticationCoordinator.swift`
+- Create: `Apps/Savari/Tests/SavariTests/AuthenticationCoordinatorTests.swift`
+- Create: `Apps/Dastak/Tests/DastakTests/AuthenticationCoordinatorTests.swift`
+- Create: `Apps/Savari/Supporting/Info.plist`
+- Create: `Apps/Dastak/Supporting/Info.plist`
+- Create: `Apps/Savari/Supporting/SignInWithApple.entitlements`
+- Create: `Apps/Dastak/Supporting/SignInWithApple.entitlements`
+- Modify: `Apps/Savari/Savari.xcodeproj/project.pbxproj`
+- Modify: `Apps/Dastak/Dastak.xcodeproj/project.pbxproj`
 - Create: `Backends/Savari/scripts/grant-initial-owner.sql`
 - Create: `Backends/Dastak/scripts/grant-initial-owner.sql`
 
@@ -306,7 +313,7 @@ git commit -m "feat: add marketplace foundation packages"
 - Consumes: Apple identity token or Google ID token, the product-specific Supabase configuration, and a required E.164 phone number after successful provider sign-in.
 - Produces: one session route: `signedOut`, `needsProfile`, or `active`; only a database owner can provision the one owner membership.
 
-**Execution dependency:** This task creates and unit-tests the client boundary with fakes. Do not run a provider integration or the owner SQL until Task 4 has created `bootstrap-account`, `private.account_memberships`, and `audit.events`.
+**Execution dependency:** This task creates and unit-tests the client boundary with fakes. Do not run a provider integration or the owner SQL until Task 4 has created `bootstrap-account`, `private.account_memberships`, and `audit.events`. The fresh bundle identifiers require new Google OAuth registrations; never copy an OAuth client ID or reversed URL scheme from the archived prototype.
 
 - [ ] **Step 1: Write failing session-route and bootstrap tests**
 
@@ -350,8 +357,8 @@ actor FakeAuthenticationClient: AuthenticationClient {
 
 ```bash
 swift test --package-path Packages/MarketplaceInfrastructure
-xcodebuild test -workspace SavariDastak.xcworkspace -scheme Savari -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
-xcodebuild test -workspace SavariDastak.xcworkspace -scheme Dastak -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+xcodebuild test -workspace SavariDastak.xcworkspace -scheme Savari -destination 'platform=iOS Simulator,name=iPhone 17e'
+xcodebuild test -workspace SavariDastak.xcworkspace -scheme Dastak -destination 'platform=iOS Simulator,name=iPhone 17e'
 ```
 
 Expected: FAIL because the authentication client and coordinators do not exist.
@@ -376,11 +383,11 @@ public protocol AuthenticationClient: Sendable {
 }
 ```
 
-The concrete product client sends Apple/Google tokens to that product's Supabase Auth provider, then calls `bootstrap-account` when no account profile exists. A user cannot navigate to driver, partner, merchant, customer, or owner functionality until the required phone profile returns from the server. The UI is a functional sign-in/profile completion shell only; visual design remains deferred.
+Add the Supabase Swift dependency to `MarketplaceInfrastructure` and keep its `SupabaseClient` private inside a concrete `SupabaseAuthenticationClient`. The concrete product client sends Apple/Google tokens to that product's Supabase Auth provider, uses only a fixed self-account lookup to determine whether a profile exists, then calls the typed `bootstrap-account` function when it does not. It must never expose a generic Supabase or table client. A user cannot navigate to driver, partner, merchant, customer, or owner functionality until the required phone profile returns from the server. The UI is a functional sign-in/profile completion shell only; visual design remains deferred.
 
 - [ ] **Step 4: Configure every app target for both providers**
 
-Add Sign in with Apple capability to all five app targets. Add Google Sign In only through `MarketplaceInfrastructure` and provide each app target's exact reversed client ID URL scheme. The Savari and Dastak customer targets use their respective project configuration; the three operational targets use the appropriate product configuration but the same `AuthenticationClient` contract.
+Add Sign in with Apple capability to all five app targets. Add the local `MarketplaceInfrastructure` package to both app projects and compile the two customer coordinators against it. Use the product `Supporting/Info.plist` files to declare the Google URL scheme as `$(GOOGLE_REVERSED_CLIENT_ID)` for every app target. Set `GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured` as the only tracked default so the shell builds but cannot start a real Google sign-in. The actual reversed client ID belongs only in an ignored product-specific `Secrets.xcconfig` after new OAuth clients are registered for the fresh bundle identifiers. The runtime configuration must fail closed when the placeholder remains. The Savari and Dastak customer targets use their respective product configuration; the three operational targets use the appropriate product configuration but the same `AuthenticationClient` contract.
 
 Do not make phone number a credential, recovery factor, or payment proof. Mark it `unverified` until a future budgeted OTP project is approved.
 
@@ -420,8 +427,8 @@ There is no Edge Function, app route, RPC, or table policy that can grant `owner
 
 ```bash
 swift test --package-path Packages/MarketplaceInfrastructure
-xcodebuild test -workspace SavariDastak.xcworkspace -scheme Savari -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
-xcodebuild test -workspace SavariDastak.xcworkspace -scheme Dastak -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+xcodebuild test -workspace SavariDastak.xcworkspace -scheme Savari -destination 'platform=iOS Simulator,name=iPhone 17e'
+xcodebuild test -workspace SavariDastak.xcworkspace -scheme Dastak -destination 'platform=iOS Simulator,name=iPhone 17e'
 git add Apps Packages Backends
 git commit -m "feat: add marketplace authentication bootstrap"
 ```
@@ -557,7 +564,7 @@ export const json = (body: unknown, status = 200) =>
 
 - [ ] **Step 5: Configure provider and secret boundaries manually in both non-production dashboards**
 
-Enable Apple and Google providers in each non-production Supabase project. Configure distinct redirect URLs and OAuth client IDs for Savari and Dastak targets. Set only server secrets with:
+Enable Apple and Google providers in each non-production Supabase project. Configure distinct redirect URLs and OAuth client IDs for Savari and Dastak targets. After each new Google OAuth registration, place its reversed client ID only in the matching ignored `Secrets.xcconfig`; do not reuse the archived prototype value. Set only server secrets with:
 
 ```bash
 supabase secrets set SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" --project-ref "$SUPABASE_NONPROD_PROJECT_REF"

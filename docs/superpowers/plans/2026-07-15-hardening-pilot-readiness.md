@@ -87,9 +87,10 @@ MARKETPLACE_PRODUCT = savari
 SUPABASE_URL = https://example.supabase.co
 SUPABASE_PUBLISHABLE_KEY = replace-me
 GOOGLE_CLIENT_ID = replace-me.apps.googleusercontent.com
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.replace-me
 ```
 
-Ignore actual `Secrets.xcconfig` files. `AppConfiguration` reads Info.plist-injected values, requires matching product names, HTTPS URL, and nonempty publishable key. It must never accept a service role, Razorpay secret, bridge secret, or Apple Maps private key.
+Ignore actual `Secrets.xcconfig` files. `AppConfiguration` reads Info.plist-injected values, requires matching product names, HTTPS URL, nonempty publishable key, and a non-placeholder Google client/reversed-client pair. It must never accept a service role, Razorpay secret, bridge secret, or Apple Maps private key.
 
 Configure Supabase Auth so the initial session behavior uses the current Supabase Swift opt-in `emitLocalSessionAsInitialSession: true`, then independently checks `session.isExpired` before routing a user into an authenticated store.
 
