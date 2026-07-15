@@ -1,0 +1,681 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		06E4A60EC147BB0C587A481C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 96C4BEFB5EDB2146908C65DA /* Foundation.framework */; };
+		2BF95860DE7F2CF566B37278 /* SavariApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26CD6CE5C628D5AFA540887 /* SavariApp.swift */; };
+		4FF20DAC6ABDFD7ADE6968B9 /* SavariAdminTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AFC714CF72791A3BB02DB38 /* SavariAdminTests.swift */; };
+		6B8A3DCA35A03806240F34BA /* SavariTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF9C0C953776EA1342D7BA86 /* SavariTests.swift */; };
+		7ABCB2897DFADA2B1DC92292 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 96C4BEFB5EDB2146908C65DA /* Foundation.framework */; };
+		881075257AB54AB177F9FE9C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 96C4BEFB5EDB2146908C65DA /* Foundation.framework */; };
+		963E26EE1C762283D3A8B1DD /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 96C4BEFB5EDB2146908C65DA /* Foundation.framework */; };
+		AE9DCECD62B39EE449BE89FB /* SavariAdminApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3F6090AAD7D1768F80D253 /* SavariAdminApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		732FD2B666AC78134AE2AC4F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CC8937940424A7C30F0DF289 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FF9A24A637FD7B42C1CD4F6F;
+			remoteInfo = SavariAdmin;
+		};
+		B4C1D85197CA77F182C94352 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CC8937940424A7C30F0DF289 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 16C40535967CDEB1FCBB256D;
+			remoteInfo = Savari;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		9007D86937D5F2D99ED349D6 /* SavariAdminTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SavariAdminTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		96C4BEFB5EDB2146908C65DA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		9946100FC1FECA26EE382972 /* SavariAdmin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SavariAdmin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9AFC714CF72791A3BB02DB38 /* SavariAdminTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavariAdminTests.swift; sourceTree = "<group>"; };
+		AF9C0C953776EA1342D7BA86 /* SavariTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavariTests.swift; sourceTree = "<group>"; };
+		C4538D30159A63123C781AC9 /* SavariTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SavariTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D289290CAA801B051272F6D6 /* Savari.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Savari.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F26CD6CE5C628D5AFA540887 /* SavariApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavariApp.swift; sourceTree = "<group>"; };
+		FF3F6090AAD7D1768F80D253 /* SavariAdminApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavariAdminApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		016725BDA92EE321B40293E7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7ABCB2897DFADA2B1DC92292 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1E090DD1C5EA809DEEAE4ABE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				881075257AB54AB177F9FE9C /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D782F6662611B283FEC4EEE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				06E4A60EC147BB0C587A481C /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EFED78936FF599F436EF308D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				963E26EE1C762283D3A8B1DD /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		14A721D37A33E1494CF2502B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				5ED4FDDF3B3E9A13A731FFB8 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		29CD745F471E46DE26FA722B /* SavariTests */ = {
+			isa = PBXGroup;
+			children = (
+				AF9C0C953776EA1342D7BA86 /* SavariTests.swift */,
+			);
+			name = SavariTests;
+			path = SavariTests;
+			sourceTree = "<group>";
+		};
+		405ADEE5E712830268ECE255 /* Savari */ = {
+			isa = PBXGroup;
+			children = (
+				F26CD6CE5C628D5AFA540887 /* SavariApp.swift */,
+			);
+			name = Savari;
+			path = Savari;
+			sourceTree = "<group>";
+		};
+		5ED4FDDF3B3E9A13A731FFB8 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				96C4BEFB5EDB2146908C65DA /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		89A6730516C1E756512E4B39 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				405ADEE5E712830268ECE255 /* Savari */,
+				B974E9B45CEA0711377E7FD2 /* SavariAdmin */,
+			);
+			name = Sources;
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		8A58332650E03FE5192AD6C3 = {
+			isa = PBXGroup;
+			children = (
+				CF7A2D0FEA90DF56D1AA63DB /* Products */,
+				14A721D37A33E1494CF2502B /* Frameworks */,
+				89A6730516C1E756512E4B39 /* Sources */,
+				CEF9857E32BF142F1729AFD3 /* Tests */,
+			);
+			sourceTree = "<group>";
+		};
+		B974E9B45CEA0711377E7FD2 /* SavariAdmin */ = {
+			isa = PBXGroup;
+			children = (
+				FF3F6090AAD7D1768F80D253 /* SavariAdminApp.swift */,
+			);
+			name = SavariAdmin;
+			path = SavariAdmin;
+			sourceTree = "<group>";
+		};
+		CEF9857E32BF142F1729AFD3 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				29CD745F471E46DE26FA722B /* SavariTests */,
+				D8045EDB898C40076201F91E /* SavariAdminTests */,
+			);
+			name = Tests;
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		CF7A2D0FEA90DF56D1AA63DB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D289290CAA801B051272F6D6 /* Savari.app */,
+				C4538D30159A63123C781AC9 /* SavariTests.xctest */,
+				9946100FC1FECA26EE382972 /* SavariAdmin.app */,
+				9007D86937D5F2D99ED349D6 /* SavariAdminTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D8045EDB898C40076201F91E /* SavariAdminTests */ = {
+			isa = PBXGroup;
+			children = (
+				9AFC714CF72791A3BB02DB38 /* SavariAdminTests.swift */,
+			);
+			name = SavariAdminTests;
+			path = SavariAdminTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		16C40535967CDEB1FCBB256D /* Savari */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 64C4BC14A231980F3900C57C /* Build configuration list for PBXNativeTarget "Savari" */;
+			buildPhases = (
+				0ABF0D02F4CCE0CF43CB50F3 /* Sources */,
+				4D782F6662611B283FEC4EEE /* Frameworks */,
+				5A01E726E53C51289D6D5B79 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Savari;
+			productName = Savari;
+			productReference = D289290CAA801B051272F6D6 /* Savari.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1FDD1106C7987915A56E571E /* SavariAdminTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F02C0B33B5F8ED1E04E83710 /* Build configuration list for PBXNativeTarget "SavariAdminTests" */;
+			buildPhases = (
+				C9F35D7963E44C95700C2742 /* Sources */,
+				016725BDA92EE321B40293E7 /* Frameworks */,
+				FAE9BF6FF3FE70925C524F30 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B2A59EF7C92B8DA2E0232FC4 /* PBXTargetDependency */,
+			);
+			name = SavariAdminTests;
+			productName = SavariAdminTests;
+			productReference = 9007D86937D5F2D99ED349D6 /* SavariAdminTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		98F95E67DA508BA4FE688DB2 /* SavariTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3DCC22223531041C9AC38543 /* Build configuration list for PBXNativeTarget "SavariTests" */;
+			buildPhases = (
+				E4E3ABB0222A0BEBF6767F89 /* Sources */,
+				1E090DD1C5EA809DEEAE4ABE /* Frameworks */,
+				DA2A35CCBECBD0B98DAFE89B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1E8199CA4509187FA9F1DB57 /* PBXTargetDependency */,
+			);
+			name = SavariTests;
+			productName = SavariTests;
+			productReference = C4538D30159A63123C781AC9 /* SavariTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		FF9A24A637FD7B42C1CD4F6F /* SavariAdmin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8CE26B91BEB241932CF3DD76 /* Build configuration list for PBXNativeTarget "SavariAdmin" */;
+			buildPhases = (
+				B21A2C0ED5195982E865AC31 /* Sources */,
+				EFED78936FF599F436EF308D /* Frameworks */,
+				B1231451F7E9C914EDE4E97E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SavariAdmin;
+			productName = SavariAdmin;
+			productReference = 9946100FC1FECA26EE382972 /* SavariAdmin.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CC8937940424A7C30F0DF289 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+			};
+			buildConfigurationList = F32FBE51CBB2FD7F140CAFA2 /* Build configuration list for PBXProject "Savari" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 8A58332650E03FE5192AD6C3;
+			minimizedProjectReferenceProxies = 0;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = CF7A2D0FEA90DF56D1AA63DB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				16C40535967CDEB1FCBB256D /* Savari */,
+				98F95E67DA508BA4FE688DB2 /* SavariTests */,
+				FF9A24A637FD7B42C1CD4F6F /* SavariAdmin */,
+				1FDD1106C7987915A56E571E /* SavariAdminTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5A01E726E53C51289D6D5B79 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1231451F7E9C914EDE4E97E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DA2A35CCBECBD0B98DAFE89B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FAE9BF6FF3FE70925C524F30 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0ABF0D02F4CCE0CF43CB50F3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2BF95860DE7F2CF566B37278 /* SavariApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B21A2C0ED5195982E865AC31 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AE9DCECD62B39EE449BE89FB /* SavariAdminApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C9F35D7963E44C95700C2742 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4FF20DAC6ABDFD7ADE6968B9 /* SavariAdminTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E4E3ABB0222A0BEBF6767F89 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B8A3DCA35A03806240F34BA /* SavariTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1E8199CA4509187FA9F1DB57 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Savari;
+			target = 16C40535967CDEB1FCBB256D /* Savari */;
+			targetProxy = B4C1D85197CA77F182C94352 /* PBXContainerItemProxy */;
+		};
+		B2A59EF7C92B8DA2E0232FC4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = SavariAdmin;
+			target = FF9A24A637FD7B42C1CD4F6F /* SavariAdmin */;
+			targetProxy = 732FD2B666AC78134AE2AC4F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2D75231A2B05595624883B7E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.savari.admin;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		86449F7B4DA0A64EE246D938 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.savari.admin;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A56DCBF2CD11538AE1F64796 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.savari.app;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A725A2374176957D4D44C6ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C863528F676BC54398FF524E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		CAC7504619C20DD4693C2626 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.savari.app.tests;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Savari.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Savari";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		CBA5B332E22DB4679EF55DD0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.savari.app.tests;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Savari.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Savari";
+			};
+			name = Debug;
+		};
+		D8C955244EB6128D29D56334 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.savari.app;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		EC22BE8D2F58B6975E6C31A1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.savari.admin.tests;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SavariAdmin.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SavariAdmin";
+			};
+			name = Debug;
+		};
+		F00681190A6A15D902A1D853 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.savari.admin.tests;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SavariAdmin.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SavariAdmin";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3DCC22223531041C9AC38543 /* Build configuration list for PBXNativeTarget "SavariTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CAC7504619C20DD4693C2626 /* Release */,
+				CBA5B332E22DB4679EF55DD0 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		64C4BC14A231980F3900C57C /* Build configuration list for PBXNativeTarget "Savari" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D8C955244EB6128D29D56334 /* Release */,
+				A56DCBF2CD11538AE1F64796 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8CE26B91BEB241932CF3DD76 /* Build configuration list for PBXNativeTarget "SavariAdmin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				86449F7B4DA0A64EE246D938 /* Release */,
+				2D75231A2B05595624883B7E /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F02C0B33B5F8ED1E04E83710 /* Build configuration list for PBXNativeTarget "SavariAdminTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F00681190A6A15D902A1D853 /* Release */,
+				EC22BE8D2F58B6975E6C31A1 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F32FBE51CBB2FD7F140CAFA2 /* Build configuration list for PBXProject "Savari" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C863528F676BC54398FF524E /* Debug */,
+				A725A2374176957D4D44C6ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CC8937940424A7C30F0DF289 /* Project object */;
+}

@@ -1,8 +1,14 @@
 .DS_Store
-supabase/.temp/
 **/xcuserdata/
 *.xcuserstate
 *.xcbkptlist
 DerivedData/
 .worktrees/
 .superpowers/
+**/supabase/.temp/
+**/supabase/.branches/
+**/.env
+**/.env.*
+!**/.env.example
+**/Secrets.xcconfig
+**/.build/

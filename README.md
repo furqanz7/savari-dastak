@@ -1,23 +1,21 @@
-# Savari
+# Savari and Dastak
 
-Savari is currently scoped to the native iOS app and Supabase backend.
+This repository contains the native iOS launch workspace for Savari and Dastak.
 
 ## Project Layout
 
-- `Savari.xcodeproj` - Xcode project for the iOS app.
-- `Savari/` - SwiftUI app source, assets, Info.plist, and entitlements.
-- `supabase/` - Supabase project config and database migrations.
+- `SavariDastak.xcworkspace` - shared Xcode workspace for all launch applications.
+- `Apps/` - product-specific iOS application projects and sources.
+- `Backends/` - product-specific backend projects and migrations.
+- `Packages/` - shared Swift packages.
+- `Legacy/SavariPrototype/` - preserved pre-launch prototype; never use it as a deployment source.
 
 ## Build
 
 ```sh
-xcodebuild -project Savari.xcodeproj -scheme Savari -configuration Debug -destination 'generic/platform=iOS Simulator' build
+xcodebuild -workspace SavariDastak.xcworkspace -scheme Savari -configuration Debug -destination 'generic/platform=iOS Simulator' build
 ```
 
-## Supabase
+## Backend Commands
 
-The project is linked to Supabase through the local Supabase CLI metadata. Apply migrations with:
-
-```sh
-SUPABASE_DB_PASSWORD='<database-password>' supabase db push --linked --include-all --yes
-```
+Always run backend commands from the relevant product directory under `Backends/`, never from the repository root or `Legacy/`.
