@@ -2,6 +2,24 @@ import Combine
 import Foundation
 import MarketplaceFoundation
 
+private enum BackendProfileNormalization {
+    static func displayName(_ value: String) -> String {
+        value
+            .split(whereSeparator: isECMAScriptWhitespace)
+            .joined(separator: " ")
+    }
+
+    static func phoneNumber(_ value: String) -> String {
+        let leadingTrimmed = value.drop(while: isECMAScriptWhitespace)
+        let trailingTrimmed = leadingTrimmed.reversed().drop(while: isECMAScriptWhitespace)
+        return String(trailingTrimmed.reversed())
+    }
+
+    private static func isECMAScriptWhitespace(_ character: Character) -> Bool {
+        character.isWhitespace || character == "\u{FEFF}"
+    }
+}
+
 @MainActor
 public final class AuthenticationCoordinator: ObservableObject {
     @Published public private(set) var route: AccountRoute = .signedOut
@@ -13,14 +31,12 @@ public final class AuthenticationCoordinator: ObservableObject {
         let phoneNumber: String
 
         init(displayName: String, phoneNumber: String) throws {
-            let normalizedName = displayName
-                .split(whereSeparator: { $0.isWhitespace })
-                .joined(separator: " ")
+            let normalizedName = BackendProfileNormalization.displayName(displayName)
             guard (1...80).contains(normalizedName.count) else {
                 throw AuthenticationClientError.invalidProfileDisplayName
             }
 
-            let normalizedPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedPhone = BackendProfileNormalization.phoneNumber(phoneNumber)
             self.displayName = normalizedName
             self.phoneNumber = try E164PhoneNumber(normalizedPhone).rawValue
         }

@@ -36,6 +36,37 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.route, .active)
     }
 
+    func testRetryWithByteOrderMarksReusesServerEquivalentIdempotencyKey() async throws {
+        let client = ProfileSubmissionAuthenticationClient(
+            bootstrapOutcomes: [.ambiguousFailure, .success],
+            restoreRoutes: [.needsProfile, .needsProfile, .active]
+        )
+        let coordinator = AuthenticationCoordinator(client: client)
+        await coordinator.restore()
+
+        do {
+            try await coordinator.completeProfile(
+                displayName: "\u{FEFF}Test\u{FEFF}\u{FEFF}User\u{FEFF}",
+                phoneNumber: "\u{FEFF}+919876543210\u{FEFF}"
+            )
+            XCTFail("Expected the first response to be ambiguous")
+        } catch let error as AuthenticationClientError {
+            XCTAssertEqual(error, .bootstrapAmbiguousFailure)
+        }
+
+        try await coordinator.completeProfile(
+            displayName: "Test User",
+            phoneNumber: "+919876543210"
+        )
+
+        let requests = await client.recordedBootstrapRequests()
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[0].key, requests[1].key)
+        XCTAssertEqual(requests[0].displayName, "Test User")
+        XCTAssertEqual(requests[0].phoneNumber, "+919876543210")
+        XCTAssertEqual(coordinator.route, .active)
+    }
+
     func testRapidDuplicateSubmissionIsSuppressedWhileFirstRequestIsInFlight() async throws {
         let client = ProfileSubmissionAuthenticationClient(
             bootstrapOutcomes: [.success],
