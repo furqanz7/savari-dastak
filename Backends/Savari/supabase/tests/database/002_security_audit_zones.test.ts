@@ -8,6 +8,15 @@ Deno.test("Savari security migration keeps evidence and client business data con
     ),
   );
   const config = await Deno.readTextFile(new URL("../../config.toml", import.meta.url));
+  const deleteRevocation = await Deno.readTextFile(
+    new URL(
+      "../../migrations/20260715170000_revoke_authenticated_storage_delete.sql",
+      import.meta.url,
+    ),
+  );
+  const behavioralTest = await Deno.readTextFile(
+    new URL("./002_security_audit_zones.pgtap.sql", import.meta.url),
+  );
 
   for (
     const contract of [
@@ -39,4 +48,20 @@ Deno.test("Savari security migration keeps evidence and client business data con
   assert(!migration.includes("alter table storage.objects enable row level security"));
   assertStringIncludes(config, "[functions.issue-evidence-url]");
   assertStringIncludes(config, "verify_jwt = true");
+  assertStringIncludes(
+    deleteRevocation,
+    "revoke delete on table storage.objects from authenticated;",
+  );
+  for (
+    const behavior of [
+      "authenticated selects only its own exact evidence path",
+      "authenticated inserts its own exact evidence path",
+      "authenticated cannot insert a foreign evidence path",
+      "authenticated cannot insert a nested evidence path",
+      "authenticated cannot insert an empty evidence filename",
+      "authenticated updates its own evidence object",
+      "authenticated cannot update a foreign evidence object",
+      "authenticated cannot delete evidence objects",
+    ]
+  ) assertStringIncludes(behavioralTest, behavior);
 });

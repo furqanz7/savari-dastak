@@ -4,6 +4,7 @@ import MarketplaceFoundation
 
 actor FakeAuthenticationClient: AuthenticationClient {
     let restoredRoute: AccountRoute
+    private var googleRedirectURL: URL?
 
     init(restoredRoute: AccountRoute) {
         self.restoredRoute = restoredRoute
@@ -11,6 +12,9 @@ actor FakeAuthenticationClient: AuthenticationClient {
 
     func signInWithApple(identityToken: String, nonce: String) async throws {}
     func signInWithGoogle(idToken: String) async throws {}
+    func signInWithGoogle(redirectTo: URL) async throws {
+        googleRedirectURL = redirectTo
+    }
     func restoreAccount() async throws -> AccountRoute { restoredRoute }
     func bootstrapAccount(
         displayName: String,
@@ -18,6 +22,10 @@ actor FakeAuthenticationClient: AuthenticationClient {
         key: IdempotencyKey
     ) async throws {}
     func signOut() async throws {}
+
+    func recordedGoogleRedirectURL() -> URL? {
+        googleRedirectURL
+    }
 }
 
 actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
@@ -37,6 +45,7 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
     private let bootstrapResult: AccountBootstrapResult
     private var appleCredentials: AppleCredentials?
     private var googleIDToken: String?
+    private var googleRedirectURL: URL?
     private var bootstrapRequest: BootstrapRequest?
     private var profileLookupAccountID: UUID?
     private var signOutCallCount = 0
@@ -60,6 +69,10 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
 
     func signInWithGoogle(idToken: String) async throws {
         googleIDToken = idToken
+    }
+
+    func signInWithGoogle(redirectTo: URL) async throws {
+        googleRedirectURL = redirectTo
     }
 
     func currentAccountID() async -> UUID? {
@@ -94,6 +107,10 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
 
     func recordedGoogleIDToken() -> String? {
         googleIDToken
+    }
+
+    func recordedGoogleRedirectURL() -> URL? {
+        googleRedirectURL
     }
 
     func recordedBootstrapRequest() -> BootstrapRequest? {

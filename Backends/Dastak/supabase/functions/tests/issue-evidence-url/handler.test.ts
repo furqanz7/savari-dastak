@@ -167,6 +167,34 @@ Deno.test("evidence URL denies an inactive or suspended owner for an owner-only 
   assertError(response, 403, "access_denied");
 });
 
+Deno.test("evidence URL maps owner lookup failures to internal_error without signing", async () => {
+  let ownerLookupCalls = 0;
+  let signingCalls = 0;
+  const response = await handleIssueEvidenceUrl(
+    request({
+      body: {
+        bucket: "dastak-evidence",
+        objectPath: `dastak-partner/${otherAccountId}/route-photo.jpg`,
+        operation: "download",
+      },
+    }),
+    dependencies({
+      isActiveOwner: () => {
+        ownerLookupCalls += 1;
+        return Promise.reject(new Error("membership lookup unavailable"));
+      },
+      signDownload: () => {
+        signingCalls += 1;
+        return Promise.resolve("https://example.test/unexpected");
+      },
+    }),
+  );
+
+  assertEquals(ownerLookupCalls, 1);
+  assertEquals(signingCalls, 0);
+  assertError(response, 500, "internal_error");
+});
+
 Deno.test("evidence URL permits an active owner to download foundation-only object roots", async () => {
   let ownerLookupAccountId: string | undefined;
   const response = await handleIssueEvidenceUrl(

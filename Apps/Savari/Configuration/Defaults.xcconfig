@@ -1,2 +1,5 @@
 GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured
+MARKETPLACE_PRODUCT = Savari
+MARKETPLACE_SUPABASE_URL = https:/$()/not-configured.invalid
+MARKETPLACE_SUPABASE_PUBLISHABLE_KEY = not-configured
 #include? "Secrets.xcconfig"

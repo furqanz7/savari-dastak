@@ -33,6 +33,12 @@
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>MarketplaceProduct</key>
+	<string>$(MARKETPLACE_PRODUCT)</string>
+	<key>MarketplaceSupabasePublishableKey</key>
+	<string>$(MARKETPLACE_SUPABASE_PUBLISHABLE_KEY)</string>
+	<key>MarketplaceSupabaseURL</key>
+	<string>$(MARKETPLACE_SUPABASE_URL)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

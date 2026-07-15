@@ -1,10 +1,14 @@
+import MarketplaceInfrastructure
 import SwiftUI
 
 @main
 struct DastakMerchantApp: App {
     var body: some Scene {
         WindowGroup {
-            Text("Dastak Merchant")
+            MarketplaceAuthenticationShell(
+                applicationName: "Dastak Merchant",
+                product: .dastak
+            )
         }
     }
 }

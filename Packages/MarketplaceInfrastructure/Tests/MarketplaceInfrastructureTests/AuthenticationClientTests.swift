@@ -7,6 +7,44 @@ import XCTest
 @testable import MarketplaceInfrastructure
 
 final class AuthenticationClientTests: XCTestCase {
+    func testRuntimeBackendConfigurationAcceptsOnlyTheExpectedConfiguredProduct() throws {
+        let configuration = try BackendConfiguration.runtime(
+            product: .savari,
+            infoDictionary: [
+                "MarketplaceProduct": "Savari",
+                "MarketplaceSupabaseURL": "https://savari-nonprod.supabase.co",
+                "MarketplaceSupabasePublishableKey": "publishable-key"
+            ]
+        )
+
+        XCTAssertEqual(configuration.product, "Savari")
+        XCTAssertEqual(configuration.supabaseURL.absoluteString, "https://savari-nonprod.supabase.co")
+        XCTAssertEqual(configuration.publishableKey, "publishable-key")
+        XCTAssertThrowsError(
+            try BackendConfiguration.runtime(
+                product: .dastak,
+                infoDictionary: [
+                    "MarketplaceProduct": "Savari",
+                    "MarketplaceSupabaseURL": "https://savari-nonprod.supabase.co",
+                    "MarketplaceSupabasePublishableKey": "publishable-key"
+                ]
+            )
+        )
+    }
+
+    func testRuntimeBackendConfigurationFailsClosedForTrackedPlaceholders() {
+        XCTAssertThrowsError(
+            try BackendConfiguration.runtime(
+                product: .savari,
+                infoDictionary: [
+                    "MarketplaceProduct": "Savari",
+                    "MarketplaceSupabaseURL": "https://not-configured.invalid",
+                    "MarketplaceSupabasePublishableKey": "not-configured"
+                ]
+            )
+        )
+    }
+
     func testRestoreWithoutCurrentAccountReturnsSignedOut() async throws {
         let operations = RecordingAuthenticationOperations(currentAccountID: nil)
         let client = SupabaseAuthenticationClient(operations: operations)
@@ -228,6 +266,32 @@ final class AuthenticationClientTests: XCTestCase {
         XCTAssertThrowsError(try configuration.validatedReversedClientID()) { error in
             XCTAssertEqual(error as? AuthenticationClientError, .googleOAuthNotConfigured)
         }
+    }
+
+    @MainActor
+    func testSharedCoordinatorUsesSupabaseGoogleWebFlowAndRestoresServerRoute() async throws {
+        let client = FakeAuthenticationClient(restoredRoute: .needsProfile)
+        let coordinator = AuthenticationCoordinator(client: client)
+
+        try await coordinator.signInWithGoogle(
+            configuration: GoogleOAuthConfiguration(
+                reversedClientID: "com.googleusercontent.apps.configured"
+            )
+        )
+
+        XCTAssertEqual(coordinator.route, .needsProfile)
+        let redirectURL = await client.recordedGoogleRedirectURL()
+        XCTAssertEqual(
+            redirectURL,
+            URL(string: "com.googleusercontent.apps.configured://login-callback")
+        )
+    }
+
+    func testAppleNonceHashUsesSHA256ForSystemCredentialRequest() {
+        XCTAssertEqual(
+            AppleSignInNonce.sha256("test"),
+            "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        )
     }
 
     func testGoogleOAuthDefaultsAreOverridableAndWiredToEveryAppTarget() throws {

@@ -14,6 +14,7 @@ final class FunctionClientTests: XCTestCase {
         )
         let client = SupabaseFunctionClient(
             configuration: makeConfiguration(),
+            accessTokenProvider: { "user-access-token" },
             transport: transport.send
         )
         let key = try XCTUnwrap(IdempotencyKey(rawValue: "request-123"))
@@ -32,7 +33,7 @@ final class FunctionClientTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Idempotency-Key"), "request-123")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
         XCTAssertEqual(request.value(forHTTPHeaderField: "apikey"), "publishable-key")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer publishable-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer user-access-token")
         XCTAssertEqual(
             try JSONDecoder().decode(TestRequest.self, from: try XCTUnwrap(request.httpBody)),
             TestRequest(value: 2)
@@ -42,10 +43,11 @@ final class FunctionClientTests: XCTestCase {
     func testInvokeDecodesTypedAPIError() async throws {
         let transport = RecordingTransport(
             statusCode: 409,
-            responseBody: #"{"code":"duplicate_request","message":"Already processed"}"#.data(using: .utf8)!
+            responseBody: #"{"error":{"code":"duplicate_request","message":"Already processed"}}"#.data(using: .utf8)!
         )
         let client = SupabaseFunctionClient(
             configuration: makeConfiguration(),
+            accessTokenProvider: { "user-access-token" },
             transport: transport.send
         )
         let key = try XCTUnwrap(IdempotencyKey(rawValue: "request-456"))
@@ -64,6 +66,57 @@ final class FunctionClientTests: XCTestCase {
             )
         } catch {
             XCTFail("Expected FunctionClientError, got \(error)")
+        }
+    }
+
+    func testInvokeRejectsMissingUserAccessTokenBeforeTransport() async throws {
+        let transport = RecordingTransport(
+            statusCode: 200,
+            responseBody: #"{"accepted":true}"#.data(using: .utf8)!
+        )
+        let client = SupabaseFunctionClient(
+            configuration: makeConfiguration(),
+            accessTokenProvider: { nil },
+            transport: transport.send
+        )
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "request-without-session"))
+
+        do {
+            let _: TestResponse = try await client.invoke(
+                "perform-action",
+                request: TestRequest(value: 2),
+                idempotencyKey: key
+            )
+            XCTFail("Expected authentication to be required")
+        } catch let error as FunctionClientError {
+            XCTAssertEqual(error, .authenticationRequired)
+        }
+
+        let callCount = await transport.recordedCallCount()
+        XCTAssertEqual(callCount, 0)
+    }
+
+    func testInvokeMapsMalformedErrorEnvelopePredictably() async throws {
+        let transport = RecordingTransport(
+            statusCode: 500,
+            responseBody: #"{"error":{"message":"database details"}}"#.data(using: .utf8)!
+        )
+        let client = SupabaseFunctionClient(
+            configuration: makeConfiguration(),
+            accessTokenProvider: { "user-access-token" },
+            transport: transport.send
+        )
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "request-malformed-error"))
+
+        do {
+            let _: TestResponse = try await client.invoke(
+                "perform-action",
+                request: TestRequest(value: 2),
+                idempotencyKey: key
+            )
+            XCTFail("Expected a malformed error response")
+        } catch let error as FunctionClientError {
+            XCTAssertEqual(error, .malformedErrorResponse(statusCode: 500))
         }
     }
 
@@ -89,6 +142,7 @@ private actor RecordingTransport {
 
     private let response: TransportResponse
     private var request: URLRequest?
+    private var callCount = 0
 
     init(statusCode: Int, responseBody: Data) {
         response = (
@@ -103,11 +157,16 @@ private actor RecordingTransport {
     }
 
     func send(_ request: URLRequest) async throws -> TransportResponse {
+        callCount += 1
         self.request = request
         return response
     }
 
     func recordedRequest() -> URLRequest? {
         request
+    }
+
+    func recordedCallCount() -> Int {
+        callCount
     }
 }

@@ -1,6 +1,6 @@
 begin;
 
-select plan(29);
+select plan(38);
 
 select policies_are('public', 'accounts', array['accounts_select_self']);
 select table_privs_are('authenticated', 'public', 'accounts', array['SELECT']);
@@ -59,6 +59,60 @@ select results_eq(
   $$select name from public.service_zones where name like 'tap %' order by name$$,
   array['tap active zone']::text[],
   'authenticated reads active service zones only'
+);
+reset role;
+
+select is(
+  has_table_privilege('authenticated', 'storage.objects', 'DELETE'),
+  false,
+  'authenticated has no storage.objects delete privilege'
+);
+
+insert into storage.objects (bucket_id, name) values
+  ('dastak-evidence', 'dastak-partner/11111111-1111-4111-8111-111111111111/existing.jpg'),
+  ('dastak-evidence', 'dastak-partner/22222222-2222-4222-8222-222222222222/foreign.jpg');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+
+select results_eq(
+  $$select name from storage.objects where bucket_id = 'dastak-evidence' order by name$$,
+  array['dastak-partner/11111111-1111-4111-8111-111111111111/existing.jpg']::text[],
+  'authenticated selects only its own exact evidence path'
+);
+select lives_ok(
+  $$insert into storage.objects (bucket_id, name) values ('dastak-evidence', 'dastak-partner/11111111-1111-4111-8111-111111111111/new.jpg')$$,
+  'authenticated inserts its own exact evidence path'
+);
+select throws_like(
+  $$insert into storage.objects (bucket_id, name) values ('dastak-evidence', 'dastak-partner/22222222-2222-4222-8222-222222222222/denied.jpg')$$,
+  '%row-level security%',
+  'authenticated cannot insert a foreign evidence path'
+);
+select throws_like(
+  $$insert into storage.objects (bucket_id, name) values ('dastak-evidence', 'dastak-partner/11111111-1111-4111-8111-111111111111/nested/file.jpg')$$,
+  '%row-level security%',
+  'authenticated cannot insert a nested evidence path'
+);
+select throws_like(
+  $$insert into storage.objects (bucket_id, name) values ('dastak-evidence', 'dastak-partner/11111111-1111-4111-8111-111111111111/')$$,
+  '%row-level security%',
+  'authenticated cannot insert an empty evidence filename'
+);
+select results_eq(
+  $$update storage.objects set metadata = '{"verified":true}'::jsonb where name = 'dastak-partner/11111111-1111-4111-8111-111111111111/existing.jpg' returning name$$,
+  array['dastak-partner/11111111-1111-4111-8111-111111111111/existing.jpg']::text[],
+  'authenticated updates its own evidence object'
+);
+select results_eq(
+  $$update storage.objects set metadata = '{"verified":true}'::jsonb where name = 'dastak-partner/22222222-2222-4222-8222-222222222222/foreign.jpg' returning name$$,
+  array[]::text[],
+  'authenticated cannot update a foreign evidence object'
+);
+select throws_like(
+  $$delete from storage.objects where name = 'dastak-partner/11111111-1111-4111-8111-111111111111/existing.jpg'$$,
+  '%permission denied%',
+  'authenticated cannot delete evidence objects'
 );
 reset role;
 

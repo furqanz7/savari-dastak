@@ -10,7 +10,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../MarketplaceFoundation"),
-        .package(url: "https://github.com/supabase/supabase-swift.git", from: "2.0.0")
+        .package(url: "https://github.com/supabase/supabase-swift.git", exact: "2.37.0")
     ],
     targets: [
         .target(

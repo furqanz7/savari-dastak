@@ -11,6 +11,7 @@ public enum AccountRoute: Equatable, Sendable {
 public protocol AuthenticationClient: Sendable {
     func signInWithApple(identityToken: String, nonce: String) async throws
     func signInWithGoogle(idToken: String) async throws
+    func signInWithGoogle(redirectTo: URL) async throws
     func restoreAccount() async throws -> AccountRoute
     func bootstrapAccount(
         displayName: String,
@@ -56,11 +57,20 @@ public struct GoogleOAuthConfiguration: Equatable, Sendable {
         }
         return normalized
     }
+
+    public func callbackURL() throws -> URL {
+        let clientID = try validatedReversedClientID()
+        guard let url = URL(string: "\(clientID)://login-callback") else {
+            throw AuthenticationClientError.googleOAuthNotConfigured
+        }
+        return url
+    }
 }
 
 protocol SupabaseAuthenticationOperations: Sendable {
     func signInWithApple(identityToken: String, nonce: String) async throws
     func signInWithGoogle(idToken: String) async throws
+    func signInWithGoogle(redirectTo: URL) async throws
     func currentAccountID() async -> UUID?
     func accountProfileID(for accountID: UUID) async throws -> UUID?
     func bootstrapAccount(
@@ -88,6 +98,10 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
 
     public func signInWithGoogle(idToken: String) async throws {
         try await operations.signInWithGoogle(idToken: idToken)
+    }
+
+    public func signInWithGoogle(redirectTo: URL) async throws {
+        try await operations.signInWithGoogle(redirectTo: redirectTo)
     }
 
     public func restoreAccount() async throws -> AccountRoute {
@@ -167,6 +181,13 @@ extension SupabaseAuthenticationClient {
                     provider: .google,
                     idToken: idToken
                 )
+            )
+        }
+
+        func signInWithGoogle(redirectTo: URL) async throws {
+            try await supabaseClient.auth.signInWithOAuth(
+                provider: .google,
+                redirectTo: redirectTo
             )
         }
 

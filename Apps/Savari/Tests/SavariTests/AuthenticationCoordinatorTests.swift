@@ -1,3 +1,4 @@
+import Foundation
 import MarketplaceFoundation
 import MarketplaceInfrastructure
 import XCTest
@@ -29,7 +30,6 @@ final class AuthenticationCoordinatorTests: XCTestCase {
 
         do {
             try await coordinator.signInWithGoogle(
-                idToken: "google-token",
                 configuration: GoogleOAuthConfiguration(
                     reversedClientID: GoogleOAuthConfiguration.notConfiguredClientID
                 )
@@ -188,6 +188,10 @@ private actor FakeAuthenticationClient: AuthenticationClient {
     }
 
     func signInWithGoogle(idToken: String) async throws {
+        googleCalls += 1
+    }
+
+    func signInWithGoogle(redirectTo: URL) async throws {
         googleCalls += 1
     }
 

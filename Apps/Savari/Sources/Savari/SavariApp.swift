@@ -1,10 +1,14 @@
+import MarketplaceInfrastructure
 import SwiftUI
 
 @main
 struct SavariApp: App {
     var body: some Scene {
         WindowGroup {
-            Text("Savari")
+            MarketplaceAuthenticationShell(
+                applicationName: "Savari",
+                product: .savari
+            )
         }
     }
 }

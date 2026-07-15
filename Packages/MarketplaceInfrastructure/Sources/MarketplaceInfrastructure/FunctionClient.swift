@@ -14,17 +14,25 @@ public protocol FunctionClient: Sendable {
 
 public enum FunctionClientError: Error, Equatable, Sendable {
     case api(statusCode: Int, code: String?, message: String)
+    case authenticationRequired
     case invalidResponse
+    case malformedErrorResponse(statusCode: Int)
 }
 
 public struct SupabaseFunctionClient: FunctionClient {
+    public typealias AccessTokenProvider = @Sendable () async throws -> String?
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
 
     private let configuration: BackendConfiguration
+    private let accessTokenProvider: AccessTokenProvider
     private let transport: Transport
 
-    public init(configuration: BackendConfiguration) {
+    public init(
+        configuration: BackendConfiguration,
+        accessTokenProvider: @escaping AccessTokenProvider
+    ) {
         self.configuration = configuration
+        self.accessTokenProvider = accessTokenProvider
         self.transport = { request in
             guard #available(macOS 12.0, *) else {
                 throw FunctionClientError.invalidResponse
@@ -37,8 +45,13 @@ public struct SupabaseFunctionClient: FunctionClient {
         }
     }
 
-    init(configuration: BackendConfiguration, transport: @escaping Transport) {
+    init(
+        configuration: BackendConfiguration,
+        accessTokenProvider: @escaping AccessTokenProvider,
+        transport: @escaping Transport
+    ) {
         self.configuration = configuration
+        self.accessTokenProvider = accessTokenProvider
         self.transport = transport
     }
 
@@ -47,6 +60,17 @@ public struct SupabaseFunctionClient: FunctionClient {
         request: Request,
         idempotencyKey: IdempotencyKey
     ) async throws -> Response {
+        let accessToken: String
+        do {
+            guard let token = try await accessTokenProvider()?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !token.isEmpty else {
+                throw FunctionClientError.authenticationRequired
+            }
+            accessToken = token
+        } catch {
+            throw FunctionClientError.authenticationRequired
+        }
+
         let url = configuration.supabaseURL
             .appendingPathComponent("functions")
             .appendingPathComponent("v1")
@@ -57,18 +81,20 @@ public struct SupabaseFunctionClient: FunctionClient {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(configuration.publishableKey, forHTTPHeaderField: "apikey")
         urlRequest.setValue(
-            "Bearer \(configuration.publishableKey)",
+            "Bearer \(accessToken)",
             forHTTPHeaderField: "Authorization"
         )
         urlRequest.setValue(idempotencyKey.rawValue, forHTTPHeaderField: "X-Idempotency-Key")
 
         let (data, response) = try await transport(urlRequest)
         guard (200..<300).contains(response.statusCode) else {
-            let payload = try JSONDecoder().decode(APIErrorPayload.self, from: data)
+            guard let payload = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data) else {
+                throw FunctionClientError.malformedErrorResponse(statusCode: response.statusCode)
+            }
             throw FunctionClientError.api(
                 statusCode: response.statusCode,
-                code: payload.code,
-                message: payload.message
+                code: payload.error.code,
+                message: payload.error.message
             )
         }
 
@@ -76,7 +102,11 @@ public struct SupabaseFunctionClient: FunctionClient {
     }
 }
 
+private struct APIErrorEnvelope: Decodable {
+    let error: APIErrorPayload
+}
+
 private struct APIErrorPayload: Decodable {
-    let code: String?
+    let code: String
     let message: String
 }
