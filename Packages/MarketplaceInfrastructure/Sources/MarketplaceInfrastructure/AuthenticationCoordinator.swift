@@ -4,19 +4,52 @@ import MarketplaceFoundation
 
 private enum BackendProfileNormalization {
     static func displayName(_ value: String) -> String {
-        value
-            .split(whereSeparator: isECMAScriptWhitespace)
-            .joined(separator: " ")
+        var normalized = ""
+        var pendingSpace = false
+
+        for scalar in value.unicodeScalars {
+            if isECMAScriptWhitespace(scalar) {
+                pendingSpace = !normalized.isEmpty
+            } else {
+                if pendingSpace {
+                    normalized.append(" ")
+                    pendingSpace = false
+                }
+                normalized.unicodeScalars.append(scalar)
+            }
+        }
+
+        return normalized
     }
 
     static func phoneNumber(_ value: String) -> String {
-        let leadingTrimmed = value.drop(while: isECMAScriptWhitespace)
-        let trailingTrimmed = leadingTrimmed.reversed().drop(while: isECMAScriptWhitespace)
-        return String(trailingTrimmed.reversed())
+        let scalars = value.unicodeScalars
+        guard
+            let first = scalars.firstIndex(where: { !isECMAScriptWhitespace($0) }),
+            let last = scalars.lastIndex(where: { !isECMAScriptWhitespace($0) })
+        else {
+            return ""
+        }
+        let end = scalars.index(after: last)
+        return String(value[first..<end])
     }
 
-    private static func isECMAScriptWhitespace(_ character: Character) -> Bool {
-        character.isWhitespace || character == "\u{FEFF}"
+    private static func isECMAScriptWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0009 ... 0x000D,
+             0x0020,
+             0x00A0,
+             0x1680,
+             0x2000 ... 0x200A,
+             0x2028 ... 0x2029,
+             0x202F,
+             0x205F,
+             0x3000,
+             0xFEFF:
+            return true
+        default:
+            return false
+        }
     }
 }
 

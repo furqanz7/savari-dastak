@@ -67,6 +67,55 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.route, .active)
     }
 
+    func testNextLineDoesNotCollapseAsECMAScriptWhitespace() async throws {
+        let client = ProfileSubmissionAuthenticationClient(
+            bootstrapOutcomes: [.ambiguousFailure, .ambiguousFailure],
+            restoreRoutes: [.needsProfile, .needsProfile, .needsProfile]
+        )
+        let coordinator = AuthenticationCoordinator(client: client)
+        await coordinator.restore()
+
+        for displayName in ["Test\u{0085}User", "Test User"] {
+            do {
+                try await coordinator.completeProfile(
+                    displayName: displayName,
+                    phoneNumber: "+919876543210"
+                )
+                XCTFail("Expected an ambiguous response")
+            } catch let error as AuthenticationClientError {
+                XCTAssertEqual(error, .bootstrapAmbiguousFailure)
+            }
+        }
+
+        let requests = await client.recordedBootstrapRequests()
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[0].displayName, "Test\u{0085}User")
+        XCTAssertNotEqual(requests[0].key, requests[1].key)
+    }
+
+    func testNextLineIsNotTrimmedFromPhoneNumber() async throws {
+        let client = ProfileSubmissionAuthenticationClient(
+            bootstrapOutcomes: [.success],
+            restoreRoutes: [.needsProfile, .active]
+        )
+        let coordinator = AuthenticationCoordinator(client: client)
+        await coordinator.restore()
+
+        do {
+            try await coordinator.completeProfile(
+                displayName: "Test User",
+                phoneNumber: "\u{0085}+919876543210"
+            )
+            XCTFail("Expected U+0085 to remain invalid under backend normalization")
+        } catch let error as AuthenticationClientError {
+            XCTAssertEqual(error, .invalidE164PhoneNumber)
+        }
+
+        let callCount = await client.bootstrapCallCount()
+        XCTAssertEqual(callCount, 0)
+        XCTAssertEqual(coordinator.route, .needsProfile)
+    }
+
     func testRapidDuplicateSubmissionIsSuppressedWhileFirstRequestIsInFlight() async throws {
         let client = ProfileSubmissionAuthenticationClient(
             bootstrapOutcomes: [.success],
