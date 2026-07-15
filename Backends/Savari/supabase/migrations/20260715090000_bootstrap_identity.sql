@@ -78,9 +78,10 @@ declare
   v_existing private.request_deduplication%rowtype;
   v_response_body jsonb;
 begin
+  -- Different idempotency keys must not race the initial account insert.
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
-      p_account_id::text || ':' || v_function_name || ':' || p_idempotency_key,
+      p_account_id::text || ':' || v_function_name,
       0
     )
   );

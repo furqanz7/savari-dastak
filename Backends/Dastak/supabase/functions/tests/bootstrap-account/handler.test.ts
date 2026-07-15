@@ -10,11 +10,20 @@ import type {
 } from "../../bootstrap-account/handler.ts";
 
 Deno.test("bootstrap account rejects missing authorization", async () => {
+  let authenticationAttempts = 0;
   const response = await handleBootstrapAccount(
     request({ headers: { "X-Idempotency-Key": "key-1" } }),
-    dependencies(),
+    dependencies({
+      authenticateBearer: () => {
+        authenticationAttempts += 1;
+        return Promise.resolve({
+          accountId: "22222222-2222-4222-8222-222222222222",
+        });
+      },
+    }),
   );
 
+  assertEquals(authenticationAttempts, 0);
   assertEquals(response.status, 401);
   assertEquals(await jsonBody(response), {
     error: {
@@ -22,6 +31,48 @@ Deno.test("bootstrap account rejects missing authorization", async () => {
       message: "A valid bearer token is required.",
     },
   });
+});
+
+Deno.test("bootstrap account authenticates an invalid bearer before request validation", async () => {
+  let authenticationAttempts = 0;
+  const response = await handleBootstrapAccount(
+    request({
+      authorization: "Bearer invalid-session-token",
+      body: { displayName: "   ", phoneNumber: "not-a-phone-number" },
+    }),
+    dependencies({
+      authenticateBearer: () => {
+        authenticationAttempts += 1;
+        return Promise.reject(new Error("invalid bearer token"));
+      },
+    }),
+  );
+
+  assertEquals(authenticationAttempts, 1);
+  assertEquals(response.status, 401);
+  assertEquals((await jsonBody(response)).error.code, "authentication_required");
+});
+
+Deno.test("bootstrap account rejects malformed authorization without authenticating", async () => {
+  let authenticationAttempts = 0;
+  const response = await handleBootstrapAccount(
+    request({
+      authorization: "Token session-token",
+      headers: { "X-Idempotency-Key": "key-1" },
+    }),
+    dependencies({
+      authenticateBearer: () => {
+        authenticationAttempts += 1;
+        return Promise.resolve({
+          accountId: "22222222-2222-4222-8222-222222222222",
+        });
+      },
+    }),
+  );
+
+  assertEquals(authenticationAttempts, 0);
+  assertEquals(response.status, 401);
+  assertEquals((await jsonBody(response)).error.code, "authentication_required");
 });
 
 Deno.test("bootstrap account rejects missing idempotency key", async () => {

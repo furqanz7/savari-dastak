@@ -48,21 +48,6 @@ export async function handleBootstrapAccount(
     );
   }
 
-  const idempotencyKey = request.headers.get("X-Idempotency-Key")?.trim() ?? "";
-  if (!idempotencyKey) {
-    return validationError("X-Idempotency-Key is required.");
-  }
-
-  const body = await parseBody(request);
-  if (!body.ok) {
-    return validationError("A JSON body with displayName and phoneNumber is required.");
-  }
-
-  const normalized = normalizeBody(body.value);
-  if (!normalized.ok) {
-    return normalized.response;
-  }
-
   let user: { accountId: string };
   try {
     user = await dependencies.authenticateBearer(authorization);
@@ -76,6 +61,21 @@ export async function handleBootstrapAccount(
       },
       401,
     );
+  }
+
+  const idempotencyKey = request.headers.get("X-Idempotency-Key")?.trim() ?? "";
+  if (!idempotencyKey) {
+    return validationError("X-Idempotency-Key is required.");
+  }
+
+  const body = await parseBody(request);
+  if (!body.ok) {
+    return validationError("A JSON body with displayName and phoneNumber is required.");
+  }
+
+  const normalized = normalizeBody(body.value);
+  if (!normalized.ok) {
+    return normalized.response;
   }
 
   try {
