@@ -136,7 +136,7 @@ xcodebuild -list -workspace SavariDastak.xcworkspace
 git diff --check
 ```
 
-Expected: the workspace lists only new Savari and Dastak schemes, and `git diff --check` prints no whitespace errors.
+Expected: the workspace lists only the five new Savari/Dastak application schemes plus shared package schemes, no legacy prototype scheme, and `git diff --check` prints no whitespace errors.
 
 - [ ] **Step 6: Commit the isolated workspace**
 
@@ -785,12 +785,33 @@ Create `scripts/test-foundation.sh`:
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
 swift test --package-path Packages/MarketplaceFoundation
 swift test --package-path Packages/MarketplaceInfrastructure
+swift package dump-package --package-path Packages/SavariDomain >/dev/null
+swift package dump-package --package-path Packages/DastakDomain >/dev/null
+if rg -n 'DastakDomain' Packages/SavariDomain || rg -n 'SavariDomain' Packages/DastakDomain; then
+  echo "Product domain packages must not depend on one another." >&2
+  exit 1
+fi
+deno test --allow-env Backends/Savari/supabase/functions/tests/
+deno test --allow-env Backends/Dastak/supabase/functions/tests/
+deno test --allow-read Backends/Savari/supabase/tests/database/001_identity_lock.test.ts Backends/Savari/supabase/tests/database/002_security_audit_zones.test.ts
+deno test --allow-read Backends/Dastak/supabase/tests/database/001_identity_lock.test.ts Backends/Dastak/supabase/tests/database/002_security_audit_zones.test.ts
 scripts/test-backend-security.sh Savari
 scripts/test-backend-security.sh Dastak
-xcodebuild -workspace SavariDastak.xcworkspace -scheme Savari -sdk iphonesimulator -configuration Debug build
-xcodebuild -workspace SavariDastak.xcworkspace -scheme Dastak -sdk iphonesimulator -configuration Debug build
+
+for scheme in Savari SavariAdmin Dastak DastakMerchant DastakAdmin; do
+  xcodebuild \
+    -workspace SavariDastak.xcworkspace \
+    -scheme "$scheme" \
+    -destination 'generic/platform=iOS Simulator' \
+    -configuration Debug \
+    CODE_SIGNING_ALLOWED=NO \
+    build
+done
 ```
 
 - [ ] **Step 2: Run the script before CI configuration**
@@ -799,11 +820,11 @@ xcodebuild -workspace SavariDastak.xcworkspace -scheme Dastak -sdk iphonesimulat
 scripts/test-foundation.sh
 ```
 
-Expected: FAIL only if a prerequisite is absent; install the missing tool or start local Supabase before proceeding. Do not weaken the script to mask a failing prerequisite.
+Expected: FAIL only if a prerequisite is absent. Report the exact missing prerequisite; do not weaken the script, install system software without owner approval, or treat an unavailable local Supabase stack as a pass.
 
 - [ ] **Step 3: Add CI jobs that mirror the local gate**
 
-Create `.github/workflows/foundation.yml` with four required jobs: `swift-packages`, `savari-backend`, `dastak-backend`, and `ios-build`. Pin the Xcode image and use `supabase/setup-cli@v1` plus `denoland/setup-deno@v2`. Each backend job starts only its own backend directory and runs its own migrations and Deno tests.
+Create `.github/workflows/foundation.yml` with four required jobs: `swift-packages`, `savari-backend`, `dastak-backend`, and `ios-build`. Use `ubuntu-24.04` for each isolated backend job and `macos-26` for Swift/iOS jobs. Select Xcode `26.6`, pin Supabase CLI `2.90.0` through `supabase/setup-cli@v2`, and pin Deno `2.8.2` through `denoland/setup-deno@v2`. Each backend job starts only its own backend directory, runs its migrations, pgTAP/grant gate, Deno function tests, static migration tests, checks, and formatting, then stops its local stack. The iOS job builds all five schemes with the generic iOS Simulator destination and signing disabled. The Swift job runs both tested shared packages and parses both domain package manifests.
 
 - [ ] **Step 4: Document exact local commands and project selection**
 
@@ -822,7 +843,7 @@ supabase start
 scripts/test-foundation.sh
 ```
 
-State that `supabase link` must be executed independently inside each backend after the owner creates the corresponding non-production project.
+State that `supabase link` must be executed independently inside each backend after the owner creates the corresponding non-production project, that the two project refs must differ, and that neither backend may be linked to the archived prototype project `mxpszppootpltifzvjla`.
 
 - [ ] **Step 5: Verify and commit the foundation gate**
 
@@ -833,7 +854,7 @@ scripts/test-foundation.sh
 git diff --check
 ```
 
-Expected: every local unit, security, function, and Debug workspace build check passes.
+Expected when all prerequisites are available: every local package, static contract, security, function, and Debug build check passes. On this machine the script must retain and report the pending Docker/Postgres failure while its independently runnable package, Deno, shell, workflow, and iOS checks are verified separately.
 
 ```bash
 git add .github README.md scripts
