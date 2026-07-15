@@ -8,7 +8,15 @@
 
 /* Begin PBXBuildFile section */
 		13F6641909457C06B89C50B4 /* DastakAdminApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7393478D80AEBF6ECFAD3B6 /* DastakAdminApp.swift */; };
+		4A4A4A4A4A4A4A4A4A4A4A4A /* AuthenticationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B4B4B4B4B4B4B4B4B4B4B4B /* AuthenticationCoordinatorTests.swift */; };
+		6A6A6A6A6A6A6A6A6A6A6A6A /* DastakAuthenticationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B6B6B6B6B6B6B6B6B6B6B6B /* DastakAuthenticationCoordinator.swift */; };
 		8AFEEAE74C2015D794184C53 /* DastakMerchantApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEB67F3237F03ECACBB65E3D /* DastakMerchantApp.swift */; };
+		718718718718718718718718 /* MarketplaceInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 712712712712712712712712 /* MarketplaceInfrastructure */; };
+		719719719719719719719719 /* MarketplaceFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 713713713713713713713713 /* MarketplaceFoundation */; };
+		71A71A71A71A71A71A71A71A /* MarketplaceInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 714714714714714714714714 /* MarketplaceInfrastructure */; };
+		71B71B71B71B71B71B71B71B /* MarketplaceFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 715715715715715715715715 /* MarketplaceFoundation */; };
+		71C71C71C71C71C71C71C71C /* MarketplaceInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 716716716716716716716716 /* MarketplaceInfrastructure */; };
+		71D71D71D71D71D71D71D71D /* MarketplaceInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 717717717717717717717717 /* MarketplaceInfrastructure */; };
 		8BD8AB4722E60D5D1B9E394E /* DastakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F4AF8EF952C8FE288A2E29 /* DastakTests.swift */; };
 		8D69905E9C394A25AFD4CBC4 /* DastakMerchantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C142CB347F221ACF0D27CD /* DastakMerchantTests.swift */; };
 		9406EE4208344F5EE4BBDDEA /* DastakAdminTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B904E5C6BCAD41FF8BEE5FC /* DastakAdminTests.swift */; };
@@ -41,6 +49,10 @@
 
 /* Begin PBXFileReference section */
 		06C142CB347F221ACF0D27CD /* DastakMerchantTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakMerchantTests.swift; sourceTree = "<group>"; };
+		4B4B4B4B4B4B4B4B4B4B4B4B /* AuthenticationCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthenticationCoordinatorTests.swift; sourceTree = "<group>"; };
+		6B6B6B6B6B6B6B6B6B6B6B6B /* DastakAuthenticationCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakAuthenticationCoordinator.swift; sourceTree = "<group>"; };
+		6D6D6D6D6D6D6D6D6D6D6D6D /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		6E6E6E6E6E6E6E6E6E6E6E6E /* SignInWithApple.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = SignInWithApple.entitlements; sourceTree = "<group>"; };
 		1B380B0452B976BF2A5DE99B /* DastakAdminTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DastakAdminTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DBF380F1FE1D56B113DBFBD /* DastakMerchantTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DastakMerchantTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3E142EFC320F2584292AC456 /* DastakMerchant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DastakMerchant.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -66,6 +78,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				71C71C71C71C71C71C71C71C /* MarketplaceInfrastructure in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -73,6 +86,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				71B71B71B71B71B71B71B71B /* MarketplaceFoundation in Frameworks */,
+				71A71A71A71A71A71A71A71A /* MarketplaceInfrastructure in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -87,6 +102,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				719719719719719719719719 /* MarketplaceFoundation in Frameworks */,
+				718718718718718718718718 /* MarketplaceInfrastructure in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -94,6 +111,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				71D71D71D71D71D71D71D71D /* MarketplaceInfrastructure in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -145,6 +163,7 @@
 		8CC467D2AECA16432D57D1A3 /* DastakTests */ = {
 			isa = PBXGroup;
 			children = (
+				4B4B4B4B4B4B4B4B4B4B4B4B /* AuthenticationCoordinatorTests.swift */,
 				B1F4AF8EF952C8FE288A2E29 /* DastakTests.swift */,
 			);
 			name = DastakTests;
@@ -170,6 +189,7 @@
 		AA51E9C705268647BA43BFC8 /* Dastak */ = {
 			isa = PBXGroup;
 			children = (
+				6C6C6C6C6C6C6C6C6C6C6C6C /* Auth */,
 				8E456A8A893F0026149CA7C8 /* DastakApp.swift */,
 			);
 			name = Dastak;
@@ -194,6 +214,7 @@
 				9B622917E368C0F8A8104F10 /* Frameworks */,
 				0ACFAC0E041AEE72689D15B3 /* Sources */,
 				AE3CA0F12C7DC21E452D56F6 /* Tests */,
+				6F6F6F6F6F6F6F6F6F6F6F6F /* Supporting */,
 			);
 			sourceTree = "<group>";
 		};
@@ -204,6 +225,25 @@
 			);
 			name = DastakAdminTests;
 			path = DastakAdminTests;
+			sourceTree = "<group>";
+		};
+		6C6C6C6C6C6C6C6C6C6C6C6C /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				6B6B6B6B6B6B6B6B6B6B6B6B /* DastakAuthenticationCoordinator.swift */,
+			);
+			name = Auth;
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		6F6F6F6F6F6F6F6F6F6F6F6F /* Supporting */ = {
+			isa = PBXGroup;
+			children = (
+				6D6D6D6D6D6D6D6D6D6D6D6D /* Info.plist */,
+				6E6E6E6E6E6E6E6E6E6E6E6E /* SignInWithApple.entitlements */,
+			);
+			name = Supporting;
+			path = Supporting;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -240,6 +280,9 @@
 			dependencies = (
 			);
 			name = DastakAdmin;
+			packageProductDependencies = (
+				717717717717717717717717 /* MarketplaceInfrastructure */,
+			);
 			productName = DastakAdmin;
 			productReference = 96E4578B39A3763443EF5598 /* DastakAdmin.app */;
 			productType = "com.apple.product-type.application";
@@ -257,6 +300,10 @@
 			dependencies = (
 			);
 			name = Dastak;
+			packageProductDependencies = (
+				712712712712712712712712 /* MarketplaceInfrastructure */,
+				713713713713713713713713 /* MarketplaceFoundation */,
+			);
 			productName = Dastak;
 			productReference = 8D878A197BA6A8D855996FD1 /* Dastak.app */;
 			productType = "com.apple.product-type.application";
@@ -275,6 +322,10 @@
 				769B654E3EE8EF3B923B62BD /* PBXTargetDependency */,
 			);
 			name = DastakTests;
+			packageProductDependencies = (
+				714714714714714714714714 /* MarketplaceInfrastructure */,
+				715715715715715715715715 /* MarketplaceFoundation */,
+			);
 			productName = DastakTests;
 			productReference = FB01BEB49EC50B8C67ADAB6D /* DastakTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -310,6 +361,9 @@
 			dependencies = (
 			);
 			name = DastakMerchant;
+			packageProductDependencies = (
+				716716716716716716716716 /* MarketplaceInfrastructure */,
+			);
 			productName = DastakMerchant;
 			productReference = 3E142EFC320F2584292AC456 /* DastakMerchant.app */;
 			productType = "com.apple.product-type.application";
@@ -322,6 +376,29 @@
 			attributes = {
 				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					486131F6E4C0B6F10ADA3BE7 = {
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
+					};
+					51D58DF103DED824F85DD03F = {
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
+					};
+					88E70E6AF4428C4AB51DDD84 = {
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
+					};
+				};
 			};
 			buildConfigurationList = FCA5315607F8712D4E6478AA /* Build configuration list for PBXProject "Dastak" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -333,6 +410,10 @@
 			);
 			mainGroup = BF532B9E5E2A53EA8059EC89;
 			minimizedProjectReferenceProxies = 0;
+			packageReferences = (
+				710710710710710710710710 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */,
+				711711711711711711711711 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 05E66D5BB2F1192F69B3775D /* Products */;
 			projectDirPath = "";
@@ -406,6 +487,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4A4A4A4A4A4A4A4A4A4A4A4A /* AuthenticationCoordinatorTests.swift in Sources */,
 				8BD8AB4722E60D5D1B9E394E /* DastakTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -438,6 +520,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6A6A6A6A6A6A6A6A6A6A6A6A /* DastakAuthenticationCoordinator.swift in Sources */,
 				DD61A65FDF5ABEF81F0E8F48 /* DastakApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -553,8 +636,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.dastak.admin;
@@ -572,8 +658,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.dastak.app;
@@ -627,8 +716,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.dastak.admin;
@@ -719,8 +811,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.dastak.merchant;
@@ -737,8 +832,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.dastak.merchant;
@@ -775,8 +873,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.dastak.app;
@@ -806,6 +907,50 @@
 			name = Debug;
 		};
 /* End XCBuildConfiguration section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		710710710710710710710710 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/MarketplaceInfrastructure;
+		};
+		711711711711711711711711 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/MarketplaceFoundation;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		712712712712712712712712 /* MarketplaceInfrastructure */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 710710710710710710710710 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */;
+			productName = MarketplaceInfrastructure;
+		};
+		713713713713713713713713 /* MarketplaceFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 711711711711711711711711 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */;
+			productName = MarketplaceFoundation;
+		};
+		714714714714714714714714 /* MarketplaceInfrastructure */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 710710710710710710710710 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */;
+			productName = MarketplaceInfrastructure;
+		};
+		715715715715715715715715 /* MarketplaceFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 711711711711711711711711 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */;
+			productName = MarketplaceFoundation;
+		};
+		716716716716716716716716 /* MarketplaceInfrastructure */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 710710710710710710710710 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */;
+			productName = MarketplaceInfrastructure;
+		};
+		717717717717717717717717 /* MarketplaceInfrastructure */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 710710710710710710710710 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */;
+			productName = MarketplaceInfrastructure;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */
 		0D250147FB684C13985B2E0C /* Build configuration list for PBXNativeTarget "DastakMerchant" */ = {

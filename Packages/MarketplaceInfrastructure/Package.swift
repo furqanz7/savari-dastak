@@ -4,17 +4,21 @@ import PackageDescription
 
 let package = Package(
     name: "MarketplaceInfrastructure",
-    platforms: [.iOS(.v17)],
+    platforms: [.iOS(.v17), .macOS(.v13)],
     products: [
         .library(name: "MarketplaceInfrastructure", targets: ["MarketplaceInfrastructure"])
     ],
     dependencies: [
-        .package(path: "../MarketplaceFoundation")
+        .package(path: "../MarketplaceFoundation"),
+        .package(url: "https://github.com/supabase/supabase-swift.git", from: "2.0.0")
     ],
     targets: [
         .target(
             name: "MarketplaceInfrastructure",
-            dependencies: ["MarketplaceFoundation"]
+            dependencies: [
+                "MarketplaceFoundation",
+                .product(name: "Supabase", package: "supabase-swift")
+            ]
         ),
         .testTarget(
             name: "MarketplaceInfrastructureTests",

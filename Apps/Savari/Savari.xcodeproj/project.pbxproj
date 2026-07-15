@@ -8,8 +8,15 @@
 
 /* Begin PBXBuildFile section */
 		2BF95860DE7F2CF566B37278 /* SavariApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26CD6CE5C628D5AFA540887 /* SavariApp.swift */; };
+		3A3A3A3A3A3A3A3A3A3A3A3A /* AuthenticationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B3B3B3B3B3B3B3B3B3B3B3B /* AuthenticationCoordinatorTests.swift */; };
 		4FF20DAC6ABDFD7ADE6968B9 /* SavariAdminTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AFC714CF72791A3BB02DB38 /* SavariAdminTests.swift */; };
+		5A5A5A5A5A5A5A5A5A5A5A5A /* SavariAuthenticationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B5B5B5B5B5B5B5B5B5B5B5B /* SavariAuthenticationCoordinator.swift */; };
 		6B8A3DCA35A03806240F34BA /* SavariTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF9C0C953776EA1342D7BA86 /* SavariTests.swift */; };
+		617617617617617617617617 /* MarketplaceInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 612612612612612612612612 /* MarketplaceInfrastructure */; };
+		618618618618618618618618 /* MarketplaceFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 613613613613613613613613 /* MarketplaceFoundation */; };
+		619619619619619619619619 /* MarketplaceInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 614614614614614614614614 /* MarketplaceInfrastructure */; };
+		61A61A61A61A61A61A61A61A /* MarketplaceFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 615615615615615615615615 /* MarketplaceFoundation */; };
+		61B61B61B61B61B61B61B61B /* MarketplaceInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 616616616616616616616616 /* MarketplaceInfrastructure */; };
 		AE9DCECD62B39EE449BE89FB /* SavariAdminApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3F6090AAD7D1768F80D253 /* SavariAdminApp.swift */; };
 /* End PBXBuildFile section */
 
@@ -32,6 +39,10 @@
 
 /* Begin PBXFileReference section */
 		9007D86937D5F2D99ED349D6 /* SavariAdminTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SavariAdminTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B3B3B3B3B3B3B3B3B3B3B3B /* AuthenticationCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthenticationCoordinatorTests.swift; sourceTree = "<group>"; };
+		5B5B5B5B5B5B5B5B5B5B5B5B /* SavariAuthenticationCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavariAuthenticationCoordinator.swift; sourceTree = "<group>"; };
+		5D5D5D5D5D5D5D5D5D5D5D5D /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5E5E5E5E5E5E5E5E5E5E5E5E /* SignInWithApple.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = SignInWithApple.entitlements; sourceTree = "<group>"; };
 		9946100FC1FECA26EE382972 /* SavariAdmin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SavariAdmin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9AFC714CF72791A3BB02DB38 /* SavariAdminTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavariAdminTests.swift; sourceTree = "<group>"; };
 		AF9C0C953776EA1342D7BA86 /* SavariTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavariTests.swift; sourceTree = "<group>"; };
@@ -53,6 +64,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				61A61A61A61A61A61A61A61A /* MarketplaceFoundation in Frameworks */,
+				619619619619619619619619 /* MarketplaceInfrastructure in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -60,6 +73,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				618618618618618618618618 /* MarketplaceFoundation in Frameworks */,
+				617617617617617617617617 /* MarketplaceInfrastructure in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,6 +82,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				61B61B61B61B61B61B61B61B /* MarketplaceInfrastructure in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -83,6 +99,7 @@
 		29CD745F471E46DE26FA722B /* SavariTests */ = {
 			isa = PBXGroup;
 			children = (
+				3B3B3B3B3B3B3B3B3B3B3B3B /* AuthenticationCoordinatorTests.swift */,
 				AF9C0C953776EA1342D7BA86 /* SavariTests.swift */,
 			);
 			name = SavariTests;
@@ -92,6 +109,7 @@
 		405ADEE5E712830268ECE255 /* Savari */ = {
 			isa = PBXGroup;
 			children = (
+				5C5C5C5C5C5C5C5C5C5C5C5C /* Auth */,
 				F26CD6CE5C628D5AFA540887 /* SavariApp.swift */,
 			);
 			name = Savari;
@@ -115,6 +133,7 @@
 				14A721D37A33E1494CF2502B /* Frameworks */,
 				89A6730516C1E756512E4B39 /* Sources */,
 				CEF9857E32BF142F1729AFD3 /* Tests */,
+				5F5F5F5F5F5F5F5F5F5F5F5F /* Supporting */,
 			);
 			sourceTree = "<group>";
 		};
@@ -125,6 +144,25 @@
 			);
 			name = SavariAdmin;
 			path = SavariAdmin;
+			sourceTree = "<group>";
+		};
+		5C5C5C5C5C5C5C5C5C5C5C5C /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				5B5B5B5B5B5B5B5B5B5B5B5B /* SavariAuthenticationCoordinator.swift */,
+			);
+			name = Auth;
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		5F5F5F5F5F5F5F5F5F5F5F5F /* Supporting */ = {
+			isa = PBXGroup;
+			children = (
+				5D5D5D5D5D5D5D5D5D5D5D5D /* Info.plist */,
+				5E5E5E5E5E5E5E5E5E5E5E5E /* SignInWithApple.entitlements */,
+			);
+			name = Supporting;
+			path = Supporting;
 			sourceTree = "<group>";
 		};
 		CEF9857E32BF142F1729AFD3 /* Tests */ = {
@@ -173,6 +211,10 @@
 			dependencies = (
 			);
 			name = Savari;
+			packageProductDependencies = (
+				612612612612612612612612 /* MarketplaceInfrastructure */,
+				613613613613613613613613 /* MarketplaceFoundation */,
+			);
 			productName = Savari;
 			productReference = D289290CAA801B051272F6D6 /* Savari.app */;
 			productType = "com.apple.product-type.application";
@@ -209,6 +251,10 @@
 				1E8199CA4509187FA9F1DB57 /* PBXTargetDependency */,
 			);
 			name = SavariTests;
+			packageProductDependencies = (
+				614614614614614614614614 /* MarketplaceInfrastructure */,
+				615615615615615615615615 /* MarketplaceFoundation */,
+			);
 			productName = SavariTests;
 			productReference = C4538D30159A63123C781AC9 /* SavariTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -226,6 +272,9 @@
 			dependencies = (
 			);
 			name = SavariAdmin;
+			packageProductDependencies = (
+				616616616616616616616616 /* MarketplaceInfrastructure */,
+			);
 			productName = SavariAdmin;
 			productReference = 9946100FC1FECA26EE382972 /* SavariAdmin.app */;
 			productType = "com.apple.product-type.application";
@@ -238,6 +287,22 @@
 			attributes = {
 				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					16C40535967CDEB1FCBB256D = {
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
+					};
+					FF9A24A637FD7B42C1CD4F6F = {
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
+					};
+				};
 			};
 			buildConfigurationList = F32FBE51CBB2FD7F140CAFA2 /* Build configuration list for PBXProject "Savari" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -249,6 +314,10 @@
 			);
 			mainGroup = 8A58332650E03FE5192AD6C3;
 			minimizedProjectReferenceProxies = 0;
+			packageReferences = (
+				610610610610610610610610 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */,
+				611611611611611611611611 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CF7A2D0FEA90DF56D1AA63DB /* Products */;
 			projectDirPath = "";
@@ -298,6 +367,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5A5A5A5A5A5A5A5A5A5A5A5A /* SavariAuthenticationCoordinator.swift in Sources */,
 				2BF95860DE7F2CF566B37278 /* SavariApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -322,6 +392,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A3A3A3A3A3A3A3A3A3A3A3A /* AuthenticationCoordinatorTests.swift in Sources */,
 				6B8A3DCA35A03806240F34BA /* SavariTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -350,8 +421,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.savari.admin;
@@ -368,8 +442,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.savari.admin;
@@ -387,8 +464,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.savari.app;
@@ -559,8 +639,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured;
+				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.savari.app;
@@ -610,6 +693,45 @@
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		610610610610610610610610 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/MarketplaceInfrastructure;
+		};
+		611611611611611611611611 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/MarketplaceFoundation;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		612612612612612612612612 /* MarketplaceInfrastructure */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 610610610610610610610610 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */;
+			productName = MarketplaceInfrastructure;
+		};
+		613613613613613613613613 /* MarketplaceFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 611611611611611611611611 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */;
+			productName = MarketplaceFoundation;
+		};
+		614614614614614614614614 /* MarketplaceInfrastructure */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 610610610610610610610610 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */;
+			productName = MarketplaceInfrastructure;
+		};
+		615615615615615615615615 /* MarketplaceFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 611611611611611611611611 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */;
+			productName = MarketplaceFoundation;
+		};
+		616616616616616616616616 /* MarketplaceInfrastructure */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 610610610610610610610610 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */;
+			productName = MarketplaceInfrastructure;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */
 		3DCC22223531041C9AC38543 /* Build configuration list for PBXNativeTarget "SavariTests" */ = {
