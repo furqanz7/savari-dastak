@@ -41,9 +41,9 @@ jobs:
       - run: supabase db test supabase/tests/database/001_identity.pgtap.sql --local
       - run: supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql --local
       - run: supabase db query --local --file ../../scripts/assert-no-client-dml.sql
-      - run: deno test --config supabase/functions/deno.json --no-lock --allow-env supabase/functions/tests/
-      - run: deno test --config supabase/functions/deno.json --no-lock --allow-read supabase/tests/database/
-      - run: find supabase/functions -name '*.ts' -print0 | xargs -0 deno check --config supabase/functions/deno.json --no-lock
+      - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-env supabase/functions/tests/
+      - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-read supabase/tests/database/
+      - run: find supabase/functions -name '*.ts' -print0 | xargs -0 deno check --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen
       - run: deno fmt --config supabase/functions/deno.json --check supabase/functions supabase/tests/database
       - if: always()
         run: supabase stop --no-backup
@@ -66,9 +66,9 @@ jobs:
       - run: supabase db test supabase/tests/database/001_identity.pgtap.sql --local
       - run: supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql --local
       - run: supabase db query --local --file ../../scripts/assert-no-client-dml.sql
-      - run: deno test --config supabase/functions/deno.json --no-lock --allow-env supabase/functions/tests/
-      - run: deno test --config supabase/functions/deno.json --no-lock --allow-read supabase/tests/database/
-      - run: find supabase/functions -name '*.ts' -print0 | xargs -0 deno check --config supabase/functions/deno.json --no-lock
+      - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-env supabase/functions/tests/
+      - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-read supabase/tests/database/
+      - run: find supabase/functions -name '*.ts' -print0 | xargs -0 deno check --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen
       - run: deno fmt --config supabase/functions/deno.json --check supabase/functions supabase/tests/database
       - if: always()
         run: supabase stop --no-backup

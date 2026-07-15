@@ -17,12 +17,13 @@ fi
 
 for backend in Savari Dastak; do
   config="Backends/$backend/supabase/functions/deno.json"
+  lockfile="Backends/$backend/supabase/functions/deno.lock"
   functions="Backends/$backend/supabase/functions"
   database_tests="Backends/$backend/supabase/tests/database"
 
-  deno test --config "$config" --no-lock --allow-env "$functions/tests/"
-  deno test --config "$config" --no-lock --allow-read "$database_tests/"
-  find "$functions" -name '*.ts' -print0 | xargs -0 deno check --config "$config" --no-lock
+  deno test --config "$config" --lock "$lockfile" --frozen --allow-env "$functions/tests/"
+  deno test --config "$config" --lock "$lockfile" --frozen --allow-read "$database_tests/"
+  find "$functions" -name '*.ts' -print0 | xargs -0 deno check --config "$config" --lock "$lockfile" --frozen
   deno fmt --config "$config" --check "$functions" "$database_tests"
 done
 
