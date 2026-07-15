@@ -7,13 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		06E4A60EC147BB0C587A481C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 96C4BEFB5EDB2146908C65DA /* Foundation.framework */; };
 		2BF95860DE7F2CF566B37278 /* SavariApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26CD6CE5C628D5AFA540887 /* SavariApp.swift */; };
 		4FF20DAC6ABDFD7ADE6968B9 /* SavariAdminTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AFC714CF72791A3BB02DB38 /* SavariAdminTests.swift */; };
 		6B8A3DCA35A03806240F34BA /* SavariTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF9C0C953776EA1342D7BA86 /* SavariTests.swift */; };
-		7ABCB2897DFADA2B1DC92292 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 96C4BEFB5EDB2146908C65DA /* Foundation.framework */; };
-		881075257AB54AB177F9FE9C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 96C4BEFB5EDB2146908C65DA /* Foundation.framework */; };
-		963E26EE1C762283D3A8B1DD /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 96C4BEFB5EDB2146908C65DA /* Foundation.framework */; };
 		AE9DCECD62B39EE449BE89FB /* SavariAdminApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF3F6090AAD7D1768F80D253 /* SavariAdminApp.swift */; };
 /* End PBXBuildFile section */
 
@@ -36,7 +32,6 @@
 
 /* Begin PBXFileReference section */
 		9007D86937D5F2D99ED349D6 /* SavariAdminTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SavariAdminTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		96C4BEFB5EDB2146908C65DA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		9946100FC1FECA26EE382972 /* SavariAdmin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SavariAdmin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9AFC714CF72791A3BB02DB38 /* SavariAdminTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavariAdminTests.swift; sourceTree = "<group>"; };
 		AF9C0C953776EA1342D7BA86 /* SavariTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavariTests.swift; sourceTree = "<group>"; };
@@ -51,7 +46,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7ABCB2897DFADA2B1DC92292 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -59,7 +53,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				881075257AB54AB177F9FE9C /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,7 +60,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				06E4A60EC147BB0C587A481C /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,7 +67,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				963E26EE1C762283D3A8B1DD /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,7 +76,6 @@
 		14A721D37A33E1494CF2502B /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				5ED4FDDF3B3E9A13A731FFB8 /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -106,14 +96,6 @@
 			);
 			name = Savari;
 			path = Savari;
-			sourceTree = "<group>";
-		};
-		5ED4FDDF3B3E9A13A731FFB8 /* iOS */ = {
-			isa = PBXGroup;
-			children = (
-				96C4BEFB5EDB2146908C65DA /* Foundation.framework */,
-			);
-			name = iOS;
 			sourceTree = "<group>";
 		};
 		89A6730516C1E756512E4B39 /* Sources */ = {

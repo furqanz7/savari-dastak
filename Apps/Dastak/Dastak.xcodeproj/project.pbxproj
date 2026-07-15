@@ -7,18 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0C56FFFB689EA03849ACC161 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10AF0E890498785E275BCC6 /* Foundation.framework */; };
 		13F6641909457C06B89C50B4 /* DastakAdminApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7393478D80AEBF6ECFAD3B6 /* DastakAdminApp.swift */; };
-		29E407B5EC701AD302F4987B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10AF0E890498785E275BCC6 /* Foundation.framework */; };
-		8544ED2568964DD21BADF277 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10AF0E890498785E275BCC6 /* Foundation.framework */; };
 		8AFEEAE74C2015D794184C53 /* DastakMerchantApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEB67F3237F03ECACBB65E3D /* DastakMerchantApp.swift */; };
 		8BD8AB4722E60D5D1B9E394E /* DastakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F4AF8EF952C8FE288A2E29 /* DastakTests.swift */; };
 		8D69905E9C394A25AFD4CBC4 /* DastakMerchantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C142CB347F221ACF0D27CD /* DastakMerchantTests.swift */; };
 		9406EE4208344F5EE4BBDDEA /* DastakAdminTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B904E5C6BCAD41FF8BEE5FC /* DastakAdminTests.swift */; };
-		95FEB631C0B100CABE3D0870 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10AF0E890498785E275BCC6 /* Foundation.framework */; };
-		D33CBD3E94703A4D9B7A3A06 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10AF0E890498785E275BCC6 /* Foundation.framework */; };
 		DD61A65FDF5ABEF81F0E8F48 /* DastakApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E456A8A893F0026149CA7C8 /* DastakApp.swift */; };
-		DE1F84AFC3AE959C0356F28B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10AF0E890498785E275BCC6 /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,7 +48,6 @@
 		8D878A197BA6A8D855996FD1 /* Dastak.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dastak.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E456A8A893F0026149CA7C8 /* DastakApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakApp.swift; sourceTree = "<group>"; };
 		96E4578B39A3763443EF5598 /* DastakAdmin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DastakAdmin.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		B10AF0E890498785E275BCC6 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		B1F4AF8EF952C8FE288A2E29 /* DastakTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakTests.swift; sourceTree = "<group>"; };
 		B7393478D80AEBF6ECFAD3B6 /* DastakAdminApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakAdminApp.swift; sourceTree = "<group>"; };
 		BEB67F3237F03ECACBB65E3D /* DastakMerchantApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakMerchantApp.swift; sourceTree = "<group>"; };
@@ -66,7 +59,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0C56FFFB689EA03849ACC161 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,7 +66,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D33CBD3E94703A4D9B7A3A06 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -82,7 +73,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				29E407B5EC701AD302F4987B /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,7 +80,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DE1F84AFC3AE959C0356F28B /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -98,7 +87,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				95FEB631C0B100CABE3D0870 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -106,7 +94,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8544ED2568964DD21BADF277 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -146,14 +133,6 @@
 			path = DastakAdmin;
 			sourceTree = "<group>";
 		};
-		5A4FFD2773DF8992248ECFE6 /* iOS */ = {
-			isa = PBXGroup;
-			children = (
-				B10AF0E890498785E275BCC6 /* Foundation.framework */,
-			);
-			name = iOS;
-			sourceTree = "<group>";
-		};
 		70C81D61DC07E54F4725F3F8 /* DastakMerchant */ = {
 			isa = PBXGroup;
 			children = (
@@ -175,7 +154,6 @@
 		9B622917E368C0F8A8104F10 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				5A4FFD2773DF8992248ECFE6 /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
