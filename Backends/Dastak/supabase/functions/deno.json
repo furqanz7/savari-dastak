@@ -6,7 +6,7 @@
     "lineWidth": 100
   },
   "tasks": {
-    "check": "deno check bootstrap-account/index.ts tests/bootstrap-account/handler.test.ts",
-    "test": "deno test --allow-env tests/"
+    "check": "deno check --config deno.json --lock deno.lock --frozen bootstrap-account/index.ts issue-evidence-url/index.ts tests/bootstrap-account/handler.test.ts tests/issue-evidence-url/handler.test.ts",
+    "test": "deno test --config deno.json --lock deno.lock --frozen --allow-env tests/"
   }
 }
