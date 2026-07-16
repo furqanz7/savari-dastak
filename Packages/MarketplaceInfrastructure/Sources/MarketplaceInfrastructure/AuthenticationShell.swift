@@ -220,8 +220,10 @@ private struct AuthenticationRouteView: View {
         do {
             errorMessage = nil
             try await coordinator.signInWithGoogle()
+        } catch let error as AuthenticationClientError {
+            errorMessage = error.googleSignInMessage
         } catch {
-            errorMessage = "Google sign-in is not configured or could not be completed."
+            errorMessage = AuthenticationClientError.oauthSignInFailed.googleSignInMessage
         }
     }
 

@@ -2,6 +2,9 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+#endif
 import MarketplaceFoundation
 import XCTest
 @testable import MarketplaceInfrastructure
@@ -326,6 +329,66 @@ final class AuthenticationClientTests: XCTestCase {
         XCTAssertEqual(
             try configuration.callbackURL(),
             URL(string: "com.dastak.merchant://login-callback")
+        )
+    }
+
+    #if canImport(AuthenticationServices)
+    func testOAuthErrorMapperTreatsCanceledWebSessionAsCancellation() {
+        let error = NSError(
+            domain: ASWebAuthenticationSessionErrorDomain,
+            code: ASWebAuthenticationSessionError.Code.canceledLogin.rawValue
+        )
+
+        XCTAssertEqual(OAuthSignInErrorMapper.map(error), .oauthCancelled)
+    }
+    #endif
+
+    func testOAuthErrorMapperTreatsExpiredStateSeparately() {
+        XCTAssertEqual(
+            OAuthSignInErrorMapper.classifyPKCE(
+                message: "OAuth state has expired",
+                providerError: "server_error",
+                providerCode: "bad_oauth_state"
+            ),
+            .oauthSessionExpired
+        )
+    }
+
+    func testOAuthErrorMapperTreatsProviderServerFailureAsUnavailable() {
+        XCTAssertEqual(
+            OAuthSignInErrorMapper.classifyPKCE(
+                message: "Unable to exchange external code",
+                providerError: "server_error",
+                providerCode: "unexpected_failure"
+            ),
+            .oauthProviderUnavailable
+        )
+    }
+
+    func testOAuthErrorMapperTreatsProviderAccessDeniedAsCancellation() {
+        XCTAssertEqual(
+            OAuthSignInErrorMapper.classifyPKCE(
+                message: "The user denied access",
+                providerError: "access_denied",
+                providerCode: nil
+            ),
+            .oauthCancelled
+        )
+    }
+
+    func testGoogleSignInMessagesAreSpecificAndCancellationIsSilent() {
+        XCTAssertNil(AuthenticationClientError.oauthCancelled.googleSignInMessage)
+        XCTAssertEqual(
+            AuthenticationClientError.oauthSessionExpired.googleSignInMessage,
+            "Google sign-in expired. Try again."
+        )
+        XCTAssertEqual(
+            AuthenticationClientError.oauthProviderUnavailable.googleSignInMessage,
+            "Google sign-in is temporarily unavailable. Try again later."
+        )
+        XCTAssertEqual(
+            AuthenticationClientError.oauthCallbackNotConfigured.googleSignInMessage,
+            "Google sign-in is not configured."
         )
     }
 

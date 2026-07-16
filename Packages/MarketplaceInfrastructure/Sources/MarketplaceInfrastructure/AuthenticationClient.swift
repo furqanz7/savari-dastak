@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+#endif
 import MarketplaceFoundation
 import Supabase
 
@@ -27,7 +30,78 @@ public enum AuthenticationClientError: Error, Equatable, Sendable {
     case invalidE164PhoneNumber
     case invalidProfileDisplayName
     case oauthCallbackNotConfigured
+    case oauthCancelled
+    case oauthProviderUnavailable
+    case oauthSessionExpired
+    case oauthSignInFailed
     case unexpectedPhoneVerificationState
+}
+
+enum OAuthSignInErrorMapper {
+    static func map(_ error: any Error) -> AuthenticationClientError {
+        if let error = error as? AuthenticationClientError {
+            return error
+        }
+
+        #if canImport(AuthenticationServices)
+        let webAuthenticationError = error as NSError
+        if webAuthenticationError.domain == ASWebAuthenticationSessionErrorDomain {
+            if webAuthenticationError.code == ASWebAuthenticationSessionError.Code.canceledLogin.rawValue {
+                return .oauthCancelled
+            }
+            return .oauthSignInFailed
+        }
+        #endif
+
+        guard let error = error as? AuthError else {
+            return .oauthSignInFailed
+        }
+
+        switch error {
+        case let .pkceGrantCodeExchange(message, providerError, providerCode):
+            return classifyPKCE(
+                message: message,
+                providerError: providerError,
+                providerCode: providerCode
+            )
+        case let .api(_, _, _, response) where (500...599).contains(response.statusCode):
+            return .oauthProviderUnavailable
+        default:
+            return .oauthSignInFailed
+        }
+    }
+
+    static func classifyPKCE(
+        message: String,
+        providerError: String?,
+        providerCode: String?
+    ) -> AuthenticationClientError {
+        let normalizedMessage = message.lowercased()
+        let normalizedProviderError = providerError?.lowercased()
+        let normalizedProviderCode = providerCode?.lowercased()
+
+        if normalizedProviderError == "access_denied"
+            || normalizedProviderCode == "user_cancelled"
+            || normalizedProviderCode == "user_canceled"
+        {
+            return .oauthCancelled
+        }
+
+        if normalizedMessage.contains("oauth state has expired")
+            || normalizedProviderCode == "bad_oauth_state"
+            || normalizedProviderCode == "oauth_state_expired"
+        {
+            return .oauthSessionExpired
+        }
+
+        if normalizedProviderError == "server_error"
+            || normalizedProviderCode == "unexpected_failure"
+        {
+            return .oauthProviderUnavailable
+        }
+
+        return .oauthSignInFailed
+    }
 }
 
 public struct OAuthCallbackConfiguration: Equatable, Sendable {
@@ -95,11 +169,19 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
     }
 
     public func signInWithGoogle(idToken: String) async throws {
-        try await operations.signInWithGoogle(idToken: idToken)
+        do {
+            try await operations.signInWithGoogle(idToken: idToken)
+        } catch {
+            throw OAuthSignInErrorMapper.map(error)
+        }
     }
 
     public func signInWithGoogle(redirectTo: URL) async throws {
-        try await operations.signInWithGoogle(redirectTo: redirectTo)
+        do {
+            try await operations.signInWithGoogle(redirectTo: redirectTo)
+        } catch {
+            throw OAuthSignInErrorMapper.map(error)
+        }
     }
 
     public func restoreAccount() async throws -> AccountRoute {

@@ -204,10 +204,34 @@ extension AuthenticationClientError {
             return "Use a valid E.164 phone number."
         case .invalidProfileDisplayName:
             return "Display name is required and must be 80 characters or fewer."
+        case .oauthCallbackNotConfigured,
+             .oauthCancelled,
+             .oauthProviderUnavailable,
+             .oauthSessionExpired,
+             .oauthSignInFailed:
+            return "Profile completion failed."
         case .unexpectedPhoneVerificationState:
             return "Profile completion returned an invalid phone state."
+        }
+    }
+
+    var googleSignInMessage: String? {
+        switch self {
+        case .oauthCancelled:
+            return nil
+        case .oauthSessionExpired:
+            return "Google sign-in expired. Try again."
+        case .oauthProviderUnavailable:
+            return "Google sign-in is temporarily unavailable. Try again later."
         case .oauthCallbackNotConfigured:
-            return "Authentication is not configured."
+            return "Google sign-in is not configured."
+        case .oauthSignInFailed,
+             .bootstrapAmbiguousFailure,
+             .bootstrapRejected,
+             .invalidE164PhoneNumber,
+             .invalidProfileDisplayName,
+             .unexpectedPhoneVerificationState:
+            return "Google sign-in could not be completed."
         }
     }
 }
