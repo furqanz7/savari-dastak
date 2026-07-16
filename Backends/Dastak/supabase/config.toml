@@ -424,3 +424,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/resolve-app-access/index.ts"
+
+[functions.merchant-applications]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/merchant-applications/index.ts"
