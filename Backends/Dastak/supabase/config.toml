@@ -448,3 +448,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/delivery-partners/index.ts"
+
+[functions.courier-dispatch]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/courier-dispatch/index.ts"

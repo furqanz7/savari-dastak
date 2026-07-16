@@ -1,0 +1,203 @@
+import { assertEquals } from "jsr:@std/assert";
+import {
+  type CourierDispatchDependencies,
+  handleCourierDispatch,
+} from "../../courier-dispatch/handler.ts";
+
+const accountId = "11111111-1111-4111-8111-111111111111";
+const assignmentId = "22222222-2222-4222-8222-222222222222";
+
+Deno.test("courier dispatch rejects missing authorization", async () => {
+  const response = await handleCourierDispatch(request({ authorization: null }), dependencies());
+  await assertError(response, 401, "authentication_required");
+});
+
+Deno.test("courier dispatch authenticates before operation validation", async () => {
+  let authenticated = false;
+  const response = await handleCourierDispatch(
+    request({ authorization: "Bearer invalid", body: {} }),
+    dependencies({
+      authenticateBearer: () => {
+        authenticated = true;
+        return Promise.reject(new Error("invalid token"));
+      },
+    }),
+  );
+
+  assertEquals(authenticated, true);
+  await assertError(response, 401, "authentication_required");
+});
+
+Deno.test("partner snapshot uses only the authenticated account", async () => {
+  let recordedAccountId: string | undefined;
+  const response = await handleCourierDispatch(
+    request({ body: { operation: "partnerSnapshot", accountId: assignmentId } }),
+    dependencies({
+      getPartnerSnapshot: (inputAccountId) => {
+        recordedAccountId = inputAccountId;
+        return Promise.resolve({ responseBody: snapshot(), responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recordedAccountId, accountId);
+});
+
+Deno.test("accept forwards only the authenticated partner and assignment", async () => {
+  let recorded: Record<string, unknown> | undefined;
+  const response = await handleCourierDispatch(
+    request({
+      body: {
+        operation: "acceptOffer",
+        assignmentId: assignmentId.toUpperCase(),
+        accountId: assignmentId,
+        orderId: assignmentId,
+        status: "accepted",
+        respondBy: "2099-01-01T00:00:00Z",
+      },
+    }),
+    dependencies({
+      acceptOffer: (input) => {
+        recorded = input;
+        return Promise.resolve({
+          responseBody: snapshot({ currentJob: offer() }),
+          responseStatus: 200,
+        });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.assignmentId, assignmentId);
+  assertEquals(recorded?.idempotencyKey, "test-key");
+  assertEquals(typeof recorded?.requestDigest, "string");
+  assertEquals("orderId" in (recorded ?? {}), false);
+  assertEquals("status" in (recorded ?? {}), false);
+  assertEquals("respondBy" in (recorded ?? {}), false);
+});
+
+Deno.test("decline normalizes the optional partner reason", async () => {
+  let recorded: Record<string, unknown> | undefined;
+  const response = await handleCourierDispatch(
+    request({
+      body: {
+        operation: "declineOffer",
+        assignmentId,
+        reason: "  Cannot reach   the store.  ",
+      },
+    }),
+    dependencies({
+      declineOffer: (input) => {
+        recorded = input;
+        return Promise.resolve({ responseBody: snapshot(), responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.assignmentId, assignmentId);
+  assertEquals(recorded?.reason, "Cannot reach the store.");
+});
+
+Deno.test("offer mutations reject invalid ids, reasons, and missing idempotency", async () => {
+  const invalidID = await handleCourierDispatch(
+    request({ body: { operation: "acceptOffer", assignmentId: "not-a-uuid" } }),
+    dependencies(),
+  );
+  await assertError(invalidID, 400, "validation_failed");
+
+  const invalidReason = await handleCourierDispatch(
+    request({
+      body: { operation: "declineOffer", assignmentId, reason: "x".repeat(301) },
+    }),
+    dependencies(),
+  );
+  await assertError(invalidReason, 400, "validation_failed");
+
+  const missingKey = await handleCourierDispatch(
+    request({
+      body: { operation: "acceptOffer", assignmentId },
+      idempotencyKey: "",
+    }),
+    dependencies(),
+  );
+  await assertError(missingKey, 400, "validation_failed");
+});
+
+Deno.test("courier dispatch dependency failures do not leak details", async () => {
+  const response = await handleCourierDispatch(
+    request(),
+    dependencies({
+      getPartnerSnapshot: () => Promise.reject(new Error("private assignment row leaked")),
+    }),
+  );
+  const body = await response.json();
+  assertEquals(response.status, 500);
+  assertEquals(body.error.code, "internal_error");
+  assertEquals(JSON.stringify(body).includes("private assignment"), false);
+});
+
+function dependencies(
+  overrides: Partial<CourierDispatchDependencies> = {},
+): CourierDispatchDependencies {
+  return {
+    authenticateBearer: () => Promise.resolve({ accountId }),
+    getPartnerSnapshot: () => Promise.resolve({ responseBody: snapshot(), responseStatus: 200 }),
+    acceptOffer: () =>
+      Promise.resolve({ responseBody: snapshot({ currentJob: offer() }), responseStatus: 200 }),
+    declineOffer: () => Promise.resolve({ responseBody: snapshot(), responseStatus: 200 }),
+    ...overrides,
+  };
+}
+
+function snapshot(overrides: Record<string, unknown> = {}) {
+  return { offer: null, currentJob: null, ...overrides };
+}
+
+function offer() {
+  return {
+    assignmentId,
+    orderId: "33333333-3333-4333-8333-333333333333",
+    assignmentStatus: "offered",
+    orderStatus: "ready",
+    offeredAt: "2026-07-16T12:00:00Z",
+    respondBy: "2026-07-16T12:01:00Z",
+    acceptedAt: null,
+    distanceMeters: 125,
+    store: {
+      storeId: "44444444-4444-4444-8444-444444444444",
+      name: "Test Store",
+      address: "1 Main Road",
+      pickup: { latitude: 12.68, longitude: 78.62 },
+    },
+    dropoff: { latitude: 12.69, longitude: 78.63 },
+    items: [],
+  };
+}
+
+function request(
+  options: {
+    authorization?: string | null;
+    body?: unknown;
+    idempotencyKey?: string;
+  } = {},
+) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (options.authorization !== null) {
+    headers.set("authorization", options.authorization ?? "Bearer valid");
+  }
+  headers.set("X-Idempotency-Key", options.idempotencyKey ?? "test-key");
+  return new Request("http://localhost/functions/v1/courier-dispatch", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(options.body ?? { operation: "partnerSnapshot" }),
+  });
+}
+
+async function assertError(response: Response, status: number, code: string) {
+  assertEquals(response.status, status);
+  assertEquals((await response.json()).error.code, code);
+}
