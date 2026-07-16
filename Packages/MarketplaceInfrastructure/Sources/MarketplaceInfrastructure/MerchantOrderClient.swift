@@ -114,6 +114,17 @@ public struct MerchantOrderQuote: Codable, Equatable, Sendable {
     }
 }
 
+public enum MerchantOrderHandoffPurpose: String, Codable, Equatable, Sendable {
+    case pickup
+    case delivery
+}
+
+public struct MerchantOrderHandoffCode: Codable, Equatable, Sendable {
+    public let purpose: MerchantOrderHandoffPurpose
+    public let code: String
+    public let expiresAt: String
+}
+
 public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
     public let orderID: UUID
     public let storeID: UUID
@@ -126,6 +137,7 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
     public let dropoff: GeoPoint
     public let stateVersion: Int64
     public let refundDecision: MerchantOrderRefundDecision?
+    public let handoffCode: MerchantOrderHandoffCode?
     public let createdAt: String
     public let updatedAt: String
 
@@ -141,6 +153,7 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
         case dropoff
         case stateVersion
         case refundDecision
+        case handoffCode
         case createdAt
         case updatedAt
     }

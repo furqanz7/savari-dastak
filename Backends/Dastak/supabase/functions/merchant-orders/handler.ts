@@ -69,6 +69,11 @@ export type MerchantOrderSnapshot = {
   dropoff: { latitude: number; longitude: number };
   stateVersion: number;
   refundDecision: MerchantOrderRefundDecision | null;
+  handoffCode?: {
+    purpose: "pickup" | "delivery";
+    code: string;
+    expiresAt: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
 };

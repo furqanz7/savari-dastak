@@ -63,6 +63,7 @@ async function advanceJob(input: CourierJobMutationInput) {
     p_action: input.action,
     p_idempotency_key: input.idempotencyKey,
     p_request_digest: input.requestDigest,
+    p_verification_code: input.verificationCode,
   });
   if (error) throw error;
   return rpcResponse(data, "advance_delivery_assignment");

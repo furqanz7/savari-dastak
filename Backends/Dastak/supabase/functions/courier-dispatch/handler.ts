@@ -23,6 +23,7 @@ export type CourierJobAction =
 
 export type CourierJobMutationInput = CourierDispatchMutationInput & {
   action: CourierJobAction;
+  verificationCode: string | null;
 };
 
 export type CourierDispatchDependencies = {
@@ -73,6 +74,7 @@ export async function handleCourierDispatch(
           body,
           actor.accountId,
           "start_to_store",
+          false,
           dependencies.advanceJob,
         );
       case "arriveAtStore":
@@ -81,6 +83,7 @@ export async function handleCourierDispatch(
           body,
           actor.accountId,
           "arrive_at_store",
+          false,
           dependencies.advanceJob,
         );
       case "confirmPickup":
@@ -89,6 +92,7 @@ export async function handleCourierDispatch(
           body,
           actor.accountId,
           "confirm_pickup",
+          true,
           dependencies.advanceJob,
         );
       case "startDelivery":
@@ -97,6 +101,7 @@ export async function handleCourierDispatch(
           body,
           actor.accountId,
           "start_delivery",
+          false,
           dependencies.advanceJob,
         );
       case "completeDelivery":
@@ -105,6 +110,7 @@ export async function handleCourierDispatch(
           body,
           actor.accountId,
           "complete_delivery",
+          true,
           dependencies.advanceJob,
         );
       default:
@@ -120,21 +126,34 @@ async function jobMutation(
   body: Record<string, unknown>,
   accountId: string,
   action: CourierJobAction,
+  verificationRequired: boolean,
   dependency: (input: CourierJobMutationInput) => Promise<RpcResult>,
 ) {
   const idempotencyKey = requiredIdempotencyKey(request);
   const assignmentId = validUUID(body.assignmentId);
-  if (!idempotencyKey || !assignmentId) return validationError();
+  const verificationCode = verificationRequired
+    ? validVerificationCode(body.verificationCode)
+    : null;
+  if (!idempotencyKey || !assignmentId || (verificationRequired && !verificationCode)) {
+    return validationError();
+  }
 
-  const normalized = { assignmentId, action };
+  const normalized = verificationRequired
+    ? { assignmentId, action, verificationCode }
+    : { assignmentId, action };
   const result = await dependency({
     accountId,
     assignmentId,
     action,
+    verificationCode,
     idempotencyKey,
     requestDigest: await canonicalDigest(normalized),
   });
   return json(result.responseBody, result.responseStatus);
+}
+
+function validVerificationCode(value: unknown) {
+  return typeof value === "string" && /^[0-9]{4}$/.test(value) ? value : null;
 }
 
 async function assignmentMutation(

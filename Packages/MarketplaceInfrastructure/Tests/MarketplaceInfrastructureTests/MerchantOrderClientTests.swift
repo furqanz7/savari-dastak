@@ -62,7 +62,11 @@ final class MerchantOrderClientTests: XCTestCase {
         let merchant = try await client.merchantSnapshot(idempotencyKey: merchantKey)
 
         XCTAssertEqual(customer.orders.first?.total, Money(paise: 29_000))
+        XCTAssertEqual(customer.orders.first?.handoffCode?.purpose, .delivery)
+        XCTAssertEqual(customer.orders.first?.handoffCode?.code, "5678")
         XCTAssertEqual(merchant.orders.first?.stateVersion, 1)
+        XCTAssertEqual(merchant.orders.first?.handoffCode?.purpose, .pickup)
+        XCTAssertEqual(merchant.orders.first?.handoffCode?.code, "1234")
         let calls = await functions.allCalls()
         XCTAssertEqual(calls.count, 2)
         XCTAssertEqual(
@@ -184,8 +188,12 @@ private actor RecordingMerchantOrderFunctionClient: FunctionClient {
         switch operation {
         case "quote":
             response = quoteJSON
-        case "create", "customerSnapshot", "merchantSnapshot":
-            response = operation == "create" ? orderJSON : snapshotJSON
+        case "create":
+            response = orderJSON
+        case "customerSnapshot":
+            response = customerSnapshotJSON
+        case "merchantSnapshot":
+            response = merchantSnapshotJSON
         case "merchantAccept":
             response = acceptedOrderJSON
         case "merchantMarkReady":
@@ -223,4 +231,7 @@ private let merchantRefundJSON = #"{"decisionId":"88888888-8888-4888-8888-888888
 private let customerRefundJSON = #"{"decisionId":"99999999-9999-4999-8999-999999999999","eligibility":"full_refund","decisionStatus":"eligible","itemRefund":{"paise":25000},"deliveryFeeRefund":{"paise":4000},"reason":"Changed my mind","createdAt":"2026-07-16T15:05:00+00:00"}"#
 private let merchantRejectedOrderJSON = ("{" + orderBase + #", "status":"cancelled","paymentState":"refund_pending","stateVersion":3,"refundDecision":"# + merchantRefundJSON + "}").data(using: .utf8)!
 private let customerCancelledOrderJSON = ("{" + orderBase + #", "status":"cancelled","paymentState":"refund_pending","stateVersion":3,"refundDecision":"# + customerRefundJSON + "}").data(using: .utf8)!
-private let snapshotJSON = ("{\"orders\":[" + String(data: orderJSON, encoding: .utf8)! + "]}").data(using: .utf8)!
+private let customerHandoffOrderJSON = ("{" + orderBase + #", "status":"in_transit","paymentState":"paid","stateVersion":1,"refundDecision":null,"handoffCode":{"purpose":"delivery","code":"5678","expiresAt":"2026-07-16T21:00:00+00:00"}}"#).data(using: .utf8)!
+private let merchantHandoffOrderJSON = ("{" + orderBase + #", "status":"at_store","paymentState":"paid","stateVersion":1,"refundDecision":null,"handoffCode":{"purpose":"pickup","code":"1234","expiresAt":"2026-07-16T21:00:00+00:00"}}"#).data(using: .utf8)!
+private let customerSnapshotJSON = ("{\"orders\":[" + String(data: customerHandoffOrderJSON, encoding: .utf8)! + "]}").data(using: .utf8)!
+private let merchantSnapshotJSON = ("{\"orders\":[" + String(data: merchantHandoffOrderJSON, encoding: .utf8)! + "]}").data(using: .utf8)!

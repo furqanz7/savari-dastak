@@ -95,6 +95,7 @@ public protocol CourierDispatchClient: Sendable {
 
     func confirmPickup(
         assignmentID: UUID,
+        verificationCode: String,
         idempotencyKey: IdempotencyKey
     ) async throws -> CourierDispatchSnapshot
 
@@ -105,6 +106,7 @@ public protocol CourierDispatchClient: Sendable {
 
     func completeDelivery(
         assignmentID: UUID,
+        verificationCode: String,
         idempotencyKey: IdempotencyKey
     ) async throws -> CourierDispatchSnapshot
 }
@@ -114,15 +116,18 @@ public struct SupabaseCourierDispatchClient: CourierDispatchClient {
         let operation: String
         let assignmentId: UUID?
         let reason: String?
+        let verificationCode: String?
 
         init(
             operation: String,
             assignmentId: UUID? = nil,
-            reason: String? = nil
+            reason: String? = nil,
+            verificationCode: String? = nil
         ) {
             self.operation = operation
             self.assignmentId = assignmentId
             self.reason = reason
+            self.verificationCode = verificationCode
         }
     }
 
@@ -187,11 +192,13 @@ public struct SupabaseCourierDispatchClient: CourierDispatchClient {
 
     public func confirmPickup(
         assignmentID: UUID,
+        verificationCode: String,
         idempotencyKey: IdempotencyKey
     ) async throws -> CourierDispatchSnapshot {
         try await lifecycle(
             operation: "confirmPickup",
             assignmentID: assignmentID,
+            verificationCode: verificationCode,
             idempotencyKey: idempotencyKey
         )
     }
@@ -209,11 +216,13 @@ public struct SupabaseCourierDispatchClient: CourierDispatchClient {
 
     public func completeDelivery(
         assignmentID: UUID,
+        verificationCode: String,
         idempotencyKey: IdempotencyKey
     ) async throws -> CourierDispatchSnapshot {
         try await lifecycle(
             operation: "completeDelivery",
             assignmentID: assignmentID,
+            verificationCode: verificationCode,
             idempotencyKey: idempotencyKey
         )
     }
@@ -221,10 +230,15 @@ public struct SupabaseCourierDispatchClient: CourierDispatchClient {
     private func lifecycle(
         operation: String,
         assignmentID: UUID,
+        verificationCode: String? = nil,
         idempotencyKey: IdempotencyKey
     ) async throws -> CourierDispatchSnapshot {
         try await invoke(
-            Request(operation: operation, assignmentId: assignmentID),
+            Request(
+                operation: operation,
+                assignmentId: assignmentID,
+                verificationCode: verificationCode
+            ),
             key: idempotencyKey
         )
     }

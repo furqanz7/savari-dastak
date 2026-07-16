@@ -104,14 +104,14 @@ Deno.test("decline normalizes the optional partner reason", async () => {
 
 Deno.test("job lifecycle operations map to server-owned actions", async () => {
   const cases = [
-    ["startToStore", "start_to_store"],
-    ["arriveAtStore", "arrive_at_store"],
-    ["confirmPickup", "confirm_pickup"],
-    ["startDelivery", "start_delivery"],
-    ["completeDelivery", "complete_delivery"],
+    ["startToStore", "start_to_store", null],
+    ["arriveAtStore", "arrive_at_store", null],
+    ["confirmPickup", "confirm_pickup", "1234"],
+    ["startDelivery", "start_delivery", null],
+    ["completeDelivery", "complete_delivery", "5678"],
   ] as const;
 
-  for (const [operation, expectedAction] of cases) {
+  for (const [operation, expectedAction, verificationCode] of cases) {
     let recorded: Record<string, unknown> | undefined;
     const response = await handleCourierDispatch(
       request({
@@ -121,6 +121,7 @@ Deno.test("job lifecycle operations map to server-owned actions", async () => {
           action: "complete_delivery",
           status: "delivered",
           orderId: assignmentId,
+          verificationCode,
         },
       }),
       dependencies({
@@ -135,8 +136,21 @@ Deno.test("job lifecycle operations map to server-owned actions", async () => {
     assertEquals(recorded?.accountId, accountId);
     assertEquals(recorded?.assignmentId, assignmentId);
     assertEquals(recorded?.action, expectedAction);
+    assertEquals(recorded?.verificationCode, verificationCode);
     assertEquals("status" in (recorded ?? {}), false);
     assertEquals("orderId" in (recorded ?? {}), false);
+  }
+});
+
+Deno.test("protected handoff transitions require a four-digit code", async () => {
+  for (const operation of ["confirmPickup", "completeDelivery"]) {
+    for (const verificationCode of [undefined, "123", "12a4", "12345"]) {
+      const response = await handleCourierDispatch(
+        request({ body: { operation, assignmentId, verificationCode } }),
+        dependencies(),
+      );
+      await assertError(response, 400, "validation_failed");
+    }
   }
 });
 

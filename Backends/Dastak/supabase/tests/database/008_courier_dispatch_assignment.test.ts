@@ -147,3 +147,32 @@ Deno.test("courier lifecycle is partner-owned and server-sequenced", async () =>
     "courier lifecycle must stay invoker-only",
   );
 });
+
+Deno.test("courier handoff codes are private, hashed, expiring, and attempt-limited", async () => {
+  const migration = await Deno.readTextFile(
+    new URL(
+      "../../migrations/20260716214658_secure_order_handoff_codes.sql",
+      import.meta.url,
+    ),
+  );
+  const normalized = migration.replace(/\s+/g, " ");
+
+  assertMatch(normalized, /pickup_code_digest bytea/i);
+  assertMatch(normalized, /delivery_code_digest bytea/i);
+  assertMatch(normalized, /interval '6 hours'/i);
+  assertMatch(normalized, /failed_attempts.*between 0 and 5/i);
+  assertMatch(normalized, /extensions\.hmac/i);
+  assertMatch(normalized, /handoffCode/i);
+  assertMatch(
+    normalized,
+    /grant execute on function public\.advance_delivery_assignment\( uuid, uuid, text, text, text, text \) to service_role/i,
+  );
+  assert(
+    !/security definer/i.test(normalized),
+    "handoff verification must stay invoker-only",
+  );
+  assert(
+    !/(pickup|delivery)_code\s+text/i.test(normalized),
+    "plaintext handoff codes must not be stored",
+  );
+});

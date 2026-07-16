@@ -48,7 +48,13 @@ select has_function(
 select has_function(
   'public',
   'advance_delivery_assignment',
-  array['uuid', 'uuid', 'text', 'text', 'text']
+  array['uuid', 'uuid', 'text', 'text', 'text', 'text']
+);
+select hasnt_function(
+  'public',
+  'advance_delivery_assignment',
+  array['uuid', 'uuid', 'text', 'text', 'text'],
+  'the unverified courier lifecycle RPC no longer exists'
 );
 select ok(
   pg_catalog.pg_get_functiondef(
@@ -92,7 +98,7 @@ select is(
 select is(
   has_function_privilege(
     'authenticated',
-    'public.advance_delivery_assignment(uuid,uuid,text,text,text)',
+    'public.advance_delivery_assignment(uuid,uuid,text,text,text,text)',
     'EXECUTE'
   ),
   false,
@@ -101,7 +107,7 @@ select is(
 select is(
   has_function_privilege(
     'service_role',
-    'public.advance_delivery_assignment(uuid,uuid,text,text,text)',
+    'public.advance_delivery_assignment(uuid,uuid,text,text,text,text)',
     'EXECUTE'
   ),
   true,
@@ -508,6 +514,70 @@ select is(
   'accept replay is idempotent'
 );
 
+create temporary table handoff_test_codes (
+  purpose text primary key,
+  code text not null
+) on commit drop;
+
+insert into handoff_test_codes (purpose, code)
+select 'pickup', order_item #>> '{handoffCode,code}'
+from pg_catalog.jsonb_array_elements(
+  (
+    select response_body -> 'orders'
+    from public.get_merchant_orders(
+      '81000000-0000-4000-8000-000000000002'
+    )
+  )
+) as order_item
+where order_item ->> 'orderId' = '81000000-0000-4000-8000-000000000082';
+
+insert into handoff_test_codes (purpose, code)
+select 'pickup_wrong', case when code = '0000' then '0001' else '0000' end
+from handoff_test_codes
+where purpose = 'pickup';
+
+select matches(
+  (select code from handoff_test_codes where purpose = 'pickup'),
+  '^[0-9]{4}$',
+  'the assigned order exposes a four-digit pickup code to its merchant'
+);
+select is(
+  (
+    select order_item -> 'handoffCode'
+    from pg_catalog.jsonb_array_elements(
+      (
+        select response_body -> 'orders'
+        from public.get_customer_orders(
+          '81000000-0000-4000-8000-000000000003'
+        )
+      )
+    ) as order_item
+    where order_item ->> 'orderId' = '81000000-0000-4000-8000-000000000082'
+  ),
+  'null'::jsonb,
+  'the customer cannot see the merchant pickup code'
+);
+select ok(
+  (
+    select response_body::text not like '%handoffCode%'
+    from public.get_delivery_partner_dispatch_snapshot(
+      '81000000-0000-4000-8000-000000000004'
+    )
+  ),
+  'the delivery partner snapshot never reveals a handoff code'
+);
+select ok(
+  (
+    select pickup_code_digest is not null
+      and pickup_code_expires_at between
+        pg_catalog.now() + interval '5 hours 59 minutes'
+        and pg_catalog.now() + interval '6 hours 1 minute'
+    from private.merchant_orders
+    where id = '81000000-0000-4000-8000-000000000082'
+  ),
+  'the pickup code is stored only as a digest with a six-hour expiry'
+);
+
 update private.merchant_orders
 set status = 'ready', ready_at = now(), state_version = state_version + 1
 where id = '81000000-0000-4000-8000-000000000083';
@@ -575,7 +645,8 @@ select is(
       ),
       'confirm_pickup',
       'skip-to-pickup',
-      'skip-to-pickup-digest'
+      'skip-to-pickup-digest',
+      null
     )
   ),
   409,
@@ -595,7 +666,8 @@ select is(
       ),
       'start_to_store',
       'start-to-store',
-      'start-to-store-digest'
+      'start-to-store-digest',
+      null
     )
   ),
   'en_route_to_pickup',
@@ -615,7 +687,8 @@ select is(
       ),
       'arrive_at_store',
       'arrive-at-store',
-      'arrive-at-store-digest'
+      'arrive-at-store-digest',
+      null
     )
   ),
   'at_store',
@@ -657,6 +730,136 @@ select is(
 select is(
   (
     select response_status
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'confirm_pickup',
+      'wrong-pickup-one',
+      'wrong-pickup-one-digest',
+      (select code from handoff_test_codes where purpose = 'pickup_wrong')
+    )
+  ),
+  422,
+  'an incorrect pickup code is rejected'
+);
+select is(
+  (
+    select response_status
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'confirm_pickup',
+      'wrong-pickup-one',
+      'wrong-pickup-one-digest',
+      (select code from handoff_test_codes where purpose = 'pickup_wrong')
+    )
+  ),
+  422,
+  'an incorrect-code retry is idempotent'
+);
+select is(
+  (
+    select pickup_code_failed_attempts
+    from private.merchant_orders
+    where id = '81000000-0000-4000-8000-000000000082'
+  ),
+  1,
+  'an idempotent retry consumes only one attempt'
+);
+select is(
+  (
+    select pg_catalog.array_agg(result.response_status order by result.response_status)
+    from (values (2), (3), (4), (5)) as attempt(number)
+    cross join lateral public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'confirm_pickup',
+      'wrong-pickup-' || attempt.number,
+      'wrong-pickup-digest-' || attempt.number,
+      (select code from handoff_test_codes where purpose = 'pickup_wrong')
+    ) as result
+  ),
+  array[422, 422, 422, 423],
+  'five incorrect pickup attempts lock verification'
+);
+select ok(
+  (
+    select pickup_code_failed_attempts = 5 and pickup_code_locked_at is not null
+    from private.merchant_orders
+    where id = '81000000-0000-4000-8000-000000000082'
+  ),
+  'pickup verification records the attempt limit and lock time'
+);
+select is(
+  (
+    select response_status
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'confirm_pickup',
+      'locked-pickup-valid',
+      'locked-pickup-valid-digest',
+      (select code from handoff_test_codes where purpose = 'pickup')
+    )
+  ),
+  423,
+  'the correct pickup code cannot bypass a verification lock'
+);
+
+update private.merchant_orders
+set pickup_code_failed_attempts = 0,
+    pickup_code_locked_at = null,
+    pickup_code_expires_at = pg_catalog.now() - interval '1 second'
+where id = '81000000-0000-4000-8000-000000000082';
+
+select is(
+  (
+    select response_status
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'confirm_pickup',
+      'expired-pickup-valid',
+      'expired-pickup-valid-digest',
+      (select code from handoff_test_codes where purpose = 'pickup')
+    )
+  ),
+  410,
+  'an expired pickup code cannot authorize collection'
+);
+
+update private.merchant_orders
+set pickup_code_expires_at = pg_catalog.now() + interval '6 hours'
+where id = '81000000-0000-4000-8000-000000000082';
+
+select is(
+  (
+    select response_status
     from public.customer_cancel_order(
       '81000000-0000-4000-8000-000000000003',
       '81000000-0000-4000-8000-000000000082',
@@ -682,11 +885,64 @@ select is(
       ),
       'confirm_pickup',
       'confirm-pickup',
-      'confirm-pickup-digest'
+      'confirm-pickup-digest',
+      (
+        select code from handoff_test_codes where purpose = 'pickup'
+      )
     )
   ),
   'picked_up',
   'the partner confirms collection only after arriving at the store'
+);
+
+insert into handoff_test_codes (purpose, code)
+select 'delivery', order_item #>> '{handoffCode,code}'
+from pg_catalog.jsonb_array_elements(
+  (
+    select response_body -> 'orders'
+    from public.get_customer_orders(
+      '81000000-0000-4000-8000-000000000003'
+    )
+  )
+) as order_item
+where order_item ->> 'orderId' = '81000000-0000-4000-8000-000000000082';
+
+insert into handoff_test_codes (purpose, code)
+select 'delivery_wrong', case when code = '0000' then '0001' else '0000' end
+from handoff_test_codes
+where purpose = 'delivery';
+
+select matches(
+  (select code from handoff_test_codes where purpose = 'delivery'),
+  '^[0-9]{4}$',
+  'the collected order exposes a four-digit delivery code to its customer'
+);
+select is(
+  (
+    select order_item -> 'handoffCode'
+    from pg_catalog.jsonb_array_elements(
+      (
+        select response_body -> 'orders'
+        from public.get_merchant_orders(
+          '81000000-0000-4000-8000-000000000002'
+        )
+      )
+    ) as order_item
+    where order_item ->> 'orderId' = '81000000-0000-4000-8000-000000000082'
+  ),
+  'null'::jsonb,
+  'the merchant cannot see the customer delivery code'
+);
+select ok(
+  (
+    select delivery_code_digest is not null
+      and delivery_code_expires_at between
+        pg_catalog.now() + interval '5 hours 59 minutes'
+        and pg_catalog.now() + interval '6 hours 1 minute'
+    from private.merchant_orders
+    where id = '81000000-0000-4000-8000-000000000082'
+  ),
+  'the delivery code is stored only as a digest with a six-hour expiry'
 );
 
 select is(
@@ -702,11 +958,33 @@ select is(
       ),
       'start_delivery',
       'start-delivery',
-      'start-delivery-digest'
+      'start-delivery-digest',
+      null
     )
   ),
   'in_transit',
   'the collected order can start travelling to the customer'
+);
+
+select is(
+  (
+    select response_status
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'complete_delivery',
+      'wrong-delivery-one',
+      'wrong-delivery-one-digest',
+      (select code from handoff_test_codes where purpose = 'delivery_wrong')
+    )
+  ),
+  422,
+  'an incorrect delivery code cannot complete the order'
 );
 
 select is(
@@ -722,7 +1000,10 @@ select is(
       ),
       'complete_delivery',
       'complete-delivery',
-      'complete-delivery-digest'
+      'complete-delivery-digest',
+      (
+        select code from handoff_test_codes where purpose = 'delivery'
+      )
     )
   ),
   'null'::jsonb,
@@ -772,7 +1053,10 @@ select is(
       ),
       'complete_delivery',
       'complete-delivery',
-      'complete-delivery-digest'
+      'complete-delivery-digest',
+      (
+        select code from handoff_test_codes where purpose = 'delivery'
+      )
     )
   ),
   200,
@@ -819,6 +1103,14 @@ select is(
   ),
   5,
   'every courier lifecycle transition is audited'
+);
+select ok(
+  (
+    select count(*) >= 6
+    from audit.events
+    where action = 'delivery_handoff_code_rejected'
+  ),
+  'rejected handoff attempts are audited without recording the submitted code'
 );
 
 select * from finish();

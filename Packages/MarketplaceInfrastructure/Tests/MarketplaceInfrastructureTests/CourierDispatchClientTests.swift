@@ -96,11 +96,14 @@ final class CourierDispatchClientTests: XCTestCase {
 
         let pickedUp = try await client.confirmPickup(
             assignmentID: assignmentID,
+            verificationCode: "1234",
             idempotencyKey: try XCTUnwrap(IdempotencyKey(rawValue: "dispatch-confirm-pickup"))
         )
         XCTAssertEqual(pickedUp.currentJob?.orderStatus, .pickedUp)
         let pickupOperation = try await recordedOperation(functions)
         XCTAssertEqual(pickupOperation, "confirmPickup")
+        let pickupCode = try await recordedVerificationCode(functions)
+        XCTAssertEqual(pickupCode, "1234")
 
         let inTransit = try await client.startDelivery(
             assignmentID: assignmentID,
@@ -112,11 +115,14 @@ final class CourierDispatchClientTests: XCTestCase {
 
         let delivered = try await client.completeDelivery(
             assignmentID: assignmentID,
+            verificationCode: "5678",
             idempotencyKey: try XCTUnwrap(IdempotencyKey(rawValue: "dispatch-complete-delivery"))
         )
         XCTAssertNil(delivered.currentJob)
         let completionOperation = try await recordedOperation(functions)
         XCTAssertEqual(completionOperation, "completeDelivery")
+        let deliveryCode = try await recordedVerificationCode(functions)
+        XCTAssertEqual(deliveryCode, "5678")
     }
 
     private func recordedOperation(
@@ -126,12 +132,22 @@ final class CourierDispatchClientTests: XCTestCase {
         let call = try XCTUnwrap(lastCall)
         return try JSONDecoder().decode(OperationOnly.self, from: call.body).operation
     }
+
+    private func recordedVerificationCode(
+        _ functions: RecordingCourierDispatchFunctionClient
+    ) async throws -> String? {
+        let lastCall = await functions.lastCall()
+        let call = try XCTUnwrap(lastCall)
+        return try JSONDecoder().decode(CapturedCourierDispatchRequest.self, from: call.body)
+            .verificationCode
+    }
 }
 
 private struct CapturedCourierDispatchRequest: Decodable {
     let operation: String
     let assignmentId: UUID?
     let reason: String?
+    let verificationCode: String?
 }
 
 private actor RecordingCourierDispatchFunctionClient: FunctionClient {
