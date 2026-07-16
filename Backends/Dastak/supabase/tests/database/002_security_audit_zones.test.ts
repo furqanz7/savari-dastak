@@ -14,6 +14,12 @@ Deno.test("Dastak security migration keeps evidence and client business data con
       import.meta.url,
     ),
   );
+  const accountPolicyOptimization = await Deno.readTextFile(
+    new URL(
+      "../../migrations/20260716191000_optimize_accounts_self_policy.sql",
+      import.meta.url,
+    ),
+  );
   const behavioralTest = await Deno.readTextFile(
     new URL("./002_security_audit_zones.pgtap.sql", import.meta.url),
   );
@@ -53,6 +59,13 @@ Deno.test("Dastak security migration keeps evidence and client business data con
       "grant select on table public.service_zones to authenticated",
     ]
   ) assertStringIncludes(grantHardening, contract);
+  for (
+    const contract of [
+      "alter policy accounts_select_self on public.accounts",
+      "using (id = (select auth.uid()))",
+    ]
+  ) assertStringIncludes(accountPolicyOptimization, contract);
+  assert(!accountPolicyOptimization.includes("using (id = auth.uid())"));
   for (
     const behavior of [
       "create extension if not exists pgtap with schema extensions",

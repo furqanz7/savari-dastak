@@ -3,9 +3,19 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(40);
+select plan(42);
 
 select policies_are('public', 'accounts', array['accounts_select_self']);
+select ok(
+  (
+    select qual ~ 'SELECT auth\.uid\(\)'
+    from pg_catalog.pg_policies
+    where schemaname = 'public'
+      and tablename = 'accounts'
+      and policyname = 'accounts_select_self'
+  ),
+  'accounts self policy evaluates auth.uid once per statement'
+);
 select table_privs_are('public', 'accounts', 'authenticated', array['SELECT']::name[]);
 select has_table('audit', 'events', 'audit.events exists');
 select col_is_pk('audit', 'events', 'id', 'audit.events id is primary key');
@@ -39,6 +49,41 @@ select table_privs_are(
   array['SELECT']::name[],
   'authenticated has only SELECT on service zones'
 );
+
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at
+) values
+(
+  '82000000-0000-4000-8000-000000000001',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'account-self@example.test', '',
+  now(), now(), now()
+),
+(
+  '82000000-0000-4000-8000-000000000002',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'account-foreign@example.test', '',
+  now(), now(), now()
+);
+
+insert into public.accounts (id, display_name, phone_number) values
+  ('82000000-0000-4000-8000-000000000001', 'Account Self', '+919200000001'),
+  ('82000000-0000-4000-8000-000000000002', 'Account Foreign', '+919200000002');
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '82000000-0000-4000-8000-000000000001',
+  true
+);
+select results_eq(
+  $$select id from public.accounts where id::text like '82000000-%' order by id$$,
+  array['82000000-0000-4000-8000-000000000001'::uuid],
+  'authenticated account reads only itself after policy optimization'
+);
+reset role;
+
 select ok(
   exists (
     select 1
