@@ -89,6 +89,25 @@ final class AuthenticationClientTests: XCTestCase {
         XCTAssertEqual(profileLookupAccountID, accountID)
     }
 
+    func testRestoreUsesServerRouteForTheRequiredDastakApplication() async throws {
+        let accountID = UUID()
+        let operations = RecordingAuthenticationOperations(
+            currentAccountID: accountID,
+            profileAccountID: accountID,
+            accountAccessRoute: .pendingApproval
+        )
+        let client = SupabaseAuthenticationClient(
+            operations: operations,
+            requiredAccess: .dastakMerchant
+        )
+
+        let route = try await client.restoreAccount()
+
+        XCTAssertEqual(route, .pendingApproval)
+        let requiredAccess = await operations.recordedRequiredAccess()
+        XCTAssertEqual(requiredAccess, .dastakMerchant)
+    }
+
     func testRestoreWithMismatchedProfileDoesNotBecomeActive() async throws {
         let currentAccountID = UUID()
         let operations = RecordingAuthenticationOperations(
@@ -170,6 +189,37 @@ final class AuthenticationClientTests: XCTestCase {
         XCTAssertEqual(
             try JSONDecoder().decode(CapturedBootstrapRequest.self, from: try capturedRequestBody(request)),
             .init(displayName: "Test User", phoneNumber: "+919876543210")
+        )
+    }
+
+    func testLiveAppAccessResolutionUsesSessionAuthorizationAndDeclaredApplication() async throws {
+        let session = makeCapturingSession(
+            responses: [
+                .init(
+                    statusCode: 200,
+                    body: #"{"route":"suspended"}"#.data(using: .utf8)!
+                )
+            ]
+        )
+        let operations = SupabaseAuthenticationClient.LiveOperations(
+            configuration: testBackendConfiguration,
+            session: session,
+            accessToken: "session-access-token"
+        )
+
+        let route = try await operations.resolveAppAccess(for: .dastakAdmin)
+
+        XCTAssertEqual(route, .suspended)
+        let request = try XCTUnwrap(
+            CapturingURLProtocol.capture.recordedRequests().first {
+                $0.url?.path == "/functions/v1/resolve-app-access"
+            }
+        )
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer session-access-token")
+        XCTAssertEqual(
+            try JSONDecoder().decode(CapturedAppAccessRequest.self, from: try capturedRequestBody(request)),
+            .init(application: "admin")
         )
     }
 
@@ -449,6 +499,27 @@ final class AuthenticationClientTests: XCTestCase {
         XCTAssertFalse(infoPlist.contains("$(GOOGLE_REVERSED_CLIENT_ID)"))
     }
 
+    func testEveryDastakTargetDeclaresItsServerApprovedAccessRequirement() throws {
+        let expectations = [
+            ("Sources/Dastak/DastakApp.swift", ".dastakCustomer"),
+            ("Sources/DastakMerchant/DastakMerchantApp.swift", ".dastakMerchant"),
+            ("Sources/DastakAdmin/DastakAdminApp.swift", ".dastakAdmin")
+        ]
+
+        for (path, requiredAccess) in expectations {
+            let source = try String(
+                contentsOf: repositoryRoot
+                    .appendingPathComponent("Apps/Dastak")
+                    .appendingPathComponent(path),
+                encoding: .utf8
+            )
+            XCTAssertTrue(
+                source.contains("requiredAccess: \(requiredAccess)"),
+                "Missing server-approved access requirement in \(path)"
+            )
+        }
+    }
+
     func testSignOutUsesProviderSessionOnly() async throws {
         let operations = RecordingAuthenticationOperations()
         let client = SupabaseAuthenticationClient(operations: operations)
@@ -548,6 +619,10 @@ final class AuthenticationClientTests: XCTestCase {
 private struct CapturedBootstrapRequest: Decodable, Equatable {
     let displayName: String
     let phoneNumber: String
+}
+
+private struct CapturedAppAccessRequest: Decodable, Equatable {
+    let application: String
 }
 
 private struct CapturedHTTPResponse {

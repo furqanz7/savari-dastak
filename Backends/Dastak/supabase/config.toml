@@ -418,3 +418,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/issue-evidence-url/index.ts"
+
+[functions.resolve-app-access]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/resolve-app-access/index.ts"

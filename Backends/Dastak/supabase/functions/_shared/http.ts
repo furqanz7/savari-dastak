@@ -1,5 +1,6 @@
 export type ApiErrorCode =
   | "authentication_required"
+  | "invalid_application"
   | "validation_failed"
   | "invalid_phone_number"
   | "account_already_exists"

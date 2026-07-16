@@ -39,13 +39,20 @@ enum AuthenticationShellError: Error {
 private final class AuthenticationShellModel: ObservableObject {
     let coordinator: AuthenticationCoordinator?
 
-    init(product: MarketplaceProduct, bundle: Bundle) {
+    init(
+        product: MarketplaceProduct,
+        bundle: Bundle,
+        requiredAccess: MarketplaceApplicationAccess
+    ) {
         guard let configuration = try? BackendConfiguration.runtime(product: product, bundle: bundle) else {
             coordinator = nil
             return
         }
         coordinator = AuthenticationCoordinator(
-            client: SupabaseAuthenticationClient(configuration: configuration)
+            client: SupabaseAuthenticationClient(
+                configuration: configuration,
+                requiredAccess: requiredAccess
+            )
         )
     }
 }
@@ -57,11 +64,16 @@ public struct MarketplaceAuthenticationShell: View {
     public init(
         applicationName: String,
         product: MarketplaceProduct,
+        requiredAccess: MarketplaceApplicationAccess = .profileOnly,
         bundle: Bundle = .main
     ) {
         self.applicationName = applicationName
         _model = StateObject(
-            wrappedValue: AuthenticationShellModel(product: product, bundle: bundle)
+            wrappedValue: AuthenticationShellModel(
+                product: product,
+                bundle: bundle,
+                requiredAccess: requiredAccess
+            )
         )
     }
 
@@ -105,6 +117,21 @@ private struct AuthenticationRouteView: View {
                 signedOutView
             case .needsProfile:
                 profileView
+            case .pendingApproval:
+                restrictedView(
+                    title: "Approval pending",
+                    message: "This account is waiting for approval to use this app."
+                )
+            case .suspended:
+                restrictedView(
+                    title: "Account suspended",
+                    message: "This account cannot use this app right now."
+                )
+            case .accessDenied:
+                restrictedView(
+                    title: "Access denied",
+                    message: "This account does not have access to this app."
+                )
             case .active:
                 activeView
             }
@@ -184,6 +211,20 @@ private struct AuthenticationRouteView: View {
     private var activeView: some View {
         VStack(spacing: 12) {
             Text("Account active")
+            Button("Sign out") {
+                Task { await signOut() }
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    private func restrictedView(title: String, message: String) -> some View {
+        VStack(spacing: 12) {
+            Text(title).font(.headline)
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
             Button("Sign out") {
                 Task { await signOut() }
             }

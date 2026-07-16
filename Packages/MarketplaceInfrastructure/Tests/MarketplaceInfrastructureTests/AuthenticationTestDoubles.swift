@@ -46,6 +46,7 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
 
     private let currentAccountID: UUID?
     private let profileAccountID: UUID?
+    private let accountAccessRoute: AccountRoute
     private let bootstrapResult: AccountBootstrapResult
     private let bootstrapError: BootstrapError?
     private var appleCredentials: AppleCredentials?
@@ -53,11 +54,13 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
     private var googleRedirectURL: URL?
     private var bootstrapRequest: BootstrapRequest?
     private var profileLookupAccountID: UUID?
+    private var requiredAccess: MarketplaceApplicationAccess?
     private var signOutCallCount = 0
 
     init(
         currentAccountID: UUID? = UUID(),
         profileAccountID: UUID? = nil,
+        accountAccessRoute: AccountRoute = .active,
         bootstrapResult: AccountBootstrapResult = AccountBootstrapResult(
             accountID: UUID(),
             phoneState: .unverified
@@ -66,6 +69,7 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
     ) {
         self.currentAccountID = currentAccountID
         self.profileAccountID = profileAccountID
+        self.accountAccessRoute = accountAccessRoute
         self.bootstrapResult = bootstrapResult
         self.bootstrapError = bootstrapError
     }
@@ -89,6 +93,11 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
     func accountProfileID(for accountID: UUID) async throws -> UUID? {
         profileLookupAccountID = accountID
         return profileAccountID
+    }
+
+    func resolveAppAccess(for requiredAccess: MarketplaceApplicationAccess) async throws -> AccountRoute {
+        self.requiredAccess = requiredAccess
+        return accountAccessRoute
     }
 
     func bootstrapAccount(
@@ -129,6 +138,10 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
 
     func recordedProfileLookupAccountID() -> UUID? {
         profileLookupAccountID
+    }
+
+    func recordedRequiredAccess() -> MarketplaceApplicationAccess? {
+        requiredAccess
     }
 
     func recordedSignOutCallCount() -> Int {

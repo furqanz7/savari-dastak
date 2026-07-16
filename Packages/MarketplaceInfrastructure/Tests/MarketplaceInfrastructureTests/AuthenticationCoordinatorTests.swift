@@ -192,6 +192,23 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         XCTAssertEqual(bootstrapCallCount, 1)
     }
 
+    func testProfileCompletionAcceptsARestrictedServerRouteAsResolved() async throws {
+        let client = ProfileSubmissionAuthenticationClient(
+            bootstrapOutcomes: [.success],
+            restoreRoutes: [.needsProfile, .accessDenied]
+        )
+        let coordinator = AuthenticationCoordinator(client: client)
+        await coordinator.restore()
+
+        try await coordinator.completeProfile(
+            displayName: "Test User",
+            phoneNumber: "+919876543210"
+        )
+
+        XCTAssertEqual(coordinator.route, .accessDenied)
+        XCTAssertNil(coordinator.profileSubmissionError)
+    }
+
     func testDefinitiveAPIFailureRemainsVisibleAndDoesNotActivate() async throws {
         let rejection = AuthenticationClientError.bootstrapRejected(
             statusCode: 400,

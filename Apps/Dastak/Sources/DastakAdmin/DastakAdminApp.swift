@@ -7,7 +7,8 @@ struct DastakAdminApp: App {
         WindowGroup {
             MarketplaceAuthenticationShell(
                 applicationName: "Dastak Admin",
-                product: .dastak
+                product: .dastak,
+                requiredAccess: .dastakAdmin
             )
         }
     }

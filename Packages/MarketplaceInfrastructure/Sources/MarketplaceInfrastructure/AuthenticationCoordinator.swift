@@ -162,7 +162,7 @@ public final class AuthenticationCoordinator: ObservableObject {
             throw error
         }
 
-        guard route == .active else {
+        guard route.confirmsExistingProfile else {
             let error = AuthenticationClientError.bootstrapAmbiguousFailure
             profileSubmissionError = error
             throw error
@@ -182,7 +182,7 @@ public final class AuthenticationCoordinator: ObservableObject {
     ) async throws {
         if let restoredRoute = try? await client.restoreAccount() {
             route = restoredRoute
-            if restoredRoute == .active {
+            if restoredRoute.confirmsExistingProfile {
                 pendingProfileSubmission = nil
                 profileSubmissionError = nil
                 return
@@ -190,6 +190,17 @@ public final class AuthenticationCoordinator: ObservableObject {
         }
         profileSubmissionError = error
         throw error
+    }
+}
+
+private extension AccountRoute {
+    var confirmsExistingProfile: Bool {
+        switch self {
+        case .pendingApproval, .suspended, .accessDenied, .active:
+            return true
+        case .signedOut, .needsProfile:
+            return false
+        }
     }
 }
 

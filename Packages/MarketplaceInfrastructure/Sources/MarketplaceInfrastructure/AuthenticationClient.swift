@@ -5,10 +5,20 @@ import AuthenticationServices
 import MarketplaceFoundation
 import Supabase
 
-public enum AccountRoute: Equatable, Sendable {
-    case signedOut
-    case needsProfile
+public enum AccountRoute: String, Codable, Equatable, Sendable {
+    case signedOut = "signed_out"
+    case needsProfile = "needs_profile"
+    case pendingApproval = "pending_approval"
+    case suspended
+    case accessDenied = "access_denied"
     case active
+}
+
+public enum MarketplaceApplicationAccess: String, Codable, Equatable, Sendable {
+    case profileOnly = "profile_only"
+    case dastakCustomer = "customer"
+    case dastakMerchant = "merchant"
+    case dastakAdmin = "admin"
 }
 
 public protocol AuthenticationClient: Sendable {
@@ -145,6 +155,7 @@ protocol SupabaseAuthenticationOperations: Sendable {
     func signInWithGoogle(redirectTo: URL) async throws
     func currentAccountID() async -> UUID?
     func accountProfileID(for accountID: UUID) async throws -> UUID?
+    func resolveAppAccess(for requiredAccess: MarketplaceApplicationAccess) async throws -> AccountRoute
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,
@@ -155,13 +166,22 @@ protocol SupabaseAuthenticationOperations: Sendable {
 
 public struct SupabaseAuthenticationClient: AuthenticationClient {
     private let operations: any SupabaseAuthenticationOperations
+    private let requiredAccess: MarketplaceApplicationAccess
 
-    public init(configuration: BackendConfiguration) {
+    public init(
+        configuration: BackendConfiguration,
+        requiredAccess: MarketplaceApplicationAccess = .profileOnly
+    ) {
         operations = LiveOperations(configuration: configuration)
+        self.requiredAccess = requiredAccess
     }
 
-    init(operations: any SupabaseAuthenticationOperations) {
+    init(
+        operations: any SupabaseAuthenticationOperations,
+        requiredAccess: MarketplaceApplicationAccess = .profileOnly
+    ) {
         self.operations = operations
+        self.requiredAccess = requiredAccess
     }
 
     public func signInWithApple(identityToken: String, nonce: String) async throws {
@@ -191,7 +211,13 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
         guard let profileAccountID = try await operations.accountProfileID(for: accountID) else {
             return .needsProfile
         }
-        return profileAccountID == accountID ? .active : .needsProfile
+        guard profileAccountID == accountID else {
+            return .needsProfile
+        }
+        guard requiredAccess != .profileOnly else {
+            return .active
+        }
+        return try await operations.resolveAppAccess(for: requiredAccess)
     }
 
     public func bootstrapAccount(
@@ -247,6 +273,14 @@ extension SupabaseAuthenticationClient {
     actor LiveOperations: SupabaseAuthenticationOperations {
         private struct AccountIdentity: Decodable {
             let id: UUID
+        }
+
+        private struct AppAccessRequest: Encodable {
+            let application: String
+        }
+
+        private struct AppAccessResponse: Decodable {
+            let route: AccountRoute
         }
 
         private let supabaseClient: SupabaseClient
@@ -318,6 +352,21 @@ extension SupabaseAuthenticationClient {
                 .execute()
                 .value
             return accounts.first?.id
+        }
+
+        func resolveAppAccess(
+            for requiredAccess: MarketplaceApplicationAccess
+        ) async throws -> AccountRoute {
+            guard requiredAccess != .profileOnly else {
+                return .active
+            }
+            let response: AppAccessResponse = try await supabaseClient.functions.invoke(
+                "resolve-app-access",
+                options: FunctionInvokeOptions(
+                    body: AppAccessRequest(application: requiredAccess.rawValue)
+                )
+            )
+            return response.route
         }
 
         func bootstrapAccount(
