@@ -60,7 +60,6 @@ select is((select public from storage.buckets where id = 'dastak-catalogue'), tr
 select policies_are('storage', 'objects', array[
   'dastak_evidence_insert_own',
   'dastak_evidence_select_own',
-  'dastak_evidence_update_own',
   'dastak_catalogue_image_insert_own',
   'dastak_catalogue_image_select_own',
   'dastak_catalogue_image_update_own',
@@ -132,8 +131,8 @@ select throws_like(
 );
 select results_eq(
   $$update storage.objects set metadata = '{"verified":true}'::jsonb where name = 'dastak-partner/11111111-1111-4111-8111-111111111111/existing.jpg' returning name$$,
-  array['dastak-partner/11111111-1111-4111-8111-111111111111/existing.jpg']::text[],
-  'authenticated updates its own evidence object'
+  array[]::text[],
+  'authenticated cannot overwrite its own identity evidence'
 );
 select results_eq(
   $$update storage.objects set metadata = '{"verified":true}'::jsonb where name = 'dastak-partner/22222222-2222-4222-8222-222222222222/foreign.jpg' returning name$$,

@@ -64,7 +64,7 @@ Deno.test("Dastak security migration keeps evidence and client business data con
       "authenticated cannot insert a foreign evidence path",
       "authenticated cannot insert a nested evidence path",
       "authenticated cannot insert an empty evidence filename",
-      "authenticated updates its own evidence object",
+      "authenticated cannot overwrite its own identity evidence",
       "authenticated cannot update a foreign evidence object",
       "authenticated cannot delete evidence objects",
     ]

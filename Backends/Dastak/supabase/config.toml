@@ -442,3 +442,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/merchant-orders/index.ts"
+
+[functions.delivery-partners]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/delivery-partners/index.ts"
