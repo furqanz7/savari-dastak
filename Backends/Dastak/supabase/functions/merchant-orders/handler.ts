@@ -107,6 +107,10 @@ export type MerchantOrderMutationInput = {
 
 export type MerchantRejectOrderInput = MerchantOrderMutationInput & { reason: string };
 export type CustomerCancelOrderInput = MerchantOrderMutationInput & { reason: string };
+export type OwnerResetHandoffInput = MerchantOrderMutationInput & {
+  purpose: "pickup" | "delivery";
+  reason: string;
+};
 
 export type MerchantOrderDependencies = {
   authenticateBearer: AuthenticateBearer;
@@ -118,6 +122,7 @@ export type MerchantOrderDependencies = {
   merchantReject: (input: MerchantRejectOrderInput) => Promise<RpcResult>;
   merchantMarkReady: (input: MerchantOrderMutationInput) => Promise<RpcResult>;
   customerCancel: (input: CustomerCancelOrderInput) => Promise<RpcResult>;
+  ownerResetHandoff: (input: OwnerResetHandoffInput) => Promise<RpcResult>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -181,12 +186,45 @@ export async function handleMerchantOrders(
           actor.accountId,
           dependencies.customerCancel,
         );
+      case "ownerResetHandoff":
+        return await ownerResetMutation(
+          request,
+          body,
+          actor.accountId,
+          dependencies.ownerResetHandoff,
+        );
       default:
         return validationError();
     }
   } catch {
     return internalError();
   }
+}
+
+async function ownerResetMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependency: (input: OwnerResetHandoffInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const orderId = validUUID(body.orderId);
+  const purpose = body.purpose === "pickup" || body.purpose === "delivery"
+    ? body.purpose
+    : undefined;
+  const reason = normalizeRequiredText(body.reason, 300);
+  if (!idempotencyKey || !orderId || !purpose || !reason) return validationError();
+
+  const normalized = { orderId, purpose, reason };
+  const result = await dependency({
+    accountId,
+    orderId,
+    purpose,
+    reason,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
 }
 
 async function quoteOrder(

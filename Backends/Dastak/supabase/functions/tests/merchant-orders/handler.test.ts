@@ -7,6 +7,7 @@ import {
   type MerchantOrderMutationInput,
   type MerchantOrderSnapshot,
   type MerchantRejectOrderInput,
+  type OwnerResetHandoffInput,
   type QuoteMerchantOrderInput,
 } from "../../merchant-orders/handler.ts";
 
@@ -297,6 +298,56 @@ Deno.test("customer cancellation sends no client refund decision", async () => {
   assertEquals("paymentState" in (recorded ?? {}), false);
 });
 
+Deno.test("owner handoff recovery forwards only authenticated reset intent", async () => {
+  let recorded: OwnerResetHandoffInput | undefined;
+  const response = await handleMerchantOrders(
+    request(
+      {
+        operation: "ownerResetHandoff",
+        accountId: otherAccountId,
+        orderId,
+        purpose: "pickup",
+        reason: "  Merchant confirmed   the handoff.  ",
+        verificationCode: "9999",
+        failedAttempts: 0,
+      },
+      "Bearer session-token",
+      "owner-reset-key-1",
+    ),
+    dependencies({
+      ownerResetHandoff: (input) => {
+        recorded = input;
+        return Promise.resolve({ responseBody: order, responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.orderId, orderId);
+  assertEquals(recorded?.purpose, "pickup");
+  assertEquals(recorded?.reason, "Merchant confirmed the handoff.");
+  assertEquals(recorded?.idempotencyKey, "owner-reset-key-1");
+  assertEquals("verificationCode" in (recorded ?? {}), false);
+  assertEquals("failedAttempts" in (recorded ?? {}), false);
+});
+
+Deno.test("owner handoff recovery validates purpose and reason", async () => {
+  for (
+    const body of [
+      { operation: "ownerResetHandoff", orderId, purpose: "other", reason: "Review" },
+      { operation: "ownerResetHandoff", orderId, purpose: "pickup", reason: "" },
+      { operation: "ownerResetHandoff", orderId, purpose: "delivery" },
+    ]
+  ) {
+    const response = await handleMerchantOrders(
+      request(body, "Bearer session-token", "owner-reset-invalid"),
+      dependencies(),
+    );
+    assertEquals(response.status, 400);
+  }
+});
+
 Deno.test("payment confirmation is not exposed to authenticated app users", async () => {
   const response = await handleMerchantOrders(
     request(
@@ -422,6 +473,8 @@ function dependencies(
       (() => Promise.resolve({ responseBody: readyOrder, responseStatus: 200 })),
     customerCancel: overrides.customerCancel ??
       (() => Promise.resolve({ responseBody: cancelledOrder, responseStatus: 200 })),
+    ownerResetHandoff: overrides.ownerResetHandoff ??
+      (() => Promise.resolve({ responseBody: order, responseStatus: 200 })),
   };
 }
 

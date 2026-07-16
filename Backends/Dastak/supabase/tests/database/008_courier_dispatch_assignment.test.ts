@@ -176,3 +176,27 @@ Deno.test("courier handoff codes are private, hashed, expiring, and attempt-limi
     "plaintext handoff codes must not be stored",
   );
 });
+
+Deno.test("owner handoff recovery is role-gated, rotating, and audited", async () => {
+  const migration = await Deno.readTextFile(
+    new URL(
+      "../../migrations/20260716220831_owner_handoff_code_recovery.sql",
+      import.meta.url,
+    ),
+  );
+  const normalized = migration.replace(/\s+/g, " ");
+
+  assertMatch(normalized, /pickup_code_version integer not null default 1/i);
+  assertMatch(normalized, /delivery_code_version integer not null default 1/i);
+  assertMatch(normalized, /create function public\.owner_reset_order_handoff_code/i);
+  assertMatch(normalized, /membership\.role = 'owner'/i);
+  assertMatch(normalized, /merchant_order_handoff_code_reset/i);
+  assertMatch(
+    normalized,
+    /grant execute on function public\.owner_reset_order_handoff_code\( uuid, uuid, text, text, text, text \) to service_role/i,
+  );
+  assert(
+    !/security definer/i.test(normalized),
+    "owner recovery must stay invoker-only",
+  );
+});

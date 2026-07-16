@@ -50,6 +50,11 @@ select has_function(
   'advance_delivery_assignment',
   array['uuid', 'uuid', 'text', 'text', 'text', 'text']
 );
+select has_function(
+  'public',
+  'owner_reset_order_handoff_code',
+  array['uuid', 'uuid', 'text', 'text', 'text', 'text']
+);
 select hasnt_function(
   'public',
   'advance_delivery_assignment',
@@ -112,6 +117,24 @@ select is(
   ),
   true,
   'service role can advance a verified partner job'
+);
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.owner_reset_order_handoff_code(uuid,uuid,text,text,text,text)',
+    'EXECUTE'
+  ),
+  false,
+  'authenticated cannot bypass owner handoff recovery verification'
+);
+select is(
+  has_function_privilege(
+    'service_role',
+    'public.owner_reset_order_handoff_code(uuid,uuid,text,text,text,text)',
+    'EXECUTE'
+  ),
+  true,
+  'service role can invoke owner handoff recovery after bearer verification'
 );
 select ok(
   exists (
@@ -826,10 +849,125 @@ select is(
   'the correct pickup code cannot bypass a verification lock'
 );
 
+insert into handoff_test_codes (purpose, code)
+select 'pickup_original', code
+from handoff_test_codes
+where purpose = 'pickup';
+
+select is(
+  (
+    select response_status
+    from public.owner_reset_order_handoff_code(
+      '81000000-0000-4000-8000-000000000003',
+      '81000000-0000-4000-8000-000000000082',
+      'pickup',
+      'Customer attempted an owner-only reset',
+      'customer-reset-pickup',
+      'customer-reset-pickup-digest'
+    )
+  ),
+  403,
+  'a customer cannot reset a locked handoff code'
+);
+select is(
+  (
+    select response_status
+    from public.owner_reset_order_handoff_code(
+      '81000000-0000-4000-8000-000000000001',
+      '81000000-0000-4000-8000-000000000082',
+      'pickup',
+      'Merchant identity confirmed after lockout',
+      'owner-reset-locked-pickup',
+      'owner-reset-locked-pickup-digest'
+    )
+  ),
+  200,
+  'an active owner can recover a locked pickup code'
+);
+
+update handoff_test_codes
+set code = (
+  select order_item #>> '{handoffCode,code}'
+  from pg_catalog.jsonb_array_elements(
+    (
+      select response_body -> 'orders'
+      from public.get_merchant_orders(
+        '81000000-0000-4000-8000-000000000002'
+      )
+    )
+  ) as order_item
+  where order_item ->> 'orderId' = '81000000-0000-4000-8000-000000000082'
+)
+where purpose = 'pickup';
+
+select isnt(
+  (select code from handoff_test_codes where purpose = 'pickup'),
+  (select code from handoff_test_codes where purpose = 'pickup_original'),
+  'owner recovery rotates the pickup code instead of restoring the old code'
+);
+select ok(
+  (
+    select pickup_code_version > 1
+      and pickup_code_failed_attempts = 0
+      and pickup_code_locked_at is null
+      and pickup_code_expires_at between
+        pg_catalog.now() + interval '5 hours 59 minutes'
+        and pg_catalog.now() + interval '6 hours 1 minute'
+    from private.merchant_orders
+    where id = '81000000-0000-4000-8000-000000000082'
+  ),
+  'owner recovery restores attempts and expiry on a new code version'
+);
+insert into handoff_test_codes (purpose, code)
+select 'pickup_version_after_lock', pickup_code_version::text
+from private.merchant_orders
+where id = '81000000-0000-4000-8000-000000000082';
+select is(
+  (
+    select response_status
+    from public.owner_reset_order_handoff_code(
+      '81000000-0000-4000-8000-000000000001',
+      '81000000-0000-4000-8000-000000000082',
+      'pickup',
+      'Merchant identity confirmed after lockout',
+      'owner-reset-locked-pickup',
+      'owner-reset-locked-pickup-digest'
+    )
+  ),
+  200,
+  'owner recovery replays idempotently'
+);
+select is(
+  (
+    select pickup_code_version::text
+    from private.merchant_orders
+    where id = '81000000-0000-4000-8000-000000000082'
+  ),
+  (
+    select code
+    from handoff_test_codes
+    where purpose = 'pickup_version_after_lock'
+  ),
+  'an idempotent owner retry does not rotate the code again'
+);
+select is(
+  (
+    select response_status
+    from public.owner_reset_order_handoff_code(
+      '81000000-0000-4000-8000-000000000001',
+      '81000000-0000-4000-8000-000000000082',
+      'pickup',
+      'Unnecessary healthy-code reset',
+      'owner-reset-healthy-pickup',
+      'owner-reset-healthy-pickup-digest'
+    )
+  ),
+  409,
+  'an owner cannot rotate a healthy handoff code'
+);
+
 update private.merchant_orders
-set pickup_code_failed_attempts = 0,
-    pickup_code_locked_at = null,
-    pickup_code_expires_at = pg_catalog.now() - interval '1 second'
+set pickup_code_expires_at = pg_catalog.now() - interval '1 second'
 where id = '81000000-0000-4000-8000-000000000082';
 
 select is(
@@ -853,9 +991,56 @@ select is(
   'an expired pickup code cannot authorize collection'
 );
 
-update private.merchant_orders
-set pickup_code_expires_at = pg_catalog.now() + interval '6 hours'
-where id = '81000000-0000-4000-8000-000000000082';
+insert into handoff_test_codes (purpose, code)
+select 'pickup_after_lock', code
+from handoff_test_codes
+where purpose = 'pickup';
+
+select is(
+  (
+    select response_status
+    from public.owner_reset_order_handoff_code(
+      '81000000-0000-4000-8000-000000000001',
+      '81000000-0000-4000-8000-000000000082',
+      'pickup',
+      'Immediate delivery exceeded handoff expiry',
+      'owner-reset-expired-pickup',
+      'owner-reset-expired-pickup-digest'
+    )
+  ),
+  200,
+  'an active owner can recover an expired pickup code'
+);
+
+update handoff_test_codes
+set code = (
+  select order_item #>> '{handoffCode,code}'
+  from pg_catalog.jsonb_array_elements(
+    (
+      select response_body -> 'orders'
+      from public.get_merchant_orders(
+        '81000000-0000-4000-8000-000000000002'
+      )
+    )
+  ) as order_item
+  where order_item ->> 'orderId' = '81000000-0000-4000-8000-000000000082'
+)
+where purpose = 'pickup';
+
+select ok(
+  (
+    select pickup_code_version > (
+        select code::integer
+        from handoff_test_codes
+        where purpose = 'pickup_version_after_lock'
+      )
+      and (select code from handoff_test_codes where purpose = 'pickup')
+        <> (select code from handoff_test_codes where purpose = 'pickup_after_lock')
+    from private.merchant_orders
+    where id = '81000000-0000-4000-8000-000000000082'
+  ),
+  'expired-code recovery rotates to another version'
+);
 
 select is(
   (
@@ -1111,6 +1296,19 @@ select ok(
     where action = 'delivery_handoff_code_rejected'
   ),
   'rejected handoff attempts are audited without recording the submitted code'
+);
+select is(
+  (
+    select count(*)::integer
+    from audit.events
+    where action = 'merchant_order_handoff_code_reset'
+      and reason in (
+        'Merchant identity confirmed after lockout',
+        'Immediate delivery exceeded handoff expiry'
+      )
+  ),
+  2,
+  'owner handoff recovery is audited once per actual rotation'
 );
 
 select * from finish();

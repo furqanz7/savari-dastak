@@ -142,6 +142,32 @@ final class MerchantOrderClientTests: XCTestCase {
         XCTAssertNil(cancelRequest.refundDecision)
         XCTAssertNil(cancelRequest.paymentState)
     }
+
+    func testOwnerResetHandoffSendsPurposeAndReasonOnly() async throws {
+        let functions = RecordingMerchantOrderFunctionClient()
+        let client = SupabaseMerchantOrderClient(functions: functions)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "owner-reset-handoff-1"))
+
+        let order = try await client.ownerResetHandoffCode(
+            orderID: orderID,
+            purpose: .pickup,
+            reason: "Merchant confirmed the handoff.",
+            idempotencyKey: key
+        )
+
+        XCTAssertNil(order.handoffCode)
+        let recordedCall = await functions.lastCall()
+        let call = try XCTUnwrap(recordedCall)
+        let request = try JSONDecoder().decode(CapturedMerchantOrderRequest.self, from: call.body)
+        XCTAssertEqual(request.operation, "ownerResetHandoff")
+        XCTAssertEqual(request.orderId, orderID)
+        XCTAssertEqual(request.purpose, .pickup)
+        XCTAssertEqual(request.reason, "Merchant confirmed the handoff.")
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+        XCTAssertNil(object["accountId"])
+        XCTAssertNil(object["verificationCode"])
+        XCTAssertNil(object["failedAttempts"])
+    }
 }
 
 private let storeID = UUID(uuidString: "33333333-3333-4333-8333-333333333333")!
@@ -165,6 +191,7 @@ private struct CapturedMerchantOrderRequest: Decodable {
     let paymentState: MerchantOrderPaymentState?
     let refundDecision: MerchantOrderRefundDecision?
     let status: MerchantOrderStatus?
+    let purpose: MerchantOrderHandoffPurpose?
 }
 
 private actor RecordingMerchantOrderFunctionClient: FunctionClient {
@@ -202,6 +229,8 @@ private actor RecordingMerchantOrderFunctionClient: FunctionClient {
             response = merchantRejectedOrderJSON
         case "customerCancel":
             response = customerCancelledOrderJSON
+        case "ownerResetHandoff":
+            response = orderJSON
         default:
             throw FunctionClientError.invalidResponse
         }

@@ -7,6 +7,7 @@ import {
   handleMerchantOrders,
   type MerchantOrderMutationInput,
   type MerchantRejectOrderInput,
+  type OwnerResetHandoffInput,
   type QuoteMerchantOrderInput,
 } from "./handler.ts";
 
@@ -27,6 +28,7 @@ Deno.serve((request) =>
     merchantReject,
     merchantMarkReady,
     customerCancel,
+    ownerResetHandoff,
   })
 );
 
@@ -101,6 +103,19 @@ async function customerCancel(input: CustomerCancelOrderInput) {
   });
   if (error) throw error;
   return rpcResponse(data, "customer_cancel_order");
+}
+
+async function ownerResetHandoff(input: OwnerResetHandoffInput) {
+  const { data, error } = await serviceClient.rpc("owner_reset_order_handoff_code", {
+    p_account_id: input.accountId,
+    p_order_id: input.orderId,
+    p_purpose: input.purpose,
+    p_reason: input.reason,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "owner_reset_order_handoff_code");
 }
 
 async function orderMutation(

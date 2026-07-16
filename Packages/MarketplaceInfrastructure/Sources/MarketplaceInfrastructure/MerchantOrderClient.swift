@@ -205,6 +205,13 @@ public protocol MerchantOrderClient: Sendable {
         reason: String,
         idempotencyKey: IdempotencyKey
     ) async throws -> MerchantOrderSnapshot
+
+    func ownerResetHandoffCode(
+        orderID: UUID,
+        purpose: MerchantOrderHandoffPurpose,
+        reason: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> MerchantOrderSnapshot
 }
 
 public struct SupabaseMerchantOrderClient: MerchantOrderClient {
@@ -216,6 +223,7 @@ public struct SupabaseMerchantOrderClient: MerchantOrderClient {
         let lines: [MerchantOrderLineInput]?
         let dropoff: GeoPoint?
         let reason: String?
+        let purpose: MerchantOrderHandoffPurpose?
 
         init(
             operation: String,
@@ -224,7 +232,8 @@ public struct SupabaseMerchantOrderClient: MerchantOrderClient {
             orderId: UUID? = nil,
             lines: [MerchantOrderLineInput]? = nil,
             dropoff: GeoPoint? = nil,
-            reason: String? = nil
+            reason: String? = nil,
+            purpose: MerchantOrderHandoffPurpose? = nil
         ) {
             self.operation = operation
             self.storeId = storeId
@@ -233,6 +242,7 @@ public struct SupabaseMerchantOrderClient: MerchantOrderClient {
             self.lines = lines
             self.dropoff = dropoff
             self.reason = reason
+            self.purpose = purpose
         }
     }
 
@@ -314,6 +324,23 @@ public struct SupabaseMerchantOrderClient: MerchantOrderClient {
     ) async throws -> MerchantOrderSnapshot {
         try await invoke(
             Request(operation: "customerCancel", orderId: orderID, reason: reason),
+            key: idempotencyKey
+        )
+    }
+
+    public func ownerResetHandoffCode(
+        orderID: UUID,
+        purpose: MerchantOrderHandoffPurpose,
+        reason: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> MerchantOrderSnapshot {
+        try await invoke(
+            Request(
+                operation: "ownerResetHandoff",
+                orderId: orderID,
+                reason: reason,
+                purpose: purpose
+            ),
             key: idempotencyKey
         )
     }
