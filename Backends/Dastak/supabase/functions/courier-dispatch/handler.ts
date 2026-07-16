@@ -14,11 +14,23 @@ export type CourierDispatchDeclineInput = CourierDispatchMutationInput & {
   reason: string | null;
 };
 
+export type CourierJobAction =
+  | "start_to_store"
+  | "arrive_at_store"
+  | "confirm_pickup"
+  | "start_delivery"
+  | "complete_delivery";
+
+export type CourierJobMutationInput = CourierDispatchMutationInput & {
+  action: CourierJobAction;
+};
+
 export type CourierDispatchDependencies = {
   authenticateBearer: AuthenticateBearer;
   getPartnerSnapshot: (accountId: string) => Promise<RpcResult>;
   acceptOffer: (input: CourierDispatchMutationInput) => Promise<RpcResult>;
   declineOffer: (input: CourierDispatchDeclineInput) => Promise<RpcResult>;
+  advanceJob: (input: CourierJobMutationInput) => Promise<RpcResult>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -55,12 +67,74 @@ export async function handleCourierDispatch(
         );
       case "declineOffer":
         return await declineMutation(request, body, actor.accountId, dependencies);
+      case "startToStore":
+        return await jobMutation(
+          request,
+          body,
+          actor.accountId,
+          "start_to_store",
+          dependencies.advanceJob,
+        );
+      case "arriveAtStore":
+        return await jobMutation(
+          request,
+          body,
+          actor.accountId,
+          "arrive_at_store",
+          dependencies.advanceJob,
+        );
+      case "confirmPickup":
+        return await jobMutation(
+          request,
+          body,
+          actor.accountId,
+          "confirm_pickup",
+          dependencies.advanceJob,
+        );
+      case "startDelivery":
+        return await jobMutation(
+          request,
+          body,
+          actor.accountId,
+          "start_delivery",
+          dependencies.advanceJob,
+        );
+      case "completeDelivery":
+        return await jobMutation(
+          request,
+          body,
+          actor.accountId,
+          "complete_delivery",
+          dependencies.advanceJob,
+        );
       default:
         return validationError();
     }
   } catch {
     return internalError();
   }
+}
+
+async function jobMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  action: CourierJobAction,
+  dependency: (input: CourierJobMutationInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const assignmentId = validUUID(body.assignmentId);
+  if (!idempotencyKey || !assignmentId) return validationError();
+
+  const normalized = { assignmentId, action };
+  const result = await dependency({
+    accountId,
+    assignmentId,
+    action,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
 }
 
 async function assignmentMutation(

@@ -72,6 +72,60 @@ final class CourierDispatchClientTests: XCTestCase {
         XCTAssertEqual(request.assignmentId, assignmentID)
         XCTAssertEqual(request.reason, "Cannot reach the store.")
     }
+
+    func testLifecycleMethodsUseExplicitOperationsAndDecodeServerStatuses() async throws {
+        let functions = RecordingCourierDispatchFunctionClient()
+        let client = SupabaseCourierDispatchClient(functions: functions)
+        let assignmentID = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
+
+        let toStore = try await client.startToStore(
+            assignmentID: assignmentID,
+            idempotencyKey: try XCTUnwrap(IdempotencyKey(rawValue: "dispatch-start-store"))
+        )
+        XCTAssertEqual(toStore.currentJob?.orderStatus, .enRouteToPickup)
+        let toStoreOperation = try await recordedOperation(functions)
+        XCTAssertEqual(toStoreOperation, "startToStore")
+
+        let atStore = try await client.arriveAtStore(
+            assignmentID: assignmentID,
+            idempotencyKey: try XCTUnwrap(IdempotencyKey(rawValue: "dispatch-arrive-store"))
+        )
+        XCTAssertEqual(atStore.currentJob?.orderStatus, .atStore)
+        let atStoreOperation = try await recordedOperation(functions)
+        XCTAssertEqual(atStoreOperation, "arriveAtStore")
+
+        let pickedUp = try await client.confirmPickup(
+            assignmentID: assignmentID,
+            idempotencyKey: try XCTUnwrap(IdempotencyKey(rawValue: "dispatch-confirm-pickup"))
+        )
+        XCTAssertEqual(pickedUp.currentJob?.orderStatus, .pickedUp)
+        let pickupOperation = try await recordedOperation(functions)
+        XCTAssertEqual(pickupOperation, "confirmPickup")
+
+        let inTransit = try await client.startDelivery(
+            assignmentID: assignmentID,
+            idempotencyKey: try XCTUnwrap(IdempotencyKey(rawValue: "dispatch-start-delivery"))
+        )
+        XCTAssertEqual(inTransit.currentJob?.orderStatus, .inTransit)
+        let deliveryOperation = try await recordedOperation(functions)
+        XCTAssertEqual(deliveryOperation, "startDelivery")
+
+        let delivered = try await client.completeDelivery(
+            assignmentID: assignmentID,
+            idempotencyKey: try XCTUnwrap(IdempotencyKey(rawValue: "dispatch-complete-delivery"))
+        )
+        XCTAssertNil(delivered.currentJob)
+        let completionOperation = try await recordedOperation(functions)
+        XCTAssertEqual(completionOperation, "completeDelivery")
+    }
+
+    private func recordedOperation(
+        _ functions: RecordingCourierDispatchFunctionClient
+    ) async throws -> String {
+        let lastCall = await functions.lastCall()
+        let call = try XCTUnwrap(lastCall)
+        return try JSONDecoder().decode(OperationOnly.self, from: call.body).operation
+    }
 }
 
 private struct CapturedCourierDispatchRequest: Decodable {
@@ -104,6 +158,32 @@ private actor RecordingCourierDispatchFunctionClient: FunctionClient {
         case "acceptOffer":
             response = snapshotJSON(assignmentStatus: "accepted", orderStatus: "assigned", asOffer: false)
         case "declineOffer":
+            response = #"{"offer":null,"currentJob":null}"#.data(using: .utf8)!
+        case "startToStore":
+            response = snapshotJSON(
+                assignmentStatus: "accepted",
+                orderStatus: "en_route_to_pickup",
+                asOffer: false
+            )
+        case "arriveAtStore":
+            response = snapshotJSON(
+                assignmentStatus: "accepted",
+                orderStatus: "at_store",
+                asOffer: false
+            )
+        case "confirmPickup":
+            response = snapshotJSON(
+                assignmentStatus: "accepted",
+                orderStatus: "picked_up",
+                asOffer: false
+            )
+        case "startDelivery":
+            response = snapshotJSON(
+                assignmentStatus: "accepted",
+                orderStatus: "in_transit",
+                asOffer: false
+            )
+        case "completeDelivery":
             response = #"{"offer":null,"currentJob":null}"#.data(using: .utf8)!
         default:
             throw FunctionClientError.invalidResponse

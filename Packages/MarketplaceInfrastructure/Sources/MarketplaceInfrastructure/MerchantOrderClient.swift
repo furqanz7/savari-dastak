@@ -8,6 +8,7 @@ public enum MerchantOrderStatus: String, Codable, Equatable, Sendable {
     case ready
     case assigned
     case enRouteToPickup = "en_route_to_pickup"
+    case atStore = "at_store"
     case pickedUp = "picked_up"
     case inTransit = "in_transit"
     case delivered

@@ -4,6 +4,7 @@ import { verifyBearerUser } from "../_shared/auth.ts";
 import {
   type CourierDispatchDeclineInput,
   type CourierDispatchMutationInput,
+  type CourierJobMutationInput,
   handleCourierDispatch,
 } from "./handler.ts";
 
@@ -19,6 +20,7 @@ Deno.serve((request) =>
     getPartnerSnapshot,
     acceptOffer,
     declineOffer,
+    advanceJob,
   })
 );
 
@@ -52,6 +54,18 @@ async function declineOffer(input: CourierDispatchDeclineInput) {
   });
   if (error) throw error;
   return rpcResponse(data, "decline_delivery_assignment");
+}
+
+async function advanceJob(input: CourierJobMutationInput) {
+  const { data, error } = await serviceClient.rpc("advance_delivery_assignment", {
+    p_account_id: input.accountId,
+    p_assignment_id: input.assignmentId,
+    p_action: input.action,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "advance_delivery_assignment");
 }
 
 function rpcResponse(data: unknown, functionName: string) {

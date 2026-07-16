@@ -45,6 +45,11 @@ select has_function(
   'decline_delivery_assignment',
   array['uuid', 'uuid', 'text', 'text', 'text']
 );
+select has_function(
+  'public',
+  'advance_delivery_assignment',
+  array['uuid', 'uuid', 'text', 'text', 'text']
+);
 select ok(
   pg_catalog.pg_get_functiondef(
     'public.accept_delivery_assignment(uuid,uuid,text,text)'::regprocedure
@@ -83,6 +88,24 @@ select is(
   ),
   true,
   'service role can decline after bearer verification'
+);
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.advance_delivery_assignment(uuid,uuid,text,text,text)',
+    'EXECUTE'
+  ),
+  false,
+  'authenticated cannot bypass courier lifecycle verification'
+);
+select is(
+  has_function_privilege(
+    'service_role',
+    'public.advance_delivery_assignment(uuid,uuid,text,text,text)',
+    'EXECUTE'
+  ),
+  true,
+  'service role can advance a verified partner job'
 );
 select ok(
   exists (
@@ -539,6 +562,223 @@ select is(
   'a suspended partner has no visible offer'
 );
 
+select is(
+  (
+    select response_status
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'confirm_pickup',
+      'skip-to-pickup',
+      'skip-to-pickup-digest'
+    )
+  ),
+  409,
+  'a partner cannot skip an assigned job directly to pickup'
+);
+
+select is(
+  (
+    select response_body #>> '{currentJob,orderStatus}'
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'start_to_store',
+      'start-to-store',
+      'start-to-store-digest'
+    )
+  ),
+  'en_route_to_pickup',
+  'the assigned partner can start travelling to the store'
+);
+
+select is(
+  (
+    select response_body #>> '{currentJob,orderStatus}'
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'arrive_at_store',
+      'arrive-at-store',
+      'arrive-at-store-digest'
+    )
+  ),
+  'at_store',
+  'the partner can mark arrival at the store only after travelling'
+);
+
+select is(
+  (
+    select order_item ->> 'status'
+    from pg_catalog.jsonb_array_elements(
+      (
+        select response_body -> 'orders'
+        from public.get_customer_orders(
+          '81000000-0000-4000-8000-000000000003'
+        )
+      )
+    ) as order_item
+    where order_item ->> 'orderId' = '81000000-0000-4000-8000-000000000082'
+  ),
+  'at_store',
+  'the customer snapshot sees the partner at the store'
+);
+select is(
+  (
+    select order_item ->> 'status'
+    from pg_catalog.jsonb_array_elements(
+      (
+        select response_body -> 'orders'
+        from public.get_merchant_orders(
+          '81000000-0000-4000-8000-000000000002'
+        )
+      )
+    ) as order_item
+    where order_item ->> 'orderId' = '81000000-0000-4000-8000-000000000082'
+  ),
+  'at_store',
+  'the merchant snapshot sees the partner at the store'
+);
+select is(
+  (
+    select response_status
+    from public.customer_cancel_order(
+      '81000000-0000-4000-8000-000000000003',
+      '81000000-0000-4000-8000-000000000082',
+      'Need owner review while courier is at the store',
+      'cancel-at-store',
+      'cancel-at-store-digest'
+    )
+  ),
+  202,
+  'customer cancellation at the store remains an owner-review request'
+);
+
+select is(
+  (
+    select response_body #>> '{currentJob,orderStatus}'
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'confirm_pickup',
+      'confirm-pickup',
+      'confirm-pickup-digest'
+    )
+  ),
+  'picked_up',
+  'the partner confirms collection only after arriving at the store'
+);
+
+select is(
+  (
+    select response_body #>> '{currentJob,orderStatus}'
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'start_delivery',
+      'start-delivery',
+      'start-delivery-digest'
+    )
+  ),
+  'in_transit',
+  'the collected order can start travelling to the customer'
+);
+
+select is(
+  (
+    select response_body -> 'currentJob'
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'accepted'
+      ),
+      'complete_delivery',
+      'complete-delivery',
+      'complete-delivery-digest'
+    )
+  ),
+  'null'::jsonb,
+  'delivery completion clears the partner current job'
+);
+select is(
+  (
+    select status
+    from private.merchant_orders
+    where id = '81000000-0000-4000-8000-000000000082'
+  ),
+  'delivered',
+  'delivery completion updates the shared order status'
+);
+select is(
+  (
+    select status
+    from private.delivery_assignment_attempts
+    where order_id = '81000000-0000-4000-8000-000000000082'
+  ),
+  'completed',
+  'delivery completion closes the accepted assignment'
+);
+select ok(
+  (
+    select assigned_at is not null
+      and en_route_to_pickup_at is not null
+      and arrived_at_store_at is not null
+      and picked_up_at is not null
+      and in_transit_at is not null
+      and delivered_at is not null
+    from private.merchant_orders
+    where id = '81000000-0000-4000-8000-000000000082'
+  ),
+  'every courier lifecycle milestone is timestamped'
+);
+select is(
+  (
+    select response_status
+    from public.advance_delivery_assignment(
+      '81000000-0000-4000-8000-000000000004',
+      (
+        select id
+        from private.delivery_assignment_attempts
+        where order_id = '81000000-0000-4000-8000-000000000082'
+          and status = 'completed'
+      ),
+      'complete_delivery',
+      'complete-delivery',
+      'complete-delivery-digest'
+    )
+  ),
+  200,
+  'delivery completion replays idempotently'
+);
+
 reset role;
 
 select ok(
@@ -564,6 +804,21 @@ select ok(
     select 1 from audit.events where action = 'delivery_assignment_expired'
   ),
   'expiry is audited'
+);
+select is(
+  (
+    select count(distinct action)::integer
+    from audit.events
+    where action in (
+      'delivery_job_started_to_store',
+      'delivery_job_arrived_at_store',
+      'delivery_job_pickup_confirmed',
+      'delivery_job_started_delivery',
+      'delivery_job_completed'
+    )
+  ),
+  5,
+  'every courier lifecycle transition is audited'
 );
 
 select * from finish();

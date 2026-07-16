@@ -82,6 +82,31 @@ public protocol CourierDispatchClient: Sendable {
         reason: String?,
         idempotencyKey: IdempotencyKey
     ) async throws -> CourierDispatchSnapshot
+
+    func startToStore(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot
+
+    func arriveAtStore(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot
+
+    func confirmPickup(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot
+
+    func startDelivery(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot
+
+    func completeDelivery(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot
 }
 
 public struct SupabaseCourierDispatchClient: CourierDispatchClient {
@@ -134,6 +159,72 @@ public struct SupabaseCourierDispatchClient: CourierDispatchClient {
                 assignmentId: assignmentID,
                 reason: reason
             ),
+            key: idempotencyKey
+        )
+    }
+
+    public func startToStore(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot {
+        try await lifecycle(
+            operation: "startToStore",
+            assignmentID: assignmentID,
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func arriveAtStore(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot {
+        try await lifecycle(
+            operation: "arriveAtStore",
+            assignmentID: assignmentID,
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func confirmPickup(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot {
+        try await lifecycle(
+            operation: "confirmPickup",
+            assignmentID: assignmentID,
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func startDelivery(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot {
+        try await lifecycle(
+            operation: "startDelivery",
+            assignmentID: assignmentID,
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func completeDelivery(
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot {
+        try await lifecycle(
+            operation: "completeDelivery",
+            assignmentID: assignmentID,
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    private func lifecycle(
+        operation: String,
+        assignmentID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CourierDispatchSnapshot {
+        try await invoke(
+            Request(operation: operation, assignmentId: assignmentID),
             key: idempotencyKey
         )
     }

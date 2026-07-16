@@ -8,6 +8,7 @@ export type MerchantOrderStatus =
   | "ready"
   | "assigned"
   | "en_route_to_pickup"
+  | "at_store"
   | "picked_up"
   | "in_transit"
   | "delivered"

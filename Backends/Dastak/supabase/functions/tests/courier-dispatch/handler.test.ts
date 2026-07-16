@@ -102,6 +102,44 @@ Deno.test("decline normalizes the optional partner reason", async () => {
   assertEquals(recorded?.reason, "Cannot reach the store.");
 });
 
+Deno.test("job lifecycle operations map to server-owned actions", async () => {
+  const cases = [
+    ["startToStore", "start_to_store"],
+    ["arriveAtStore", "arrive_at_store"],
+    ["confirmPickup", "confirm_pickup"],
+    ["startDelivery", "start_delivery"],
+    ["completeDelivery", "complete_delivery"],
+  ] as const;
+
+  for (const [operation, expectedAction] of cases) {
+    let recorded: Record<string, unknown> | undefined;
+    const response = await handleCourierDispatch(
+      request({
+        body: {
+          operation,
+          assignmentId,
+          action: "complete_delivery",
+          status: "delivered",
+          orderId: assignmentId,
+        },
+      }),
+      dependencies({
+        advanceJob: (input) => {
+          recorded = input;
+          return Promise.resolve({ responseBody: snapshot(), responseStatus: 200 });
+        },
+      }),
+    );
+
+    assertEquals(response.status, 200);
+    assertEquals(recorded?.accountId, accountId);
+    assertEquals(recorded?.assignmentId, assignmentId);
+    assertEquals(recorded?.action, expectedAction);
+    assertEquals("status" in (recorded ?? {}), false);
+    assertEquals("orderId" in (recorded ?? {}), false);
+  }
+});
+
 Deno.test("offer mutations reject invalid ids, reasons, and missing idempotency", async () => {
   const invalidID = await handleCourierDispatch(
     request({ body: { operation: "acceptOffer", assignmentId: "not-a-uuid" } }),
@@ -149,6 +187,7 @@ function dependencies(
     acceptOffer: () =>
       Promise.resolve({ responseBody: snapshot({ currentJob: offer() }), responseStatus: 200 }),
     declineOffer: () => Promise.resolve({ responseBody: snapshot(), responseStatus: 200 }),
+    advanceJob: () => Promise.resolve({ responseBody: snapshot(), responseStatus: 200 }),
     ...overrides,
   };
 }

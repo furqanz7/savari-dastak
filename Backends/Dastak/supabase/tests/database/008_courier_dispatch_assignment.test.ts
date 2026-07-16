@@ -4,7 +4,9 @@ Deno.test("courier dispatch stays private, nearest-first, and server-timed", asy
   const migrationsDirectory = new URL("../../migrations/", import.meta.url);
   const migrations = [];
   for await (const entry of Deno.readDir(migrationsDirectory)) {
-    if (entry.isFile && entry.name.endsWith("_courier_dispatch_assignment.sql")) {
+    if (
+      entry.isFile && entry.name.endsWith("_courier_dispatch_assignment.sql")
+    ) {
       migrations.push(entry.name);
     }
   }
@@ -20,7 +22,10 @@ Deno.test("courier dispatch stays private, nearest-first, and server-timed", asy
     .replace(/\(\s+/g, "(")
     .replace(/\s+\)/g, ")");
 
-  assertMatch(normalized, /create table private\.delivery_assignment_attempts/i);
+  assertMatch(
+    normalized,
+    /create table private\.delivery_assignment_attempts/i,
+  );
   assertMatch(
     signatures,
     /alter table private\.delivery_assignment_attempts enable row level security/i,
@@ -47,7 +52,10 @@ Deno.test("courier dispatch stays private, nearest-first, and server-timed", asy
     );
     assertMatch(
       signatures,
-      new RegExp(`grant execute on function public\\.${escaped} to service_role`, "i"),
+      new RegExp(
+        `grant execute on function public\\.${escaped} to service_role`,
+        "i",
+      ),
     );
   }
 
@@ -56,7 +64,10 @@ Deno.test("courier dispatch stays private, nearest-first, and server-timed", asy
   assertMatch(normalized, /extensions\.st_distance/i);
   assertMatch(normalized, /where status = 'offered'/i);
   assertMatch(normalized, /where status in \('offered', 'accepted'\)/i);
-  assertMatch(normalized, /not exists \( select 1 from private\.delivery_assignment_attempts/i);
+  assertMatch(
+    normalized,
+    /not exists \( select 1 from private\.delivery_assignment_attempts/i,
+  );
   assertMatch(normalized, /create extension if not exists pg_cron/i);
   assertMatch(normalized, /cron\.schedule\(/i);
   assertMatch(normalized, /'10 seconds'/i);
@@ -66,7 +77,10 @@ Deno.test("courier dispatch stays private, nearest-first, and server-timed", asy
   assertMatch(normalized, /delivery_assignment_expired/i);
   assertMatch(normalized, /security invoker/gi);
   assertMatch(normalized, /set search_path = ''/gi);
-  assert(!/security definer/i.test(normalized), "dispatch must not introduce definer functions");
+  assert(
+    !/security definer/i.test(normalized),
+    "dispatch must not introduce definer functions",
+  );
 });
 
 Deno.test("courier dispatch serializes idempotency by account and function", async () => {
@@ -90,5 +104,46 @@ Deno.test("courier dispatch serializes idempotency by account and function", asy
     normalized,
     /hashtextextended\(\s*p_account_id::text \|\| ':' \|\| v_function_name, 0\s*\)/i,
   );
-  assert(!/security definer/i.test(normalized), "idempotency wrappers must stay invoker-only");
+  assert(
+    !/security definer/i.test(normalized),
+    "idempotency wrappers must stay invoker-only",
+  );
+});
+
+Deno.test("courier lifecycle is partner-owned and server-sequenced", async () => {
+  const migration = await Deno.readTextFile(
+    new URL(
+      "../../migrations/20260716200000_courier_job_lifecycle.sql",
+      import.meta.url,
+    ),
+  );
+  const normalized = migration.replace(/\s+/g, " ");
+
+  assertMatch(
+    normalized,
+    /'assigned'.*'en_route_to_pickup'.*'at_store'.*'picked_up'.*'in_transit'.*'delivered'/i,
+  );
+  assertMatch(
+    normalized,
+    /create function public\.advance_delivery_assignment/i,
+  );
+  assertMatch(
+    normalized,
+    /grant execute on function public\.advance_delivery_assignment\( uuid, uuid, text, text, text \) to service_role/i,
+  );
+  for (
+    const action of [
+      "start_to_store",
+      "arrive_at_store",
+      "confirm_pickup",
+      "start_delivery",
+      "complete_delivery",
+    ]
+  ) assertMatch(normalized, new RegExp(action, "i"));
+  assertMatch(normalized, /security invoker/gi);
+  assertMatch(normalized, /set search_path = ''/gi);
+  assert(
+    !/security definer/i.test(normalized),
+    "courier lifecycle must stay invoker-only",
+  );
 });
