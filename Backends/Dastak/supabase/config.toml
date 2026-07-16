@@ -430,3 +430,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/merchant-applications/index.ts"
+
+[functions.catalogue]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/catalogue/index.ts"

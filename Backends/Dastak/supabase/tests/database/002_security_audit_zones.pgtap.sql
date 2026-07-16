@@ -61,6 +61,9 @@ select policies_are('storage', 'objects', array[
   'dastak_evidence_insert_own',
   'dastak_evidence_select_own',
   'dastak_evidence_update_own',
+  'dastak_catalogue_image_insert_own',
+  'dastak_catalogue_image_select_own',
+  'dastak_catalogue_image_update_own',
   'dastak_merchant_evidence_insert_own',
   'dastak_merchant_evidence_select_own'
 ]);
