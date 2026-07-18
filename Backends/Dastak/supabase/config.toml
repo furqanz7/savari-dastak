@@ -460,3 +460,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/payment-ledger/index.ts"
+
+[functions.parcel-deliveries]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/parcel-deliveries/index.ts"
