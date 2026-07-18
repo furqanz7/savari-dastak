@@ -454,3 +454,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/courier-dispatch/index.ts"
+
+[functions.payment-ledger]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/payment-ledger/index.ts"
