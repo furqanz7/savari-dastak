@@ -109,7 +109,11 @@ select policies_are('storage', 'objects', array[
   'dastak_catalogue_image_select_own',
   'dastak_catalogue_image_update_own',
   'dastak_merchant_evidence_insert_own',
-  'dastak_merchant_evidence_select_own'
+  'dastak_merchant_evidence_select_own',
+  'dastak_pharmacy_evidence_insert_own',
+  'dastak_pharmacy_evidence_select_own',
+  'dastak_prescription_evidence_insert_own',
+  'dastak_prescription_evidence_select_own'
 ]);
 
 insert into audit.events (action, entity_type) values ('tap_insert', 'test');

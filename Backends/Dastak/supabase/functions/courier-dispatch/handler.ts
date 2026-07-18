@@ -29,6 +29,10 @@ export type CourierJobMutationInput = CourierDispatchMutationInput & {
 export type CourierDispatchDependencies = {
   authenticateBearer: AuthenticateBearer;
   getPartnerSnapshot: (accountId: string) => Promise<RpcResult>;
+  getAssignmentControlledScope: (
+    accountId: string,
+    assignmentId: string,
+  ) => Promise<"general" | "medicine" | "tobacco" | null>;
   acceptOffer: (input: CourierDispatchMutationInput) => Promise<RpcResult>;
   declineOffer: (input: CourierDispatchDeclineInput) => Promise<RpcResult>;
   advanceJob: (input: CourierJobMutationInput) => Promise<RpcResult>;
@@ -112,6 +116,7 @@ export async function handleCourierDispatch(
           "complete_delivery",
           true,
           dependencies.advanceJob,
+          dependencies.getAssignmentControlledScope,
         );
       default:
         return validationError();
@@ -128,6 +133,7 @@ async function jobMutation(
   action: CourierJobAction,
   verificationRequired: boolean,
   dependency: (input: CourierJobMutationInput) => Promise<RpcResult>,
+  getAssignmentControlledScope?: CourierDispatchDependencies["getAssignmentControlledScope"],
 ) {
   const idempotencyKey = requiredIdempotencyKey(request);
   const assignmentId = validUUID(body.assignmentId);
@@ -136,6 +142,18 @@ async function jobMutation(
     : null;
   if (!idempotencyKey || !assignmentId || (verificationRequired && !verificationCode)) {
     return validationError();
+  }
+
+  if (
+    action === "complete_delivery" && getAssignmentControlledScope &&
+    await getAssignmentControlledScope(accountId, assignmentId) === "tobacco"
+  ) {
+    return json({
+      error: {
+        code: "restricted_handoff_required",
+        message: "Use restricted handoff with a visual age check for this order.",
+      },
+    }, 409);
   }
 
   const normalized = verificationRequired

@@ -18,6 +18,7 @@ Deno.serve((request) =>
   handleCourierDispatch(request, {
     authenticateBearer: verifyBearerUser,
     getPartnerSnapshot,
+    getAssignmentControlledScope,
     acceptOffer,
     declineOffer,
     advanceJob,
@@ -31,6 +32,15 @@ async function getPartnerSnapshot(accountId: string) {
   );
   if (error) throw error;
   return rpcResponse(data, "get_delivery_partner_dispatch_snapshot");
+}
+
+async function getAssignmentControlledScope(accountId: string, assignmentId: string) {
+  const { data, error } = await serviceClient.rpc(
+    "get_delivery_assignment_controlled_scope",
+    { p_account_id: accountId, p_assignment_id: assignmentId },
+  );
+  if (error) throw error;
+  return data === "general" || data === "medicine" || data === "tobacco" ? data : null;
 }
 
 async function acceptOffer(input: CourierDispatchMutationInput) {

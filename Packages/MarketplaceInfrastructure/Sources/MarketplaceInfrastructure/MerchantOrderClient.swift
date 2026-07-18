@@ -101,6 +101,7 @@ public struct MerchantOrderQuote: Codable, Equatable, Sendable {
     public let total: Money
     public let dropoff: GeoPoint
     public let expiresAt: String
+    public let controlledCategory: ControlledOrderMetadata?
 
     private enum CodingKeys: String, CodingKey {
         case quoteID = "quoteId"
@@ -111,6 +112,7 @@ public struct MerchantOrderQuote: Codable, Equatable, Sendable {
         case total
         case dropoff
         case expiresAt
+        case controlledCategory
     }
 }
 
@@ -138,6 +140,7 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
     public let stateVersion: Int64
     public let refundDecision: MerchantOrderRefundDecision?
     public let handoffCode: MerchantOrderHandoffCode?
+    public let controlledCategory: ControlledOrderMetadata?
     public let createdAt: String
     public let updatedAt: String
 
@@ -154,6 +157,7 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
         case stateVersion
         case refundDecision
         case handoffCode
+        case controlledCategory
         case createdAt
         case updatedAt
     }

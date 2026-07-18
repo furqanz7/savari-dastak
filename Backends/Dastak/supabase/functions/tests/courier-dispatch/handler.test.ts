@@ -154,6 +154,25 @@ Deno.test("protected handoff transitions require a four-digit code", async () =>
   }
 });
 
+Deno.test("ordinary completion rejects tobacco handoff", async () => {
+  let advanceCalls = 0;
+  const response = await handleCourierDispatch(
+    request({
+      body: { operation: "completeDelivery", assignmentId, verificationCode: "5678" },
+    }),
+    dependencies({
+      getAssignmentControlledScope: () => Promise.resolve("tobacco"),
+      advanceJob: () => {
+        advanceCalls += 1;
+        return Promise.resolve({ responseBody: snapshot(), responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(advanceCalls, 0);
+  await assertError(response, 409, "restricted_handoff_required");
+});
+
 Deno.test("offer mutations reject invalid ids, reasons, and missing idempotency", async () => {
   const invalidID = await handleCourierDispatch(
     request({ body: { operation: "acceptOffer", assignmentId: "not-a-uuid" } }),
@@ -198,6 +217,7 @@ function dependencies(
   return {
     authenticateBearer: () => Promise.resolve({ accountId }),
     getPartnerSnapshot: () => Promise.resolve({ responseBody: snapshot(), responseStatus: 200 }),
+    getAssignmentControlledScope: () => Promise.resolve("general"),
     acceptOffer: () =>
       Promise.resolve({ responseBody: snapshot({ currentJob: offer() }), responseStatus: 200 }),
     declineOffer: () => Promise.resolve({ responseBody: snapshot(), responseStatus: 200 }),

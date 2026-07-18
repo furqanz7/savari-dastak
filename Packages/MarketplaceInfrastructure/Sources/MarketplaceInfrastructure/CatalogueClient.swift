@@ -69,6 +69,8 @@ public struct CatalogueProduct: Codable, Equatable, Sendable {
     public let availability: CatalogueAvailability
     public let catalogueKind: CatalogueKind
     public let restrictedApprovalState: RestrictedApprovalState
+    public let requiresPrescription: Bool?
+    public let restrictedTobaccoKind: ControlledTobaccoKind?
     public let isActive: Bool
 
     private enum CodingKeys: String, CodingKey {
@@ -83,6 +85,8 @@ public struct CatalogueProduct: Codable, Equatable, Sendable {
         case availability
         case catalogueKind
         case restrictedApprovalState
+        case requiresPrescription
+        case restrictedTobaccoKind
         case isActive
     }
 }
