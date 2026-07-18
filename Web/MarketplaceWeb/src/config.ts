@@ -1,0 +1,117 @@
+export const appVariants = [
+  "savari-passenger",
+  "savari-rider",
+  "dastak-customer",
+  "dastak-delivery",
+  "dastak-merchant",
+] as const;
+
+export type AppVariant = (typeof appVariants)[number];
+export type Product = "savari" | "dastak";
+export type AppRole = "passenger" | "rider" | "customer" | "delivery" | "merchant";
+
+export type AppConfig = {
+  variant: AppVariant;
+  product: Product;
+  role: AppRole;
+  brand: string;
+  roleLabel: string;
+  supabaseUrl: string;
+  supabasePublishableKey: string;
+};
+
+type PublicEnvironment = {
+  VITE_APP_VARIANT?: string;
+  VITE_SUPABASE_URL?: string;
+  VITE_SUPABASE_PUBLISHABLE_KEY?: string;
+};
+
+const variants: Record<AppVariant, Omit<AppConfig, "supabaseUrl" | "supabasePublishableKey">> = {
+  "savari-passenger": {
+    variant: "savari-passenger",
+    product: "savari",
+    role: "passenger",
+    brand: "Savari",
+    roleLabel: "Passenger",
+  },
+  "savari-rider": {
+    variant: "savari-rider",
+    product: "savari",
+    role: "rider",
+    brand: "Savari",
+    roleLabel: "Rider",
+  },
+  "dastak-customer": {
+    variant: "dastak-customer",
+    product: "dastak",
+    role: "customer",
+    brand: "Dastak",
+    roleLabel: "Customer",
+  },
+  "dastak-delivery": {
+    variant: "dastak-delivery",
+    product: "dastak",
+    role: "delivery",
+    brand: "Dastak",
+    roleLabel: "Delivery Partner",
+  },
+  "dastak-merchant": {
+    variant: "dastak-merchant",
+    product: "dastak",
+    role: "merchant",
+    brand: "Dastak",
+    roleLabel: "Merchant",
+  },
+};
+
+export function readAppConfig(environment: PublicEnvironment): AppConfig {
+  const variant = environment.VITE_APP_VARIANT;
+  if (!appVariants.includes(variant as AppVariant)) {
+    throw new Error("VITE_APP_VARIANT must identify a supported web app.");
+  }
+
+  const supabaseUrl = environment.VITE_SUPABASE_URL?.trim() ?? "";
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(supabaseUrl)) {
+    throw new Error("VITE_SUPABASE_URL must be a hosted Supabase project URL.");
+  }
+
+  const supabasePublishableKey = environment.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ?? "";
+  assertBrowserSafeKey(supabasePublishableKey);
+
+  return {
+    ...variants[variant as AppVariant],
+    supabaseUrl: supabaseUrl.replace(/\/$/, ""),
+    supabasePublishableKey,
+  };
+}
+
+export function assertBrowserSafeKey(key: string) {
+  if (!key) throw new Error("VITE_SUPABASE_PUBLISHABLE_KEY is required.");
+  if (key.startsWith("sb_secret_")) {
+    throw new Error("A Supabase secret key cannot be included in a browser app.");
+  }
+  if (key.startsWith("sb_publishable_")) return;
+
+  const parts = key.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Use a Supabase publishable or legacy anon key.");
+  }
+  try {
+    const payload = JSON.parse(decodeBase64Url(parts[1])) as { role?: unknown };
+    if (payload.role !== "anon") {
+      throw new Error("Only the legacy anon JWT is browser-safe.");
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === "Only the legacy anon JWT is browser-safe.") {
+      throw error;
+    }
+    throw new Error("Use a valid Supabase publishable or legacy anon key.");
+  }
+}
+
+function decodeBase64Url(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  if (typeof globalThis.atob === "function") return globalThis.atob(padded);
+  return Buffer.from(padded, "base64").toString("utf8");
+}

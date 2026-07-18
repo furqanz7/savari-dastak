@@ -12,3 +12,6 @@ DerivedData/
 !**/.env.example
 **/Secrets.xcconfig
 **/.build/
+**/.vercel/
+**/node_modules/
+**/dist/
