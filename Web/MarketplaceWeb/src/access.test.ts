@@ -37,6 +37,18 @@ describe("Dastak role isolation", () => {
     expect(mapDeliverySnapshot({ onboardingState: "pending" }).state).toBe("pending");
     expect(mapDeliverySnapshot({ onboardingState: "approved" }).state).toBe("active");
   });
+
+  it("recognizes a revoked server session", async () => {
+    const access = await import("./access");
+    const isAuthenticationRequiredResponse = (
+      access as typeof access & {
+        isAuthenticationRequiredResponse?: (status: number) => boolean;
+      }
+    ).isAuthenticationRequiredResponse;
+
+    expect(isAuthenticationRequiredResponse?.(401)).toBe(true);
+    expect(isAuthenticationRequiredResponse?.(500)).toBe(false);
+  });
 });
 
 describe("profile validation", () => {

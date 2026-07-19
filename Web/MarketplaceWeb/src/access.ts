@@ -1,7 +1,7 @@
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { AppConfig } from "./config";
 
-export type AccessState = "needs_profile" | "active" | "pending" | "suspended" | "denied";
+export type AccessState = "signed_out" | "needs_profile" | "active" | "pending" | "suspended" | "denied";
 
 export type AccountProfile = {
   displayName: string;
@@ -110,6 +110,10 @@ export function mapDeliverySnapshot(snapshot: DeliverySnapshot): AccessResult {
   }
 }
 
+export function isAuthenticationRequiredResponse(status: number) {
+  return status === 401;
+}
+
 async function resolveSavariAccess(
   client: SupabaseClient,
   userId: string,
@@ -143,6 +147,9 @@ async function resolveDastakAccess(
   const { role } = config;
   if (role === "delivery") {
     const response = await callFunction(session, config, "delivery-partners", { operation: "selfSnapshot" });
+    if (isAuthenticationRequiredResponse(response.status)) {
+      return { state: "signed_out" } satisfies AccessResult;
+    }
     if (response.status === 409) return { state: "needs_profile" } satisfies AccessResult;
     if (!response.ok) throw new Error(readErrorMessage(response.body, "Delivery access could not be verified."));
     return mapDeliverySnapshot(response.body as DeliverySnapshot);
@@ -150,6 +157,9 @@ async function resolveDastakAccess(
 
   const application = role === "merchant" ? "merchant" : "customer";
   const response = await callFunction(session, config, "resolve-app-access", { application });
+  if (isAuthenticationRequiredResponse(response.status)) {
+    return { state: "signed_out" } satisfies AccessResult;
+  }
   if (!response.ok) throw new Error(readErrorMessage(response.body, "Account access could not be verified."));
   const result = mapDastakRoute((response.body as { route?: unknown }).route);
   if (result.state === "active") {

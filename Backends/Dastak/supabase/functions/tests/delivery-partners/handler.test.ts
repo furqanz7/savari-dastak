@@ -8,6 +8,23 @@ const accountId = "11111111-1111-4111-8111-111111111111";
 const applicationId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
 const evidencePath = `dastak-partner/${accountId}/identity.pdf`;
 
+Deno.test("delivery partners accept browser CORS preflight", async () => {
+  let authenticationAttempts = 0;
+  const response = await handleDeliveryPartners(
+    preflightRequest("delivery-partners"),
+    dependencies({
+      authenticateBearer: () => {
+        authenticationAttempts += 1;
+        return Promise.resolve({ accountId });
+      },
+    }),
+  );
+
+  assertEquals(authenticationAttempts, 0);
+  assertEquals(response.status, 204);
+  assertCorsHeaders(response);
+});
+
 Deno.test("delivery partners reject missing authorization", async () => {
   const response = await handleDeliveryPartners(request({ authorization: null }), dependencies());
   await assertError(response, 401, "authentication_required");
@@ -291,4 +308,24 @@ function request(
 async function assertError(response: Response, status: number, code: string) {
   assertEquals(response.status, status);
   assertEquals((await response.json()).error.code, code);
+}
+
+function preflightRequest(functionName: string) {
+  return new Request(`http://localhost/functions/v1/${functionName}`, {
+    method: "OPTIONS",
+    headers: {
+      origin: "https://dastak-delivery.vercel.app",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "apikey,authorization,content-type,x-idempotency-key",
+    },
+  });
+}
+
+function assertCorsHeaders(response: Response) {
+  assertEquals(response.headers.get("access-control-allow-origin"), "*");
+  assertEquals(response.headers.get("access-control-allow-methods"), "POST, OPTIONS");
+  assertEquals(
+    response.headers.get("access-control-allow-headers"),
+    "authorization, x-client-info, apikey, content-type, x-idempotency-key",
+  );
 }

@@ -9,6 +9,25 @@ import type {
   BootstrapAccountInput,
 } from "../../bootstrap-account/handler.ts";
 
+Deno.test("bootstrap account accepts browser CORS preflight", async () => {
+  let authenticationAttempts = 0;
+  const response = await handleBootstrapAccount(
+    preflightRequest("bootstrap-account"),
+    dependencies({
+      authenticateBearer: () => {
+        authenticationAttempts += 1;
+        return Promise.resolve({
+          accountId: "22222222-2222-4222-8222-222222222222",
+        });
+      },
+    }),
+  );
+
+  assertEquals(authenticationAttempts, 0);
+  assertEquals(response.status, 204);
+  assertCorsHeaders(response);
+});
+
 Deno.test("bootstrap account rejects missing authorization", async () => {
   let authenticationAttempts = 0;
   const response = await handleBootstrapAccount(
@@ -248,4 +267,24 @@ function request(options: {
 
 async function jsonBody(response: Response) {
   return await response.json();
+}
+
+function preflightRequest(functionName: string) {
+  return new Request(`http://localhost/functions/v1/${functionName}`, {
+    method: "OPTIONS",
+    headers: {
+      origin: "https://dastak-customer.vercel.app",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "apikey,authorization,content-type,x-idempotency-key",
+    },
+  });
+}
+
+function assertCorsHeaders(response: Response) {
+  assertEquals(response.headers.get("access-control-allow-origin"), "*");
+  assertEquals(response.headers.get("access-control-allow-methods"), "POST, OPTIONS");
+  assertEquals(
+    response.headers.get("access-control-allow-headers"),
+    "authorization, x-client-info, apikey, content-type, x-idempotency-key",
+  );
 }

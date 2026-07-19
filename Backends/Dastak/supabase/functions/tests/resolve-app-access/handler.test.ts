@@ -6,6 +6,23 @@ import {
 } from "../../resolve-app-access/handler.ts";
 import type { AuthenticateBearer } from "../../bootstrap-account/handler.ts";
 
+Deno.test("resolve app access accepts browser CORS preflight", async () => {
+  let authenticationAttempts = 0;
+  const response = await handleResolveAppAccess(
+    preflightRequest("resolve-app-access"),
+    dependencies({
+      authenticateBearer: () => {
+        authenticationAttempts += 1;
+        return Promise.resolve({ accountId });
+      },
+    }),
+  );
+
+  assertEquals(authenticationAttempts, 0);
+  assertEquals(response.status, 204);
+  assertCorsHeaders(response);
+});
+
 Deno.test("resolve app access rejects missing authorization", async () => {
   let authenticationAttempts = 0;
   const response = await handleResolveAppAccess(
@@ -116,4 +133,24 @@ function request(body: unknown, authorization?: string) {
 
 async function jsonBody(response: Response) {
   return await response.json();
+}
+
+function preflightRequest(functionName: string) {
+  return new Request(`http://localhost/functions/v1/${functionName}`, {
+    method: "OPTIONS",
+    headers: {
+      origin: "https://dastak-customer.vercel.app",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "apikey,authorization,content-type",
+    },
+  });
+}
+
+function assertCorsHeaders(response: Response) {
+  assertEquals(response.headers.get("access-control-allow-origin"), "*");
+  assertEquals(response.headers.get("access-control-allow-methods"), "POST, OPTIONS");
+  assertEquals(
+    response.headers.get("access-control-allow-headers"),
+    "authorization, x-client-info, apikey, content-type, x-idempotency-key",
+  );
 }

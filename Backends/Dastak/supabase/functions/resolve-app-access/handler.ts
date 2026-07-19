@@ -1,4 +1,4 @@
-import { json } from "../_shared/http.ts";
+import { corsPreflight, json } from "../_shared/http.ts";
 import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
 export type DastakApplication = "customer" | "merchant" | "admin";
@@ -34,6 +34,9 @@ export async function handleResolveAppAccess(
   request: Request,
   dependencies: Dependencies,
 ) {
+  const preflight = corsPreflight(request);
+  if (preflight) return preflight;
+
   const authorization = request.headers.get("authorization") ?? "";
   if (!authorization.match(/^Bearer\s+\S+$/)) {
     return authenticationRequired();

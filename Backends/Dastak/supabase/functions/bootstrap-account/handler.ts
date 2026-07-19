@@ -1,4 +1,4 @@
-import { json } from "../_shared/http.ts";
+import { corsPreflight, json } from "../_shared/http.ts";
 
 export type AuthenticateBearer = (
   bearerToken: string,
@@ -35,6 +35,9 @@ export async function handleBootstrapAccount(
   request: Request,
   dependencies: Dependencies,
 ) {
+  const preflight = corsPreflight(request);
+  if (preflight) return preflight;
+
   const authorization = request.headers.get("authorization") ?? "";
   if (!authorization.match(/^Bearer\s+\S+$/)) {
     return json(
