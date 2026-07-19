@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { LogOut, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
 import { completeProfile, isValidProfile, resolveAccess, type AccessResult } from "./access";
+import { shouldPreserveAuthenticatedView } from "./auth-state";
 import { CatalogueView } from "./CatalogueView";
 import { readAppConfig } from "./config";
+import { SavariRideView } from "./SavariRideView";
 
 const config = readAppConfig({
   VITE_APP_VARIANT: import.meta.env.VITE_APP_VARIANT,
@@ -30,12 +32,15 @@ type ViewState =
 export default function App() {
   const [view, setView] = useState<ViewState>({ phase: "loading" });
   const [busy, setBusy] = useState(false);
+  const knownUserId = useRef<string | undefined>(undefined);
 
   const evaluate = useCallback(async (session: Session | null) => {
     if (!session) {
+      knownUserId.current = undefined;
       setView({ phase: "signed_out" });
       return;
     }
+    knownUserId.current = session.user.id;
     setView({ phase: "loading" });
     try {
       const access = await resolveAccess(supabase, session, config);
@@ -52,13 +57,13 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    void supabase.auth.getSession().then(({ data, error }) => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
-      if (error) setView({ phase: "error", message: error.message });
-      else void evaluate(data.session);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) void evaluate(session);
+      if (shouldPreserveAuthenticatedView(event, session, knownUserId.current)) {
+        setView((current) => updateViewSession(current, session));
+        return;
+      }
+      void evaluate(session);
     });
     return () => {
       active = false;
@@ -98,7 +103,7 @@ export default function App() {
         )}
       </header>
 
-      <section className={`content ${view.phase === "ready" && config.variant === "dastak-customer" ? "catalogue-content" : ""}`}>
+      <section className={`content ${view.phase === "ready" && ["dastak-customer", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}>
         {view.phase === "loading" && <Loading />}
         {view.phase === "signed_out" && <SignIn busy={busy} onSignIn={signIn} />}
         {view.phase === "profile" && (
@@ -112,6 +117,18 @@ export default function App() {
       </section>
     </main>
   );
+}
+
+function updateViewSession(view: ViewState, session: Session): ViewState {
+  switch (view.phase) {
+    case "profile":
+    case "ready":
+    case "restricted":
+    case "error":
+      return { ...view, session };
+    default:
+      return view;
+  }
 }
 
 function Brand() {
@@ -192,6 +209,16 @@ function ProfileForm({ session, onComplete }: { session: Session; onComplete: ()
 }
 
 function Ready({ access, email, session }: { access: AccessResult; email?: string; session: Session }) {
+  if (config.variant === "savari-passenger") {
+    return (
+      <SavariRideView
+        accessToken={session.access_token}
+        displayName={access.profile?.displayName}
+        supabaseUrl={config.supabaseUrl}
+        publishableKey={config.supabasePublishableKey}
+      />
+    );
+  }
   if (config.variant === "dastak-customer") {
     return (
       <CatalogueView

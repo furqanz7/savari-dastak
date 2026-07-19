@@ -72,7 +72,61 @@ button:disabled { cursor: wait; opacity: .55; }
   align-items: center;
   padding: 28px 0 88px;
 }
-.content.catalogue-content { align-items: start; }
+.content.workspace-content { align-items: start; }
+
+.ride-shell, .active-ride { width: min(100%, 780px); margin: 0 auto; }
+.ride-heading { padding: 18px 0 26px; }
+.ride-heading h1, .active-ride h1 { margin: 5px 0 8px; font-size: 38px; line-height: 1.08; }
+.ride-heading > div > p:last-child { margin: 0; color: #68706b; }
+.route-builder { border-top: 1px solid #d8dcd9; border-bottom: 1px solid #d8dcd9; }
+.route-row { min-height: 82px; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 14px 0; }
+.route-row + .route-row { border-top: 1px solid #e0e4e1; }
+.route-row > div, .route-row label { display: grid; gap: 4px; }
+.route-row small, .active-route small { color: #6b746e; font-size: 12px; }
+.route-row strong { overflow-wrap: anywhere; }
+.route-marker { width: 11px; height: 11px; display: inline-block; border: 3px solid var(--accent); border-radius: 50%; }
+.destination-marker { border-radius: 2px; border-color: var(--contrast); }
+.route-action { min-height: 42px; display: inline-flex; align-items: center; gap: 7px; padding: 0 13px; border: 1px solid #cfd5d1; border-radius: 7px; background: #fff; color: #253029; font-weight: 700; }
+.destination-row label input { width: 100%; height: 38px; padding: 0; border: 0; outline: 0; background: transparent; color: #17201b; font-weight: 650; }
+.destination-row label input::placeholder { color: #8a928d; font-weight: 500; }
+.search-button { width: 40px; height: 40px; }
+.destination-results { border-top: 1px solid #e0e4e1; }
+.destination-results button { width: 100%; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start; padding: 14px 0; border: 0; border-bottom: 1px solid #e0e4e1; background: transparent; color: #202923; text-align: left; }
+.destination-results button > span { display: grid; gap: 3px; }
+.destination-results small { color: #6b746e; overflow-wrap: anywhere; }
+.ride-primary { width: 100%; margin-top: 22px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.ride-error { margin: 16px 0 0; color: #ad2f2a; font-size: 14px; }
+.fare-section { margin-top: 28px; padding-top: 26px; border-top: 1px solid #d8dcd9; }
+.fare-section > header { display: flex; justify-content: space-between; gap: 18px; align-items: end; }
+.fare-section h2 { margin: 4px 0 0; font-size: 24px; }
+.fare-section > header > span { color: #68706b; font-size: 14px; }
+.vehicle-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 17px; }
+.vehicle-options button { min-height: 88px; display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px solid #ced4d0; border-radius: 8px; background: #fff; color: #202923; text-align: left; }
+.vehicle-options button.selected { border: 2px solid var(--accent); background: var(--accent-soft); }
+.vehicle-options button span { display: grid; gap: 5px; }
+.vehicle-options button strong { font-size: 17px; }
+.vehicle-options button small { color: #59645d; font-size: 15px; font-weight: 700; }
+.ride-loading { min-height: 300px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #68706b; }
+.ride-loading span { width: 18px; height: 18px; border: 2px solid #c9cfcb; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+.active-ride { padding-top: 24px; }
+.active-ride > header { display: flex; align-items: center; gap: 15px; padding-bottom: 27px; border-bottom: 1px solid #d8dcd9; }
+.active-ride h1 { margin-bottom: 0; }
+.ride-status-icon { width: 48px; height: 48px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 8px; color: var(--accent); background: var(--accent-soft); }
+.ride-status-icon.finished { color: #176b3a; background: #e4f1e8; }
+.active-route { padding: 22px 0; border-bottom: 1px solid #d8dcd9; }
+.active-route > div { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 52px; }
+.active-route p { display: grid; gap: 3px; margin: 0; }
+.ride-facts { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; padding: 20px 0; border-bottom: 1px solid #d8dcd9; }
+.ride-facts div { display: grid; gap: 5px; }
+.ride-facts dt { color: #6b746e; font-size: 12px; }
+.ride-facts dd { margin: 0; font-size: 18px; font-weight: 750; }
+.driver-contact, .boarding-code { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 19px 0; border-bottom: 1px solid #d8dcd9; }
+.driver-contact > div, .boarding-code { display: grid; gap: 4px; }
+.driver-contact small, .boarding-code small { color: #6b746e; }
+.driver-contact a { min-height: 40px; display: inline-flex; align-items: center; gap: 7px; padding: 0 13px; border: 1px solid #cfd5d1; border-radius: 7px; color: #202923; background: #fff; font-weight: 700; text-decoration: none; }
+.boarding-code strong { font-size: 28px; letter-spacing: 0; }
+.ride-actions { display: grid; gap: 10px; margin-top: 22px; }
+.ride-actions .primary-button, .ride-actions .secondary-button { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 
 .catalogue-shell { width: 100%; }
 .catalogue-heading {
@@ -228,6 +282,15 @@ button:disabled { cursor: wait; opacity: .55; }
   .store-status { grid-column: 2; justify-self: start; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .product-copy { min-height: 138px; padding: 11px; }
+  .ride-heading { padding-top: 8px; }
+  .ride-heading h1, .active-ride h1 { font-size: 30px; }
+  .route-row { grid-template-columns: 18px minmax(0, 1fr); }
+  .route-action, .search-button { grid-column: 2; justify-self: start; }
+  .destination-row label { align-self: end; }
+  .fare-section > header { display: grid; align-items: start; }
+  .vehicle-options { grid-template-columns: 1fr; }
+  .ride-facts { gap: 12px; }
+  .ride-facts dd { font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
