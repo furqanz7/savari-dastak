@@ -8,6 +8,24 @@ import {
   type UpsertStoreInput,
 } from "../../catalogue/handler.ts";
 
+Deno.test("catalogue accepts browser CORS preflight without authenticating", async () => {
+  let authenticationAttempts = 0;
+  const response = await handleCatalogue(
+    new Request("http://localhost/functions/v1/catalogue", { method: "OPTIONS" }),
+    dependencies({
+      authenticateBearer: () => {
+        authenticationAttempts += 1;
+        return Promise.resolve({ accountId });
+      },
+    }),
+  );
+
+  assertEquals(authenticationAttempts, 0);
+  assertEquals(response.status, 204);
+  assertEquals(response.headers.get("access-control-allow-origin"), "*");
+  assert(response.headers.get("access-control-allow-headers")?.includes("authorization"));
+});
+
 Deno.test("catalogue rejects missing authorization", async () => {
   let authenticationAttempts = 0;
   const response = await handleCatalogue(

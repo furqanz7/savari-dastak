@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { LogOut, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
 import { completeProfile, isValidProfile, resolveAccess, type AccessResult } from "./access";
+import { CatalogueView } from "./CatalogueView";
 import { readAppConfig } from "./config";
 
 const config = readAppConfig({
@@ -97,13 +98,13 @@ export default function App() {
         )}
       </header>
 
-      <section className="content">
+      <section className={`content ${view.phase === "ready" && config.variant === "dastak-customer" ? "catalogue-content" : ""}`}>
         {view.phase === "loading" && <Loading />}
         {view.phase === "signed_out" && <SignIn busy={busy} onSignIn={signIn} />}
         {view.phase === "profile" && (
           <ProfileForm session={view.session} onComplete={() => evaluate(view.session)} />
         )}
-        {view.phase === "ready" && <Ready access={view.access} email={view.session.user.email} />}
+        {view.phase === "ready" && <Ready access={view.access} email={view.session.user.email} session={view.session} />}
         {view.phase === "restricted" && <Restricted access={view.access} />}
         {view.phase === "error" && (
           <ErrorState message={view.message} onRetry={() => evaluate(view.session ?? null)} />
@@ -190,7 +191,17 @@ function ProfileForm({ session, onComplete }: { session: Session; onComplete: ()
   );
 }
 
-function Ready({ access, email }: { access: AccessResult; email?: string }) {
+function Ready({ access, email, session }: { access: AccessResult; email?: string; session: Session }) {
+  if (config.variant === "dastak-customer") {
+    return (
+      <CatalogueView
+        accessToken={session.access_token}
+        displayName={access.profile?.displayName}
+        supabaseUrl={config.supabaseUrl}
+        publishableKey={config.supabasePublishableKey}
+      />
+    );
+  }
   return (
     <div className="status-panel">
       <div className="section-icon success"><ShieldCheck size={23} /></div>

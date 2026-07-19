@@ -1,4 +1,4 @@
-import { json } from "../_shared/http.ts";
+import { corsPreflight, json } from "../_shared/http.ts";
 import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
 export type CatalogueAvailability = "in_stock" | "out_of_stock";
@@ -120,6 +120,9 @@ export async function handleCatalogue(
   request: Request,
   dependencies: CatalogueDependencies,
 ) {
+  const preflight = corsPreflight(request);
+  if (preflight) return preflight;
+
   const authorization = request.headers.get("authorization") ?? "";
   if (!/^Bearer\s+\S+$/.test(authorization)) return authenticationRequired();
 
