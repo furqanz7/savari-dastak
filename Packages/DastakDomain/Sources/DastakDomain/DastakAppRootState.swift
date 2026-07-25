@@ -17,6 +17,7 @@ public enum DeliveryPartnerAccess: String, Codable, Equatable, Sendable {
     case approved
     case rejected
     case suspended
+    case unavailable
 }
 
 public enum DastakAppRootError: Error, Equatable, Sendable {

@@ -17,6 +17,8 @@
 		71B71B71B71B71B71B71B71B /* MarketplaceFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 715715715715715715715715 /* MarketplaceFoundation */; };
 		71C71C71C71C71C71C71C71C /* MarketplaceInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 716716716716716716716716 /* MarketplaceInfrastructure */; };
 		71D71D71D71D71D71D71D71D /* MarketplaceInfrastructure in Frameworks */ = {isa = PBXBuildFile; productRef = 717717717717717717717717 /* MarketplaceInfrastructure */; };
+		D3D3D3D3D3D3D3D3D3D3D3D3 /* DastakDomain in Frameworks */ = {isa = PBXBuildFile; productRef = D1D1D1D1D1D1D1D1D1D1D1D1 /* DastakDomain */; };
+		D4D4D4D4D4D4D4D4D4D4D4D4 /* DastakDomain in Frameworks */ = {isa = PBXBuildFile; productRef = D2D2D2D2D2D2D2D2D2D2D2D2 /* DastakDomain */; };
 		8BD8AB4722E60D5D1B9E394E /* DastakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F4AF8EF952C8FE288A2E29 /* DastakTests.swift */; };
 		8D69905E9C394A25AFD4CBC4 /* DastakMerchantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C142CB347F221ACF0D27CD /* DastakMerchantTests.swift */; };
 		9406EE4208344F5EE4BBDDEA /* DastakAdminTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B904E5C6BCAD41FF8BEE5FC /* DastakAdminTests.swift */; };
@@ -87,6 +89,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4D4D4D4D4D4D4D4D4D4D4D4 /* DastakDomain in Frameworks */,
 				71B71B71B71B71B71B71B71B /* MarketplaceFoundation in Frameworks */,
 				71A71A71A71A71A71A71A71A /* MarketplaceInfrastructure in Frameworks */,
 			);
@@ -103,6 +106,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D3D3D3D3D3D3D3D3D3D3D3D3 /* DastakDomain in Frameworks */,
 				719719719719719719719719 /* MarketplaceFoundation in Frameworks */,
 				718718718718718718718718 /* MarketplaceInfrastructure in Frameworks */,
 			);
@@ -314,6 +318,7 @@
 			packageProductDependencies = (
 				712712712712712712712712 /* MarketplaceInfrastructure */,
 				713713713713713713713713 /* MarketplaceFoundation */,
+				D1D1D1D1D1D1D1D1D1D1D1D1 /* DastakDomain */,
 			);
 			productName = Dastak;
 			productReference = 8D878A197BA6A8D855996FD1 /* Dastak.app */;
@@ -336,6 +341,7 @@
 			packageProductDependencies = (
 				714714714714714714714714 /* MarketplaceInfrastructure */,
 				715715715715715715715715 /* MarketplaceFoundation */,
+				D2D2D2D2D2D2D2D2D2D2D2D2 /* DastakDomain */,
 			);
 			productName = DastakTests;
 			productReference = FB01BEB49EC50B8C67ADAB6D /* DastakTests.xctest */;
@@ -424,6 +430,7 @@
 			packageReferences = (
 				710710710710710710710710 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */,
 				711711711711711711711711 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */,
+				D0D0D0D0D0D0D0D0D0D0D0D0 /* XCLocalSwiftPackageReference "DastakDomain" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 05E66D5BB2F1192F69B3775D /* Products */;
@@ -928,6 +935,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../Packages/MarketplaceFoundation;
 		};
+		D0D0D0D0D0D0D0D0D0D0D0D0 /* XCLocalSwiftPackageReference "DastakDomain" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/DastakDomain;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -960,6 +971,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 710710710710710710710710 /* XCLocalSwiftPackageReference "MarketplaceInfrastructure" */;
 			productName = MarketplaceInfrastructure;
+		};
+		D1D1D1D1D1D1D1D1D1D1D1D1 /* DastakDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D0D0D0D0D0D0D0D0D0D0D0D0 /* XCLocalSwiftPackageReference "DastakDomain" */;
+			productName = DastakDomain;
+		};
+		D2D2D2D2D2D2D2D2D2D2D2D2 /* DastakDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D0D0D0D0D0D0D0D0D0D0D0D0 /* XCLocalSwiftPackageReference "DastakDomain" */;
+			productName = DastakDomain;
 		};
 /* End XCSwiftPackageProductDependency section */
 

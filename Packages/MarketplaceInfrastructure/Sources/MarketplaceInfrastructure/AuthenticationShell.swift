@@ -38,6 +38,7 @@ enum AuthenticationShellError: Error {
 @MainActor
 private final class AuthenticationShellModel: ObservableObject {
     let coordinator: AuthenticationCoordinator?
+    let functionClient: (any FunctionClient)?
 
     init(
         product: MarketplaceProduct,
@@ -46,19 +47,30 @@ private final class AuthenticationShellModel: ObservableObject {
     ) {
         guard let configuration = try? BackendConfiguration.runtime(product: product, bundle: bundle) else {
             coordinator = nil
+            functionClient = nil
             return
         }
+        let operations = SupabaseAuthenticationClient.LiveOperations(
+            configuration: configuration
+        )
         coordinator = AuthenticationCoordinator(
             client: SupabaseAuthenticationClient(
-                configuration: configuration,
+                operations: operations,
                 requiredAccess: requiredAccess
             )
+        )
+        functionClient = SupabaseFunctionClient(
+            configuration: configuration,
+            accessTokenProvider: {
+                try await operations.currentAccessToken()
+            }
         )
     }
 }
 
 public struct MarketplaceAuthenticationShell: View {
     private let applicationName: String
+    private let activeContent: (any FunctionClient) -> AnyView
     @StateObject private var model: AuthenticationShellModel
 
     public init(
@@ -67,7 +79,26 @@ public struct MarketplaceAuthenticationShell: View {
         requiredAccess: MarketplaceApplicationAccess = .profileOnly,
         bundle: Bundle = .main
     ) {
+        self.init(
+            applicationName: applicationName,
+            product: product,
+            requiredAccess: requiredAccess,
+            bundle: bundle,
+            activeContent: { _ in DefaultMarketplaceActiveView() }
+        )
+    }
+
+    public init<Content: View>(
+        applicationName: String,
+        product: MarketplaceProduct,
+        requiredAccess: MarketplaceApplicationAccess = .profileOnly,
+        bundle: Bundle = .main,
+        @ViewBuilder activeContent: @escaping (any FunctionClient) -> Content
+    ) {
         self.applicationName = applicationName
+        self.activeContent = { functionClient in
+            AnyView(activeContent(functionClient))
+        }
         _model = StateObject(
             wrappedValue: AuthenticationShellModel(
                 product: product,
@@ -79,10 +110,13 @@ public struct MarketplaceAuthenticationShell: View {
 
     public var body: some View {
         Group {
-            if let coordinator = model.coordinator {
+            if let coordinator = model.coordinator,
+               let functionClient = model.functionClient
+            {
                 AuthenticationRouteView(
                     applicationName: applicationName,
-                    coordinator: coordinator
+                    coordinator: coordinator,
+                    activeContent: activeContent(functionClient)
                 )
             } else {
                 VStack(spacing: 12) {
@@ -98,9 +132,16 @@ public struct MarketplaceAuthenticationShell: View {
     }
 }
 
+private struct DefaultMarketplaceActiveView: View {
+    var body: some View {
+        Text("Account active")
+    }
+}
+
 private struct AuthenticationRouteView: View {
     let applicationName: String
     @ObservedObject var coordinator: AuthenticationCoordinator
+    let activeContent: AnyView
 
     @State private var displayName = ""
     @State private var phoneNumber = ""
@@ -109,6 +150,21 @@ private struct AuthenticationRouteView: View {
     @State private var restored = false
 
     var body: some View {
+        Group {
+            if coordinator.route == .active {
+                activeView
+            } else {
+                authenticationView
+            }
+        }
+        .task {
+            guard !restored else { return }
+            restored = true
+            await coordinator.restore()
+        }
+    }
+
+    private var authenticationView: some View {
         VStack(spacing: 16) {
             Text(applicationName).font(.title2).bold()
 
@@ -133,7 +189,7 @@ private struct AuthenticationRouteView: View {
                     message: "This account does not have access to this app."
                 )
             case .active:
-                activeView
+                EmptyView()
             }
 
             if let errorMessage {
@@ -144,11 +200,6 @@ private struct AuthenticationRouteView: View {
         }
         .padding(24)
         .frame(maxWidth: 420)
-        .task {
-            guard !restored else { return }
-            restored = true
-            await coordinator.restore()
-        }
     }
 
     private var signedOutView: some View {
@@ -209,12 +260,26 @@ private struct AuthenticationRouteView: View {
     }
 
     private var activeView: some View {
-        VStack(spacing: 12) {
-            Text("Account active")
-            Button("Sign out") {
-                Task { await signOut() }
+        VStack(spacing: 0) {
+            activeContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal)
             }
-            .buttonStyle(.bordered)
+
+            Divider()
+            HStack {
+                Spacer()
+                Button("Sign out") {
+                    Task { await signOut() }
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding()
         }
     }
 

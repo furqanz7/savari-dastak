@@ -343,6 +343,14 @@ extension SupabaseAuthenticationClient {
             }
         }
 
+        func currentAccessToken() async throws -> String? {
+            do {
+                return try await supabaseClient.auth.session.accessToken
+            } catch AuthError.sessionMissing {
+                return nil
+            }
+        }
+
         func accountProfileID(for accountID: UUID) async throws -> UUID? {
             let accounts: [AccountIdentity] = try await supabaseClient
                 .from("accounts")
