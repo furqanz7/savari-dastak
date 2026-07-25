@@ -1,4 +1,4 @@
-import { json } from "../_shared/http.ts";
+import { corsPreflight, json } from "../_shared/http.ts";
 import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
 export type MerchantOrderStatus =
@@ -107,6 +107,12 @@ export type MerchantOrderMutationInput = {
 
 export type MerchantRejectOrderInput = MerchantOrderMutationInput & { reason: string };
 export type CustomerCancelOrderInput = MerchantOrderMutationInput & { reason: string };
+export type MerchantConfirmReturnInput = MerchantOrderMutationInput & { reason: string };
+export type OwnerReviewRefundInput = MerchantOrderMutationInput & {
+  outcome: "approve_full" | "approve_items_only" | "deny";
+  faultSource: "merchant" | "dastak" | null;
+  reason: string;
+};
 export type OwnerResetHandoffInput = MerchantOrderMutationInput & {
   purpose: "pickup" | "delivery";
   reason: string;
@@ -118,10 +124,13 @@ export type MerchantOrderDependencies = {
   createOrder: (input: CreateMerchantOrderInput) => Promise<RpcResult>;
   getCustomerOrders: (accountId: string) => Promise<RpcResult>;
   getMerchantOrders: (accountId: string) => Promise<RpcResult>;
+  getOwnerOrders: (accountId: string, limit: number) => Promise<RpcResult>;
   merchantAccept: (input: MerchantOrderMutationInput) => Promise<RpcResult>;
   merchantReject: (input: MerchantRejectOrderInput) => Promise<RpcResult>;
   merchantMarkReady: (input: MerchantOrderMutationInput) => Promise<RpcResult>;
   customerCancel: (input: CustomerCancelOrderInput) => Promise<RpcResult>;
+  merchantConfirmReturn: (input: MerchantConfirmReturnInput) => Promise<RpcResult>;
+  ownerReviewRefund: (input: OwnerReviewRefundInput) => Promise<RpcResult>;
   ownerResetHandoff: (input: OwnerResetHandoffInput) => Promise<RpcResult>;
 };
 
@@ -131,6 +140,9 @@ export async function handleMerchantOrders(
   request: Request,
   dependencies: MerchantOrderDependencies,
 ) {
+  const preflight = corsPreflight(request);
+  if (preflight) return preflight;
+
   const authorization = request.headers.get("authorization") ?? "";
   if (!/^Bearer\s+\S+$/.test(authorization)) return authenticationRequired();
 
@@ -156,6 +168,12 @@ export async function handleMerchantOrders(
       }
       case "merchantSnapshot": {
         const result = await dependencies.getMerchantOrders(actor.accountId);
+        return json(result.responseBody, result.responseStatus);
+      }
+      case "ownerSnapshot": {
+        const limit = validOwnerLimit(body.limit);
+        if (!limit) return validationError();
+        const result = await dependencies.getOwnerOrders(actor.accountId, limit);
         return json(result.responseBody, result.responseStatus);
       }
       case "merchantAccept":
@@ -186,6 +204,20 @@ export async function handleMerchantOrders(
           actor.accountId,
           dependencies.customerCancel,
         );
+      case "merchantConfirmReturn":
+        return await reasonedMutation(
+          request,
+          body,
+          actor.accountId,
+          dependencies.merchantConfirmReturn,
+        );
+      case "ownerReviewRefund":
+        return await ownerReviewRefundMutation(
+          request,
+          body,
+          actor.accountId,
+          dependencies.ownerReviewRefund,
+        );
       case "ownerResetHandoff":
         return await ownerResetMutation(
           request,
@@ -199,6 +231,39 @@ export async function handleMerchantOrders(
   } catch {
     return internalError();
   }
+}
+
+async function ownerReviewRefundMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependency: (input: OwnerReviewRefundInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const orderId = validUUID(body.orderId);
+  const outcome: OwnerReviewRefundInput["outcome"] | undefined = body.outcome === "approve_full" ||
+      body.outcome === "approve_items_only" || body.outcome === "deny"
+    ? body.outcome
+    : undefined;
+  const faultSource: OwnerReviewRefundInput["faultSource"] | undefined =
+    body.faultSource === null || body.faultSource === undefined
+      ? null
+      : body.faultSource === "merchant" || body.faultSource === "dastak"
+      ? body.faultSource
+      : undefined;
+  const reason = normalizeRequiredText(body.reason, 300);
+  if (!idempotencyKey || !orderId || !outcome || faultSource === undefined || !reason) {
+    return validationError();
+  }
+
+  const normalized = { orderId, outcome, faultSource, reason };
+  const result = await dependency({
+    accountId,
+    ...normalized,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
 }
 
 async function ownerResetMutation(
@@ -368,6 +433,13 @@ function normalizeRequiredText(value: unknown, maximumLength: number) {
 
 function validUUID(value: unknown) {
   return typeof value === "string" && uuidPattern.test(value) ? value.toLowerCase() : undefined;
+}
+
+function validOwnerLimit(value: unknown) {
+  const limit = value === undefined ? 50 : value;
+  return typeof limit === "number" && Number.isInteger(limit) && limit >= 1 && limit <= 100
+    ? limit
+    : undefined;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

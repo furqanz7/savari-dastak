@@ -26,6 +26,7 @@ Deno.serve((request) =>
     routeParcel,
     quoteParcel,
     createParcel,
+    getCustomerSnapshot,
     getParcelSnapshot,
     getPartnerSnapshot,
     acknowledgeAssignment,
@@ -39,9 +40,7 @@ Deno.serve((request) =>
 async function routeParcel(input: ParcelRouteInput) {
   const endpoint = Deno.env.get("DASTAK_ROUTE_PROVIDER_URL");
   const token = Deno.env.get("DASTAK_ROUTE_PROVIDER_TOKEN");
-  if (!endpoint || !token) {
-    throw new ParcelRoutingUnavailableError("Route provider is not configured");
-  }
+  if (!endpoint || !token) return estimatedRoute(input);
 
   let response: Response;
   try {
@@ -65,6 +64,26 @@ async function routeParcel(input: ParcelRouteInput) {
   return {
     distanceMeters: route.distanceMeters as number,
     durationSeconds: route.durationSeconds as number,
+  };
+}
+
+function estimatedRoute(input: ParcelRouteInput) {
+  const earthRadiusMeters = 6_371_000;
+  const toRadians = (degrees: number) => degrees * Math.PI / 180;
+  const latitudeDelta = toRadians(input.dropoff.latitude - input.pickup.latitude);
+  const longitudeDelta = toRadians(input.dropoff.longitude - input.pickup.longitude);
+  const firstLatitude = toRadians(input.pickup.latitude);
+  const secondLatitude = toRadians(input.dropoff.latitude);
+  const haversine = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(firstLatitude) * Math.cos(secondLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+  const directMeters = earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+  const distanceMeters = Math.max(50, Math.ceil(directMeters * 1.25));
+  const speedMetersPerSecond = input.deliveryMethod === "walking" ? 1.25
+    : input.deliveryMethod === "bicycle" ? 4
+    : input.deliveryMethod === "bike" ? 7.5 : 6;
+  return {
+    distanceMeters,
+    durationSeconds: Math.max(60, Math.ceil(distanceMeters / speedMetersPerSecond)),
   };
 }
 
@@ -95,6 +114,13 @@ async function createParcel(input: ParcelCreateInput) {
     p_declared_value_paise: input.declaredValuePaise,
     p_idempotency_key: input.idempotencyKey,
     p_request_digest: input.requestDigest,
+  });
+}
+
+async function getCustomerSnapshot(accountId: string) {
+  return rpc("get_customer_parcel_deliveries", {
+    p_account_id: accountId,
+    p_limit: 20,
   });
 }
 

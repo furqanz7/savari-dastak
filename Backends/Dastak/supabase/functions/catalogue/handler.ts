@@ -49,6 +49,7 @@ export type CatalogueProduct = {
 
 export type CatalogueSnapshot = {
   serviceZoneId: string | null;
+  discoveryRadiusMeters: number;
   stores: CatalogueStore[];
   categories: CatalogueCategory[];
   products: CatalogueProduct[];
@@ -104,6 +105,7 @@ export type CatalogueDependencies = {
     accountId: string;
     latitude: number;
     longitude: number;
+    discoveryRadiusMeters: number;
   }) => Promise<RpcResult>;
 };
 
@@ -286,8 +288,19 @@ async function browse(
   dependencies: CatalogueDependencies,
 ) {
   const location = parseLocation(body.location);
-  if (!location) return validationError();
-  const result = await dependencies.browseCatalogue({ accountId, ...location });
+  const discoveryRadiusMeters = body.discoveryRadiusMeters ?? 10000;
+  if (
+    !location || typeof discoveryRadiusMeters !== "number" ||
+    !Number.isInteger(discoveryRadiusMeters) ||
+    discoveryRadiusMeters < 10000 || discoveryRadiusMeters > 30000
+  ) {
+    return validationError();
+  }
+  const result = await dependencies.browseCatalogue({
+    accountId,
+    ...location,
+    discoveryRadiusMeters,
+  });
   return json(result.responseBody, result.responseStatus);
 }
 

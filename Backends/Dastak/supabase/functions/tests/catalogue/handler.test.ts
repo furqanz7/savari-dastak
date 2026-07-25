@@ -275,13 +275,16 @@ Deno.test("merchant snapshot uses only the authenticated merchant", async () => 
 });
 
 Deno.test("customer browse forwards authenticated customer and valid location", async () => {
-  let recorded: { accountId: string; latitude: number; longitude: number } | undefined;
+  let recorded:
+    | { accountId: string; latitude: number; longitude: number; discoveryRadiusMeters: number }
+    | undefined;
   const response = await handleCatalogue(
     request(
       {
         operation: "browse",
         accountId: otherAccountId,
         location: { latitude: 12.6819, longitude: 78.6201 },
+        discoveryRadiusMeters: 25000,
       },
       "Bearer session-token",
     ),
@@ -298,7 +301,38 @@ Deno.test("customer browse forwards authenticated customer and valid location", 
     accountId,
     latitude: 12.6819,
     longitude: 78.6201,
+    discoveryRadiusMeters: 25000,
   });
+});
+
+Deno.test("customer browse defaults to 10 kilometres and rejects an out-of-range filter", async () => {
+  const recorded: number[] = [];
+  const deps = dependencies({
+    browseCatalogue: (input) => {
+      recorded.push(input.discoveryRadiusMeters);
+      return Promise.resolve({ responseBody: snapshot, responseStatus: 200 });
+    },
+  });
+
+  const defaultResponse = await handleCatalogue(
+    request({
+      operation: "browse",
+      location: { latitude: 12.6819, longitude: 78.6201 },
+    }, "Bearer session-token"),
+    deps,
+  );
+  const invalidResponse = await handleCatalogue(
+    request({
+      operation: "browse",
+      location: { latitude: 12.6819, longitude: 78.6201 },
+      discoveryRadiusMeters: 30001,
+    }, "Bearer session-token"),
+    deps,
+  );
+
+  assertEquals(defaultResponse.status, 200);
+  assertEquals(invalidResponse.status, 400);
+  assertEquals(recorded, [10000]);
 });
 
 Deno.test("catalogue dependency failures do not leak details", async () => {
@@ -357,6 +391,7 @@ const product = {
 };
 const snapshot: CatalogueSnapshot = {
   serviceZoneId,
+  discoveryRadiusMeters: 10000,
   stores: [store],
   categories: [category],
   products: [product],

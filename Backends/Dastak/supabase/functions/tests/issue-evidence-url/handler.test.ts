@@ -10,6 +10,16 @@ const accountId = "22222222-2222-4222-8222-222222222222";
 const otherAccountId = "33333333-3333-4333-8333-333333333333";
 const selfPath = `dastak-partner/${accountId}/delivery-photo.jpg`;
 
+Deno.test("evidence URL serves browser preflight without authentication", async () => {
+  const response = await handleIssueEvidenceUrl(
+    new Request("http://localhost/functions/v1/issue-evidence-url", { method: "OPTIONS" }),
+    dependencies(),
+  );
+
+  assertEquals(response.status, 204);
+  assertEquals(response.headers.get("access-control-allow-origin"), "*");
+});
+
 Deno.test("evidence URL rejects missing authorization before validation", async () => {
   let calls = 0;
   const response = await handleIssueEvidenceUrl(

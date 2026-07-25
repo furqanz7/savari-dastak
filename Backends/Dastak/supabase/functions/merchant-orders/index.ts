@@ -5,9 +5,11 @@ import {
   type CreateMerchantOrderInput,
   type CustomerCancelOrderInput,
   handleMerchantOrders,
+  type MerchantConfirmReturnInput,
   type MerchantOrderMutationInput,
   type MerchantRejectOrderInput,
   type OwnerResetHandoffInput,
+  type OwnerReviewRefundInput,
   type QuoteMerchantOrderInput,
 } from "./handler.ts";
 
@@ -24,10 +26,13 @@ Deno.serve((request) =>
     createOrder,
     getCustomerOrders,
     getMerchantOrders,
+    getOwnerOrders,
     merchantAccept,
     merchantReject,
     merchantMarkReady,
     customerCancel,
+    merchantConfirmReturn,
+    ownerReviewRefund,
     ownerResetHandoff,
   })
 );
@@ -73,6 +78,15 @@ async function getMerchantOrders(accountId: string) {
   return rpcResponse(data, "get_merchant_orders");
 }
 
+async function getOwnerOrders(accountId: string, limit: number) {
+  const { data, error } = await serviceClient.rpc("get_owner_merchant_orders", {
+    p_account_id: accountId,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "get_owner_merchant_orders");
+}
+
 async function merchantAccept(input: MerchantOrderMutationInput) {
   return orderMutation("merchant_accept_order", input);
 }
@@ -103,6 +117,35 @@ async function customerCancel(input: CustomerCancelOrderInput) {
   });
   if (error) throw error;
   return rpcResponse(data, "customer_cancel_order");
+}
+
+async function merchantConfirmReturn(input: MerchantConfirmReturnInput) {
+  const { data, error } = await serviceClient.rpc(
+    "merchant_confirm_customer_cancellation_return",
+    {
+      p_account_id: input.accountId,
+      p_order_id: input.orderId,
+      p_reason: input.reason,
+      p_idempotency_key: input.idempotencyKey,
+      p_request_digest: input.requestDigest,
+    },
+  );
+  if (error) throw error;
+  return rpcResponse(data, "merchant_confirm_customer_cancellation_return");
+}
+
+async function ownerReviewRefund(input: OwnerReviewRefundInput) {
+  const { data, error } = await serviceClient.rpc("owner_review_merchant_order_refund", {
+    p_account_id: input.accountId,
+    p_order_id: input.orderId,
+    p_outcome: input.outcome,
+    p_fault_source: input.faultSource,
+    p_reason: input.reason,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "owner_review_merchant_order_refund");
 }
 
 async function ownerResetHandoff(input: OwnerResetHandoffInput) {

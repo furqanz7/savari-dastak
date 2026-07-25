@@ -87,11 +87,13 @@ async function browseCatalogue(input: {
   accountId: string;
   latitude: number;
   longitude: number;
+  discoveryRadiusMeters: number;
 }) {
   const { data, error } = await serviceClient.rpc("browse_catalogue", {
     p_account_id: input.accountId,
     p_latitude: input.latitude,
     p_longitude: input.longitude,
+    p_discovery_radius_m: input.discoveryRadiusMeters,
   });
   if (error) throw error;
   return rpcResponse(data, "browse_catalogue");

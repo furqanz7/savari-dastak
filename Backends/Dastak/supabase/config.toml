@@ -439,7 +439,8 @@ entrypoint = "./functions/catalogue/index.ts"
 
 [functions.merchant-orders]
 enabled = true
-verify_jwt = true
+# The handler authenticates bearer tokens after serving browser CORS preflight.
+verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/merchant-orders/index.ts"
 
@@ -461,9 +462,24 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/payment-ledger/index.ts"
 
+[functions.dastak-payments]
+enabled = true
+# The handler verifies customer bearer tokens after serving browser CORS preflight.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/dastak-payments/index.ts"
+
+[functions.razorpay-webhook]
+enabled = true
+# Razorpay authenticates this endpoint with an HMAC over the raw request body.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/razorpay-webhook/index.ts"
+
 [functions.parcel-deliveries]
 enabled = true
-verify_jwt = true
+# The handler authenticates bearer tokens after serving browser CORS preflight.
+verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/parcel-deliveries/index.ts"
 

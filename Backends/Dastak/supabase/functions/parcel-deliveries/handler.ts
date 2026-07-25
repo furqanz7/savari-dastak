@@ -1,4 +1,4 @@
-import { json } from "../_shared/http.ts";
+import { corsPreflight, json } from "../_shared/http.ts";
 import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
 type RpcResult = { responseBody: unknown; responseStatus: number };
@@ -79,6 +79,7 @@ export type ParcelDeliveryDependencies = {
   routeParcel: (input: ParcelRouteInput) => Promise<ParcelRoute>;
   quoteParcel: (input: ParcelQuoteInput) => Promise<RpcResult>;
   createParcel: (input: ParcelCreateInput) => Promise<RpcResult>;
+  getCustomerSnapshot: (accountId: string) => Promise<RpcResult>;
   getParcelSnapshot: (accountId: string, parcelId: string) => Promise<RpcResult>;
   getPartnerSnapshot: (accountId: string) => Promise<RpcResult>;
   acknowledgeAssignment: (input: ParcelAssignmentMutationInput) => Promise<RpcResult>;
@@ -98,6 +99,9 @@ export async function handleParcelDeliveries(
   request: Request,
   dependencies: ParcelDeliveryDependencies,
 ) {
+  const preflight = corsPreflight(request);
+  if (preflight) return preflight;
+
   const authorization = request.headers.get("authorization") ?? "";
   if (!/^Bearer\s+\S+$/.test(authorization)) return authenticationRequired();
 
@@ -117,6 +121,8 @@ export async function handleParcelDeliveries(
         return await quoteMutation(request, body, actor.accountId, dependencies);
       case "createParcel":
         return await createMutation(request, body, actor.accountId, dependencies.createParcel);
+      case "customerSnapshot":
+        return rpcResponse(await dependencies.getCustomerSnapshot(actor.accountId));
       case "parcelSnapshot": {
         const parcelId = validUUID(body.parcelId);
         if (!parcelId) return validationError();

@@ -7,6 +7,16 @@ import {
 const accountId = "11111111-1111-4111-8111-111111111111";
 const assignmentId = "22222222-2222-4222-8222-222222222222";
 
+Deno.test("courier dispatch serves browser preflight without authentication", async () => {
+  const response = await handleCourierDispatch(
+    new Request("http://localhost/functions/v1/courier-dispatch", { method: "OPTIONS" }),
+    dependencies(),
+  );
+
+  assertEquals(response.status, 204);
+  assertEquals(response.headers.get("access-control-allow-origin"), "*");
+});
+
 Deno.test("courier dispatch rejects missing authorization", async () => {
   const response = await handleCourierDispatch(request({ authorization: null }), dependencies());
   await assertError(response, 401, "authentication_required");

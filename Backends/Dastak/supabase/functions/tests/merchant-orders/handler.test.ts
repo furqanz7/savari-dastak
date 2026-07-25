@@ -3,13 +3,32 @@ import {
   type CreateMerchantOrderInput,
   type CustomerCancelOrderInput,
   handleMerchantOrders,
+  type MerchantConfirmReturnInput,
   type MerchantOrderDependencies,
   type MerchantOrderMutationInput,
   type MerchantOrderSnapshot,
   type MerchantRejectOrderInput,
   type OwnerResetHandoffInput,
+  type OwnerReviewRefundInput,
   type QuoteMerchantOrderInput,
 } from "../../merchant-orders/handler.ts";
+
+Deno.test("merchant orders serve browser preflight without authentication", async () => {
+  let authenticationAttempts = 0;
+  const response = await handleMerchantOrders(
+    new Request("http://localhost/functions/v1/merchant-orders", { method: "OPTIONS" }),
+    dependencies({
+      authenticateBearer: () => {
+        authenticationAttempts += 1;
+        return Promise.resolve({ accountId });
+      },
+    }),
+  );
+
+  assertEquals(authenticationAttempts, 0);
+  assertEquals(response.status, 204);
+  assertEquals(response.headers.get("access-control-allow-origin"), "*");
+});
 
 Deno.test("merchant orders reject missing authorization", async () => {
   let authenticationAttempts = 0;
@@ -193,6 +212,33 @@ Deno.test("customer and merchant snapshots use only the authenticated account", 
   assertEquals(requested, [`customer:${accountId}`, `merchant:${accountId}`]);
 });
 
+Deno.test("owner snapshot uses only the authenticated owner and a bounded limit", async () => {
+  let requested: { accountId: string; limit: number } | undefined;
+  const response = await handleMerchantOrders(
+    request(
+      { operation: "ownerSnapshot", accountId: otherAccountId, limit: 25 },
+      "Bearer owner-session",
+    ),
+    dependencies({
+      getOwnerOrders: (id, limit) => {
+        requested = { accountId: id, limit };
+        return Promise.resolve({ responseBody: { orders: [] }, responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(requested, { accountId, limit: 25 });
+
+  for (const limit of [0, 101, 1.5, "50"]) {
+    const invalid = await handleMerchantOrders(
+      request({ operation: "ownerSnapshot", limit }, "Bearer owner-session"),
+      dependencies(),
+    );
+    assertEquals(invalid.status, 400);
+  }
+});
+
 Deno.test("merchant accept forwards an authenticated transition intent", async () => {
   let recorded: MerchantOrderMutationInput | undefined;
   const response = await handleMerchantOrders(
@@ -296,6 +342,65 @@ Deno.test("customer cancellation sends no client refund decision", async () => {
   assertEquals(recorded?.reason, "Changed my mind");
   assertEquals("eligibility" in (recorded ?? {}), false);
   assertEquals("paymentState" in (recorded ?? {}), false);
+});
+
+Deno.test("owner refund review forwards only the validated decision", async () => {
+  let recorded: OwnerReviewRefundInput | undefined;
+  const response = await handleMerchantOrders(
+    request(
+      {
+        operation: "ownerReviewRefund",
+        orderId,
+        outcome: "approve_full",
+        faultSource: "merchant",
+        reason: "  Merchant   could not fulfil  ",
+        itemRefund: { paise: 1 },
+      },
+      "Bearer owner-session",
+      "refund-review-key-1",
+    ),
+    dependencies({
+      ownerReviewRefund: (input) => {
+        recorded = input;
+        return Promise.resolve({ responseBody: cancelledOrder, responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.orderId, orderId);
+  assertEquals(recorded?.outcome, "approve_full");
+  assertEquals(recorded?.faultSource, "merchant");
+  assertEquals(recorded?.reason, "Merchant could not fulfil");
+  assertEquals("itemRefund" in (recorded ?? {}), false);
+});
+
+Deno.test("merchant return confirmation forwards no refund amount", async () => {
+  let recorded: MerchantConfirmReturnInput | undefined;
+  const response = await handleMerchantOrders(
+    request(
+      {
+        operation: "merchantConfirmReturn",
+        orderId,
+        reason: "  Items   received back  ",
+        refundAmount: 1,
+      },
+      "Bearer merchant-session",
+      "return-key-1",
+    ),
+    dependencies({
+      merchantConfirmReturn: (input) => {
+        recorded = input;
+        return Promise.resolve({ responseBody: cancelledOrder, responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.reason, "Items received back");
+  assertEquals("refundAmount" in (recorded ?? {}), false);
 });
 
 Deno.test("owner handoff recovery forwards only authenticated reset intent", async () => {
@@ -465,6 +570,8 @@ function dependencies(
       (() => Promise.resolve({ responseBody: snapshot, responseStatus: 200 })),
     getMerchantOrders: overrides.getMerchantOrders ??
       (() => Promise.resolve({ responseBody: snapshot, responseStatus: 200 })),
+    getOwnerOrders: overrides.getOwnerOrders ??
+      (() => Promise.resolve({ responseBody: snapshot, responseStatus: 200 })),
     merchantAccept: overrides.merchantAccept ??
       (() => Promise.resolve({ responseBody: acceptedOrder, responseStatus: 200 })),
     merchantReject: overrides.merchantReject ??
@@ -472,6 +579,10 @@ function dependencies(
     merchantMarkReady: overrides.merchantMarkReady ??
       (() => Promise.resolve({ responseBody: readyOrder, responseStatus: 200 })),
     customerCancel: overrides.customerCancel ??
+      (() => Promise.resolve({ responseBody: cancelledOrder, responseStatus: 200 })),
+    merchantConfirmReturn: overrides.merchantConfirmReturn ??
+      (() => Promise.resolve({ responseBody: cancelledOrder, responseStatus: 200 })),
+    ownerReviewRefund: overrides.ownerReviewRefund ??
       (() => Promise.resolve({ responseBody: cancelledOrder, responseStatus: 200 })),
     ownerResetHandoff: overrides.ownerResetHandoff ??
       (() => Promise.resolve({ responseBody: order, responseStatus: 200 })),

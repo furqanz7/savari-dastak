@@ -108,6 +108,10 @@ Deno.test("snapshots derive customer, recipient, and partner identity from beare
       recorded.push(["partner", actor]);
       return Promise.resolve({ responseBody: partnerSnapshot(), responseStatus: 200 });
     },
+    getCustomerSnapshot: (actor) => {
+      recorded.push(["customer", actor]);
+      return Promise.resolve({ responseBody: [parcel()], responseStatus: 200 });
+    },
   });
 
   assertEquals(
@@ -122,7 +126,12 @@ Deno.test("snapshots derive customer, recipient, and partner identity from beare
       .status,
     200,
   );
-  assertEquals(recorded, [["parcel", accountId, parcelId], ["partner", accountId]]);
+  assertEquals(
+    (await handleParcelDeliveries(request({ body: { operation: "customerSnapshot" } }), deps))
+      .status,
+    200,
+  );
+  assertEquals(recorded, [["parcel", accountId, parcelId], ["partner", accountId], ["customer", accountId]]);
 });
 
 Deno.test("assignment and lifecycle operations map to server-owned actions", async () => {
@@ -242,6 +251,7 @@ function dependencies(
     routeParcel: () => Promise.resolve({ distanceMeters: 4_250, durationSeconds: 720 }),
     quoteParcel: () => ok(quote()),
     createParcel: () => Promise.resolve({ responseBody: parcel(), responseStatus: 201 }),
+    getCustomerSnapshot: () => ok([parcel()]),
     getParcelSnapshot: () => ok(parcel()),
     getPartnerSnapshot: () => ok(partnerSnapshot()),
     acknowledgeAssignment: () => ok(partnerSnapshot()),

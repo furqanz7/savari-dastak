@@ -1,4 +1,4 @@
-import { json } from "../_shared/http.ts";
+import { corsPreflight, json } from "../_shared/http.ts";
 import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
 export type MerchantApplicationStatus = "pending" | "approved" | "rejected";
@@ -56,6 +56,9 @@ export async function handleMerchantApplications(
   request: Request,
   dependencies: Dependencies,
 ) {
+  const preflight = corsPreflight(request);
+  if (preflight) return preflight;
+
   const authorization = request.headers.get("authorization") ?? "";
   if (!/^Bearer\s+\S+$/.test(authorization)) return authenticationRequired();
 

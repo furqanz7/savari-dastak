@@ -1,4 +1,4 @@
-import { json } from "../_shared/http.ts";
+import { corsPreflight, json } from "../_shared/http.ts";
 
 export type AuthenticateBearer = (bearerToken: string) => Promise<{ accountId: string }>;
 export type IsActiveOwner = (accountId: string) => Promise<boolean>;
@@ -23,6 +23,9 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 const evidenceUrlExpirySeconds = 300;
 
 export async function handleIssueEvidenceUrl(request: Request, dependencies: Dependencies) {
+  const preflight = corsPreflight(request);
+  if (preflight) return preflight;
+
   const authorization = request.headers.get("authorization") ?? "";
   if (!/^Bearer\s+\S+$/.test(authorization)) return authenticationRequired();
 

@@ -9,6 +9,23 @@ import {
 } from "../../merchant-applications/handler.ts";
 import type { AuthenticateBearer } from "../../bootstrap-account/handler.ts";
 
+Deno.test("merchant applications answer browser preflight without authentication", async () => {
+  let authenticationAttempts = 0;
+  const response = await handleMerchantApplications(
+    new Request("http://localhost/functions/v1/merchant-applications", { method: "OPTIONS" }),
+    dependencies({
+      authenticateBearer: () => {
+        authenticationAttempts += 1;
+        return Promise.resolve({ accountId });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 204);
+  assertEquals(response.headers.get("access-control-allow-origin"), "*");
+  assertEquals(authenticationAttempts, 0);
+});
+
 Deno.test("merchant applications reject missing authorization", async () => {
   let authenticationAttempts = 0;
   const response = await handleMerchantApplications(
