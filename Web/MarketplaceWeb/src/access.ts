@@ -152,10 +152,18 @@ async function resolveDastakAccess(
     }
     if (response.status === 409) return { state: "needs_profile" } satisfies AccessResult;
     if (!response.ok) throw new Error(readErrorMessage(response.body, "Delivery access could not be verified."));
-    return mapDeliverySnapshot(response.body as DeliverySnapshot);
+    const result = mapDeliverySnapshot(response.body as DeliverySnapshot);
+    if (result.state === "active") {
+      const { data } = await client.from("accounts").select("display_name,phone_number").eq("id", session.user.id).maybeSingle<{
+        display_name: string;
+        phone_number: string;
+      }>();
+      if (data) result.profile = { displayName: data.display_name, phoneNumber: data.phone_number };
+    }
+    return result;
   }
 
-  const application = role === "merchant" ? "merchant" : "customer";
+  const application = role === "merchant" ? "merchant" : role === "admin" ? "admin" : "customer";
   const response = await callFunction(session, config, "resolve-app-access", { application });
   if (isAuthenticationRequiredResponse(response.status)) {
     return { state: "signed_out" } satisfies AccessResult;

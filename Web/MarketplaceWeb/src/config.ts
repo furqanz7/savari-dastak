@@ -4,11 +4,12 @@ export const appVariants = [
   "dastak-customer",
   "dastak-delivery",
   "dastak-merchant",
+  "dastak-admin",
 ] as const;
 
 export type AppVariant = (typeof appVariants)[number];
 export type Product = "savari" | "dastak";
-export type AppRole = "passenger" | "rider" | "customer" | "delivery" | "merchant";
+export type AppRole = "passenger" | "rider" | "customer" | "delivery" | "merchant" | "admin";
 
 export type AppConfig = {
   variant: AppVariant;
@@ -61,6 +62,13 @@ const variants: Record<AppVariant, Omit<AppConfig, "supabaseUrl" | "supabasePubl
     role: "merchant",
     brand: "Dastak",
     roleLabel: "Merchant",
+  },
+  "dastak-admin": {
+    variant: "dastak-admin",
+    product: "dastak",
+    role: "admin",
+    brand: "Dastak",
+    roleLabel: "Admin",
   },
 };
 

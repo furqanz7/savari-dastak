@@ -3,8 +3,10 @@ import {
   browseCatalogue,
   catalogueImageUrl,
   formatPrice,
+  getMerchantCatalogue,
   groupCatalogue,
   parseCatalogueSnapshot,
+  upsertCatalogueProduct,
 } from "./catalogue";
 
 const storeId = "33333333-3333-4333-8333-333333333333";
@@ -12,6 +14,7 @@ const categoryId = "44444444-4444-4444-8444-444444444444";
 
 const snapshot = {
   serviceZoneId: "66666666-6666-4666-8666-666666666666",
+  discoveryRadiusMeters: 10000,
   stores: [{
     storeId,
     name: "Corner Store",
@@ -99,5 +102,88 @@ describe("catalogue data", () => {
       accessToken: "access-token",
       location: { latitude: 12.6819, longitude: 78.6201 },
     }, fetcher)).rejects.toMatchObject({ code: "outside_service_area", status: 422 });
+  });
+
+  it("sends the selected discovery radius in metres", async () => {
+    let requestBody: unknown;
+    const fetcher = (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body));
+      return Promise.resolve(new Response(JSON.stringify({
+        ...snapshot,
+        discoveryRadiusMeters: 25000,
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+    };
+
+    const result = await browseCatalogue({
+      supabaseUrl: "https://example.supabase.co",
+      publishableKey: "publishable-key",
+      accessToken: "access-token",
+      location: { latitude: 12.6819, longitude: 78.6201 },
+      discoveryRadiusKm: 25,
+    }, fetcher);
+
+    expect(requestBody).toMatchObject({ discoveryRadiusMeters: 25000 });
+    expect(result.discoveryRadiusMeters).toBe(25000);
+  });
+
+  it("rejects discovery radii outside 10 to 30 kilometres", async () => {
+    await expect(browseCatalogue({
+      supabaseUrl: "https://example.supabase.co",
+      publishableKey: "publishable-key",
+      accessToken: "access-token",
+      location: { latitude: 12.6819, longitude: 78.6201 },
+      discoveryRadiusKm: 9,
+    })).rejects.toMatchObject({ code: "invalid_discovery_radius", status: 400 });
+  });
+
+  it("loads merchant catalogues that do not contain a discovery radius", async () => {
+    const fetcher = () => Promise.resolve(new Response(JSON.stringify({
+      ...snapshot,
+      discoveryRadiusMeters: undefined,
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const result = await getMerchantCatalogue({
+      supabaseUrl: "https://example.supabase.co",
+      publishableKey: "publishable-key",
+      accessToken: "access-token",
+    }, fetcher);
+
+    expect(result.discoveryRadiusMeters).toBe(10000);
+  });
+
+  it("sends server-authoritative product mutations with an idempotency key", async () => {
+    let requestBody: unknown;
+    let requestHeaders: Headers | undefined;
+    const fetcher = (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body));
+      requestHeaders = new Headers(init?.headers);
+      return Promise.resolve(new Response(JSON.stringify(snapshot.products[0]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+    };
+
+    const product = await upsertCatalogueProduct({
+      supabaseUrl: "https://example.supabase.co",
+      publishableKey: "publishable-key",
+      accessToken: "access-token",
+      categoryId,
+      name: "Lime Soda",
+      description: "Fresh",
+      unitLabel: "750 ml",
+      pricePaise: 12500,
+      availability: "in_stock",
+      catalogueKind: "general",
+      isActive: true,
+      idempotencyKey: "product-key",
+    }, fetcher);
+
+    expect(requestHeaders?.get("x-idempotency-key")).toBe("product-key");
+    expect(requestBody).toMatchObject({
+      operation: "upsertProduct",
+      categoryId,
+      price: { currency: "INR", paise: 12500 },
+    });
+    expect(product.name).toBe("Lime Soda");
   });
 });

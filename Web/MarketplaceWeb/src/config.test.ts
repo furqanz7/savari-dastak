@@ -12,9 +12,17 @@ describe("readAppConfig", () => {
     })).toMatchObject({ product: "savari", role: "rider", supabaseUrl: "https://example.supabase.co" });
   });
 
+  it("loads the owner-only Dastak Admin variant", () => {
+    expect(readAppConfig({
+      VITE_APP_VARIANT: "dastak-admin",
+      VITE_SUPABASE_URL: "https://example.supabase.co",
+      VITE_SUPABASE_PUBLISHABLE_KEY: anonJwt,
+    })).toMatchObject({ product: "dastak", role: "admin", roleLabel: "Admin" });
+  });
+
   it("rejects unsupported variants", () => {
     expect(() => readAppConfig({
-      VITE_APP_VARIANT: "admin",
+      VITE_APP_VARIANT: "unsupported",
       VITE_SUPABASE_URL: "https://example.supabase.co",
       VITE_SUPABASE_PUBLISHABLE_KEY: anonJwt,
     })).toThrow(/supported web app/);

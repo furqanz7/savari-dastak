@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type CatalogueLocation = { latitude: number; longitude: number };
 
 export type CatalogueStore = {
@@ -35,6 +37,7 @@ export type CatalogueProduct = {
 
 export type CatalogueSnapshot = {
   serviceZoneId: string | null;
+  discoveryRadiusMeters: number;
   stores: CatalogueStore[];
   categories: CatalogueCategory[];
   products: CatalogueProduct[];
@@ -56,6 +59,37 @@ type BrowseInput = {
   publishableKey: string;
   accessToken: string;
   location: CatalogueLocation;
+  discoveryRadiusKm?: number;
+};
+
+export type CatalogueAuth = Pick<BrowseInput, "supabaseUrl" | "publishableKey" | "accessToken">;
+
+export type StoreMutation = {
+  name: string;
+  address: string;
+  location: CatalogueLocation;
+  isPublished: boolean;
+  acceptingOrders: boolean;
+};
+
+export type CategoryMutation = {
+  categoryId?: string;
+  name: string;
+  displayOrder: number;
+  isActive: boolean;
+};
+
+export type ProductMutation = {
+  productId?: string;
+  categoryId: string;
+  name: string;
+  description?: string;
+  unitLabel: string;
+  pricePaise: number;
+  imageObjectPath?: string;
+  availability: CatalogueProduct["availability"];
+  catalogueKind: CatalogueProduct["catalogueKind"];
+  isActive: boolean;
 };
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -67,6 +101,14 @@ const approvalValues = new Set(["not_applicable", "pending", "approved", "reject
 
 export async function browseCatalogue(input: BrowseInput, fetcher: Fetcher = fetch) {
   if (!validLocation(input.location)) throw new CatalogueRequestError("invalid_location", "Choose a valid delivery location.", 400);
+  const discoveryRadiusKm = input.discoveryRadiusKm ?? 10;
+  if (!Number.isInteger(discoveryRadiusKm) || discoveryRadiusKm < 10 || discoveryRadiusKm > 30) {
+    throw new CatalogueRequestError(
+      "invalid_discovery_radius",
+      "Choose a search radius from 10 to 30 kilometres.",
+      400,
+    );
+  }
 
   let response: Response;
   try {
@@ -77,7 +119,11 @@ export async function browseCatalogue(input: BrowseInput, fetcher: Fetcher = fet
         authorization: `Bearer ${input.accessToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ operation: "browse", location: input.location }),
+      body: JSON.stringify({
+        operation: "browse",
+        location: input.location,
+        discoveryRadiusMeters: discoveryRadiusKm * 1000,
+      }),
     });
   } catch {
     throw new CatalogueRequestError("network_error", "Dastak could not reach the catalogue.", 0);
@@ -93,19 +139,130 @@ export async function browseCatalogue(input: BrowseInput, fetcher: Fetcher = fet
   return parseCatalogueSnapshot(payload);
 }
 
+export async function getMerchantCatalogue(input: CatalogueAuth, fetcher: Fetcher = fetch) {
+  return parseCatalogueSnapshot(await invokeCatalogue(input, { operation: "merchantSnapshot" }, undefined, fetcher));
+}
+
+export async function upsertMerchantStore(
+  input: CatalogueAuth & StoreMutation & { idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  return parseStore(await invokeCatalogue(input, {
+    operation: "upsertStore",
+    name: input.name,
+    address: input.address,
+    location: input.location,
+    isPublished: input.isPublished,
+    acceptingOrders: input.acceptingOrders,
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function upsertCatalogueCategory(
+  input: CatalogueAuth & CategoryMutation & { idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  return parseCategory(await invokeCatalogue(input, {
+    operation: "upsertCategory",
+    categoryId: input.categoryId ?? null,
+    name: input.name,
+    displayOrder: input.displayOrder,
+    isActive: input.isActive,
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function upsertCatalogueProduct(
+  input: CatalogueAuth & ProductMutation & { idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  return parseProduct(await invokeCatalogue(input, {
+    operation: "upsertProduct",
+    productId: input.productId ?? null,
+    categoryId: input.categoryId,
+    name: input.name,
+    description: input.description?.trim() || null,
+    unitLabel: input.unitLabel,
+    price: { currency: "INR", paise: input.pricePaise },
+    imageObjectPath: input.imageObjectPath ?? null,
+    availability: input.availability,
+    catalogueKind: input.catalogueKind,
+    isActive: input.isActive,
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function uploadCatalogueImage(
+  client: SupabaseClient,
+  accountId: string,
+  file: File,
+) {
+  if (!/^image\/(jpeg|png|webp)$/i.test(file.type) || file.size > 5 * 1024 * 1024) {
+    throw new CatalogueRequestError("invalid_image", "Use a JPG, PNG, or WebP image up to 5 MB.", 400);
+  }
+  const extension = file.type.toLowerCase() === "image/png" ? "png"
+    : file.type.toLowerCase() === "image/webp" ? "webp" : "jpg";
+  const objectPath = `merchant/${accountId}/${crypto.randomUUID()}.${extension}`;
+  const { error } = await client.storage.from("dastak-catalogue").upload(objectPath, file, {
+    cacheControl: "3600",
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) throw new CatalogueRequestError("image_upload_failed", error.message, 400);
+  return objectPath;
+}
+
 export function parseCatalogueSnapshot(value: unknown): CatalogueSnapshot {
   const source = record(value);
   if (!source || !Array.isArray(source.stores) || !Array.isArray(source.categories) || !Array.isArray(source.products)) invalid();
 
   const serviceZoneId = source.serviceZoneId === null ? null : uuid(source.serviceZoneId);
   if (serviceZoneId === undefined) invalid();
+  const discoveryRadiusMeters = source.discoveryRadiusMeters === undefined
+    ? 10000
+    : number(source.discoveryRadiusMeters);
+  if (
+    discoveryRadiusMeters === undefined || !Number.isInteger(discoveryRadiusMeters) ||
+    discoveryRadiusMeters < 10000 || discoveryRadiusMeters > 30000
+  ) invalid();
 
   return {
     serviceZoneId,
+    discoveryRadiusMeters,
     stores: source.stores.map(parseStore),
     categories: source.categories.map(parseCategory),
     products: source.products.map(parseProduct),
   };
+}
+
+async function invokeCatalogue(
+  input: CatalogueAuth,
+  body: Record<string, unknown>,
+  idempotencyKey: string | undefined,
+  fetcher: Fetcher,
+) {
+  let response: Response;
+  try {
+    response = await fetcher(`${input.supabaseUrl.replace(/\/$/, "")}/functions/v1/catalogue`, {
+      method: "POST",
+      headers: {
+        apikey: input.publishableKey,
+        authorization: `Bearer ${input.accessToken}`,
+        "content-type": "application/json",
+        ...(idempotencyKey ? { "x-idempotency-key": idempotencyKey } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new CatalogueRequestError("network_error", "Dastak could not reach the catalogue.", 0);
+  }
+  const payload = await response.json().catch(() => undefined);
+  if (!response.ok) {
+    const error = record(record(payload)?.error);
+    throw new CatalogueRequestError(
+      text(error?.code, 80) ?? "catalogue_unavailable",
+      text(error?.message, 240) ?? "The catalogue request could not be completed.",
+      response.status,
+    );
+  }
+  return payload;
 }
 
 export function groupCatalogue(snapshot: CatalogueSnapshot): GroupedCatalogueStore[] {

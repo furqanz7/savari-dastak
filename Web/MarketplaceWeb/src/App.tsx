@@ -3,8 +3,13 @@ import { LogOut, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
 import { completeProfile, isValidProfile, resolveAccess, type AccessResult } from "./access";
 import { shouldPreserveAuthenticatedView } from "./auth-state";
-import { CatalogueView } from "./CatalogueView";
+import { DastakCustomerView } from "./DastakCustomerView";
+import { AdminDashboard } from "./AdminDashboard";
+import { DeliveryPartnerApplicationForm } from "./DeliveryPartnerApplicationForm";
+import { DeliveryPartnerView } from "./DeliveryPartnerView";
 import { readAppConfig } from "./config";
+import { MerchantApplicationForm } from "./MerchantApplicationForm";
+import { MerchantOrdersView } from "./MerchantOrdersView";
 import { SavariRideView } from "./SavariRideView";
 
 const config = readAppConfig({
@@ -103,14 +108,16 @@ export default function App() {
         )}
       </header>
 
-      <section className={`content ${view.phase === "ready" && ["dastak-customer", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}>
+      <section className={`content ${view.phase === "ready" && ["dastak-admin", "dastak-customer", "dastak-delivery", "dastak-merchant", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}>
         {view.phase === "loading" && <Loading />}
         {view.phase === "signed_out" && <SignIn busy={busy} onSignIn={signIn} />}
         {view.phase === "profile" && (
           <ProfileForm session={view.session} onComplete={() => evaluate(view.session)} />
         )}
         {view.phase === "ready" && <Ready access={view.access} email={view.session.user.email} session={view.session} />}
-        {view.phase === "restricted" && <Restricted access={view.access} />}
+        {view.phase === "restricted" && (
+          <Restricted access={view.access} session={view.session} onSubmitted={() => evaluate(view.session)} />
+        )}
         {view.phase === "error" && (
           <ErrorState message={view.message} onRetry={() => evaluate(view.session ?? null)} />
         )}
@@ -221,7 +228,41 @@ function Ready({ access, email, session }: { access: AccessResult; email?: strin
   }
   if (config.variant === "dastak-customer") {
     return (
-      <CatalogueView
+      <DastakCustomerView
+        accessToken={session.access_token}
+        displayName={access.profile?.displayName}
+        email={email}
+        phoneNumber={access.profile?.phoneNumber}
+        supabaseUrl={config.supabaseUrl}
+        publishableKey={config.supabasePublishableKey}
+      />
+    );
+  }
+  if (config.variant === "dastak-merchant") {
+    return (
+      <MerchantOrdersView
+        accessToken={session.access_token}
+        accountId={session.user.id}
+        client={supabase}
+        displayName={access.profile?.displayName}
+        supabaseUrl={config.supabaseUrl}
+        publishableKey={config.supabasePublishableKey}
+      />
+    );
+  }
+  if (config.variant === "dastak-delivery") {
+    return (
+      <DeliveryPartnerView
+        accessToken={session.access_token}
+        displayName={access.profile?.displayName}
+        supabaseUrl={config.supabaseUrl}
+        publishableKey={config.supabasePublishableKey}
+      />
+    );
+  }
+  if (config.variant === "dastak-admin") {
+    return (
+      <AdminDashboard
         accessToken={session.access_token}
         displayName={access.profile?.displayName}
         supabaseUrl={config.supabaseUrl}
@@ -243,7 +284,37 @@ function Ready({ access, email, session }: { access: AccessResult; email?: strin
   );
 }
 
-function Restricted({ access }: { access: AccessResult }) {
+function Restricted({
+  access,
+  session,
+  onSubmitted,
+}: {
+  access: AccessResult;
+  session: Session;
+  onSubmitted: () => void;
+}) {
+  if (config.variant === "dastak-merchant" && access.state === "denied") {
+    return (
+      <MerchantApplicationForm
+        client={supabase}
+        session={session}
+        supabaseUrl={config.supabaseUrl}
+        publishableKey={config.supabasePublishableKey}
+        onSubmitted={onSubmitted}
+      />
+    );
+  }
+  if (config.variant === "dastak-delivery" && access.state === "denied") {
+    return (
+      <DeliveryPartnerApplicationForm
+        client={supabase}
+        session={session}
+        supabaseUrl={config.supabaseUrl}
+        publishableKey={config.supabasePublishableKey}
+        onSubmitted={onSubmitted}
+      />
+    );
+  }
   const title = access.state === "pending" ? "Approval pending" : access.state === "suspended" ? "Account suspended" : "Access not approved";
   return (
     <div className="status-panel">
