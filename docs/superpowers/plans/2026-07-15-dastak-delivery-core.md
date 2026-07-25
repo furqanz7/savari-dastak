@@ -1,8 +1,14 @@
 # Dastak Delivery Core Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Payment scope update (2026-07-26):** The prepaid-only and no-COD constraints
+> in this plan are superseded by
+> [Dastak Marketplace Payments And COD Implementation Plan](2026-07-26-dastak-marketplace-payments-cod.md).
+> Immediate delivery remains unchanged. Person-to-person parcels remain
+> prepaid-only.
 
-**Goal:** Deliver Dastak's separate, server-authoritative parcel and merchant delivery core with approved partner and merchant roles, prepayment state, automatic dispatch, evidence, refunds, and safe category controls.
+**Goal:** Deliver Dastak's separate, server-authoritative parcel and merchant delivery core with approved partner and merchant roles, authoritative payment eligibility, automatic dispatch, evidence, refunds, and safe category controls.
 
 **Architecture:** Dastak runs in its own Supabase project with independent identities, product data, delivery state, and payments. Deno Edge Functions own every order, partner, merchant, and delivery mutation. The Dastak and Dastak Merchant targets communicate only through typed function clients and read snapshots. The later Savari bridge is the sole allowed cross-product integration point.
 
@@ -11,8 +17,8 @@
 ## Global Constraints
 
 - Execute only after the foundation plan is complete. Do not add Dastak tables to the Savari project.
-- Support immediate local parcel and merchant deliveries only. There is no scheduled delivery, cash on delivery, or courier waiting state.
-- Dastak customers pay in-app before parcel assignment and before merchant fulfilment. The Razorpay creation and webhook authority arrive in the payments plan; this plan uses a server-owned payment-state contract.
+- Support immediate local parcel and merchant deliveries only. There is no scheduled delivery or courier waiting state.
+- Person-to-person parcels remain prepaid. Merchant-order prepaid, UPI-on-delivery, and physical-COD rules follow the 2026-07-26 payment plan and use server-owned payment and exposure state.
 - The nearest eligible partner is assigned automatically and has 60 seconds to acknowledge. A stale, timed-out, cancelled, or ineligible assignment is reassigned automatically.
 - Delivery partners may use walking, bicycle, Bike, or Auto. Bike and Auto require owner-approved vehicle proof; walking and bicycle do not.
 - Dastak drivers/partners do not become Savari drivers implicitly. Cross-product eligibility is modeled only in the bridge plan.

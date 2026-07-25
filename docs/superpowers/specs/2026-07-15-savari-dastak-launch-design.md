@@ -126,12 +126,20 @@ Rules:
 
 ## 5. Dastak Delivery Product
 
+### 5.0 Service areas and discovery
+
+- Dastak is not hard-coded to Vaniyambadi or any other city. The owner may configure one or more active city service zones.
+- Each city zone has an owner-configured coverage range from 10 km through 30 km. The stored polygon remains the final server authority for availability.
+- Customer store discovery uses the delivery location as its origin. The customer may filter the discovery range from 10 km through 30 km, with 10 km selected by default.
+- The effective discovery area is the intersection of the selected customer range and the active city-zone boundary. Increasing the filter cannot expose stores or permit delivery outside an active zone.
+- A merchant store and its delivery point must be inside the same active city zone. The server validates this independently of the client filter.
+
 ### 5.1 Delivery types
 
 Dastak supports all three delivery models at launch:
 
 1. **Person-to-person parcel**: sender prepays the delivery fee in-app. There is no cash on delivery. Sender provides a pickup code and recipient provides a delivery code.
-2. **Merchant order**: customer pays item amount and delivery fee in-app before assignment. Merchant accepts the order, sets preparation state, and marks it ready. Courier matching begins only after ready state.
+2. **Merchant order**: the server offers prepaid online, UPI on delivery, or physical cash on delivery only when the final payable total and rider exposure satisfy the versioned payment policy. Merchant accepts the order, sets preparation state, and marks it ready. Courier matching begins only after ready state and after any required payment or pay-on-delivery exposure reservation is valid.
 3. **Collect with my Savari ride**: passenger purchases a merchant order in Dastak, then chooses this option only inside Dastak opened from Savari navigation while that passenger already has a matched Savari ride.
 
 Standalone Dastak does not offer "Collect with my Savari ride." The feature is never available to an unrelated passenger or a passenger without a current matched ride.
@@ -139,14 +147,16 @@ Standalone Dastak does not offer "Collect with my Savari ride." The feature is n
 ### 5.2 Partner assignment and delivery state
 
 - Dastak auto-assigns the closest eligible Delivery Partner using the same 60-second acknowledgement, reassignment, freshness, and reliability rules as Savari.
-- Delivery rate cards use a minimum fare plus a per-kilometre rate, with separate owner-configurable rates for walking, bicycle, Bike, and Auto.
+- Delivery pricing uses server-calculated route distance from pickup to drop-off. The launch customer fee is INR 35 for the first 3 km plus INR 8 for each started kilometre beyond 3 km.
+- The launch courier payout is INR 30 for the first 3 km plus INR 7 for each started kilometre beyond 3 km. Dastak therefore retains an initial INR 5 delivery margin plus INR 1 for each started kilometre beyond 3 km.
+- Delivery and payout rate cards are versioned and owner-configurable per city. The approved launch defaults apply to every supported delivery method until the owner configures a method-specific rate card.
 - A Delivery Partner receives the defined courier payout for the job. A Savari Driver who performs an eligible Dastak task receives that same courier payout in addition to any separate ride earnings.
 - Merchant orders have an explicit merchant acceptance and ready state. Partners do not wait at a merchant before the merchant marks the order ready.
 - Parcel and merchant delivery terminal states require server-verified pickup and delivery evidence, including handoff codes where applicable.
 
 ### 5.3 Ride-linked Dastak collection
 
-- The merchant order must be paid and ready before the passenger can attach it to a ride.
+- The merchant order must be ready before the passenger can attach it to a ride. A prepaid order must be paid; a pay-on-delivery order must have a valid payment-method snapshot and a successful combined-exposure reservation.
 - Before passenger pickup, the added merchant pickup is permitted only when the predicted pickup delay is at most five minutes.
 - After passenger boarding, only the current passenger's own purchase may add a stop. No unrelated delivery can be added while a passenger is aboard.
 - The merchant item amount and Dastak delivery fee remain Dastak payments. Savari ride payment remains independent. The driver can earn both amounts, but the payout rule is shared.
@@ -177,7 +187,7 @@ Standalone Dastak does not offer "Collect with my Savari ride." The feature is n
 
 - Cash/direct UPI Savari rides: driver keeps 100 percent; Savari earns no commission.
 - In-app Savari rides: platform commission is configurable; launch default is 10 percent of verified in-app earnings.
-- Dastak merchant orders: Dastak deducts a configurable merchant commission from item sales and retains a configurable part of the delivery fee. Partner gets the defined courier payout.
+- Dastak merchant orders: the launch merchant commission is 10 percent of the item subtotal. The percentage is owner-configurable and versioned per city. Dastak also retains the delivery-fee margin, and the partner receives the defined courier payout.
 - Dastak parcels: customer prepays delivery fee and the partner gets the defined courier payout.
 
 ### 6.3 Global rolling holdback
@@ -198,6 +208,7 @@ Savari and Dastak payments stay in their own product projects. A single private 
 - Every provider event is deduplicated using an immutable event identifier.
 - Transfer and payout states are explicit: `pending`, `withdrawable`, `created`, `processing`, `paid`, `failed`, `reversed`, and `adjusted`.
 - A post-payout dispute or refund creates an adjustment or approved reversal; it does not rewrite completed financial history.
+- Dastak merchant-order payment eligibility, merchant pickup guarantee, Customer Verification PIN, rider cash and goods exposure, refundable security deposits, gross cash remittance, independent merchant settlement, and incident/reconciliation rules are defined by the [Dastak Marketplace Payments And COD Implementation Plan](../plans/2026-07-26-dastak-marketplace-payments-cod.md).
 
 ## 7. Data, Security, And Location
 
@@ -276,7 +287,7 @@ Every slice requires:
 
 Pilot launch gates:
 
-- Vaniyambadi service area configured and verified.
+- At least one city service area, including its 10–30 km coverage configuration, is configured and verified without a hard-coded city dependency.
 - Small manually approved group of drivers, Delivery Partners, merchants, and pharmacies.
 - Apple and Google sign-in, APNs, Maps, and Razorpay Route production configuration verified.
 - Current regulatory, distribution, and App Review risk checks completed for pharmacy and Paan Corner activation, including the adult, exclusion-zone, and handoff controls.
