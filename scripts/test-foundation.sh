@@ -12,14 +12,14 @@ require_command() {
   fi
 }
 
-for command_name in swift deno xcodebuild rg find xargs; do
+for command_name in swift deno xcodebuild rg find xargs node npm; do
   require_command "$command_name"
 done
 
 swift test --package-path Packages/MarketplaceFoundation
 swift test --package-path Packages/MarketplaceInfrastructure
+swift test --package-path Packages/DastakDomain
 swift package dump-package --package-path Packages/SavariDomain >/dev/null
-swift package dump-package --package-path Packages/DastakDomain >/dev/null
 
 if rg -n 'DastakDomain' Packages/SavariDomain \
   || rg -n 'SavariDomain' Packages/DastakDomain; then
@@ -47,7 +47,9 @@ for backend in Savari Dastak; do
   run_backend_static_checks "$backend"
 done
 
-for scheme in Savari SavariAdmin Dastak DastakMerchant DastakAdmin; do
+"$repo_root/scripts/test-dastak-web.sh"
+
+for scheme in Savari SavariAdmin; do
   xcodebuild \
     -workspace SavariDastak.xcworkspace \
     -scheme "$scheme" \
@@ -56,3 +58,5 @@ for scheme in Savari SavariAdmin Dastak DastakMerchant DastakAdmin; do
     CODE_SIGNING_ALLOWED=NO \
     build
 done
+
+"$repo_root/scripts/test-dastak-ios.sh"

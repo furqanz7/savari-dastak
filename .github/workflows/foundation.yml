@@ -14,14 +14,25 @@ jobs:
           xcode-version: '26.6'
       - run: swift test --package-path Packages/MarketplaceFoundation
       - run: swift test --package-path Packages/MarketplaceInfrastructure
+      - run: swift test --package-path Packages/DastakDomain
       - run: swift package dump-package --package-path Packages/SavariDomain >/dev/null
-      - run: swift package dump-package --package-path Packages/DastakDomain >/dev/null
       - run: |
           if grep -R -n -E 'DastakDomain' Packages/SavariDomain \
             || grep -R -n -E 'SavariDomain' Packages/DastakDomain; then
             echo "Product domain packages must not depend on one another." >&2
             exit 1
           fi
+
+  dastak-web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: Web/MarketplaceWeb/package-lock.json
+      - run: scripts/test-dastak-web.sh
 
   savari-backend:
     runs-on: ubuntu-24.04
@@ -38,9 +49,7 @@ jobs:
           deno-version: v2.8.2
       - run: supabase start
       - run: supabase db reset --local
-      - run: supabase db test supabase/tests/database/001_identity.pgtap.sql --local
-      - run: supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql --local
-      - run: supabase db query --local --file ../../scripts/assert-no-client-dml.sql
+      - run: ../../scripts/test-backend-security.sh Savari --local
       - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-env supabase/functions/tests/
       - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-read supabase/tests/database/
       - run: find supabase/functions -name '*.ts' -print0 | xargs -0 deno check --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen
@@ -63,9 +72,7 @@ jobs:
           deno-version: v2.8.2
       - run: supabase start
       - run: supabase db reset --local
-      - run: supabase db test supabase/tests/database/001_identity.pgtap.sql --local
-      - run: supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql --local
-      - run: supabase db query --local --file ../../scripts/assert-no-client-dml.sql
+      - run: ../../scripts/test-backend-security.sh Dastak --local
       - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-env supabase/functions/tests/
       - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-read supabase/tests/database/
       - run: find supabase/functions -name '*.ts' -print0 | xargs -0 deno check --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen
@@ -81,7 +88,7 @@ jobs:
         with:
           xcode-version: '26.6'
       - run: |
-          for scheme in Savari SavariAdmin Dastak DastakMerchant DastakAdmin; do
+          for scheme in Savari SavariAdmin; do
             xcodebuild \
               -workspace SavariDastak.xcworkspace \
               -scheme "$scheme" \
@@ -90,3 +97,4 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               build
           done
+      - run: scripts/test-dastak-ios.sh

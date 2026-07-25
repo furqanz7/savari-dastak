@@ -21,9 +21,11 @@ esac
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root/Backends/$backend"
 
-profile_args=()
-if [[ -n "${SUPABASE_PROFILE:-}" ]]; then
-  profile_args=(--profile "$SUPABASE_PROFILE")
+shopt -s nullglob
+test_files=(supabase/tests/database/*.pgtap.sql)
+if (( ${#test_files[@]} == 0 )); then
+  printf 'No pgTAP database tests found for %s.\n' "$backend" >&2
+  exit 1
 fi
 
 run_linked_pgtap() {
@@ -65,11 +67,17 @@ if [[ "$scope" == "--linked" ]]; then
     exit 1
   fi
 
-  run_linked_pgtap supabase/tests/database/001_identity.pgtap.sql
-  run_linked_pgtap supabase/tests/database/002_security_audit_zones.pgtap.sql
+  for test_file in "${test_files[@]}"; do
+    run_linked_pgtap "$test_file"
+  done
 else
-  supabase db test supabase/tests/database/001_identity.pgtap.sql "$scope"
-  supabase db test supabase/tests/database/002_security_audit_zones.pgtap.sql "$scope"
+  supabase db test "${test_files[@]}" "$scope"
 fi
 
-supabase db query "$scope" --file "$repo_root/scripts/assert-no-client-dml.sql" "${profile_args[@]}"
+if [[ -n "${SUPABASE_PROFILE:-}" ]]; then
+  supabase db query "$scope" \
+    --file "$repo_root/scripts/assert-no-client-dml.sql" \
+    --profile "$SUPABASE_PROFILE"
+else
+  supabase db query "$scope" --file "$repo_root/scripts/assert-no-client-dml.sql"
+fi
