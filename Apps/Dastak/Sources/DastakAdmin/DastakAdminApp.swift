@@ -1,3 +1,4 @@
+import DastakDomain
 import MarketplaceInfrastructure
 import SwiftUI
 
@@ -9,7 +10,24 @@ struct DastakAdminApp: App {
                 applicationName: "Dastak Admin",
                 product: .dastak,
                 requiredAccess: .dastakAdmin
-            )
+            ) { _ in
+                DastakAdminRoot()
+            }
         }
+    }
+}
+
+private struct DastakAdminRoot: View {
+    private let rootState = DastakAppRootState(application: .admin)
+
+    var body: some View {
+        Group {
+            if rootState.activeRoot == .admin {
+                Text("Admin")
+                    .font(.title2)
+                    .bold()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
