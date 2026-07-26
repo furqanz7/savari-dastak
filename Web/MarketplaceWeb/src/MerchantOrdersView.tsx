@@ -1,6 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BookOpen, Check, ClipboardList, PackageCheck, ReceiptText, RefreshCw, X } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  ClipboardList,
+  LogOut,
+  PackageCheck,
+  ReceiptText,
+  RefreshCw,
+  Store,
+  UserRound,
+  X,
+} from "lucide-react";
 import { formatPrice } from "./catalogue";
 import { MerchantCatalogueView } from "./MerchantCatalogueView";
 import {
@@ -20,13 +31,27 @@ type Props = {
   accountId: string;
   client: SupabaseClient;
   displayName?: string;
+  email?: string;
+  phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  onSignOut: () => void;
 };
 
 type MerchantAction = "accept" | "ready" | "reject" | "confirmReturn" | "refund";
+type MerchantSection = "orders" | "catalogue" | "store" | "account";
 
-export function MerchantOrdersView({ accessToken, accountId, client, displayName, supabaseUrl, publishableKey }: Props) {
+export function MerchantOrdersView({
+  accessToken,
+  accountId,
+  client,
+  displayName,
+  email,
+  phoneNumber,
+  supabaseUrl,
+  publishableKey,
+  onSignOut,
+}: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [orders, setOrders] = useState<MerchantOrderSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +60,7 @@ export function MerchantOrdersView({ accessToken, accountId, client, displayName
   const [error, setError] = useState<string>();
   const [rejectingOrderId, setRejectingOrderId] = useState<string>();
   const [rejectionReason, setRejectionReason] = useState("");
-  const [section, setSection] = useState<"orders" | "catalogue">("orders");
+  const [section, setSection] = useState<MerchantSection>("orders");
   const refreshInFlight = useRef(false);
   const mutationKeys = useRef(new Map<string, string>());
 
@@ -120,20 +145,35 @@ export function MerchantOrdersView({ accessToken, accountId, client, displayName
 
   const activeOrders = orders.filter((order) => !isFinalOrder(order));
   const recentOrders = orders.filter(isFinalOrder).slice(0, 10);
+  const awaitingDecision = activeOrders.filter((order) => order.status === "paid").length;
+  const preparing = activeOrders.filter((order) => order.status === "merchant_accepted").length;
+  const readyForPickup = activeOrders.filter((order) => order.status === "ready").length;
 
   return (
     <div className="merchant-workspace">
-      <nav className="workspace-tabs" aria-label="Merchant workspace">
-        <button type="button" className={section === "orders" ? "selected" : ""} onClick={() => setSection("orders")}><ClipboardList size={17} /> Orders</button>
-        <button type="button" className={section === "catalogue" ? "selected" : ""} onClick={() => setSection("catalogue")}><BookOpen size={17} /> Catalogue</button>
+      <nav className="workspace-tabs merchant-tabs" aria-label="Merchant workspace" role="tablist">
+        <MerchantTab selected={section === "orders"} onSelect={() => setSection("orders")} icon={<ClipboardList size={18} />} label="Orders" />
+        <MerchantTab selected={section === "catalogue"} onSelect={() => setSection("catalogue")} icon={<BookOpen size={18} />} label="Catalogue" />
+        <MerchantTab selected={section === "store"} onSelect={() => setSection("store")} icon={<Store size={18} />} label="Store" />
+        <MerchantTab selected={section === "account"} onSelect={() => setSection("account")} icon={<UserRound size={18} />} label="Account" />
       </nav>
-      {section === "catalogue" ? (
+      {section === "catalogue" || section === "store" ? (
         <MerchantCatalogueView
           accessToken={accessToken}
           accountId={accountId}
           client={client}
           supabaseUrl={supabaseUrl}
           publishableKey={publishableKey}
+          mode={section}
+          onOpenStore={() => setSection("store")}
+        />
+      ) : section === "account" ? (
+        <MerchantAccount
+          displayName={displayName}
+          email={email}
+          phoneNumber={phoneNumber}
+          onManageStore={() => setSection("store")}
+          onSignOut={onSignOut}
         />
       ) : (
       <div className="merchant-orders-shell">
@@ -153,6 +193,11 @@ export function MerchantOrdersView({ accessToken, accountId, client, displayName
         <div className="catalogue-loading" role="status"><span /> Loading orders</div>
       ) : (
         <>
+          <div className="merchant-summary" aria-label="Order summary">
+            <MerchantSummary label="Needs action" value={awaitingDecision} />
+            <MerchantSummary label="Preparing" value={preparing} />
+            <MerchantSummary label="Ready" value={readyForPickup} />
+          </div>
           <MerchantOrderSection
             title="Active orders"
             orders={activeOrders}
@@ -183,6 +228,86 @@ export function MerchantOrdersView({ accessToken, accountId, client, displayName
       </div>
       )}
     </div>
+  );
+}
+
+function MerchantTab({
+  selected,
+  onSelect,
+  icon,
+  label,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      className={selected ? "selected" : ""}
+      onClick={onSelect}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function MerchantSummary({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function MerchantAccount({
+  displayName,
+  email,
+  phoneNumber,
+  onManageStore,
+  onSignOut,
+}: {
+  displayName?: string;
+  email?: string;
+  phoneNumber?: string;
+  onManageStore: () => void;
+  onSignOut: () => void;
+}) {
+  return (
+    <section className="merchant-account">
+      <header className="merchant-orders-heading">
+        <div>
+          <p className="eyebrow">Dastak Merchant</p>
+          <h1>Account</h1>
+          <p>Your merchant identity and workspace access.</p>
+        </div>
+      </header>
+      <div className="merchant-profile">
+        <span><UserRound size={22} /></span>
+        <div>
+          <strong>{displayName || "Merchant account"}</strong>
+          <small>Approved merchant</small>
+        </div>
+      </div>
+      <dl className="merchant-account-list">
+        {email && <div><dt>Email</dt><dd>{email}</dd></div>}
+        {phoneNumber && <div><dt>Phone</dt><dd>{phoneNumber}</dd></div>}
+        <div><dt>Access</dt><dd>Active</dd></div>
+      </dl>
+      <div className="merchant-account-actions">
+        <button className="secondary-button" type="button" onClick={onManageStore}>
+          <Store size={18} /> Manage store
+        </button>
+        <button className="danger-button" type="button" onClick={onSignOut}>
+          <LogOut size={18} /> Sign out
+        </button>
+      </div>
+    </section>
   );
 }
 

@@ -101,7 +101,10 @@ export default function App() {
     <main className={`app product-${config.product}`}>
       <header className="topbar">
         <Brand />
-        {view.phase !== "signed_out" && view.phase !== "loading" && !(config.variant === "dastak-customer" && view.phase === "ready") && (
+        {view.phase !== "signed_out" && view.phase !== "loading" && !(
+          ["dastak-customer", "dastak-merchant"].includes(config.variant) &&
+          view.phase === "ready"
+        ) && (
           <button className="icon-button" type="button" onClick={signOut} disabled={busy} aria-label="Sign out" title="Sign out">
             <LogOut size={19} />
           </button>
@@ -251,8 +254,11 @@ function Ready({ access, email, session, onSignOut }: {
         accountId={session.user.id}
         client={supabase}
         displayName={access.profile?.displayName}
+        email={email}
+        phoneNumber={access.profile?.phoneNumber}
         supabaseUrl={config.supabaseUrl}
         publishableKey={config.supabasePublishableKey}
+        onSignOut={onSignOut}
       />
     );
   }

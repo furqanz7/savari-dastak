@@ -19,6 +19,7 @@ final class MerchantOrderClientTests: XCTestCase {
 
         XCTAssertEqual(quote.total, Money(paise: 29_000))
         XCTAssertEqual(quote.dropoff, dropoff)
+        XCTAssertEqual(quote.deliveryDistanceMeters, 4_250)
         let recordedCall = await functions.lastCall()
         let call = try XCTUnwrap(recordedCall)
         XCTAssertEqual(call.name, "merchant-orders")
@@ -105,6 +106,31 @@ final class MerchantOrderClientTests: XCTestCase {
         XCTAssertEqual(readyRequest.orderId, orderID)
         XCTAssertNil(acceptRequest.status)
         XCTAssertNil(acceptRequest.accountId)
+    }
+
+    func testMerchantConfirmsReturnedItemsWithoutSupplyingRefundState() async throws {
+        let functions = RecordingMerchantOrderFunctionClient()
+        let client = SupabaseMerchantOrderClient(functions: functions)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "confirm-return-key-1"))
+
+        let returned = try await client.merchantConfirmReturn(
+            orderID: orderID,
+            reason: "Returned items received by merchant",
+            idempotencyKey: key
+        )
+
+        XCTAssertEqual(returned.status, .cancelled)
+        let lastCall = await functions.lastCall()
+        let recordedCall = try XCTUnwrap(lastCall)
+        let request = try JSONDecoder().decode(
+            CapturedMerchantOrderRequest.self,
+            from: recordedCall.body
+        )
+        XCTAssertEqual(request.operation, "merchantConfirmReturn")
+        XCTAssertEqual(request.orderId, orderID)
+        XCTAssertEqual(request.reason, "Returned items received by merchant")
+        XCTAssertNil(request.refundDecision)
+        XCTAssertNil(request.paymentState)
     }
 
     func testRejectAndCancelCannotSupplyRefundOrPaymentState() async throws {
@@ -225,6 +251,8 @@ private actor RecordingMerchantOrderFunctionClient: FunctionClient {
             response = acceptedOrderJSON
         case "merchantMarkReady":
             response = readyOrderJSON
+        case "merchantConfirmReturn":
+            response = returnedOrderJSON
         case "merchantReject":
             response = merchantRejectedOrderJSON
         case "customerCancel":
@@ -251,11 +279,12 @@ private struct OperationOnly: Decodable {
 }
 
 private let lineJSON = #"{"productId":"55555555-5555-4555-8555-555555555555","name":"Lime Soda","unitLabel":"750 ml","unitPrice":{"paise":12500},"quantity":2,"lineSubtotal":{"paise":25000}}"#
-private let quoteJSON = (#"{"quoteId":"66666666-6666-4666-8666-666666666666","storeId":"33333333-3333-4333-8333-333333333333","lines":["# + lineJSON + #"],"itemSubtotal":{"paise":25000},"deliveryFee":{"paise":4000},"total":{"paise":29000},"dropoff":{"latitude":12.6819,"longitude":78.6201},"expiresAt":"2026-07-16T15:00:00+00:00"}"#).data(using: .utf8)!
-private let orderBase = #""orderId":"77777777-7777-4777-8777-777777777777","storeId":"33333333-3333-4333-8333-333333333333","lines":["# + lineJSON + #"],"itemSubtotal":{"paise":25000},"deliveryFee":{"paise":4000},"total":{"paise":29000},"dropoff":{"latitude":12.6819,"longitude":78.6201},"createdAt":"2026-07-16T14:55:00+00:00","updatedAt":"2026-07-16T14:55:00+00:00""#
+private let quoteJSON = (#"{"quoteId":"66666666-6666-4666-8666-666666666666","storeId":"33333333-3333-4333-8333-333333333333","lines":["# + lineJSON + #"],"itemSubtotal":{"paise":25000},"deliveryFee":{"paise":4000},"deliveryDistanceMeters":4250,"total":{"paise":29000},"dropoff":{"latitude":12.6819,"longitude":78.6201},"expiresAt":"2026-07-16T15:00:00+00:00"}"#).data(using: .utf8)!
+private let orderBase = #""orderId":"77777777-7777-4777-8777-777777777777","storeId":"33333333-3333-4333-8333-333333333333","lines":["# + lineJSON + #"],"itemSubtotal":{"paise":25000},"deliveryFee":{"paise":4000},"deliveryDistanceMeters":4250,"total":{"paise":29000},"dropoff":{"latitude":12.6819,"longitude":78.6201},"createdAt":"2026-07-16T14:55:00+00:00","updatedAt":"2026-07-16T14:55:00+00:00""#
 private let orderJSON = ("{" + orderBase + #", "status":"payment_pending","paymentState":"payment_pending","stateVersion":1,"refundDecision":null}"#).data(using: .utf8)!
 private let acceptedOrderJSON = ("{" + orderBase + #", "status":"merchant_accepted","paymentState":"paid","stateVersion":3,"refundDecision":null}"#).data(using: .utf8)!
 private let readyOrderJSON = ("{" + orderBase + #", "status":"ready","paymentState":"paid","stateVersion":4,"refundDecision":null}"#).data(using: .utf8)!
+private let returnedOrderJSON = ("{" + orderBase + #", "status":"cancelled","paymentState":"refund_pending","stateVersion":5,"refundDecision":null}"#).data(using: .utf8)!
 private let merchantRefundJSON = #"{"decisionId":"88888888-8888-4888-8888-888888888888","eligibility":"merchant_fault_full_refund","decisionStatus":"eligible","itemRefund":{"paise":25000},"deliveryFeeRefund":{"paise":4000},"reason":"Item cannot be fulfilled","createdAt":"2026-07-16T15:05:00+00:00"}"#
 private let customerRefundJSON = #"{"decisionId":"99999999-9999-4999-8999-999999999999","eligibility":"full_refund","decisionStatus":"eligible","itemRefund":{"paise":25000},"deliveryFeeRefund":{"paise":4000},"reason":"Changed my mind","createdAt":"2026-07-16T15:05:00+00:00"}"#
 private let merchantRejectedOrderJSON = ("{" + orderBase + #", "status":"cancelled","paymentState":"refund_pending","stateVersion":3,"refundDecision":"# + merchantRefundJSON + "}").data(using: .utf8)!

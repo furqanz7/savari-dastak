@@ -98,6 +98,7 @@ public struct MerchantOrderQuote: Codable, Equatable, Sendable {
     public let lines: [MerchantOrderLineSnapshot]
     public let itemSubtotal: Money
     public let deliveryFee: Money
+    public let deliveryDistanceMeters: Int
     public let total: Money
     public let dropoff: GeoPoint
     public let expiresAt: String
@@ -109,6 +110,7 @@ public struct MerchantOrderQuote: Codable, Equatable, Sendable {
         case lines
         case itemSubtotal
         case deliveryFee
+        case deliveryDistanceMeters
         case total
         case dropoff
         case expiresAt
@@ -135,6 +137,7 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
     public let lines: [MerchantOrderLineSnapshot]
     public let itemSubtotal: Money
     public let deliveryFee: Money
+    public let deliveryDistanceMeters: Int
     public let total: Money
     public let dropoff: GeoPoint
     public let stateVersion: Int64
@@ -152,6 +155,7 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
         case lines
         case itemSubtotal
         case deliveryFee
+        case deliveryDistanceMeters
         case total
         case dropoff
         case stateVersion
@@ -201,6 +205,12 @@ public protocol MerchantOrderClient: Sendable {
 
     func merchantMarkReady(
         orderID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> MerchantOrderSnapshot
+
+    func merchantConfirmReturn(
+        orderID: UUID,
+        reason: String,
         idempotencyKey: IdempotencyKey
     ) async throws -> MerchantOrderSnapshot
 
@@ -317,6 +327,21 @@ public struct SupabaseMerchantOrderClient: MerchantOrderClient {
     ) async throws -> MerchantOrderSnapshot {
         try await invoke(
             Request(operation: "merchantMarkReady", orderId: orderID),
+            key: idempotencyKey
+        )
+    }
+
+    public func merchantConfirmReturn(
+        orderID: UUID,
+        reason: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> MerchantOrderSnapshot {
+        try await invoke(
+            Request(
+                operation: "merchantConfirmReturn",
+                orderId: orderID,
+                reason: reason
+            ),
             key: idempotencyKey
         )
     }

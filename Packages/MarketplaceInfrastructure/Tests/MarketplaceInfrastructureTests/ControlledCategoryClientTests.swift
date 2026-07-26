@@ -64,7 +64,7 @@ private actor RecordingControlledCategoryFunctionClient: FunctionClient {
         let operation = try JSONDecoder().decode(ControlledOperation.self, from: body).operation
         let response: Data
         if operation == "quote" {
-            response = #"{"quoteId":"44444444-4444-4444-8444-444444444444","storeId":"22222222-2222-4222-8222-222222222222","lines":[],"itemSubtotal":{"paise":10000},"deliveryFee":{"paise":4000},"total":{"paise":14000},"dropoff":{"latitude":12.6819,"longitude":78.6201},"expiresAt":"2026-07-19T12:05:00Z"}"#.data(using: .utf8)!
+            response = #"{"quoteId":"44444444-4444-4444-8444-444444444444","storeId":"22222222-2222-4222-8222-222222222222","lines":[],"itemSubtotal":{"paise":10000},"deliveryFee":{"paise":4000},"deliveryDistanceMeters":4250,"total":{"paise":14000},"dropoff":{"latitude":12.6819,"longitude":78.6201},"expiresAt":"2026-07-19T12:05:00Z"}"#.data(using: .utf8)!
         } else {
             response = #"{"offer":null,"currentJob":null}"#.data(using: .utf8)!
         }

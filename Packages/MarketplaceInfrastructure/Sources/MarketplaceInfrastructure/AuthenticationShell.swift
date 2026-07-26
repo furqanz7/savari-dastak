@@ -62,7 +62,7 @@ enum AuthenticationShellError: Error {
 @MainActor
 private final class AuthenticationShellModel: ObservableObject {
     let coordinator: AuthenticationCoordinator?
-    let functionClient: (any FunctionClient)?
+    let services: MarketplaceAuthenticatedServices?
 
     init(
         product: MarketplaceProduct,
@@ -71,7 +71,7 @@ private final class AuthenticationShellModel: ObservableObject {
     ) {
         guard let configuration = try? BackendConfiguration.runtime(product: product, bundle: bundle) else {
             coordinator = nil
-            functionClient = nil
+            services = nil
             return
         }
         let operations = SupabaseAuthenticationClient.LiveOperations(
@@ -83,10 +83,28 @@ private final class AuthenticationShellModel: ObservableObject {
                 requiredAccess: requiredAccess
             )
         )
-        functionClient = SupabaseFunctionClient(
+        let functionClient = SupabaseFunctionClient(
             configuration: configuration,
             accessTokenProvider: {
                 try await operations.currentAccessToken()
+            }
+        )
+        services = MarketplaceAuthenticatedServices(
+            functions: functionClient,
+            accountIDProvider: {
+                guard let accountID = await operations.currentAccountID() else {
+                    throw MarketplaceAuthenticatedServicesError.authenticationRequired
+                }
+                return accountID
+            },
+            objectUploader: { bucket, path, data, contentType, cacheControl in
+                try await operations.uploadObject(
+                    bucket: bucket,
+                    path: path,
+                    data: data,
+                    contentType: contentType,
+                    cacheControl: cacheControl
+                )
             }
         )
     }
@@ -95,7 +113,8 @@ private final class AuthenticationShellModel: ObservableObject {
 public struct MarketplaceAuthenticationShell: View {
     private let applicationName: String
     private let showsPersistentSignOut: Bool
-    private let activeContent: (any FunctionClient) -> AnyView
+    private let activeContent: (MarketplaceAuthenticatedServices) -> AnyView
+    private let restrictedContent: ((AccountRoute, MarketplaceAuthenticatedServices) -> AnyView)?
     @StateObject private var model: AuthenticationShellModel
 
     public init(
@@ -111,7 +130,8 @@ public struct MarketplaceAuthenticationShell: View {
             requiredAccess: requiredAccess,
             showsPersistentSignOut: showsPersistentSignOut,
             bundle: bundle,
-            activeContent: { _ in DefaultMarketplaceActiveView() }
+            activeContent: { _ in AnyView(DefaultMarketplaceActiveView()) },
+            restrictedContent: nil
         )
     }
 
@@ -123,11 +143,57 @@ public struct MarketplaceAuthenticationShell: View {
         bundle: Bundle = .main,
         @ViewBuilder activeContent: @escaping (any FunctionClient) -> Content
     ) {
+        self.init(
+            applicationName: applicationName,
+            product: product,
+            requiredAccess: requiredAccess,
+            showsPersistentSignOut: showsPersistentSignOut,
+            bundle: bundle,
+            activeContent: { services in AnyView(activeContent(services.functions)) },
+            restrictedContent: nil
+        )
+    }
+
+    public init<Content: View, RestrictedContent: View>(
+        applicationName: String,
+        product: MarketplaceProduct,
+        requiredAccess: MarketplaceApplicationAccess,
+        showsPersistentSignOut: Bool = true,
+        bundle: Bundle = .main,
+        @ViewBuilder authenticatedServicesContent: @escaping (
+            MarketplaceAuthenticatedServices
+        ) -> Content,
+        @ViewBuilder restrictedContent: @escaping (
+            AccountRoute,
+            MarketplaceAuthenticatedServices
+        ) -> RestrictedContent
+    ) {
+        self.init(
+            applicationName: applicationName,
+            product: product,
+            requiredAccess: requiredAccess,
+            showsPersistentSignOut: showsPersistentSignOut,
+            bundle: bundle,
+            activeContent: { services in AnyView(authenticatedServicesContent(services)) },
+            restrictedContent: { route, services in
+                AnyView(restrictedContent(route, services))
+            }
+        )
+    }
+
+    private init(
+        applicationName: String,
+        product: MarketplaceProduct,
+        requiredAccess: MarketplaceApplicationAccess,
+        showsPersistentSignOut: Bool,
+        bundle: Bundle,
+        activeContent: @escaping (MarketplaceAuthenticatedServices) -> AnyView,
+        restrictedContent: ((AccountRoute, MarketplaceAuthenticatedServices) -> AnyView)?
+    ) {
         self.applicationName = applicationName
         self.showsPersistentSignOut = showsPersistentSignOut
-        self.activeContent = { functionClient in
-            AnyView(activeContent(functionClient))
-        }
+        self.activeContent = activeContent
+        self.restrictedContent = restrictedContent
         _model = StateObject(
             wrappedValue: AuthenticationShellModel(
                 product: product,
@@ -140,13 +206,16 @@ public struct MarketplaceAuthenticationShell: View {
     public var body: some View {
         Group {
             if let coordinator = model.coordinator,
-               let functionClient = model.functionClient
+               let services = model.services
             {
                 AuthenticationRouteView(
                     applicationName: applicationName,
                     coordinator: coordinator,
                     showsPersistentSignOut: showsPersistentSignOut,
-                    activeContent: activeContent(functionClient)
+                    activeContent: activeContent(services),
+                    restrictedContent: restrictedContent.map { content in
+                        { route in content(route, services) }
+                    }
                 )
             } else {
                 VStack(spacing: 12) {
@@ -173,6 +242,7 @@ private struct AuthenticationRouteView: View {
     @ObservedObject var coordinator: AuthenticationCoordinator
     let showsPersistentSignOut: Bool
     let activeContent: AnyView
+    let restrictedContent: ((AccountRoute) -> AnyView)?
 
     @State private var displayName = ""
     @State private var phoneNumber = ""
@@ -205,17 +275,20 @@ private struct AuthenticationRouteView: View {
             case .needsProfile:
                 profileView
             case .pendingApproval:
-                restrictedView(
+                resolvedRestrictedView(
+                    route: .pendingApproval,
                     title: "Approval pending",
                     message: "This account is waiting for approval to use this app."
                 )
             case .suspended:
-                restrictedView(
+                resolvedRestrictedView(
+                    route: .suspended,
                     title: "Account suspended",
                     message: "This account cannot use this app right now."
                 )
             case .accessDenied:
-                restrictedView(
+                resolvedRestrictedView(
+                    route: .accessDenied,
                     title: "Access denied",
                     message: "This account does not have access to this app."
                 )
@@ -339,6 +412,25 @@ private struct AuthenticationRouteView: View {
                 Task { await signOut() }
             }
             .buttonStyle(.bordered)
+        }
+    }
+
+    @ViewBuilder
+    private func resolvedRestrictedView(
+        route: AccountRoute,
+        title: String,
+        message: String
+    ) -> some View {
+        if let restrictedContent {
+            VStack(spacing: 16) {
+                restrictedContent(route)
+                Button("Sign out") {
+                    Task { await signOut() }
+                }
+                .buttonStyle(.bordered)
+            }
+        } else {
+            restrictedView(title: title, message: message)
         }
     }
 

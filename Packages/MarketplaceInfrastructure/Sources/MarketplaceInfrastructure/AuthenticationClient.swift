@@ -351,6 +351,26 @@ extension SupabaseAuthenticationClient {
             }
         }
 
+        func uploadObject(
+            bucket: String,
+            path: String,
+            data: Data,
+            contentType: String,
+            cacheControl: String
+        ) async throws {
+            try await supabaseClient.storage
+                .from(bucket)
+                .upload(
+                    path,
+                    data: data,
+                    options: FileOptions(
+                        cacheControl: cacheControl,
+                        contentType: contentType,
+                        upsert: false
+                    )
+                )
+        }
+
         func accountProfileID(for accountID: UUID) async throws -> UUID? {
             let accounts: [AccountIdentity] = try await supabaseClient
                 .from("accounts")
