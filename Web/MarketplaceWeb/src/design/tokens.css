@@ -1,0 +1,58 @@
+:root {
+  color-scheme: light dark;
+
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+
+  --dastak-accent: #e45b49;
+  --dastak-accent-dark: #ff8172;
+  --dastak-accent-soft: #fff0ec;
+  --savari-accent: #138a5b;
+  --route: #007aff;
+
+  --primary-action: #171719;
+  --primary-action-foreground: #fff;
+  --destructive: #d70015;
+  --success: #18864b;
+  --warning: #a05a00;
+
+  --canvas: #f7f7f5;
+  --surface: #fff;
+  --text-primary: #171719;
+  --text-secondary: #68686d;
+  --divider: #d7d7dc;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --radius-compact: 8px;
+  --radius-control: 14px;
+  --radius-sheet: 28px;
+  --minimum-target: 44px;
+  --content-max: 720px;
+
+  --glass: color-mix(in srgb, var(--surface) 82%, transparent);
+  --glass-border: color-mix(in srgb, white 30%, transparent);
+  --glass-shadow: 0 18px 50px rgb(0 0 0 / 10%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --dastak-accent: #ff8172;
+    --dastak-accent-soft: #331915;
+    --canvas: #0d0d0f;
+    --surface: #1c1c1e;
+    --text-primary: #f5f5f7;
+    --text-secondary: #afafb4;
+    --divider: #38383d;
+    --primary-action: #f5f5f7;
+    --primary-action-foreground: #171719;
+    --glass-border: color-mix(in srgb, white 12%, transparent);
+    --glass-shadow: 0 18px 50px rgb(0 0 0 / 28%);
+  }
+}

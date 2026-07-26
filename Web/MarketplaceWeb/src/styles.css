@@ -1,7 +1,9 @@
+@import "./design/tokens.css";
+
 :root {
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #17201b;
-  background: #f3f5f2;
+  font-family: var(--font-system);
+  color: var(--text-primary);
+  background: var(--canvas);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   letter-spacing: 0;
@@ -14,19 +16,19 @@ button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .55; }
 
 .app {
-  --accent: #176b3a;
+  --accent: var(--savari-accent);
   --accent-soft: #e4f1e8;
   --contrast: #efb92f;
   min-height: 100vh;
   padding: env(safe-area-inset-top) max(20px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(20px, env(safe-area-inset-left));
-  background: #f3f5f2;
+  background: var(--canvas);
 }
 
 .app.product-dastak {
-  --accent: #a53631;
-  --accent-soft: #f7e7e5;
+  --accent: var(--dastak-accent);
+  --accent-soft: var(--dastak-accent-soft);
   --contrast: #167068;
-  background: #f7f4f2;
+  background: var(--canvas);
 }
 
 .topbar {
