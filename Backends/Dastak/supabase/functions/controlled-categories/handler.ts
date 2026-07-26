@@ -8,40 +8,59 @@ type Location = { latitude: number; longitude: number };
 type Mutation = { accountId: string; idempotencyKey: string; requestDigest: string };
 
 export type AdultAttestationInput = Mutation & {
-  policyVersion: string; affirmedAdult: boolean; affirmedNotForMinor: boolean;
+  policyVersion: string;
+  affirmedAdult: boolean;
+  affirmedNotForMinor: boolean;
 };
 export type ControlledBrowseInput = { accountId: string; scope: Scope } & Location;
 export type ControlledQuoteInput = Mutation & {
-  scope: Scope; storeId: string;
+  scope: Scope;
+  storeId: string;
   lines: Array<{ productId: string; quantity: number }>;
-  dropoffLatitude: number; dropoffLongitude: number;
+  dropoffLatitude: number;
+  dropoffLongitude: number;
   prescriptionEvidencePath: string | null;
 };
 export type ControlledOrderInput = Mutation & { quoteId: string };
 export type ControlledOrderSnapshotInput = { accountId: string; orderId: string };
 export type StoreComplianceInput = Mutation & {
-  scope: Scope; evidenceObjectPath: string | null;
+  scope: Scope;
+  evidenceObjectPath: string | null;
 };
 export type StoreComplianceReviewInput = Mutation & {
-  complianceId: string; decision: "approve" | "reject" | "suspend";
-  validUntil: string | null; reason: string | null;
+  complianceId: string;
+  decision: "approve" | "reject" | "suspend";
+  validUntil: string | null;
+  reason: string | null;
 };
 export type ControlledProductInput = Mutation & {
-  productId: string; tobaccoKind: TobaccoKind | null;
+  productId: string;
+  tobaccoKind: TobaccoKind | null;
 };
 export type ControlledProductReviewInput = Mutation & {
-  productId: string; decision: "approve" | "reject" | "suspend"; reason: string | null;
+  productId: string;
+  decision: "approve" | "reject" | "suspend";
+  reason: string | null;
 };
 export type ControlledPolicyInput = Mutation & {
-  version: string; allowedTobaccoKinds: TobaccoKind[]; active: boolean;
+  version: string;
+  allowedTobaccoKinds: TobaccoKind[];
+  active: boolean;
 };
 export type ExclusionZoneInput = Mutation & {
-  zoneId: string | null; name: string; kind: "school" | "college";
-  latitude: number; longitude: number; radiusMeters: number; active: boolean;
+  zoneId: string | null;
+  name: string;
+  kind: "school" | "college";
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  active: boolean;
 };
 export type RestrictedHandoffInput = Mutation & {
-  assignmentId: string; verificationCode: string;
-  visualAgeCheck: "passed" | "failed" | "uncertain"; reason: string | null;
+  assignmentId: string;
+  verificationCode: string;
+  visualAgeCheck: "passed" | "failed" | "uncertain";
+  reason: string | null;
 };
 export type RestrictedReturnInput = Mutation & { orderId: string; reason: string };
 
@@ -83,18 +102,26 @@ export async function handleControlledCategories(
   if (!body || typeof body.operation !== "string") return validationError();
   try {
     switch (body.operation) {
-      case "attestAdult": return attestAdult(request, body, actor.accountId, dependencies);
-      case "browse": return browse(body, actor.accountId, dependencies);
-      case "quote": return quote(request, body, actor.accountId, dependencies);
-      case "createOrder": return createOrder(request, body, actor.accountId, dependencies);
-      case "orderSnapshot": return orderSnapshot(body, actor.accountId, dependencies);
+      case "attestAdult":
+        return attestAdult(request, body, actor.accountId, dependencies);
+      case "browse":
+        return browse(body, actor.accountId, dependencies);
+      case "quote":
+        return quote(request, body, actor.accountId, dependencies);
+      case "createOrder":
+        return createOrder(request, body, actor.accountId, dependencies);
+      case "orderSnapshot":
+        return orderSnapshot(body, actor.accountId, dependencies);
       case "submitStoreCompliance":
         return submitStoreCompliance(request, body, actor.accountId, dependencies);
       case "reviewStoreCompliance":
         return reviewStoreCompliance(request, body, actor.accountId, dependencies);
-      case "submitProduct": return submitProduct(request, body, actor.accountId, dependencies);
-      case "reviewProduct": return reviewProduct(request, body, actor.accountId, dependencies);
-      case "upsertPolicy": return upsertPolicy(request, body, actor.accountId, dependencies);
+      case "submitProduct":
+        return submitProduct(request, body, actor.accountId, dependencies);
+      case "reviewProduct":
+        return reviewProduct(request, body, actor.accountId, dependencies);
+      case "upsertPolicy":
+        return upsertPolicy(request, body, actor.accountId, dependencies);
       case "upsertExclusionZone":
         return upsertExclusionZone(request, body, actor.accountId, dependencies);
       case "verifyRestrictedHandoff":
@@ -103,7 +130,8 @@ export async function handleControlledCategories(
         return confirmRestrictedReturn(request, body, actor.accountId, dependencies);
       case "prescriptionDownloadURL":
         return prescriptionDownload(body, actor.accountId, dependencies);
-      default: return validationError();
+      default:
+        return validationError();
     }
   } catch {
     return internalError();
@@ -111,7 +139,9 @@ export async function handleControlledCategories(
 }
 
 async function attestAdult(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const policyVersion = normalizedText(body.policyVersion, 80);
@@ -119,12 +149,15 @@ async function attestAdult(
     return validationError();
   }
   return mutation(request, accountId, {
-    policyVersion, affirmedAdult: true, affirmedNotForMinor: true,
+    policyVersion,
+    affirmedAdult: true,
+    affirmedNotForMinor: true,
   }, dependencies.attestAdult);
 }
 
 async function browse(
-  body: Record<string, unknown>, accountId: string,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const scope = controlledScope(body.scope);
@@ -134,7 +167,9 @@ async function browse(
 }
 
 async function quote(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const scope = controlledScope(body.scope);
@@ -146,7 +181,9 @@ async function quote(
     return validationError();
   }
   return mutation(request, accountId, {
-    scope, storeId, lines,
+    scope,
+    storeId,
+    lines,
     dropoffLatitude: dropoff.latitude,
     dropoffLongitude: dropoff.longitude,
     prescriptionEvidencePath,
@@ -154,7 +191,9 @@ async function quote(
 }
 
 async function createOrder(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const quoteId = uuid(body.quoteId);
@@ -164,7 +203,8 @@ async function createOrder(
 }
 
 async function orderSnapshot(
-  body: Record<string, unknown>, accountId: string,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const orderId = uuid(body.orderId);
@@ -173,35 +213,51 @@ async function orderSnapshot(
 }
 
 async function submitStoreCompliance(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const scope = controlledScope(body.scope);
   const evidenceObjectPath = optionalText(body.evidenceObjectPath, 500);
-  if (!scope || evidenceObjectPath === undefined ||
-    ((scope === "medicine") !== (evidenceObjectPath !== null))) return validationError();
+  if (
+    !scope || evidenceObjectPath === undefined ||
+    ((scope === "medicine") !== (evidenceObjectPath !== null))
+  ) return validationError();
   return mutation(
-    request, accountId, { scope, evidenceObjectPath }, dependencies.submitStoreCompliance,
+    request,
+    accountId,
+    { scope, evidenceObjectPath },
+    dependencies.submitStoreCompliance,
   );
 }
 
 async function reviewStoreCompliance(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const complianceId = uuid(body.complianceId);
   const decision = reviewDecision(body.decision);
   const validUntil = optionalDate(body.validUntil);
   const reason = optionalText(body.reason, 500);
-  if (!complianceId || !decision || validUntil === undefined || reason === undefined ||
-    (decision !== "approve" && !reason)) return validationError();
+  if (
+    !complianceId || !decision || validUntil === undefined || reason === undefined ||
+    (decision !== "approve" && !reason)
+  ) return validationError();
   return mutation(request, accountId, {
-    complianceId, decision, validUntil, reason,
+    complianceId,
+    decision,
+    validUntil,
+    reason,
   }, dependencies.reviewStoreCompliance);
 }
 
 async function submitProduct(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const productId = uuid(body.productId);
@@ -212,7 +268,9 @@ async function submitProduct(
 }
 
 async function reviewProduct(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const productId = uuid(body.productId);
@@ -225,7 +283,9 @@ async function reviewProduct(
 }
 
 async function upsertPolicy(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const version = normalizedText(body.version, 80);
@@ -234,47 +294,71 @@ async function upsertPolicy(
     return validationError();
   }
   return mutation(request, accountId, {
-    version, allowedTobaccoKinds, active: body.active,
+    version,
+    allowedTobaccoKinds,
+    active: body.active,
   }, dependencies.upsertPolicy);
 }
 
 async function upsertExclusionZone(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const zoneId = optionalUUID(body.zoneId);
   const name = normalizedText(body.name, 120);
   const kind = body.kind === "school" || body.kind === "college" ? body.kind : undefined;
   const point = location(body.center);
-  if (zoneId === undefined || !name || !kind || !point ||
+  if (
+    zoneId === undefined || !name || !kind || !point ||
     typeof body.radiusMeters !== "number" || !Number.isInteger(body.radiusMeters) ||
-    body.radiusMeters < 1 || body.radiusMeters > 5_000 || typeof body.active !== "boolean") {
+    body.radiusMeters < 1 || body.radiusMeters > 5_000 || typeof body.active !== "boolean"
+  ) {
     return validationError();
   }
   return mutation(request, accountId, {
-    zoneId, name, kind, ...point, radiusMeters: body.radiusMeters, active: body.active,
+    zoneId,
+    name,
+    kind,
+    ...point,
+    radiusMeters: body.radiusMeters,
+    active: body.active,
   }, dependencies.upsertExclusionZone);
 }
 
 async function verifyRestrictedHandoff(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const assignmentId = uuid(body.assignmentId);
-  const verificationCode = typeof body.verificationCode === "string" && /^[0-9]{4}$/.test(body.verificationCode)
-    ? body.verificationCode : undefined;
+  const verificationCode =
+    typeof body.verificationCode === "string" && /^[0-9]{4}$/.test(body.verificationCode)
+      ? body.verificationCode
+      : undefined;
   const visualAgeCheck = body.visualAgeCheck === "passed" || body.visualAgeCheck === "failed" ||
-      body.visualAgeCheck === "uncertain" ? body.visualAgeCheck : undefined;
+      body.visualAgeCheck === "uncertain"
+    ? body.visualAgeCheck
+    : undefined;
   const reason = optionalText(body.reason, 500);
-  if (!assignmentId || !verificationCode || !visualAgeCheck || reason === undefined ||
-    (visualAgeCheck !== "passed" && !reason)) return validationError();
+  if (
+    !assignmentId || !verificationCode || !visualAgeCheck || reason === undefined ||
+    (visualAgeCheck !== "passed" && !reason)
+  ) return validationError();
   return mutation(request, accountId, {
-    assignmentId, verificationCode, visualAgeCheck, reason,
+    assignmentId,
+    verificationCode,
+    visualAgeCheck,
+    reason,
   }, dependencies.verifyRestrictedHandoff);
 }
 
 async function confirmRestrictedReturn(
-  request: Request, body: Record<string, unknown>, accountId: string,
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const orderId = uuid(body.orderId);
@@ -285,35 +369,48 @@ async function confirmRestrictedReturn(
 }
 
 async function prescriptionDownload(
-  body: Record<string, unknown>, accountId: string,
+  body: Record<string, unknown>,
+  accountId: string,
   dependencies: ControlledCategoryDependencies,
 ) {
   const orderId = uuid(body.orderId);
   if (!orderId) return validationError();
   const objectPath = await dependencies.getPrescriptionEvidencePath({ accountId, orderId });
   if (!objectPath) {
-    return json({ error: { code: "evidence_not_found", message: "Prescription evidence was not found." } }, 404);
+    return json({
+      error: { code: "evidence_not_found", message: "Prescription evidence was not found." },
+    }, 404);
   }
   return json({ signedUrl: await dependencies.signEvidenceDownload(objectPath), expiresIn: 300 });
 }
 
 async function mutation<T extends Record<string, unknown>>(
-  request: Request, accountId: string, normalized: T,
+  request: Request,
+  accountId: string,
+  normalized: T,
   dependency: (input: Mutation & T) => Promise<RpcResult>,
 ) {
   const idempotencyKey = requiredIdempotencyKey(request);
   if (!idempotencyKey) return validationError();
-  return rpcResponse(await dependency({
-    accountId, ...normalized, idempotencyKey,
-    requestDigest: await canonicalDigest(normalized),
-  }));
+  return rpcResponse(
+    await dependency({
+      accountId,
+      ...normalized,
+      idempotencyKey,
+      requestDigest: await canonicalDigest(normalized),
+    }),
+  );
 }
 
 function rpcResponse(result: RpcResult) {
   return json(result.responseBody, result.responseStatus);
 }
 async function parseBody(request: Request): Promise<Record<string, unknown> | undefined> {
-  try { return record(await request.json()); } catch { return undefined; }
+  try {
+    return record(await request.json());
+  } catch {
+    return undefined;
+  }
 }
 function orderLines(value: unknown) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 50) return undefined;
@@ -323,8 +420,10 @@ function orderLines(value: unknown) {
     const line = record(raw);
     const productId = uuid(line?.productId);
     const quantity = line?.quantity;
-    if (!productId || typeof quantity !== "number" || !Number.isInteger(quantity) ||
-      quantity < 1 || quantity > 99 || seen.has(productId)) return undefined;
+    if (
+      !productId || typeof quantity !== "number" || !Number.isInteger(quantity) ||
+      quantity < 1 || quantity > 99 || seen.has(productId)
+    ) return undefined;
     seen.add(productId);
     lines.push({ productId, quantity });
   }
@@ -332,9 +431,11 @@ function orderLines(value: unknown) {
 }
 function location(value: unknown): Location | undefined {
   const point = record(value);
-  if (!point || typeof point.latitude !== "number" || !Number.isFinite(point.latitude) ||
+  if (
+    !point || typeof point.latitude !== "number" || !Number.isFinite(point.latitude) ||
     point.latitude < -90 || point.latitude > 90 || typeof point.longitude !== "number" ||
-    !Number.isFinite(point.longitude) || point.longitude < -180 || point.longitude > 180) {
+    !Number.isFinite(point.longitude) || point.longitude < -180 || point.longitude > 180
+  ) {
     return undefined;
   }
   return { latitude: point.latitude, longitude: point.longitude };
@@ -348,7 +449,8 @@ function reviewDecision(value: unknown) {
 function optionalTobaccoKind(value: unknown): TobaccoKind | null | undefined {
   if (value === null || value === undefined) return null;
   return typeof value === "string" && tobaccoKinds.has(value as TobaccoKind)
-    ? value as TobaccoKind : undefined;
+    ? value as TobaccoKind
+    : undefined;
 }
 function tobaccoKindList(value: unknown): TobaccoKind[] | undefined {
   if (!Array.isArray(value) || value.length < 1 || value.length > 3) return undefined;
@@ -360,7 +462,8 @@ function tobaccoKindList(value: unknown): TobaccoKind[] | undefined {
 function optionalDate(value: unknown): string | null | undefined {
   if (value === null || value === undefined) return null;
   return typeof value === "string" && value.length <= 40 && !Number.isNaN(Date.parse(value))
-    ? value : undefined;
+    ? value
+    : undefined;
 }
 function normalizedText(value: unknown, maximumLength: number) {
   if (typeof value !== "string") return undefined;
@@ -378,22 +481,37 @@ function optionalUUID(value: unknown): string | null | undefined {
 }
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown> : undefined;
+    ? value as Record<string, unknown>
+    : undefined;
 }
 function requiredIdempotencyKey(request: Request) {
   const key = request.headers.get("X-Idempotency-Key")?.trim() ?? "";
   return key.length >= 1 && key.length <= 200 ? key : undefined;
 }
 async function canonicalDigest(value: unknown) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(value)),
+  );
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 function authenticationRequired() {
-  return json({ error: { code: "authentication_required", message: "A valid bearer token is required." } }, 401);
+  return json({
+    error: { code: "authentication_required", message: "A valid bearer token is required." },
+  }, 401);
 }
 function validationError() {
-  return json({ error: { code: "validation_failed", message: "The controlled-category request is invalid." } }, 400);
+  return json({
+    error: { code: "validation_failed", message: "The controlled-category request is invalid." },
+  }, 400);
 }
 function internalError() {
-  return json({ error: { code: "internal_error", message: "The controlled-category request could not be completed." } }, 500);
+  return json({
+    error: {
+      code: "internal_error",
+      message: "The controlled-category request could not be completed.",
+    },
+  }, 500);
 }

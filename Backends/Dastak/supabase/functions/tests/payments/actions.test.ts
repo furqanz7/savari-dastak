@@ -71,7 +71,11 @@ Deno.test("refund processing uses the authenticated actor and idempotency", asyn
 Deno.test("parcel checkout selects the parcel payment contract", async () => {
   let recorded: PaymentActionInput | undefined;
   const response = await handleDastakPayments(
-    request({ operation: "createCheckout", entityType: "parcel", parcelId: orderId }, "Bearer session", "parcel-checkout"),
+    request(
+      { operation: "createCheckout", entityType: "parcel", parcelId: orderId },
+      "Bearer session",
+      "parcel-checkout",
+    ),
     dependencies({
       createCheckout: (input) => {
         recorded = input;

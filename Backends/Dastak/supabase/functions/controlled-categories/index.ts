@@ -12,108 +12,121 @@ const serviceClient = createClient(
 Deno.serve((request) =>
   handleControlledCategories(request, {
     authenticateBearer: verifyBearerUser,
-    attestAdult: (input) => rpc("record_adult_attestation", {
-      p_account_id: input.accountId,
-      p_policy_version: input.policyVersion,
-      p_affirmed_adult: input.affirmedAdult,
-      p_affirmed_not_for_minor: input.affirmedNotForMinor,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    browseCatalogue: (input) => rpc("browse_controlled_catalogue", {
-      p_account_id: input.accountId,
-      p_scope: input.scope,
-      p_latitude: input.latitude,
-      p_longitude: input.longitude,
-    }),
-    quoteOrder: (input) => rpc("quote_controlled_merchant_order", {
-      p_account_id: input.accountId,
-      p_scope: input.scope,
-      p_store_id: input.storeId,
-      p_lines: input.lines,
-      p_dropoff_latitude: input.dropoffLatitude,
-      p_dropoff_longitude: input.dropoffLongitude,
-      p_prescription_evidence_path: input.prescriptionEvidencePath,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    createOrder: (input) => rpc("create_controlled_merchant_order", {
-      p_account_id: input.accountId,
-      p_quote_id: input.quoteId,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    getOrderSnapshot: (input) => rpc("get_controlled_order_snapshot", {
-      p_account_id: input.accountId,
-      p_order_id: input.orderId,
-    }),
-    submitStoreCompliance: (input) => rpc("submit_controlled_store_compliance", {
-      p_account_id: input.accountId,
-      p_scope: input.scope,
-      p_evidence_object_path: input.evidenceObjectPath,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    reviewStoreCompliance: (input) => rpc("review_controlled_store_compliance", {
-      p_owner_id: input.accountId,
-      p_compliance_id: input.complianceId,
-      p_decision: input.decision,
-      p_valid_until: input.validUntil,
-      p_reason: input.reason,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    submitProduct: (input) => rpc("submit_controlled_product", {
-      p_account_id: input.accountId,
-      p_product_id: input.productId,
-      p_tobacco_kind: input.tobaccoKind,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    reviewProduct: (input) => rpc("review_controlled_product", {
-      p_owner_id: input.accountId,
-      p_product_id: input.productId,
-      p_decision: input.decision,
-      p_reason: input.reason,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    upsertPolicy: (input) => rpc("upsert_controlled_category_policy", {
-      p_owner_id: input.accountId,
-      p_version: input.version,
-      p_allowed_tobacco_kinds: input.allowedTobaccoKinds,
-      p_active: input.active,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    upsertExclusionZone: (input) => rpc("upsert_restricted_exclusion_zone", {
-      p_owner_id: input.accountId,
-      p_zone_id: input.zoneId,
-      p_name: input.name,
-      p_kind: input.kind,
-      p_latitude: input.latitude,
-      p_longitude: input.longitude,
-      p_radius_meters: input.radiusMeters,
-      p_active: input.active,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    verifyRestrictedHandoff: (input) => rpc("verify_restricted_handoff", {
-      p_account_id: input.accountId,
-      p_assignment_id: input.assignmentId,
-      p_verification_code: input.verificationCode,
-      p_visual_age_check: input.visualAgeCheck,
-      p_reason: input.reason,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
-    confirmRestrictedReturn: (input) => rpc("confirm_restricted_return", {
-      p_account_id: input.accountId,
-      p_order_id: input.orderId,
-      p_reason: input.reason,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_digest: input.requestDigest,
-    }),
+    attestAdult: (input) =>
+      rpc("record_adult_attestation", {
+        p_account_id: input.accountId,
+        p_policy_version: input.policyVersion,
+        p_affirmed_adult: input.affirmedAdult,
+        p_affirmed_not_for_minor: input.affirmedNotForMinor,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    browseCatalogue: (input) =>
+      rpc("browse_controlled_catalogue", {
+        p_account_id: input.accountId,
+        p_scope: input.scope,
+        p_latitude: input.latitude,
+        p_longitude: input.longitude,
+      }),
+    quoteOrder: (input) =>
+      rpc("quote_controlled_merchant_order", {
+        p_account_id: input.accountId,
+        p_scope: input.scope,
+        p_store_id: input.storeId,
+        p_lines: input.lines,
+        p_dropoff_latitude: input.dropoffLatitude,
+        p_dropoff_longitude: input.dropoffLongitude,
+        p_prescription_evidence_path: input.prescriptionEvidencePath,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    createOrder: (input) =>
+      rpc("create_controlled_merchant_order", {
+        p_account_id: input.accountId,
+        p_quote_id: input.quoteId,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    getOrderSnapshot: (input) =>
+      rpc("get_controlled_order_snapshot", {
+        p_account_id: input.accountId,
+        p_order_id: input.orderId,
+      }),
+    submitStoreCompliance: (input) =>
+      rpc("submit_controlled_store_compliance", {
+        p_account_id: input.accountId,
+        p_scope: input.scope,
+        p_evidence_object_path: input.evidenceObjectPath,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    reviewStoreCompliance: (input) =>
+      rpc("review_controlled_store_compliance", {
+        p_owner_id: input.accountId,
+        p_compliance_id: input.complianceId,
+        p_decision: input.decision,
+        p_valid_until: input.validUntil,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    submitProduct: (input) =>
+      rpc("submit_controlled_product", {
+        p_account_id: input.accountId,
+        p_product_id: input.productId,
+        p_tobacco_kind: input.tobaccoKind,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    reviewProduct: (input) =>
+      rpc("review_controlled_product", {
+        p_owner_id: input.accountId,
+        p_product_id: input.productId,
+        p_decision: input.decision,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    upsertPolicy: (input) =>
+      rpc("upsert_controlled_category_policy", {
+        p_owner_id: input.accountId,
+        p_version: input.version,
+        p_allowed_tobacco_kinds: input.allowedTobaccoKinds,
+        p_active: input.active,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    upsertExclusionZone: (input) =>
+      rpc("upsert_restricted_exclusion_zone", {
+        p_owner_id: input.accountId,
+        p_zone_id: input.zoneId,
+        p_name: input.name,
+        p_kind: input.kind,
+        p_latitude: input.latitude,
+        p_longitude: input.longitude,
+        p_radius_meters: input.radiusMeters,
+        p_active: input.active,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    verifyRestrictedHandoff: (input) =>
+      rpc("verify_restricted_handoff", {
+        p_account_id: input.accountId,
+        p_assignment_id: input.assignmentId,
+        p_verification_code: input.verificationCode,
+        p_visual_age_check: input.visualAgeCheck,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
+    confirmRestrictedReturn: (input) =>
+      rpc("confirm_restricted_return", {
+        p_account_id: input.accountId,
+        p_order_id: input.orderId,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_digest: input.requestDigest,
+      }),
     getPrescriptionEvidencePath: async (input) => {
       const { data, error } = await serviceClient.rpc(
         "get_order_prescription_evidence_path",

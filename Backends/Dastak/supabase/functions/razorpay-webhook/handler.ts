@@ -28,7 +28,10 @@ export async function handleRazorpayWebhook(
   const rawBody = await request.text();
   if (!providerEventId || !await validSignature(rawBody, signature, dependencies.webhookSecret)) {
     return json({
-      error: { code: "invalid_webhook_signature", message: "The Razorpay webhook signature is invalid." },
+      error: {
+        code: "invalid_webhook_signature",
+        message: "The Razorpay webhook signature is invalid.",
+      },
     }, 401);
   }
 
@@ -64,7 +67,9 @@ async function parseEvent(
   rawBody: string,
 ): Promise<RazorpayWebhookEvent | undefined> {
   const createdAt = payload.created_at;
-  if (typeof createdAt !== "number" || !Number.isSafeInteger(createdAt) || createdAt <= 0) return undefined;
+  if (typeof createdAt !== "number" || !Number.isSafeInteger(createdAt) || createdAt <= 0) {
+    return undefined;
+  }
   const occurredAt = new Date(createdAt * 1000).toISOString();
   const requestDigest = await sha256(rawBody);
   const payloadRecord = record(payload.payload);
@@ -120,11 +125,15 @@ async function validSignature(body: string, received: string, secret: string) {
     false,
     ["sign"],
   );
-  const expected = Array.from(new Uint8Array(await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(body),
-  ))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const expected = Array.from(
+    new Uint8Array(
+      await crypto.subtle.sign(
+        "HMAC",
+        key,
+        new TextEncoder().encode(body),
+      ),
+    ),
+  ).map((byte) => byte.toString(16).padStart(2, "0")).join("");
   let mismatch = expected.length ^ received.length;
   for (let index = 0; index < expected.length; index += 1) {
     mismatch |= expected.charCodeAt(index) ^ (received.charCodeAt(index) || 0);
@@ -134,17 +143,21 @@ async function validSignature(body: string, received: string, secret: string) {
 
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 function providerId(value: unknown, prefix: "order" | "pay" | "rfnd") {
-  return typeof value === "string" && new RegExp(`^${prefix}_[A-Za-z0-9]+$`).test(value) && value.length <= 200
+  return typeof value === "string" && new RegExp(`^${prefix}_[A-Za-z0-9]+$`).test(value) &&
+      value.length <= 200
     ? value
     : undefined;
 }
 
 function validMoney(value: unknown) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 100_000_000
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 &&
+      value <= 100_000_000
     ? value
     : undefined;
 }

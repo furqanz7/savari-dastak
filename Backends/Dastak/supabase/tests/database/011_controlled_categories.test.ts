@@ -28,7 +28,10 @@ Deno.test("controlled categories fail closed behind private server contracts", a
     ]
   ) {
     assertMatch(normalized, new RegExp(`create table private\\.${table}`, "i"));
-    assertMatch(normalized, new RegExp(`alter table private\\.${table} enable row level security`, "i"));
+    assertMatch(
+      normalized,
+      new RegExp(`alter table private\\.${table} enable row level security`, "i"),
+    );
     assertMatch(
       normalized,
       new RegExp(`revoke all on table private\\.${table} from public, anon, authenticated`, "i"),
@@ -57,7 +60,10 @@ Deno.test("controlled categories fail closed behind private server contracts", a
     const escaped = signature.replace(/[()]/g, "\\$&");
     assertMatch(
       signatures,
-      new RegExp(`revoke execute on function public\\.${escaped} from public, anon, authenticated`, "i"),
+      new RegExp(
+        `revoke execute on function public\\.${escaped} from public, anon, authenticated`,
+        "i",
+      ),
     );
     assertMatch(
       signatures,

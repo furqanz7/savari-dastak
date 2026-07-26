@@ -131,7 +131,10 @@ Deno.test("snapshots derive customer, recipient, and partner identity from beare
       .status,
     200,
   );
-  assertEquals(recorded, [["parcel", accountId, parcelId], ["partner", accountId], ["customer", accountId]]);
+  assertEquals(recorded, [["parcel", accountId, parcelId], ["partner", accountId], [
+    "customer",
+    accountId,
+  ]]);
 });
 
 Deno.test("assignment and lifecycle operations map to server-owned actions", async () => {

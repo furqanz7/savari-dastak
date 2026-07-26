@@ -1,9 +1,4 @@
-import {
-  assert,
-  assertEquals,
-  assertExists,
-  assertMatch,
-} from "jsr:@std/assert";
+import { assert, assertEquals, assertExists, assertMatch } from "jsr:@std/assert";
 
 Deno.test("city marketplace configuration is bounded, versioned, and owner managed", async () => {
   const migrationsDirectory = new URL("../../migrations/", import.meta.url);

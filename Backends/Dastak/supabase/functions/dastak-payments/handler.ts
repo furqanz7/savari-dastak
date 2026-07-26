@@ -37,8 +37,10 @@ export async function handleDastakPayments(
   }
 
   const body = await parseBody(request);
-  const entityType = body?.entityType === "parcel" ? "parcel"
-    : body?.entityType === undefined || body?.entityType === "merchant_order" ? "merchant_order"
+  const entityType = body?.entityType === "parcel"
+    ? "parcel"
+    : body?.entityType === undefined || body?.entityType === "merchant_order"
+    ? "merchant_order"
     : undefined;
   const orderId = validUUID(entityType === "parcel" ? body?.parcelId : body?.orderId);
   const idempotencyKey = requiredIdempotencyKey(request);

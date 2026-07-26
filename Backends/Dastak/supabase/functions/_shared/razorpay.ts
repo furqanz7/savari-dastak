@@ -38,23 +38,27 @@ export class RazorpayClient {
     this.authorization = `Basic ${btoa(`${keyId}:${keySecret}`)}`;
   }
 
-  async resolveOrder(input: { amountPaise: number; currency: "INR"; receipt: string; orderId: string }) {
+  async resolveOrder(
+    input: { amountPaise: number; currency: "INR"; receipt: string; orderId: string },
+  ) {
     const existing = await this.findOrderByReceipt(input.receipt);
     if (existing) {
       assertOrderMatches(existing, input);
       return existing;
     }
 
-    const created = parseOrder(await this.request("/orders", {
-      method: "POST",
-      body: JSON.stringify({
-        amount: input.amountPaise,
-        currency: input.currency,
-        receipt: input.receipt,
-        partial_payment: false,
-        notes: { dastak_order_id: input.orderId },
+    const created = parseOrder(
+      await this.request("/orders", {
+        method: "POST",
+        body: JSON.stringify({
+          amount: input.amountPaise,
+          currency: input.currency,
+          receipt: input.receipt,
+          partial_payment: false,
+          notes: { dastak_order_id: input.orderId },
+        }),
       }),
-    }));
+    );
     assertOrderMatches(created, input);
     return created;
   }
@@ -76,31 +80,37 @@ export class RazorpayClient {
       return existing;
     }
 
-    const created = parseRefund(await this.request(
-      `/payments/${encodeURIComponent(input.providerPaymentId)}/refund`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          amount: input.amountPaise,
-          receipt: input.receipt,
-          notes: { dastak_order_id: input.orderId },
-        }),
-      },
-    ));
+    const created = parseRefund(
+      await this.request(
+        `/payments/${encodeURIComponent(input.providerPaymentId)}/refund`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            amount: input.amountPaise,
+            receipt: input.receipt,
+            notes: { dastak_order_id: input.orderId },
+          }),
+        },
+      ),
+    );
     assertRefundMatches(created, input);
     return created;
   }
 
   private async findOrderByReceipt(receipt: string) {
-    const payload = record(await this.request(`/orders?receipt=${encodeURIComponent(receipt)}&count=1`));
+    const payload = record(
+      await this.request(`/orders?receipt=${encodeURIComponent(receipt)}&count=1`),
+    );
     if (!payload || !Array.isArray(payload.items)) throw new RazorpayApiError(502);
     return payload.items.length === 0 ? undefined : parseOrder(payload.items[0]);
   }
 
   private async findRefundByReceipt(providerPaymentId: string, receipt: string) {
-    const payload = record(await this.request(
-      `/payments/${encodeURIComponent(providerPaymentId)}/refunds?count=100`,
-    ));
+    const payload = record(
+      await this.request(
+        `/payments/${encodeURIComponent(providerPaymentId)}/refunds?count=100`,
+      ),
+    );
     if (!payload || !Array.isArray(payload.items)) throw new RazorpayApiError(502);
     const match = payload.items.find((item) => record(item)?.receipt === receipt);
     return match === undefined ? undefined : parseRefund(match);
@@ -164,7 +174,10 @@ function assertOrderMatches(
   order: RazorpayOrder,
   expected: { amountPaise: number; currency: "INR"; receipt: string },
 ) {
-  if (order.amount !== expected.amountPaise || order.currency !== expected.currency || order.receipt !== expected.receipt) {
+  if (
+    order.amount !== expected.amountPaise || order.currency !== expected.currency ||
+    order.receipt !== expected.receipt
+  ) {
     throw new RazorpayApiError(409);
   }
 }
@@ -180,7 +193,8 @@ function assertRefundMatches(
 }
 
 function validMoney(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 100_000_000;
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 &&
+    value <= 100_000_000;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

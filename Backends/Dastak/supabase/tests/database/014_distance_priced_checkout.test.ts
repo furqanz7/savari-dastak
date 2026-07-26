@@ -26,7 +26,10 @@ Deno.test("merchant checkout snapshots server-measured distance pricing", async 
   assertMatch(normalized, /st_distance\([^;]+store\.location[^;]+dropoff/is);
   assertMatch(normalized, /calculate_merchant_order_distance_terms\(/i);
   assertMatch(normalized, /new\.delivery_fee_paise :=/i);
-  assertMatch(normalized, /new\.total_paise := new\.item_subtotal_paise \+ new\.delivery_fee_paise/i);
+  assertMatch(
+    normalized,
+    /new\.total_paise := new\.item_subtotal_paise \+ new\.delivery_fee_paise/i,
+  );
   assertMatch(normalized, /'deliveryDistanceMeters'/i);
   assertMatch(normalized, /security invoker/gi);
   assertMatch(normalized, /set search_path = ''/gi);
@@ -51,7 +54,10 @@ Deno.test("distance-priced order creation revalidates computed terms", async () 
   const normalized = migration.replace(/\s+/g, " ");
 
   assertMatch(normalized, /create or replace function public\.create_merchant_order/i);
-  assertMatch(normalized, /calculate_merchant_order_distance_terms\( v_rate, v_quote\.delivery_distance_m \)/i);
+  assertMatch(
+    normalized,
+    /calculate_merchant_order_distance_terms\( v_rate, v_quote\.delivery_distance_m \)/i,
+  );
   assertMatch(normalized, /is distinct from v_quote\.delivery_fee_paise/i);
   assertMatch(normalized, /is distinct from v_quote\.courier_payout_paise/i);
   assertNotMatch(normalized, /rate\.delivery_fee_paise\s*=\s*v_quote\.delivery_fee_paise/i);

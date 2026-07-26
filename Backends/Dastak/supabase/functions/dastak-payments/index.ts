@@ -19,12 +19,15 @@ Deno.serve((request) =>
 );
 
 async function createCheckout(input: PaymentActionInput) {
-  const prepared = await rpc(input.entityType === "parcel"
-    ? "prepare_parcel_razorpay_checkout"
-    : "prepare_merchant_order_razorpay_checkout", {
-    p_account_id: input.accountId,
-    [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
-  });
+  const prepared = await rpc(
+    input.entityType === "parcel"
+      ? "prepare_parcel_razorpay_checkout"
+      : "prepare_merchant_order_razorpay_checkout",
+    {
+      p_account_id: input.accountId,
+      [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
+    },
+  );
   if (prepared.responseStatus !== 200) return prepared;
 
   try {
@@ -44,15 +47,18 @@ async function createCheckout(input: PaymentActionInput) {
       (details.providerOrderId !== undefined && providerOrder.id !== details.providerOrderId)
     ) return providerConflict();
 
-    const attached = await rpc(input.entityType === "parcel"
-      ? "attach_parcel_razorpay_order"
-      : "attach_merchant_order_razorpay_order", {
-      p_account_id: input.accountId,
-      [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
-      p_provider_order_reference: providerOrder.id,
-      p_amount_paise: details.amountPaise,
-      p_currency: details.currency,
-    });
+    const attached = await rpc(
+      input.entityType === "parcel"
+        ? "attach_parcel_razorpay_order"
+        : "attach_merchant_order_razorpay_order",
+      {
+        p_account_id: input.accountId,
+        [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
+        p_provider_order_reference: providerOrder.id,
+        p_amount_paise: details.amountPaise,
+        p_currency: details.currency,
+      },
+    );
     if (attached.responseStatus !== 200) return attached;
     return {
       responseBody: {
@@ -69,18 +75,24 @@ async function createCheckout(input: PaymentActionInput) {
 }
 
 async function processRefund(input: PaymentActionInput) {
-  const prepared = await rpc(input.entityType === "parcel"
-    ? "prepare_parcel_razorpay_refund"
-    : "prepare_merchant_order_razorpay_refund", {
-    p_account_id: input.accountId,
-    [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
-  });
+  const prepared = await rpc(
+    input.entityType === "parcel"
+      ? "prepare_parcel_razorpay_refund"
+      : "prepare_merchant_order_razorpay_refund",
+    {
+      p_account_id: input.accountId,
+      [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
+    },
+  );
   if (prepared.responseStatus !== 200) return prepared;
 
   try {
     const details = refundDetails(prepared.responseBody);
     if (details.refundState === "processed") {
-      return { responseBody: { orderId: details.orderId, refundState: "processed" }, responseStatus: 200 };
+      return {
+        responseBody: { orderId: details.orderId, refundState: "processed" },
+        responseStatus: 200,
+      };
     }
     const client = razorpayClient();
     const providerRefund = details.providerRefundId
@@ -94,14 +106,17 @@ async function processRefund(input: PaymentActionInput) {
       });
     if (providerRefund.amount !== details.amountPaise) return providerConflict();
 
-    return await rpc(input.entityType === "parcel"
-      ? "attach_parcel_razorpay_refund"
-      : "attach_merchant_order_razorpay_refund", {
-      p_account_id: input.accountId,
-      [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
-      p_provider_refund_reference: providerRefund.id,
-      p_amount_paise: details.amountPaise,
-    });
+    return await rpc(
+      input.entityType === "parcel"
+        ? "attach_parcel_razorpay_refund"
+        : "attach_merchant_order_razorpay_refund",
+      {
+        p_account_id: input.accountId,
+        [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
+        p_provider_refund_reference: providerRefund.id,
+        p_amount_paise: details.amountPaise,
+      },
+    );
   } catch (error) {
     return providerError(error);
   }
@@ -125,8 +140,17 @@ function checkoutDetails(value: unknown) {
   const providerOrderId = source?.providerOrderId === null
     ? undefined
     : text(source?.providerOrderId, 200);
-  if (!entityId || !receipt || !amountPaise || source?.currency !== "INR") throw new Error("Invalid checkout details");
-  return { entityId, orderId: entityId, amountPaise, receipt, providerOrderId, currency: "INR" as const };
+  if (!entityId || !receipt || !amountPaise || source?.currency !== "INR") {
+    throw new Error("Invalid checkout details");
+  }
+  return {
+    entityId,
+    orderId: entityId,
+    amountPaise,
+    receipt,
+    providerOrderId,
+    currency: "INR" as const,
+  };
 }
 
 function refundDetails(value: unknown) {
@@ -143,7 +167,15 @@ function refundDetails(value: unknown) {
     !orderId || !providerPaymentId || !amountPaise || !receipt || source?.currency !== "INR" ||
     (refundState !== "pending" && refundState !== "processed")
   ) throw new Error("Invalid refund details");
-  return { orderId, providerPaymentId, providerRefundId, amountPaise, receipt, refundState, currency: "INR" as const };
+  return {
+    orderId,
+    providerPaymentId,
+    providerRefundId,
+    amountPaise,
+    receipt,
+    refundState,
+    currency: "INR" as const,
+  };
 }
 
 function razorpayClient() {
@@ -176,11 +208,14 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 
 function text(value: unknown, maximum: number) {
-  return typeof value === "string" && value.length >= 1 && value.length <= maximum ? value : undefined;
+  return typeof value === "string" && value.length >= 1 && value.length <= maximum
+    ? value
+    : undefined;
 }
 
 function money(value: unknown) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 100_000_000
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 &&
+      value <= 100_000_000
     ? value
     : undefined;
 }

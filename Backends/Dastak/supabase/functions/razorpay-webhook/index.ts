@@ -1,10 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { json } from "../_shared/http.ts";
-import {
-  handleRazorpayWebhook,
-  type RazorpayWebhookEvent,
-} from "./handler.ts";
+import { handleRazorpayWebhook, type RazorpayWebhookEvent } from "./handler.ts";
 
 const serviceClient = createClient(
   requiredEnv("SUPABASE_URL"),
@@ -16,7 +13,10 @@ Deno.serve((request) => {
   const webhookSecret = Deno.env.get("RAZORPAY_WEBHOOK_SECRET");
   if (!webhookSecret) {
     return json({
-      error: { code: "provider_configuration_missing", message: "Razorpay webhook is not configured." },
+      error: {
+        code: "provider_configuration_missing",
+        message: "Razorpay webhook is not configured.",
+      },
     }, 503);
   }
   return handleRazorpayWebhook(request, { webhookSecret, recordEvent });

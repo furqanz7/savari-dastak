@@ -76,11 +76,16 @@ function estimatedRoute(input: ParcelRouteInput) {
   const secondLatitude = toRadians(input.dropoff.latitude);
   const haversine = Math.sin(latitudeDelta / 2) ** 2 +
     Math.cos(firstLatitude) * Math.cos(secondLatitude) * Math.sin(longitudeDelta / 2) ** 2;
-  const directMeters = earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+  const directMeters = earthRadiusMeters * 2 *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
   const distanceMeters = Math.max(50, Math.ceil(directMeters * 1.25));
-  const speedMetersPerSecond = input.deliveryMethod === "walking" ? 1.25
-    : input.deliveryMethod === "bicycle" ? 4
-    : input.deliveryMethod === "bike" ? 7.5 : 6;
+  const speedMetersPerSecond = input.deliveryMethod === "walking"
+    ? 1.25
+    : input.deliveryMethod === "bicycle"
+    ? 4
+    : input.deliveryMethod === "bike"
+    ? 7.5
+    : 6;
   return {
     distanceMeters,
     durationSeconds: Math.max(60, Math.ceil(distanceMeters / speedMetersPerSecond)),

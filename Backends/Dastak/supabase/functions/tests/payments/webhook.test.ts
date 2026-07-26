@@ -125,11 +125,15 @@ async function signedRequest(body: string, eventId: string) {
     false,
     ["sign"],
   );
-  const signature = Array.from(new Uint8Array(await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(body),
-  ))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const signature = Array.from(
+    new Uint8Array(
+      await crypto.subtle.sign(
+        "HMAC",
+        key,
+        new TextEncoder().encode(body),
+      ),
+    ),
+  ).map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return new Request("http://localhost/functions/v1/razorpay-webhook", {
     method: "POST",
     headers: {
