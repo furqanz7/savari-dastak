@@ -12,6 +12,7 @@ import {
   type DeliveryJobOperation,
   type DeliveryPartnerSnapshot,
 } from "./delivery";
+import { formatPrice } from "./catalogue";
 import { formatDeliveryDistance, orderStatusLabel } from "./orders";
 import {
   getParcelPartnerSnapshot,
@@ -167,7 +168,7 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
       <header className="delivery-heading">
         <div>
           <p className="eyebrow">{displayName ? `Hello, ${displayName}` : "Dastak Delivery Partner"}</p>
-          <h1>Delivery queue</h1>
+          <h1>Delivery</h1>
           <p>{partner?.deliveryMethod ? deliveryMethodLabel(partner.deliveryMethod) : "Delivery Partner"}</p>
         </div>
         <button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={Boolean(busy)} aria-label="Refresh delivery queue" title="Refresh delivery queue">
@@ -180,26 +181,21 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
         <>
           <section className="delivery-availability" aria-label="Availability">
             <span className={`availability-icon ${online ? "online" : ""}`}><Power size={21} /></span>
-            <div><strong>{online ? "Online" : "Offline"}</strong><small>{online ? "Available for nearby orders" : "Not receiving assignments"}</small></div>
-            <button
-              className={online ? "secondary-button" : "primary-button"}
-              type="button"
-              disabled={Boolean(busy) || (online && hasJob)}
-              title={online && hasJob ? "Complete the active delivery first" : undefined}
-              onClick={() => void changeAvailability(!online)}
-            >
-              <Power size={17} /> {online ? "Go offline" : "Go online"}
-            </button>
+            <div>
+              <strong>{online ? "Online" : "Offline"}</strong>
+              <small>{online ? availabilityMessage(partner?.availability?.availableUntil) : "Not receiving assignments"}</small>
+            </div>
+            <label className="availability-switch" title={online && hasJob ? "Complete the active delivery first" : undefined}>
+              <input
+                type="checkbox"
+                checked={online}
+                disabled={Boolean(busy) || (online && hasJob)}
+                onChange={(event) => void changeAvailability(event.currentTarget.checked)}
+                aria-label="Available for deliveries"
+              />
+              <span aria-hidden="true" />
+            </label>
           </section>
-
-          {dispatch.offer && (
-            <DeliveryOffer
-              offer={dispatch.offer}
-              busy={Boolean(busy)}
-              onAccept={() => void runDispatchAction(dispatch.offer!, "accept")}
-              onDecline={() => void runDispatchAction(dispatch.offer!, "decline")}
-            />
-          )}
 
           {dispatch.currentJob && (
             <CurrentDelivery
@@ -211,15 +207,6 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
             />
           )}
 
-          {parcelDispatch.offer && (
-            <ParcelOffer
-              offer={parcelDispatch.offer}
-              busy={Boolean(busy)}
-              onAccept={() => void runParcelAction(parcelDispatch.offer!, "acknowledgeAssignment")}
-              onDecline={() => void runParcelAction(parcelDispatch.offer!, "declineAssignment")}
-            />
-          )}
-
           {parcelDispatch.currentJob && (
             <CurrentParcel
               assignment={parcelDispatch.currentJob}
@@ -227,6 +214,24 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
               verificationCode={verificationCode}
               onVerificationCode={setVerificationCode}
               onAction={(operation, code) => void runParcelAction(parcelDispatch.currentJob!, operation, code)}
+            />
+          )}
+
+          {dispatch.offer && (
+            <DeliveryOffer
+              offer={dispatch.offer}
+              busy={Boolean(busy)}
+              onAccept={() => void runDispatchAction(dispatch.offer!, "accept")}
+              onDecline={() => void runDispatchAction(dispatch.offer!, "decline")}
+            />
+          )}
+
+          {parcelDispatch.offer && (
+            <ParcelOffer
+              offer={parcelDispatch.offer}
+              busy={Boolean(busy)}
+              onAccept={() => void runParcelAction(parcelDispatch.offer!, "acknowledgeAssignment")}
+              onDecline={() => void runParcelAction(parcelDispatch.offer!, "declineAssignment")}
             />
           )}
 
@@ -252,6 +257,7 @@ function ParcelOffer({ offer, busy, onAccept, onDecline }: {
     <section className="delivery-offer" aria-label="New parcel offer">
       <header><div><p className="eyebrow">Parcel offer</p><h2>{offer.parcel.declaredContents}</h2></div><OfferTimer respondBy={offer.respondBy} /></header>
       <p className="delivery-address"><MapPin size={18} /> {offer.parcel.pickup.address}</p>
+      <p className="delivery-payout"><small>You earn</small><strong>{formatPrice(offer.parcel.courierPayout.paise)}</strong></p>
       <div className="delivery-route-facts">
         <span><Navigation size={17} /> {formatDeliveryDistance(Math.round(offer.distanceMeters))} to pickup</span>
         <MapLink location={offer.parcel.pickup} label="Open pickup route" />
@@ -278,7 +284,7 @@ function CurrentParcel({ assignment, busy, verificationCode, onVerificationCode,
   const destination = headingToRecipient ? assignment.parcel.dropoff : assignment.parcel.pickup;
   return (
     <section className="current-delivery" aria-label="Active parcel delivery">
-      <header><span className="section-icon"><PackageCheck size={22} /></span><div><p className="eyebrow">Active parcel</p><h2>{parcelStatusLabel(assignment.parcel.status)}</h2></div></header>
+      <header><span className="section-icon"><PackageCheck size={22} /></span><div><p className="eyebrow">Active parcel</p><h2>{parcelStatusLabel(assignment.parcel.status)}</h2></div><p className="active-delivery-payout"><small>Earnings</small><strong>{formatPrice(assignment.parcel.courierPayout.paise)}</strong></p></header>
       <div className="delivery-stop"><span><Store size={19} /></span><div><small>Pickup</small><strong>{assignment.parcel.pickup.address}</strong></div></div>
       <div className="delivery-stop"><span><MapPin size={19} /></span><div><small>Drop-off</small><strong>{assignment.parcel.dropoff.address}</strong></div></div>
       <div className="parcel-job-facts"><p><small>Contents</small><strong>{assignment.parcel.declaredContents}</strong></p><p><small>Recipient</small><strong>{assignment.parcel.recipient.name}</strong></p></div>
@@ -299,6 +305,7 @@ function DeliveryOffer({ offer, busy, onAccept, onDecline }: {
     <section className="delivery-offer" aria-label="New delivery offer">
       <header><div><p className="eyebrow">New offer</p><h2>{offer.store.name}</h2></div><OfferTimer respondBy={offer.respondBy} /></header>
       <p className="delivery-address"><Store size={18} /> {offer.store.address}</p>
+      <p className="delivery-payout"><small>You earn</small><strong>{formatPrice(offer.courierPayout.paise)}</strong></p>
       <DeliveryItems assignment={offer} />
       <div className="delivery-route-facts">
         <span><Navigation size={17} /> {formatDeliveryDistance(Math.round(offer.distanceMeters))} to store</span>
@@ -327,6 +334,7 @@ function CurrentDelivery({ assignment, busy, verificationCode, onVerificationCod
       <header>
         <span className="section-icon"><PackageCheck size={22} /></span>
         <div><p className="eyebrow">Active delivery</p><h2>{orderStatusLabel(assignment.orderStatus)}</h2></div>
+        <p className="active-delivery-payout"><small>Earnings</small><strong>{formatPrice(assignment.courierPayout.paise)}</strong></p>
       </header>
       <div className="delivery-stop">
         <span><Store size={19} /></span>
@@ -444,6 +452,11 @@ function coordinateLabel(location: { latitude: number; longitude: number }) {
 }
 function deliveryMethodLabel(method: string) {
   return method === "bike" ? "Bike" : method === "auto" ? "Auto" : `${method.charAt(0).toUpperCase()}${method.slice(1)}`;
+}
+function availabilityMessage(availableUntil?: string | null) {
+  if (!availableUntil) return "Available for nearby orders";
+  const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(availableUntil));
+  return `Available until ${time} · Auto-offline after 15 minutes`;
 }
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The delivery service is unavailable right now.";

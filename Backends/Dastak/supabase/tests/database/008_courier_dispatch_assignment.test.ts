@@ -110,6 +110,38 @@ Deno.test("courier dispatch serializes idempotency by account and function", asy
   );
 });
 
+Deno.test("courier dispatch exposes the server-priced payout", async () => {
+  const migration = await Deno.readTextFile(
+    new URL(
+      "../../migrations/20260726220000_expose_courier_offer_payout.sql",
+      import.meta.url,
+    ),
+  );
+  const normalized = migration.replace(/\s+/g, " ");
+  const signatures = normalized
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")");
+
+  assertMatch(
+    normalized,
+    /'courierPayout', pg_catalog\.jsonb_build_object\( 'paise', merchant_order\.courier_payout_paise \)/i,
+  );
+  assertMatch(normalized, /security invoker/i);
+  assertMatch(normalized, /set search_path = ''/i);
+  assertMatch(
+    signatures,
+    /revoke execute on function private\.delivery_assignment_json\(private\.delivery_assignment_attempts\) from public, anon, authenticated/i,
+  );
+  assertMatch(
+    signatures,
+    /grant execute on function private\.delivery_assignment_json\(private\.delivery_assignment_attempts\) to service_role/i,
+  );
+  assert(
+    !/security definer/i.test(normalized),
+    "dispatch serialization must remain invoker-only",
+  );
+});
+
 Deno.test("courier lifecycle is partner-owned and server-sequenced", async () => {
   const migration = await Deno.readTextFile(
     new URL(

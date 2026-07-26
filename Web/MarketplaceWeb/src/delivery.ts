@@ -25,6 +25,7 @@ export type DeliveryAssignment = {
   respondBy: string;
   acceptedAt: string | null;
   distanceMeters: number;
+  courierPayout: { paise: number };
   store: {
     storeId: string;
     name: string;
@@ -284,6 +285,7 @@ function assignment(value: unknown): DeliveryAssignment {
     respondBy: timestamp(source.respondBy),
     acceptedAt: source.acceptedAt === null ? null : timestamp(source.acceptedAt),
     distanceMeters,
+    courierPayout: money(source.courierPayout),
     store: {
       storeId: requiredUUID(store.storeId),
       name: requiredText(store.name, 160),
@@ -303,6 +305,13 @@ function assignment(value: unknown): DeliveryAssignment {
       };
     }),
   };
+}
+
+function money(value: unknown) {
+  const source = record(value);
+  const paise = source?.paise;
+  if (typeof paise !== "number" || !Number.isSafeInteger(paise) || paise < 0 || paise > 100_000_000) invalid();
+  return { paise };
 }
 
 function location(value: unknown): OrderLocation {

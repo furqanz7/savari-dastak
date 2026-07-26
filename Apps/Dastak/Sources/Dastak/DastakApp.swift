@@ -153,20 +153,9 @@ private struct DastakCustomerPartnerRoot: View {
         case .customer:
             DastakCustomerRootView(functions: functionClient)
         case .deliveryPartner:
-            rootLabel("Delivery Partner")
+            DastakDeliveryPartnerRootView(functions: functionClient)
         case .merchant, .admin:
             EmptyView()
         }
-    }
-
-    private func rootLabel(_ title: String) -> some View {
-        VStack(alignment: .leading) {
-            Text(title)
-                .font(.title2)
-                .bold()
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
     }
 }

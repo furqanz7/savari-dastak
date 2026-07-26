@@ -39,6 +39,7 @@ const offer = {
   respondBy: "2026-07-22T10:01:00Z",
   acceptedAt: null,
   distanceMeters: 850.5,
+  courierPayout: { paise: 4200 },
   store: { storeId, name: "Town Store", address: "Main Road", pickup: location },
   dropoff: { latitude: 12.69, longitude: 78.63 },
   items: [{ productId, name: "Lime Soda", unitLabel: "750 ml", quantity: 2 }],
@@ -90,6 +91,7 @@ describe("delivery partner client", () => {
     const snapshot = await getDeliveryDispatch(auth, () =>
       Promise.resolve(new Response(JSON.stringify({ offer, currentJob: null }), { status: 200 })));
     expect(snapshot.offer?.store.name).toBe("Town Store");
+    expect(snapshot.offer?.courierPayout.paise).toBe(4200);
 
     await expect(getDeliveryDispatch(auth, () => Promise.resolve(new Response(JSON.stringify({
       offer: { ...offer, customerAccountId: accountId },

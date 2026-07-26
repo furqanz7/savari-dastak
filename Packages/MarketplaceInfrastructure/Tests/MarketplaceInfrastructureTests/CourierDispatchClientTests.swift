@@ -13,6 +13,7 @@ final class CourierDispatchClientTests: XCTestCase {
 
         XCTAssertEqual(snapshot.offer?.assignmentStatus, .offered)
         XCTAssertEqual(snapshot.offer?.orderStatus, .ready)
+        XCTAssertEqual(snapshot.offer?.courierPayout.paise, 4200)
         XCTAssertEqual(snapshot.offer?.store.name, "Test Store")
         XCTAssertNil(snapshot.currentJob)
         let recordedCall = await functions.lastCall()
@@ -216,7 +217,7 @@ private actor RecordingCourierDispatchFunctionClient: FunctionClient {
         orderStatus: String,
         asOffer: Bool
     ) -> Data {
-        let assignment = #"{"assignmentId":"22222222-2222-4222-8222-222222222222","orderId":"33333333-3333-4333-8333-333333333333","assignmentStatus":"\#(assignmentStatus)","orderStatus":"\#(orderStatus)","offeredAt":"2026-07-16T12:00:00Z","respondBy":"2026-07-16T12:01:00Z","acceptedAt":\#(assignmentStatus == "accepted" ? "\"2026-07-16T12:00:30Z\"" : "null"),"distanceMeters":125.5,"store":{"storeId":"44444444-4444-4444-8444-444444444444","name":"Test Store","address":"1 Main Road","pickup":{"latitude":12.68,"longitude":78.62}},"dropoff":{"latitude":12.69,"longitude":78.63},"items":[{"productId":"55555555-5555-4555-8555-555555555555","name":"Test Item","unitLabel":"1 pack","quantity":1}]}"#
+        let assignment = #"{"assignmentId":"22222222-2222-4222-8222-222222222222","orderId":"33333333-3333-4333-8333-333333333333","assignmentStatus":"\#(assignmentStatus)","orderStatus":"\#(orderStatus)","offeredAt":"2026-07-16T12:00:00Z","respondBy":"2026-07-16T12:01:00Z","acceptedAt":\#(assignmentStatus == "accepted" ? "\"2026-07-16T12:00:30Z\"" : "null"),"distanceMeters":125.5,"courierPayout":{"paise":4200},"store":{"storeId":"44444444-4444-4444-8444-444444444444","name":"Test Store","address":"1 Main Road","pickup":{"latitude":12.68,"longitude":78.62}},"dropoff":{"latitude":12.69,"longitude":78.63},"items":[{"productId":"55555555-5555-4555-8555-555555555555","name":"Test Item","unitLabel":"1 pack","quantity":1}]}"#
         let json = asOffer
             ? #"{"offer":\#(assignment),"currentJob":null}"#
             : #"{"offer":null,"currentJob":\#(assignment)}"#

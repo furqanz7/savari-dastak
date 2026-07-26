@@ -43,6 +43,7 @@ public struct CourierAssignment: Codable, Equatable, Sendable {
     public let respondBy: String
     public let acceptedAt: String?
     public let distanceMeters: Double
+    public let courierPayout: Money
     public let store: CourierAssignmentStore
     public let dropoff: GeoPoint
     public let items: [CourierAssignmentItem]
@@ -56,6 +57,7 @@ public struct CourierAssignment: Codable, Equatable, Sendable {
         case respondBy
         case acceptedAt
         case distanceMeters
+        case courierPayout
         case store
         case dropoff
         case items
