@@ -101,7 +101,7 @@ export default function App() {
     <main className={`app product-${config.product}`}>
       <header className="topbar">
         <Brand />
-        {view.phase !== "signed_out" && view.phase !== "loading" && (
+        {view.phase !== "signed_out" && view.phase !== "loading" && !(config.variant === "dastak-customer" && view.phase === "ready") && (
           <button className="icon-button" type="button" onClick={signOut} disabled={busy} aria-label="Sign out" title="Sign out">
             <LogOut size={19} />
           </button>
@@ -114,7 +114,7 @@ export default function App() {
         {view.phase === "profile" && (
           <ProfileForm session={view.session} onComplete={() => evaluate(view.session)} />
         )}
-        {view.phase === "ready" && <Ready access={view.access} email={view.session.user.email} session={view.session} />}
+        {view.phase === "ready" && <Ready access={view.access} email={view.session.user.email} session={view.session} onSignOut={signOut} />}
         {view.phase === "restricted" && (
           <Restricted access={view.access} session={view.session} onSubmitted={() => evaluate(view.session)} />
         )}
@@ -143,7 +143,7 @@ function Brand() {
     <div className="brand-lockup">
       <span className="brand-mark" aria-hidden="true">{config.brand[0]}</span>
       <span>
-        <strong>{config.brand}</strong>
+        <strong>{config.brand}{config.product === "dastak" && <span className="brand-urdu" lang="ur"> دستک</span>}</strong>
         <small>{config.roleLabel}</small>
       </span>
     </div>
@@ -215,7 +215,12 @@ function ProfileForm({ session, onComplete }: { session: Session; onComplete: ()
   );
 }
 
-function Ready({ access, email, session }: { access: AccessResult; email?: string; session: Session }) {
+function Ready({ access, email, session, onSignOut }: {
+  access: AccessResult;
+  email?: string;
+  session: Session;
+  onSignOut: () => void;
+}) {
   if (config.variant === "savari-passenger") {
     return (
       <SavariRideView
@@ -235,6 +240,7 @@ function Ready({ access, email, session }: { access: AccessResult; email?: strin
         phoneNumber={access.profile?.phoneNumber}
         supabaseUrl={config.supabaseUrl}
         publishableKey={config.supabasePublishableKey}
+        onSignOut={onSignOut}
       />
     );
   }

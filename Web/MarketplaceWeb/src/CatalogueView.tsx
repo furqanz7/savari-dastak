@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
+  Bike,
+  ChevronRight,
   CreditCard,
   ImageOff,
   LocateFixed,
@@ -9,9 +11,11 @@ import {
   Plus,
   ReceiptText,
   RefreshCw,
+  Search,
   ShoppingBag,
   Store,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 import {
@@ -47,6 +51,8 @@ import {
   summarizeCart,
   type CartEntries,
 } from "./cart";
+import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
+import type { CustomerSection } from "./DastakCustomerView";
 
 type Props = {
   accessToken: string;
@@ -55,6 +61,10 @@ type Props = {
   phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  section: CustomerSection;
+  onNavigate: (section: CustomerSection) => void;
+  onOpenParcel: () => void;
+  onSignOut: () => void;
 };
 
 type SelectedLocation = { label: string; coordinates: CatalogueLocation };
@@ -63,7 +73,18 @@ type CatalogueState =
   | { phase: "loading" }
   | { phase: "ready"; stores: GroupedCatalogueStore[] }
   | { phase: "error"; code: string; message: string };
-export function CatalogueView({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey }: Props) {
+export function CatalogueView({
+  accessToken,
+  displayName,
+  email,
+  phoneNumber,
+  supabaseUrl,
+  publishableKey,
+  section,
+  onNavigate,
+  onOpenParcel,
+  onSignOut,
+}: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation>();
   const [discoveryRadiusKm, setDiscoveryRadiusKm] = useState(10);
@@ -75,6 +96,7 @@ export function CatalogueView({ accessToken, displayName, email, phoneNumber, su
   const [orderBusy, setOrderBusy] = useState(false);
   const [orderError, setOrderError] = useState<string>();
   const [paymentMessage, setPaymentMessage] = useState<string>();
+  const [searchQuery, setSearchQuery] = useState("");
   const catalogueRequest = useRef(0);
   const orderCreationRequest = useRef<{ quoteId: string; idempotencyKey: string } | undefined>(undefined);
 
@@ -152,6 +174,17 @@ export function CatalogueView({ accessToken, displayName, email, phoneNumber, su
   const cartSummary = summarizeCart(cart);
   const cartEntries = cartSummary.items;
   const cartStoreId = cartSummary.storeId;
+  const visibleStores = useMemo(
+    () => filterCatalogueStores(state.phase === "ready" ? state.stores : [], section === "search" ? searchQuery : ""),
+    [searchQuery, section, state],
+  );
+
+  const chooseLocation = (place: SelectedPlace) => {
+    void load({
+      label: place.address,
+      coordinates: { latitude: place.latitude, longitude: place.longitude },
+    });
+  };
 
   const changeQuantity = (store: GroupedCatalogueStore, product: CatalogueProduct, delta: -1 | 1) => {
     setOrderError(undefined);
@@ -295,78 +328,204 @@ export function CatalogueView({ accessToken, displayName, email, phoneNumber, su
   };
 
   return (
-    <div className="catalogue-shell">
-      <div className="catalogue-heading">
-        <div>
-          <p className="eyebrow">{displayName ? `Hello, ${displayName}` : "Dastak customer"}</p>
-          <h1>Nearby stores</h1>
-          <p>{selectedLocation ? `Delivering near ${selectedLocation.label}` : "Choose where you want the order delivered."}</p>
-        </div>
-        <div className="location-actions" aria-label="Delivery location">
-          <div className="range-filter" role="group" aria-label="Store search radius">
-            <span>Search radius</span>
-            <div className="range-stepper">
-              <button
-                type="button"
-                onClick={() => changeDiscoveryRadius(-5)}
-                disabled={discoveryRadiusKm === 10}
-                aria-label="Decrease search radius"
-                title="Decrease search radius"
-              >
-                <Minus size={15} />
-              </button>
-              <strong aria-live="polite">{discoveryRadiusKm} km</strong>
-              <button
-                type="button"
-                onClick={() => changeDiscoveryRadius(5)}
-                disabled={discoveryRadiusKm === 30}
-                aria-label="Increase search radius"
-                title="Increase search radius"
-              >
-                <Plus size={15} />
-              </button>
-            </div>
-          </div>
-          <button type="button" className="location-button primary-location" onClick={useCurrentLocation} disabled={state.phase === "loading"}>
-            <LocateFixed size={18} /> Use current location
-          </button>
-        </div>
-      </div>
-
+    <div className={`catalogue-shell customer-section customer-section-${section}`}>
       {(orderError ?? cartState.error) && <p className="order-error" role="alert">{orderError ?? cartState.error}</p>}
       {paymentMessage && <p className="payment-message" role="status">{paymentMessage}</p>}
-      {!ordersLoading && orders.length > 0 && (
-        <OrdersSection orders={orders} busy={orderBusy} onCancel={cancelOrder} onPay={retryPayment} onRefresh={refreshOrders} />
+      {section === "home" && (
+        <>
+          <header className="customer-home-heading">
+            <p className="eyebrow">{displayName ? `Hello, ${displayName}` : "Dastak"}</p>
+            <h1>What do you need today?</h1>
+            <button className="customer-search-prompt" type="button" onClick={() => onNavigate("search")}>
+              <Search size={20} /><span>Search products and stores</span>
+            </button>
+          </header>
+          <LocationControls
+            selectedLocation={selectedLocation}
+            discoveryRadiusKm={discoveryRadiusKm}
+            loading={state.phase === "loading"}
+            onChooseLocation={chooseLocation}
+            onUseCurrentLocation={useCurrentLocation}
+            onChangeRadius={changeDiscoveryRadius}
+          />
+          <button className="parcel-promo" type="button" onClick={onOpenParcel}>
+            <span className="parcel-promo-icon"><Bike size={22} /></span>
+            <span><strong>Send a parcel</strong><small>Immediate pickup and delivery</small></span>
+            <ChevronRight size={20} />
+          </button>
+          {cartEntries.length > 0 && (
+            <CartSummary
+              itemCount={cartSummary.itemCount}
+              subtotal={cartSummary.subtotalPaise}
+              storeName={cartSummary.storeName ?? "Store"}
+              busy={orderBusy}
+              onClear={clearCart}
+              onReview={reviewOrder}
+            />
+          )}
+          {quote && <CheckoutSection quote={quote} busy={orderBusy} onPlaceOrder={placeOrder} />}
+          {!ordersLoading && orders.some((order) => !isFinalOrder(order)) && (
+            <div className="customer-active-order">
+              <OrdersSection
+                orders={orders.filter((order) => !isFinalOrder(order)).slice(0, 1)}
+                busy={orderBusy}
+                onCancel={cancelOrder}
+                onPay={retryPayment}
+                onRefresh={refreshOrders}
+                title="Active order"
+              />
+              <button type="button" onClick={() => onNavigate("orders")}>View all orders <ChevronRight size={16} /></button>
+            </div>
+          )}
+          <CatalogueContent
+            state={state}
+            stores={visibleStores}
+            selectedLocation={selectedLocation}
+            supabaseUrl={supabaseUrl}
+            cartStoreId={cartStoreId}
+            cart={cart}
+            onQuantity={changeQuantity}
+            onRetry={() => selectedLocation && void load(selectedLocation)}
+            heading="Nearby"
+          />
+        </>
       )}
-      {cartEntries.length > 0 && (
-        <CartSummary
-          itemCount={cartSummary.itemCount}
-          subtotal={cartSummary.subtotalPaise}
-          storeName={cartSummary.storeName ?? "Store"}
-          busy={orderBusy}
-          onClear={clearCart}
-          onReview={reviewOrder}
-        />
-      )}
-      {quote && <CheckoutSection quote={quote} busy={orderBusy} onPlaceOrder={placeOrder} />}
 
+      {section === "search" && (
+        <>
+          <header className="customer-page-heading"><p className="eyebrow">Discovery</p><h1>Search</h1></header>
+          <label className="customer-product-search">
+            <Search size={20} />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Products, categories, or stores"
+              autoFocus
+            />
+            {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Clear search" title="Clear search"><X size={17} /></button>}
+          </label>
+          <LocationControls
+            selectedLocation={selectedLocation}
+            discoveryRadiusKm={discoveryRadiusKm}
+            loading={state.phase === "loading"}
+            onChooseLocation={chooseLocation}
+            onUseCurrentLocation={useCurrentLocation}
+            onChangeRadius={changeDiscoveryRadius}
+            compact
+          />
+          {cartEntries.length > 0 && (
+            <CartSummary
+              itemCount={cartSummary.itemCount}
+              subtotal={cartSummary.subtotalPaise}
+              storeName={cartSummary.storeName ?? "Store"}
+              busy={orderBusy}
+              onClear={clearCart}
+              onReview={reviewOrder}
+            />
+          )}
+          {quote && <CheckoutSection quote={quote} busy={orderBusy} onPlaceOrder={placeOrder} />}
+          <CatalogueContent
+            state={state}
+            stores={visibleStores}
+            selectedLocation={selectedLocation}
+            supabaseUrl={supabaseUrl}
+            cartStoreId={cartStoreId}
+            cart={cart}
+            onQuantity={changeQuantity}
+            onRetry={() => selectedLocation && void load(selectedLocation)}
+            heading={searchQuery ? "Results" : "Browse all"}
+            emptySearch={Boolean(searchQuery)}
+          />
+        </>
+      )}
+
+      {section === "orders" && (
+        <>
+          <header className="customer-page-heading"><p className="eyebrow">Purchases</p><h1>Orders</h1></header>
+          {ordersLoading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length > 0 ? (
+            <OrdersSection orders={orders} busy={orderBusy} onCancel={cancelOrder} onPay={retryPayment} onRefresh={refreshOrders} title="Your orders" />
+          ) : (
+            <CatalogueMessage icon={<ReceiptText size={25} />} title="No orders yet">
+              Your orders and delivery updates will appear here.
+            </CatalogueMessage>
+          )}
+        </>
+      )}
+
+      {section === "account" && (
+        <section className="customer-account">
+          <header className="customer-page-heading"><p className="eyebrow">Dastak account</p><h1>{displayName || "Your account"}</h1></header>
+          <span className="customer-account-icon"><UserRound size={25} /></span>
+          <dl className="account-list">
+            {email && <div><dt>Email</dt><dd>{email}</dd></div>}
+            {phoneNumber && <div><dt>Phone</dt><dd>{phoneNumber}</dd></div>}
+            <div><dt>Discovery</dt><dd>{discoveryRadiusKm} km</dd></div>
+          </dl>
+          <button className="customer-sign-out" type="button" onClick={onSignOut}>Sign out</button>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function LocationControls({ selectedLocation, discoveryRadiusKm, loading, compact = false, onChooseLocation, onUseCurrentLocation, onChangeRadius }: {
+  selectedLocation?: SelectedLocation;
+  discoveryRadiusKm: number;
+  loading: boolean;
+  compact?: boolean;
+  onChooseLocation: (place: SelectedPlace) => void;
+  onUseCurrentLocation: () => void;
+  onChangeRadius: (deltaKm: number) => void;
+}) {
+  const place = selectedLocation ? {
+    address: selectedLocation.label,
+    latitude: selectedLocation.coordinates.latitude,
+    longitude: selectedLocation.coordinates.longitude,
+  } : undefined;
+
+  return (
+    <section className={`customer-location-band ${compact ? "compact" : ""}`} aria-label="Delivery area">
+      <LocationSearchField label="Delivery location" value={place} onChange={onChooseLocation} disabled={loading} />
+      <button type="button" className="location-current-button" onClick={onUseCurrentLocation} disabled={loading} aria-label="Use current location" title="Use current location">
+        <LocateFixed size={18} />
+      </button>
+      <div className="range-filter" role="group" aria-label="Store search radius">
+        <span>Range</span>
+        <div className="range-stepper">
+          <button type="button" onClick={() => onChangeRadius(-5)} disabled={discoveryRadiusKm === 10} aria-label="Decrease search radius" title="Decrease search radius"><Minus size={15} /></button>
+          <strong aria-live="polite">{discoveryRadiusKm} km</strong>
+          <button type="button" onClick={() => onChangeRadius(5)} disabled={discoveryRadiusKm === 30} aria-label="Increase search radius" title="Increase search radius"><Plus size={15} /></button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CatalogueContent({ state, stores, selectedLocation, supabaseUrl, cartStoreId, cart, onQuantity, onRetry, heading, emptySearch = false }: {
+  state: CatalogueState;
+  stores: GroupedCatalogueStore[];
+  selectedLocation?: SelectedLocation;
+  supabaseUrl: string;
+  cartStoreId?: string;
+  cart: CartEntries;
+  onQuantity: (store: GroupedCatalogueStore, product: CatalogueProduct, delta: -1 | 1) => void;
+  onRetry: () => void;
+  heading: string;
+  emptySearch?: boolean;
+}) {
+  return (
+    <section className="customer-catalogue">
+      {state.phase === "ready" && state.stores.length > 0 && <h2>{heading}</h2>}
       {state.phase === "idle" && (
-        <CatalogueMessage icon={<MapPin size={25} />} title="Set a delivery location">
-          Stores and products are shown only for areas Dastak currently serves.
+        <CatalogueMessage icon={<MapPin size={25} />} title="Choose a delivery location">
+          Search any city where Dastak has an active service area.
         </CatalogueMessage>
       )}
       {state.phase === "loading" && <div className="catalogue-loading" role="status"><span /> Finding nearby stores</div>}
       {state.phase === "error" && (
-        <CatalogueMessage
-          icon={<MapPin size={25} />}
-          title={state.code === "outside_service_area" ? "Not available here yet" : "Could not load stores"}
-        >
+        <CatalogueMessage icon={<MapPin size={25} />} title={state.code === "outside_service_area" ? "Not available here yet" : "Could not load stores"}>
           <p>{state.message}</p>
-          {selectedLocation && (
-            <button type="button" className="secondary-button compact-button" onClick={() => void load(selectedLocation)}>
-              <RefreshCw size={16} /> Retry
-            </button>
-          )}
+          {selectedLocation && <button type="button" className="secondary-button compact-button" onClick={onRetry}><RefreshCw size={16} /> Retry</button>}
         </CatalogueMessage>
       )}
       {state.phase === "ready" && state.stores.length === 0 && (
@@ -374,41 +533,40 @@ export function CatalogueView({ accessToken, displayName, email, phoneNumber, su
           Dastak serves this area, but no merchant catalogue is currently available.
         </CatalogueMessage>
       )}
-      {state.phase === "ready" && state.stores.length > 0 && (
+      {state.phase === "ready" && state.stores.length > 0 && stores.length === 0 && (
+        <CatalogueMessage icon={<Search size={25} />} title={emptySearch ? "No matching products" : "Nothing to show"}>
+          Try another product, category, or store.
+        </CatalogueMessage>
+      )}
+      {state.phase === "ready" && stores.length > 0 && (
         <div className="store-list" aria-live="polite">
-          {state.stores.map((store) => (
-            <StoreCatalogue
-              key={store.storeId}
-              store={store}
-              supabaseUrl={supabaseUrl}
-              cartStoreId={cartStoreId}
-              quantities={cart}
-              onQuantity={changeQuantity}
-            />
+          {stores.map((store) => (
+            <StoreCatalogue key={store.storeId} store={store} supabaseUrl={supabaseUrl} cartStoreId={cartStoreId} quantities={cart} onQuantity={onQuantity} />
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-function OrdersSection({ orders, busy, onCancel, onPay, onRefresh }: {
+function OrdersSection({ orders, busy, onCancel, onPay, onRefresh, title }: {
   orders: MerchantOrderSnapshot[];
   busy: boolean;
   onCancel: (order: MerchantOrderSnapshot) => void;
   onPay: (order: MerchantOrderSnapshot) => void;
   onRefresh: () => Promise<void>;
+  title: string;
 }) {
   return (
     <section className="orders-section" aria-label="Your orders">
       <header>
-        <div><p className="eyebrow">Orders</p><h2>Your orders</h2></div>
+        <div><p className="eyebrow">Orders</p><h2>{title}</h2></div>
         <button className="icon-button" type="button" onClick={() => void onRefresh()} disabled={busy} aria-label="Refresh orders" title="Refresh orders">
           <RefreshCw size={18} />
         </button>
       </header>
       <div className="order-list">
-        {orders.slice(0, 3).map((order) => (
+        {orders.map((order) => (
           <article className="order-row" key={order.orderId}>
             <span className="order-icon"><ReceiptText size={20} /></span>
             <div className="order-main">
@@ -591,4 +749,23 @@ function orderMessage(error: unknown) {
   return error instanceof Error
     ? error.message
     : "The order request is unavailable right now.";
+}
+
+function filterCatalogueStores(stores: GroupedCatalogueStore[], query: string) {
+  const needle = query.trim().toLocaleLowerCase();
+  if (!needle) return stores;
+
+  return stores.flatMap((store) => {
+    const storeMatches = `${store.name} ${store.address}`.toLocaleLowerCase().includes(needle);
+    const categories = store.categories.flatMap((category) => {
+      const categoryMatches = category.name.toLocaleLowerCase().includes(needle);
+      const products = storeMatches || categoryMatches
+        ? category.products
+        : category.products.filter((product) =>
+          `${product.name} ${product.description ?? ""} ${product.unitLabel}`.toLocaleLowerCase().includes(needle)
+        );
+      return products.length > 0 ? [{ ...category, products }] : [];
+    });
+    return categories.length > 0 ? [{ ...store, categories }] : [];
+  });
 }

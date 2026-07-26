@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { LocateFixed, MapPin, Search } from "lucide-react";
 import { searchLocations, type LocationSearchResult } from "./location-search";
 
@@ -14,6 +14,10 @@ export function LocationSearchField({ label, value, onChange, disabled }: {
   const [results, setResults] = useState<LocationSearchResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    if (value?.address) setQuery(value.address);
+  }, [value?.address]);
 
   const search = async () => {
     if (query.trim().length < 3) return;
