@@ -1,4 +1,5 @@
 import DastakDomain
+import DastakUI
 import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
@@ -7,15 +8,28 @@ import SwiftUI
 struct DastakApp: App {
     var body: some Scene {
         WindowGroup {
-            MarketplaceAuthenticationShell(
-                applicationName: "Dastak",
-                product: .dastak,
-                requiredAccess: .dastakCustomer
-            ) { functionClient in
-                DastakCustomerPartnerRoot(
-                    client: SupabaseDeliveryPartnerClient(functions: functionClient)
-                )
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-DastakUIPreview") {
+                DastakCustomerRootView(preview: true)
+            } else {
+                authenticatedRoot
             }
+            #else
+            authenticatedRoot
+            #endif
+        }
+    }
+
+    private var authenticatedRoot: some View {
+        MarketplaceAuthenticationShell(
+            applicationName: "Dastak",
+            product: .dastak,
+            requiredAccess: .dastakCustomer,
+            showsPersistentSignOut: false
+        ) { functionClient in
+            DastakCustomerPartnerRoot(
+                functionClient: functionClient
+            )
         }
     }
 }
@@ -85,11 +99,15 @@ final class DastakRootModel: ObservableObject {
 
 private struct DastakCustomerPartnerRoot: View {
     @StateObject private var model: DastakRootModel
+    private let functionClient: any FunctionClient
 
-    init(client: any DeliveryPartnerClient) {
+    init(functionClient: any FunctionClient) {
+        self.functionClient = functionClient
         _model = StateObject(
             wrappedValue: DastakRootModel(
-                accessProvider: LiveDeliveryPartnerAccessProvider(client: client)
+                accessProvider: LiveDeliveryPartnerAccessProvider(
+                    client: SupabaseDeliveryPartnerClient(functions: functionClient)
+                )
             )
         )
     }
@@ -133,7 +151,7 @@ private struct DastakCustomerPartnerRoot: View {
     private var activeRoot: some View {
         switch model.rootState.activeRoot {
         case .customer:
-            rootLabel("Customer")
+            DastakCustomerRootView(functions: functionClient)
         case .deliveryPartner:
             rootLabel("Delivery Partner")
         case .merchant, .admin:

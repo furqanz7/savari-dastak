@@ -5,6 +5,30 @@ import MarketplaceFoundation
 import Security
 import SwiftUI
 
+public struct MarketplaceSignOutAction: @unchecked Sendable {
+    private let action: @MainActor () async -> Void
+
+    public init(action: @escaping @MainActor () async -> Void) {
+        self.action = action
+    }
+
+    @MainActor
+    public func callAsFunction() async {
+        await action()
+    }
+}
+
+private struct MarketplaceSignOutEnvironmentKey: EnvironmentKey {
+    static let defaultValue = MarketplaceSignOutAction(action: {})
+}
+
+public extension EnvironmentValues {
+    var marketplaceSignOut: MarketplaceSignOutAction {
+        get { self[MarketplaceSignOutEnvironmentKey.self] }
+        set { self[MarketplaceSignOutEnvironmentKey.self] = newValue }
+    }
+}
+
 enum AppleSignInNonce {
     private static let characters = Array(
         "0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._"
@@ -70,6 +94,7 @@ private final class AuthenticationShellModel: ObservableObject {
 
 public struct MarketplaceAuthenticationShell: View {
     private let applicationName: String
+    private let showsPersistentSignOut: Bool
     private let activeContent: (any FunctionClient) -> AnyView
     @StateObject private var model: AuthenticationShellModel
 
@@ -77,12 +102,14 @@ public struct MarketplaceAuthenticationShell: View {
         applicationName: String,
         product: MarketplaceProduct,
         requiredAccess: MarketplaceApplicationAccess = .profileOnly,
+        showsPersistentSignOut: Bool = true,
         bundle: Bundle = .main
     ) {
         self.init(
             applicationName: applicationName,
             product: product,
             requiredAccess: requiredAccess,
+            showsPersistentSignOut: showsPersistentSignOut,
             bundle: bundle,
             activeContent: { _ in DefaultMarketplaceActiveView() }
         )
@@ -92,10 +119,12 @@ public struct MarketplaceAuthenticationShell: View {
         applicationName: String,
         product: MarketplaceProduct,
         requiredAccess: MarketplaceApplicationAccess = .profileOnly,
+        showsPersistentSignOut: Bool = true,
         bundle: Bundle = .main,
         @ViewBuilder activeContent: @escaping (any FunctionClient) -> Content
     ) {
         self.applicationName = applicationName
+        self.showsPersistentSignOut = showsPersistentSignOut
         self.activeContent = { functionClient in
             AnyView(activeContent(functionClient))
         }
@@ -116,6 +145,7 @@ public struct MarketplaceAuthenticationShell: View {
                 AuthenticationRouteView(
                     applicationName: applicationName,
                     coordinator: coordinator,
+                    showsPersistentSignOut: showsPersistentSignOut,
                     activeContent: activeContent(functionClient)
                 )
             } else {
@@ -141,6 +171,7 @@ private struct DefaultMarketplaceActiveView: View {
 private struct AuthenticationRouteView: View {
     let applicationName: String
     @ObservedObject var coordinator: AuthenticationCoordinator
+    let showsPersistentSignOut: Bool
     let activeContent: AnyView
 
     @State private var displayName = ""
@@ -260,6 +291,20 @@ private struct AuthenticationRouteView: View {
     }
 
     private var activeView: some View {
+        Group {
+            if showsPersistentSignOut {
+                persistentSignOutView
+            } else {
+                activeContent
+                    .environment(
+                        \.marketplaceSignOut,
+                        MarketplaceSignOutAction { await signOut() }
+                    )
+            }
+        }
+    }
+
+    private var persistentSignOutView: some View {
         VStack(spacing: 0) {
             activeContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

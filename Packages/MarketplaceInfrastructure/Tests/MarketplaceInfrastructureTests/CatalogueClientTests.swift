@@ -108,20 +108,26 @@ final class CatalogueClientTests: XCTestCase {
         )
     }
 
-    func testBrowseSendsOnlyCustomerLocationAndDecodesServerPrices() async throws {
+    func testBrowseSendsCustomerLocationAndDiscoveryRadiusAndDecodesServerPrices() async throws {
         let functions = RecordingCatalogueFunctionClient()
         let client = SupabaseCatalogueClient(functions: functions)
         let key = try XCTUnwrap(IdempotencyKey(rawValue: "browse-key-1"))
         let location = GeoPoint(latitude: 12.6819, longitude: 78.6201)
 
-        let snapshot = try await client.browse(at: location, idempotencyKey: key)
+        let snapshot = try await client.browse(
+            at: location,
+            discoveryRadiusKilometres: 20,
+            idempotencyKey: key
+        )
 
         XCTAssertEqual(snapshot.products.first?.price, Money(paise: 12_500))
+        XCTAssertEqual(snapshot.discoveryRadiusMeters, 20_000)
         let recordedCall = await functions.lastCall()
         let call = try XCTUnwrap(recordedCall)
         let request = try JSONDecoder().decode(CapturedCatalogueRequest.self, from: call.body)
         XCTAssertEqual(request.operation, "browse")
         XCTAssertEqual(request.location, location)
+        XCTAssertEqual(request.discoveryRadiusMeters, 20_000)
         XCTAssertNil(request.accountId)
     }
 }
@@ -150,6 +156,7 @@ private struct CapturedCatalogueRequest: Decodable {
     let availability: CatalogueAvailability?
     let catalogueKind: CatalogueKind?
     let restrictedApprovalState: RestrictedApprovalState?
+    let discoveryRadiusMeters: Int?
 }
 
 private actor RecordingCatalogueFunctionClient: FunctionClient {
@@ -197,4 +204,4 @@ private struct OperationOnly: Decodable {
 private let storeJSON = #"{"storeId":"33333333-3333-4333-8333-333333333333","name":"Corner Store","address":"12 Main Road","location":{"latitude":12.6819,"longitude":78.6201},"serviceZoneId":"66666666-6666-4666-8666-666666666666","isPublished":true,"acceptingOrders":true}"#.data(using: .utf8)!
 private let categoryJSON = #"{"categoryId":"44444444-4444-4444-8444-444444444444","storeId":"33333333-3333-4333-8333-333333333333","name":"Snacks and Drinks","displayOrder":4,"isActive":true}"#.data(using: .utf8)!
 private let productJSON = #"{"productId":"55555555-5555-4555-8555-555555555555","storeId":"33333333-3333-4333-8333-333333333333","categoryId":"44444444-4444-4444-8444-444444444444","name":"Lime Soda","description":"Freshly bottled","unitLabel":"750 ml","price":{"paise":12500},"imageObjectPath":"merchant/account/lime-soda.jpg","availability":"in_stock","catalogueKind":"general","restrictedApprovalState":"not_applicable","isActive":true}"#.data(using: .utf8)!
-private let snapshotJSON = #"{"serviceZoneId":"66666666-6666-4666-8666-666666666666","stores":[{"storeId":"33333333-3333-4333-8333-333333333333","name":"Corner Store","address":"12 Main Road","location":{"latitude":12.6819,"longitude":78.6201},"serviceZoneId":"66666666-6666-4666-8666-666666666666","isPublished":true,"acceptingOrders":true}],"categories":[{"categoryId":"44444444-4444-4444-8444-444444444444","storeId":"33333333-3333-4333-8333-333333333333","name":"Snacks and Drinks","displayOrder":4,"isActive":true}],"products":[{"productId":"55555555-5555-4555-8555-555555555555","storeId":"33333333-3333-4333-8333-333333333333","categoryId":"44444444-4444-4444-8444-444444444444","name":"Lime Soda","description":"Freshly bottled","unitLabel":"750 ml","price":{"paise":12500},"imageObjectPath":"merchant/account/lime-soda.jpg","availability":"in_stock","catalogueKind":"general","restrictedApprovalState":"not_applicable","isActive":true}]}"#.data(using: .utf8)!
+private let snapshotJSON = #"{"serviceZoneId":"66666666-6666-4666-8666-666666666666","discoveryRadiusMeters":20000,"stores":[{"storeId":"33333333-3333-4333-8333-333333333333","name":"Corner Store","address":"12 Main Road","location":{"latitude":12.6819,"longitude":78.6201},"serviceZoneId":"66666666-6666-4666-8666-666666666666","isPublished":true,"acceptingOrders":true}],"categories":[{"categoryId":"44444444-4444-4444-8444-444444444444","storeId":"33333333-3333-4333-8333-333333333333","name":"Snacks and Drinks","displayOrder":4,"isActive":true}],"products":[{"productId":"55555555-5555-4555-8555-555555555555","storeId":"33333333-3333-4333-8333-333333333333","categoryId":"44444444-4444-4444-8444-444444444444","name":"Lime Soda","description":"Freshly bottled","unitLabel":"750 ml","price":{"paise":12500},"imageObjectPath":"merchant/account/lime-soda.jpg","availability":"in_stock","catalogueKind":"general","restrictedApprovalState":"not_applicable","isActive":true}]}"#.data(using: .utf8)!

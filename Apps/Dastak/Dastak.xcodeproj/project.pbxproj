@@ -24,6 +24,7 @@
 		E10000000000000000000001 /* MarketplaceDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = E20000000000000000000001 /* MarketplaceDesignSystem */; };
 		E10000000000000000000002 /* MarketplaceDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = E20000000000000000000002 /* MarketplaceDesignSystem */; };
 		E10000000000000000000003 /* MarketplaceDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = E20000000000000000000003 /* MarketplaceDesignSystem */; };
+		F10000000000000000000001 /* DastakUI in Frameworks */ = {isa = PBXBuildFile; productRef = F20000000000000000000001 /* DastakUI */; };
 		8BD8AB4722E60D5D1B9E394E /* DastakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F4AF8EF952C8FE288A2E29 /* DastakTests.swift */; };
 		8D69905E9C394A25AFD4CBC4 /* DastakMerchantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C142CB347F221ACF0D27CD /* DastakMerchantTests.swift */; };
 		9406EE4208344F5EE4BBDDEA /* DastakAdminTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B904E5C6BCAD41FF8BEE5FC /* DastakAdminTests.swift */; };
@@ -117,6 +118,7 @@
 				719719719719719719719719 /* MarketplaceFoundation in Frameworks */,
 				718718718718718718718718 /* MarketplaceInfrastructure in Frameworks */,
 				E10000000000000000000001 /* MarketplaceDesignSystem in Frameworks */,
+				F10000000000000000000001 /* DastakUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -332,6 +334,7 @@
 				713713713713713713713713 /* MarketplaceFoundation */,
 				D1D1D1D1D1D1D1D1D1D1D1D1 /* DastakDomain */,
 				E20000000000000000000001 /* MarketplaceDesignSystem */,
+				F20000000000000000000001 /* DastakUI */,
 			);
 			productName = Dastak;
 			productReference = 8D878A197BA6A8D855996FD1 /* Dastak.app */;
@@ -447,6 +450,7 @@
 				711711711711711711711711 /* XCLocalSwiftPackageReference "MarketplaceFoundation" */,
 				D0D0D0D0D0D0D0D0D0D0D0D0 /* XCLocalSwiftPackageReference "DastakDomain" */,
 				E00000000000000000000001 /* XCLocalSwiftPackageReference "MarketplaceDesignSystem" */,
+				F00000000000000000000001 /* XCLocalSwiftPackageReference "DastakUI" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 05E66D5BB2F1192F69B3775D /* Products */;
@@ -959,6 +963,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../Packages/MarketplaceDesignSystem;
 		};
+		F00000000000000000000001 /* XCLocalSwiftPackageReference "DastakUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/DastakUI;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1026,6 +1034,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E00000000000000000000001 /* XCLocalSwiftPackageReference "MarketplaceDesignSystem" */;
 			productName = MarketplaceDesignSystem;
+		};
+		F20000000000000000000001 /* DastakUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F00000000000000000000001 /* XCLocalSwiftPackageReference "DastakUI" */;
+			productName = DastakUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 

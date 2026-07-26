@@ -39,6 +39,8 @@
 	<string>$(MARKETPLACE_SUPABASE_PUBLISHABLE_KEY)</string>
 	<key>MarketplaceSupabaseURL</key>
 	<string>$(MARKETPLACE_SUPABASE_URL)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Dastak uses your location to show nearby stores, price deliveries, and track active orders.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

@@ -93,15 +93,43 @@ public struct CatalogueProduct: Codable, Equatable, Sendable {
 
 public struct CatalogueSnapshot: Codable, Equatable, Sendable {
     public let serviceZoneID: UUID?
+    public let discoveryRadiusMeters: Int
     public let stores: [CatalogueStore]
     public let categories: [CatalogueCategory]
     public let products: [CatalogueProduct]
 
     private enum CodingKeys: String, CodingKey {
         case serviceZoneID = "serviceZoneId"
+        case discoveryRadiusMeters
         case stores
         case categories
         case products
+    }
+
+    public init(
+        serviceZoneID: UUID?,
+        discoveryRadiusMeters: Int = 10_000,
+        stores: [CatalogueStore],
+        categories: [CatalogueCategory],
+        products: [CatalogueProduct]
+    ) {
+        self.serviceZoneID = serviceZoneID
+        self.discoveryRadiusMeters = discoveryRadiusMeters
+        self.stores = stores
+        self.categories = categories
+        self.products = products
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        serviceZoneID = try container.decodeIfPresent(UUID.self, forKey: .serviceZoneID)
+        discoveryRadiusMeters = try container.decodeIfPresent(
+            Int.self,
+            forKey: .discoveryRadiusMeters
+        ) ?? 10_000
+        stores = try container.decode([CatalogueStore].self, forKey: .stores)
+        categories = try container.decode([CatalogueCategory].self, forKey: .categories)
+        products = try container.decode([CatalogueProduct].self, forKey: .products)
     }
 }
 
@@ -140,6 +168,7 @@ public protocol CatalogueClient: Sendable {
     func merchantSnapshot(idempotencyKey: IdempotencyKey) async throws -> CatalogueSnapshot
     func browse(
         at location: GeoPoint,
+        discoveryRadiusKilometres: Int,
         idempotencyKey: IdempotencyKey
     ) async throws -> CatalogueSnapshot
 }
@@ -162,6 +191,7 @@ public struct SupabaseCatalogueClient: CatalogueClient {
         let imageObjectPath: String?
         let availability: CatalogueAvailability?
         let catalogueKind: CatalogueKind?
+        let discoveryRadiusMeters: Int?
     }
 
     private let functions: any FunctionClient
@@ -195,7 +225,8 @@ public struct SupabaseCatalogueClient: CatalogueClient {
                 price: nil,
                 imageObjectPath: nil,
                 availability: nil,
-                catalogueKind: nil
+                catalogueKind: nil,
+                discoveryRadiusMeters: nil
             ),
             key: idempotencyKey
         )
@@ -225,7 +256,8 @@ public struct SupabaseCatalogueClient: CatalogueClient {
                 price: nil,
                 imageObjectPath: nil,
                 availability: nil,
-                catalogueKind: nil
+                catalogueKind: nil,
+                discoveryRadiusMeters: nil
             ),
             key: idempotencyKey
         )
@@ -261,7 +293,8 @@ public struct SupabaseCatalogueClient: CatalogueClient {
                 price: price,
                 imageObjectPath: imageObjectPath,
                 availability: availability,
-                catalogueKind: catalogueKind
+                catalogueKind: catalogueKind,
+                discoveryRadiusMeters: nil
             ),
             key: idempotencyKey
         )
@@ -275,9 +308,11 @@ public struct SupabaseCatalogueClient: CatalogueClient {
 
     public func browse(
         at location: GeoPoint,
+        discoveryRadiusKilometres: Int = 10,
         idempotencyKey: IdempotencyKey
     ) async throws -> CatalogueSnapshot {
-        try await invoke(
+        precondition((10...30).contains(discoveryRadiusKilometres))
+        return try await invoke(
             Request(
                 operation: "browse",
                 name: nil,
@@ -294,7 +329,8 @@ public struct SupabaseCatalogueClient: CatalogueClient {
                 price: nil,
                 imageObjectPath: nil,
                 availability: nil,
-                catalogueKind: nil
+                catalogueKind: nil,
+                discoveryRadiusMeters: discoveryRadiusKilometres * 1_000
             ),
             key: idempotencyKey
         )
@@ -324,7 +360,8 @@ public struct SupabaseCatalogueClient: CatalogueClient {
             price: nil,
             imageObjectPath: nil,
             availability: nil,
-            catalogueKind: nil
+            catalogueKind: nil,
+            discoveryRadiusMeters: nil
         )
     }
 }
