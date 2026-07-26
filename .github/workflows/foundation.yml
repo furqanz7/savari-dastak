@@ -8,7 +8,7 @@ jobs:
   swift-packages:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26.6'
@@ -26,8 +26,8 @@ jobs:
   dastak-web:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: npm
@@ -40,7 +40,7 @@ jobs:
       run:
         working-directory: Backends/Savari
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: supabase/setup-cli@v2
         with:
           version: 2.90.0
@@ -63,7 +63,7 @@ jobs:
       run:
         working-directory: Backends/Dastak
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: supabase/setup-cli@v2
         with:
           version: 2.90.0
@@ -83,7 +83,7 @@ jobs:
   ios-build:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26.6'
