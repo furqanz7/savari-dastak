@@ -787,10 +787,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .dastak-launch-content {
   position: absolute;
   z-index: 1;
-  right: 0;
-  bottom: max(88px, env(safe-area-inset-bottom));
-  left: 0;
+  inset: 0;
   display: grid;
+  align-content: center;
   justify-items: center;
   gap: 10px;
   padding: 0 24px;
@@ -799,8 +798,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .dastak-launch-content p {
   margin: 0;
   color: #f5f2ec;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-size: 46px;
-  font-weight: 300;
+  font-weight: 100;
   line-height: 1;
 }
 .dastak-launch-content p span { margin-left: 8px; font-size: .78em; font-weight: 400; }
@@ -877,8 +877,7 @@ button:disabled { cursor: wait; opacity: .55; }
   .auth-copy h1 { font-size: 48px; }
   .product-dastak .dastak-auth-layout { align-self: center; gap: 36px; }
   .product-dastak .dastak-auth-layout .auth-copy h1 { font-size: 42px; }
-  .dastak-launch-content { bottom: max(66px, env(safe-area-inset-bottom)); }
-  .dastak-launch-content p { font-size: 38px; }
+  .dastak-launch-content p { font-size: 42px; }
   .form-panel, .status-panel { padding: 24px 20px; align-self: center; }
   .form-panel h1, .status-panel h1 { font-size: 30px; }
   .catalogue-heading { display: grid; align-items: start; padding-top: 8px; }

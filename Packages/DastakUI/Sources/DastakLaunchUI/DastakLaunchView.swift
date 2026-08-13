@@ -138,16 +138,13 @@ public struct DastakLaunchView<Content: View>: View {
                 .ignoresSafeArea()
 
             VStack(spacing: MarketplaceSpacing.compact) {
-                Spacer()
-
-                DastakWordmark(size: 44)
+                DastakLaunchWordmark()
                     .foregroundStyle(MarketplaceColors.primaryActionForeground.color)
 
                 if let label = variant.label {
                     Text(label)
                         .font(.caption.weight(.semibold))
                         .textCase(.uppercase)
-                        .tracking(1.3)
                         .foregroundStyle(MarketplaceColors.primaryActionForeground.color.opacity(0.78))
 
                     Capsule()
@@ -155,11 +152,10 @@ public struct DastakLaunchView<Content: View>: View {
                         .frame(width: 34, height: 2)
                         .padding(.top, MarketplaceSpacing.xSmall)
                 }
-
-                Spacer()
-                    .frame(height: MarketplaceSpacing.xxLarge)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .padding(.horizontal, MarketplaceSpacing.large)
+            .ignoresSafeArea()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Opening Dastak")
@@ -181,6 +177,24 @@ public struct DastakLaunchView<Content: View>: View {
                 hasFinishedLaunch = true
             }
         }
+    }
+}
+
+private struct DastakLaunchWordmark: View {
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(MarketplaceWordmark.dastakLatin.uppercased())
+                .font(.custom("HelveticaNeue-UltraLight", fixedSize: 48))
+
+            Text(MarketplaceWordmark.dastakUrdu)
+                .font(.system(size: 40, weight: .light))
+                .environment(\.layoutDirection, .rightToLeft)
+                .baselineOffset(2)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(MarketplaceWordmark.dastakLatin)
     }
 }
 
