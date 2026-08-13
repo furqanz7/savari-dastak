@@ -276,7 +276,7 @@ function DastakLaunchScreen({
         </video>
       )}
       <div className="dastak-launch-content">
-        <p>DASTAK <span lang="ur">دستک</span></p>
+        <p><span className="dastak-launch-latin">DASTAK</span> <span className="dastak-launch-urdu" lang="ur">دستک</span></p>
         <small>{config.roleLabel}</small>
         <i aria-hidden="true" />
       </div>

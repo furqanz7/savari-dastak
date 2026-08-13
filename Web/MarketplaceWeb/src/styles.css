@@ -799,11 +799,18 @@ button:disabled { cursor: wait; opacity: .55; }
   margin: 0;
   color: #f5f2ec;
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 46px;
+  font-size: 48px;
   font-weight: 100;
   line-height: 1;
 }
-.dastak-launch-content p span { margin-left: 8px; font-size: .78em; font-weight: 400; }
+.dastak-launch-latin { display: inline-block; transform: translateY(-2px); }
+.dastak-launch-content .dastak-launch-urdu {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: .8em;
+  font-weight: 400;
+  transform: translateY(2px);
+}
 .dastak-launch-content small {
   color: rgb(245 242 236 / 78%);
   font-size: 11px;
@@ -877,7 +884,7 @@ button:disabled { cursor: wait; opacity: .55; }
   .auth-copy h1 { font-size: 48px; }
   .product-dastak .dastak-auth-layout { align-self: center; gap: 36px; }
   .product-dastak .dastak-auth-layout .auth-copy h1 { font-size: 42px; }
-  .dastak-launch-content p { font-size: 42px; }
+  .dastak-launch-content p { font-size: 44px; }
   .form-panel, .status-panel { padding: 24px 20px; align-self: center; }
   .form-panel h1, .status-panel h1 { font-size: 30px; }
   .catalogue-heading { display: grid; align-items: start; padding-top: 8px; }
