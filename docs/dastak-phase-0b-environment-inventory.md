@@ -34,6 +34,8 @@ Supabase CLI 2.90.0 remains pinned because CI uses that version. Upgrading it is
 - Phase 0-B baseline: 47 local migrations and 46 remote versions; the forward-only earnings-role repair `20260813003805_fix_dastak_delivery_earnings_role.sql` is intentionally not pushed in this phase
 - Edge Functions: 17 local and 17 active remote functions; Phase 0-A source parity matched, while the Phase 0-B CORS repair for `earnings` remains local until its migration and function are released together
 
+Post-baseline release status: Phase 1 Task 1 released the pending migration and `earnings` Function together on 2026-08-13. Hosted migration history now matches all 47 local versions, and deployed `earnings` version 12 matches the committed bundle with JWT verification enabled.
+
 Configured secret names:
 
 - `APNS_BUNDLE_ID`

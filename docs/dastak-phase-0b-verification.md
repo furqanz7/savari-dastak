@@ -35,6 +35,16 @@ The local `earnings` Edge Function now handles browser CORS and has tests for pr
 
 Hosted database lint also emits PostGIS extension-owned warnings. These are not application-owned definitions and were not rewritten.
 
+## Phase 1 Task 1 release
+
+On 2026-08-13, migration `20260813003805_fix_dastak_delivery_earnings_role.sql` and the CORS-safe `earnings` Function were released together to project `zmtsolkfxlrxepshnjdf`.
+
+- Hosted migration history matches all 47 local versions and a final dry run reports the database is up to date.
+- Deployed `earnings` version 12 is active, requires JWT verification, and its downloaded bundle matches the committed source.
+- The live database function is security invoker with an empty search path, uses `dastak_partner`, denies execution to `anon` and `authenticated`, and grants execution only to `service_role`.
+- Live CORS preflight returns 204 and an unauthenticated POST returns 401.
+- Hosted `public` and `private` schema lint reports no errors.
+
 ## Clean baseline gate
 
 The complete staged baseline was committed and checked out into a detached, empty worktree. From that clean checkout:
