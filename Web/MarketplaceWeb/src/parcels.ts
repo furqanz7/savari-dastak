@@ -26,6 +26,26 @@ export type ParcelDelivery = {
   declaredValue: ParcelMoney;
   deliveryFee: ParcelMoney;
   courierPayout: ParcelMoney;
+  courier?: {
+    displayName: string;
+    phoneNumber: string;
+    deliveryMethod: ParcelDeliveryMethod;
+    location: { latitude: number; longitude: number } | null;
+    lastSeenAt: string | null;
+  };
+  timeline?: {
+    createdAt: string;
+    paymentCapturedAt?: string;
+    assignedAt?: string;
+    enRouteToPickupAt?: string;
+    pickedUpAt?: string;
+    inTransitAt?: string;
+    deliveredAt?: string;
+    cancelledAt?: string;
+  };
+  stateVersion?: number;
+  createdAt?: string;
+  updatedAt?: string;
   handoffCode: { purpose: "pickup" | "delivery"; code: string; expiresAt: string } | null;
 };
 
@@ -193,6 +213,11 @@ export function parseParcel(value: unknown): ParcelDelivery {
     declaredValue: money(source.declaredValue, true),
     deliveryFee: money(source.deliveryFee),
     courierPayout: money(source.courierPayout, true),
+    courier: courier(source.courier),
+    timeline: timeline(source.timeline),
+    stateVersion: optionalPositiveInteger(source.stateVersion),
+    createdAt: optionalDateText(source.createdAt),
+    updatedAt: optionalDateText(source.updatedAt),
     handoffCode: handoff ? {
       purpose: handoff.purpose === "pickup" || handoff.purpose === "delivery" ? handoff.purpose : invalid(),
       code: code(handoff.code),
@@ -262,6 +287,43 @@ function point(value: unknown): ParcelPoint {
   return { latitude: source.latitude, longitude: source.longitude, address: requiredText(source.address, 300) };
 }
 
+function geoPoint(value: unknown) {
+  const source = record(value);
+  if (!source || typeof source.latitude !== "number" || typeof source.longitude !== "number" ||
+    !Number.isFinite(source.latitude) || source.latitude < -90 || source.latitude > 90 ||
+    !Number.isFinite(source.longitude) || source.longitude < -180 || source.longitude > 180) invalid();
+  return { latitude: source.latitude, longitude: source.longitude };
+}
+
+function courier(value: unknown): ParcelDelivery["courier"] {
+  if (value === null || value === undefined) return undefined;
+  const source = record(value);
+  if (!source) invalid();
+  return {
+    displayName: requiredText(source.displayName, 100),
+    phoneNumber: phone(source.phoneNumber),
+    deliveryMethod: method(source.deliveryMethod),
+    location: source.location === null || source.location === undefined ? null : geoPoint(source.location),
+    lastSeenAt: source.lastSeenAt === null || source.lastSeenAt === undefined ? null : dateText(source.lastSeenAt),
+  };
+}
+
+function timeline(value: unknown): ParcelDelivery["timeline"] {
+  if (value === null || value === undefined) return undefined;
+  const source = record(value);
+  if (!source) invalid();
+  return {
+    createdAt: dateText(source.createdAt),
+    paymentCapturedAt: optionalDateText(source.paymentCapturedAt),
+    assignedAt: optionalDateText(source.assignedAt),
+    enRouteToPickupAt: optionalDateText(source.enRouteToPickupAt),
+    pickedUpAt: optionalDateText(source.pickedUpAt),
+    inTransitAt: optionalDateText(source.inTransitAt),
+    deliveredAt: optionalDateText(source.deliveredAt),
+    cancelledAt: optionalDateText(source.cancelledAt),
+  };
+}
+
 function money(value: unknown, allowZero = false): ParcelMoney {
   const source = record(value);
   const paise = source?.paise;
@@ -279,10 +341,19 @@ function positiveInteger(value: unknown) {
   return value;
 }
 
+function optionalPositiveInteger(value: unknown) {
+  if (value === null || value === undefined) return undefined;
+  return positiveInteger(value);
+}
+
 function dateText(value: unknown) {
   const result = requiredText(value, 50);
   if (Number.isNaN(Date.parse(result))) invalid();
   return result;
+}
+
+function optionalDateText(value: unknown) {
+  return value === null || value === undefined ? undefined : dateText(value);
 }
 
 function phone(value: unknown) {

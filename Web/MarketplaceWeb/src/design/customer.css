@@ -1,0 +1,151 @@
+/* Customer product surfaces shared by catalogue, orders and parcel delivery. */
+.customer-workspace button:focus-visible,
+.customer-workspace a:focus-visible,
+.customer-workspace input:focus-visible,
+.customer-workspace textarea:focus-visible,
+.customer-workspace select:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--dastak-accent) 36%, transparent);
+  outline-offset: 2px;
+}
+
+.customer-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: end center;
+  padding: 20px;
+  background: rgb(15 15 16 / 68%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.customer-sheet {
+  width: min(580px, 100%);
+  max-height: min(820px, calc(100vh - 40px));
+  overflow: auto;
+  padding: 26px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sheet);
+  color: var(--text-primary);
+  background: var(--surface);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 38%);
+}
+
+.customer-sheet > header,
+.customer-detail-header,
+.customer-receipt > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.customer-sheet h2 { margin: 5px 0 0; font-size: 26px; line-height: 1.14; }
+.customer-address-sheet .place-search-field { margin-top: 24px; }
+.customer-address-sheet .place-search-field > label,
+.customer-address-details > span,
+.address-type-picker legend { color: var(--text-secondary); font-size: 13px; font-weight: 700; }
+.customer-address-sheet .place-search-input { margin-top: 8px; border-color: var(--divider); background: var(--surface-raised); }
+.customer-address-sheet .place-search-input input { color: var(--text-primary); background: transparent; }
+.customer-address-sheet .place-search-results { position: static; margin-top: 8px; border-color: var(--divider); background: var(--surface-raised); }
+.customer-address-sheet .place-search-results button { color: var(--text-primary); border-color: var(--divider); background: transparent; }
+
+.address-type-picker { margin: 22px 0 0; padding: 0; border: 0; }
+.address-type-picker > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; padding: 4px; border-radius: 8px; background: var(--surface-muted); }
+.address-type-picker button { min-height: 40px; border: 0; border-radius: 6px; color: var(--text-secondary); background: transparent; font-weight: 700; }
+.address-type-picker button.selected { color: var(--text-primary); background: var(--surface-raised); box-shadow: 0 1px 5px rgb(0 0 0 / 12%); }
+.customer-address-details { display: grid; gap: 8px; margin-top: 20px; }
+.customer-address-details textarea { width: 100%; min-height: 94px; resize: vertical; padding: 12px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); }
+.address-preview { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; margin-top: 16px; padding: 14px 0; border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); color: var(--dastak-accent); }
+.address-preview span { min-width: 0; display: grid; gap: 4px; color: var(--text-primary); }
+.address-preview small { color: var(--text-secondary); overflow-wrap: anywhere; }
+.customer-sheet-action { width: 100%; min-height: 52px; margin-top: 20px; display: inline-flex; justify-content: center; align-items: center; gap: 8px; }
+
+.account-address-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; margin-top: 24px; padding: 18px 0; border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); }
+.account-address-card > div { min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start; color: var(--dastak-accent); }
+.account-address-card span { min-width: 0; display: grid; gap: 4px; color: var(--text-primary); }
+.account-address-card small { color: var(--text-secondary); overflow-wrap: anywhere; }
+.account-address-card > small { grid-column: 1 / -1; }
+
+.checkout-address { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; margin: 20px 0 0; padding: 16px 0; border-top: 1px solid var(--divider); color: var(--dastak-accent); }
+.checkout-address span { display: grid; gap: 4px; min-width: 0; }
+.checkout-address small { color: var(--text-secondary); }
+.checkout-address strong { color: var(--text-primary); overflow-wrap: anywhere; }
+
+.order-row { position: relative; }
+.order-open { grid-column: 2; width: fit-content; min-height: 36px; display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; color: var(--dastak-accent); background: transparent; font-weight: 700; }
+.order-main { min-width: 0; }
+.order-main > strong { font-size: 16px; }
+.order-main > small { display: block; margin-top: 4px; }
+
+.customer-delivery-detail { width: min(100%, 760px); margin: 0 auto; padding-bottom: 48px; }
+.customer-detail-header { min-height: 52px; align-items: center; border-bottom: 1px solid var(--divider); }
+.customer-status-hero { padding: 34px 0 26px; }
+.customer-status-hero h1 { margin: 6px 0 8px; font-family: var(--font-display); font-size: 40px; line-height: 1.08; }
+.customer-status-hero > p:last-of-type { max-width: 560px; margin: 0; color: var(--text-secondary); font-size: 17px; line-height: 1.45; }
+.customer-status-hero > span { width: fit-content; display: block; margin-top: 16px; padding: 6px 8px; border-radius: 6px; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-size: 12px; font-weight: 750; }
+
+.customer-route-panel { overflow: hidden; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
+.customer-map-frame { width: 100%; aspect-ratio: 16 / 8.5; min-height: 230px; background: var(--surface-muted); }
+.customer-map-frame iframe { width: 100%; height: 100%; display: block; border: 0; filter: saturate(.72) contrast(.96); }
+.customer-route-points { display: grid; gap: 0; padding: 6px 16px; }
+.customer-route-points > div { min-width: 0; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; padding: 12px 0; }
+.customer-route-points > div + div { border-top: 1px solid var(--divider); }
+.customer-route-points span:last-child { min-width: 0; display: grid; gap: 3px; }
+.customer-route-points small { color: var(--text-secondary); overflow-wrap: anywhere; }
+.route-dot { color: var(--dastak-accent); }
+.route-dot.courier { color: var(--route); }
+.customer-map-link { width: calc(100% - 32px); min-height: 44px; margin: 4px 16px 16px; text-decoration: none; }
+
+.customer-contact-card { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 12px; align-items: center; padding: 22px 0; border-bottom: 1px solid var(--divider); }
+.customer-contact-card div { min-width: 0; display: grid; gap: 4px; }
+.customer-contact-card small { color: var(--text-secondary); text-transform: capitalize; }
+.customer-contact-card a { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--divider); border-radius: 50%; color: var(--text-primary); background: var(--surface); }
+.customer-handoff { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 18px; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--divider); }
+.customer-handoff small,.customer-handoff span { color: var(--text-secondary); }
+.customer-handoff strong { grid-column: 2; grid-row: 1 / span 2; font-size: 30px; letter-spacing: 0; }
+
+.customer-receipt { margin-top: 26px; padding: 22px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
+.customer-receipt > header { align-items: center; margin-bottom: 10px; }
+.customer-receipt h2 { margin: 0; font-size: 20px; }
+.customer-receipt > div { min-width: 0; display: flex; align-items: start; justify-content: space-between; gap: 20px; padding: 12px 0; border-top: 1px solid var(--divider); }
+.customer-receipt > div > span { min-width: 0; display: grid; gap: 3px; }
+.customer-receipt small { color: var(--text-secondary); overflow-wrap: anywhere; }
+.customer-receipt .receipt-address { display: grid; grid-template-columns: 20px minmax(0, 1fr); justify-content: start; color: var(--text-secondary); }
+.customer-receipt a { color: var(--dastak-accent); text-decoration: none; }
+
+.customer-timeline { margin-top: 28px; }
+.customer-timeline h2 { margin: 0 0 14px; font-size: 20px; }
+.customer-timeline ol { margin: 0; padding: 0; list-style: none; }
+.customer-timeline li { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 12px; min-height: 62px; }
+.customer-timeline li::after { content: ""; position: absolute; top: 16px; bottom: 0; left: 5px; width: 1px; background: var(--divider); }
+.customer-timeline li:last-child::after { display: none; }
+.customer-timeline li > span { width: 11px; height: 11px; margin-top: 3px; border: 2px solid var(--dastak-accent); border-radius: 50%; background: var(--canvas); }
+.customer-timeline li.current > span { background: var(--dastak-accent); }
+.customer-timeline li div { display: grid; gap: 4px; }
+.customer-timeline time { color: var(--text-secondary); font-size: 13px; }
+.customer-detail-actions { display: grid; gap: 10px; margin-top: 26px; }
+.customer-detail-actions button { width: 100%; min-height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+.cancellation-reasons { display: grid; gap: 8px; margin-top: 22px; }
+.cancellation-reasons button { min-height: 50px; padding: 0 14px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); text-align: left; font-weight: 650; }
+
+@media (max-width: 820px) {
+  .customer-sheet-backdrop { padding: 10px; }
+  .customer-sheet { max-height: calc(100vh - 10px); padding: 22px 18px calc(22px + env(safe-area-inset-bottom)); border-radius: var(--radius-sheet) var(--radius-sheet) 8px 8px; }
+  .customer-status-hero h1 { font-size: 34px; }
+  .customer-map-frame { aspect-ratio: 4 / 3; min-height: 250px; }
+  .order-open { grid-column: 2 / -1; }
+}
+
+@media (max-width: 390px) {
+  .customer-receipt { padding: 16px; }
+  .customer-status-hero h1 { font-size: 30px; }
+  .account-address-card { grid-template-columns: 1fr; }
+  .account-address-card > button { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .customer-workspace * { scroll-behavior: auto !important; transition: none !important; }
+}

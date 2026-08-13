@@ -1,5 +1,34 @@
 export type OrderLocation = { latitude: number; longitude: number };
+export type AddressedOrderLocation = OrderLocation & { address: string };
 export type OrderLineInput = { productId: string; quantity: number };
+
+export type CustomerCourierSnapshot = {
+  displayName: string;
+  phoneNumber: string;
+  deliveryMethod: "walking" | "bicycle" | "bike" | "auto";
+  location: OrderLocation | null;
+  lastSeenAt: string | null;
+};
+
+export type MerchantOrderAddressSnapshot = {
+  label: string | null;
+  address: string | null;
+  details: string | null;
+  displayAddress: string | null;
+};
+
+export type MerchantOrderTimeline = {
+  createdAt: string;
+  acceptedAt?: string;
+  readyAt?: string;
+  assignedAt?: string;
+  enRouteToPickupAt?: string;
+  atStoreAt?: string;
+  pickedUpAt?: string;
+  inTransitAt?: string;
+  deliveredAt?: string;
+  cancelledAt?: string;
+};
 
 export type MerchantOrderLine = {
   productId: string;
@@ -18,6 +47,7 @@ type MerchantOrderPricing = {
   deliveryDistanceMeters: number;
   total: { paise: number };
   dropoff: OrderLocation;
+  deliveryAddress?: MerchantOrderAddressSnapshot;
 };
 
 export type MerchantOrderQuote = MerchantOrderPricing & {
@@ -44,6 +74,9 @@ export type MerchantOrderSnapshot = MerchantOrderPricing & {
   status: MerchantOrderStatus;
   paymentState: "payment_pending" | "paid" | "not_collected" | "refund_pending" | "refunded";
   stateVersion: number;
+  store?: { name: string; phoneNumber: string; pickup: AddressedOrderLocation };
+  courier?: CustomerCourierSnapshot;
+  timeline?: MerchantOrderTimeline;
   handoffCode: { purpose: "pickup" | "delivery"; code: string; expiresAt: string } | null;
   refundDecision: {
     eligibility: string;
@@ -55,6 +88,8 @@ export type MerchantOrderSnapshot = MerchantOrderPricing & {
   createdAt: string;
   updatedAt: string;
 };
+
+export type MerchantOrderPaymentState = MerchantOrderSnapshot["paymentState"];
 
 type AuthenticatedInput = {
   supabaseUrl: string;
@@ -186,6 +221,7 @@ export function parseMerchantOrderQuote(value: unknown): MerchantOrderQuote {
     deliveryDistanceMeters: deliveryDistance(source.deliveryDistanceMeters),
     total: money(source.total),
     dropoff: location(source.dropoff),
+    deliveryAddress: addressSnapshot(source.deliveryAddress),
     expiresAt: timestamp(source.expiresAt),
   };
 }
@@ -212,6 +248,10 @@ export function parseMerchantOrder(value: unknown): MerchantOrderSnapshot {
     deliveryDistanceMeters: deliveryDistance(source.deliveryDistanceMeters),
     total: money(source.total),
     dropoff: location(source.dropoff),
+    deliveryAddress: addressSnapshot(source.deliveryAddress),
+    store: storeSnapshot(source.store),
+    courier: courierSnapshot(source.courier),
+    timeline: orderTimeline(source.timeline),
     stateVersion,
     handoffCode: handoffCode(source.handoffCode),
     refundDecision: refundDecision(source.refundDecision),
@@ -314,6 +354,79 @@ function location(value: unknown): OrderLocation {
   return { latitude, longitude };
 }
 
+function addressedLocation(value: unknown): AddressedOrderLocation {
+  return { ...location(value), address: requiredText(record(value)?.address, 300) };
+}
+
+function nullableText(value: unknown, maximum: number) {
+  return value === null || value === undefined ? null : requiredText(value, maximum);
+}
+
+function addressSnapshot(value: unknown): MerchantOrderAddressSnapshot | undefined {
+  if (value === undefined || value === null) return undefined;
+  const source = record(value);
+  if (!source) invalid();
+  return {
+    label: nullableText(source.label, 40),
+    address: nullableText(source.address, 300),
+    details: nullableText(source.details, 300),
+    displayAddress: nullableText(source.displayAddress, 620),
+  };
+}
+
+function storeSnapshot(value: unknown): MerchantOrderSnapshot["store"] {
+  if (value === undefined || value === null) return undefined;
+  const source = record(value);
+  if (!source) invalid();
+  return {
+    name: requiredText(source.name, 160),
+    phoneNumber: phone(source.phoneNumber),
+    pickup: addressedLocation(source.pickup),
+  };
+}
+
+function courierSnapshot(value: unknown): CustomerCourierSnapshot | undefined {
+  if (value === undefined || value === null) return undefined;
+  const source = record(value);
+  const deliveryMethod = source?.deliveryMethod;
+  if (!source || typeof deliveryMethod !== "string" || !deliveryMethods.has(deliveryMethod)) invalid();
+  return {
+    displayName: requiredText(source.displayName, 100),
+    phoneNumber: phone(source.phoneNumber),
+    deliveryMethod: deliveryMethod as CustomerCourierSnapshot["deliveryMethod"],
+    location: source.location === null || source.location === undefined ? null : location(source.location),
+    lastSeenAt: source.lastSeenAt === null || source.lastSeenAt === undefined ? null : timestamp(source.lastSeenAt),
+  };
+}
+
+function orderTimeline(value: unknown): MerchantOrderTimeline | undefined {
+  if (value === undefined || value === null) return undefined;
+  const source = record(value);
+  if (!source) invalid();
+  return {
+    createdAt: timestamp(source.createdAt),
+    acceptedAt: optionalTimestamp(source.acceptedAt),
+    readyAt: optionalTimestamp(source.readyAt),
+    assignedAt: optionalTimestamp(source.assignedAt),
+    enRouteToPickupAt: optionalTimestamp(source.enRouteToPickupAt),
+    atStoreAt: optionalTimestamp(source.atStoreAt),
+    pickedUpAt: optionalTimestamp(source.pickedUpAt),
+    inTransitAt: optionalTimestamp(source.inTransitAt),
+    deliveredAt: optionalTimestamp(source.deliveredAt),
+    cancelledAt: optionalTimestamp(source.cancelledAt),
+  };
+}
+
+function optionalTimestamp(value: unknown) {
+  return value === null || value === undefined ? undefined : timestamp(value);
+}
+
+function phone(value: unknown) {
+  const result = requiredText(value, 16);
+  if (!/^\+[1-9][0-9]{7,14}$/.test(result)) invalid();
+  return result;
+}
+
 function money(value: unknown) {
   const paise = record(value)?.paise;
   if (typeof paise !== "number" || !Number.isInteger(paise) || paise < 0 || paise > 100_000_000) invalid();
@@ -381,3 +494,4 @@ const orderStatuses = new Set([
   "at_store", "picked_up", "in_transit", "delivered", "cancelled", "returning_to_merchant",
 ]);
 const paymentStates = new Set(["payment_pending", "paid", "not_collected", "refund_pending", "refunded"]);
+const deliveryMethods = new Set(["walking", "bicycle", "bike", "auto"]);

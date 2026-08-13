@@ -12,6 +12,7 @@ import {
   quoteMerchantOrder,
   rejectMerchantOrder,
 } from "./orders";
+import { merchantOrderPresentation, paymentStateLabel } from "./customerLifecycle";
 
 const storeId = "33333333-3333-4333-8333-333333333333";
 const productId = "55555555-5555-4555-8555-555555555555";
@@ -61,6 +62,62 @@ const auth = {
 };
 
 describe("customer orders", () => {
+  it("maps every order state to one customer action", () => {
+    const states = [
+      ["payment_pending", "payment_pending", "pay"],
+      ["paid", "paid", "cancel"],
+      ["merchant_accepted", "paid", "request_cancellation"],
+      ["ready", "paid", "request_cancellation"],
+      ["assigned", "paid", "request_cancellation"],
+      ["en_route_to_pickup", "paid", "request_cancellation"],
+      ["at_store", "paid", "request_cancellation"],
+      ["picked_up", "paid", "request_cancellation"],
+      ["in_transit", "paid", "request_cancellation"],
+      ["delivered", "paid", "none"],
+      ["cancelled", "refunded", "none"],
+      ["returning_to_merchant", "refund_pending", "none"],
+    ] as const;
+
+    for (const [status, paymentState, action] of states) {
+      expect(merchantOrderPresentation(status, paymentState).primaryAction).toBe(action);
+    }
+    expect(paymentStateLabel("not_collected")).toBe("Not charged");
+  });
+
+  it("parses the saved address, store, courier, and timeline contract", () => {
+    const parsed = parseMerchantOrder({
+      ...paidOrder,
+      deliveryAddress: {
+        label: "Home",
+        address: "CL Road, Vaniyambadi",
+        details: "12, first floor",
+        displayAddress: "12, first floor, CL Road, Vaniyambadi",
+      },
+      store: {
+        name: "Dastak Mart",
+        phoneNumber: "+919876543210",
+        pickup: { latitude: 12.681, longitude: 78.621, address: "Market Road" },
+      },
+      courier: {
+        displayName: "Aamir",
+        phoneNumber: "+919812345678",
+        deliveryMethod: "bike",
+        location: { latitude: 12.682, longitude: 78.623 },
+        lastSeenAt: "2026-08-13T10:05:00Z",
+      },
+      timeline: {
+        createdAt: "2026-08-13T10:00:00Z",
+        acceptedAt: "2026-08-13T10:01:00Z",
+        assignedAt: "2026-08-13T10:03:00Z",
+      },
+    });
+
+    expect(parsed.deliveryAddress?.label).toBe("Home");
+    expect(parsed.store?.name).toBe("Dastak Mart");
+    expect(parsed.courier?.location?.longitude).toBe(78.623);
+    expect(parsed.timeline?.acceptedAt).toBe("2026-08-13T10:01:00Z");
+  });
+
   it("requests a server-priced quote using only product IDs and quantities", async () => {
     let requestBody: Record<string, unknown> | undefined;
     const fetcher = (_input: RequestInfo | URL, init?: RequestInit) => {

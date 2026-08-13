@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Home, ReceiptText, Search, UserRound } from "lucide-react";
 import { CatalogueView } from "./CatalogueView";
 import { ParcelCustomerView } from "./ParcelCustomerView";
-
-export type CustomerSection = "home" | "search" | "orders" | "account";
+import {
+  parseCustomerDestination,
+  serializeCustomerDestination,
+  type CustomerDestination,
+  type CustomerSection,
+} from "./customerNavigation";
 
 type Props = {
   accessToken: string;
@@ -16,31 +20,64 @@ type Props = {
 };
 
 export function DastakCustomerView(props: Props) {
-  const [section, setSection] = useState<CustomerSection | "parcel">("home");
+  const [destination, setDestination] = useState<CustomerDestination>(() =>
+    parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
+  );
+  const section = destination.section;
   const catalogueSection = section === "parcel" ? "home" : section;
+
+  const navigate = useCallback((next: CustomerDestination, replace = false) => {
+    const hash = serializeCustomerDestination(next);
+    setDestination(next);
+    if (typeof window !== "undefined" && window.location.hash !== hash) {
+      window.history[replace ? "replaceState" : "pushState"](null, "", hash);
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    const restore = () => setDestination(parseCustomerDestination(window.location.hash));
+    window.addEventListener("hashchange", restore);
+    window.addEventListener("popstate", restore);
+    if (!window.location.hash) navigate({ section: "home" }, true);
+    return () => {
+      window.removeEventListener("hashchange", restore);
+      window.removeEventListener("popstate", restore);
+    };
+  }, [navigate]);
+
+  const navigateSection = (nextSection: CustomerSection) => navigate({ section: nextSection });
 
   return (
     <div className="customer-workspace">
       <nav className="customer-navigation" aria-label="Dastak">
-        <CustomerNavigationButton icon={<Home />} label="Home" selected={section === "home"} onClick={() => setSection("home")} />
-        <CustomerNavigationButton icon={<Search />} label="Search" selected={section === "search"} onClick={() => setSection("search")} />
-        <CustomerNavigationButton icon={<ReceiptText />} label="Orders" selected={section === "orders"} onClick={() => setSection("orders")} />
-        <CustomerNavigationButton icon={<UserRound />} label="Account" selected={section === "account"} onClick={() => setSection("account")} />
+        <CustomerNavigationButton icon={<Home />} label="Home" selected={section === "home"} onClick={() => navigateSection("home")} />
+        <CustomerNavigationButton icon={<Search />} label="Search" selected={section === "search"} onClick={() => navigateSection("search")} />
+        <CustomerNavigationButton icon={<ReceiptText />} label="Orders" selected={section === "orders"} onClick={() => navigateSection("orders")} />
+        <CustomerNavigationButton icon={<UserRound />} label="Account" selected={section === "account"} onClick={() => navigateSection("account")} />
       </nav>
       <div className="customer-view" hidden={section === "parcel"}>
         <CatalogueView
           {...props}
           section={catalogueSection}
-          onNavigate={setSection}
-          onOpenParcel={() => setSection("parcel")}
+          selectedOrderId={destination.entityType === "merchantOrder" ? destination.entityId : undefined}
+          onNavigate={navigateSection}
+          onOpenOrder={(orderId) => navigate({ section: "orders", entityType: "merchantOrder", entityId: orderId })}
+          onCloseOrder={() => navigate({ section: "orders" })}
+          onOpenParcel={() => navigate({ section: "parcel" })}
         />
       </div>
       {section === "parcel" && (
         <div className="customer-view parcel-experience">
-          <button className="customer-back-button" type="button" onClick={() => setSection("home")}>
+          {!destination.entityId && <button className="customer-back-button" type="button" onClick={() => navigate({ section: "home" })}>
             <ArrowLeft size={18} /> Home
-          </button>
-          <ParcelCustomerView {...props} />
+          </button>}
+          <ParcelCustomerView
+            {...props}
+            selectedParcelId={destination.entityType === "parcel" ? destination.entityId : undefined}
+            onOpenParcel={(parcelId) => navigate({ section: "parcel", entityType: "parcel", entityId: parcelId })}
+            onCloseParcel={() => navigate({ section: "parcel" })}
+          />
         </div>
       )}
     </div>

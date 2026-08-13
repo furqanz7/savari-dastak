@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
+  ArrowLeft,
   Bike,
   ChevronRight,
   CreditCard,
@@ -9,6 +10,7 @@ import {
   Minus,
   PackageOpen,
   Plus,
+  Phone,
   ReceiptText,
   RefreshCw,
   Search,
@@ -29,12 +31,10 @@ import {
   type GroupedCatalogueStore,
 } from "./catalogue";
 import {
-  canCancelOrder,
   cancelMerchantOrder,
   createMerchantOrder,
   formatDeliveryDistance,
   getCustomerOrders,
-  orderStatusLabel,
   quoteMerchantOrder,
   type MerchantOrderQuote,
   type MerchantOrderSnapshot,
@@ -53,7 +53,15 @@ import {
 } from "./cart";
 import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
 import { customerDataIssue, type CustomerDataIssue } from "./customerDataState";
-import type { CustomerSection } from "./DastakCustomerView";
+import type { CustomerSection } from "./customerNavigation";
+import {
+  getCustomerAddresses,
+  saveDefaultCustomerAddress,
+  type CustomerDeliveryAddress,
+} from "./customerAddresses";
+import { CustomerAddressSheet, type CustomerAddressDraft } from "./CustomerAddressSheet";
+import { CancellationSheet, CustomerRouteMap, CustomerTimeline } from "./CustomerDeliveryDetails";
+import { merchantOrderPresentation, paymentStateLabel } from "./customerLifecycle";
 
 type Props = {
   accessToken: string;
@@ -63,7 +71,10 @@ type Props = {
   supabaseUrl: string;
   publishableKey: string;
   section: CustomerSection;
+  selectedOrderId?: string;
   onNavigate: (section: CustomerSection) => void;
+  onOpenOrder: (orderId: string) => void;
+  onCloseOrder: () => void;
   onOpenParcel: () => void;
   onSignOut: () => void;
 };
@@ -118,7 +129,10 @@ export function CatalogueView({
   supabaseUrl,
   publishableKey,
   section,
+  selectedOrderId,
   onNavigate,
+  onOpenOrder,
+  onCloseOrder,
   onOpenParcel,
   onSignOut,
 }: Props) {
@@ -135,11 +149,18 @@ export function CatalogueView({
   const [orderError, setOrderError] = useState<string>();
   const [ordersRefreshIssue, setOrdersRefreshIssue] = useState<CustomerDataIssue>();
   const [paymentMessage, setPaymentMessage] = useState<string>();
+  const [deliveryAddress, setDeliveryAddress] = useState<CustomerDeliveryAddress>();
+  const [addressLoading, setAddressLoading] = useState(true);
+  const [addressEditorOpen, setAddressEditorOpen] = useState(false);
+  const [addressError, setAddressError] = useState<string>();
+  const [reviewAfterAddress, setReviewAfterAddress] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderSnapshot>();
   const [searchQuery, setSearchQuery] = useState("");
   const catalogueRequest = useRef(0);
   const orderCreationRequest = useRef<{ quoteId: string; idempotencyKey: string } | undefined>(undefined);
   const restoredDiscovery = useRef(false);
   const ordersRefreshInFlight = useRef(false);
+  const addressSaveRequest = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     saveCustomerDiscovery(selectedLocation, discoveryRadiusKm);
@@ -182,7 +203,7 @@ export function CatalogueView({
     };
   }, [hasActiveOrders, ordersRefreshIssue?.kind, refreshOrders]);
 
-  const load = useCallback(async (location: SelectedLocation, radiusKm = discoveryRadiusKm) => {
+  const load = useCallback(async (location: SelectedLocation, radiusKm: number) => {
     const requestId = ++catalogueRequest.current;
     setSelectedLocation(location);
     setQuote(undefined);
@@ -203,13 +224,31 @@ export function CatalogueView({
         : new CatalogueRequestError("catalogue_unavailable", "The catalogue is unavailable right now.", 0);
       setState({ phase: "error", code: requestError.code, message: requestError.message });
     }
-  }, [auth, discoveryRadiusKm]);
+  }, [auth]);
 
   useEffect(() => {
     if (restoredDiscovery.current || !selectedLocation) return;
     restoredDiscovery.current = true;
     void load(selectedLocation, discoveryRadiusKm);
   }, [discoveryRadiusKm, load, selectedLocation]);
+
+  useEffect(() => {
+    let active = true;
+    void getCustomerAddresses(auth).then((snapshot) => {
+      if (!active) return;
+      const saved = snapshot.addresses.find((address) => address.isDefault) ?? snapshot.addresses[0];
+      setDeliveryAddress(saved);
+      setAddressError(undefined);
+      if (saved) {
+        void load({ label: saved.displayAddress, coordinates: saved.location }, initialDiscovery.radiusKm);
+      }
+    }).catch((error) => {
+      if (active) setAddressError(orderMessage(error));
+    }).finally(() => {
+      if (active) setAddressLoading(false);
+    });
+    return () => { active = false; };
+  }, [auth, initialDiscovery.radiusKm, load]);
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -221,7 +260,7 @@ export function CatalogueView({
       (position) => void load({
         label: "Current location",
         coordinates: { latitude: position.coords.latitude, longitude: position.coords.longitude },
-      }),
+      }, discoveryRadiusKm),
       () => setState({
         phase: "error",
         code: "location_denied",
@@ -250,7 +289,7 @@ export function CatalogueView({
     void load({
       label: place.address,
       coordinates: { latitude: place.latitude, longitude: place.longitude },
-    });
+    }, discoveryRadiusKm);
   };
 
   const changeQuantity = (store: GroupedCatalogueStore, product: CatalogueProduct, delta: -1 | 1) => {
@@ -272,8 +311,8 @@ export function CatalogueView({
     setOrderError(undefined);
   };
 
-  const reviewOrder = async () => {
-    if (!selectedLocation || !cartStoreId || cartEntries.length === 0) return;
+  const requestOrderQuote = async (location: SelectedLocation) => {
+    if (!cartStoreId || cartEntries.length === 0) return;
     setOrderBusy(true);
     setOrderError(undefined);
     try {
@@ -281,7 +320,7 @@ export function CatalogueView({
         ...auth,
         storeId: cartStoreId,
         lines: cartEntries.map((entry) => ({ productId: entry.product.productId, quantity: entry.quantity })),
-        dropoff: selectedLocation.coordinates,
+        dropoff: location.coordinates,
         idempotencyKey: crypto.randomUUID(),
       });
       setQuote(nextQuote);
@@ -291,6 +330,50 @@ export function CatalogueView({
       };
     } catch (error) {
       setOrderError(orderMessage(error));
+    } finally {
+      setOrderBusy(false);
+    }
+  };
+
+  const reviewOrder = () => {
+    if (!selectedLocation || !cartStoreId || cartEntries.length === 0 || addressLoading) return;
+    if (!deliveryAddress || !sameLocation(deliveryAddress.location, selectedLocation.coordinates)) {
+      setReviewAfterAddress(true);
+      setAddressEditorOpen(true);
+      return;
+    }
+    void requestOrderQuote(selectedLocation);
+  };
+
+  const saveAddress = async (draft: CustomerAddressDraft) => {
+    setOrderBusy(true);
+    setAddressError(undefined);
+    try {
+      addressSaveRequest.current ??= crypto.randomUUID();
+      const snapshot = await saveDefaultCustomerAddress({
+        ...auth,
+        label: draft.label,
+        address: draft.place.address,
+        details: draft.details,
+        location: { latitude: draft.place.latitude, longitude: draft.place.longitude },
+        idempotencyKey: addressSaveRequest.current,
+      });
+      const saved = snapshot.addresses.find((address) => address.isDefault) ?? snapshot.addresses[0];
+      if (!saved) throw new Error("The saved delivery address was not returned.");
+      addressSaveRequest.current = undefined;
+      setDeliveryAddress(saved);
+      const location = { label: saved.displayAddress, coordinates: saved.location };
+      setSelectedLocation(location);
+      setAddressEditorOpen(false);
+      setAddressLoading(false);
+      if (reviewAfterAddress) {
+        setReviewAfterAddress(false);
+        await requestOrderQuote(location);
+      } else {
+        void load(location, discoveryRadiusKm);
+      }
+    } catch (error) {
+      setAddressError(orderMessage(error));
     } finally {
       setOrderBusy(false);
     }
@@ -373,28 +456,32 @@ export function CatalogueView({
     }
   };
 
-  const cancelOrder = async (order: MerchantOrderSnapshot) => {
-    if (!window.confirm("Cancel this order?")) return;
+  const cancelOrder = async (order: MerchantOrderSnapshot, reason: string) => {
     setOrderBusy(true);
     setOrderError(undefined);
     try {
       const cancelled = await cancelMerchantOrder({
         ...auth,
         orderId: order.orderId,
-        reason: "Customer cancelled from web",
+        reason,
         idempotencyKey: crypto.randomUUID(),
       });
       setOrders((current) => current.map((item) => item.orderId === cancelled.orderId ? cancelled : item));
       if (cancelled.refundDecision?.decisionStatus === "review_required") {
         setPaymentMessage("Cancellation sent to Dastak for refund review.");
       } else if (cancelled.paymentState === "refund_pending") {
-        const refund = await processOrderRefund({
-          ...auth,
-          orderId: cancelled.orderId,
-          idempotencyKey: crypto.randomUUID(),
-        });
-        setPaymentMessage(refund.refundState === "processed" ? "Refund completed." : "Refund submitted.");
+        try {
+          const refund = await processOrderRefund({
+            ...auth,
+            orderId: cancelled.orderId,
+            idempotencyKey: crypto.randomUUID(),
+          });
+          setPaymentMessage(refund.refundState === "processed" ? "Refund completed." : "Refund submitted.");
+        } catch {
+          setPaymentMessage("Order cancelled. Your refund is queued and will update automatically.");
+        }
       }
+      setCancellingOrder(undefined);
     } catch (error) {
       setOrderError(orderMessage(error));
     } finally {
@@ -439,14 +526,15 @@ export function CatalogueView({
               onReview={reviewOrder}
             />
           )}
-          {quote && <CheckoutSection quote={quote} busy={orderBusy} onPlaceOrder={placeOrder} />}
+          {quote && <CheckoutSection quote={quote} address={deliveryAddress} busy={orderBusy} onPlaceOrder={placeOrder} />}
           {!ordersLoading && hasActiveOrders && (
             <div className="customer-active-order">
               <OrdersSection
                 orders={orders.filter((order) => !isFinalOrder(order)).slice(0, 1)}
                 busy={orderBusy}
-                onCancel={cancelOrder}
+                onCancel={setCancellingOrder}
                 onPay={retryPayment}
+                onOpen={onOpenOrder}
                 onRefresh={refreshOrders}
                 title="Active order"
               />
@@ -461,7 +549,7 @@ export function CatalogueView({
             cartStoreId={cartStoreId}
             cart={cart}
             onQuantity={changeQuantity}
-            onRetry={() => selectedLocation && void load(selectedLocation)}
+            onRetry={() => selectedLocation && void load(selectedLocation, discoveryRadiusKm)}
             heading="Nearby"
           />
         </>
@@ -499,7 +587,7 @@ export function CatalogueView({
               onReview={reviewOrder}
             />
           )}
-          {quote && <CheckoutSection quote={quote} busy={orderBusy} onPlaceOrder={placeOrder} />}
+          {quote && <CheckoutSection quote={quote} address={deliveryAddress} busy={orderBusy} onPlaceOrder={placeOrder} />}
           <CatalogueContent
             state={state}
             stores={visibleStores}
@@ -508,7 +596,7 @@ export function CatalogueView({
             cartStoreId={cartStoreId}
             cart={cart}
             onQuantity={changeQuantity}
-            onRetry={() => selectedLocation && void load(selectedLocation)}
+            onRetry={() => selectedLocation && void load(selectedLocation, discoveryRadiusKm)}
             heading={searchQuery ? "Results" : "Browse all"}
             emptySearch={Boolean(searchQuery)}
           />
@@ -517,16 +605,27 @@ export function CatalogueView({
 
       {section === "orders" && (
         <>
-          <header className="customer-page-heading"><p className="eyebrow">Purchases</p><h1>Orders</h1></header>
-          {ordersLoading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length > 0 ? (
-            <OrdersSection orders={orders} busy={orderBusy} onCancel={cancelOrder} onPay={retryPayment} onRefresh={refreshOrders} title="Your orders" />
-          ) : ordersRefreshIssue ? (
-            <CustomerDataRecovery issue={ordersRefreshIssue} onRetry={refreshOrders} onSignOut={onSignOut} />
-          ) : (
-            <CatalogueMessage icon={<ReceiptText size={25} />} title="No orders yet">
-              Your orders and delivery updates will appear here.
-            </CatalogueMessage>
-          )}
+          {selectedOrderId && orders.find((order) => order.orderId === selectedOrderId) ? (
+            <CustomerOrderDetail
+              order={orders.find((order) => order.orderId === selectedOrderId)!}
+              busy={orderBusy}
+              onBack={onCloseOrder}
+              onPay={retryPayment}
+              onCancel={setCancellingOrder}
+              onRefresh={refreshOrders}
+            />
+          ) : <>
+            <header className="customer-page-heading"><p className="eyebrow">Purchases</p><h1>Orders</h1></header>
+            {ordersLoading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length > 0 ? (
+              <OrdersSection orders={orders} busy={orderBusy} onCancel={setCancellingOrder} onPay={retryPayment} onOpen={onOpenOrder} onRefresh={refreshOrders} title="Your orders" />
+            ) : ordersRefreshIssue ? (
+              <CustomerDataRecovery issue={ordersRefreshIssue} onRetry={refreshOrders} onSignOut={onSignOut} />
+            ) : (
+              <CatalogueMessage icon={<ReceiptText size={25} />} title="No orders yet">
+                Your orders and delivery updates will appear here.
+              </CatalogueMessage>
+            )}
+          </>}
         </>
       )}
 
@@ -539,9 +638,28 @@ export function CatalogueView({
             {phoneNumber && <div><dt>Phone</dt><dd>{phoneNumber}</dd></div>}
             <div><dt>Discovery</dt><dd>{discoveryRadiusKm} km</dd></div>
           </dl>
+          <section className="account-address-card">
+            <div><MapPin size={20} /><span><strong>Delivery address</strong><small>{deliveryAddress?.displayAddress ?? "No saved address"}</small></span></div>
+            <button className="secondary-button compact-button" type="button" onClick={() => setAddressEditorOpen(true)} disabled={addressLoading}>{deliveryAddress ? "Edit" : "Add address"}</button>
+            {addressError && <small className="error-text">{addressError}</small>}
+          </section>
           <button className="customer-sign-out" type="button" onClick={onSignOut}>Sign out</button>
         </section>
       )}
+      {addressEditorOpen && <CustomerAddressSheet
+        address={deliveryAddress}
+        initialPlace={reviewAfterAddress && selectedLocation ? { address: selectedLocation.label, latitude: selectedLocation.coordinates.latitude, longitude: selectedLocation.coordinates.longitude } : undefined}
+        busy={orderBusy}
+        error={addressError}
+        onDismiss={() => { addressSaveRequest.current = undefined; setAddressEditorOpen(false); setReviewAfterAddress(false); setAddressError(undefined); }}
+        onSave={saveAddress}
+      />}
+      {cancellingOrder && <CancellationSheet
+        title={merchantOrderPresentation(cancellingOrder.status, cancellingOrder.paymentState).primaryAction === "request_cancellation" ? "Request cancellation?" : "Cancel this order?"}
+        busy={orderBusy}
+        onDismiss={() => setCancellingOrder(undefined)}
+        onConfirm={(reason) => cancelOrder(cancellingOrder, reason)}
+      />}
     </div>
   );
 }
@@ -657,11 +775,12 @@ function CatalogueContent({ state, stores, selectedLocation, supabaseUrl, cartSt
   );
 }
 
-function OrdersSection({ orders, busy, onCancel, onPay, onRefresh, title }: {
+function OrdersSection({ orders, busy, onCancel, onPay, onOpen, onRefresh, title }: {
   orders: MerchantOrderSnapshot[];
   busy: boolean;
   onCancel: (order: MerchantOrderSnapshot) => void;
   onPay: (order: MerchantOrderSnapshot) => void;
+  onOpen: (orderId: string) => void;
   onRefresh: () => Promise<void>;
   title: string;
 }) {
@@ -674,30 +793,89 @@ function OrdersSection({ orders, busy, onCancel, onPay, onRefresh, title }: {
         </button>
       </header>
       <div className="order-list">
-        {orders.map((order) => (
-          <article className="order-row" key={order.orderId}>
+        {orders.map((order) => {
+          const presentation = merchantOrderPresentation(order.status, order.paymentState);
+          return <article className="order-row" key={order.orderId}>
             <span className="order-icon"><ReceiptText size={20} /></span>
             <div className="order-main">
-              <strong>{orderStatusLabel(order.status)}</strong>
+              <strong>{presentation.title}</strong>
+              <small>{presentation.message}</small>
               <small>{order.lines.map((line) => `${line.quantity} x ${line.name}`).join(", ")}</small>
               {order.handoffCode?.purpose === "delivery" && <span className="delivery-code">Delivery code <b>{order.handoffCode.code}</b></span>}
               {customerRefundText(order) && <span className="order-refund">{customerRefundText(order)}</span>}
             </div>
             <strong className="order-total">{formatPrice(order.total.paise)}</strong>
-            {order.paymentState === "payment_pending" && order.status === "payment_pending" && (
+            <button className="order-open" type="button" onClick={() => onOpen(order.orderId)}>View details <ChevronRight size={16} /></button>
+            {presentation.primaryAction === "pay" && (
               <button className="primary-button order-pay" type="button" onClick={() => onPay(order)} disabled={busy}>
                 <CreditCard size={16} /> Pay
               </button>
             )}
-            {canCancelOrder(order.status) && (
+            {(presentation.primaryAction === "cancel" || presentation.primaryAction === "request_cancellation") && (
               <button className="order-cancel" type="button" onClick={() => onCancel(order)} disabled={busy}>
-                <X size={16} /> Cancel
+                <X size={16} /> {presentation.primaryAction === "request_cancellation" ? "Request cancellation" : "Cancel"}
               </button>
             )}
           </article>
-        ))}
+        })}
       </div>
     </section>
+  );
+}
+
+function CustomerOrderDetail({ order, busy, onBack, onPay, onCancel, onRefresh }: {
+  order: MerchantOrderSnapshot;
+  busy: boolean;
+  onBack: () => void;
+  onPay: (order: MerchantOrderSnapshot) => void;
+  onCancel: (order: MerchantOrderSnapshot) => void;
+  onRefresh: () => Promise<void>;
+}) {
+  const presentation = merchantOrderPresentation(order.status, order.paymentState);
+  const timeline = order.timeline;
+  const points = [
+    ...(order.store ? [{ label: order.store.name, ...order.store.pickup, kind: "pickup" as const }] : []),
+    { label: "Delivery address", address: order.deliveryAddress?.displayAddress ?? "Selected delivery location", ...order.dropoff, kind: "dropoff" as const },
+    ...(order.courier?.location ? [{ label: order.courier.displayName, address: "Delivery partner's latest location", ...order.courier.location, kind: "courier" as const }] : []),
+  ];
+
+  return (
+    <article className="customer-delivery-detail">
+      <header className="customer-detail-header">
+        <button className="customer-back-button" type="button" onClick={onBack}><ArrowLeft size={18} /> Orders</button>
+        <button className="icon-button" type="button" onClick={() => void onRefresh()} disabled={busy} aria-label="Refresh order" title="Refresh"><RefreshCw size={18} /></button>
+      </header>
+      <section className="customer-status-hero">
+        <p className="eyebrow">Order {order.orderId.slice(-6).toUpperCase()}</p>
+        <h1>{presentation.title}</h1>
+        <p>{presentation.message}</p>
+        <span>{paymentStateLabel(order.paymentState)}</span>
+      </section>
+      <CustomerRouteMap points={points} />
+      {order.courier && <section className="customer-contact-card"><span className="order-icon"><Bike size={20} /></span><div><strong>{order.courier.displayName}</strong><small>Your delivery partner · {order.courier.deliveryMethod}</small></div><a href={`tel:${order.courier.phoneNumber}`} aria-label="Call delivery partner"><Phone size={18} /></a></section>}
+      {order.handoffCode?.purpose === "delivery" && <section className="customer-handoff"><small>Share only at your door</small><strong>{order.handoffCode.code}</strong><span>Delivery code</span></section>}
+      <section className="customer-receipt">
+        <header><h2>Receipt</h2><strong>{formatPrice(order.total.paise)}</strong></header>
+        {order.lines.map((line) => <div key={line.productId}><span>{line.quantity} × {line.name}<small>{line.unitLabel}</small></span><strong>{formatPrice(line.lineSubtotal.paise)}</strong></div>)}
+        <div><span>Delivery · {formatDeliveryDistance(order.deliveryDistanceMeters)}</span><strong>{formatPrice(order.deliveryFee.paise)}</strong></div>
+        {order.deliveryAddress?.displayAddress && <div className="receipt-address"><MapPin size={17} /><span>{order.deliveryAddress.displayAddress}</span></div>}
+      </section>
+      <CustomerTimeline items={[
+        { label: "Order placed", value: timeline?.createdAt ?? order.createdAt },
+        { label: "Store accepted", value: timeline?.acceptedAt },
+        { label: "Ready for pickup", value: timeline?.readyAt },
+        { label: "Partner assigned", value: timeline?.assignedAt },
+        { label: "Picked up", value: timeline?.pickedUpAt },
+        { label: "On the way", value: timeline?.inTransitAt },
+        { label: "Delivered", value: timeline?.deliveredAt },
+        { label: "Cancelled", value: timeline?.cancelledAt },
+      ]} />
+      {customerRefundText(order) && <p className="payment-message">{customerRefundText(order)}</p>}
+      <div className="customer-detail-actions">
+        {presentation.primaryAction === "pay" && <button className="primary-button" type="button" disabled={busy} onClick={() => onPay(order)}><CreditCard size={18} /> Pay {formatPrice(order.total.paise)}</button>}
+        {(presentation.primaryAction === "cancel" || presentation.primaryAction === "request_cancellation") && <button className="danger-button" type="button" disabled={busy} onClick={() => onCancel(order)}><X size={18} /> {presentation.primaryAction === "request_cancellation" ? "Request cancellation" : "Cancel order"}</button>}
+      </div>
+    </article>
   );
 }
 
@@ -736,8 +914,9 @@ function CartSummary({ itemCount, subtotal, storeName, busy, onClear, onReview }
   );
 }
 
-function CheckoutSection({ quote, busy, onPlaceOrder }: {
+function CheckoutSection({ quote, address, busy, onPlaceOrder }: {
   quote: MerchantOrderQuote;
+  address?: CustomerDeliveryAddress;
   busy: boolean;
   onPlaceOrder: () => void;
 }) {
@@ -757,6 +936,7 @@ function CheckoutSection({ quote, busy, onPlaceOrder }: {
         </div>
         <div className="checkout-grand-total"><dt>Total</dt><dd>{formatPrice(quote.total.paise)}</dd></div>
       </dl>
+      {address && <div className="checkout-address"><MapPin size={18} /><span><small>Deliver to {address.label}</small><strong>{address.displayAddress}</strong></span></div>}
       <button className="primary-button checkout-button" type="button" onClick={onPlaceOrder} disabled={busy}>
         <CreditCard size={17} /> Pay {formatPrice(quote.total.paise)}
       </button>
@@ -857,6 +1037,10 @@ function orderMessage(error: unknown) {
   return error instanceof Error
     ? error.message
     : "The order request is unavailable right now.";
+}
+
+function sameLocation(left: CatalogueLocation, right: CatalogueLocation) {
+  return Math.abs(left.latitude - right.latitude) < .00001 && Math.abs(left.longitude - right.longitude) < .00001;
 }
 
 function filterCatalogueStores(stores: GroupedCatalogueStore[], query: string) {

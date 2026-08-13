@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getCustomerParcels, mutateParcelAssignment, parseParcel, quoteParcel } from "./parcels";
+import { parcelPresentation, parcelPaymentStateLabel } from "./customerLifecycle";
 
 const parcelId = "22222222-2222-4222-8222-222222222222";
 const assignmentId = "33333333-3333-4333-8333-333333333333";
@@ -27,6 +28,39 @@ const auth = {
 };
 
 describe("parcel delivery", () => {
+  it("keeps one customer action per parcel state and retries failed payments", () => {
+    expect(parcelPresentation("payment_pending", "failed", "sender").primaryAction).toBe("pay");
+    expect(parcelPresentation("assigned", "paid", "sender").primaryAction).toBe("cancel");
+    expect(parcelPresentation("in_transit", "paid", "sender").primaryAction).toBe("none");
+    expect(parcelPresentation("assigned", "paid", "recipient").primaryAction).toBe("none");
+    expect(parcelPaymentStateLabel("refund_pending")).toBe("Refund processing");
+  });
+
+  it("parses courier location, state version, and delivery timeline", () => {
+    const parsed = parseParcel({
+      ...parcel,
+      courier: {
+        displayName: "Aamir",
+        phoneNumber: "+919812345678",
+        deliveryMethod: "bike",
+        location: { latitude: 12.685, longitude: 78.629 },
+        lastSeenAt: "2026-08-13T10:10:00Z",
+      },
+      timeline: {
+        createdAt: "2026-08-13T10:00:00Z",
+        paymentCapturedAt: "2026-08-13T10:01:00Z",
+        assignedAt: "2026-08-13T10:02:00Z",
+      },
+      stateVersion: 4,
+      createdAt: "2026-08-13T10:00:00Z",
+      updatedAt: "2026-08-13T10:10:00Z",
+    });
+
+    expect(parsed.courier?.displayName).toBe("Aamir");
+    expect(parsed.timeline?.paymentCapturedAt).toBe("2026-08-13T10:01:00Z");
+    expect(parsed.stateVersion).toBe(4);
+  });
+
   it("parses customer parcel snapshots", async () => {
     const fetcher = () => Promise.resolve(new Response(JSON.stringify([parcel]), { status: 200 }));
     await expect(getCustomerParcels(auth, fetcher)).resolves.toEqual([{ ...parseParcel(parcel), audience: "sender" }]);
