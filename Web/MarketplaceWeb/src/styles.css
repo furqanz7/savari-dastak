@@ -803,13 +803,13 @@ button:disabled { cursor: wait; opacity: .55; }
   font-weight: 100;
   line-height: 1;
 }
-.dastak-launch-latin { display: inline-block; transform: translateY(-5px); }
+.dastak-launch-latin { display: inline-block; transform: translateY(-7px); }
 .dastak-launch-content .dastak-launch-urdu {
   display: inline-block;
   margin-left: 8px;
   font-size: .8em;
   font-weight: 400;
-  transform: translateY(5px);
+  transform: translateY(7px);
 }
 .dastak-launch-content small {
   color: rgb(245 242 236 / 78%);

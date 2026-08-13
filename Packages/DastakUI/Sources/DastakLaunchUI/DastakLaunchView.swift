@@ -185,12 +185,12 @@ private struct DastakLaunchWordmark: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(MarketplaceWordmark.dastakLatin.uppercased())
                 .font(.custom("HelveticaNeue-UltraLight", fixedSize: 50))
-                .offset(y: -5)
+                .offset(y: -7)
 
             Text(MarketplaceWordmark.dastakUrdu)
                 .font(.system(size: 42, weight: .light))
                 .environment(\.layoutDirection, .rightToLeft)
-                .offset(y: 5)
+                .offset(y: 7)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.72)
