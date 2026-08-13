@@ -96,7 +96,17 @@ public struct DastakCustomerRootView: View {
                     discoveryRadiusKilometres: model.discoveryRadiusKilometres,
                     refreshFailure: model.accountRefreshFailure,
                     chooseLocation: { deliveryAddressEditorMode = .edit },
-                    retryAccount: { Task { await model.refreshCheckoutCustomer() } }
+                    retryAccount: { Task { await model.refreshCheckoutCustomer() } },
+                    updateProfile: { displayName, phoneNumber in
+                        try await model.updateAccountProfile(
+                            displayName: displayName,
+                            phoneNumber: phoneNumber
+                        )
+                    },
+                    deleteAccount: {
+                        try await model.deleteAccount()
+                        await signOut()
+                    }
                 )
             }
             .tag(Tab.account)

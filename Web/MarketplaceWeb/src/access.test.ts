@@ -54,6 +54,8 @@ describe("Dastak role isolation", () => {
 describe("profile validation", () => {
   it("requires a normalized name and E.164 phone", () => {
     expect(isValidProfile({ displayName: "Furqan", phoneNumber: "+919876543210" })).toBe(true);
+    expect(isValidProfile({ displayName: "F", phoneNumber: "+919876543210" })).toBe(true);
     expect(isValidProfile({ displayName: "F", phoneNumber: "9876543210" })).toBe(false);
+    expect(isValidProfile({ displayName: "F".repeat(81), phoneNumber: "+919876543210" })).toBe(false);
   });
 });

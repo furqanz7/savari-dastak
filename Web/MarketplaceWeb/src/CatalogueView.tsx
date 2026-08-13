@@ -20,6 +20,8 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { AccountProfileSheet } from "./AccountProfileSheet";
+import { deleteAccount, updateAccountProfile, type AccountProfile } from "./accountProfile";
 import {
   browseCatalogue,
   catalogueImageUrl,
@@ -154,6 +156,14 @@ export function CatalogueView({
   const [addressEditorOpen, setAddressEditorOpen] = useState(false);
   const [addressError, setAddressError] = useState<string>();
   const [reviewAfterAddress, setReviewAfterAddress] = useState(false);
+  const [accountProfile, setAccountProfile] = useState<AccountProfile>({
+    displayName: displayName ?? "",
+    phoneNumber: phoneNumber ?? "",
+  });
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileError, setProfileError] = useState<string>();
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderSnapshot>();
   const [searchQuery, setSearchQuery] = useState("");
   const catalogueRequest = useRef(0);
@@ -241,9 +251,14 @@ export function CatalogueView({
       setAddressError(undefined);
       if (saved) {
         void load({ label: saved.displayAddress, coordinates: saved.location }, initialDiscovery.radiusKm);
+      } else {
+        setAddressEditorOpen(true);
       }
     }).catch((error) => {
-      if (active) setAddressError(orderMessage(error));
+      if (active) {
+        setAddressError(orderMessage(error));
+        setAddressEditorOpen(true);
+      }
     }).finally(() => {
       if (active) setAddressLoading(false);
     });
@@ -379,6 +394,34 @@ export function CatalogueView({
     }
   };
 
+  const saveProfile = async (profile: AccountProfile) => {
+    setProfileBusy(true);
+    setProfileError(undefined);
+    try {
+      const updated = await updateAccountProfile({ ...auth, ...profile });
+      setAccountProfile(updated);
+      setProfileEditorOpen(false);
+    } catch (error) {
+      setProfileError(orderMessage(error));
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+
+  const confirmAccountDeletion = async () => {
+    setProfileBusy(true);
+    setProfileError(undefined);
+    try {
+      await deleteAccount(auth);
+      onSignOut();
+    } catch (error) {
+      setProfileError(orderMessage(error));
+      setShowDeleteConfirmation(false);
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+
   const placeOrder = async () => {
     if (!quote) return;
     setOrderBusy(true);
@@ -409,9 +452,9 @@ export function CatalogueView({
       idempotencyKey: crypto.randomUUID(),
     });
     const result = await openRazorpayCheckout(session, {
-      name: displayName,
+      name: accountProfile.displayName,
       email,
-      phoneNumber,
+      phoneNumber: accountProfile.phoneNumber,
     });
     if (result === "dismissed") {
       setPaymentMessage("Payment was not completed. You can pay from your order.");
@@ -497,7 +540,7 @@ export function CatalogueView({
       {section === "home" && (
         <>
           <header className="customer-home-heading">
-            <p className="eyebrow">{displayName ? `Hello, ${displayName}` : "Dastak"}</p>
+            <p className="eyebrow">{accountProfile.displayName ? `Hello, ${accountProfile.displayName}` : "Dastak"}</p>
             <h1>What do you need today?</h1>
             <button className="customer-search-prompt" type="button" onClick={() => onNavigate("search")}>
               <Search size={20} /><span>Search products and stores</span>
@@ -631,29 +674,47 @@ export function CatalogueView({
 
       {section === "account" && (
         <section className="customer-account">
-          <header className="customer-page-heading"><p className="eyebrow">Dastak account</p><h1>{displayName || "Your account"}</h1></header>
-          <span className="customer-account-icon"><UserRound size={25} /></span>
-          <dl className="account-list">
-            {email && <div><dt>Email</dt><dd>{email}</dd></div>}
-            {phoneNumber && <div><dt>Phone</dt><dd>{phoneNumber}</dd></div>}
-            <div><dt>Discovery</dt><dd>{discoveryRadiusKm} km</dd></div>
-          </dl>
+          <header className="customer-page-heading"><p className="eyebrow">Dastak account</p><h1>{accountProfile.displayName || "Your account"}</h1></header>
+          <button className="customer-profile-card" type="button" onClick={() => setProfileEditorOpen(true)}>
+            <span className="customer-account-icon"><UserRound size={25} /></span>
+            <span><strong>{accountProfile.displayName}</strong><small>{accountProfile.phoneNumber}</small>{email && <small>{email}</small>}</span>
+            <ChevronRight size={19} />
+          </button>
+          <dl className="account-list"><div><dt>Discovery range</dt><dd>{discoveryRadiusKm} km</dd></div></dl>
           <section className="account-address-card">
             <div><MapPin size={20} /><span><strong>Delivery address</strong><small>{deliveryAddress?.displayAddress ?? "No saved address"}</small></span></div>
             <button className="secondary-button compact-button" type="button" onClick={() => setAddressEditorOpen(true)} disabled={addressLoading}>{deliveryAddress ? "Edit" : "Add address"}</button>
             {addressError && <small className="error-text">{addressError}</small>}
           </section>
           <button className="customer-sign-out" type="button" onClick={onSignOut}>Sign out</button>
+          <button className="customer-delete-account" type="button" onClick={() => setShowDeleteConfirmation(true)}>Delete account</button>
+          {profileError && !profileEditorOpen && <p className="error-text" role="alert">{profileError}</p>}
         </section>
       )}
       {addressEditorOpen && <CustomerAddressSheet
         address={deliveryAddress}
-        initialPlace={reviewAfterAddress && selectedLocation ? { address: selectedLocation.label, latitude: selectedLocation.coordinates.latitude, longitude: selectedLocation.coordinates.longitude } : undefined}
+        initialPlace={selectedLocation ? { address: selectedLocation.label, latitude: selectedLocation.coordinates.latitude, longitude: selectedLocation.coordinates.longitude } : undefined}
         busy={orderBusy}
         error={addressError}
-        onDismiss={() => { addressSaveRequest.current = undefined; setAddressEditorOpen(false); setReviewAfterAddress(false); setAddressError(undefined); }}
+        required={!addressLoading && !deliveryAddress}
+        onDismiss={() => { if (!deliveryAddress) return; addressSaveRequest.current = undefined; setAddressEditorOpen(false); setReviewAfterAddress(false); setAddressError(undefined); }}
         onSave={saveAddress}
       />}
+      {profileEditorOpen && <AccountProfileSheet
+        profile={accountProfile}
+        busy={profileBusy}
+        error={profileError}
+        onDismiss={() => { setProfileEditorOpen(false); setProfileError(undefined); }}
+        onSave={saveProfile}
+      />}
+      {showDeleteConfirmation && <div className="customer-sheet-backdrop" role="presentation">
+        <section className="customer-sheet delete-account-sheet" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title">
+          <header><div><p className="eyebrow">Permanent action</p><h2 id="delete-account-title">Delete your account?</h2></div></header>
+          <p>Completed order records may be retained without your identity where legally required. This cannot be undone.</p>
+          <button className="danger-button" type="button" disabled={profileBusy} onClick={() => void confirmAccountDeletion()}>{profileBusy ? "Deleting..." : "Delete account"}</button>
+          <button className="secondary-button" type="button" disabled={profileBusy} onClick={() => setShowDeleteConfirmation(false)}>Keep account</button>
+        </section>
+      </div>}
       {cancellingOrder && <CancellationSheet
         title={merchantOrderPresentation(cancellingOrder.status, cancellingOrder.paymentState).primaryAction === "request_cancellation" ? "Request cancellation?" : "Cancel this order?"}
         busy={orderBusy}

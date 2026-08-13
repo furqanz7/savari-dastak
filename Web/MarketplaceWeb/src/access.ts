@@ -66,7 +66,7 @@ export async function completeProfile(
 
 export function isValidProfile(profile: AccountProfile) {
   const name = normalizeName(profile.displayName);
-  return name.length >= 2 && name.length <= 100 && /^\+[1-9]\d{7,14}$/.test(profile.phoneNumber.trim());
+  return name.length >= 1 && name.length <= 80 && /^\+[1-9]\d{7,14}$/.test(profile.phoneNumber.trim());
 }
 
 export function mapSavariAccess(

@@ -18,7 +18,7 @@ if [[ "$role" == "all" && "$mode" != "--check" ]]; then
   exit 64
 fi
 
-for command_name in vercel rg; do
+for command_name in vercel rg rsync; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'Missing required deployment prerequisite: %s\n' "$command_name" >&2
     exit 127
@@ -114,7 +114,15 @@ if [[ "$mode" == "--check" ]]; then
   exit 0
 fi
 
-deploy_args=(deploy "$repo_root" --project "$project" --scope "$team_slug" --yes)
+deploy_root="$audit_root/deploy"
+mkdir -p "$deploy_root/Web/MarketplaceWeb"
+rsync -a \
+  --exclude node_modules \
+  --exclude dist \
+  "$repo_root/Web/MarketplaceWeb/" \
+  "$deploy_root/Web/MarketplaceWeb/"
+
+deploy_args=(deploy "$deploy_root" --project "$project" --scope "$team_slug" --archive=tgz --yes)
 if [[ "$mode" == "--production" ]]; then
   deploy_args+=(--prod)
 fi

@@ -9,11 +9,12 @@ export type CustomerAddressDraft = {
   place: SelectedPlace;
 };
 
-export function CustomerAddressSheet({ address, initialPlace, busy, error, onDismiss, onSave }: {
+export function CustomerAddressSheet({ address, initialPlace, busy, error, required = false, onDismiss, onSave }: {
   address?: CustomerDeliveryAddress;
   initialPlace?: SelectedPlace;
   busy: boolean;
   error?: string;
+  required?: boolean;
   onDismiss: () => void;
   onSave: (draft: CustomerAddressDraft) => Promise<void>;
 }) {
@@ -35,7 +36,7 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, onDis
       <form className="customer-sheet customer-address-sheet" aria-modal="true" aria-labelledby="address-sheet-title" role="dialog" onSubmit={submit}>
         <header>
           <div><p className="eyebrow">Delivery details</p><h2 id="address-sheet-title">Where should we deliver?</h2></div>
-          <button className="icon-button" type="button" onClick={onDismiss} disabled={busy} aria-label="Close address editor" title="Close"><X size={19} /></button>
+          {!required && <button className="icon-button" type="button" onClick={onDismiss} disabled={busy} aria-label="Close address editor" title="Close"><X size={19} /></button>}
         </header>
         <LocationSearchField label="Delivery location" value={place} onChange={setPlace} disabled={busy} />
         <fieldset className="address-type-picker">
@@ -51,7 +52,7 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, onDis
         {place && <div className="address-preview"><MapPin size={18} /><span><strong>{label}</strong><small>{place.address}</small></span></div>}
         {error && <p className="order-error" role="alert">{error}</p>}
         <button className="primary-button customer-sheet-action" type="submit" disabled={busy || !place || !details.trim()}>
-          <Check size={18} /> {busy ? "Saving..." : "Save delivery address"}
+          <Check size={18} /> {busy ? "Saving..." : required ? "Save and start shopping" : "Save delivery address"}
         </button>
       </form>
     </div>

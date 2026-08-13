@@ -80,6 +80,7 @@ final class DastakCustomerModel: ObservableObject {
     private let orderClient: any MerchantOrderClient
     private let checkoutClient: any DastakCheckoutClient
     private let addressClient: any CustomerAddressClient
+    private let accountProfileClient: any AccountProfileClient
     private let deviceTokenClient: SupabaseDastakDeviceTokenClient?
     private let checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)?
     private let accountIDProvider: (@Sendable () async throws -> UUID)?
@@ -93,6 +94,7 @@ final class DastakCustomerModel: ObservableObject {
         parcelClient: any ParcelDeliveryClient,
         checkoutClient: any DastakCheckoutClient,
         addressClient: any CustomerAddressClient,
+        accountProfileClient: any AccountProfileClient,
         deviceTokenClient: SupabaseDastakDeviceTokenClient? = nil,
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil
@@ -102,6 +104,7 @@ final class DastakCustomerModel: ObservableObject {
         self.parcelClient = parcelClient
         self.checkoutClient = checkoutClient
         self.addressClient = addressClient
+        self.accountProfileClient = accountProfileClient
         self.deviceTokenClient = deviceTokenClient
         self.checkoutCustomerProvider = checkoutCustomerProvider
         self.accountIDProvider = accountIDProvider
@@ -118,6 +121,7 @@ final class DastakCustomerModel: ObservableObject {
             parcelClient: SupabaseParcelDeliveryClient(functions: functions),
             checkoutClient: SupabaseDastakCheckoutClient(functions: functions),
             addressClient: SupabaseCustomerAddressClient(functions: functions),
+            accountProfileClient: SupabaseAccountProfileClient(functions: functions),
             deviceTokenClient: SupabaseDastakDeviceTokenClient(functions: functions),
             checkoutCustomerProvider: checkoutCustomerProvider,
             accountIDProvider: accountIDProvider
@@ -172,6 +176,24 @@ final class DastakCustomerModel: ObservableObject {
         } catch {
             accountRefreshFailure = refreshFailure(for: error)
         }
+    }
+
+    func updateAccountProfile(displayName: String, phoneNumber: String) async throws {
+        let profile = try await accountProfileClient.update(
+            displayName: displayName,
+            phoneNumber: phoneNumber,
+            idempotencyKey: makeKey()
+        )
+        checkoutCustomer = MarketplaceCheckoutCustomer(
+            displayName: profile.displayName,
+            email: checkoutCustomer?.email,
+            phoneNumber: profile.phoneNumber
+        )
+        accountRefreshFailure = nil
+    }
+
+    func deleteAccount() async throws {
+        try await accountProfileClient.deleteAccount(idempotencyKey: makeKey())
     }
 
     func setLocation(_ location: DastakDeliveryLocation) async -> Bool {

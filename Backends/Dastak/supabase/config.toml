@@ -413,6 +413,13 @@ entrypoint = "./functions/bootstrap-account/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/bootstrap-account/*.html" ]
 
+[functions.account-profile]
+enabled = true
+# The handler authenticates bearer tokens after serving browser CORS preflight.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/account-profile/index.ts"
+
 [functions.issue-evidence-url]
 enabled = true
 verify_jwt = true

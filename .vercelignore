@@ -1,8 +1,15 @@
 **/node_modules/
+**/.build/
 **/dist/
 .git/
 .worktrees/
 DerivedData/
+Apps/
+Backends/
+Legacy/
+Packages/
+SavariDastak.xcworkspace/
+docs/
 *.xcarchive
 *.zip
 *.mov

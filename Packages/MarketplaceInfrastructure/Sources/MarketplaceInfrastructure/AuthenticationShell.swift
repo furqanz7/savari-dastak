@@ -119,6 +119,7 @@ private final class AuthenticationShellModel: ObservableObject {
 public struct MarketplaceAuthenticationShell: View {
     private let applicationName: String
     private let product: MarketplaceProduct
+    private let requiredAccess: MarketplaceApplicationAccess
     private let showsPersistentSignOut: Bool
     private let activeContent: (MarketplaceAuthenticatedServices) -> AnyView
     private let restrictedContent: ((AccountRoute, MarketplaceAuthenticatedServices) -> AnyView)?
@@ -199,6 +200,7 @@ public struct MarketplaceAuthenticationShell: View {
     ) {
         self.applicationName = applicationName
         self.product = product
+        self.requiredAccess = requiredAccess
         self.showsPersistentSignOut = showsPersistentSignOut
         self.activeContent = activeContent
         self.restrictedContent = restrictedContent
@@ -219,6 +221,7 @@ public struct MarketplaceAuthenticationShell: View {
                 AuthenticationRouteView(
                     applicationName: applicationName,
                     product: product,
+                    requiredAccess: requiredAccess,
                     coordinator: coordinator,
                     showsPersistentSignOut: showsPersistentSignOut,
                     activeContent: activeContent(services),
@@ -242,6 +245,7 @@ private struct DefaultMarketplaceActiveView: View {
 private struct AuthenticationRouteView: View {
     let applicationName: String
     let product: MarketplaceProduct
+    let requiredAccess: MarketplaceApplicationAccess
     @ObservedObject var coordinator: AuthenticationCoordinator
     let showsPersistentSignOut: Bool
     let activeContent: AnyView
@@ -269,6 +273,14 @@ private struct AuthenticationRouteView: View {
             guard !restored else { return }
             restored = true
             await coordinator.restore()
+            if product == .dastak, coordinator.route == .needsProfile, phoneNumber.isEmpty {
+                phoneNumber = "+91"
+            }
+        }
+        .onChange(of: coordinator.route) { route in
+            if product == .dastak, route == .needsProfile, phoneNumber.isEmpty {
+                phoneNumber = "+91"
+            }
         }
     }
 
@@ -519,24 +531,32 @@ private struct AuthenticationRouteView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(
-                displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || coordinator.isProfileSubmissionInFlight
+                !profileInputIsValid || coordinator.isProfileSubmissionInFlight
             )
         }
     }
 
     private var dastakProfileView: some View {
         VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Tell us about you")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("Your name and phone number are required for deliveries.")
+                    .font(.subheadline)
+                    .foregroundStyle(dastakSecondaryText)
+            }
+            .padding(.bottom, 4)
             #if os(iOS)
-            TextField("Display name", text: $displayName)
+            TextField("Full name", text: $displayName)
                 .textContentType(.name)
                 .textFieldStyle(DastakTextFieldStyle())
             #else
-            TextField("Display name", text: $displayName)
+            TextField("Full name", text: $displayName)
                 .textFieldStyle(DastakTextFieldStyle())
             #endif
             dastakPhoneNumberField
-            Text("Your number is used only for delivery contact.")
+            Text("Include the country code. Your number is used only for delivery contact.")
                 .font(.caption)
                 .foregroundStyle(dastakSecondaryText)
             Button(coordinator.isProfileSubmissionInFlight ? "Completing profile" : "Continue") {
@@ -544,8 +564,7 @@ private struct AuthenticationRouteView: View {
             }
             .buttonStyle(DastakPrimaryButtonStyle())
             .disabled(
-                displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || coordinator.isProfileSubmissionInFlight
+                !profileInputIsValid || coordinator.isProfileSubmissionInFlight
             )
         }
     }
@@ -672,6 +691,14 @@ private struct AuthenticationRouteView: View {
             return
         }
 
+        if displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let fullName = credential.fullName {
+            displayName = [fullName.givenName, fullName.familyName]
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+        }
+
         Task {
             do {
                 errorMessage = nil
@@ -739,7 +766,19 @@ private struct AuthenticationRouteView: View {
     }
 
     private var dastakRoleLabel: String {
-        applicationName == "Dastak Merchant" ? "Merchant" : "Customer"
+        switch requiredAccess {
+        case .dastakCustomer: "Customer"
+        case .dastakMerchant: "Merchant"
+        case .dastakAdmin: "Admin"
+        case .profileOnly: applicationName
+        }
+    }
+
+    private var profileInputIsValid: Bool {
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (1...80).contains(name.count)
+            && phone.range(of: #"^\+[1-9][0-9]{7,14}$"#, options: .regularExpression) != nil
     }
 }
 

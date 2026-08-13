@@ -62,11 +62,25 @@
 .address-preview small { color: var(--text-secondary); overflow-wrap: anywhere; }
 .customer-sheet-action { width: 100%; min-height: 52px; margin-top: 20px; display: inline-flex; justify-content: center; align-items: center; gap: 8px; }
 
+.account-profile-sheet > label { display: grid; gap: 8px; margin-top: 20px; color: var(--text-secondary); font-size: 13px; font-weight: 700; }
+.account-profile-sheet input { width: 100%; min-height: 50px; padding: 0 13px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); }
+.account-profile-sheet > small { display: block; margin-top: 12px; color: var(--text-secondary); line-height: 1.45; }
+.delete-account-sheet { display: grid; gap: 12px; }
+.delete-account-sheet > p { margin: 10px 0 12px; color: var(--text-secondary); line-height: 1.55; }
+.delete-account-sheet > button { width: 100%; min-height: 50px; }
+
 .account-address-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; margin-top: 24px; padding: 18px 0; border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); }
 .account-address-card > div { min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start; color: var(--dastak-accent); }
 .account-address-card span { min-width: 0; display: grid; gap: 4px; color: var(--text-primary); }
 .account-address-card small { color: var(--text-secondary); overflow-wrap: anywhere; }
 .account-address-card > small { grid-column: 1 / -1; }
+
+.customer-profile-card { width: 100%; display: grid; grid-template-columns: 58px minmax(0, 1fr) 20px; gap: 14px; align-items: center; margin-top: 24px; padding: 16px 0; border: 0; border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); color: var(--text-primary); background: transparent; text-align: left; }
+.customer-profile-card .customer-account-icon { margin: 0; }
+.customer-profile-card > span:nth-child(2) { min-width: 0; display: grid; gap: 4px; }
+.customer-profile-card small { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; }
+.customer-profile-card > svg { color: var(--text-secondary); }
+.customer-delete-account { min-height: 44px; margin-left: 24px; padding: 0; border: 0; color: var(--destructive); background: transparent; font-weight: 700; }
 
 .checkout-address { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; margin: 20px 0 0; padding: 16px 0; border-top: 1px solid var(--divider); color: var(--dastak-accent); }
 .checkout-address span { display: grid; gap: 4px; min-width: 0; }
