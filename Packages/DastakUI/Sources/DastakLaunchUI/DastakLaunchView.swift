@@ -100,7 +100,7 @@ public struct DastakLaunchView<Content: View>: View {
             if !reduceMotion, videoResource == nil {
                 videoResource = variant.nextVideoResource()
             }
-            let minimumDuration: Duration = reduceMotion ? .milliseconds(650) : .milliseconds(1_200)
+            let minimumDuration: Duration = reduceMotion ? .milliseconds(650) : .milliseconds(2_200)
             try? await Task.sleep(for: minimumDuration)
             guard !Task.isCancelled else { return }
             minimumDurationElapsed = true
@@ -108,7 +108,7 @@ public struct DastakLaunchView<Content: View>: View {
         }
         .task(id: reduceMotion) {
             guard !reduceMotion else { return }
-            try? await Task.sleep(for: .milliseconds(2_500))
+            try? await Task.sleep(for: .milliseconds(4_000))
             guard !Task.isCancelled else { return }
             finish()
         }
@@ -213,9 +213,9 @@ private struct LaunchVideo: UIViewRepresentable {
 
 private final class LaunchVideoPlayerView: UIView {
     private var resourceName: String?
-    private var player: AVQueuePlayer?
-    private var looper: AVPlayerLooper?
+    private var player: AVPlayer?
     private var statusObservation: NSKeyValueObservation?
+    private var playbackEndedObserver: NSObjectProtocol?
     private var onReady: () -> Void
     private var onFailure: () -> Void
     private var didResolveMedia = false
@@ -263,36 +263,40 @@ private final class LaunchVideoPlayerView: UIView {
             return
         }
 
-        let queuePlayer = AVQueuePlayer()
-        queuePlayer.isMuted = true
-        queuePlayer.actionAtItemEnd = .none
-        queuePlayer.automaticallyWaitsToMinimizeStalling = false
+        let item = AVPlayerItem(url: url)
+        let player = AVPlayer(playerItem: item)
+        player.isMuted = true
+        player.actionAtItemEnd = .none
+        player.automaticallyWaitsToMinimizeStalling = false
 
-        let templateItem = AVPlayerItem(url: url)
-        let playerLooper = AVPlayerLooper(player: queuePlayer, templateItem: templateItem)
-        guard let currentItem = queuePlayer.currentItem else {
-            reportFailure()
-            return
+        self.player = player
+        playerLayer.player = player
+        playbackEndedObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak player] _ in
+            player?.seek(to: .zero)
+            player?.play()
         }
-
-        player = queuePlayer
-        looper = playerLooper
-        playerLayer.player = queuePlayer
-        statusObservation = currentItem.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+        statusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
             let status = item.status
             DispatchQueue.main.async { [weak self] in
                 self?.handle(status)
             }
         }
-        queuePlayer.play()
+        player.play()
     }
 
     func stop() {
         statusObservation?.invalidate()
         statusObservation = nil
+        if let playbackEndedObserver {
+            NotificationCenter.default.removeObserver(playbackEndedObserver)
+            self.playbackEndedObserver = nil
+        }
         player?.pause()
         playerLayer.player = nil
-        looper = nil
         player = nil
     }
 
