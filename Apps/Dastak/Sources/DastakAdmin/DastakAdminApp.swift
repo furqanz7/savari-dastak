@@ -1,5 +1,6 @@
 import DastakDomain
 import DastakLaunchUI
+import DastakUI
 import MarketplaceInfrastructure
 import SwiftUI
 
@@ -11,26 +12,27 @@ struct DastakAdminApp: App {
                 MarketplaceAuthenticationShell(
                     applicationName: "Dastak Admin",
                     product: .dastak,
-                    requiredAccess: .dastakAdmin
-                ) { _ in
-                    DastakAdminRoot()
-                }
+                    requiredAccess: .dastakAdmin,
+                    showsPersistentSignOut: false,
+                    authenticatedServicesContent: { services in
+                        DastakAdminRoot(services: services)
+                    },
+                    restrictedContent: { _, _ in EmptyView() }
+                )
             }
         }
     }
 }
 
 private struct DastakAdminRoot: View {
-    private let rootState = DastakAppRootState(application: .admin)
+    let services: MarketplaceAuthenticatedServices
 
     var body: some View {
-        Group {
-            if rootState.activeRoot == .admin {
-                Text("Admin")
-                    .font(.title2)
-                    .bold()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        DastakIdentityAccountView(
+            roleName: "Owner",
+            accessLabel: "Full access",
+            allowsAccountDeletion: false,
+            services: services
+        )
     }
 }

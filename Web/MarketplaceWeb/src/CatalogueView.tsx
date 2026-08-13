@@ -686,6 +686,14 @@ export function CatalogueView({
             <button className="secondary-button compact-button" type="button" onClick={() => setAddressEditorOpen(true)} disabled={addressLoading}>{deliveryAddress ? "Edit" : "Add address"}</button>
             {addressError && <small className="error-text">{addressError}</small>}
           </section>
+          <dl className="account-list customer-preferences">
+            <div><dt>Order updates</dt><dd>In app</dd></div>
+            <div><dt>Language</dt><dd>Follows browser</dd></div>
+          </dl>
+          <section className="role-privacy">
+            <strong>Privacy and data</strong>
+            <p>Your number is unverified and is shared only when an active delivery requires contact. Your saved address is used for discovery, pricing and fulfilment.</p>
+          </section>
           <button className="customer-sign-out" type="button" onClick={onSignOut}>Sign out</button>
           <button className="customer-delete-account" type="button" onClick={() => setShowDeleteConfirmation(true)}>Delete account</button>
           {profileError && !profileEditorOpen && <p className="error-text" role="alert">{profileError}</p>}

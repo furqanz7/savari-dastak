@@ -11,7 +11,8 @@ struct DastakMerchantApp: App {
                 MarketplaceAuthenticationShell(
                     applicationName: "Dastak Merchant",
                     product: .dastak,
-                    requiredAccess: .dastakMerchant
+                    requiredAccess: .dastakMerchant,
+                    showsPersistentSignOut: false
                 ) { services in
                     DastakMerchantRootView(services: services)
                 } restrictedContent: { route, services in

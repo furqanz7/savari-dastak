@@ -1223,6 +1223,26 @@ button:disabled { cursor: wait; opacity: .55; }
 .customer-account .account-list { border-top-color: var(--divider); }
 .customer-account .account-list div { border-bottom-color: var(--divider); }
 .customer-account .account-list dt { color: var(--text-secondary); }
+.customer-preferences { margin-top: 20px; }
+.role-account { width: min(620px, 100%); padding-top: 6px; }
+.role-profile {
+  width: 100%; min-height: 104px; display: grid; grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 14px; align-items: center; padding: 18px; border: 1px solid var(--divider);
+  border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); text-align: left;
+}
+.role-profile > span { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; color: var(--dastak-accent); background: var(--dastak-accent-soft); }
+.role-profile strong, .role-profile small { display: block; }
+.role-profile small { margin-top: 3px; color: var(--text-secondary); }
+.role-profile b { color: var(--dastak-accent); font-size: 13px; }
+.role-account-list { margin: 20px 0 0; }
+.role-account-list > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 15px 0; border-bottom: 1px solid var(--divider); }
+.role-account-list dt { display: inline-flex; align-items: center; gap: 9px; color: var(--text-secondary); }
+.role-account-list dd { margin: 0; font-weight: 700; }
+.role-privacy { margin-top: 20px; padding: 18px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
+.role-privacy p { margin: 7px 0 0; color: var(--text-secondary); line-height: 1.55; }
+.role-account-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+.role-account-actions > :only-child { grid-column: 1 / -1; }
+.role-account-actions button { justify-content: center; margin: 0; }
 .customer-sign-out {
   min-height: 44px;
   margin-top: 24px;

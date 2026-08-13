@@ -16,6 +16,24 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         await coordinator.restore()
 
         XCTAssertFalse(coordinator.isRestoring)
+        XCTAssertFalse(coordinator.restorationFailed)
+        XCTAssertEqual(coordinator.route, .active)
+    }
+
+    func testRestoreFailurePreservesRouteAndCanBeRetried() async {
+        let client = RecoverableRestoreAuthenticationClient()
+        let coordinator = AuthenticationCoordinator(client: client)
+
+        await coordinator.restore()
+        XCTAssertTrue(coordinator.restorationFailed)
+        XCTAssertEqual(coordinator.route, .signedOut)
+
+        await coordinator.restore()
+        XCTAssertFalse(coordinator.restorationFailed)
+        XCTAssertEqual(coordinator.route, .active)
+
+        await coordinator.restore()
+        XCTAssertTrue(coordinator.restorationFailed)
         XCTAssertEqual(coordinator.route, .active)
     }
 
@@ -251,6 +269,28 @@ final class AuthenticationCoordinatorTests: XCTestCase {
         let restoreCallCount = await client.restoreCallCount()
         XCTAssertEqual(restoreCallCount, 1)
     }
+}
+
+private actor RecoverableRestoreAuthenticationClient: AuthenticationClient {
+    private var restoreCount = 0
+
+    func signInWithApple(identityToken: String, nonce: String) async throws {}
+    func signInWithGoogle(idToken: String) async throws {}
+    func signInWithGoogle(redirectTo: URL) async throws {}
+
+    func restoreAccount() async throws -> AccountRoute {
+        restoreCount += 1
+        if restoreCount == 2 { return .active }
+        throw URLError(.notConnectedToInternet)
+    }
+
+    func bootstrapAccount(
+        displayName: String,
+        phoneNumber: String,
+        key: IdempotencyKey
+    ) async throws {}
+
+    func signOut() async throws {}
 }
 
 private actor ProfileSubmissionAuthenticationClient: AuthenticationClient {

@@ -4,9 +4,10 @@ import SwiftUI
 
 public struct DastakMerchantRootView: View {
     @StateObject private var model: DastakMerchantModel
-    @Environment(\.marketplaceSignOut) private var signOut
+    private let services: MarketplaceAuthenticatedServices
 
     public init(services: MarketplaceAuthenticatedServices) {
+        self.services = services
         _model = StateObject(wrappedValue: DastakMerchantModel(services: services))
     }
 
@@ -21,7 +22,10 @@ public struct DastakMerchantRootView: View {
             DastakMerchantStoreView(model: model)
                 .tabItem { Label("Store", systemImage: "storefront") }
 
-            merchantAccount
+            DastakIdentityAccountView(
+                roleName: "Merchant",
+                services: services
+            )
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
         }
         .tint(MarketplaceColors.dastakAccent.color)
@@ -47,49 +51,4 @@ public struct DastakMerchantRootView: View {
         }
     }
 
-    private var merchantAccount: some View {
-        NavigationStack {
-            List {
-                Section {
-                    HStack(spacing: MarketplaceSpacing.compact) {
-                        Image(systemName: "storefront")
-                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                            .frame(width: 36, height: 36)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(model.store?.name ?? "Dastak Merchant")
-                                .font(.headline)
-                            Text(storeState)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Section("Store") {
-                    LabeledContent(
-                        "Published",
-                        value: model.store?.isPublished == true ? "Yes" : "No"
-                    )
-                    LabeledContent(
-                        "Accepting orders",
-                        value: model.store?.acceptingOrders == true ? "Yes" : "No"
-                    )
-                    LabeledContent("Products", value: model.products.count.formatted())
-                }
-
-                Section {
-                    Button("Sign out", role: .destructive) {
-                        Task { await signOut() }
-                    }
-                }
-            }
-            .navigationTitle("Account")
-        }
-    }
-
-    private var storeState: String {
-        guard let store = model.store else { return "Store setup required" }
-        if !store.isPublished { return "Store is not published" }
-        return store.acceptingOrders ? "Open for orders" : "Not accepting orders"
-    }
 }

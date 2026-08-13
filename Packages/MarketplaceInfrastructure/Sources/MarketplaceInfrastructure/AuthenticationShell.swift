@@ -261,6 +261,8 @@ private struct AuthenticationRouteView: View {
         Group {
             if coordinator.isRestoring {
                 restoreView
+            } else if coordinator.restorationFailed {
+                restorationFailureView
             } else if coordinator.route == .active {
                 activeView
             } else if product == .dastak {
@@ -308,6 +310,46 @@ private struct AuthenticationRouteView: View {
                     .tint(dastakAccent)
                     .accessibilityLabel("Restoring account")
             }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var restorationFailureView: some View {
+        ZStack {
+            (product == .dastak ? dastakCanvas : Color(red: 0.06, green: 0.06, blue: 0.06))
+                .ignoresSafeArea()
+            VStack(spacing: 16) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(product == .dastak ? dastakAccent : .white)
+                Text("Unable to check your account")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("Check your connection and try again. Your saved sign-in has not been removed.")
+                    .font(.subheadline)
+                    .foregroundStyle(product == .dastak ? dastakSecondaryText : Color.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 330)
+                Button("Try again") {
+                    errorMessage = nil
+                    Task { await coordinator.restore() }
+                }
+                .frame(maxWidth: 360)
+                .frame(minHeight: 54)
+                .font(.headline)
+                .foregroundStyle(product == .dastak ? Color(red: 33 / 255, green: 19 / 255, blue: 14 / 255) : .black)
+                .background(product == .dastak ? dastakAccent : .white)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .buttonStyle(.plain)
+                Button("Sign out") { Task { await signOut() } }
+                    .foregroundStyle(.secondary)
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(product == .dastak ? dastakError : .red)
+                }
+            }
+            .padding(28)
         }
         .preferredColorScheme(.dark)
     }
@@ -667,19 +709,48 @@ private struct AuthenticationRouteView: View {
         if let restrictedContent {
             VStack(spacing: 16) {
                 restrictedContent(route)
+                Button("Check status") {
+                    Task { await coordinator.restore() }
+                }
+                .buttonStyle(.borderedProminent)
                 Button("Sign out") {
                     Task { await signOut() }
                 }
                 .buttonStyle(.bordered)
             }
         } else {
-            restrictedView(title: title, message: message)
+            VStack(spacing: 12) {
+                Text(title).font(.headline)
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Check status") {
+                    Task { await coordinator.restore() }
+                }
+                .buttonStyle(.borderedProminent)
+                Button("Sign out") {
+                    Task { await signOut() }
+                }
+                .buttonStyle(.bordered)
+            }
         }
     }
 
     private func handleAppleCompletion(
         _ result: Result<ASAuthorization, any Error>
     ) {
+        if case let .failure(error) = result {
+            appleNonce = nil
+            if let authorizationError = error as? ASAuthorizationError,
+               authorizationError.code == .canceled {
+                errorMessage = nil
+            } else {
+                errorMessage = "Apple sign-in could not be completed."
+            }
+            return
+        }
+
         guard
             case let .success(authorization) = result,
             let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
@@ -687,9 +758,11 @@ private struct AuthenticationRouteView: View {
             let identityToken = String(data: tokenData, encoding: .utf8),
             let nonce = appleNonce
         else {
+            appleNonce = nil
             errorMessage = "Apple sign-in could not be completed."
             return
         }
+        appleNonce = nil
 
         if displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            let fullName = credential.fullName {

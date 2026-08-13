@@ -7,8 +7,10 @@ import {
   PackageSearch,
   RefreshCw,
   Store,
+  UserRound,
   X,
 } from "lucide-react";
+import { RoleAccountView } from "./RoleAccountView";
 import {
   getAdminOrders,
   getEvidenceUrl,
@@ -29,16 +31,19 @@ import { processOrderRefund } from "./payments";
 type Props = {
   accessToken: string;
   displayName?: string;
+  email?: string;
+  phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  onSignOut: () => void;
 };
 
-export function AdminDashboard({ accessToken, displayName, supabaseUrl, publishableKey }: Props) {
+export function AdminDashboard({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey, onSignOut }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [merchants, setMerchants] = useState<MerchantAdminApplication[]>([]);
   const [partners, setPartners] = useState<PartnerAdminApplication[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
-  const [tab, setTab] = useState<"approvals" | "orders">("approvals");
+  const [tab, setTab] = useState<"approvals" | "orders" | "account">("approvals");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
@@ -167,9 +172,21 @@ export function AdminDashboard({ accessToken, displayName, supabaseUrl, publisha
       <div className="admin-tabs" role="tablist" aria-label="Admin views">
         <button type="button" role="tab" aria-selected={tab === "approvals"} className={tab === "approvals" ? "selected" : ""} onClick={() => setTab("approvals")}>Approvals</button>
         <button type="button" role="tab" aria-selected={tab === "orders"} className={tab === "orders" ? "selected" : ""} onClick={() => setTab("orders")}>Orders</button>
+        <button type="button" role="tab" aria-selected={tab === "account"} className={tab === "account" ? "selected" : ""} onClick={() => setTab("account")}><UserRound size={17} /> Account</button>
       </div>
 
-      {loading ? <div className="catalogue-loading" role="status"><span /> Loading operations</div> : tab === "approvals" ? (
+      {tab === "account" ? <RoleAccountView
+        accessToken={accessToken}
+        displayName={displayName}
+        email={email}
+        phoneNumber={phoneNumber}
+        roleName="Owner"
+        accessLabel="Full access"
+        supabaseUrl={supabaseUrl}
+        publishableKey={publishableKey}
+        allowsAccountDeletion={false}
+        onSignOut={onSignOut}
+      /> : loading ? <div className="catalogue-loading" role="status"><span /> Loading operations</div> : tab === "approvals" ? (
         <div className="admin-approvals" role="tabpanel">
           <ApprovalSection title="Merchant applications" count={merchants.length} empty="No merchant applications waiting.">
             {merchants.map((application) => (

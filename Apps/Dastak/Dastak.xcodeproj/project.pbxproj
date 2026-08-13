@@ -33,6 +33,7 @@
 		E10000000000000000000003 /* MarketplaceDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = E20000000000000000000003 /* MarketplaceDesignSystem */; };
 		F10000000000000000000001 /* DastakUI in Frameworks */ = {isa = PBXBuildFile; productRef = F20000000000000000000001 /* DastakUI */; };
 		F10000000000000000000002 /* DastakUI in Frameworks */ = {isa = PBXBuildFile; productRef = F20000000000000000000002 /* DastakUI */; };
+		F10000000000000000000003 /* DastakUI in Frameworks */ = {isa = PBXBuildFile; productRef = F20000000000000000000003 /* DastakUI */; };
 		G10000000000000000000001 /* DastakLaunchUI in Frameworks */ = {isa = PBXBuildFile; productRef = G20000000000000000000001 /* DastakLaunchUI */; };
 		G10000000000000000000002 /* DastakLaunchUI in Frameworks */ = {isa = PBXBuildFile; productRef = G20000000000000000000002 /* DastakLaunchUI */; };
 		G10000000000000000000003 /* DastakLaunchUI in Frameworks */ = {isa = PBXBuildFile; productRef = G20000000000000000000003 /* DastakLaunchUI */; };
@@ -140,6 +141,7 @@
 				D8D8D8D8D8D8D8D8D8D8D8D8 /* DastakDomain in Frameworks */,
 				71D71D71D71D71D71D71D71D /* MarketplaceInfrastructure in Frameworks */,
 				E10000000000000000000003 /* MarketplaceDesignSystem in Frameworks */,
+				F10000000000000000000003 /* DastakUI in Frameworks */,
 				G10000000000000000000003 /* DastakLaunchUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -313,6 +315,7 @@
 				717717717717717717717717 /* MarketplaceInfrastructure */,
 				D6D6D6D6D6D6D6D6D6D6D6D6 /* DastakDomain */,
 				E20000000000000000000003 /* MarketplaceDesignSystem */,
+				F20000000000000000000003 /* DastakUI */,
 				G20000000000000000000003 /* DastakLaunchUI */,
 			);
 			productName = DastakAdmin;
@@ -1165,6 +1168,11 @@
 			productName = DastakUI;
 		};
 		F20000000000000000000002 /* DastakUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F00000000000000000000001 /* XCLocalSwiftPackageReference "../../Packages/DastakUI" */;
+			productName = DastakUI;
+		};
+		F20000000000000000000003 /* DastakUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = F00000000000000000000001 /* XCLocalSwiftPackageReference "../../Packages/DastakUI" */;
 			productName = DastakUI;

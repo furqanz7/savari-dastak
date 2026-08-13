@@ -57,6 +57,7 @@ private enum BackendProfileNormalization {
 public final class AuthenticationCoordinator: ObservableObject {
     @Published public private(set) var route: AccountRoute = .signedOut
     @Published public private(set) var isRestoring = true
+    @Published public private(set) var restorationFailed = false
     @Published public private(set) var isProfileSubmissionInFlight = false
     @Published public private(set) var profileSubmissionError: AuthenticationClientError?
 
@@ -90,27 +91,40 @@ public final class AuthenticationCoordinator: ObservableObject {
 
     public func restore() async {
         isRestoring = true
+        restorationFailed = false
         defer { isRestoring = false }
         do {
             route = try await client.restoreAccount()
         } catch {
-            route = .signedOut
+            restorationFailed = true
         }
     }
 
     public func signInWithApple(identityToken: String, nonce: String) async throws {
         route = .signedOut
+        restorationFailed = false
         try await client.signInWithApple(identityToken: identityToken, nonce: nonce)
-        route = try await client.restoreAccount()
+        do {
+            route = try await client.restoreAccount()
+        } catch {
+            restorationFailed = true
+            throw error
+        }
     }
 
     public func signInWithGoogle(
         configuration: OAuthCallbackConfiguration = OAuthCallbackConfiguration(bundle: .main)
     ) async throws {
         route = .signedOut
+        restorationFailed = false
         let callbackURL = try configuration.callbackURL()
         try await client.signInWithGoogle(redirectTo: callbackURL)
-        route = try await client.restoreAccount()
+        do {
+            route = try await client.restoreAccount()
+        } catch {
+            restorationFailed = true
+            throw error
+        }
     }
 
     public func completeProfile(
@@ -177,6 +191,7 @@ public final class AuthenticationCoordinator: ObservableObject {
         try await client.signOut()
         pendingProfileSubmission = nil
         profileSubmissionError = nil
+        restorationFailed = false
         route = .signedOut
     }
 

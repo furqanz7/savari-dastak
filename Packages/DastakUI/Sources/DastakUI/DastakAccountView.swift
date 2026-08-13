@@ -8,6 +8,7 @@ struct DastakAccountView: View {
     let discoveryRadiusKilometres: Int
     let refreshFailure: DastakCustomerRefreshFailure?
     let chooseLocation: () -> Void
+    let openOrders: () -> Void
     let retryAccount: () -> Void
     let updateProfile: (String, String) async throws -> Void
     let deleteAccount: () async throws -> Void
@@ -17,6 +18,7 @@ struct DastakAccountView: View {
     @State private var showingDeleteConfirmation = false
     @State private var isDeleting = false
     @State private var errorMessage: String?
+    @State private var notificationStatus: DastakNotificationPermissionState = .notRequested
 
     var body: some View {
         ScrollView {
@@ -26,6 +28,7 @@ struct DastakAccountView: View {
                     DastakRefreshNotice(failure: refreshFailure, action: retryAccount)
                 }
                 deliverySection
+                preferencesSection
                 supportSection
                 accountActions
             }
@@ -60,6 +63,9 @@ struct DastakAccountView: View {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
+        }
+        .task {
+            notificationStatus = await DastakNotificationPreferences.status()
         }
     }
 
@@ -149,6 +155,15 @@ struct DastakAccountView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             Text("Support")
                 .font(MarketplaceTypography.sectionTitle)
+            Button(action: openOrders) {
+                Label("Help with an order", systemImage: "questionmark.bubble")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
             Link(destination: URL(string: "tel:112")!) {
                 Label("Emergency assistance", systemImage: "sos")
                     .font(.headline)
@@ -157,6 +172,69 @@ struct DastakAccountView: View {
             }
             .foregroundStyle(MarketplaceColors.destructive.color)
             .marketplaceFlatSurface()
+        }
+    }
+
+    private var preferencesSection: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Preferences")
+                .font(MarketplaceTypography.sectionTitle)
+
+            VStack(spacing: 0) {
+                Button { Task { await manageNotifications() } } label: {
+                    accountRow(
+                        title: "Notifications",
+                        value: notificationStatus.title,
+                        symbol: "bell"
+                    )
+                }
+                .buttonStyle(.plain)
+                Divider()
+                Button(action: DastakNotificationPreferences.openSystemSettings) {
+                    accountRow(title: "Language", value: "Follows iPhone", symbol: "globe")
+                }
+                .buttonStyle(.plain)
+                Divider()
+                NavigationLink {
+                    DastakPrivacyAndDataView()
+                } label: {
+                    accountRow(title: "Privacy and data", value: nil, symbol: "hand.raised")
+                }
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
+        }
+    }
+
+    private func accountRow(title: String, value: String?, symbol: String) -> some View {
+        HStack(spacing: MarketplaceSpacing.compact) {
+            Image(systemName: symbol)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 24)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            Spacer()
+            if let value {
+                Text(value)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(.tertiary)
+        }
+        .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+        .contentShape(Rectangle())
+    }
+
+    @MainActor
+    private func manageNotifications() async {
+        switch notificationStatus {
+        case .notRequested:
+            notificationStatus = await DastakNotificationPreferences.request()
+        case .enabled, .disabled, .unavailable:
+            DastakNotificationPreferences.openSystemSettings()
         }
     }
 
@@ -194,7 +272,25 @@ struct DastakAccountView: View {
     }
 }
 
-private struct DastakProfileEditor: View {
+struct DastakPrivacyAndDataView: View {
+    var body: some View {
+        List {
+            Section("Contact") {
+                Text("Your phone number is unverified at launch and is not used to sign in, recover your account, or prove payment.")
+                Text("It is shared only when an active delivery requires customer and partner contact.")
+            }
+            Section("Location") {
+                Text("Your saved delivery address is used for discovery, pricing and fulfilment. Current location is requested only when you choose to use it.")
+            }
+            Section("Control") {
+                Text("You can edit your profile and delivery address, change permissions in iPhone Settings, sign out, or permanently delete your account from Account.")
+            }
+        }
+        .navigationTitle("Privacy and data")
+    }
+}
+
+struct DastakProfileEditor: View {
     let customer: MarketplaceCheckoutCustomer?
     let updateProfile: (String, String) async throws -> Void
 

@@ -34,11 +34,7 @@ struct DastakApp: App {
             requiredAccess: .dastakCustomer,
             showsPersistentSignOut: false,
             authenticatedServicesContent: { services in
-                DastakCustomerPartnerRoot(
-                    functionClient: services.functions,
-                    checkoutCustomerProvider: services.checkoutCustomer,
-                    accountIDProvider: services.accountID
-                )
+                DastakCustomerPartnerRoot(services: services)
             },
             restrictedContent: { _, _ in EmptyView() }
         )
@@ -51,13 +47,6 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
-        Task { @MainActor in
-            let granted = try? await UNUserNotificationCenter.current().requestAuthorization(
-                options: [.alert, .sound, .badge]
-            )
-            guard granted == true else { return }
-            application.registerForRemoteNotifications()
-        }
         return true
     }
 
@@ -160,6 +149,7 @@ final class DastakRootModel: ObservableObject {
     )
     @Published private(set) var isRefreshing = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var selectedRoot: DastakAppRoot = .customer
 
     private let accessProvider: any DeliveryPartnerAccessProviding
 
@@ -184,32 +174,27 @@ final class DastakRootModel: ObservableObject {
     }
 
     func select(_ root: DastakAppRoot) {
-        do {
-            try rootState.select(root)
-        } catch {
+        guard root == .customer || root == .deliveryPartner else {
             errorMessage = "This mode is not available for this account."
+            return
+        }
+        selectedRoot = root
+        if root == .customer || rootState.deliveryPartnerAccess == .approved {
+            try? rootState.select(root)
         }
     }
 }
 
 private struct DastakCustomerPartnerRoot: View {
     @StateObject private var model: DastakRootModel
-    private let functionClient: any FunctionClient
-    private let checkoutCustomerProvider: @Sendable () async throws -> MarketplaceCheckoutCustomer?
-    private let accountIDProvider: @Sendable () async throws -> UUID
+    private let services: MarketplaceAuthenticatedServices
 
-    init(
-        functionClient: any FunctionClient,
-        checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer?,
-        accountIDProvider: @escaping @Sendable () async throws -> UUID
-    ) {
-        self.functionClient = functionClient
-        self.checkoutCustomerProvider = checkoutCustomerProvider
-        self.accountIDProvider = accountIDProvider
+    init(services: MarketplaceAuthenticatedServices) {
+        self.services = services
         _model = StateObject(
             wrappedValue: DastakRootModel(
                 accessProvider: LiveDeliveryPartnerAccessProvider(
-                    client: SupabaseDeliveryPartnerClient(functions: functionClient)
+                    client: SupabaseDeliveryPartnerClient(functions: services.functions)
                 )
             )
         )
@@ -217,20 +202,18 @@ private struct DastakCustomerPartnerRoot: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if model.rootState.availableRoots.count > 1 {
-                Picker(
-                    "Mode",
-                    selection: Binding(
-                        get: { model.rootState.activeRoot },
-                        set: { model.select($0) }
-                    )
-                ) {
-                    Text("Customer").tag(DastakAppRoot.customer)
-                    Text("Delivery Partner").tag(DastakAppRoot.deliveryPartner)
-                }
-                .pickerStyle(.segmented)
-                .padding()
+            Picker(
+                "Mode",
+                selection: Binding(
+                    get: { model.selectedRoot },
+                    set: { model.select($0) }
+                )
+            ) {
+                Text("Customer").tag(DastakAppRoot.customer)
+                Text("Delivery Partner").tag(DastakAppRoot.deliveryPartner)
             }
+            .pickerStyle(.segmented)
+            .padding()
 
             activeRoot
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -238,7 +221,8 @@ private struct DastakCustomerPartnerRoot: View {
             if model.isRefreshing {
                 ProgressView()
                     .padding(.bottom)
-            } else if let errorMessage = model.errorMessage {
+            } else if let errorMessage = model.errorMessage,
+                      model.selectedRoot == .customer {
                 Text(errorMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -252,15 +236,23 @@ private struct DastakCustomerPartnerRoot: View {
 
     @ViewBuilder
     private var activeRoot: some View {
-        switch model.rootState.activeRoot {
+        switch model.selectedRoot {
         case .customer:
             DastakCustomerRootView(
-                functions: functionClient,
-                checkoutCustomerProvider: checkoutCustomerProvider,
-                accountIDProvider: accountIDProvider
+                functions: services.functions,
+                checkoutCustomerProvider: services.checkoutCustomer,
+                accountIDProvider: services.accountID
             )
         case .deliveryPartner:
-            DastakDeliveryPartnerRootView(functions: functionClient)
+            if model.rootState.deliveryPartnerAccess == .approved {
+                DastakDeliveryPartnerRootView(services: services)
+            } else {
+                DastakDeliveryPartnerAccessView(
+                    access: model.rootState.deliveryPartnerAccess,
+                    services: services,
+                    onRefresh: { await model.refreshPartnerAccess() }
+                )
+            }
         case .merchant, .admin:
             EmptyView()
         }

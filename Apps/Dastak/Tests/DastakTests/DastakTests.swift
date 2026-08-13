@@ -12,6 +12,7 @@ final class DastakTests: XCTestCase {
         await model.refreshPartnerAccess()
         model.select(.deliveryPartner)
 
+        XCTAssertEqual(model.selectedRoot, .deliveryPartner)
         XCTAssertEqual(model.rootState.activeRoot, .deliveryPartner)
         XCTAssertNil(model.errorMessage)
     }
@@ -28,6 +29,17 @@ final class DastakTests: XCTestCase {
         XCTAssertEqual(model.rootState.activeRoot, .customer)
         XCTAssertEqual(model.rootState.deliveryPartnerAccess, .unavailable)
         XCTAssertNotNil(model.errorMessage)
+    }
+
+    func testUnapprovedAccountCanOpenPartnerApplicationStatus() {
+        let model = DastakRootModel(
+            accessProvider: StubPartnerAccessProvider(result: .success(.pending))
+        )
+
+        model.select(.deliveryPartner)
+
+        XCTAssertEqual(model.selectedRoot, .deliveryPartner)
+        XCTAssertEqual(model.rootState.activeRoot, .customer)
     }
 }
 

@@ -107,7 +107,7 @@ export default function App() {
 
   const signOut = async () => {
     setBusy(true);
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     setBusy(false);
   };
 
@@ -116,7 +116,7 @@ export default function App() {
       <header className="topbar" aria-hidden={showsDastakLaunch || undefined}>
         <Brand />
         {view.phase !== "signed_out" && view.phase !== "loading" && !(
-          ["dastak-customer", "dastak-merchant"].includes(config.variant) &&
+          config.product === "dastak" &&
           view.phase === "ready"
         ) && (
           <button className="icon-button" type="button" onClick={signOut} disabled={busy} aria-label="Sign out" title="Sign out">
@@ -341,7 +341,7 @@ function ProfileForm({ session, onComplete }: { session: Session; onComplete: ()
       <h1>Complete your profile</h1>
       <label>
         Full name
-        <input autoComplete="name" value={displayName} maxLength={100} onChange={(event) => setDisplayName(event.target.value)} />
+        <input autoComplete="name" value={displayName} maxLength={80} onChange={(event) => setDisplayName(event.target.value)} />
       </label>
       <label>
         Phone number
@@ -403,8 +403,11 @@ function Ready({ access, email, session, onSignOut }: {
       <DeliveryPartnerView
         accessToken={session.access_token}
         displayName={access.profile?.displayName}
+        email={email}
+        phoneNumber={access.profile?.phoneNumber}
         supabaseUrl={config.supabaseUrl}
         publishableKey={config.supabasePublishableKey}
+        onSignOut={onSignOut}
       />
     );
   }
@@ -413,8 +416,11 @@ function Ready({ access, email, session, onSignOut }: {
       <AdminDashboard
         accessToken={session.access_token}
         displayName={access.profile?.displayName}
+        email={email}
+        phoneNumber={access.profile?.phoneNumber}
         supabaseUrl={config.supabaseUrl}
         publishableKey={config.supabasePublishableKey}
+        onSignOut={onSignOut}
       />
     );
   }
@@ -470,6 +476,7 @@ function Restricted({
       <p className="eyebrow">{config.roleLabel}</p>
       <h1>{title}</h1>
       <p>{access.message}</p>
+      <button className="secondary-button" type="button" onClick={onSubmitted}><RefreshCw size={17} /> Check status</button>
     </div>
   );
 }

@@ -73,6 +73,7 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var parcelsRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var sessionExpired = false
     @Published private(set) var isDeliveryAddressConfirmed = false
+    @Published private(set) var hasCompletedOnboarding = false
 
     let parcelClient: any ParcelDeliveryClient
 
@@ -166,6 +167,11 @@ final class DastakCustomerModel: ObservableObject {
               !token.isEmpty,
               let deviceTokenClient else { return }
         _ = try? await deviceTokenClient.register(token: token, idempotencyKey: makeKey())
+    }
+
+    func completeOnboarding() {
+        hasCompletedOnboarding = true
+        UserDefaults.standard.set(true, forKey: preferenceKey("onboardingCompleted"))
     }
 
     func refreshCheckoutCustomer() async {
@@ -542,6 +548,9 @@ final class DastakCustomerModel: ObservableObject {
         }
         selectedLocation = Self.savedDeliveryLocation(scope: preferenceScope)
         discoveryRadiusKilometres = Self.savedDiscoveryRadius(scope: preferenceScope)
+        hasCompletedOnboarding = UserDefaults.standard.bool(
+            forKey: preferenceKey("onboardingCompleted")
+        )
 
         do {
             let response = try await addressClient.snapshot(idempotencyKey: makeKey())

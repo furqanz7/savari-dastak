@@ -454,7 +454,7 @@ extension SupabaseAuthenticationClient {
         }
 
         func signOut() async throws {
-            try await supabaseClient.auth.signOut()
+            try await supabaseClient.auth.signOut(scope: .local)
         }
     }
 }

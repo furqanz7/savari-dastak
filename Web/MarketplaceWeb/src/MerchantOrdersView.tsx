@@ -4,7 +4,6 @@ import {
   BookOpen,
   Check,
   ClipboardList,
-  LogOut,
   PackageCheck,
   ReceiptText,
   RefreshCw,
@@ -12,6 +11,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { RoleAccountView } from "./RoleAccountView";
 import { formatPrice } from "./catalogue";
 import { MerchantCatalogueView } from "./MerchantCatalogueView";
 import {
@@ -174,13 +174,16 @@ export function MerchantOrdersView({
           onOpenStore={() => setSection("store")}
         />
       ) : section === "account" ? (
-        <MerchantAccount
+        <RoleAccountView
+          accessToken={accessToken}
           displayName={displayName}
           email={email}
           phoneNumber={phoneNumber}
-          onManageStore={() => setSection("store")}
+          roleName="Merchant"
+          supabaseUrl={supabaseUrl}
+          publishableKey={publishableKey}
           onSignOut={onSignOut}
-        />
+        ><button className="secondary-button" type="button" onClick={() => setSection("store")}><Store size={18} /> Manage store</button></RoleAccountView>
       ) : (
       <div className="merchant-orders-shell">
       <header className="merchant-orders-heading">
@@ -278,52 +281,6 @@ function EarningsSummary({ earnings }: { earnings: EarningsSnapshot }) {
     <MerchantSummary label="This week" value={formatPrice(earnings.thisWeekPaise)} />
     <MerchantSummary label="In progress" value={formatPrice(earnings.pendingPaise)} />
   </div>;
-}
-
-function MerchantAccount({
-  displayName,
-  email,
-  phoneNumber,
-  onManageStore,
-  onSignOut,
-}: {
-  displayName?: string;
-  email?: string;
-  phoneNumber?: string;
-  onManageStore: () => void;
-  onSignOut: () => void;
-}) {
-  return (
-    <section className="merchant-account">
-      <header className="merchant-orders-heading">
-        <div>
-          <p className="eyebrow">Dastak Merchant</p>
-          <h1>Account</h1>
-          <p>Your merchant identity and workspace access.</p>
-        </div>
-      </header>
-      <div className="merchant-profile">
-        <span><UserRound size={22} /></span>
-        <div>
-          <strong>{displayName || "Merchant account"}</strong>
-          <small>Approved merchant</small>
-        </div>
-      </div>
-      <dl className="merchant-account-list">
-        {email && <div><dt>Email</dt><dd>{email}</dd></div>}
-        {phoneNumber && <div><dt>Phone</dt><dd>{phoneNumber}</dd></div>}
-        <div><dt>Access</dt><dd>Active</dd></div>
-      </dl>
-      <div className="merchant-account-actions">
-        <button className="secondary-button" type="button" onClick={onManageStore}>
-          <Store size={18} /> Manage store
-        </button>
-        <button className="danger-button" type="button" onClick={onSignOut}>
-          <LogOut size={18} /> Sign out
-        </button>
-      </div>
-    </section>
-  );
 }
 
 function MerchantOrderSection({

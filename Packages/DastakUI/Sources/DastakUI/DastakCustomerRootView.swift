@@ -31,6 +31,7 @@ public struct DastakCustomerRootView: View {
     @State private var selectedTab: Tab = .home
     @State private var ordersPath: [DastakCustomerDestination] = []
     @State private var deliveryAddressEditorMode: DeliveryAddressEditorMode?
+    @State private var onboardingStep: DastakCustomerOnboardingStep?
     @State private var showingCart = false
     @State private var showingParcel = false
     @State private var showingCheckout = false
@@ -96,6 +97,7 @@ public struct DastakCustomerRootView: View {
                     discoveryRadiusKilometres: model.discoveryRadiusKilometres,
                     refreshFailure: model.accountRefreshFailure,
                     chooseLocation: { deliveryAddressEditorMode = .edit },
+                    openOrders: { selectedTab = .orders },
                     retryAccount: { Task { await model.refreshCheckoutCustomer() } },
                     updateProfile: { displayName, phoneNumber in
                         try await model.updateAccountProfile(
@@ -125,11 +127,11 @@ public struct DastakCustomerRootView: View {
         }
         .task {
             guard !isPreview else { return }
-            locationManager.requestLocation()
             await model.bootstrap()
-            if !model.hasCompleteDeliveryAddress {
-                deliveryAddressEditorMode = .onboarding
-            }
+            onboardingStep = DastakCustomerOnboardingStep.next(
+                hasAddress: model.hasCompleteDeliveryAddress,
+                hasCompleted: model.hasCompletedOnboarding
+            )
             if let destination = consumePendingDestination() {
                 open(destination)
             }
@@ -156,6 +158,32 @@ public struct DastakCustomerRootView: View {
             .interactiveDismissDisabled(mode.requiresCompletion)
             .presentationDetents(mode.requiresCompletion ? [.large] : [.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .dastakOnboardingCover(item: $onboardingStep) { step in
+            switch step {
+            case .address:
+                DastakDeliveryAddressEditor(
+                    requiresCompletion: true,
+                    initialLocation: model.selectedLocation,
+                    currentLocation: locationManager.location,
+                    requestCurrentLocation: locationManager.requestLocation,
+                    save: { location in await model.setLocation(location) },
+                    onSaved: { onboardingStep = .notifications }
+                )
+            case .notifications:
+                DastakNotificationOnboardingView(
+                    enableNotifications: {
+                        _ = await DastakNotificationPreferences.request()
+                        await model.registerDeviceTokenIfAvailable()
+                        model.completeOnboarding()
+                        onboardingStep = nil
+                    },
+                    continueWithoutNotifications: {
+                        model.completeOnboarding()
+                        onboardingStep = nil
+                    }
+                )
+            }
         }
         .sheet(isPresented: $showingCart) {
             DastakCartView(
@@ -250,6 +278,20 @@ public struct DastakCustomerRootView: View {
             return nil
         }
         return DastakCustomerDestination(notificationPayload: ["orderId": orderID])
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func dastakOnboardingCover<Content: View>(
+        item: Binding<DastakCustomerOnboardingStep?>,
+        @ViewBuilder content: @escaping (DastakCustomerOnboardingStep) -> Content
+    ) -> some View {
+        #if os(iOS)
+        fullScreenCover(item: item, content: content)
+        #else
+        sheet(item: item, content: content)
+        #endif
     }
 }
 

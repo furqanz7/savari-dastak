@@ -31,6 +31,7 @@ struct DastakDeliveryAddressEditor: View {
     let currentLocation: DastakDeliveryLocation?
     let requestCurrentLocation: () -> Void
     let save: (DastakDeliveryLocation) async -> Bool
+    let onSaved: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedLocation: DastakDeliveryLocation?
@@ -46,13 +47,15 @@ struct DastakDeliveryAddressEditor: View {
         initialLocation: DastakDeliveryLocation?,
         currentLocation: DastakDeliveryLocation?,
         requestCurrentLocation: @escaping () -> Void,
-        save: @escaping (DastakDeliveryLocation) async -> Bool
+        save: @escaping (DastakDeliveryLocation) async -> Bool,
+        onSaved: (() -> Void)? = nil
     ) {
         self.requiresCompletion = requiresCompletion
         self.initialLocation = initialLocation
         self.currentLocation = currentLocation
         self.requestCurrentLocation = requestCurrentLocation
         self.save = save
+        self.onSaved = onSaved
 
         let kind = AddressKind(savedLabel: initialLocation?.label)
         _selectedLocation = State(initialValue: initialLocation)
@@ -229,7 +232,11 @@ struct DastakDeliveryAddressEditor: View {
         isSaving = false
         if didSave {
             errorMessage = nil
-            dismiss()
+            if let onSaved {
+                onSaved()
+            } else {
+                dismiss()
+            }
         } else {
             errorMessage = "The address could not be saved. Check your connection and try again."
         }

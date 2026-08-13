@@ -3,85 +3,31 @@ import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
 
-public struct DastakDeliveryPartnerRootView: View {
+struct DastakDeliveryPartnerWorkspaceView: View {
     @StateObject private var model: DastakDeliveryPartnerModel
     @StateObject private var locationManager = DastakLocationManager()
     @State private var handoffCode = ""
+    @State private var pendingOnlineRequest = false
 
-    public init(functions: any FunctionClient) {
+    init(functions: any FunctionClient) {
         _model = StateObject(wrappedValue: DastakDeliveryPartnerModel(functions: functions))
     }
 
-    public var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                    partnerHeader
-
-                    if model.isLoading {
-                        DastakLoadingOverlay(title: "Loading delivery queue")
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, MarketplaceSpacing.xxLarge)
-                    } else {
-                        if let earnings = model.earnings {
-                            DastakEarningsCard(earnings: earnings, title: "Earnings")
-                        }
-                        availability
-
-                        if let currentJob = model.courierDispatch?.currentJob {
-                            courierJob(currentJob)
-                        }
-                        if let currentJob = model.parcelDispatch?.currentJob {
-                            parcelJob(currentJob)
-                        }
-                        if let offer = model.courierDispatch?.offer {
-                            courierOffer(offer)
-                        }
-                        if let offer = model.parcelDispatch?.offer {
-                            parcelOffer(offer)
-                        }
-                        if hasNoAssignment {
-                            DastakEmptyState(
-                                symbol: model.isOnline ? "dot.radiowaves.left.and.right" : "power",
-                                title: model.isOnline ? "Waiting for assignments" : "You are offline",
-                                message: model.isOnline
-                                    ? "Ready merchant orders and parcels nearby will appear here."
-                                    : "Go online when you are ready to deliver."
-                            )
-                            .frame(minHeight: 260)
-                        }
-                    }
-                }
-                .frame(maxWidth: MarketplaceMetrics.contentMaxWidth)
-                .padding(.horizontal, MarketplaceSpacing.medium)
-                .padding(.bottom, MarketplaceSpacing.xxLarge)
-                .frame(maxWidth: .infinity)
-            }
-            .refreshable { await model.refresh() }
-            .navigationTitle("Delivery Partner")
-            .dastakInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.refresh() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(MarketplaceIconButtonStyle())
-                    .disabled(model.isRefreshing || model.isBusy)
-                    .accessibilityLabel("Refresh delivery queue")
-                }
-            }
-        }
+    var body: some View {
+        deliveryWorkspace
         .marketplacePage()
         .task {
-            locationManager.requestLocation()
             await model.bootstrap()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { return }
                 await model.refresh()
             }
+        }
+        .onReceive(locationManager.$location) { location in
+            guard pendingOnlineRequest, let location else { return }
+            pendingOnlineRequest = false
+            Task { await model.setAvailability(online: true, location: location) }
         }
         .alert(
             "Dastak",
@@ -93,6 +39,62 @@ public struct DastakDeliveryPartnerRootView: View {
             Button("OK", role: .cancel) { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "")
+        }
+    }
+
+    private var deliveryWorkspace: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                    partnerHeader
+                    deliveryContent
+                }
+                .frame(maxWidth: MarketplaceMetrics.contentMaxWidth)
+                .padding(.horizontal, MarketplaceSpacing.medium)
+                .padding(.bottom, MarketplaceSpacing.xxLarge)
+                .frame(maxWidth: .infinity)
+            }
+            .refreshable { await model.refresh() }
+            .navigationTitle("Delivery Partner")
+            .dastakInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { Task { await model.refresh() } } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(MarketplaceIconButtonStyle())
+                    .disabled(model.isRefreshing || model.isBusy)
+                    .accessibilityLabel("Refresh delivery queue")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var deliveryContent: some View {
+        if model.isLoading {
+            DastakLoadingOverlay(title: "Loading delivery queue")
+                .frame(maxWidth: .infinity)
+                .padding(.top, MarketplaceSpacing.xxLarge)
+        } else {
+            if let earnings = model.earnings {
+                DastakEarningsCard(earnings: earnings, title: "Earnings")
+            }
+            availability
+            if let currentJob = model.courierDispatch?.currentJob { courierJob(currentJob) }
+            if let currentJob = model.parcelDispatch?.currentJob { parcelJob(currentJob) }
+            if let offer = model.courierDispatch?.offer { courierOffer(offer) }
+            if let offer = model.parcelDispatch?.offer { parcelOffer(offer) }
+            if hasNoAssignment {
+                DastakEmptyState(
+                    symbol: model.isOnline ? "dot.radiowaves.left.and.right" : "power",
+                    title: model.isOnline ? "Waiting for assignments" : "You are offline",
+                    message: model.isOnline
+                        ? "Ready merchant orders and parcels nearby will appear here."
+                        : "Go online when you are ready to deliver."
+                )
+                .frame(minHeight: 260)
+            }
         }
     }
 
@@ -135,14 +137,7 @@ public struct DastakDeliveryPartnerRootView: View {
                     "Online",
                     isOn: Binding(
                         get: { model.isOnline },
-                        set: { online in
-                            Task {
-                                await model.setAvailability(
-                                    online: online,
-                                    location: locationManager.location
-                                )
-                            }
-                        }
+                        set: { online in changeAvailability(online) }
                     )
                 )
                 .labelsHidden()
@@ -157,6 +152,10 @@ public struct DastakDeliveryPartnerRootView: View {
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            } else if let locationError = locationManager.errorMessage {
+                Text(locationError)
+                    .font(.caption)
+                    .foregroundStyle(MarketplaceColors.destructive.color)
             }
         }
         .padding(.vertical, MarketplaceSpacing.medium)
@@ -175,6 +174,17 @@ public struct DastakDeliveryPartnerRootView: View {
             && model.courierDispatch?.currentJob == nil
             && model.parcelDispatch?.offer == nil
             && model.parcelDispatch?.currentJob == nil
+    }
+
+    private func changeAvailability(_ online: Bool) {
+        if online, locationManager.location == nil {
+            pendingOnlineRequest = true
+            locationManager.requestLocation()
+            return
+        }
+        Task {
+            await model.setAvailability(online: online, location: locationManager.location)
+        }
     }
 
     private func courierOffer(_ offer: CourierAssignment) -> some View {

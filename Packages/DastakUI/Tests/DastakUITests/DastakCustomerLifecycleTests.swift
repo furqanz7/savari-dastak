@@ -5,6 +5,24 @@ import XCTest
 @testable import DastakUI
 
 final class DastakCustomerLifecycleTests: XCTestCase {
+    func testCustomerOnboardingRequiresAddressBeforeOptionalNotifications() {
+        XCTAssertEqual(
+            DastakCustomerOnboardingStep.next(hasAddress: false, hasCompleted: false),
+            .address
+        )
+        XCTAssertEqual(
+            DastakCustomerOnboardingStep.next(hasAddress: true, hasCompleted: false),
+            .notifications
+        )
+        XCTAssertNil(
+            DastakCustomerOnboardingStep.next(hasAddress: true, hasCompleted: true)
+        )
+        XCTAssertEqual(
+            DastakCustomerOnboardingStep.next(hasAddress: false, hasCompleted: true),
+            .address
+        )
+    }
+
     func testEveryMerchantOrderStateHasOneHumanLabelAndPrimaryAction() {
         let expected: [(MerchantOrderStatus, String, DastakCustomerPrimaryAction)] = [
             (.paymentPending, "Payment pending", .pay),

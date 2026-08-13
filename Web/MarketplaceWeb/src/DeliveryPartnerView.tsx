@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bike, Check, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, X } from "lucide-react";
+import { Bike, Check, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, X } from "lucide-react";
 import {
   acceptDeliveryOffer,
   advanceDeliveryJob,
@@ -22,17 +22,21 @@ import {
   type ParcelPartnerSnapshot,
 } from "./parcels";
 import { getEarnings, type EarningsSnapshot } from "./earnings";
+import { RoleAccountView } from "./RoleAccountView";
 
 type Props = {
   accessToken: string;
   displayName?: string;
+  email?: string;
+  phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  onSignOut: () => void;
 };
 
 type DispatchAction = "accept" | "decline" | DeliveryJobOperation;
 
-export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, publishableKey }: Props) {
+export function DeliveryPartnerView({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey, onSignOut }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [partner, setPartner] = useState<DeliveryPartnerSnapshot>();
   const [dispatch, setDispatch] = useState<DeliveryDispatchSnapshot>({ offer: null, currentJob: null });
@@ -42,6 +46,7 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const [verificationCode, setVerificationCode] = useState("");
+  const [section, setSection] = useState<"deliveries" | "account">("deliveries");
   const refreshInFlight = useRef(false);
   const actionKeys = useRef(new Map<string, string>());
 
@@ -169,6 +174,20 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
 
   return (
     <div className="delivery-shell">
+      <nav className="workspace-tabs" role="tablist" aria-label="Delivery Partner workspace">
+        <button type="button" role="tab" aria-selected={section === "deliveries"} className={section === "deliveries" ? "selected" : ""} onClick={() => setSection("deliveries")}><Bike size={18} /> Deliveries</button>
+        <button type="button" role="tab" aria-selected={section === "account"} className={section === "account" ? "selected" : ""} onClick={() => setSection("account")}><UserRound size={18} /> Account</button>
+      </nav>
+      {section === "account" ? <RoleAccountView
+        accessToken={accessToken}
+        displayName={displayName}
+        email={email}
+        phoneNumber={phoneNumber}
+        roleName="Delivery Partner"
+        supabaseUrl={supabaseUrl}
+        publishableKey={publishableKey}
+        onSignOut={onSignOut}
+      /> : <>
       <header className="delivery-heading">
         <div>
           <p className="eyebrow">{displayName ? `Hello, ${displayName}` : "Dastak Delivery Partner"}</p>
@@ -248,6 +267,7 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
           )}
         </>
       )}
+      </>}
     </div>
   );
 }
