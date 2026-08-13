@@ -101,6 +101,7 @@ public struct MerchantOrderQuote: Codable, Equatable, Sendable {
     public let deliveryDistanceMeters: Int
     public let total: Money
     public let dropoff: GeoPoint
+    public let deliveryAddress: MerchantOrderAddressSnapshot?
     public let expiresAt: String
     public let controlledCategory: ControlledOrderMetadata?
 
@@ -113,9 +114,44 @@ public struct MerchantOrderQuote: Codable, Equatable, Sendable {
         case deliveryDistanceMeters
         case total
         case dropoff
+        case deliveryAddress
         case expiresAt
         case controlledCategory
     }
+}
+
+public struct MerchantOrderAddressSnapshot: Codable, Equatable, Sendable {
+    public let label: String?
+    public let address: String?
+    public let details: String?
+    public let displayAddress: String?
+}
+
+public struct CustomerCourierSnapshot: Codable, Equatable, Sendable {
+    public let displayName: String
+    public let phoneNumber: String
+    public let deliveryMethod: DeliveryMethod
+    public let location: GeoPoint?
+    public let lastSeenAt: String?
+}
+
+public struct MerchantOrderStoreSnapshot: Codable, Equatable, Sendable {
+    public let name: String
+    public let phoneNumber: String
+    public let pickup: AddressedGeoPoint
+}
+
+public struct MerchantOrderTimeline: Codable, Equatable, Sendable {
+    public let createdAt: String
+    public let acceptedAt: String?
+    public let readyAt: String?
+    public let assignedAt: String?
+    public let enRouteToPickupAt: String?
+    public let atStoreAt: String?
+    public let pickedUpAt: String?
+    public let inTransitAt: String?
+    public let deliveredAt: String?
+    public let cancelledAt: String?
 }
 
 public enum MerchantOrderHandoffPurpose: String, Codable, Equatable, Sendable {
@@ -140,6 +176,10 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
     public let deliveryDistanceMeters: Int
     public let total: Money
     public let dropoff: GeoPoint
+    public let deliveryAddress: MerchantOrderAddressSnapshot?
+    public let store: MerchantOrderStoreSnapshot?
+    public let courier: CustomerCourierSnapshot?
+    public let timeline: MerchantOrderTimeline?
     public let stateVersion: Int64
     public let refundDecision: MerchantOrderRefundDecision?
     public let handoffCode: MerchantOrderHandoffCode?
@@ -158,6 +198,10 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
         case deliveryDistanceMeters
         case total
         case dropoff
+        case deliveryAddress
+        case store
+        case courier
+        case timeline
         case stateVersion
         case refundDecision
         case handoffCode

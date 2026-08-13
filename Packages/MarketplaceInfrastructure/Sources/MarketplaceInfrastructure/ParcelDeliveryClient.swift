@@ -99,6 +99,11 @@ public struct ParcelDelivery: Codable, Equatable, Sendable {
     public let declaredValue: Money
     public let deliveryFee: Money
     public let courierPayout: Money
+    public let courier: CustomerCourierSnapshot?
+    public let timeline: ParcelDeliveryTimeline?
+    public let stateVersion: Int64?
+    public let createdAt: String?
+    public let updatedAt: String?
     public let handoffCode: ParcelHandoffCode?
 
     private enum CodingKeys: String, CodingKey {
@@ -114,8 +119,24 @@ public struct ParcelDelivery: Codable, Equatable, Sendable {
         case declaredValue
         case deliveryFee
         case courierPayout
+        case courier
+        case timeline
+        case stateVersion
+        case createdAt
+        case updatedAt
         case handoffCode
     }
+}
+
+public struct ParcelDeliveryTimeline: Codable, Equatable, Sendable {
+    public let createdAt: String
+    public let paymentCapturedAt: String?
+    public let assignedAt: String?
+    public let enRouteToPickupAt: String?
+    public let pickedUpAt: String?
+    public let inTransitAt: String?
+    public let deliveredAt: String?
+    public let cancelledAt: String?
 }
 
 public struct CustomerParcelDelivery: Codable, Equatable, Sendable {

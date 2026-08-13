@@ -5,7 +5,10 @@ import MarketplaceInfrastructure
 import SwiftUI
 
 private let dastakOrderNotificationOpened = Notification.Name("dastak.notification.orderOpened")
-private let dastakPendingOrderIDKey = "dastak.notification.pendingOrderID"
+private let dastakDeviceTokenRegistered = Notification.Name("dastak.notification.deviceTokenRegistered")
+private let dastakPendingEntityTypeKey = "dastak.notification.pendingEntityType"
+private let dastakPendingEntityIDKey = "dastak.notification.pendingEntityID"
+private let dastakLegacyPendingOrderIDKey = "dastak.notification.pendingOrderID"
 
 public struct DastakCustomerRootView: View {
     private enum Tab: Hashable {
@@ -26,6 +29,7 @@ public struct DastakCustomerRootView: View {
     @StateObject private var model: DastakCustomerModel
     @StateObject private var locationManager = DastakLocationManager()
     @State private var selectedTab: Tab = .home
+    @State private var ordersPath: [DastakCustomerDestination] = []
     @State private var deliveryAddressEditorMode: DeliveryAddressEditorMode?
     @State private var showingCart = false
     @State private var showingParcel = false
@@ -36,12 +40,14 @@ public struct DastakCustomerRootView: View {
 
     public init(
         functions: any FunctionClient,
-        checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil
+        checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
+        accountIDProvider: (@Sendable () async throws -> UUID)? = nil
     ) {
         _model = StateObject(
             wrappedValue: DastakCustomerModel(
                 functions: functions,
-                checkoutCustomerProvider: checkoutCustomerProvider
+                checkoutCustomerProvider: checkoutCustomerProvider,
+                accountIDProvider: accountIDProvider
             )
         )
         isPreview = false
@@ -77,7 +83,7 @@ public struct DastakCustomerRootView: View {
             .tag(Tab.search)
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
-            NavigationStack {
+            NavigationStack(path: $ordersPath) {
                 DastakOrdersView(model: model)
             }
             .tag(Tab.orders)
@@ -114,12 +120,18 @@ public struct DastakCustomerRootView: View {
             if !model.hasCompleteDeliveryAddress {
                 deliveryAddressEditorMode = .onboarding
             }
-            if consumePendingOrderID() != nil {
-                selectedTab = .orders
+            if let destination = consumePendingDestination() {
+                open(destination)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: dastakOrderNotificationOpened)) { _ in
-            selectedTab = .orders
+        .onReceive(NotificationCenter.default.publisher(for: dastakOrderNotificationOpened)) { notification in
+            guard let destination = DastakCustomerDestination(
+                notificationPayload: notification.userInfo ?? [:]
+            ) else { return }
+            open(destination)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: dastakDeviceTokenRegistered)) { _ in
+            Task { await model.registerDeviceTokenIfAvailable() }
         }
         .sheet(item: $deliveryAddressEditorMode) { mode in
             DastakDeliveryAddressEditor(
@@ -172,9 +184,17 @@ public struct DastakCustomerRootView: View {
                             }
                         }
                     case let .failed(message):
-                        model.errorMessage = message.isEmpty ? "Payment failed. You can try again." : message
+                        model.clearCheckoutSession()
+                        showingCheckout = false
+                        selectedTab = .orders
+                        model.ordersActionMessage = message.isEmpty
+                            ? "Payment failed. You can try again from Orders."
+                            : message
                     case .dismissed:
-                        break
+                        model.clearCheckoutSession()
+                        showingCheckout = false
+                        selectedTab = .orders
+                        model.ordersActionMessage = "Payment was not completed. Your order is saved and you can retry here."
                     }
                 }
             }
@@ -196,43 +216,34 @@ public struct DastakCustomerRootView: View {
         }
     }
 
-    private func consumePendingOrderID() -> String? {
-        let orderID = UserDefaults.standard.string(forKey: dastakPendingOrderIDKey)
-        UserDefaults.standard.removeObject(forKey: dastakPendingOrderIDKey)
-        return orderID
+    private func open(_ destination: DastakCustomerDestination) {
+        selectedTab = .orders
+        ordersPath = [destination]
+        Task { await model.refreshOrdersAndParcels() }
+    }
+
+    private func consumePendingDestination() -> DastakCustomerDestination? {
+        let defaults = UserDefaults.standard
+        defer {
+            defaults.removeObject(forKey: dastakPendingEntityTypeKey)
+            defaults.removeObject(forKey: dastakPendingEntityIDKey)
+            defaults.removeObject(forKey: dastakLegacyPendingOrderIDKey)
+        }
+
+        if let entityType = defaults.string(forKey: dastakPendingEntityTypeKey),
+           let entityID = defaults.string(forKey: dastakPendingEntityIDKey) {
+            return DastakCustomerDestination(
+                notificationPayload: ["entityType": entityType, "entityId": entityID]
+            )
+        }
+        guard let orderID = defaults.string(forKey: dastakLegacyPendingOrderIDKey) else {
+            return nil
+        }
+        return DastakCustomerDestination(notificationPayload: ["orderId": orderID])
     }
 }
 
-private struct DastakCustomerNotice: View {
-    let message: String
-    let dismiss: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(MarketplaceColors.dastakAccent.color)
-            Text(message)
-                .font(.footnote)
-                .foregroundStyle(MarketplaceColors.dastakText.color)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            Button(action: dismiss) {
-                Image(systemName: "xmark")
-                    .font(.caption.bold())
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss message")
-        }
-        .padding(MarketplaceSpacing.compact)
-        .background(MarketplaceColors.dastakSurface.color, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(MarketplaceColors.dividerDark.color, lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.2), radius: 14, y: 6)
-    }
-}
+private typealias DastakCustomerNotice = DastakActionNotice
 
 private struct DastakSessionExpiredView: View {
     let signInAgain: () -> Void

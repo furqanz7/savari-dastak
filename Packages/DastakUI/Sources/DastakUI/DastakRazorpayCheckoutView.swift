@@ -1,10 +1,13 @@
 import Foundation
 import MarketplaceInfrastructure
-import Razorpay
 import SwiftUI
+
+#if canImport(Razorpay) && canImport(UIKit)
+import Razorpay
 import UIKit
 
 private typealias StandardRazorpayCheckout = Razorpay.RazorpayCheckout
+#endif
 
 public enum DastakRazorpayResult: Equatable, Sendable {
     case succeeded(String)
@@ -83,6 +86,7 @@ public enum DastakPaymentMethod: String, CaseIterable, Identifiable, Sendable {
 
 /// Hosts Razorpay's official Standard iOS Checkout. Dastak does not render the
 /// provider page in its own web view: the SDK owns UPI app switching and return.
+#if canImport(Razorpay) && canImport(UIKit)
 public struct DastakRazorpayCheckoutView: UIViewControllerRepresentable {
     public let session: DastakCheckoutSession
     public let customerName: String?
@@ -248,3 +252,26 @@ public final class CheckoutHostController: UIViewController, @preconcurrency Raz
         result?(value)
     }
 }
+#else
+public struct DastakRazorpayCheckoutView: View {
+    private let onResult: @MainActor (DastakRazorpayResult) -> Void
+
+    public init(
+        session: DastakCheckoutSession,
+        customerName: String?,
+        customerEmail: String?,
+        customerPhone: String?,
+        paymentMethod: DastakPaymentMethod = .googlePay,
+        onResult: @escaping @MainActor (DastakRazorpayResult) -> Void
+    ) {
+        self.onResult = onResult
+    }
+
+    public var body: some View {
+        Color.clear
+            .task {
+                onResult(.failed("Razorpay checkout is only available on iPhone and iPad."))
+            }
+    }
+}
+#endif

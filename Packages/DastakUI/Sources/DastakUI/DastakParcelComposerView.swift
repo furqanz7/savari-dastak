@@ -25,6 +25,14 @@ struct DastakParcelComposerView: View {
                 recipientSection
                 parcelSection
                 fareSection
+                if let errorMessage = model.parcelErrorMessage {
+                    Section {
+                        DastakActionNotice(message: errorMessage) {
+                            model.parcelErrorMessage = nil
+                        }
+                    }
+                    .listRowBackground(Color.clear)
+                }
                 actionSection
             }
             .navigationTitle("Send a parcel")

@@ -44,13 +44,7 @@ struct DastakOrdersView: View {
                     if !model.parcels.isEmpty {
                         Section("Parcel deliveries") {
                             ForEach(model.parcels, id: \.parcel.parcelID) { customerParcel in
-                                NavigationLink {
-                                    DastakParcelDetailView(
-                                        customerParcel: customerParcel,
-                                        pay: { await model.retryPayment(for: customerParcel) },
-                                        cancel: { await model.cancel(customerParcel) }
-                                    )
-                                } label: {
+                                NavigationLink(value: DastakCustomerDestination.parcel(customerParcel.parcel.parcelID)) {
                                     DastakParcelHistoryRow(customerParcel: customerParcel)
                                 }
                             }
@@ -59,16 +53,7 @@ struct DastakOrdersView: View {
 
                     Section("Store orders") {
                         ForEach(model.orders, id: \.orderID) { order in
-                            NavigationLink {
-                                DastakOrderDetailView(
-                                    order: order,
-                                    store: model.catalogue?.stores.first {
-                                        $0.storeID == order.storeID
-                                    },
-                                    cancel: { await model.cancel(order) },
-                                    pay: { await model.retryPayment(for: order) }
-                                )
-                            } label: {
+                            NavigationLink(value: DastakCustomerDestination.merchantOrder(order.orderID)) {
                                 DastakOrderRow(order: order)
                             }
                         }
@@ -78,6 +63,17 @@ struct DastakOrdersView: View {
             }
         }
         .navigationTitle("Orders")
+        .navigationDestination(for: DastakCustomerDestination.self) { destination in
+            DastakCustomerDeliveryDestinationView(model: model, destination: destination)
+        }
+        .safeAreaInset(edge: .bottom, spacing: MarketplaceSpacing.small) {
+            if let message = model.ordersActionMessage {
+                DastakActionNotice(message: message) {
+                    model.ordersActionMessage = nil
+                }
+                .padding(.horizontal, MarketplaceSpacing.medium)
+            }
+        }
         .refreshable {
             await model.refreshOrdersAndParcels()
         }
@@ -95,6 +91,48 @@ struct DastakOrdersView: View {
                 await model.refreshOrdersAndParcels()
             }
         }
+    }
+}
+
+private struct DastakCustomerDeliveryDestinationView: View {
+    @ObservedObject var model: DastakCustomerModel
+    let destination: DastakCustomerDestination
+
+    @ViewBuilder
+    var body: some View {
+        switch destination {
+        case let .merchantOrder(orderID):
+            if let order = model.orders.first(where: { $0.orderID == orderID }) {
+                DastakOrderDetailView(
+                    order: order,
+                    store: model.catalogue?.stores.first { $0.storeID == order.storeID },
+                    cancel: { reason in await model.cancel(order, reason: reason) },
+                    pay: { await model.retryPayment(for: order) }
+                )
+            } else {
+                missing(title: "Order unavailable")
+            }
+        case let .parcel(parcelID):
+            if let parcel = model.parcels.first(where: { $0.parcel.parcelID == parcelID }) {
+                DastakParcelDetailView(
+                    customerParcel: parcel,
+                    pay: { await model.retryPayment(for: parcel) },
+                    cancel: { reason in await model.cancel(parcel, reason: reason) }
+                )
+            } else {
+                missing(title: "Delivery unavailable")
+            }
+        }
+    }
+
+    private func missing(title: String) -> some View {
+        DastakEmptyState(
+            symbol: "arrow.clockwise",
+            title: title,
+            message: "Refresh to load the latest details.",
+            actionTitle: "Refresh",
+            action: { Task { await model.refreshOrdersAndParcels() } }
+        )
     }
 }
 
@@ -157,17 +195,18 @@ private struct DastakParcelHistoryRow: View {
 private struct DastakParcelDetailView: View {
     let customerParcel: CustomerParcelDelivery
     let pay: () async -> Void
-    let cancel: () async -> Void
+    let cancel: (String) async -> Void
 
     @State private var mapPosition: MapCameraPosition
     @State private var isCancelling = false
+    @State private var showingCancellationReasons = false
 
     private var parcel: ParcelDelivery { customerParcel.parcel }
 
     init(
         customerParcel: CustomerParcelDelivery,
         pay: @escaping () async -> Void,
-        cancel: @escaping () async -> Void
+        cancel: @escaping (String) async -> Void
     ) {
         self.customerParcel = customerParcel
         self.pay = pay
@@ -192,7 +231,12 @@ private struct DastakParcelDetailView: View {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                 map
                 status
+                if let courier = parcel.courier {
+                    DastakCourierCard(courier: courier, destinationName: "recipient")
+                        .padding(.horizontal, MarketplaceSpacing.medium)
+                }
                 route
+                timeline
                 payment
                 if canPay {
                     Button {
@@ -205,11 +249,7 @@ private struct DastakParcelDetailView: View {
                 }
                 if canCancel {
                     Button(role: .destructive) {
-                        isCancelling = true
-                        Task {
-                            await cancel()
-                            isCancelling = false
-                        }
+                        showingCancellationReasons = true
                     } label: {
                         isCancelling ? AnyView(ProgressView()) : AnyView(Text("Cancel delivery"))
                     }
@@ -222,6 +262,17 @@ private struct DastakParcelDetailView: View {
         }
         .navigationTitle("Parcel")
         .dastakInlineNavigationTitle()
+        .confirmationDialog(
+            "Why are you cancelling?",
+            isPresented: $showingCancellationReasons,
+            titleVisibility: .visible
+        ) {
+            cancellationButton("Plans changed")
+            cancellationButton("Pickup details changed")
+            cancellationButton("Delivery is delayed")
+        } message: {
+            Text("Before pickup, an eligible captured payment is refunded to its original method.")
+        }
     }
 
     private var map: some View {
@@ -238,6 +289,20 @@ private struct DastakParcelDetailView: View {
                 coordinate: CLLocationCoordinate2D(latitude: parcel.dropoff.latitude, longitude: parcel.dropoff.longitude)
             )
             .tint(.red)
+            if let courierLocation = parcel.courier?.location {
+                Annotation(
+                    "Delivery partner",
+                    coordinate: CLLocationCoordinate2D(
+                        latitude: courierLocation.latitude,
+                        longitude: courierLocation.longitude
+                    )
+                ) {
+                    Image(systemName: "location.fill")
+                        .padding(10)
+                        .foregroundStyle(.black)
+                        .background(MarketplaceColors.dastakAccent.color, in: Circle())
+                }
+            }
         }
         .mapStyle(.standard(elevation: .realistic))
         .frame(height: 260)
@@ -246,9 +311,9 @@ private struct DastakParcelDetailView: View {
 
     private var status: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text(DastakFormatting.parcelStatus(parcel.status))
+            Text(presentation.title)
                 .font(MarketplaceTypography.sectionTitle)
-            Text(statusMessage)
+            Text(presentation.message)
                 .foregroundStyle(.secondary)
             if let handoffCode = parcel.handoffCode {
                 HStack {
@@ -294,16 +359,33 @@ private struct DastakParcelDetailView: View {
     }
 
     private var payment: some View {
-        VStack(spacing: MarketplaceSpacing.compact) {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            HStack {
+                Text("Receipt")
+                    .font(.headline)
+                Spacer()
+                Text("#\(parcel.parcelID.uuidString.prefix(8).uppercased())")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+            Divider()
             line("Delivery", parcel.deliveryFee)
             Divider()
             HStack {
                 Text("Payment")
                 Spacer()
                 DastakStatusPill(
-                    text: parcel.paymentStatus == .paid ? "Paid" : "Pending",
+                    text: DastakCustomerLifecycle.paymentTitle(parcel.paymentStatus),
                     emphasis: parcel.paymentStatus == .paid
                 )
+            }
+            if parcel.paymentStatus == .refundPending || parcel.paymentStatus == .refunded {
+                Text(parcel.paymentStatus == .refunded
+                     ? "The refund was returned to the original payment method."
+                     : "The refund is being processed to the original payment method.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(MarketplaceSpacing.medium)
@@ -312,28 +394,46 @@ private struct DastakParcelDetailView: View {
     }
 
     private var canPay: Bool {
-        customerParcel.audience == .sender && parcel.paymentStatus == .pending
+        presentation.primaryAction == .pay
     }
 
     private var canCancel: Bool {
         guard customerParcel.audience == .sender else { return false }
         return switch parcel.status {
-        case .paymentPending, .paid, .assigned, .enRouteToPickup:
-            true
-        case .pickedUp, .inTransit, .delivered, .cancelled:
-            false
+        case .paymentPending, .paid, .assigned, .enRouteToPickup: true
+        case .pickedUp, .inTransit, .delivered, .cancelled: false
         }
     }
 
-    private var statusMessage: String {
-        switch parcel.status {
-        case .paymentPending: "Complete payment to request pickup."
-        case .paid: "Finding a delivery partner."
-        case .assigned: "A delivery partner has been assigned."
-        case .enRouteToPickup: "Your delivery partner is heading to pickup."
-        case .pickedUp, .inTransit: "Your parcel is on the way."
-        case .delivered: "Your parcel was delivered."
-        case .cancelled: "This parcel delivery was cancelled."
+    private var presentation: DastakCustomerLifecyclePresentation {
+        DastakCustomerLifecycle.parcel(
+            status: parcel.status,
+            paymentStatus: parcel.paymentStatus,
+            audience: customerParcel.audience
+        )
+    }
+
+    private var timeline: some View {
+        DastakTimelineCard(steps: [
+            ("Delivery created", parcel.timeline?.createdAt ?? parcel.createdAt),
+            ("Payment confirmed", parcel.timeline?.paymentCapturedAt),
+            ("Partner assigned", parcel.timeline?.assignedAt),
+            ("Heading to pickup", parcel.timeline?.enRouteToPickupAt),
+            ("Parcel collected", parcel.timeline?.pickedUpAt),
+            ("On the way", parcel.timeline?.inTransitAt),
+            ("Delivered", parcel.timeline?.deliveredAt),
+            ("Cancelled", parcel.timeline?.cancelledAt),
+        ])
+        .padding(.horizontal, MarketplaceSpacing.medium)
+    }
+
+    private func cancellationButton(_ reason: String) -> some View {
+        Button(reason, role: .destructive) {
+            isCancelling = true
+            Task {
+                await cancel(reason)
+                isCancelling = false
+            }
         }
     }
 
@@ -349,16 +449,17 @@ private struct DastakParcelDetailView: View {
 private struct DastakOrderDetailView: View {
     let order: MerchantOrderSnapshot
     let store: CatalogueStore?
-    let cancel: () async -> Void
+    let cancel: (String) async -> Void
     let pay: () async -> Void
 
     @State private var mapPosition: MapCameraPosition
     @State private var isCancelling = false
+    @State private var showingCancellationReasons = false
 
     init(
         order: MerchantOrderSnapshot,
         store: CatalogueStore?,
-        cancel: @escaping () async -> Void,
+        cancel: @escaping (String) async -> Void,
         pay: @escaping () async -> Void
     ) {
         self.order = order
@@ -385,7 +486,13 @@ private struct DastakOrderDetailView: View {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                 map
                 status
+                if let courier = order.courier {
+                    DastakCourierCard(courier: courier, destinationName: "delivery address")
+                        .padding(.horizontal, MarketplaceSpacing.medium)
+                }
+                deliveryAddress
                 items
+                timeline
                 payment
                 if order.paymentState == .paymentPending {
                     payButton
@@ -398,11 +505,31 @@ private struct DastakOrderDetailView: View {
         }
         .navigationTitle("Order")
         .dastakInlineNavigationTitle()
+        .confirmationDialog(
+            "Why are you cancelling?",
+            isPresented: $showingCancellationReasons,
+            titleVisibility: .visible
+        ) {
+            cancellationButton("Plans changed")
+            cancellationButton("Ordered by mistake")
+            cancellationButton("Delivery is delayed")
+        } message: {
+            Text(cancellationMessage)
+        }
     }
 
     private var map: some View {
         Map(position: $mapPosition) {
-            if let store {
+            if let pickup = order.store?.pickup {
+                Marker(
+                    order.store?.name ?? "Store",
+                    coordinate: CLLocationCoordinate2D(
+                        latitude: pickup.latitude,
+                        longitude: pickup.longitude
+                    )
+                )
+                .tint(.orange)
+            } else if let store {
                 Marker(
                     store.name,
                     coordinate: CLLocationCoordinate2D(
@@ -421,6 +548,20 @@ private struct DastakOrderDetailView: View {
                 )
             )
             .tint(MarketplaceColors.dastakAccent.color)
+            if let courierLocation = order.courier?.location {
+                Annotation(
+                    "Delivery partner",
+                    coordinate: CLLocationCoordinate2D(
+                        latitude: courierLocation.latitude,
+                        longitude: courierLocation.longitude
+                    )
+                ) {
+                    Image(systemName: "location.fill")
+                        .padding(10)
+                        .foregroundStyle(.black)
+                        .background(MarketplaceColors.dastakAccent.color, in: Circle())
+                }
+            }
         }
         .mapStyle(.standard(elevation: .realistic))
         .frame(height: 260)
@@ -429,9 +570,9 @@ private struct DastakOrderDetailView: View {
 
     private var status: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text(DastakFormatting.orderStatus(order.status))
+            Text(presentation.title)
                 .font(MarketplaceTypography.sectionTitle)
-            Text(statusMessage)
+            Text(presentation.message)
                 .foregroundStyle(.secondary)
             if let code = order.handoffCode {
                 HStack {
@@ -473,8 +614,55 @@ private struct DastakOrderDetailView: View {
         .padding(.horizontal, MarketplaceSpacing.medium)
     }
 
+    private var deliveryAddress: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+            Label("Deliver to", systemImage: "house.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(order.deliveryAddress?.label ?? "Delivery address")
+                .font(.headline)
+            if let displayAddress = order.deliveryAddress?.displayAddress {
+                Text(displayAddress)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+        .padding(.horizontal, MarketplaceSpacing.medium)
+    }
+
+    private var timeline: some View {
+        DastakTimelineCard(steps: [
+            ("Order placed", order.timeline?.createdAt ?? order.createdAt),
+            ("Store accepted", order.timeline?.acceptedAt),
+            ("Ready", order.timeline?.readyAt),
+            ("Partner assigned", order.timeline?.assignedAt),
+            ("Heading to store", order.timeline?.enRouteToPickupAt),
+            ("At the store", order.timeline?.atStoreAt),
+            ("Collected", order.timeline?.pickedUpAt),
+            ("On the way", order.timeline?.inTransitAt),
+            ("Delivered", order.timeline?.deliveredAt),
+            ("Cancelled", order.timeline?.cancelledAt),
+        ])
+        .padding(.horizontal, MarketplaceSpacing.medium)
+    }
+
     private var payment: some View {
-        VStack(spacing: MarketplaceSpacing.compact) {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            HStack {
+                Text("Receipt")
+                    .font(.headline)
+                Spacer()
+                Text("#\(order.orderID.uuidString.prefix(8).uppercased())")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+            if let storeName = order.store?.name ?? store?.name {
+                Text(storeName)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Divider()
             line("Items", order.itemSubtotal)
             line("Delivery", order.deliveryFee)
             Divider()
@@ -483,9 +671,27 @@ private struct DastakOrderDetailView: View {
                 Text("Payment")
                 Spacer()
                 DastakStatusPill(
-                    text: order.paymentState == .paid ? "Paid" : "Pending",
+                    text: DastakCustomerLifecycle.paymentTitle(order.paymentState),
                     emphasis: order.paymentState == .paid
                 )
+            }
+            if let decision = order.refundDecision {
+                Divider()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(decision.decisionStatus == .reviewRequired
+                         ? "Cancellation under review"
+                         : DastakCustomerLifecycle.paymentTitle(order.paymentState))
+                        .font(.subheadline.bold())
+                    Text(decision.reason)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    if let itemRefund = decision.itemRefund,
+                       let deliveryRefund = decision.deliveryFeeRefund {
+                        Text("Refund: \(DastakFormatting.money(Money(paise: itemRefund.paise + deliveryRefund.paise)))")
+                            .font(.footnote.bold().monospacedDigit())
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(MarketplaceSpacing.medium)
@@ -495,11 +701,7 @@ private struct DastakOrderDetailView: View {
 
     private var cancelButton: some View {
         Button(role: .destructive) {
-            isCancelling = true
-            Task {
-                await cancel()
-                isCancelling = false
-            }
+            showingCancellationReasons = true
         } label: {
             if isCancelling {
                 ProgressView()
@@ -534,26 +736,133 @@ private struct DastakOrderDetailView: View {
 
     private var canCancel: Bool {
         switch order.status {
-        case .delivered, .cancelled, .pickedUp, .inTransit, .returningToMerchant:
-            false
-        default:
+        case .paymentPending, .paid, .merchantAccepted, .ready, .assigned,
+             .enRouteToPickup, .atStore, .pickedUp, .inTransit:
             true
+        case .delivered, .cancelled, .returningToMerchant:
+            false
         }
     }
 
-    private var statusMessage: String {
-        switch order.status {
-        case .paymentPending: "Complete payment to send this order to the store."
-        case .paid: "The store is reviewing your order."
-        case .merchantAccepted: "The store is preparing your items."
-        case .ready: "Your order is ready for collection."
-        case .assigned: "A delivery partner has been assigned."
-        case .enRouteToPickup: "Your delivery partner is heading to the store."
-        case .atStore: "Your delivery partner has reached the store."
-        case .pickedUp, .inTransit: "Your order is on the way."
-        case .delivered: "Your order was delivered."
-        case .cancelled: "This order was cancelled."
-        case .returningToMerchant: "The order is being returned to the store."
+    private var presentation: DastakCustomerLifecyclePresentation {
+        DastakCustomerLifecycle.merchantOrder(
+            status: order.status,
+            paymentState: order.paymentState
+        )
+    }
+
+    private var cancellationMessage: String {
+        presentation.primaryAction == .requestCancellation
+            ? "The order is already being fulfilled. Dastak will review the refundable amount."
+            : "An eligible captured payment is refunded to its original method."
+    }
+
+    private func cancellationButton(_ reason: String) -> some View {
+        Button(reason, role: .destructive) {
+            isCancelling = true
+            Task {
+                await cancel(reason)
+                isCancelling = false
+            }
         }
+    }
+}
+
+private struct DastakCourierCard: View {
+    let courier: CustomerCourierSnapshot
+    let destinationName: String
+
+    var body: some View {
+        HStack(spacing: MarketplaceSpacing.compact) {
+            Image(systemName: methodSymbol)
+                .font(.title2)
+                .frame(width: 44, height: 44)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .background(MarketplaceColors.dastakAccent.color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(courier.displayName)
+                    .font(.headline)
+                Text(courier.location == nil
+                     ? "Delivery partner assigned"
+                     : "Live location updated on the map")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+            if let phoneURL {
+                Link(destination: phoneURL) {
+                    Image(systemName: "phone.fill")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Call delivery partner")
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Partner is travelling toward the \(destinationName)")
+    }
+
+    private var methodSymbol: String {
+        switch courier.deliveryMethod {
+        case .walking: "figure.walk"
+        case .bicycle: "bicycle"
+        case .bike: "motorcycle"
+        case .auto, .car: "car.fill"
+        }
+    }
+
+    private var phoneURL: URL? {
+        let number = courier.phoneNumber.filter { $0.isNumber || $0 == "+" }
+        guard !number.isEmpty else { return nil }
+        return URL(string: "tel:\(number)")
+    }
+}
+
+private struct DastakTimelineCard: View {
+    let steps: [(String, String?)]
+
+    private var visibleSteps: [(String, String)] {
+        steps.compactMap { title, timestamp in
+            guard let timestamp else { return nil }
+            return (title, timestamp)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Timeline")
+                .font(.headline)
+            ForEach(Array(visibleSteps.enumerated()), id: \.offset) { index, step in
+                HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                    Image(systemName: index == visibleSteps.indices.last
+                          ? "checkmark.circle.fill"
+                          : "circle.fill")
+                        .font(index == visibleSteps.indices.last ? .body : .system(size: 7))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        .frame(width: 20, height: 20)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(step.0)
+                            .font(.subheadline.bold())
+                        Text(DastakLifecycleDateFormatter.string(step.1))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+    }
+}
+
+private enum DastakLifecycleDateFormatter {
+    static func string(_ value: String) -> String {
+        guard let date = ISO8601DateFormatter().date(from: value) else { return value }
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }

@@ -2,13 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { importPKCS8, SignJWT } from "npm:jose@5";
 import { corsPreflight, json } from "../_shared/http.ts";
+import {
+  notificationCopy,
+  notificationPayload,
+  type NotificationQueueEvent,
+} from "./notification.ts";
 
 const supabase = createClient(
   requiredEnv("SUPABASE_URL"),
   requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
-  {
-    auth: { autoRefreshToken: false, persistSession: false },
-  },
+  { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
 Deno.serve(async (request) => {
@@ -16,70 +19,93 @@ Deno.serve(async (request) => {
   if (preflight) return preflight;
   if (
     request.headers.get("x-dastak-internal-secret") !== requiredEnv("DASTAK_NOTIFICATION_SECRET")
-  ) {
-    return json({ error: { code: "forbidden" } }, 403);
-  }
+  ) return json({ error: { code: "forbidden" } }, 403);
 
-  const { data: events, error } = await supabase
-    .from("dastak_order_notification_queue")
-    .select("id, order_id, account_id, status, payment_state, attempts")
+  try {
+    const events = await readPendingEvents();
+    const diagnostics: Array<{ id: string; sent: boolean; responses: string[] }> = [];
+    let processed = 0;
+
+    for (const event of events) {
+      const result = await sendNotification(event);
+      diagnostics.push({ id: event.id, sent: result.sent, responses: result.responses });
+      await updateEvent(event, result.sent);
+      if (result.sent) processed += 1;
+    }
+
+    return json({ claimed: events.length, processed, diagnostics }, 200);
+  } catch (error) {
+    console.error("Notification queue processing failed", error);
+    return json({ error: { code: "notification_processing_failed" } }, 500);
+  }
+});
+
+async function readPendingEvents(): Promise<NotificationQueueEvent[]> {
+  const [orders, parcels] = await Promise.all([
+    readQueue("dastak_order_notification_queue", "merchantOrder", "order_id"),
+    readQueue("dastak_parcel_notification_queue", "parcel", "parcel_id"),
+  ]);
+  return [...orders, ...parcels]
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .slice(0, 4);
+}
+
+async function readQueue(
+  table: NotificationQueueEvent["table"],
+  entityType: NotificationQueueEvent["entityType"],
+  entityColumn: "order_id" | "parcel_id",
+): Promise<NotificationQueueEvent[]> {
+  const { data, error } = await supabase
+    .from(table)
+    .select(`id, ${entityColumn}, account_id, status, payment_state, attempts, created_at`)
     .is("processed_at", null)
     .lt("attempts", 5)
     .order("created_at", { ascending: true })
-    .limit(1);
-  if (error) {
-    return json({
-      error: { code: "queue_read_failed", message: error.message, details: error.details },
-    }, 500);
-  }
+    .limit(2);
+  if (error) throw error;
 
-  let processed = 0;
-  const diagnostics: Array<{ id: string; sent: boolean; responses: string[] }> = [];
-  for (const event of events) {
-    const result = await sendNotification(event);
-    const sent = result.sent;
-    diagnostics.push({ id: event.id, sent, responses: result.responses });
-    await supabase.from("dastak_order_notification_queue")
-      .update({ attempts: event.attempts + 1 })
-      .eq("id", event.id);
-    if (sent) {
-      await supabase.from("dastak_order_notification_queue")
-        .update({ processed_at: new Date().toISOString() })
-        .eq("id", event.id);
-      processed += 1;
-    }
-  }
-  return json({ claimed: events.length, processed, diagnostics }, 200);
-});
+  return (data ?? []).map((row) => {
+    const record = row as unknown as Record<string, string | number>;
+    return {
+      id: String(record.id),
+      table,
+      entityType,
+      entityId: String(record[entityColumn]),
+      accountId: String(record.account_id),
+      status: String(record.status),
+      paymentState: String(record.payment_state),
+      attempts: Number(record.attempts),
+      createdAt: String(record.created_at),
+    };
+  });
+}
 
-type QueueEvent = {
-  id: string;
-  order_id: string;
-  account_id: string;
-  status: string;
-  payment_state: string;
-  attempts: number;
-};
+async function updateEvent(event: NotificationQueueEvent, sent: boolean) {
+  const changes: Record<string, unknown> = { attempts: event.attempts + 1 };
+  if (sent) changes.processed_at = new Date().toISOString();
+  const { error } = await supabase.from(event.table).update(changes).eq("id", event.id);
+  if (error) throw error;
+}
 
 async function sendNotification(
-  event: QueueEvent,
+  event: NotificationQueueEvent,
 ): Promise<{ sent: boolean; responses: string[] }> {
   const { data: tokens, error } = await supabase
     .from("dastak_device_tokens")
     .select("device_token")
-    .eq("account_id", event.account_id)
+    .eq("account_id", event.accountId)
     .eq("platform", "ios");
   if (error) throw error;
-  if (!tokens || tokens.length === 0) return { sent: true, responses: [] };
+  if (!tokens?.length) return { sent: true, responses: [] };
 
   const jwt = await providerToken();
   const endpoint = Deno.env.get("APNS_ENVIRONMENT") === "production"
     ? "https://api.push.apple.com"
     : "https://api.sandbox.push.apple.com";
-  const title = event.payment_state === "paid" ? "Payment confirmed" : "Order update";
-  const message = statusMessage(event.status, event.payment_state);
-  let successful = false;
+  const copy = notificationCopy(event);
   const responses: string[] = [];
+  let successful = false;
+
   for (const { device_token: token } of tokens) {
     const response = await fetch(`${endpoint}/3/device/${token}`, {
       method: "POST",
@@ -92,8 +118,8 @@ async function sendNotification(
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        aps: { alert: { title, body: message }, sound: "default", badge: 1 },
-        orderId: event.order_id,
+        aps: { alert: copy, sound: "default", badge: 1 },
+        ...notificationPayload(event),
       }),
     });
     responses.push(`${response.status}:${await response.text()}`);
@@ -103,36 +129,6 @@ async function sendNotification(
     }
   }
   return { sent: successful, responses };
-}
-
-function statusMessage(status: string, paymentState: string) {
-  if (paymentState === "refund_pending") return "Your refund is being processed.";
-  if (paymentState === "refunded") return "Your refund has been completed.";
-  switch (status) {
-    case "paid":
-      return "Your order is waiting for the store.";
-    case "merchant_accepted":
-      return "The store accepted your order.";
-    case "ready":
-      return "Your order is ready for pickup.";
-    case "assigned":
-      return "A delivery partner was assigned.";
-    case "en_route_to_pickup":
-      return "Your delivery partner is heading to the store.";
-    case "at_store":
-      return "Your delivery partner reached the store.";
-    case "returning_to_merchant":
-      return "Your order is being returned to the store.";
-    case "picked_up":
-    case "in_transit":
-      return "Your order is on the way.";
-    case "delivered":
-      return "Your order was delivered.";
-    case "cancelled":
-      return "Your order was cancelled.";
-    default:
-      return "Your order status changed.";
-  }
 }
 
 async function providerToken() {

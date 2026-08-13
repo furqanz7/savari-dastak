@@ -35,7 +35,8 @@ struct DastakApp: App {
             authenticatedServicesContent: { services in
                 DastakCustomerPartnerRoot(
                     functionClient: services.functions,
-                    checkoutCustomerProvider: services.checkoutCustomer
+                    checkoutCustomerProvider: services.checkoutCustomer,
+                    accountIDProvider: services.accountID
                 )
             },
             restrictedContent: { _, _ in EmptyView() }
@@ -61,7 +62,9 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        UserDefaults.standard.set(token, forKey: "dastak.apns.deviceToken")
+        Task { @MainActor in
+            DastakNotificationRoute.register(deviceToken: token)
+        }
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
@@ -79,21 +82,50 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard let orderID = response.notification.request.content.userInfo["orderId"] as? String,
-              UUID(uuidString: orderID) != nil else { return }
-        DastakNotificationRoute.openOrder(orderID)
+        guard let route = DastakNotificationRoute.route(
+            from: response.notification.request.content.userInfo
+        ) else { return }
+        DastakNotificationRoute.open(type: route.type, id: route.id)
     }
 }
 
+@MainActor
 enum DastakNotificationRoute {
     static let orderOpened = Notification.Name("dastak.notification.orderOpened")
-    private static let pendingOrderIDKey = "dastak.notification.pendingOrderID"
+    static let deviceTokenRegistered = Notification.Name("dastak.notification.deviceTokenRegistered")
+    private static let pendingEntityTypeKey = "dastak.notification.pendingEntityType"
+    private static let pendingEntityIDKey = "dastak.notification.pendingEntityID"
 
-    static func openOrder(_ orderID: String) {
-        UserDefaults.standard.set(orderID, forKey: pendingOrderIDKey)
-        NotificationCenter.default.post(name: orderOpened, object: orderID)
+    nonisolated static func route(from payload: [AnyHashable: Any]) -> (type: String, id: String)? {
+        if let entityType = payload["entityType"] as? String,
+           let entityID = payload["entityId"] as? String,
+           ["merchantOrder", "parcel"].contains(entityType),
+           UUID(uuidString: entityID) != nil {
+            return (entityType, entityID)
+        }
+        if let parcelID = payload["parcelId"] as? String, UUID(uuidString: parcelID) != nil {
+            return ("parcel", parcelID)
+        }
+        if let orderID = payload["orderId"] as? String, UUID(uuidString: orderID) != nil {
+            return ("merchantOrder", orderID)
+        }
+        return nil
     }
 
+    static func register(deviceToken: String) {
+        UserDefaults.standard.set(deviceToken, forKey: "dastak.apns.deviceToken")
+        NotificationCenter.default.post(name: deviceTokenRegistered, object: nil)
+    }
+
+    static func open(type: String, id: String) {
+        UserDefaults.standard.set(type, forKey: pendingEntityTypeKey)
+        UserDefaults.standard.set(id, forKey: pendingEntityIDKey)
+        NotificationCenter.default.post(
+            name: orderOpened,
+            object: nil,
+            userInfo: ["entityType": type, "entityId": id]
+        )
+    }
 }
 
 protocol DeliveryPartnerAccessProviding: Sendable {
@@ -163,13 +195,16 @@ private struct DastakCustomerPartnerRoot: View {
     @StateObject private var model: DastakRootModel
     private let functionClient: any FunctionClient
     private let checkoutCustomerProvider: @Sendable () async throws -> MarketplaceCheckoutCustomer?
+    private let accountIDProvider: @Sendable () async throws -> UUID
 
     init(
         functionClient: any FunctionClient,
-        checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer?
+        checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer?,
+        accountIDProvider: @escaping @Sendable () async throws -> UUID
     ) {
         self.functionClient = functionClient
         self.checkoutCustomerProvider = checkoutCustomerProvider
+        self.accountIDProvider = accountIDProvider
         _model = StateObject(
             wrappedValue: DastakRootModel(
                 accessProvider: LiveDeliveryPartnerAccessProvider(
@@ -220,7 +255,8 @@ private struct DastakCustomerPartnerRoot: View {
         case .customer:
             DastakCustomerRootView(
                 functions: functionClient,
-                checkoutCustomerProvider: checkoutCustomerProvider
+                checkoutCustomerProvider: checkoutCustomerProvider,
+                accountIDProvider: accountIDProvider
             )
         case .deliveryPartner:
             DastakDeliveryPartnerRootView(functions: functionClient)

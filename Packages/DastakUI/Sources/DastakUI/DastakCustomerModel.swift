@@ -63,49 +63,64 @@ final class DastakCustomerModel: ObservableObject {
     @Published var searchText = ""
     @Published var cart = DastakCart()
     @Published var errorMessage: String?
+    @Published var cartErrorMessage: String?
+    @Published var parcelErrorMessage: String?
+    @Published var ordersActionMessage: String?
+    @Published private(set) var addressErrorMessage: String?
     @Published private(set) var catalogueRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var accountRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var ordersRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var parcelsRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var sessionExpired = false
+    @Published private(set) var isDeliveryAddressConfirmed = false
 
     let parcelClient: any ParcelDeliveryClient
 
     private let catalogueClient: any CatalogueClient
     private let orderClient: any MerchantOrderClient
     private let checkoutClient: any DastakCheckoutClient
+    private let addressClient: any CustomerAddressClient
     private let deviceTokenClient: SupabaseDastakDeviceTokenClient?
     private let checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)?
+    private let accountIDProvider: (@Sendable () async throws -> UUID)?
+    private var preferenceScope = "default"
+    private var orderPlacementAttempt = DastakOrderPlacementAttempt()
+    private var parcelPlacementAttempt = DastakOrderPlacementAttempt()
 
     init(
         catalogueClient: any CatalogueClient,
         orderClient: any MerchantOrderClient,
         parcelClient: any ParcelDeliveryClient,
         checkoutClient: any DastakCheckoutClient,
+        addressClient: any CustomerAddressClient,
         deviceTokenClient: SupabaseDastakDeviceTokenClient? = nil,
-        checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil
+        checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
+        accountIDProvider: (@Sendable () async throws -> UUID)? = nil
     ) {
         self.catalogueClient = catalogueClient
         self.orderClient = orderClient
         self.parcelClient = parcelClient
         self.checkoutClient = checkoutClient
+        self.addressClient = addressClient
         self.deviceTokenClient = deviceTokenClient
         self.checkoutCustomerProvider = checkoutCustomerProvider
-        selectedLocation = Self.savedDeliveryLocation()
-        discoveryRadiusKilometres = Self.savedDiscoveryRadius()
+        self.accountIDProvider = accountIDProvider
     }
 
     convenience init(
         functions: any FunctionClient,
-        checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil
+        checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
+        accountIDProvider: (@Sendable () async throws -> UUID)? = nil
     ) {
         self.init(
             catalogueClient: SupabaseCatalogueClient(functions: functions),
             orderClient: SupabaseMerchantOrderClient(functions: functions),
             parcelClient: SupabaseParcelDeliveryClient(functions: functions),
             checkoutClient: SupabaseDastakCheckoutClient(functions: functions),
+            addressClient: SupabaseCustomerAddressClient(functions: functions),
             deviceTokenClient: SupabaseDastakDeviceTokenClient(functions: functions),
-            checkoutCustomerProvider: checkoutCustomerProvider
+            checkoutCustomerProvider: checkoutCustomerProvider,
+            accountIDProvider: accountIDProvider
         )
     }
 
@@ -120,7 +135,7 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     var hasCompleteDeliveryAddress: Bool {
-        selectedLocation?.isReadyForDelivery == true
+        isDeliveryAddressConfirmed && selectedLocation?.isReadyForDelivery == true
     }
 
     var ordersAndParcelsRefreshFailure: DastakCustomerRefreshFailure? {
@@ -129,6 +144,7 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func bootstrap() async {
+        await restorePreferencesAndAddress()
         async let orders: Void = refreshOrders()
         async let parcels: Void = refreshParcels()
         async let deviceToken: Void = registerDeviceTokenIfAvailable()
@@ -141,11 +157,11 @@ final class DastakCustomerModel: ObservableObject {
         }
     }
 
-    private func registerDeviceTokenIfAvailable() async {
+    func registerDeviceTokenIfAvailable() async {
         guard let token = UserDefaults.standard.string(forKey: "dastak.apns.deviceToken"),
               !token.isEmpty,
               let deviceTokenClient else { return }
-        try? await deviceTokenClient.register(token: token, idempotencyKey: makeKey())
+        _ = try? await deviceTokenClient.register(token: token, idempotencyKey: makeKey())
     }
 
     func refreshCheckoutCustomer() async {
@@ -158,10 +174,33 @@ final class DastakCustomerModel: ObservableObject {
         }
     }
 
-    func setLocation(_ location: DastakDeliveryLocation) async {
-        selectedLocation = location
-        persistDiscoveryPreferences()
-        await refreshCatalogue()
+    func setLocation(_ location: DastakDeliveryLocation) async -> Bool {
+        guard let label = location.label, let details = location.details else {
+            addressErrorMessage = "Add a label and doorstep details before saving."
+            return false
+        }
+        do {
+            let response = try await addressClient.saveDefault(
+                label: label,
+                address: location.address,
+                details: details,
+                location: location.point,
+                idempotencyKey: makeKey()
+            )
+            selectedLocation = response.addresses.first(where: \.isDefault)
+                .map(Self.deliveryLocation) ?? location
+            isDeliveryAddressConfirmed = true
+            addressErrorMessage = nil
+            persistDiscoveryPreferences()
+            await refreshCatalogue()
+            return true
+        } catch {
+            addressErrorMessage = message(
+                for: error,
+                fallback: "The address could not be saved. Check your connection and try again."
+            )
+            return false
+        }
     }
 
     func setDiscoveryRadius(_ kilometres: Int) async {
@@ -210,6 +249,10 @@ final class DastakCustomerModel: ObservableObject {
             parcels = try await parcelClient.customerSnapshot(
                 idempotencyKey: makeKey()
             )
+            .sorted {
+                ($0.parcel.updatedAt ?? $0.parcel.createdAt ?? "") >
+                    ($1.parcel.updatedAt ?? $1.parcel.createdAt ?? "")
+            }
             parcelsRefreshFailure = nil
         } catch {
             parcelsRefreshFailure = refreshFailure(for: error)
@@ -246,9 +289,9 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func prepareQuote() async {
-        guard let storeID = cart.storeID,
+        guard hasCompleteDeliveryAddress,
+              let storeID = cart.storeID,
               let selectedLocation,
-              selectedLocation.isReadyForDelivery,
               !cart.entries.isEmpty else { return }
         isCheckingOut = true
         defer { isCheckingOut = false }
@@ -259,9 +302,10 @@ final class DastakCustomerModel: ObservableObject {
                 dropoff: selectedLocation.point,
                 idempotencyKey: makeKey()
             )
-            errorMessage = nil
+            orderPlacementAttempt.reset()
+            cartErrorMessage = nil
         } catch {
-            presentError(for: error, fallback: "The final price could not be calculated.")
+            cartErrorMessage = message(for: error, fallback: "The final price could not be calculated.")
         }
     }
 
@@ -272,33 +316,55 @@ final class DastakCustomerModel: ObservableObject {
         do {
             let order = try await orderClient.create(
                 quoteID: quote.quoteID,
-                idempotencyKey: makeKey()
+                idempotencyKey: orderPlacementAttempt.key(for: quote.quoteID, makeKey: makeKey)
             )
-            checkoutSession = try await checkoutClient.createMerchantOrderCheckout(
-                orderID: order.orderID,
-                idempotencyKey: makeKey()
-            )
+            orders = [order] + orders.filter { $0.orderID != order.orderID }
             cart.removeAll()
             self.quote = nil
-            await refreshOrders()
-            errorMessage = nil
+            orderPlacementAttempt.reset()
+            cartErrorMessage = nil
+            do {
+                checkoutSession = try await checkoutClient.createMerchantOrderCheckout(
+                    orderID: order.orderID,
+                    idempotencyKey: makeKey()
+                )
+            } catch {
+                ordersActionMessage = "Your order is saved. Payment could not start, so you can retry from Orders."
+            }
             return order
         } catch {
-            presentError(for: error, fallback: "Checkout could not be started.")
+            cartErrorMessage = message(for: error, fallback: "The order could not be placed. Try again without changing your basket.")
             return nil
         }
     }
 
-    func cancel(_ order: MerchantOrderSnapshot) async {
+    func cancel(_ order: MerchantOrderSnapshot, reason: String = "Cancelled by customer") async {
         do {
-            _ = try await orderClient.customerCancel(
+            let updated = try await orderClient.customerCancel(
                 orderID: order.orderID,
-                reason: "Cancelled by customer",
+                reason: reason,
                 idempotencyKey: makeKey()
             )
+            orders = [updated] + orders.filter { $0.orderID != updated.orderID }
+            if updated.paymentState == .refundPending,
+               updated.refundDecision?.decisionStatus == .eligible {
+                do {
+                    _ = try await checkoutClient.processMerchantOrderRefund(
+                        orderID: updated.orderID,
+                        idempotencyKey: makeKey()
+                    )
+                    ordersActionMessage = "Cancellation confirmed. Your refund is processing."
+                } catch {
+                    ordersActionMessage = "Cancellation confirmed. Your refund is queued and will update here."
+                }
+            } else if updated.refundDecision?.decisionStatus == .reviewRequired {
+                ordersActionMessage = "Your cancellation request is under review. Dastak will show the refund decision here."
+            } else {
+                ordersActionMessage = "Order cancelled. You were not charged."
+            }
             await refreshOrders()
         } catch {
-            presentError(for: error, fallback: "This order could not be cancelled.")
+            ordersActionMessage = message(for: error, fallback: "This order could not be cancelled.")
         }
     }
 
@@ -315,15 +381,15 @@ final class DastakCustomerModel: ObservableObject {
                 orderID: order.orderID,
                 idempotencyKey: makeKey()
             )
-            errorMessage = nil
+            ordersActionMessage = nil
         } catch {
-            presentError(for: error, fallback: "Payment could not be started.")
+            ordersActionMessage = message(for: error, fallback: "Payment could not be started.")
         }
     }
 
     func retryPayment(for parcel: CustomerParcelDelivery) async {
         guard parcel.audience == .sender,
-              parcel.parcel.paymentStatus == .pending,
+              parcel.parcel.paymentStatus == .pending || parcel.parcel.paymentStatus == .failed,
               !isCheckingOut else { return }
         isCheckingOut = true
         defer { isCheckingOut = false }
@@ -332,40 +398,48 @@ final class DastakCustomerModel: ObservableObject {
                 parcelID: parcel.parcel.parcelID,
                 idempotencyKey: makeKey()
             )
-            errorMessage = nil
+            ordersActionMessage = nil
         } catch {
-            presentError(for: error, fallback: "Payment could not be started.")
+            ordersActionMessage = message(for: error, fallback: "Payment could not be started.")
         }
     }
 
-    func cancel(_ parcel: CustomerParcelDelivery) async {
+    func cancel(_ parcel: CustomerParcelDelivery, reason: String = "Cancelled by customer") async {
         guard parcel.audience == .sender, canCancel(parcel.parcel.status) else { return }
         do {
             let updated = try await parcelClient.cancelParcel(
                 parcelID: parcel.parcel.parcelID,
-                reason: "Cancelled by customer",
+                reason: reason,
                 idempotencyKey: makeKey()
             )
             if updated.paymentStatus == .refundPending {
-                _ = try await checkoutClient.processParcelRefund(
-                    parcelID: updated.parcelID,
-                    idempotencyKey: makeKey()
-                )
+                do {
+                    _ = try await checkoutClient.processParcelRefund(
+                        parcelID: updated.parcelID,
+                        idempotencyKey: makeKey()
+                    )
+                    ordersActionMessage = "Delivery cancelled. Your refund is processing."
+                } catch {
+                    ordersActionMessage = "Delivery cancelled. Your refund is queued and will update here."
+                }
+            } else {
+                ordersActionMessage = "Delivery cancelled. You were not charged."
             }
             await refreshParcels()
-            errorMessage = nil
         } catch {
-            presentError(for: error, fallback: "This parcel delivery could not be cancelled.")
+            ordersActionMessage = message(for: error, fallback: "This parcel delivery could not be cancelled.")
         }
     }
 
     func clearCart() {
         cart.removeAll()
         quote = nil
+        orderPlacementAttempt.reset()
     }
 
     func resetParcelQuote() {
         parcelQuote = nil
+        parcelPlacementAttempt.reset()
     }
 
     func prepareParcelQuote(
@@ -390,9 +464,10 @@ final class DastakCustomerModel: ObservableObject {
                 ),
                 idempotencyKey: makeKey()
             )
-            errorMessage = nil
+            parcelPlacementAttempt.reset()
+            parcelErrorMessage = nil
         } catch {
-            presentError(for: error, fallback: "The parcel fare could not be calculated.")
+            parcelErrorMessage = message(for: error, fallback: "The parcel fare could not be calculated.")
         }
     }
 
@@ -412,19 +487,24 @@ final class DastakCustomerModel: ObservableObject {
                 recipientPhoneNumber: recipientPhoneNumber,
                 declaredContents: declaredContents,
                 declaredValuePaise: declaredValuePaise,
-                idempotencyKey: makeKey()
-            )
-            checkoutSession = try await checkoutClient.createParcelCheckout(
-                parcelID: parcel.parcelID,
-                idempotencyKey: makeKey()
+                idempotencyKey: parcelPlacementAttempt.key(for: parcelQuote.quoteID, makeKey: makeKey)
             )
             let customerParcel = CustomerParcelDelivery(parcel: parcel, audience: .sender)
             parcels = [customerParcel] + parcels.filter { $0.parcel.parcelID != parcel.parcelID }
             self.parcelQuote = nil
-            errorMessage = nil
+            parcelPlacementAttempt.reset()
+            parcelErrorMessage = nil
+            do {
+                checkoutSession = try await checkoutClient.createParcelCheckout(
+                    parcelID: parcel.parcelID,
+                    idempotencyKey: makeKey()
+                )
+            } catch {
+                ordersActionMessage = "Your delivery is saved. Payment could not start, so you can retry from Orders."
+            }
             return parcel
         } catch {
-            presentError(for: error, fallback: "Parcel checkout could not be started.")
+            parcelErrorMessage = message(for: error, fallback: "The delivery could not be created. Try again without changing its details.")
             return nil
         }
     }
@@ -433,25 +513,67 @@ final class DastakCustomerModel: ObservableObject {
         IdempotencyKey(rawValue: UUID().uuidString)!
     }
 
-    private func persistDiscoveryPreferences() {
-        let defaults = UserDefaults.standard
-        defaults.set(discoveryRadiusKilometres, forKey: "dastak.customer.discoveryRadiusKilometres")
-        if let selectedLocation,
-           let data = try? JSONEncoder().encode(selectedLocation) {
-            defaults.set(data, forKey: "dastak.customer.deliveryLocation")
+    private func restorePreferencesAndAddress() async {
+        isDeliveryAddressConfirmed = false
+        if let accountIDProvider, let accountID = try? await accountIDProvider() {
+            preferenceScope = accountID.uuidString.lowercased()
+        }
+        selectedLocation = Self.savedDeliveryLocation(scope: preferenceScope)
+        discoveryRadiusKilometres = Self.savedDiscoveryRadius(scope: preferenceScope)
+
+        do {
+            let response = try await addressClient.snapshot(idempotencyKey: makeKey())
+            if let saved = response.addresses.first(where: \.isDefault) {
+                selectedLocation = Self.deliveryLocation(saved)
+                isDeliveryAddressConfirmed = true
+                persistDiscoveryPreferences()
+            } else if let selectedLocation, selectedLocation.isReadyForDelivery {
+                _ = await setLocation(selectedLocation)
+            } else {
+                selectedLocation = nil
+                isDeliveryAddressConfirmed = false
+            }
+            addressErrorMessage = nil
+        } catch {
+            addressErrorMessage = message(
+                for: error,
+                fallback: "Saved addresses are unavailable. Try again before ordering."
+            )
         }
     }
 
-    private static func savedDeliveryLocation() -> DastakDeliveryLocation? {
-        guard let data = UserDefaults.standard.data(forKey: "dastak.customer.deliveryLocation") else {
+    private func persistDiscoveryPreferences() {
+        let defaults = UserDefaults.standard
+        defaults.set(discoveryRadiusKilometres, forKey: preferenceKey("discoveryRadiusKilometres"))
+        if let selectedLocation,
+           let data = try? JSONEncoder().encode(selectedLocation) {
+            defaults.set(data, forKey: preferenceKey("deliveryLocation"))
+        }
+    }
+
+    private func preferenceKey(_ name: String) -> String {
+        "dastak.customer.\(preferenceScope).\(name)"
+    }
+
+    private static func savedDeliveryLocation(scope: String) -> DastakDeliveryLocation? {
+        guard let data = UserDefaults.standard.data(forKey: "dastak.customer.\(scope).deliveryLocation") else {
             return nil
         }
         return try? JSONDecoder().decode(DastakDeliveryLocation.self, from: data)
     }
 
-    private static func savedDiscoveryRadius() -> Int {
-        let value = UserDefaults.standard.integer(forKey: "dastak.customer.discoveryRadiusKilometres")
+    private static func savedDiscoveryRadius(scope: String) -> Int {
+        let value = UserDefaults.standard.integer(forKey: "dastak.customer.\(scope).discoveryRadiusKilometres")
         return (10...30).contains(value) ? value : 10
+    }
+
+    private static func deliveryLocation(_ address: CustomerDeliveryAddress) -> DastakDeliveryLocation {
+        DastakDeliveryLocation(
+            address: address.address,
+            point: address.location,
+            label: address.label,
+            details: address.details
+        )
     }
 
     private func canCancel(_ status: ParcelDeliveryStatus) -> Bool {
@@ -520,8 +642,11 @@ extension DastakCustomerModel {
         let model = DastakCustomerModel(functions: functions)
         model.selectedLocation = DastakDeliveryLocation(
             address: "Gandhi Road, Vaniyambadi",
-            point: GeoPoint(latitude: 12.6819, longitude: 78.6201)
+            point: GeoPoint(latitude: 12.6819, longitude: 78.6201),
+            label: "Home",
+            details: "12, Gandhi Road"
         )
+        model.isDeliveryAddressConfirmed = true
         model.catalogue = try? JSONDecoder().decode(
             CatalogueSnapshot.self,
             from: Data(Self.previewCatalogueJSON.utf8)

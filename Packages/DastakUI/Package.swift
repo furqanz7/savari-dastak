@@ -23,7 +23,11 @@ let package = Package(
                 "MarketplaceDesignSystem",
                 "MarketplaceFoundation",
                 "MarketplaceInfrastructure",
-                .product(name: "RazorpayCheckout", package: "razorpay-pod")
+                .product(
+                    name: "RazorpayCheckout",
+                    package: "razorpay-pod",
+                    condition: .when(platforms: [.iOS])
+                )
             ],
             resources: [
                 .process("Resources")

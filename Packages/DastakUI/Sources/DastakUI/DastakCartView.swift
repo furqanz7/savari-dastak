@@ -26,6 +26,11 @@ struct DastakCartView: View {
                             items
                             totals
                             deliveryAddress
+                            if let errorMessage = model.cartErrorMessage {
+                                DastakActionNotice(message: errorMessage) {
+                                    model.cartErrorMessage = nil
+                                }
+                            }
                         }
                         .padding(MarketplaceSpacing.medium)
                         .padding(.bottom, 100)

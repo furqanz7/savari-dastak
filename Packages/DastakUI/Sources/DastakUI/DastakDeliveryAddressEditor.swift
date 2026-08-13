@@ -30,7 +30,7 @@ struct DastakDeliveryAddressEditor: View {
     let initialLocation: DastakDeliveryLocation?
     let currentLocation: DastakDeliveryLocation?
     let requestCurrentLocation: () -> Void
-    let save: (DastakDeliveryLocation) async -> Void
+    let save: (DastakDeliveryLocation) async -> Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedLocation: DastakDeliveryLocation?
@@ -39,13 +39,14 @@ struct DastakDeliveryAddressEditor: View {
     @State private var details: String
     @State private var showingLocationPicker = false
     @State private var isSaving = false
+    @State private var errorMessage: String?
 
     init(
         requiresCompletion: Bool,
         initialLocation: DastakDeliveryLocation?,
         currentLocation: DastakDeliveryLocation?,
         requestCurrentLocation: @escaping () -> Void,
-        save: @escaping (DastakDeliveryLocation) async -> Void
+        save: @escaping (DastakDeliveryLocation) async -> Bool
     ) {
         self.requiresCompletion = requiresCompletion
         self.initialLocation = initialLocation
@@ -68,6 +69,11 @@ struct DastakDeliveryAddressEditor: View {
                     locationSelector
                     addressTypePicker
                     addressDetails
+                    if let errorMessage {
+                        DastakActionNotice(message: errorMessage) {
+                            self.errorMessage = nil
+                        }
+                    }
                 }
                 .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
                 .padding(.horizontal, MarketplaceSpacing.medium)
@@ -212,7 +218,7 @@ struct DastakDeliveryAddressEditor: View {
     private func saveAddress() async {
         guard let selectedLocation, canSave else { return }
         isSaving = true
-        await save(
+        let didSave = await save(
             DastakDeliveryLocation(
                 address: selectedLocation.address,
                 point: selectedLocation.point,
@@ -221,6 +227,11 @@ struct DastakDeliveryAddressEditor: View {
             )
         )
         isSaving = false
-        dismiss()
+        if didSave {
+            errorMessage = nil
+            dismiss()
+        } else {
+            errorMessage = "The address could not be saved. Check your connection and try again."
+        }
     }
 }
