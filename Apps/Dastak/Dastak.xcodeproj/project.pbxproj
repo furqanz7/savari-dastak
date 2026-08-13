@@ -33,6 +33,9 @@
 		E10000000000000000000003 /* MarketplaceDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = E20000000000000000000003 /* MarketplaceDesignSystem */; };
 		F10000000000000000000001 /* DastakUI in Frameworks */ = {isa = PBXBuildFile; productRef = F20000000000000000000001 /* DastakUI */; };
 		F10000000000000000000002 /* DastakUI in Frameworks */ = {isa = PBXBuildFile; productRef = F20000000000000000000002 /* DastakUI */; };
+		G10000000000000000000001 /* DastakLaunchUI in Frameworks */ = {isa = PBXBuildFile; productRef = G20000000000000000000001 /* DastakLaunchUI */; };
+		G10000000000000000000002 /* DastakLaunchUI in Frameworks */ = {isa = PBXBuildFile; productRef = G20000000000000000000002 /* DastakLaunchUI */; };
+		G10000000000000000000003 /* DastakLaunchUI in Frameworks */ = {isa = PBXBuildFile; productRef = G20000000000000000000003 /* DastakLaunchUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -96,6 +99,7 @@
 				71C71C71C71C71C71C71C71C /* MarketplaceInfrastructure in Frameworks */,
 				E10000000000000000000002 /* MarketplaceDesignSystem in Frameworks */,
 				F10000000000000000000002 /* DastakUI in Frameworks */,
+				G10000000000000000000002 /* DastakLaunchUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +129,7 @@
 				718718718718718718718718 /* MarketplaceInfrastructure in Frameworks */,
 				E10000000000000000000001 /* MarketplaceDesignSystem in Frameworks */,
 				F10000000000000000000001 /* DastakUI in Frameworks */,
+				G10000000000000000000001 /* DastakLaunchUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -135,6 +140,7 @@
 				D8D8D8D8D8D8D8D8D8D8D8D8 /* DastakDomain in Frameworks */,
 				71D71D71D71D71D71D71D71D /* MarketplaceInfrastructure in Frameworks */,
 				E10000000000000000000003 /* MarketplaceDesignSystem in Frameworks */,
+				G10000000000000000000003 /* DastakLaunchUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,6 +313,7 @@
 				717717717717717717717717 /* MarketplaceInfrastructure */,
 				D6D6D6D6D6D6D6D6D6D6D6D6 /* DastakDomain */,
 				E20000000000000000000003 /* MarketplaceDesignSystem */,
+				G20000000000000000000003 /* DastakLaunchUI */,
 			);
 			productName = DastakAdmin;
 			productReference = 96E4578B39A3763443EF5598 /* DastakAdmin.app */;
@@ -331,6 +338,7 @@
 				D1D1D1D1D1D1D1D1D1D1D1D1 /* DastakDomain */,
 				E20000000000000000000001 /* MarketplaceDesignSystem */,
 				F20000000000000000000001 /* DastakUI */,
+				G20000000000000000000001 /* DastakLaunchUI */,
 			);
 			productName = Dastak;
 			productReference = 8D878A197BA6A8D855996FD1 /* Dastak.app */;
@@ -395,6 +403,7 @@
 				D5D5D5D5D5D5D5D5D5D5D5D5 /* DastakDomain */,
 				E20000000000000000000002 /* MarketplaceDesignSystem */,
 				F20000000000000000000002 /* DastakUI */,
+				G20000000000000000000002 /* DastakLaunchUI */,
 			);
 			productName = DastakMerchant;
 			productReference = 3E142EFC320F2584292AC456 /* DastakMerchant.app */;
@@ -1159,6 +1168,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F00000000000000000000001 /* XCLocalSwiftPackageReference "../../Packages/DastakUI" */;
 			productName = DastakUI;
+		};
+		G20000000000000000000001 /* DastakLaunchUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F00000000000000000000001 /* XCLocalSwiftPackageReference "../../Packages/DastakUI" */;
+			productName = DastakLaunchUI;
+		};
+		G20000000000000000000002 /* DastakLaunchUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F00000000000000000000001 /* XCLocalSwiftPackageReference "../../Packages/DastakUI" */;
+			productName = DastakLaunchUI;
+		};
+		G20000000000000000000003 /* DastakLaunchUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F00000000000000000000001 /* XCLocalSwiftPackageReference "../../Packages/DastakUI" */;
+			productName = DastakLaunchUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

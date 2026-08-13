@@ -762,9 +762,12 @@ button:disabled { cursor: wait; opacity: .55; }
   z-index: 100;
   inset: 0;
   overflow: hidden;
-  background: #000;
+  background: var(--dastak-background, #0f0f10);
   color: var(--text-primary);
+  opacity: 1;
+  transition: opacity 280ms ease-out;
 }
+.dastak-launch.is-leaving { opacity: 0; }
 .dastak-launch::after {
   content: "";
   position: absolute;
@@ -777,8 +780,10 @@ button:disabled { cursor: wait; opacity: .55; }
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: .78;
+  opacity: 0;
+  transition: opacity 320ms ease-out;
 }
+.dastak-launch.is-ready .dastak-launch-video { opacity: .78; }
 .dastak-launch-content {
   position: absolute;
   z-index: 1;
@@ -985,7 +990,8 @@ button:disabled { cursor: wait; opacity: .55; }
 
 @media (prefers-reduced-motion: reduce) {
   .loading span { animation: none; }
-  .dastak-launch-video { visibility: hidden; }
+  .dastak-launch, .dastak-launch-video { transition: none; }
+  .dastak-launch-video { display: none; }
 }
 
 /* Dastak customer uses one spatial system across native iOS and the web. */

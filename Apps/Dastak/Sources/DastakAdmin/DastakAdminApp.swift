@@ -1,4 +1,5 @@
 import DastakDomain
+import DastakLaunchUI
 import MarketplaceInfrastructure
 import SwiftUI
 
@@ -6,12 +7,14 @@ import SwiftUI
 struct DastakAdminApp: App {
     var body: some Scene {
         WindowGroup {
-            MarketplaceAuthenticationShell(
-                applicationName: "Dastak Admin",
-                product: .dastak,
-                requiredAccess: .dastakAdmin
-            ) { _ in
-                DastakAdminRoot()
+            DastakLaunchView(variant: .admin) {
+                MarketplaceAuthenticationShell(
+                    applicationName: "Dastak Admin",
+                    product: .dastak,
+                    requiredAccess: .dastakAdmin
+                ) { _ in
+                    DastakAdminRoot()
+                }
             }
         }
     }

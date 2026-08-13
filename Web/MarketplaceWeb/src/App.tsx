@@ -5,6 +5,7 @@ import { completeProfile, isValidProfile, resolveAccess, type AccessResult } fro
 import { shouldPreserveAuthenticatedView } from "./auth-state";
 import { DastakCustomerView } from "./DastakCustomerView";
 import { AdminDashboard } from "./AdminDashboard";
+import { canCompleteDastakLaunch, dastakLaunchVideos, takeNextDastakLaunchVideo } from "./dastak-launch";
 import { DeliveryPartnerApplicationForm } from "./DeliveryPartnerApplicationForm";
 import { DeliveryPartnerView } from "./DeliveryPartnerView";
 import { readAppConfig } from "./config";
@@ -25,11 +26,17 @@ const supabase = createClient(config.supabaseUrl, config.supabasePublishableKey,
     autoRefreshToken: true,
   },
 });
-const dastakLaunchVideos = [
-  "/launch/dastak-launch.mp4",
-  "/launch/dastak-launch-2.mp4",
-  "/launch/dastak-launch-3.mp4",
-];
+const dastakLaunchVideo = config.product === "dastak"
+  ? takeNextDastakLaunchVideo(dastakLaunchStorage(), config.variant)
+  : dastakLaunchVideos[0];
+
+function dastakLaunchStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
 
 type ViewState =
   | { phase: "loading" }
@@ -43,14 +50,8 @@ export default function App() {
   const [view, setView] = useState<ViewState>({ phase: "loading" });
   const [busy, setBusy] = useState(false);
   const [showsDastakLaunch, setShowsDastakLaunch] = useState(config.product === "dastak");
-  const [dastakLaunchVideo] = useState(nextDastakLaunchVideo);
   const knownUserId = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (config.product !== "dastak") return;
-    const timer = window.setTimeout(() => setShowsDastakLaunch(false), 1250);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const finishDastakLaunch = useCallback(() => setShowsDastakLaunch(false), []);
 
   const evaluate = useCallback(async (session: Session | null) => {
     if (!session) {
@@ -112,7 +113,7 @@ export default function App() {
 
   return (
     <main className={`app product-${config.product}`}>
-      <header className="topbar">
+      <header className="topbar" aria-hidden={showsDastakLaunch || undefined}>
         <Brand />
         {view.phase !== "signed_out" && view.phase !== "loading" && !(
           ["dastak-customer", "dastak-merchant"].includes(config.variant) &&
@@ -124,7 +125,10 @@ export default function App() {
         )}
       </header>
 
-      <section className={`content ${view.phase === "ready" && ["dastak-admin", "dastak-customer", "dastak-delivery", "dastak-merchant", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}>
+      <section
+        aria-hidden={showsDastakLaunch || undefined}
+        className={`content ${view.phase === "ready" && ["dastak-admin", "dastak-customer", "dastak-delivery", "dastak-merchant", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}
+      >
         {view.phase === "loading" && <Loading />}
         {view.phase === "signed_out" && <SignIn busy={busy} onSignIn={signIn} />}
         {view.phase === "profile" && (
@@ -138,7 +142,9 @@ export default function App() {
           <ErrorState message={view.message} onRetry={() => evaluate(view.session ?? null)} />
         )}
       </section>
-      {showsDastakLaunch && <DastakLaunchScreen videoSource={dastakLaunchVideo} />}
+      {showsDastakLaunch && (
+        <DastakLaunchScreen videoSource={dastakLaunchVideo} onFinished={finishDastakLaunch} />
+      )}
     </main>
   );
 }
@@ -207,12 +213,68 @@ function SignIn({ busy, onSignIn }: { busy: boolean; onSignIn: (provider: Provid
   );
 }
 
-function DastakLaunchScreen({ videoSource }: { videoSource: string }) {
+function DastakLaunchScreen({
+  videoSource,
+  onFinished,
+}: {
+  videoSource: string;
+  onFinished: () => void;
+}) {
+  const reducedMotion = usePrefersReducedMotion();
+  const [mediaState, setMediaState] = useState<"loading" | "ready" | "failed">("loading");
+  const [minimumDurationElapsed, setMinimumDurationElapsed] = useState(false);
+  const [maximumDurationElapsed, setMaximumDurationElapsed] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
+
+  useEffect(() => {
+    const minimumTimer = window.setTimeout(
+      () => setMinimumDurationElapsed(true),
+      reducedMotion ? 650 : 1200,
+    );
+    const maximumTimer = window.setTimeout(() => setMaximumDurationElapsed(true), 2500);
+    return () => {
+      window.clearTimeout(minimumTimer);
+      window.clearTimeout(maximumTimer);
+    };
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    if (isLeaving || !canCompleteDastakLaunch({
+      minimumDurationElapsed,
+      mediaState,
+      reducedMotion,
+      maximumDurationElapsed,
+    })) return;
+    setIsLeaving(true);
+  }, [isLeaving, maximumDurationElapsed, mediaState, minimumDurationElapsed, reducedMotion]);
+
+  useEffect(() => {
+    if (!isLeaving) return;
+    const timer = window.setTimeout(onFinished, reducedMotion ? 0 : 280);
+    return () => window.clearTimeout(timer);
+  }, [isLeaving, onFinished, reducedMotion]);
+
   return (
-    <section className="dastak-launch" aria-label="Opening Dastak">
-      <video className="dastak-launch-video" autoPlay muted loop playsInline preload="metadata" aria-hidden="true">
-        <source src={videoSource} type="video/mp4" />
-      </video>
+    <section
+      className={`dastak-launch ${mediaState === "ready" ? "is-ready" : ""} ${isLeaving ? "is-leaving" : ""}`}
+      role="status"
+      aria-label="Opening Dastak"
+    >
+      {!reducedMotion && mediaState !== "failed" && (
+        <video
+          className="dastak-launch-video"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden="true"
+          onCanPlay={() => setMediaState("ready")}
+          onError={() => setMediaState("failed")}
+        >
+          <source src={videoSource} type="video/mp4" />
+        </video>
+      )}
       <div className="dastak-launch-content">
         <p>Dastak <span lang="ur">دستک</span></p>
         <small>{config.roleLabel}</small>
@@ -222,16 +284,18 @@ function DastakLaunchScreen({ videoSource }: { videoSource: string }) {
   );
 }
 
-function nextDastakLaunchVideo() {
-  if (config.product !== "dastak") return dastakLaunchVideos[0];
-  const key = "dastak.launch-video-index";
-  const storedIndex = window.sessionStorage.getItem(key);
-  const currentIndex = storedIndex === null ? -1 : Number(storedIndex);
-  const nextIndex = Number.isInteger(currentIndex) && currentIndex >= 0
-    ? (currentIndex + 1) % dastakLaunchVideos.length
-    : 0;
-  window.sessionStorage.setItem(key, String(nextIndex));
-  return dastakLaunchVideos[nextIndex];
+function usePrefersReducedMotion() {
+  const query = "(prefers-reduced-motion: reduce)";
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query);
+    const update = () => setMatches(mediaQuery.matches);
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, []);
+
+  return matches;
 }
 
 function GoogleLogo() {
