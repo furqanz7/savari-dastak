@@ -3,20 +3,26 @@ import DastakUI
 import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
+import UIKit
+import UserNotifications
 
 @main
 struct DastakApp: App {
+    @UIApplicationDelegateAdaptor(DastakNotificationDelegate.self) private var notificationDelegate
+
     var body: some Scene {
         WindowGroup {
-            #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-DastakUIPreview") {
-                DastakCustomerRootView(preview: true)
-            } else {
+            DastakLaunchView(variant: .customerAndPartner) {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-DastakUIPreview") {
+                    DastakCustomerRootView(preview: true)
+                } else {
+                    authenticatedRoot
+                }
+                #else
                 authenticatedRoot
+                #endif
             }
-            #else
-            authenticatedRoot
-            #endif
         }
     }
 
@@ -25,13 +31,69 @@ struct DastakApp: App {
             applicationName: "Dastak",
             product: .dastak,
             requiredAccess: .dastakCustomer,
-            showsPersistentSignOut: false
-        ) { functionClient in
-            DastakCustomerPartnerRoot(
-                functionClient: functionClient
-            )
-        }
+            showsPersistentSignOut: false,
+            authenticatedServicesContent: { services in
+                DastakCustomerPartnerRoot(
+                    functionClient: services.functions,
+                    checkoutCustomerProvider: services.checkoutCustomer
+                )
+            },
+            restrictedContent: { _, _ in EmptyView() }
+        )
     }
+}
+
+final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        Task { @MainActor in
+            let granted = try? await UNUserNotificationCenter.current().requestAuthorization(
+                options: [.alert, .sound, .badge]
+            )
+            guard granted == true else { return }
+            application.registerForRemoteNotifications()
+        }
+        return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        UserDefaults.standard.set(token, forKey: "dastak.apns.deviceToken")
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        UserDefaults.standard.removeObject(forKey: "dastak.apns.deviceToken")
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .badge]
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard let orderID = response.notification.request.content.userInfo["orderId"] as? String,
+              UUID(uuidString: orderID) != nil else { return }
+        DastakNotificationRoute.openOrder(orderID)
+    }
+}
+
+enum DastakNotificationRoute {
+    static let orderOpened = Notification.Name("dastak.notification.orderOpened")
+    private static let pendingOrderIDKey = "dastak.notification.pendingOrderID"
+
+    static func openOrder(_ orderID: String) {
+        UserDefaults.standard.set(orderID, forKey: pendingOrderIDKey)
+        NotificationCenter.default.post(name: orderOpened, object: orderID)
+    }
+
 }
 
 protocol DeliveryPartnerAccessProviding: Sendable {
@@ -100,9 +162,14 @@ final class DastakRootModel: ObservableObject {
 private struct DastakCustomerPartnerRoot: View {
     @StateObject private var model: DastakRootModel
     private let functionClient: any FunctionClient
+    private let checkoutCustomerProvider: @Sendable () async throws -> MarketplaceCheckoutCustomer?
 
-    init(functionClient: any FunctionClient) {
+    init(
+        functionClient: any FunctionClient,
+        checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer?
+    ) {
         self.functionClient = functionClient
+        self.checkoutCustomerProvider = checkoutCustomerProvider
         _model = StateObject(
             wrappedValue: DastakRootModel(
                 accessProvider: LiveDeliveryPartnerAccessProvider(
@@ -151,7 +218,10 @@ private struct DastakCustomerPartnerRoot: View {
     private var activeRoot: some View {
         switch model.rootState.activeRoot {
         case .customer:
-            DastakCustomerRootView(functions: functionClient)
+            DastakCustomerRootView(
+                functions: functionClient,
+                checkoutCustomerProvider: checkoutCustomerProvider
+            )
         case .deliveryPartner:
             DastakDeliveryPartnerRootView(functions: functionClient)
         case .merchant, .admin:

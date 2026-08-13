@@ -23,6 +23,9 @@ public struct DastakDeliveryPartnerRootView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, MarketplaceSpacing.xxLarge)
                     } else {
+                        if let earnings = model.earnings {
+                            DastakEarningsCard(earnings: earnings, title: "Earnings")
+                        }
                         availability
 
                         if let currentJob = model.courierDispatch?.currentJob {

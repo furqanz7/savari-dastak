@@ -25,6 +25,7 @@ import {
   type MerchantOrderSnapshot,
 } from "./orders";
 import { processOrderRefund } from "./payments";
+import { getEarnings, type EarningsSnapshot } from "./earnings";
 
 type Props = {
   accessToken: string;
@@ -54,6 +55,7 @@ export function MerchantOrdersView({
 }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [orders, setOrders] = useState<MerchantOrderSnapshot[]>([]);
+  const [earnings, setEarnings] = useState<EarningsSnapshot>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyOrderId, setBusyOrderId] = useState<string>();
@@ -69,8 +71,12 @@ export function MerchantOrdersView({
     refreshInFlight.current = true;
     if (showProgress) setRefreshing(true);
     try {
-      const snapshot = await getMerchantOrders(auth);
+      const [snapshot, earningsSnapshot] = await Promise.all([
+        getMerchantOrders(auth),
+        getEarnings(auth, "merchantSnapshot").catch(() => undefined),
+      ]);
       setOrders(snapshot.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)));
+      setEarnings(earningsSnapshot);
       setError(undefined);
     } catch (refreshError) {
       setError(orderMessage(refreshError));
@@ -198,6 +204,7 @@ export function MerchantOrdersView({
             <MerchantSummary label="Preparing" value={preparing} />
             <MerchantSummary label="Ready" value={readyForPickup} />
           </div>
+          {earnings && <EarningsSummary earnings={earnings} />}
           <MerchantOrderSection
             title="Active orders"
             orders={activeOrders}
@@ -256,13 +263,21 @@ function MerchantTab({
   );
 }
 
-function MerchantSummary({ label, value }: { label: string; value: number }) {
+function MerchantSummary({ label, value }: { label: string; value: number | string }) {
   return (
     <div>
       <small>{label}</small>
       <strong>{value}</strong>
     </div>
   );
+}
+
+function EarningsSummary({ earnings }: { earnings: EarningsSnapshot }) {
+  return <div className="merchant-summary" aria-label="Earnings summary">
+    <MerchantSummary label="Completed" value={formatPrice(earnings.completedPaise)} />
+    <MerchantSummary label="This week" value={formatPrice(earnings.thisWeekPaise)} />
+    <MerchantSummary label="In progress" value={formatPrice(earnings.pendingPaise)} />
+  </div>;
 }
 
 function MerchantAccount({

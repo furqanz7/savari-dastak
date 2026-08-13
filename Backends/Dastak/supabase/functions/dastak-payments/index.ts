@@ -64,6 +64,7 @@ async function createCheckout(input: PaymentActionInput) {
       responseBody: {
         ...details,
         orderId: details.entityId,
+        entityType: input.entityType,
         providerOrderId: providerOrder.id,
         keyId: client.keyId,
       },

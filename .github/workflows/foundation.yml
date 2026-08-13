@@ -13,6 +13,7 @@ jobs:
         with:
           xcode-version: '26.6'
       - run: swift test --package-path Packages/MarketplaceFoundation
+      - run: swift test --package-path Packages/MarketplaceDesignSystem
       - run: swift test --package-path Packages/MarketplaceInfrastructure
       - run: swift test --package-path Packages/DastakDomain
       - run: swift package dump-package --package-path Packages/SavariDomain >/dev/null

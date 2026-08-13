@@ -3,13 +3,42 @@ import Foundation
 import MapKit
 import MarketplaceFoundation
 
-public struct DastakDeliveryLocation: Equatable, Sendable {
+public struct DastakDeliveryLocation: Codable, Equatable, Sendable {
     public let address: String
     public let point: GeoPoint
+    public let label: String?
+    public let details: String?
 
-    public init(address: String, point: GeoPoint) {
+    public init(
+        address: String,
+        point: GeoPoint,
+        label: String? = nil,
+        details: String? = nil
+    ) {
         self.address = address
         self.point = point
+        self.label = Self.cleaned(label)
+        self.details = Self.cleaned(details)
+    }
+
+    public var displayName: String {
+        label ?? "Delivery address"
+    }
+
+    public var displayAddress: String {
+        [details, address]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+    }
+
+    public var isReadyForDelivery: Bool {
+        label != nil && details != nil
+    }
+
+    private static func cleaned(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

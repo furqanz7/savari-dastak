@@ -112,11 +112,11 @@ describe("customer orders", () => {
     expect(requestBody).toEqual({ operation: "merchantSnapshot" });
   });
 
-  it("rejects a merchant snapshot containing an unpaid order", async () => {
-    await expect(getMerchantOrders(auth, () =>
-      Promise.resolve(new Response(JSON.stringify({ orders: [order] }), { status: 200 })))).rejects.toThrow(
-      "invalid order response",
-    );
+  it("excludes unpaid orders from a merchant snapshot", async () => {
+    const result = await getMerchantOrders(auth, () =>
+      Promise.resolve(new Response(JSON.stringify({ orders: [order] }), { status: 200 })));
+
+    expect(result).toEqual([]);
   });
 
   it("sends merchant fulfilment transitions with idempotency", async () => {

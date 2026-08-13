@@ -50,6 +50,11 @@ public enum ParcelAssignmentStatus: String, Codable, Equatable, Sendable {
     case acknowledged
 }
 
+public enum ParcelDeliveryAudience: String, Codable, Equatable, Sendable {
+    case sender
+    case recipient
+}
+
 public struct ParcelQuote: Codable, Equatable, Sendable {
     public let quoteID: UUID
     public let deliveryMethod: DeliveryMethod
@@ -113,6 +118,32 @@ public struct ParcelDelivery: Codable, Equatable, Sendable {
     }
 }
 
+public struct CustomerParcelDelivery: Codable, Equatable, Sendable {
+    public let parcel: ParcelDelivery
+    public let audience: ParcelDeliveryAudience
+
+    public init(parcel: ParcelDelivery, audience: ParcelDeliveryAudience) {
+        self.parcel = parcel
+        self.audience = audience
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case audience
+    }
+
+    public init(from decoder: Decoder) throws {
+        parcel = try ParcelDelivery(from: decoder)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        audience = try container.decode(ParcelDeliveryAudience.self, forKey: .audience)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try parcel.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(audience, forKey: .audience)
+    }
+}
+
 public struct ParcelAssignment: Codable, Equatable, Sendable {
     public let assignmentID: UUID
     public let assignmentStatus: ParcelAssignmentStatus
@@ -171,6 +202,10 @@ public protocol ParcelDeliveryClient: Sendable {
         parcelID: UUID,
         idempotencyKey: IdempotencyKey
     ) async throws -> ParcelDelivery
+
+    func customerSnapshot(
+        idempotencyKey: IdempotencyKey
+    ) async throws -> [CustomerParcelDelivery]
 
     func partnerSnapshot(
         idempotencyKey: IdempotencyKey
@@ -328,6 +363,12 @@ public struct SupabaseParcelDeliveryClient: ParcelDeliveryClient {
             Request(operation: "parcelSnapshot", parcelId: parcelID),
             key: idempotencyKey
         )
+    }
+
+    public func customerSnapshot(
+        idempotencyKey: IdempotencyKey
+    ) async throws -> [CustomerParcelDelivery] {
+        try await invoke(Request(operation: "customerSnapshot"), key: idempotencyKey)
     }
 
     public func partnerSnapshot(

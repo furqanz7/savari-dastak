@@ -16,6 +16,14 @@ struct DastakSearchView: View {
                     title: "Location needed",
                     message: "Choose a delivery location from Home before searching."
                 )
+            } else if model.catalogue == nil, let failure = model.catalogueRefreshFailure {
+                DastakEmptyState(
+                    symbol: failure.symbol,
+                    title: failure.title,
+                    message: failure.message,
+                    actionTitle: failure.actionTitle,
+                    action: { Task { await model.refreshCatalogue() } }
+                )
             } else if model.activeProducts.isEmpty {
                 DastakEmptyState(
                     symbol: "magnifyingglass",

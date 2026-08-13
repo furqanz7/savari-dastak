@@ -8,6 +8,7 @@ public enum DastakCheckoutEntityType: String, Codable, Equatable, Sendable {
 
 public struct DastakCheckoutSession: Codable, Equatable, Sendable {
     public let orderID: UUID
+    public let entityType: DastakCheckoutEntityType
     public let providerOrderID: String
     public let keyID: String
     public let amountPaise: Int
@@ -16,11 +17,25 @@ public struct DastakCheckoutSession: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case orderID = "orderId"
+        case entityType
         case providerOrderID = "providerOrderId"
         case keyID = "keyId"
         case amountPaise
         case currency
         case receipt
+    }
+
+    // Older deployed payment responses did not include entityType. Keep those
+    // sessions usable while the updated Edge Function rolls out.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        orderID = try container.decode(UUID.self, forKey: .orderID)
+        entityType = try container.decodeIfPresent(DastakCheckoutEntityType.self, forKey: .entityType) ?? .merchantOrder
+        providerOrderID = try container.decode(String.self, forKey: .providerOrderID)
+        keyID = try container.decode(String.self, forKey: .keyID)
+        amountPaise = try container.decode(Int.self, forKey: .amountPaise)
+        currency = try container.decode(String.self, forKey: .currency)
+        receipt = try container.decode(String.self, forKey: .receipt)
     }
 }
 

@@ -12,7 +12,8 @@ let package = Package(
         .package(path: "../DastakDomain"),
         .package(path: "../MarketplaceDesignSystem"),
         .package(path: "../MarketplaceFoundation"),
-        .package(path: "../MarketplaceInfrastructure")
+        .package(path: "../MarketplaceInfrastructure"),
+        .package(url: "https://github.com/razorpay/razorpay-pod.git", exact: "1.5.7")
     ],
     targets: [
         .target(
@@ -21,7 +22,11 @@ let package = Package(
                 "DastakDomain",
                 "MarketplaceDesignSystem",
                 "MarketplaceFoundation",
-                "MarketplaceInfrastructure"
+                "MarketplaceInfrastructure",
+                .product(name: "RazorpayCheckout", package: "razorpay-pod")
+            ],
+            resources: [
+                .process("Resources")
             ]
         ),
         .testTarget(

@@ -114,11 +114,11 @@ export async function getMerchantOrders(
   const payload = record(await call(input, { operation: "merchantSnapshot" }, undefined, fetcher));
   if (!payload || !Array.isArray(payload.orders)) invalid();
   const orders = payload.orders.map(parseMerchantOrder);
-  if (orders.some((order) =>
-    order.status === "payment_pending" || order.paymentState === "payment_pending" ||
-    (order.status === "cancelled" && order.paymentState === "not_collected")
-  )) invalid();
-  return orders;
+  return orders.filter((order) =>
+    order.status !== "payment_pending" &&
+    order.paymentState !== "payment_pending" &&
+    !(order.status === "cancelled" && order.paymentState === "not_collected")
+  );
 }
 
 export async function acceptMerchantOrder(

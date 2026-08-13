@@ -5,6 +5,20 @@ import XCTest
 
 @MainActor
 final class AuthenticationCoordinatorTests: XCTestCase {
+    func testRestoreClearsRestoringStateAfterSuccess() async {
+        let client = ProfileSubmissionAuthenticationClient(
+            bootstrapOutcomes: [],
+            restoreRoutes: [.active]
+        )
+        let coordinator = AuthenticationCoordinator(client: client)
+
+        XCTAssertTrue(coordinator.isRestoring)
+        await coordinator.restore()
+
+        XCTAssertFalse(coordinator.isRestoring)
+        XCTAssertEqual(coordinator.route, .active)
+    }
+
     func testRetryOfSameNormalizedPayloadReusesIdempotencyKeyAfterAmbiguousFailure() async throws {
         let client = ProfileSubmissionAuthenticationClient(
             bootstrapOutcomes: [.ambiguousFailure, .success],

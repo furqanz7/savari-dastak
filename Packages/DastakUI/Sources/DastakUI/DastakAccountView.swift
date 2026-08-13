@@ -3,61 +3,132 @@ import MarketplaceInfrastructure
 import SwiftUI
 
 struct DastakAccountView: View {
+    let customer: MarketplaceCheckoutCustomer?
     let location: DastakDeliveryLocation?
     let discoveryRadiusKilometres: Int
+    let refreshFailure: DastakCustomerRefreshFailure?
     let chooseLocation: () -> Void
+    let retryAccount: () -> Void
 
     @Environment(\.marketplaceSignOut) private var signOut
 
     var body: some View {
-        List {
-            Section {
-                HStack {
-                    DastakWordmark(size: 28)
-                    Spacer()
+        ScrollView {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                profileCard
+                if let refreshFailure {
+                    DastakRefreshNotice(failure: refreshFailure, action: retryAccount)
                 }
-                .padding(.vertical, MarketplaceSpacing.small)
+                deliverySection
+                supportSection
+                signOutButton
             }
+            .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .padding(.top, MarketplaceSpacing.medium)
+            .padding(.bottom, MarketplaceSpacing.xxLarge)
+        }
+        .scrollIndicators(.hidden)
+        .navigationTitle("Account")
+    }
 
-            Section("Delivery") {
-                Button(action: chooseLocation) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Delivery location")
+    private var profileCard: some View {
+        HStack(spacing: MarketplaceSpacing.compact) {
+            Image(systemName: "person.crop.circle.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(customer?.displayName ?? "Your account")
+                    .font(.headline)
+                Text(customer?.phoneNumber ?? "Phone number unavailable")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if let email = customer?.email, !email.isEmpty {
+                    Text(email)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+    }
+
+    private var deliverySection: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Delivery")
+                .font(MarketplaceTypography.sectionTitle)
+
+            Button(action: chooseLocation) {
+                VStack(spacing: MarketplaceSpacing.medium) {
+                    HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                        Image(systemName: "location.fill")
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(location?.displayName ?? "Add delivery address")
+                                .font(.headline)
                                 .foregroundStyle(.primary)
-                            Text(location?.address ?? "Not selected")
-                                .font(.caption)
+                            Text(location?.displayAddress ?? "Add a house, flat or landmark")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
                                 .lineLimit(2)
                         }
-                    } icon: {
-                        Image(systemName: "location")
+                        Spacer(minLength: MarketplaceSpacing.small)
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    Divider()
+
+                    HStack {
+                        Label("Delivery range", systemImage: "scope")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(discoveryRadiusKilometres) km")
+                            .font(.subheadline.bold().monospacedDigit())
+                            .foregroundStyle(.primary)
                     }
                 }
-
-                LabeledContent("Discovery range", value: "\(discoveryRadiusKilometres) km")
+                .padding(MarketplaceSpacing.medium)
+                .contentShape(Rectangle())
             }
-
-            Section("Support") {
-                Link(destination: URL(string: "tel:112")!) {
-                    Label("Emergency assistance", systemImage: "sos")
-                }
-                Label("Help with an order", systemImage: "questionmark.circle")
-                Label("Privacy", systemImage: "hand.raised")
-            }
-
-            Section {
-                Button("Sign out", role: .destructive) {
-                    Task { await signOut() }
-                }
-            }
-
-            Section {
-                Text("Dastak follows your iPhone language and appearance settings.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            .buttonStyle(.plain)
+            .marketplaceFlatSurface()
         }
-        .navigationTitle("Account")
+    }
+
+    private var supportSection: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Support")
+                .font(MarketplaceTypography.sectionTitle)
+            Link(destination: URL(string: "tel:112")!) {
+                Label("Emergency assistance", systemImage: "sos")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(MarketplaceSpacing.medium)
+            }
+            .foregroundStyle(MarketplaceColors.destructive.color)
+            .marketplaceFlatSurface()
+        }
+    }
+
+    private var signOutButton: some View {
+        Button(role: .destructive) {
+            Task { await signOut() }
+        } label: {
+            Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(MarketplaceColors.destructive.color)
+        .padding(.vertical, MarketplaceSpacing.small)
     }
 }

@@ -6,22 +6,54 @@ import SwiftUI
 
 struct DastakOrdersView: View {
     @ObservedObject var model: DastakCustomerModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
-            if model.isLoadingOrders, model.orders.isEmpty {
+            if model.isLoadingOrders, model.isLoadingParcels, model.orders.isEmpty, model.parcels.isEmpty {
                 ProgressView("Refreshing orders")
-            } else if model.orders.isEmpty, model.createdParcel == nil {
-                DastakEmptyState(
-                    symbol: "clock",
-                    title: "No orders yet",
-                    message: "Your store orders and parcel deliveries will appear here."
-                )
+            } else if model.orders.isEmpty, model.parcels.isEmpty {
+                if let failure = model.ordersAndParcelsRefreshFailure {
+                    DastakEmptyState(
+                        symbol: failure.symbol,
+                        title: failure.title,
+                        message: failure.message,
+                        actionTitle: failure.actionTitle,
+                        action: { Task { await model.refreshOrdersAndParcels() } }
+                    )
+                } else {
+                    DastakEmptyState(
+                        symbol: "clock",
+                        title: "No orders yet",
+                        message: "Your store orders and parcel deliveries will appear here."
+                    )
+                }
             } else {
                 List {
-                    if let parcel = model.createdParcel {
-                        Section("Parcel") {
-                            DastakParcelHistoryRow(parcel: parcel)
+                    if let failure = model.ordersAndParcelsRefreshFailure {
+                        Section {
+                            DastakRefreshNotice(
+                                failure: failure,
+                                action: { Task { await model.refreshOrdersAndParcels() } }
+                            )
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                        }
+                    }
+
+                    if !model.parcels.isEmpty {
+                        Section("Parcel deliveries") {
+                            ForEach(model.parcels, id: \.parcel.parcelID) { customerParcel in
+                                NavigationLink {
+                                    DastakParcelDetailView(
+                                        customerParcel: customerParcel,
+                                        pay: { await model.retryPayment(for: customerParcel) },
+                                        cancel: { await model.cancel(customerParcel) }
+                                    )
+                                } label: {
+                                    DastakParcelHistoryRow(customerParcel: customerParcel)
+                                }
+                            }
                         }
                     }
 
@@ -33,7 +65,8 @@ struct DastakOrdersView: View {
                                     store: model.catalogue?.stores.first {
                                         $0.storeID == order.storeID
                                     },
-                                    cancel: { await model.cancel(order) }
+                                    cancel: { await model.cancel(order) },
+                                    pay: { await model.retryPayment(for: order) }
                                 )
                             } label: {
                                 DastakOrderRow(order: order)
@@ -45,12 +78,21 @@ struct DastakOrdersView: View {
             }
         }
         .navigationTitle("Orders")
-        .refreshable { await model.refreshOrders() }
+        .refreshable {
+            await model.refreshOrdersAndParcels()
+        }
         .task {
-            await model.refreshOrders()
+            await model.refreshOrdersAndParcels()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
-                await model.refreshOrders()
+                guard !Task.isCancelled, scenePhase == .active else { continue }
+                await model.refreshOrdersAndParcels()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                await model.refreshOrdersAndParcels()
             }
         }
     }
@@ -89,7 +131,9 @@ private struct DastakOrderRow: View {
 }
 
 private struct DastakParcelHistoryRow: View {
-    let parcel: ParcelDelivery
+    let customerParcel: CustomerParcelDelivery
+
+    private var parcel: ParcelDelivery { customerParcel.parcel }
 
     var body: some View {
         HStack(spacing: MarketplaceSpacing.compact) {
@@ -99,7 +143,7 @@ private struct DastakParcelHistoryRow: View {
                 Text(parcel.dropoff.address)
                     .font(.headline)
                     .lineLimit(1)
-                Text(DastakFormatting.parcelStatus(parcel.status))
+                Text("\(customerParcel.audience == .sender ? "Sent" : "Incoming") · \(DastakFormatting.parcelStatus(parcel.status))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -110,10 +154,203 @@ private struct DastakParcelHistoryRow: View {
     }
 }
 
+private struct DastakParcelDetailView: View {
+    let customerParcel: CustomerParcelDelivery
+    let pay: () async -> Void
+    let cancel: () async -> Void
+
+    @State private var mapPosition: MapCameraPosition
+    @State private var isCancelling = false
+
+    private var parcel: ParcelDelivery { customerParcel.parcel }
+
+    init(
+        customerParcel: CustomerParcelDelivery,
+        pay: @escaping () async -> Void,
+        cancel: @escaping () async -> Void
+    ) {
+        self.customerParcel = customerParcel
+        self.pay = pay
+        self.cancel = cancel
+        let center = CLLocationCoordinate2D(
+            latitude: (customerParcel.parcel.pickup.latitude + customerParcel.parcel.dropoff.latitude) / 2,
+            longitude: (customerParcel.parcel.pickup.longitude + customerParcel.parcel.dropoff.longitude) / 2
+        )
+        _mapPosition = State(
+            initialValue: .region(
+                MKCoordinateRegion(
+                    center: center,
+                    latitudinalMeters: 5_000,
+                    longitudinalMeters: 5_000
+                )
+            )
+        )
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                map
+                status
+                route
+                payment
+                if canPay {
+                    Button {
+                        Task { await pay() }
+                    } label: {
+                        Label("Pay securely", systemImage: "lock.fill")
+                    }
+                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                }
+                if canCancel {
+                    Button(role: .destructive) {
+                        isCancelling = true
+                        Task {
+                            await cancel()
+                            isCancelling = false
+                        }
+                    } label: {
+                        isCancelling ? AnyView(ProgressView()) : AnyView(Text("Cancel delivery"))
+                    }
+                    .buttonStyle(MarketplaceSecondaryButtonStyle())
+                    .disabled(isCancelling)
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                }
+            }
+            .padding(.bottom, MarketplaceSpacing.xLarge)
+        }
+        .navigationTitle("Parcel")
+        .dastakInlineNavigationTitle()
+    }
+
+    private var map: some View {
+        Map(position: $mapPosition) {
+            Marker(
+                "Pickup",
+                systemImage: "shippingbox.fill",
+                coordinate: CLLocationCoordinate2D(latitude: parcel.pickup.latitude, longitude: parcel.pickup.longitude)
+            )
+            .tint(MarketplaceColors.dastakAccent.color)
+            Marker(
+                "Drop-off",
+                systemImage: "mappin.circle.fill",
+                coordinate: CLLocationCoordinate2D(latitude: parcel.dropoff.latitude, longitude: parcel.dropoff.longitude)
+            )
+            .tint(.red)
+        }
+        .mapStyle(.standard(elevation: .realistic))
+        .frame(height: 260)
+        .accessibilityLabel("Parcel route map")
+    }
+
+    private var status: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text(DastakFormatting.parcelStatus(parcel.status))
+                .font(MarketplaceTypography.sectionTitle)
+            Text(statusMessage)
+                .foregroundStyle(.secondary)
+            if let handoffCode = parcel.handoffCode {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(handoffCode.purpose == .pickup ? "Pickup code" : "Delivery code")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(handoffCode.code)
+                            .font(.title.bold().monospaced())
+                    }
+                    Spacer()
+                    Image(systemName: "number.square.fill")
+                        .font(.title)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                }
+                .padding(MarketplaceSpacing.medium)
+                .marketplaceFlatSurface()
+            }
+        }
+        .padding(.horizontal, MarketplaceSpacing.medium)
+    }
+
+    private var route: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            Label("Pickup", systemImage: "shippingbox.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(parcel.pickup.address)
+            Divider()
+            Label("Drop-off", systemImage: "mappin.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(parcel.dropoff.address)
+            Divider()
+            Text(parcel.declaredContents)
+                .font(.headline)
+            Text(customerParcel.audience == .sender ? "Recipient: \(parcel.recipient.name)" : "You are receiving this parcel")
+                .foregroundStyle(.secondary)
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+        .padding(.horizontal, MarketplaceSpacing.medium)
+    }
+
+    private var payment: some View {
+        VStack(spacing: MarketplaceSpacing.compact) {
+            line("Delivery", parcel.deliveryFee)
+            Divider()
+            HStack {
+                Text("Payment")
+                Spacer()
+                DastakStatusPill(
+                    text: parcel.paymentStatus == .paid ? "Paid" : "Pending",
+                    emphasis: parcel.paymentStatus == .paid
+                )
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+        .padding(.horizontal, MarketplaceSpacing.medium)
+    }
+
+    private var canPay: Bool {
+        customerParcel.audience == .sender && parcel.paymentStatus == .pending
+    }
+
+    private var canCancel: Bool {
+        guard customerParcel.audience == .sender else { return false }
+        return switch parcel.status {
+        case .paymentPending, .paid, .assigned, .enRouteToPickup:
+            true
+        case .pickedUp, .inTransit, .delivered, .cancelled:
+            false
+        }
+    }
+
+    private var statusMessage: String {
+        switch parcel.status {
+        case .paymentPending: "Complete payment to request pickup."
+        case .paid: "Finding a delivery partner."
+        case .assigned: "A delivery partner has been assigned."
+        case .enRouteToPickup: "Your delivery partner is heading to pickup."
+        case .pickedUp, .inTransit: "Your parcel is on the way."
+        case .delivered: "Your parcel was delivered."
+        case .cancelled: "This parcel delivery was cancelled."
+        }
+    }
+
+    private func line(_ title: String, _ value: Money) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(DastakFormatting.money(value)).monospacedDigit()
+        }
+    }
+}
+
 private struct DastakOrderDetailView: View {
     let order: MerchantOrderSnapshot
     let store: CatalogueStore?
     let cancel: () async -> Void
+    let pay: () async -> Void
 
     @State private var mapPosition: MapCameraPosition
     @State private var isCancelling = false
@@ -121,11 +358,13 @@ private struct DastakOrderDetailView: View {
     init(
         order: MerchantOrderSnapshot,
         store: CatalogueStore?,
-        cancel: @escaping () async -> Void
+        cancel: @escaping () async -> Void,
+        pay: @escaping () async -> Void
     ) {
         self.order = order
         self.store = store
         self.cancel = cancel
+        self.pay = pay
         let center = CLLocationCoordinate2D(
             latitude: order.dropoff.latitude,
             longitude: order.dropoff.longitude
@@ -148,6 +387,9 @@ private struct DastakOrderDetailView: View {
                 status
                 items
                 payment
+                if order.paymentState == .paymentPending {
+                    payButton
+                }
                 if canCancel {
                     cancelButton
                 }
@@ -267,6 +509,16 @@ private struct DastakOrderDetailView: View {
         }
         .buttonStyle(MarketplaceSecondaryButtonStyle())
         .disabled(isCancelling)
+        .padding(.horizontal, MarketplaceSpacing.medium)
+    }
+
+    private var payButton: some View {
+        Button {
+            Task { await pay() }
+        } label: {
+            Label("Pay securely", systemImage: "lock.fill")
+        }
+        .buttonStyle(MarketplacePrimaryButtonStyle())
         .padding(.horizontal, MarketplaceSpacing.medium)
     }
 

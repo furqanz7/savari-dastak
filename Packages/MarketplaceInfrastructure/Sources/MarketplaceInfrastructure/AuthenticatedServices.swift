@@ -5,6 +5,18 @@ public enum MarketplaceAuthenticatedServicesError: Error, Equatable, Sendable {
     case invalidObjectPath
 }
 
+public struct MarketplaceCheckoutCustomer: Equatable, Sendable {
+    public let displayName: String
+    public let email: String?
+    public let phoneNumber: String
+
+    public init(displayName: String, email: String?, phoneNumber: String) {
+        self.displayName = displayName
+        self.email = email
+        self.phoneNumber = phoneNumber
+    }
+}
+
 public struct MarketplaceAuthenticatedServices: Sendable {
     public let functions: any FunctionClient
 
@@ -16,6 +28,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         String,
         String
     ) async throws -> Void
+    private let checkoutCustomerProvider: @Sendable () async throws -> MarketplaceCheckoutCustomer?
 
     init(
         functions: any FunctionClient,
@@ -26,15 +39,21 @@ public struct MarketplaceAuthenticatedServices: Sendable {
             Data,
             String,
             String
-        ) async throws -> Void
+        ) async throws -> Void,
+        checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer? = { nil }
     ) {
         self.functions = functions
         self.accountIDProvider = accountIDProvider
         self.objectUploader = objectUploader
+        self.checkoutCustomerProvider = checkoutCustomerProvider
     }
 
     public func accountID() async throws -> UUID {
         try await accountIDProvider()
+    }
+
+    public func checkoutCustomer() async throws -> MarketplaceCheckoutCustomer? {
+        try await checkoutCustomerProvider()
     }
 
     public func uploadObject(

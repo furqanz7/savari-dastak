@@ -66,7 +66,7 @@ struct DastakHomeView: View {
                             Text("Deliver to")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Text(model.selectedLocation?.address ?? "Choose location")
+                            Text(model.selectedLocation?.displayAddress ?? "Choose location")
                                 .font(.subheadline.bold())
                                 .lineLimit(1)
                         }
@@ -167,6 +167,15 @@ struct DastakHomeView: View {
         } else if model.isLoadingCatalogue, model.catalogue == nil {
             ProgressView("Finding nearby stores")
                 .frame(maxWidth: .infinity, minHeight: 320)
+        } else if model.catalogue == nil, let failure = model.catalogueRefreshFailure {
+            DastakEmptyState(
+                symbol: failure.symbol,
+                title: failure.title,
+                message: failure.message,
+                actionTitle: failure.actionTitle,
+                action: { Task { await model.refreshCatalogue() } }
+            )
+            .frame(minHeight: 320)
         } else if let catalogue = model.catalogue, catalogue.stores.isEmpty {
             DastakEmptyState(
                 symbol: "storefront",
@@ -175,6 +184,12 @@ struct DastakHomeView: View {
             )
             .frame(minHeight: 320)
         } else {
+            if let failure = model.catalogueRefreshFailure {
+                DastakRefreshNotice(
+                    failure: failure,
+                    action: { Task { await model.refreshCatalogue() } }
+                )
+            }
             ForEach(model.catalogue?.stores ?? [], id: \.storeID) { store in
                 storeSection(store)
             }

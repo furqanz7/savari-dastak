@@ -25,6 +25,11 @@ const supabase = createClient(config.supabaseUrl, config.supabasePublishableKey,
     autoRefreshToken: true,
   },
 });
+const dastakLaunchVideos = [
+  "/launch/dastak-launch.mp4",
+  "/launch/dastak-launch-2.mp4",
+  "/launch/dastak-launch-3.mp4",
+];
 
 type ViewState =
   | { phase: "loading" }
@@ -37,7 +42,15 @@ type ViewState =
 export default function App() {
   const [view, setView] = useState<ViewState>({ phase: "loading" });
   const [busy, setBusy] = useState(false);
+  const [showsDastakLaunch, setShowsDastakLaunch] = useState(config.product === "dastak");
+  const [dastakLaunchVideo] = useState(nextDastakLaunchVideo);
   const knownUserId = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (config.product !== "dastak") return;
+    const timer = window.setTimeout(() => setShowsDastakLaunch(false), 1250);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const evaluate = useCallback(async (session: Session | null) => {
     if (!session) {
@@ -125,6 +138,7 @@ export default function App() {
           <ErrorState message={view.message} onRetry={() => evaluate(view.session ?? null)} />
         )}
       </section>
+      {showsDastakLaunch && <DastakLaunchScreen videoSource={dastakLaunchVideo} />}
     </main>
   );
 }
@@ -142,11 +156,22 @@ function updateViewSession(view: ViewState, session: Session): ViewState {
 }
 
 function Brand() {
+  if (config.product === "dastak") {
+    return (
+      <div className="brand-lockup brand-lockup-dastak">
+        <span>
+          <strong>Dastak <span className="brand-urdu" lang="ur">دستک</span></strong>
+          <small>{config.roleLabel}</small>
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="brand-lockup">
       <span className="brand-mark" aria-hidden="true">{config.brand[0]}</span>
       <span>
-        <strong>{config.brand}{config.product === "dastak" && <span className="brand-urdu" lang="ur"> دستک</span>}</strong>
+        <strong>{config.brand}</strong>
         <small>{config.roleLabel}</small>
       </span>
     </div>
@@ -155,21 +180,68 @@ function Brand() {
 
 function SignIn({ busy, onSignIn }: { busy: boolean; onSignIn: (provider: Provider) => void }) {
   return (
-    <div className="auth-layout">
+    <div className={`auth-layout ${config.product === "dastak" ? "dastak-auth-layout" : ""}`}>
       <div className="auth-copy">
-        <p className="eyebrow">{config.roleLabel}</p>
-        <h1>{config.brand}</h1>
-        <p>Sign in to continue.</p>
+        {config.product === "dastak" ? (
+          <>
+            <h1>Dastak <span className="brand-urdu" lang="ur">دستک</span></h1>
+            <p>{config.roleLabel}</p>
+          </>
+        ) : (
+          <>
+            <p className="eyebrow">{config.roleLabel}</p>
+            <h1>{config.brand}</h1>
+            <p>Sign in to continue.</p>
+          </>
+        )}
       </div>
       <div className="auth-actions" aria-label="Sign in options">
         <button className="provider-button apple" type="button" disabled={busy} onClick={() => onSignIn("apple")}>
           <span aria-hidden="true">&#63743;</span> Continue with Apple
         </button>
         <button className="provider-button google" type="button" disabled={busy} onClick={() => onSignIn("google")}>
-          <span className="google-g" aria-hidden="true">G</span> Continue with Google
+          <GoogleLogo /> Continue with Google
         </button>
       </div>
     </div>
+  );
+}
+
+function DastakLaunchScreen({ videoSource }: { videoSource: string }) {
+  return (
+    <section className="dastak-launch" aria-label="Opening Dastak">
+      <video className="dastak-launch-video" autoPlay muted loop playsInline preload="metadata" aria-hidden="true">
+        <source src={videoSource} type="video/mp4" />
+      </video>
+      <div className="dastak-launch-content">
+        <p>Dastak <span lang="ur">دستک</span></p>
+        <small>{config.roleLabel}</small>
+        <i aria-hidden="true" />
+      </div>
+    </section>
+  );
+}
+
+function nextDastakLaunchVideo() {
+  if (config.product !== "dastak") return dastakLaunchVideos[0];
+  const key = "dastak.launch-video-index";
+  const storedIndex = window.sessionStorage.getItem(key);
+  const currentIndex = storedIndex === null ? -1 : Number(storedIndex);
+  const nextIndex = Number.isInteger(currentIndex) && currentIndex >= 0
+    ? (currentIndex + 1) % dastakLaunchVideos.length
+    : 0;
+  window.sessionStorage.setItem(key, String(nextIndex));
+  return dastakLaunchVideos[nextIndex];
+}
+
+function GoogleLogo() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="google-logo">
+      <path fill="#4285F4" d="M21.35 12.2c0-.7-.06-1.37-.16-2.01H12v3.82h5.27c-.23 1.24-.96 2.29-2.04 2.99v2.49h3.3c1.93-1.77 3.04-4.38 3.04-7.29z" />
+      <path fill="#34A853" d="M12 22c2.7 0 4.97-.89 6.62-2.41l-3.3-2.49c-.92.62-2.1.99-3.32.99-2.56 0-4.73-1.73-5.51-4.06H3.07v2.55A9.99 9.99 0 0 0 12 22z" />
+      <path fill="#FBBC05" d="M6.49 13.99A5.99 5.99 0 0 1 6.18 12c0-.69.12-1.36.31-1.99V7.46H3.07A9.99 9.99 0 0 0 2 12c0 1.61.39 3.13 1.07 4.54l3.42-2.55z" />
+      <path fill="#EA4335" d="M12 5.99c1.47 0 2.79.51 3.83 1.52l2.87-2.87C16.96 2.99 14.69 2 12 2A9.99 9.99 0 0 0 3.07 7.46l3.42 2.55C7.27 7.72 9.44 5.99 12 5.99z" />
+    </svg>
   );
 }
 

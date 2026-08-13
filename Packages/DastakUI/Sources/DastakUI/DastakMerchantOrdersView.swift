@@ -18,6 +18,9 @@ struct DastakMerchantOrdersView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, MarketplaceSpacing.xxLarge)
                     } else {
+                        if let earnings = model.earnings {
+                            DastakEarningsCard(earnings: earnings, title: "Earnings")
+                        }
                         summary
                         orderSection(
                             title: "Active orders",

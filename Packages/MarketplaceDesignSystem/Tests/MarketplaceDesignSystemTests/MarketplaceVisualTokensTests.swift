@@ -3,15 +3,15 @@ import Testing
 
 @Test
 func dastakBrandAndDestructiveColoursRemainDistinct() {
-    #expect(MarketplaceColors.dastakAccent.hex == 0xE45B49)
-    #expect(MarketplaceColors.destructive.hex == 0xD70015)
+    #expect(MarketplaceColors.dastakAccent.hex == 0xB08D57)
+    #expect(MarketplaceColors.destructive.hex == 0xA65A45)
     #expect(MarketplaceColors.dastakAccent != MarketplaceColors.destructive)
 }
 
 @Test
 func primaryActionsStayNeutral() {
-    #expect(MarketplaceColors.primaryAction.hex == 0x171719)
-    #expect(MarketplaceColors.primaryActionForeground.hex == 0xFFFFFF)
+    #expect(MarketplaceColors.primaryAction.hex == 0x21130E)
+    #expect(MarketplaceColors.primaryActionForeground.hex == 0xF5F2EC)
 }
 
 @Test

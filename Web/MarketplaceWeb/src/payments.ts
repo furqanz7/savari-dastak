@@ -17,6 +17,7 @@ export type CheckoutSession = {
 };
 
 export type CheckoutResult = "success" | "failed" | "dismissed";
+type PaymentMethod = "upi" | "card" | "netbanking" | "wallet" | "paylater";
 
 export class PaymentRequestError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) {
@@ -79,6 +80,8 @@ export async function openRazorpayCheckout(
   session: CheckoutSession,
   customer: { name?: string; email?: string; phoneNumber?: string },
 ): Promise<CheckoutResult> {
+  const method = await selectPaymentMethod();
+  if (!method) return "dismissed";
   const Razorpay = await loadRazorpayCheckout();
   return await new Promise((resolve) => {
     let completed = false;
@@ -100,12 +103,52 @@ export async function openRazorpayCheckout(
         contact: customer.phoneNumber,
       },
       retry: { enabled: true },
+      method: {
+        upi: method === "upi",
+        card: method === "card",
+        netbanking: method === "netbanking",
+        wallet: method === "wallet",
+        paylater: method === "paylater",
+      },
       modal: { ondismiss: () => finish("dismissed") },
       handler: () => finish("success"),
       theme: { color: "#166534" },
     });
     checkout.on("payment.failed", () => finish("failed"));
     checkout.open();
+  });
+}
+
+function selectPaymentMethod(): Promise<PaymentMethod | undefined> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "payment-method-overlay";
+    overlay.innerHTML = `
+      <div class="payment-method-sheet" role="dialog" aria-modal="true" aria-labelledby="payment-method-title">
+        <div class="payment-method-header"><div><p class="eyebrow">Dastak</p><h2 id="payment-method-title">Select payment method</h2><p>Choose how you want to pay. Razorpay securely completes the payment.</p></div><button class="icon-button" data-dismiss aria-label="Close">×</button></div>
+        <section><h3>UPI</h3>
+          <button class="payment-method-row selected" data-method="upi"><span class="payment-method-icon">↗</span><span><strong>UPI ID</strong><small>Enter your UPI ID</small></span><span class="payment-check">✓</span></button>
+          ${["Google Pay", "Paytm", "PhonePe", "CRED", "POP", "super.money", "Jupiter", "JioFinance", "slice"].map((name) => `<button class="payment-method-row" data-method="upi"><span class="payment-method-icon">↗</span><span><strong>${name}</strong><small>Pay with the app if installed</small></span><span class="payment-check"></span></button>`).join("")}
+        </section>
+        <section><h3>Other payment methods</h3>
+          <button class="payment-method-row" data-method="card"><span class="payment-method-icon">▣</span><span><strong>Credit or debit card</strong><small>Add a card securely at checkout</small></span><span class="payment-check"></span></button>
+          <button class="payment-method-row" data-method="netbanking"><span class="payment-method-icon">▤</span><span><strong>Net banking</strong><small>Select your bank</small></span><span class="payment-check"></span></button>
+          <button class="payment-method-row" data-method="wallet"><span class="payment-method-icon">▱</span><span><strong>Wallets</strong><small>Available wallets</small></span><span class="payment-check"></span></button>
+          <button class="payment-method-row" data-method="paylater"><span class="payment-method-icon">◷</span><span><strong>Pay later</strong><small>Where supported by your account</small></span><span class="payment-check"></span></button>
+        </section>
+        <button class="primary-button payment-method-continue">Continue securely</button>
+      </div>`;
+    document.body.append(overlay);
+    let selected: PaymentMethod = "upi";
+    const close = (value?: PaymentMethod) => { overlay.remove(); resolve(value); };
+    overlay.querySelectorAll<HTMLButtonElement>("[data-method]").forEach((button) => button.addEventListener("click", () => {
+      selected = button.dataset.method as PaymentMethod;
+      overlay.querySelectorAll(".payment-method-row").forEach((row) => row.classList.remove("selected"));
+      button.classList.add("selected");
+    }));
+    overlay.querySelector("[data-dismiss]")?.addEventListener("click", () => close());
+    overlay.querySelector(".payment-method-continue")?.addEventListener("click", () => close(selected));
+    overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
   });
 }
 

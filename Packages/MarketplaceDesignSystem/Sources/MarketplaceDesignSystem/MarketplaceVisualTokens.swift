@@ -17,28 +17,36 @@ public struct MarketplaceRGB: Equatable, Sendable {
 }
 
 public enum MarketplaceColors {
-    public static let dastakAccent = MarketplaceRGB(hex: 0xE45B49)
-    public static let dastakAccentDark = MarketplaceRGB(hex: 0xFF8172)
-    public static let dastakAccentSoft = MarketplaceRGB(hex: 0xFFF0EC)
+    public static let dastakBrand = MarketplaceRGB(hex: 0x3A241A)
+    public static let dastakIconBackground = MarketplaceRGB(hex: 0x21130E)
+    public static let dastakAccent = MarketplaceRGB(hex: 0xB08D57)
+    public static let dastakAccentDark = MarketplaceRGB(hex: 0xD1B37E)
+    public static let dastakAccentSoft = MarketplaceRGB(hex: 0x2A2018)
     public static let savariAccent = MarketplaceRGB(hex: 0x138A5B)
     public static let route = MarketplaceRGB(hex: 0x007AFF)
 
-    public static let primaryAction = MarketplaceRGB(hex: 0x171719)
-    public static let primaryActionForeground = MarketplaceRGB(hex: 0xFFFFFF)
-    public static let destructive = MarketplaceRGB(hex: 0xD70015)
-    public static let success = MarketplaceRGB(hex: 0x18864B)
-    public static let warning = MarketplaceRGB(hex: 0xA05A00)
+    public static let primaryAction = MarketplaceRGB(hex: 0x21130E)
+    public static let primaryActionForeground = MarketplaceRGB(hex: 0xF5F2EC)
+    public static let destructive = MarketplaceRGB(hex: 0xA65A45)
+    public static let success = MarketplaceRGB(hex: 0x5F7650)
+    public static let warning = MarketplaceRGB(hex: 0xB08D57)
 
-    public static let canvasLight = MarketplaceRGB(hex: 0xF7F7F5)
-    public static let canvasDark = MarketplaceRGB(hex: 0x0D0D0F)
-    public static let surfaceLight = MarketplaceRGB(hex: 0xFFFFFF)
-    public static let surfaceDark = MarketplaceRGB(hex: 0x1C1C1E)
-    public static let textPrimaryLight = MarketplaceRGB(hex: 0x171719)
-    public static let textPrimaryDark = MarketplaceRGB(hex: 0xF5F5F7)
-    public static let textSecondaryLight = MarketplaceRGB(hex: 0x68686D)
-    public static let textSecondaryDark = MarketplaceRGB(hex: 0xAFAFB4)
-    public static let dividerLight = MarketplaceRGB(hex: 0xD7D7DC)
-    public static let dividerDark = MarketplaceRGB(hex: 0x38383D)
+    public static let canvasLight = MarketplaceRGB(hex: 0xF4EBDD)
+    public static let canvasDark = MarketplaceRGB(hex: 0x0F0F10)
+    public static let surfaceLight = MarketplaceRGB(hex: 0xFFF9F2)
+    public static let surfaceDark = MarketplaceRGB(hex: 0x181716)
+    public static let textPrimaryLight = MarketplaceRGB(hex: 0x21130E)
+    public static let textPrimaryDark = MarketplaceRGB(hex: 0xF5F2EC)
+    public static let textSecondaryLight = MarketplaceRGB(hex: 0x9A938B)
+    public static let textSecondaryDark = MarketplaceRGB(hex: 0xB8B1A8)
+    public static let dividerLight = MarketplaceRGB(hex: 0xD9CCBF)
+    public static let dividerDark = MarketplaceRGB(hex: 0x2D2520)
+
+    // Explicit Dastak aliases keep product views on the shared palette.
+    public static let dastakBackground = canvasDark
+    public static let dastakSurface = surfaceDark
+    public static let dastakText = textPrimaryDark
+    public static let dastakSecondaryText = textSecondaryDark
 
     public static func accent(for scheme: ColorScheme) -> Color {
         (scheme == .dark ? dastakAccentDark : dastakAccent).color

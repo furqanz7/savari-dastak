@@ -1,6 +1,15 @@
 {
-  "originHash" : "9577fc3db87da87d186cec21c606695067cc6ef7a8a523ec10630c675db24946",
+  "originHash" : "ef12acb8568040018b1637c10bca124d5139c011ab9e50e2cba1847450ff9a79",
   "pins" : [
+    {
+      "identity" : "razorpay-pod",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/razorpay/razorpay-pod.git",
+      "state" : {
+        "revision" : "952726216dd642d5502f001ea2df1041a568753a",
+        "version" : "1.5.7"
+      }
+    },
     {
       "identity" : "supabase-swift",
       "kind" : "remoteSourceControl",

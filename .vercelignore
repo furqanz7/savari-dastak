@@ -1,0 +1,10 @@
+**/node_modules/
+**/dist/
+.git/
+.worktrees/
+DerivedData/
+*.xcarchive
+*.zip
+*.mov
+*.mp4
+!Web/MarketplaceWeb/public/launch/*.mp4

@@ -4,6 +4,9 @@ import Foundation
 import MarketplaceFoundation
 import Security
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public struct MarketplaceSignOutAction: @unchecked Sendable {
     private let action: @MainActor () async -> Void
@@ -105,6 +108,9 @@ private final class AuthenticationShellModel: ObservableObject {
                     contentType: contentType,
                     cacheControl: cacheControl
                 )
+            },
+            checkoutCustomerProvider: {
+                try await operations.checkoutCustomer()
             }
         )
     }
@@ -112,6 +118,7 @@ private final class AuthenticationShellModel: ObservableObject {
 
 public struct MarketplaceAuthenticationShell: View {
     private let applicationName: String
+    private let product: MarketplaceProduct
     private let showsPersistentSignOut: Bool
     private let activeContent: (MarketplaceAuthenticatedServices) -> AnyView
     private let restrictedContent: ((AccountRoute, MarketplaceAuthenticatedServices) -> AnyView)?
@@ -191,6 +198,7 @@ public struct MarketplaceAuthenticationShell: View {
         restrictedContent: ((AccountRoute, MarketplaceAuthenticatedServices) -> AnyView)?
     ) {
         self.applicationName = applicationName
+        self.product = product
         self.showsPersistentSignOut = showsPersistentSignOut
         self.activeContent = activeContent
         self.restrictedContent = restrictedContent
@@ -210,6 +218,7 @@ public struct MarketplaceAuthenticationShell: View {
             {
                 AuthenticationRouteView(
                     applicationName: applicationName,
+                    product: product,
                     coordinator: coordinator,
                     showsPersistentSignOut: showsPersistentSignOut,
                     activeContent: activeContent(services),
@@ -218,14 +227,7 @@ public struct MarketplaceAuthenticationShell: View {
                     }
                 )
             } else {
-                VStack(spacing: 12) {
-                    Text(applicationName).font(.title2).bold()
-                    Text("Authentication unavailable")
-                    Text("Backend configuration is missing.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .padding()
+                ShellUnavailableView(applicationName: applicationName)
             }
         }
     }
@@ -239,6 +241,7 @@ private struct DefaultMarketplaceActiveView: View {
 
 private struct AuthenticationRouteView: View {
     let applicationName: String
+    let product: MarketplaceProduct
     @ObservedObject var coordinator: AuthenticationCoordinator
     let showsPersistentSignOut: Bool
     let activeContent: AnyView
@@ -252,8 +255,12 @@ private struct AuthenticationRouteView: View {
 
     var body: some View {
         Group {
-            if coordinator.route == .active {
+            if coordinator.isRestoring {
+                restoreView
+            } else if coordinator.route == .active {
                 activeView
+            } else if product == .dastak {
+                dastakAuthenticationView
             } else {
                 authenticationView
             }
@@ -265,45 +272,179 @@ private struct AuthenticationRouteView: View {
         }
     }
 
-    private var authenticationView: some View {
-        VStack(spacing: 16) {
-            Text(applicationName).font(.title2).bold()
+    private var restoreView: some View {
+        if product == .dastak {
+            return AnyView(dastakRestoreView)
+        }
 
-            switch coordinator.route {
-            case .signedOut:
-                signedOutView
-            case .needsProfile:
-                profileView
-            case .pendingApproval:
-                resolvedRestrictedView(
-                    route: .pendingApproval,
-                    title: "Approval pending",
-                    message: "This account is waiting for approval to use this app."
-                )
-            case .suspended:
-                resolvedRestrictedView(
-                    route: .suspended,
-                    title: "Account suspended",
-                    message: "This account cannot use this app right now."
-                )
-            case .accessDenied:
-                resolvedRestrictedView(
-                    route: .accessDenied,
-                    title: "Access denied",
-                    message: "This account does not have access to this app."
-                )
-            case .active:
-                EmptyView()
-            }
+        return AnyView(
+        ZStack {
+            Color(red: 0.06, green: 0.06, blue: 0.06).ignoresSafeArea()
+            ProgressView()
+                .tint(.white)
+                .accessibilityLabel("Restoring account")
+        }
+        )
+    }
 
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+    private var dastakRestoreView: some View {
+        ZStack {
+            dastakCanvas.ignoresSafeArea()
+            VStack(spacing: 18) {
+                DastakAuthWordmark(size: 38)
+                ProgressView()
+                    .tint(dastakAccent)
+                    .accessibilityLabel("Restoring account")
             }
         }
-        .padding(24)
-        .frame(maxWidth: 420)
+        .preferredColorScheme(.dark)
+    }
+
+    private var authenticationView: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.06, green: 0.06, blue: 0.06),
+                    Color(red: 0.13, green: 0.08, blue: 0.06)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                Spacer(minLength: 0)
+                VStack(spacing: 12) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.10))
+                        .frame(width: 92, height: 92)
+                        .overlay {
+                            Text(String(applicationName.prefix(1)))
+                                .font(.system(size: 36, weight: .bold, design: .serif))
+                                .foregroundStyle(.white)
+                        }
+
+                    Text(applicationName)
+                        .font(.system(size: 32, weight: .light, design: .serif))
+                        .foregroundStyle(.white)
+
+                    Text(routeSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.white.opacity(0.74))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 300)
+                }
+
+                Group {
+                    switch coordinator.route {
+                    case .signedOut:
+                        signedOutView
+                    case .needsProfile:
+                        profileView
+                    case .pendingApproval:
+                        resolvedRestrictedView(
+                            route: .pendingApproval,
+                            title: "Approval pending",
+                            message: "This account is waiting for approval to use this app."
+                        )
+                    case .suspended:
+                        resolvedRestrictedView(
+                            route: .suspended,
+                            title: "Account suspended",
+                            message: "This account cannot use this app right now."
+                        )
+                    case .accessDenied:
+                        resolvedRestrictedView(
+                            route: .accessDenied,
+                            title: "Access denied",
+                            message: "This account does not have access to this app."
+                        )
+                    case .active:
+                        EmptyView()
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 430)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+                .shadow(color: .black.opacity(0.22), radius: 28, y: 18)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.81))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 28)
+        }
+    }
+
+    private var dastakAuthenticationView: some View {
+        ZStack {
+            dastakCanvas.ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    DastakAuthWordmark(size: 40)
+                    Text(dastakRoleLabel)
+                        .font(.caption.weight(.semibold))
+                        .textCase(.uppercase)
+                        .tracking(1.2)
+                        .foregroundStyle(dastakAccent)
+                    Text(routeSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(dastakSecondaryText)
+                }
+                .padding(.top, 28)
+
+                Spacer(minLength: 72)
+
+                Group {
+                    switch coordinator.route {
+                    case .signedOut:
+                        dastakSignedOutView
+                    case .needsProfile:
+                        dastakProfileView
+                    case .pendingApproval:
+                        resolvedRestrictedView(
+                            route: .pendingApproval,
+                            title: "Approval pending",
+                            message: "This account is waiting for approval to use this app."
+                        )
+                    case .suspended:
+                        resolvedRestrictedView(
+                            route: .suspended,
+                            title: "Account suspended",
+                            message: "This account cannot use this app right now."
+                        )
+                    case .accessDenied:
+                        resolvedRestrictedView(
+                            route: .accessDenied,
+                            title: "Access denied",
+                            message: "This account does not have access to this app."
+                        )
+                    case .active:
+                        EmptyView()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(dastakError)
+                        .padding(.top, 20)
+                }
+            }
+            .frame(maxWidth: 430, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 36)
+        }
+        .preferredColorScheme(.dark)
     }
 
     private var signedOutView: some View {
@@ -321,13 +462,47 @@ private struct AuthenticationRouteView: View {
                 handleAppleCompletion(result)
             }
             .signInWithAppleButtonStyle(.black)
-            .frame(height: 44)
+            .frame(height: 50)
 
-            Button("Continue with Google") {
+            Button {
                 Task { await signInWithGoogle() }
+            } label: {
+                HStack(spacing: 10) {
+                    GoogleLogoMark()
+                    Text("Continue with Google")
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .frame(minHeight: 44)
+            .buttonStyle(BrandGoogleButtonStyle())
+        }
+    }
+
+    private var dastakSignedOutView: some View {
+        VStack(spacing: 12) {
+            SignInWithAppleButton(.continue) { request in
+                do {
+                    let nonce = try AppleSignInNonce.make()
+                    appleNonce = nonce
+                    request.requestedScopes = [.fullName, .email]
+                    request.nonce = AppleSignInNonce.sha256(nonce)
+                } catch {
+                    errorMessage = "Apple sign-in is unavailable."
+                }
+            } onCompletion: { result in
+                handleAppleCompletion(result)
+            }
+            .signInWithAppleButtonStyle(.white)
+            .frame(height: 54)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Button {
+                Task { await signInWithGoogle() }
+            } label: {
+                HStack(spacing: 10) {
+                    GoogleLogoMark()
+                    Text("Continue with Google")
+                }
+            }
+            .buttonStyle(DastakGoogleButtonStyle())
         }
     }
 
@@ -350,6 +525,31 @@ private struct AuthenticationRouteView: View {
         }
     }
 
+    private var dastakProfileView: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            #if os(iOS)
+            TextField("Display name", text: $displayName)
+                .textContentType(.name)
+                .textFieldStyle(DastakTextFieldStyle())
+            #else
+            TextField("Display name", text: $displayName)
+                .textFieldStyle(DastakTextFieldStyle())
+            #endif
+            dastakPhoneNumberField
+            Text("Your number is used only for delivery contact.")
+                .font(.caption)
+                .foregroundStyle(dastakSecondaryText)
+            Button(coordinator.isProfileSubmissionInFlight ? "Completing profile" : "Continue") {
+                Task { await completeProfile() }
+            }
+            .buttonStyle(DastakPrimaryButtonStyle())
+            .disabled(
+                displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || coordinator.isProfileSubmissionInFlight
+            )
+        }
+    }
+
     @ViewBuilder
     private var phoneNumberField: some View {
         #if os(iOS)
@@ -360,6 +560,19 @@ private struct AuthenticationRouteView: View {
         #else
         TextField("Phone number (unverified)", text: $phoneNumber)
             .textFieldStyle(.roundedBorder)
+        #endif
+    }
+
+    @ViewBuilder
+    private var dastakPhoneNumberField: some View {
+        #if os(iOS)
+        TextField("Phone number", text: $phoneNumber)
+            .textContentType(.telephoneNumber)
+            .keyboardType(.phonePad)
+            .textFieldStyle(DastakTextFieldStyle())
+        #else
+        TextField("Phone number", text: $phoneNumber)
+            .textFieldStyle(DastakTextFieldStyle())
         #endif
     }
 
@@ -412,6 +625,17 @@ private struct AuthenticationRouteView: View {
                 Task { await signOut() }
             }
             .buttonStyle(.bordered)
+        }
+    }
+
+    private var routeSubtitle: String {
+        switch coordinator.route {
+        case .signedOut: return "Sign in to continue."
+        case .needsProfile: return "Complete your account details."
+        case .pendingApproval: return "Your account is awaiting approval."
+        case .suspended: return "This account is currently suspended."
+        case .accessDenied: return "This account cannot use this app."
+        case .active: return "Account active."
         }
     }
 
@@ -492,5 +716,158 @@ private struct AuthenticationRouteView: View {
         } catch {
             errorMessage = "Sign out failed."
         }
+    }
+
+    private var dastakCanvas: Color {
+        Color(red: 15 / 255, green: 15 / 255, blue: 16 / 255)
+    }
+
+    private var dastakSurface: Color {
+        Color(red: 24 / 255, green: 23 / 255, blue: 22 / 255)
+    }
+
+    private var dastakAccent: Color {
+        Color(red: 176 / 255, green: 141 / 255, blue: 87 / 255)
+    }
+
+    private var dastakSecondaryText: Color {
+        Color(red: 184 / 255, green: 177 / 255, blue: 168 / 255)
+    }
+
+    private var dastakError: Color {
+        Color(red: 166 / 255, green: 90 / 255, blue: 69 / 255)
+    }
+
+    private var dastakRoleLabel: String {
+        applicationName == "Dastak Merchant" ? "Merchant" : "Customer"
+    }
+}
+
+private struct DastakAuthWordmark: View {
+    let size: CGFloat
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: size * 0.18) {
+            Text("Dastak")
+                .font(.system(size: size, weight: .light, design: .default))
+            Text("دستک")
+                .font(.system(size: size * 0.78, weight: .regular))
+                .environment(\.layoutDirection, .rightToLeft)
+        }
+        .foregroundStyle(Color(red: 245 / 255, green: 242 / 255, blue: 236 / 255))
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Dastak")
+    }
+}
+
+private struct DastakTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(.horizontal, 15)
+            .frame(minHeight: 52)
+            .foregroundStyle(Color(red: 245 / 255, green: 242 / 255, blue: 236 / 255))
+            .background(Color(red: 24 / 255, green: 23 / 255, blue: 22 / 255))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.14), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+private struct DastakPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 54)
+            .font(.headline)
+            .foregroundStyle(Color(red: 33 / 255, green: 19 / 255, blue: 14 / 255))
+            .background(Color(red: 176 / 255, green: 141 / 255, blue: 87 / 255))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .opacity(configuration.isPressed ? 0.82 : 1)
+    }
+}
+
+private struct DastakGoogleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 54)
+            .font(.headline)
+            .foregroundStyle(Color(red: 33 / 255, green: 19 / 255, blue: 14 / 255))
+            .background(Color(red: 245 / 255, green: 242 / 255, blue: 236 / 255))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            }
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .scaleEffect(configuration.isPressed ? 0.99 : 1)
+    }
+}
+
+private struct GoogleLogoMark: View {
+    var body: some View {
+        #if canImport(UIKit)
+        if let url = Bundle.module.url(forResource: "GoogleG", withExtension: "png"),
+           let image = UIImage(contentsOfFile: url.path)
+        {
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+                .accessibilityHidden(true)
+        } else {
+            fallbackMark
+        }
+        #else
+        fallbackMark
+        #endif
+    }
+
+    private var fallbackMark: some View {
+        Image("GoogleG", bundle: .module)
+            .renderingMode(.original)
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: 22, height: 22)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct BrandGoogleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 50)
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .background(Color.white)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .scaleEffect(configuration.isPressed ? 0.99 : 1)
+    }
+}
+
+private struct ShellUnavailableView: View {
+    let applicationName: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(applicationName)
+                .font(.title2.bold())
+            Text("Authentication unavailable")
+            Text("Backend configuration is missing.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
     }
 }

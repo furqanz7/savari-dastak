@@ -53,6 +53,7 @@ struct DastakMerchantProductDraft: Identifiable {
 final class DastakMerchantModel: ObservableObject {
     @Published private(set) var orders: [MerchantOrderSnapshot] = []
     @Published private(set) var catalogue: CatalogueSnapshot?
+    @Published private(set) var earnings: DastakEarningsSnapshot?
     @Published private(set) var isLoading = true
     @Published private(set) var isRefreshing = false
     @Published private(set) var busyIdentity: String?
@@ -63,18 +64,21 @@ final class DastakMerchantModel: ObservableObject {
     private let orderClient: any MerchantOrderClient
     private let catalogueClient: any CatalogueClient
     private let checkoutClient: any DastakCheckoutClient
+    private let earningsClient: any DastakEarningsClient
     private var actionKeys: [String: IdempotencyKey] = [:]
 
     init(
         services: MarketplaceAuthenticatedServices,
         orderClient: any MerchantOrderClient,
         catalogueClient: any CatalogueClient,
-        checkoutClient: any DastakCheckoutClient
+        checkoutClient: any DastakCheckoutClient,
+        earningsClient: any DastakEarningsClient
     ) {
         self.services = services
         self.orderClient = orderClient
         self.catalogueClient = catalogueClient
         self.checkoutClient = checkoutClient
+        self.earningsClient = earningsClient
     }
 
     convenience init(services: MarketplaceAuthenticatedServices) {
@@ -82,7 +86,8 @@ final class DastakMerchantModel: ObservableObject {
             services: services,
             orderClient: SupabaseMerchantOrderClient(functions: services.functions),
             catalogueClient: SupabaseCatalogueClient(functions: services.functions),
-            checkoutClient: SupabaseDastakCheckoutClient(functions: services.functions)
+            checkoutClient: SupabaseDastakCheckoutClient(functions: services.functions),
+            earningsClient: SupabaseDastakEarningsClient(functions: services.functions)
         )
     }
 
@@ -129,9 +134,11 @@ final class DastakMerchantModel: ObservableObject {
         do {
             async let orders = orderClient.merchantSnapshot(idempotencyKey: makeKey())
             async let catalogue = catalogueClient.merchantSnapshot(idempotencyKey: makeKey())
-            let result = try await (orders, catalogue)
+            async let earnings = earningsClient.merchantSnapshot(idempotencyKey: makeKey())
+            let result = try await (orders, catalogue, earnings)
             self.orders = Self.sorted(result.0.orders)
             self.catalogue = result.1
+            self.earnings = result.2
             errorMessage = nil
         } catch {
             errorMessage = message(for: error, fallback: "Merchant information could not be refreshed.")

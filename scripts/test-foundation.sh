@@ -17,6 +17,7 @@ for command_name in swift deno xcodebuild rg find xargs node npm; do
 done
 
 swift test --package-path Packages/MarketplaceFoundation
+swift test --package-path Packages/MarketplaceDesignSystem
 swift test --package-path Packages/MarketplaceInfrastructure
 swift test --package-path Packages/DastakDomain
 swift package dump-package --package-path Packages/SavariDomain >/dev/null

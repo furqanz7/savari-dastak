@@ -16,6 +16,23 @@ This repository contains the native iOS launch workspace for Savari and Dastak.
 xcodebuild -workspace SavariDastak.xcworkspace -scheme Savari -configuration Debug -destination 'generic/platform=iOS Simulator' build
 ```
 
+## Dastak Web Deployments
+
+Each Dastak role is a separate Vercel project. Do not run `vercel deploy` directly from the repository or web directory; local Vercel links are intentionally unsupported because they can deploy one role to another role's domain.
+
+```sh
+# Verify project roots and production role variables without deploying
+scripts/deploy-dastak-web.sh all --check
+
+# Explicit preview or production deployment
+scripts/deploy-dastak-web.sh customer --preview
+scripts/deploy-dastak-web.sh customer --production
+```
+
+Supported roles are `customer`, `delivery`, `merchant`, and `admin`.
+
+The non-secret Dastak environment and ownership inventory is recorded in `docs/dastak-phase-0b-environment-inventory.md`.
+
 ## Backend Commands
 
 Always run backend commands from the relevant product directory under `Backends/`, never from the repository root or `Legacy/`.

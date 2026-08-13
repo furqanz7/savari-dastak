@@ -24,6 +24,38 @@ struct DastakEmptyState: View {
     }
 }
 
+struct DastakRefreshNotice: View {
+    let failure: DastakCustomerRefreshFailure
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+            Image(systemName: failure.symbol)
+                .font(.title3)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(failure.title)
+                    .font(.subheadline.bold())
+                Text(failure.message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: MarketplaceSpacing.small)
+
+            Button(failure.actionTitle, action: action)
+                .font(.footnote.bold())
+                .buttonStyle(.bordered)
+                .tint(MarketplaceColors.dastakAccent.color)
+        }
+        .padding(MarketplaceSpacing.compact)
+        .marketplaceFlatSurface()
+    }
+}
+
 struct DastakProductArtwork: View {
     let kind: CatalogueKind
 

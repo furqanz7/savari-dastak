@@ -17,7 +17,10 @@ npm audit --omit=dev --audit-level=high
 npm test
 npm run lint
 
-VITE_APP_VARIANT=dastak-customer \
-VITE_SUPABASE_URL=https://ci.supabase.co \
-VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ci \
-npm run build
+for variant in dastak-customer dastak-delivery dastak-merchant dastak-admin; do
+  printf 'Building Dastak web variant: %s\n' "$variant"
+  VITE_APP_VARIANT="$variant" \
+  VITE_SUPABASE_URL=https://ci.supabase.co \
+  VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ci \
+  npm run build
+done

@@ -18,6 +18,9 @@ let package = Package(
             dependencies: [
                 "MarketplaceFoundation",
                 .product(name: "Supabase", package: "supabase-swift")
+            ],
+            resources: [
+                .process("Resources")
             ]
         ),
         .testTarget(

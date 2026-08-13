@@ -26,6 +26,7 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     @Published private(set) var partner: DeliveryPartnerSnapshot?
     @Published private(set) var courierDispatch: CourierDispatchSnapshot?
     @Published private(set) var parcelDispatch: ParcelPartnerSnapshot?
+    @Published private(set) var earnings: DastakEarningsSnapshot?
     @Published private(set) var isLoading = true
     @Published private(set) var isRefreshing = false
     @Published private(set) var busyOperation: String?
@@ -34,23 +35,27 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     private let partnerClient: any DeliveryPartnerClient
     private let courierClient: any CourierDispatchClient
     private let parcelClient: any ParcelDeliveryClient
+    private let earningsClient: any DastakEarningsClient
     private var actionKeys: [String: IdempotencyKey] = [:]
 
     init(
         partnerClient: any DeliveryPartnerClient,
         courierClient: any CourierDispatchClient,
-        parcelClient: any ParcelDeliveryClient
+        parcelClient: any ParcelDeliveryClient,
+        earningsClient: any DastakEarningsClient
     ) {
         self.partnerClient = partnerClient
         self.courierClient = courierClient
         self.parcelClient = parcelClient
+        self.earningsClient = earningsClient
     }
 
     convenience init(functions: any FunctionClient) {
         self.init(
             partnerClient: SupabaseDeliveryPartnerClient(functions: functions),
             courierClient: SupabaseCourierDispatchClient(functions: functions),
-            parcelClient: SupabaseParcelDeliveryClient(functions: functions)
+            parcelClient: SupabaseParcelDeliveryClient(functions: functions),
+            earningsClient: SupabaseDastakEarningsClient(functions: functions)
         )
     }
 
@@ -80,10 +85,12 @@ final class DastakDeliveryPartnerModel: ObservableObject {
             async let partnerSnapshot = partnerClient.selfSnapshot(idempotencyKey: makeKey())
             async let courierSnapshot = courierClient.partnerSnapshot(idempotencyKey: makeKey())
             async let parcelSnapshot = parcelClient.partnerSnapshot(idempotencyKey: makeKey())
-            let snapshots = try await (partnerSnapshot, courierSnapshot, parcelSnapshot)
+            async let earningsSnapshot = earningsClient.deliveryPartnerSnapshot(idempotencyKey: makeKey())
+            let snapshots = try await (partnerSnapshot, courierSnapshot, parcelSnapshot, earningsSnapshot)
             partner = snapshots.0
             courierDispatch = snapshots.1
             parcelDispatch = snapshots.2
+            earnings = snapshots.3
             errorMessage = nil
         } catch {
             errorMessage = message(for: error, fallback: "The delivery queue could not be refreshed.")

@@ -8,7 +8,7 @@ public struct MarketplacePageBackground: ViewModifier {
     public func body(content: Content) -> some View {
         content
             .foregroundStyle(MarketplaceColors.primaryText(for: colorScheme))
-            .background(MarketplaceColors.canvas(for: colorScheme))
+            .background(MarketplaceColors.canvas(for: colorScheme).ignoresSafeArea())
     }
 }
 
@@ -47,6 +47,13 @@ public struct MarketplaceFlatSurface: ViewModifier {
                     style: .continuous
                 )
             )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: MarketplaceMetrics.compactCornerRadius,
+                    style: .continuous
+                )
+                .stroke(MarketplaceColors.divider(for: colorScheme), lineWidth: 1)
+            }
     }
 }
 

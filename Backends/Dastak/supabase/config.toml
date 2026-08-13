@@ -476,6 +476,12 @@ verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/razorpay-webhook/index.ts"
 
+[functions.earnings]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/earnings/index.ts"
+
 [functions.parcel-deliveries]
 enabled = true
 # The handler authenticates bearer tokens after serving browser CORS preflight.
@@ -488,3 +494,23 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/controlled-categories/index.ts"
+
+[functions.register-device-token]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/register-device-token/index.ts"
+
+[functions.send-order-notification]
+enabled = true
+# Internal callers authenticate with DASTAK_NOTIFICATION_SECRET.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/send-order-notification/index.ts"
+
+[functions.process-order-notification-queue]
+enabled = true
+# The scheduled worker authenticates with DASTAK_NOTIFICATION_SECRET.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/process-order-notification-queue/index.ts"

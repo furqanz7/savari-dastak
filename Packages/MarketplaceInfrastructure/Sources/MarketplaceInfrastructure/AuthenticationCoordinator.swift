@@ -56,6 +56,7 @@ private enum BackendProfileNormalization {
 @MainActor
 public final class AuthenticationCoordinator: ObservableObject {
     @Published public private(set) var route: AccountRoute = .signedOut
+    @Published public private(set) var isRestoring = true
     @Published public private(set) var isProfileSubmissionInFlight = false
     @Published public private(set) var profileSubmissionError: AuthenticationClientError?
 
@@ -88,6 +89,8 @@ public final class AuthenticationCoordinator: ObservableObject {
     }
 
     public func restore() async {
+        isRestoring = true
+        defer { isRestoring = false }
         do {
             route = try await client.restoreAccount()
         } catch {

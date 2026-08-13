@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CreditCard, MapPin, Package, Phone, RefreshCw, Send, ShieldCheck, X } from "lucide-react";
 import { formatPrice } from "./catalogue";
 import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
@@ -15,6 +15,7 @@ import {
   type CustomerParcelDelivery,
 } from "./parcels";
 import { createParcelCheckoutSession, openRazorpayCheckout, processParcelRefund } from "./payments";
+import { customerDataIssue, type CustomerDataIssue } from "./customerDataState";
 
 type Props = {
   accessToken: string;
@@ -23,9 +24,10 @@ type Props = {
   phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  onSignOut: () => void;
 };
 
-export function ParcelCustomerView({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey }: Props) {
+export function ParcelCustomerView({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey, onSignOut }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [parcels, setParcels] = useState<CustomerParcelDelivery[]>([]);
   const [pickup, setPickup] = useState<SelectedPlace>();
@@ -40,24 +42,35 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [refreshIssue, setRefreshIssue] = useState<CustomerDataIssue>();
+  const refreshInFlight = useRef(false);
+  const hasActiveParcels = parcels.some((parcel) => !isFinal(parcel));
 
   const refresh = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     try {
       setParcels(await getCustomerParcels(auth));
-      setError(undefined);
+      setRefreshIssue(undefined);
     } catch (refreshError) {
-      setError(message(refreshError));
+      setRefreshIssue(customerDataIssue(refreshError));
     } finally {
       setLoading(false);
+      refreshInFlight.current = false;
     }
   }, [auth]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    if (!parcels.some((parcel) => !isFinal(parcel))) return;
-    const interval = window.setInterval(() => void refresh(), 5_000);
-    return () => window.clearInterval(interval);
-  }, [parcels, refresh]);
+    if (!hasActiveParcels || refreshIssue?.kind === "session") return;
+    const interval = window.setInterval(() => void refresh(), 10_000);
+    const onOnline = () => void refresh();
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [hasActiveParcels, refresh, refreshIssue?.kind]);
 
   const requestQuote = async (event: FormEvent) => {
     event.preventDefault();
@@ -181,11 +194,12 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
       </header>
 
       {error && <p className="order-error" role="alert">{error}</p>}
+      {refreshIssue && <ParcelRefreshNotice issue={refreshIssue} retry={refresh} signOut={onSignOut} />}
       {notice && <p className="success-text" role="status">{notice}</p>}
 
       <section className="parcel-history" aria-label="Your parcel deliveries">
         <header><h2>Sent and received</h2><span>{parcels.length}</span></header>
-        {loading ? <div className="catalogue-loading" role="status"><span /> Loading parcels</div> : parcels.length === 0 ? <p className="merchant-orders-empty">No parcels yet.</p> : (
+        {loading ? <div className="catalogue-loading" role="status"><span /> Loading parcels</div> : parcels.length === 0 && refreshIssue ? <ParcelRecovery issue={refreshIssue} retry={refresh} signOut={onSignOut} /> : parcels.length === 0 ? <p className="merchant-orders-empty">No parcels yet.</p> : (
           <div className="parcel-list">{parcels.map((parcel) => <ParcelCard key={parcel.parcelId} parcel={parcel} busy={busy} onPay={pay} onCancel={cancel} />)}</div>
         )}
       </section>
@@ -215,6 +229,29 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
         )}
       </form>
       <small className="map-attribution">Location search data © OpenStreetMap contributors</small>
+    </div>
+  );
+}
+
+function ParcelRefreshNotice({ issue, retry, signOut }: { issue: CustomerDataIssue; retry: () => Promise<void>; signOut: () => void }) {
+  return (
+    <div className="customer-data-notice" role="status">
+      <span><strong>{issue.title}</strong><small>{issue.message}</small></span>
+      <button type="button" className="secondary-button compact-button" onClick={issue.action === "sign_in" ? signOut : () => void retry()}>
+        {issue.action === "sign_in" ? "Sign in again" : "Try again"}
+      </button>
+    </div>
+  );
+}
+
+function ParcelRecovery({ issue, retry, signOut }: { issue: CustomerDataIssue; retry: () => Promise<void>; signOut: () => void }) {
+  return (
+    <div className="parcel-recovery">
+      <strong>{issue.title}</strong>
+      <span>{issue.message}</span>
+      <button type="button" className="secondary-button compact-button" onClick={issue.action === "sign_in" ? signOut : () => void retry()}>
+        {issue.action === "sign_in" ? "Sign in again" : "Try again"}
+      </button>
     </div>
   );
 }

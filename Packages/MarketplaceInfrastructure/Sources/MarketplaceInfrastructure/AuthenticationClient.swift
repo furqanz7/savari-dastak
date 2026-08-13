@@ -275,6 +275,16 @@ extension SupabaseAuthenticationClient {
             let id: UUID
         }
 
+        private struct CheckoutProfile: Decodable {
+            let displayName: String
+            let phoneNumber: String
+
+            private enum CodingKeys: String, CodingKey {
+                case displayName = "display_name"
+                case phoneNumber = "phone_number"
+            }
+        }
+
         private struct AppAccessRequest: Encodable {
             let application: String
         }
@@ -288,7 +298,10 @@ extension SupabaseAuthenticationClient {
         init(configuration: BackendConfiguration) {
             supabaseClient = SupabaseClient(
                 supabaseURL: configuration.supabaseURL,
-                supabaseKey: configuration.publishableKey
+                supabaseKey: configuration.publishableKey,
+                options: SupabaseClientOptions(
+                    auth: .init(emitLocalSessionAsInitialSession: true)
+                )
             )
         }
 
@@ -301,7 +314,10 @@ extension SupabaseAuthenticationClient {
                 supabaseURL: configuration.supabaseURL,
                 supabaseKey: configuration.publishableKey,
                 options: SupabaseClientOptions(
-                    auth: .init(accessToken: { accessToken }),
+                    auth: .init(
+                        emitLocalSessionAsInitialSession: true,
+                        accessToken: { accessToken }
+                    ),
                     global: .init(session: session)
                 )
             )
@@ -349,6 +365,29 @@ extension SupabaseAuthenticationClient {
             } catch AuthError.sessionMissing {
                 return nil
             }
+        }
+
+        func checkoutCustomer() async throws -> MarketplaceCheckoutCustomer? {
+            let user: User
+            do {
+                user = try await supabaseClient.auth.session.user
+            } catch AuthError.sessionMissing {
+                return nil
+            }
+
+            let profiles: [CheckoutProfile] = try await supabaseClient
+                .from("accounts")
+                .select("display_name,phone_number")
+                .eq("id", value: user.id.uuidString)
+                .limit(1)
+                .execute()
+                .value
+            guard let profile = profiles.first else { return nil }
+            return MarketplaceCheckoutCustomer(
+                displayName: profile.displayName,
+                email: user.email,
+                phoneNumber: profile.phoneNumber
+            )
         }
 
         func uploadObject(

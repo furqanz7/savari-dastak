@@ -21,6 +21,7 @@ import {
   type ParcelAssignment,
   type ParcelPartnerSnapshot,
 } from "./parcels";
+import { getEarnings, type EarningsSnapshot } from "./earnings";
 
 type Props = {
   accessToken: string;
@@ -36,6 +37,7 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
   const [partner, setPartner] = useState<DeliveryPartnerSnapshot>();
   const [dispatch, setDispatch] = useState<DeliveryDispatchSnapshot>({ offer: null, currentJob: null });
   const [parcelDispatch, setParcelDispatch] = useState<ParcelPartnerSnapshot>({ offer: null, currentJob: null });
+  const [earnings, setEarnings] = useState<EarningsSnapshot>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
@@ -48,14 +50,16 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
     refreshInFlight.current = true;
     if (showProgress) setBusy("refresh");
     try {
-      const [partnerSnapshot, dispatchSnapshot, parcelSnapshot] = await Promise.all([
+      const [partnerSnapshot, dispatchSnapshot, parcelSnapshot, earningsSnapshot] = await Promise.all([
         getDeliveryPartnerSnapshot(auth),
         getDeliveryDispatch(auth),
         getParcelPartnerSnapshot(auth),
+        getEarnings(auth, "deliveryPartnerSnapshot").catch(() => undefined),
       ]);
       setPartner(partnerSnapshot);
       setDispatch(dispatchSnapshot);
       setParcelDispatch(parcelSnapshot);
+      setEarnings(earningsSnapshot);
       setError(undefined);
     } catch (refreshError) {
       setError(message(refreshError));
@@ -196,6 +200,7 @@ export function DeliveryPartnerView({ accessToken, displayName, supabaseUrl, pub
               <span aria-hidden="true" />
             </label>
           </section>
+          {earnings && <section className="merchant-summary" aria-label="Earnings summary"><div><small>Completed</small><strong>{formatPrice(earnings.completedPaise)}</strong></div><div><small>This week</small><strong>{formatPrice(earnings.thisWeekPaise)}</strong></div><div><small>In progress</small><strong>{formatPrice(earnings.pendingPaise)}</strong></div></section>}
 
           {dispatch.currentJob && (
             <CurrentDelivery

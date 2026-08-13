@@ -52,6 +52,7 @@ import {
   type CartEntries,
 } from "./cart";
 import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
+import { customerDataIssue, type CustomerDataIssue } from "./customerDataState";
 import type { CustomerSection } from "./DastakCustomerView";
 
 type Props = {
@@ -68,6 +69,42 @@ type Props = {
 };
 
 type SelectedLocation = { label: string; coordinates: CatalogueLocation };
+type CustomerDiscoveryPreference = {
+  version: 1;
+  location?: SelectedLocation;
+  radiusKm: number;
+};
+
+const customerDiscoveryStorageKey = "dastak.customer.discovery.v1";
+
+function savedCustomerDiscovery(): CustomerDiscoveryPreference {
+  if (typeof window === "undefined") return { version: 1, radiusKm: 10 };
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(customerDiscoveryStorageKey) ?? "null");
+    if (!parsed || typeof parsed !== "object") return { version: 1, radiusKm: 10 };
+    const value = parsed as Partial<CustomerDiscoveryPreference>;
+    const radiusKm = typeof value.radiusKm === "number" && [10, 15, 20, 25, 30].includes(value.radiusKm)
+      ? value.radiusKm
+      : 10;
+    const location = value.location;
+    if (!location || typeof location.label !== "string" ||
+      typeof location.coordinates?.latitude !== "number" || typeof location.coordinates?.longitude !== "number") {
+      return { version: 1, radiusKm };
+    }
+    return { version: 1, radiusKm, location };
+  } catch {
+    return { version: 1, radiusKm: 10 };
+  }
+}
+
+function saveCustomerDiscovery(location: SelectedLocation | undefined, radiusKm: number) {
+  try {
+    window.localStorage.setItem(customerDiscoveryStorageKey, JSON.stringify({ version: 1, location, radiusKm }));
+  } catch {
+    // Storage can be unavailable in private browsing; the current session still works.
+  }
+}
+
 type CatalogueState =
   | { phase: "idle" }
   | { phase: "loading" }
@@ -86,8 +123,9 @@ export function CatalogueView({
   onSignOut,
 }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
-  const [selectedLocation, setSelectedLocation] = useState<SelectedLocation>();
-  const [discoveryRadiusKm, setDiscoveryRadiusKm] = useState(10);
+  const [initialDiscovery] = useState(savedCustomerDiscovery);
+  const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | undefined>(initialDiscovery.location);
+  const [discoveryRadiusKm, setDiscoveryRadiusKm] = useState(initialDiscovery.radiusKm);
   const [state, setState] = useState<CatalogueState>({ phase: "idle" });
   const [cartState, dispatchCart] = useReducer(cartReducer, undefined, createEmptyCart);
   const [quote, setQuote] = useState<MerchantOrderQuote>();
@@ -95,19 +133,30 @@ export function CatalogueView({
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [orderBusy, setOrderBusy] = useState(false);
   const [orderError, setOrderError] = useState<string>();
+  const [ordersRefreshIssue, setOrdersRefreshIssue] = useState<CustomerDataIssue>();
   const [paymentMessage, setPaymentMessage] = useState<string>();
   const [searchQuery, setSearchQuery] = useState("");
   const catalogueRequest = useRef(0);
   const orderCreationRequest = useRef<{ quoteId: string; idempotencyKey: string } | undefined>(undefined);
+  const restoredDiscovery = useRef(false);
+  const ordersRefreshInFlight = useRef(false);
+
+  useEffect(() => {
+    saveCustomerDiscovery(selectedLocation, discoveryRadiusKm);
+  }, [selectedLocation, discoveryRadiusKm]);
 
   const refreshOrders = useCallback(async () => {
+    if (ordersRefreshInFlight.current) return;
+    ordersRefreshInFlight.current = true;
     try {
       const snapshot = await getCustomerOrders(auth);
       setOrders(snapshot.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)));
+      setOrdersRefreshIssue(undefined);
     } catch (error) {
-      setOrderError(orderMessage(error));
+      setOrdersRefreshIssue(customerDataIssue(error));
     } finally {
       setOrdersLoading(false);
+      ordersRefreshInFlight.current = false;
     }
   }, [auth]);
 
@@ -115,13 +164,25 @@ export function CatalogueView({
     void refreshOrders();
   }, [refreshOrders]);
 
-  useEffect(() => {
-    if (!orders.some((order) => !isFinalOrder(order))) return;
-    const interval = window.setInterval(() => void refreshOrders(), 5_000);
-    return () => window.clearInterval(interval);
-  }, [orders, refreshOrders]);
+  const hasActiveOrders = orders.some((order) => !isFinalOrder(order));
 
-  const load = async (location: SelectedLocation, radiusKm = discoveryRadiusKm) => {
+  useEffect(() => {
+    if (!hasActiveOrders || ordersRefreshIssue?.kind === "session") return;
+    const interval = window.setInterval(() => void refreshOrders(), 10_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshOrders();
+    };
+    const onOnline = () => void refreshOrders();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [hasActiveOrders, ordersRefreshIssue?.kind, refreshOrders]);
+
+  const load = useCallback(async (location: SelectedLocation, radiusKm = discoveryRadiusKm) => {
     const requestId = ++catalogueRequest.current;
     setSelectedLocation(location);
     setQuote(undefined);
@@ -142,7 +203,13 @@ export function CatalogueView({
         : new CatalogueRequestError("catalogue_unavailable", "The catalogue is unavailable right now.", 0);
       setState({ phase: "error", code: requestError.code, message: requestError.message });
     }
-  };
+  }, [auth, discoveryRadiusKm]);
+
+  useEffect(() => {
+    if (restoredDiscovery.current || !selectedLocation) return;
+    restoredDiscovery.current = true;
+    void load(selectedLocation, discoveryRadiusKm);
+  }, [discoveryRadiusKm, load, selectedLocation]);
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -275,8 +342,16 @@ export function CatalogueView({
     setPaymentMessage("Payment received. Confirming securely...");
     for (let attempt = 0; attempt < 10; attempt += 1) {
       await delay(1_500);
-      const snapshot = await getCustomerOrders(auth);
+      let snapshot: MerchantOrderSnapshot[];
+      try {
+        snapshot = await getCustomerOrders(auth);
+      } catch (error) {
+        setOrdersRefreshIssue(customerDataIssue(error));
+        setPaymentMessage("Payment was received. We are confirming it securely and will update your order shortly.");
+        return;
+      }
       setOrders(snapshot.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)));
+      setOrdersRefreshIssue(undefined);
       const updated = snapshot.find((item) => item.orderId === order.orderId);
       if (updated && updated.paymentState !== "payment_pending") {
         setPaymentMessage(updated.paymentState === "paid" ? "Payment confirmed." : "Payment status updated.");
@@ -330,6 +405,7 @@ export function CatalogueView({
   return (
     <div className={`catalogue-shell customer-section customer-section-${section}`}>
       {(orderError ?? cartState.error) && <p className="order-error" role="alert">{orderError ?? cartState.error}</p>}
+      {ordersRefreshIssue && <CustomerDataNotice issue={ordersRefreshIssue} onRetry={refreshOrders} onSignOut={onSignOut} />}
       {paymentMessage && <p className="payment-message" role="status">{paymentMessage}</p>}
       {section === "home" && (
         <>
@@ -364,7 +440,7 @@ export function CatalogueView({
             />
           )}
           {quote && <CheckoutSection quote={quote} busy={orderBusy} onPlaceOrder={placeOrder} />}
-          {!ordersLoading && orders.some((order) => !isFinalOrder(order)) && (
+          {!ordersLoading && hasActiveOrders && (
             <div className="customer-active-order">
               <OrdersSection
                 orders={orders.filter((order) => !isFinalOrder(order)).slice(0, 1)}
@@ -444,6 +520,8 @@ export function CatalogueView({
           <header className="customer-page-heading"><p className="eyebrow">Purchases</p><h1>Orders</h1></header>
           {ordersLoading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length > 0 ? (
             <OrdersSection orders={orders} busy={orderBusy} onCancel={cancelOrder} onPay={retryPayment} onRefresh={refreshOrders} title="Your orders" />
+          ) : ordersRefreshIssue ? (
+            <CustomerDataRecovery issue={ordersRefreshIssue} onRetry={refreshOrders} onSignOut={onSignOut} />
           ) : (
             <CatalogueMessage icon={<ReceiptText size={25} />} title="No orders yet">
               Your orders and delivery updates will appear here.
@@ -465,6 +543,36 @@ export function CatalogueView({
         </section>
       )}
     </div>
+  );
+}
+
+function CustomerDataNotice({ issue, onRetry, onSignOut }: {
+  issue: CustomerDataIssue;
+  onRetry: () => Promise<void>;
+  onSignOut: () => void;
+}) {
+  return (
+    <div className="customer-data-notice" role="status">
+      <span><strong>{issue.title}</strong><small>{issue.message}</small></span>
+      <button type="button" className="secondary-button compact-button" onClick={issue.action === "sign_in" ? onSignOut : () => void onRetry()}>
+        {issue.action === "sign_in" ? "Sign in again" : "Try again"}
+      </button>
+    </div>
+  );
+}
+
+function CustomerDataRecovery({ issue, onRetry, onSignOut }: {
+  issue: CustomerDataIssue;
+  onRetry: () => Promise<void>;
+  onSignOut: () => void;
+}) {
+  return (
+    <CatalogueMessage icon={<RefreshCw size={25} />} title={issue.title}>
+      <p>{issue.message}</p>
+      <button type="button" className="secondary-button compact-button" onClick={issue.action === "sign_in" ? onSignOut : () => void onRetry()}>
+        {issue.action === "sign_in" ? "Sign in again" : "Try again"}
+      </button>
+    </CatalogueMessage>
   );
 }
 

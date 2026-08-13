@@ -4,7 +4,12 @@ import SwiftUI
 
 struct DastakCartView: View {
     @ObservedObject var model: DastakCustomerModel
+    let currentLocation: DastakDeliveryLocation?
+    let requestCurrentLocation: () -> Void
+
     @Environment(\.dismiss) private var dismiss
+    @State private var showingPaymentMethods = false
+    @State private var showingDeliveryAddressEditor = false
 
     var body: some View {
         NavigationStack {
@@ -49,6 +54,24 @@ struct DastakCartView: View {
                     await model.prepareQuote()
                 }
             }
+            .onChange(of: model.selectedLocation) { _, _ in
+                guard !model.cart.entries.isEmpty else { return }
+                Task { await model.prepareQuote() }
+            }
+        }
+        .sheet(isPresented: $showingDeliveryAddressEditor) {
+            DastakDeliveryAddressEditor(
+                requiresCompletion: true,
+                initialLocation: model.selectedLocation,
+                currentLocation: currentLocation,
+                requestCurrentLocation: requestCurrentLocation,
+                save: { location in
+                    await model.setLocation(location)
+                }
+            )
+            .interactiveDismissDisabled()
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -110,19 +133,35 @@ struct DastakCartView: View {
     }
 
     private var deliveryAddress: some View {
-        HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
-            Image(systemName: "location.fill")
-                .foregroundStyle(MarketplaceColors.dastakAccent.color)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Deliver to")
-                    .font(.headline)
-                Text(model.selectedLocation?.address ?? "Location unavailable")
+        Button {
+            showingDeliveryAddressEditor = true
+        } label: {
+            HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                Image(systemName: "location.fill")
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(model.hasCompleteDeliveryAddress ? "Deliver to" : "Add delivery address")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text(
+                        model.hasCompleteDeliveryAddress
+                            ? model.selectedLocation?.displayAddress ?? ""
+                            : "Add your house, flat or landmark before payment."
+                    )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
             }
-            Spacer()
+            .padding(MarketplaceSpacing.medium)
+            .contentShape(Rectangle())
         }
-        .padding(MarketplaceSpacing.medium)
+        .buttonStyle(.plain)
         .marketplaceFlatSurface()
     }
 
@@ -130,13 +169,10 @@ struct DastakCartView: View {
         VStack(spacing: 0) {
             Divider()
             Button {
-                Task {
-                    if model.quote == nil {
-                        await model.prepareQuote()
-                    }
-                    if await model.createOrderAndCheckout() != nil {
-                        dismiss()
-                    }
+                if model.hasCompleteDeliveryAddress {
+                    showingPaymentMethods = true
+                } else {
+                    showingDeliveryAddressEditor = true
                 }
             } label: {
                 if model.isCheckingOut {
@@ -144,18 +180,30 @@ struct DastakCartView: View {
                         .tint(.white)
                 } else {
                     HStack {
-                        Text("Pay securely")
+                        Text(model.hasCompleteDeliveryAddress ? "Continue to payment" : "Add delivery address")
                         Spacer()
-                        Text(DastakFormatting.money(model.quote?.total ?? model.cart.subtotal))
-                            .monospacedDigit()
+                        if model.hasCompleteDeliveryAddress {
+                            Text(DastakFormatting.money(model.quote?.total ?? model.cart.subtotal))
+                                .monospacedDigit()
+                        }
                     }
                 }
             }
             .buttonStyle(MarketplacePrimaryButtonStyle())
-            .disabled(model.quote == nil || model.isCheckingOut)
+            .disabled(model.isCheckingOut || (model.hasCompleteDeliveryAddress && model.quote == nil))
             .padding(MarketplaceSpacing.medium)
         }
         .background(.bar)
+        .sheet(isPresented: $showingPaymentMethods) {
+            DastakPaymentMethodView(model: model) {
+                showingPaymentMethods = false
+                Task {
+                    if model.quote == nil { await model.prepareQuote() }
+                    if await model.createOrderAndCheckout() != nil { dismiss() }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 
     private func totalRow(_ title: String, value: Money, emphasized: Bool = false) -> some View {
