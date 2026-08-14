@@ -183,7 +183,7 @@ public struct DastakLaunchView<Content: View>: View {
 private struct DastakLaunchWordmark: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(MarketplaceWordmark.dastakLatin.uppercased())
+            Text(MarketplaceWordmark.dastakLatin)
                 .font(.custom("HelveticaNeue-UltraLight", fixedSize: 50))
                 .offset(y: -7)
 
