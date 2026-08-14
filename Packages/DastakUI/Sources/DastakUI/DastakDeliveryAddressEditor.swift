@@ -1,5 +1,8 @@
 import MarketplaceDesignSystem
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct DastakDeliveryAddressEditor: View {
     private enum AddressKind: String, CaseIterable, Identifiable {
@@ -84,6 +87,9 @@ struct DastakDeliveryAddressEditor: View {
                 .padding(.bottom, 104)
             }
             .scrollIndicators(.hidden)
+#if os(iOS)
+            .scrollDismissesKeyboard(.interactively)
+#endif
             .marketplacePage()
             .safeAreaInset(edge: .bottom) {
                 saveButton
@@ -96,8 +102,15 @@ struct DastakDeliveryAddressEditor: View {
                         Button("Cancel") { dismiss() }
                     }
                 }
+#if os(iOS)
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { dismissKeyboard() }
+                }
+#endif
             }
         }
+        .onTapGesture { dismissKeyboard() }
         .sheet(isPresented: $showingLocationPicker) {
             DastakLocationPicker(
                 title: "Choose location",
@@ -240,5 +253,17 @@ struct DastakDeliveryAddressEditor: View {
         } else {
             errorMessage = "The address could not be saved. Check your connection and try again."
         }
+    }
+
+    @MainActor
+    private func dismissKeyboard() {
+#if canImport(UIKit)
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+#endif
     }
 }

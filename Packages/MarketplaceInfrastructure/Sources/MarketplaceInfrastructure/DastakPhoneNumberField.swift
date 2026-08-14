@@ -121,20 +121,20 @@ struct DastakPhoneNumberParts: Equatable, Sendable {
     }
 }
 
-struct DastakPhoneNumberField: View {
+public struct DastakPhoneNumberField: View {
     @Binding private var phoneNumber: String
     @State private var selectedCountry: DastakCallingCode
     @State private var nationalNumber: String
     @State private var showsCountryPicker = false
 
-    init(phoneNumber: Binding<String>) {
+    public init(phoneNumber: Binding<String>) {
         _phoneNumber = phoneNumber
         let parts = DastakPhoneNumberParts.parse(phoneNumber.wrappedValue)
         _selectedCountry = State(initialValue: parts.country)
         _nationalNumber = State(initialValue: parts.nationalNumber)
     }
 
-    var body: some View {
+    public var body: some View {
         HStack(spacing: 0) {
             Button { showsCountryPicker = true } label: {
                 HStack(spacing: 7) {

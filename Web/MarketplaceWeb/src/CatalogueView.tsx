@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ArrowLeft,
+  Bell,
   Bike,
   ChevronRight,
+  CircleHelp,
   CreditCard,
+  Globe2,
+  Hand,
   ImageOff,
   LocateFixed,
+  LogOut,
   MapPin,
   Minus,
   PackageOpen,
@@ -14,6 +19,7 @@ import {
   ReceiptText,
   RefreshCw,
   Search,
+  ShieldAlert,
   ShoppingBag,
   Store,
   Trash2,
@@ -682,22 +688,58 @@ export function CatalogueView({
             <span><strong>{accountProfile.displayName}</strong><small>{accountProfile.phoneNumber}</small>{email && <small>{email}</small>}</span>
             <ChevronRight size={19} />
           </button>
-          <dl className="account-list"><div><dt>Discovery range</dt><dd>{discoveryRadiusKm} km</dd></div></dl>
-          <section className="account-address-card">
-            <div><MapPin size={20} /><span><strong>Delivery address</strong><small>{deliveryAddress?.displayAddress ?? "No saved address"}</small></span></div>
-            <button className="secondary-button compact-button" type="button" onClick={() => setAddressEditorOpen(true)} disabled={addressLoading}>{deliveryAddress ? "Edit" : "Add address"}</button>
-            {addressError && <small className="error-text">{addressError}</small>}
+
+          <section className="customer-account-group" aria-labelledby="account-delivery-title">
+            <h2 id="account-delivery-title">Delivery</h2>
+            <div className="customer-account-rows">
+              <button className="customer-account-row" type="button" onClick={() => setAddressEditorOpen(true)} disabled={addressLoading}>
+                <MapPin size={20} />
+                <span><strong>Delivery address</strong><small>{deliveryAddress?.displayAddress ?? "Add a house, flat or landmark"}</small></span>
+                <ChevronRight size={18} />
+              </button>
+              <div className="customer-account-row">
+                <LocateFixed size={20} />
+                <span><strong>Discovery range</strong><small>Stores shown around your delivery location</small></span>
+                <b>{discoveryRadiusKm} km</b>
+              </div>
+            </div>
+            {addressError && <small className="error-text customer-account-error">{addressError}</small>}
           </section>
-          <dl className="account-list customer-preferences">
-            <div><dt>Order updates</dt><dd>In app</dd></div>
-            <div><dt>Language</dt><dd>Follows browser</dd></div>
-          </dl>
-          <section className="role-privacy">
-            <strong>Privacy and data</strong>
-            <p>Your number is unverified and is shared only when an active delivery requires contact. Your saved address is used for discovery, pricing and fulfilment.</p>
+
+          <section className="customer-account-group" aria-labelledby="account-preferences-title">
+            <h2 id="account-preferences-title">Preferences</h2>
+            <div className="customer-account-rows">
+              <div className="customer-account-row"><Bell size={20} /><span><strong>Order updates</strong><small>Shown in Dastak</small></span><b>On</b></div>
+              <div className="customer-account-row"><Globe2 size={20} /><span><strong>Language</strong><small>Uses your browser language</small></span><b>Auto</b></div>
+            </div>
           </section>
-          <button className="customer-sign-out" type="button" onClick={() => setShowSignOutConfirmation(true)}>Sign out</button>
-          <button className="customer-delete-account" type="button" onClick={() => setShowDeleteConfirmation(true)}>Delete account</button>
+
+          <section className="customer-account-group" aria-labelledby="account-support-title">
+            <h2 id="account-support-title">Help and safety</h2>
+            <div className="customer-account-rows">
+              <button className="customer-account-row" type="button" onClick={() => onNavigate("orders")}>
+                <CircleHelp size={20} /><span><strong>Help with an order</strong><small>Open an order to get relevant support</small></span><ChevronRight size={18} />
+              </button>
+              <a className="customer-account-row emergency" href="tel:112">
+                <ShieldAlert size={20} /><span><strong>Emergency assistance</strong><small>Call India emergency services</small></span><ChevronRight size={18} />
+              </a>
+            </div>
+          </section>
+
+          <section className="customer-account-group" aria-labelledby="account-privacy-title">
+            <h2 id="account-privacy-title">Privacy and account</h2>
+            <div className="customer-account-rows">
+              <div className="customer-account-row customer-privacy-row">
+                <Hand size={20} /><span><strong>Privacy and data</strong><small>Your unverified number is shared only for an active delivery. Your saved address is used for discovery, pricing and fulfilment.</small></span>
+              </div>
+              <button className="customer-account-row" type="button" onClick={() => setShowSignOutConfirmation(true)}>
+                <LogOut size={20} /><span><strong>Sign out</strong><small>Keep this account and end this session</small></span><ChevronRight size={18} />
+              </button>
+              <button className="customer-account-row destructive" type="button" onClick={() => setShowDeleteConfirmation(true)}>
+                <Trash2 size={20} /><span><strong>Delete account</strong><small>Permanently remove your Dastak account</small></span><ChevronRight size={18} />
+              </button>
+            </div>
+          </section>
           {profileError && !profileEditorOpen && <p className="error-text" role="alert">{profileError}</p>}
         </section>
       )}

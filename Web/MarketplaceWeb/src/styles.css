@@ -88,6 +88,7 @@ button:disabled { cursor: wait; opacity: .55; }
   padding: 28px 32px 88px;
 }
 .content.workspace-content { align-items: start; padding-top: 20px; }
+.content.dastak-auth-content { min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
 
 .ride-shell, .active-ride { width: min(100%, 780px); margin: 0 auto; }
 .ride-heading { padding: 18px 0 26px; }
@@ -855,6 +856,8 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 .form-panel { display: grid; gap: 16px; }
 .form-panel label { display: grid; gap: 7px; font-size: 14px; font-weight: 700; }
+.phone-field-group { display: grid; gap: 7px; }
+.phone-field-group > label { color: inherit; font-size: 14px; font-weight: 700; }
 .form-panel input, .form-panel textarea, .form-panel select {
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--divider) 90%, transparent);
@@ -878,6 +881,47 @@ button:disabled { cursor: wait; opacity: .55; }
   font-weight: 650;
 }
 .form-panel small { color: var(--text-secondary); margin-top: -10px; }
+.dastak-profile-form {
+  width: min(100%, 540px);
+  padding: 20px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.dastak-profile-heading { display: grid; gap: 9px; margin-bottom: 14px; }
+.dastak-profile-topline { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.dastak-profile-topline > button { min-height: 44px; padding: 0; border: 0; color: var(--text-secondary); background: transparent; font-size: 13px; font-weight: 700; }
+.dastak-profile-topline > button:hover { color: var(--text-primary); }
+.dastak-profile-heading h1 { margin: 18px 0 0; }
+.dastak-profile-heading > p:last-child { max-width: 440px; margin: 0; color: var(--text-secondary); line-height: 1.55; }
+.dastak-profile-wordmark { margin: 0 0 4px; color: var(--text-primary); font-family: var(--font-dastak-wordmark); font-size: 46px; line-height: 1; }
+.dastak-profile-wordmark span[lang="ur"] { display: inline-block; margin-left: 4px; font-size: .72em; transform: translateY(5px); }
+.phone-number-field {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(84px, 1fr) auto minmax(130px, 1.4fr);
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--divider) 90%, transparent);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: var(--surface);
+}
+.phone-number-field:focus-within { outline: 3px solid var(--accent-soft); border-color: var(--accent); }
+.phone-number-field select,
+.phone-number-field input {
+  width: 100%;
+  min-width: 0;
+  height: 50px;
+  padding: 0 12px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  color: var(--text-primary);
+  background: transparent !important;
+}
+.phone-number-field select { text-overflow: ellipsis; }
+.phone-number-field > span { padding-left: 12px; border-left: 1px solid var(--divider); font-variant-numeric: tabular-nums; }
 .section-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; color: var(--accent); background: var(--accent-soft); }
 .section-icon.success { color: #176b3a; background: #e4f1e8; }
 .error-text { color: #ad2f2a !important; font-size: 14px !important; }
@@ -894,10 +938,14 @@ button:disabled { cursor: wait; opacity: .55; }
 @media (max-width: 720px) {
   .topbar { height: 68px; }
   .content { min-height: calc(100vh - 86px); padding: 32px 0 64px; align-items: stretch; }
+  .content.dastak-auth-content { min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding-top: 40px; padding-bottom: 40px; align-items: center; }
   .auth-layout { grid-template-columns: 1fr; gap: 52px; align-content: space-between; }
   .auth-copy h1 { font-size: 48px; }
   .product-dastak .dastak-auth-layout { align-self: center; gap: 36px; }
   .product-dastak .dastak-auth-layout .auth-copy h1 { font-size: 42px; }
+  .dastak-profile-form { padding: 10px 0; }
+  .dastak-profile-wordmark { font-size: 40px; }
+  .phone-number-field { grid-template-columns: 88px auto minmax(112px, 1fr); }
   .dastak-launch-content p { font-size: 44px; }
   .form-panel, .status-panel { padding: 24px 20px; align-self: center; }
   .form-panel h1, .status-panel h1 { font-size: 30px; }

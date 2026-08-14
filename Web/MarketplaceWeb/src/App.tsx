@@ -11,6 +11,7 @@ import { DeliveryPartnerView } from "./DeliveryPartnerView";
 import { readAppConfig } from "./config";
 import { MerchantApplicationForm } from "./MerchantApplicationForm";
 import { MerchantOrdersView } from "./MerchantOrdersView";
+import { PhoneNumberField } from "./PhoneNumberField";
 import { SavariRideView } from "./SavariRideView";
 
 const config = readAppConfig({
@@ -52,6 +53,8 @@ export default function App() {
   const [showsDastakLaunch, setShowsDastakLaunch] = useState(config.product === "dastak");
   const knownUserId = useRef<string | undefined>(undefined);
   const finishDastakLaunch = useCallback(() => setShowsDastakLaunch(false), []);
+  const usesFullDastakAuth = config.product === "dastak"
+    && (view.phase === "loading" || view.phase === "signed_out" || view.phase === "profile");
 
   const evaluate = useCallback(async (session: Session | null) => {
     if (!session) {
@@ -113,7 +116,7 @@ export default function App() {
 
   return (
     <main className={`app product-${config.product}`}>
-      <header className="topbar" aria-hidden={showsDastakLaunch || undefined}>
+      {!usesFullDastakAuth && <header className="topbar" aria-hidden={showsDastakLaunch || undefined}>
         <Brand />
         {view.phase !== "signed_out" && view.phase !== "loading" && !(
           config.product === "dastak" &&
@@ -123,16 +126,16 @@ export default function App() {
             <LogOut size={19} />
           </button>
         )}
-      </header>
+      </header>}
 
       <section
         aria-hidden={showsDastakLaunch || undefined}
-        className={`content ${view.phase === "ready" && ["dastak-admin", "dastak-customer", "dastak-delivery", "dastak-merchant", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}
+        className={`content ${usesFullDastakAuth ? "dastak-auth-content" : ""} ${view.phase === "ready" && ["dastak-admin", "dastak-customer", "dastak-delivery", "dastak-merchant", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}
       >
         {view.phase === "loading" && <Loading />}
         {view.phase === "signed_out" && <SignIn busy={busy} onSignIn={signIn} />}
         {view.phase === "profile" && (
-          <ProfileForm session={view.session} onComplete={() => evaluate(view.session)} />
+          <ProfileForm session={view.session} onComplete={() => evaluate(view.session)} onSignOut={signOut} />
         )}
         {view.phase === "ready" && <Ready access={view.access} email={view.session.user.email} session={view.session} onSignOut={signOut} />}
         {view.phase === "restricted" && (
@@ -309,7 +312,11 @@ function GoogleLogo() {
   );
 }
 
-function ProfileForm({ session, onComplete }: { session: Session; onComplete: () => void }) {
+function ProfileForm({ session, onComplete, onSignOut }: {
+  session: Session;
+  onComplete: () => void;
+  onSignOut: () => void;
+}) {
   const suggestedName = useMemo(() => {
     const metadata = session.user.user_metadata as Record<string, unknown>;
     return typeof metadata.full_name === "string" ? metadata.full_name : "";
@@ -335,19 +342,29 @@ function ProfileForm({ session, onComplete }: { session: Session; onComplete: ()
   };
 
   return (
-    <form className="form-panel" onSubmit={submit}>
-      <div className="section-icon"><UserRound size={22} /></div>
-      <p className="eyebrow">Account details</p>
-      <h1>Complete your profile</h1>
+    <form className={`form-panel${config.product === "dastak" ? " dastak-profile-form" : ""}`} onSubmit={submit}>
+      {config.product === "dastak" ? <header className="dastak-profile-heading">
+        <div className="dastak-profile-topline">
+          <p className="dastak-profile-wordmark"><span>Dastak</span> <span lang="ur">دستک</span></p>
+          <button type="button" onClick={onSignOut}>Use a different account</button>
+        </div>
+        <p className="eyebrow">{config.roleLabel}</p>
+        <h1>Your details</h1>
+        <p>Tell us how to address you and how an active delivery can reach you.</p>
+      </header> : <>
+        <div className="section-icon"><UserRound size={22} /></div>
+        <p className="eyebrow">Account details</p>
+        <h1>Complete your profile</h1>
+      </>}
       <label>
         Full name
         <input autoComplete="name" value={displayName} maxLength={80} onChange={(event) => setDisplayName(event.target.value)} />
       </label>
-      <label>
-        Phone number
-        <input type="tel" inputMode="tel" autoComplete="tel" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} aria-describedby="phone-hint" />
-      </label>
-      <small id="phone-hint">Include country code, for example +91.</small>
+      <div className="phone-field-group">
+        <label htmlFor="profile-phone">Phone number</label>
+        <PhoneNumberField value={phoneNumber} onChange={setPhoneNumber} id="profile-phone" />
+      </div>
+      <small id="phone-hint">Used only when an active delivery requires contact. It is not used to sign in.</small>
       {error && <p className="error-text" role="alert">{error}</p>}
       <button className="primary-button" disabled={!valid || busy} type="submit">Save and continue</button>
     </form>

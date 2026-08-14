@@ -1,6 +1,9 @@
 import MarketplaceDesignSystem
 import MarketplaceInfrastructure
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct DastakAccountView: View {
     private enum AccountAlert: Identifiable {
@@ -54,7 +57,7 @@ struct DastakAccountView: View {
         .navigationTitle("Account")
         .sheet(isPresented: $showingProfileEditor) {
             DastakProfileEditor(customer: customer, updateProfile: updateProfile)
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .alert(item: $accountAlert, content: makeAccountAlert)
@@ -312,6 +315,10 @@ struct DastakPrivacyAndDataView: View {
 }
 
 struct DastakProfileEditor: View {
+    private enum Field: Hashable {
+        case name
+    }
+
     let customer: MarketplaceCheckoutCustomer?
     let updateProfile: (String, String) async throws -> Void
 
@@ -320,6 +327,7 @@ struct DastakProfileEditor: View {
     @State private var phoneNumber: String
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @FocusState private var focusedField: Field?
 
     init(
         customer: MarketplaceCheckoutCustomer?,
@@ -333,28 +341,60 @@ struct DastakProfileEditor: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Personal details") {
-                    TextField("Full name", text: $displayName)
-                        .textContentType(.name)
+            ScrollView {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                        Text("Personal details")
+                            .font(.largeTitle.bold())
+                        Text("Keep your delivery contact accurate.")
+                            .font(MarketplaceTypography.supporting)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                        Text("Full name")
+                            .font(.subheadline.weight(.semibold))
+                        TextField("Enter your full name", text: $displayName)
+                            .textContentType(.name)
 #if os(iOS)
-                    TextField("Phone number with country code", text: $phoneNumber)
-                        .textContentType(.telephoneNumber)
-                        .keyboardType(.phonePad)
-#else
-                    TextField("Phone number with country code", text: $phoneNumber)
-                        .textContentType(.telephoneNumber)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
 #endif
-                }
-                Section {
-                    Text("Your phone number is shared only when needed for an active delivery.")
+                            .focused($focusedField, equals: .name)
+                            .padding(.horizontal, MarketplaceSpacing.compact)
+                            .frame(minHeight: 56)
+                            .marketplaceFlatSurface()
+                    }
+
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                        Text("Phone number")
+                            .font(.subheadline.weight(.semibold))
+                        DastakPhoneNumberField(phoneNumber: $phoneNumber)
+                        Label(
+                            "Used only when an active delivery requires contact. It is not used to sign in.",
+                            systemImage: "lock.fill"
+                        )
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+
                 if let errorMessage {
-                    Section { Text(errorMessage).foregroundStyle(MarketplaceColors.destructive.color) }
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(MarketplaceColors.destructive.color)
+                    }
                 }
+                .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+                .padding(.horizontal, MarketplaceSpacing.medium)
+                .padding(.top, MarketplaceSpacing.large)
+                .padding(.bottom, MarketplaceSpacing.xxLarge)
             }
+            .scrollIndicators(.hidden)
+#if os(iOS)
+            .scrollDismissesKeyboard(.interactively)
+#endif
+            .marketplacePage()
             .navigationTitle("Edit profile")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -364,11 +404,21 @@ struct DastakProfileEditor: View {
                     Button("Cancel") { dismiss() }.disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isSaving ? "Saving..." : "Save") { Task { await save() } }
+                    Button(isSaving ? "Saving..." : "Save") {
+                        dismissKeyboard()
+                        Task { await save() }
+                    }
                         .disabled(!isValid || isSaving)
                 }
+#if os(iOS)
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { dismissKeyboard() }
+                }
+#endif
             }
         }
+        .onTapGesture { dismissKeyboard() }
     }
 
     private var isValid: Bool {
@@ -376,6 +426,19 @@ struct DastakProfileEditor: View {
         let phone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         return (1...80).contains(name.count)
             && phone.range(of: #"^\+[1-9][0-9]{7,14}$"#, options: .regularExpression) != nil
+    }
+
+    @MainActor
+    private func dismissKeyboard() {
+        focusedField = nil
+#if canImport(UIKit)
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+#endif
     }
 
     @MainActor

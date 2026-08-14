@@ -63,7 +63,10 @@
 .customer-sheet-action { width: 100%; min-height: 52px; margin-top: 20px; display: inline-flex; justify-content: center; align-items: center; gap: 8px; }
 
 .account-profile-sheet > label { display: grid; gap: 8px; margin-top: 20px; color: var(--text-secondary); font-size: 13px; font-weight: 700; }
-.account-profile-sheet input { width: 100%; min-height: 50px; padding: 0 13px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); }
+.account-profile-sheet > .phone-field-group { margin-top: 20px; }
+.account-profile-sheet > .phone-field-group > label { color: var(--text-secondary); font-size: 13px; }
+.account-profile-sheet > label > input { width: 100%; min-height: 50px; padding: 0 13px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); }
+.account-profile-sheet .phone-number-field { background: var(--surface-raised); }
 .account-profile-sheet > small { display: block; margin-top: 12px; color: var(--text-secondary); line-height: 1.45; }
 .delete-account-sheet { display: grid; gap: 12px; }
 .delete-account-sheet > p { margin: 10px 0 12px; color: var(--text-secondary); line-height: 1.55; }
@@ -81,6 +84,39 @@
 .customer-profile-card small { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; }
 .customer-profile-card > svg { color: var(--text-secondary); }
 .customer-delete-account { min-height: 44px; margin-left: 24px; padding: 0; border: 0; color: var(--destructive); background: transparent; font-weight: 700; }
+
+.customer-account-group { margin-top: 30px; }
+.customer-account-group > h2 { margin: 0 0 10px; font-size: 18px; line-height: 1.25; }
+.customer-account-rows { border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); }
+.customer-account-row {
+  width: 100%;
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 13px 0;
+  border: 0;
+  color: var(--text-primary);
+  background: transparent;
+  text-align: left;
+  text-decoration: none;
+}
+.customer-account-row + .customer-account-row { border-top: 1px solid var(--divider); }
+.customer-account-row > svg:first-child { color: var(--dastak-accent); }
+.customer-account-row > svg:last-child { color: var(--text-secondary); }
+.customer-account-row > span { min-width: 0; display: grid; gap: 3px; }
+.customer-account-row strong { font-size: 15px; }
+.customer-account-row small { color: var(--text-secondary); line-height: 1.4; overflow-wrap: anywhere; }
+.customer-account-row > b { color: var(--text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+button.customer-account-row:not(:disabled):hover { color: var(--dastak-accent); }
+.customer-account-row.emergency > svg:first-child,
+.customer-account-row.emergency strong,
+.customer-account-row.destructive > svg:first-child,
+.customer-account-row.destructive strong { color: var(--destructive); }
+.customer-privacy-row { align-items: start; }
+.customer-privacy-row > svg { margin-top: 2px; }
+.customer-account-error { display: block; margin-top: 9px; }
 
 .checkout-address { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; margin: 20px 0 0; padding: 16px 0; border-top: 1px solid var(--divider); color: var(--dastak-accent); }
 .checkout-address span { display: grid; gap: 4px; min-width: 0; }
