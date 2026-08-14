@@ -1,6 +1,7 @@
 import AuthenticationServices
 import CryptoKit
 import Foundation
+import MarketplaceDesignSystem
 import MarketplaceFoundation
 import Security
 import SwiftUI
@@ -859,18 +860,8 @@ private struct DastakAuthWordmark: View {
     let size: CGFloat
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: size * 0.18) {
-            Text("Dastak")
-                .font(.system(size: size, weight: .light, design: .default))
-            Text("دستک")
-                .font(.system(size: size * 0.78, weight: .regular))
-                .environment(\.layoutDirection, .rightToLeft)
-        }
+        DastakWordmark(size: size)
         .foregroundStyle(Color(red: 245 / 255, green: 242 / 255, blue: 236 / 255))
-        .lineLimit(1)
-        .minimumScaleFactor(0.72)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Dastak")
     }
 }
 

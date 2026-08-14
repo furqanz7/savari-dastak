@@ -184,7 +184,7 @@ private struct DastakLaunchWordmark: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(MarketplaceWordmark.dastakLatin)
-                .font(.custom("HelveticaNeue-UltraLight", fixedSize: 50))
+                .font(MarketplaceTypography.instrumentSerif(fixedSize: 50))
                 .offset(y: -7)
 
             Text(MarketplaceWordmark.dastakUrdu)

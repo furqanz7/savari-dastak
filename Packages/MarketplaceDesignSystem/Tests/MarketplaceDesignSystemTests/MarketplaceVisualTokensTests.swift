@@ -1,5 +1,8 @@
 import Testing
 @testable import MarketplaceDesignSystem
+#if canImport(AppKit)
+import AppKit
+#endif
 
 @Test
 func dastakBrandAndDestructiveColoursRemainDistinct() {
@@ -35,4 +38,13 @@ func bilingualWordmarkCopyIsStable() {
     #expect(MarketplaceWordmark.dastakUrdu == "دستک")
     #expect(MarketplaceWordmark.savariLatin == "Savari")
     #expect(MarketplaceWordmark.savariUrdu == "سواری")
+}
+
+@Test
+func instrumentSerifIsBundledAndRegistered() {
+    _ = MarketplaceTypography.instrumentSerif(fixedSize: 24)
+
+    #if canImport(AppKit)
+    #expect(NSFont(name: MarketplaceTypography.instrumentSerifPostScriptName, size: 24) != nil)
+    #endif
 }

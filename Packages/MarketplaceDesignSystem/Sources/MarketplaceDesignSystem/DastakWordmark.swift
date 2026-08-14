@@ -41,7 +41,7 @@ public struct MarketplaceBilingualWordmark: View {
     public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: size * 0.22) {
             Text(brand.latinName)
-                .font(.system(size: size, weight: .light, design: .default))
+                .font(latinFont)
 
             Text(brand.urduName)
                 .font(.system(size: size * 0.84, weight: .regular))
@@ -52,6 +52,15 @@ public struct MarketplaceBilingualWordmark: View {
         .minimumScaleFactor(0.72)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(brand.latinName)
+    }
+
+    private var latinFont: Font {
+        switch brand {
+        case .dastak:
+            MarketplaceTypography.instrumentSerif(fixedSize: size)
+        case .savari:
+            .system(size: size, weight: .light, design: .default)
+        }
     }
 }
 

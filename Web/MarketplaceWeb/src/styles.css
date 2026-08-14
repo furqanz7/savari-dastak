@@ -1,5 +1,13 @@
 @import "./design/tokens.css";
 
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/InstrumentSerif-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   font-family: var(--font-system);
   color: var(--text-primary);
@@ -47,7 +55,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .brand-lockup strong { font-size: 18px; }
 .brand-lockup small { color: #68716c; font-size: 12px; }
 .brand-lockup-dastak { gap: 0; }
-.brand-lockup-dastak strong { font-size: 22px; font-weight: 400; }
+.brand-lockup-dastak strong { font-family: var(--font-dastak-wordmark); font-size: 22px; font-weight: 400; }
 .brand-lockup-dastak small { color: var(--text-secondary); font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 .brand-mark {
   width: 36px;
@@ -733,8 +741,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .product-dastak .dastak-auth-layout .auth-copy h1 {
   margin: 0;
   color: var(--text-primary);
+  font-family: var(--font-dastak-wordmark);
   font-size: 50px;
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1;
 }
 .product-dastak .dastak-auth-layout .auth-copy > p:last-child {
@@ -803,7 +812,12 @@ button:disabled { cursor: wait; opacity: .55; }
   font-weight: 100;
   line-height: 1;
 }
-.dastak-launch-latin { display: inline-block; transform: translateY(-7px); }
+.dastak-launch-latin {
+  display: inline-block;
+  font-family: var(--font-dastak-wordmark);
+  font-weight: 400;
+  transform: translateY(-7px);
+}
 .dastak-launch-content .dastak-launch-urdu {
   display: inline-block;
   margin-left: 8px;
@@ -1001,7 +1015,7 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 
 /* Dastak customer uses one spatial system across native iOS and the web. */
-.brand-urdu { color: var(--text-secondary); font-weight: 500; }
+.brand-urdu { color: var(--text-secondary); font-family: var(--font-system); font-weight: 500; }
 .customer-workspace {
   width: 100%;
   min-width: 0;

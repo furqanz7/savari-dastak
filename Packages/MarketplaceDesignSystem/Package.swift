@@ -12,7 +12,10 @@ let package = Package(
         )
     ],
     targets: [
-        .target(name: "MarketplaceDesignSystem"),
+        .target(
+            name: "MarketplaceDesignSystem",
+            resources: [.process("Resources")]
+        ),
         .testTarget(
             name: "MarketplaceDesignSystemTests",
             dependencies: ["MarketplaceDesignSystem"]
