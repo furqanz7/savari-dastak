@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { LogOut, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
 import { completeProfile, isValidProfile, resolveAccess, type AccessResult } from "./access";
+import { AccountActionDialog } from "./AccountActionDialog";
 import { shouldPreserveAuthenticatedView } from "./auth-state";
 import { DastakCustomerView } from "./DastakCustomerView";
 import { AdminDashboard } from "./AdminDashboard";
@@ -108,11 +109,12 @@ export default function App() {
     }
   };
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     setBusy(true);
-    await supabase.auth.signOut({ scope: "local" });
+    const { error } = await supabase.auth.signOut({ scope: "local" });
     setBusy(false);
-  };
+    if (error) setView({ phase: "error", message: "Dastak could not sign you out. Try again." });
+  }, []);
 
   return (
     <main className={`app product-${config.product}`}>
@@ -139,7 +141,7 @@ export default function App() {
         )}
         {view.phase === "ready" && <Ready access={view.access} email={view.session.user.email} session={view.session} onSignOut={signOut} />}
         {view.phase === "restricted" && (
-          <Restricted access={view.access} session={view.session} onSubmitted={() => evaluate(view.session)} />
+          <Restricted access={view.access} session={view.session} onSubmitted={() => evaluate(view.session)} onSignOut={signOut} />
         )}
         {view.phase === "error" && (
           <ErrorState message={view.message} onRetry={() => evaluate(view.session ?? null)} />
@@ -459,43 +461,69 @@ function Restricted({
   access,
   session,
   onSubmitted,
+  onSignOut,
 }: {
   access: AccessResult;
   session: Session;
   onSubmitted: () => void;
+  onSignOut: () => void;
 }) {
   if (config.variant === "dastak-merchant" && access.state === "denied") {
     return (
-      <MerchantApplicationForm
-        client={supabase}
-        session={session}
-        supabaseUrl={config.supabaseUrl}
-        publishableKey={config.supabasePublishableKey}
-        onSubmitted={onSubmitted}
-      />
+      <RestrictedShell onSignOut={onSignOut}>
+        <MerchantApplicationForm
+          client={supabase}
+          session={session}
+          supabaseUrl={config.supabaseUrl}
+          publishableKey={config.supabasePublishableKey}
+          onSubmitted={onSubmitted}
+        />
+      </RestrictedShell>
     );
   }
   if (config.variant === "dastak-delivery" && access.state === "denied") {
     return (
-      <DeliveryPartnerApplicationForm
-        client={supabase}
-        session={session}
-        supabaseUrl={config.supabaseUrl}
-        publishableKey={config.supabasePublishableKey}
-        onSubmitted={onSubmitted}
-      />
+      <RestrictedShell onSignOut={onSignOut}>
+        <DeliveryPartnerApplicationForm
+          client={supabase}
+          session={session}
+          supabaseUrl={config.supabaseUrl}
+          publishableKey={config.supabasePublishableKey}
+          onSubmitted={onSubmitted}
+        />
+      </RestrictedShell>
     );
   }
   const title = access.state === "pending" ? "Approval pending" : access.state === "suspended" ? "Account suspended" : "Access not approved";
   return (
-    <div className="status-panel">
-      <div className="section-icon"><ShieldCheck size={23} /></div>
-      <p className="eyebrow">{config.roleLabel}</p>
-      <h1>{title}</h1>
-      <p>{access.message}</p>
-      <button className="secondary-button" type="button" onClick={onSubmitted}><RefreshCw size={17} /> Check status</button>
-    </div>
+    <RestrictedShell onSignOut={onSignOut}>
+      <div className="status-panel">
+        <div className="section-icon"><ShieldCheck size={23} /></div>
+        <p className="eyebrow">{config.roleLabel}</p>
+        <h1>{title}</h1>
+        <p>{access.message}</p>
+        <button className="secondary-button" type="button" onClick={onSubmitted}><RefreshCw size={17} /> Check status</button>
+      </div>
+    </RestrictedShell>
   );
+}
+
+function RestrictedShell({ children, onSignOut }: { children: ReactNode; onSignOut: () => void }) {
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  return <>
+    <div className="restricted-account-layout">
+      {children}
+      <button className="restricted-account-switch" type="button" onClick={() => setConfirmingSignOut(true)}>
+        <LogOut size={17} /> Use a different account
+      </button>
+    </div>
+    {confirmingSignOut && <AccountActionDialog
+      action="sign-out"
+      message="You'll need to sign in again to continue with a different account."
+      onConfirm={onSignOut}
+      onDismiss={() => setConfirmingSignOut(false)}
+    />}
+  </>;
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {

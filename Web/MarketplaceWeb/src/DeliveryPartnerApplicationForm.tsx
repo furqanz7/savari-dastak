@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
-import { Bike } from "lucide-react";
+import { Bike, FileCheck2, FileUp, Navigation, ShieldCheck } from "lucide-react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import { ApplicationProgress } from "./ApplicationProgress";
 import {
   isAcceptedPartnerEvidence,
   submitDeliveryPartnerApplication,
@@ -57,41 +58,53 @@ export function DeliveryPartnerApplicationForm({
   };
 
   return (
-    <form className="form-panel" onSubmit={submit}>
-      <div className="section-icon"><Bike size={22} /></div>
-      <p className="eyebrow">Delivery Partner</p>
-      <h1>Apply to deliver</h1>
-      <label>
-        Delivery method
-        <select value={deliveryMethod} onChange={(event) => setDeliveryMethod(event.target.value as DeliveryMethod)}>
-          <option value="walking">Walking</option>
-          <option value="bicycle">Bicycle</option>
-          <option value="bike">Bike</option>
-          <option value="auto">Auto</option>
-          <option value="car">Car</option>
-        </select>
-      </label>
-      <label>
-        Identity proof
-        <input
-          className="file-input"
-          type="file"
-          accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
-          onChange={(event) => {
-            setEvidenceFile(event.target.files?.[0]);
-            setUploadedEvidence(undefined);
-            requestKey.current = crypto.randomUUID();
-          }}
-        />
-      </label>
-      <small>PDF, JPG or PNG, up to 10 MB.</small>
+    <form className="application-onboarding delivery-application-panel" onSubmit={submit}>
+      <header className="application-heading">
+        <span className="application-heading-icon"><Bike size={24} /></span>
+        <div><p className="eyebrow">Delivery Partner</p><h1>Deliver with Dastak</h1><p>Choose how you travel and provide one identity document for owner review.</p></div>
+      </header>
+
+      <ApplicationProgress />
+
+      <section className="application-section" aria-labelledby="partner-method-title">
+        <header><Navigation size={20} /><div><h2 id="partner-method-title">Delivery method</h2><p>Choose the method you will actively use.</p></div></header>
+        <label>
+          Travel method
+          <select value={deliveryMethod} onChange={(event) => setDeliveryMethod(event.target.value as DeliveryMethod)}>
+            <option value="walking">Walking</option>
+            <option value="bicycle">Bicycle</option>
+            <option value="bike">Bike</option>
+            <option value="auto">Auto</option>
+            <option value="car">Car</option>
+          </select>
+        </label>
+      </section>
+
+      <section className="application-section" aria-labelledby="partner-document-title">
+        <header><ShieldCheck size={20} /><div><h2 id="partner-document-title">Identity proof</h2><p>Upload one clear document that belongs to you.</p></div></header>
+        <label className="application-file-picker">
+          <input
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+            onChange={(event) => {
+              setEvidenceFile(event.target.files?.[0]);
+              setUploadedEvidence(undefined);
+              requestKey.current = crypto.randomUUID();
+            }}
+          />
+          <span>{evidenceFile ? <FileCheck2 size={23} /> : <FileUp size={23} />}</span>
+          <span><strong>{evidenceFile?.name ?? "Choose a document"}</strong><small>PDF, JPG or PNG, up to 10 MB</small></span>
+        </label>
+      </section>
+
       {evidenceFile && !isAcceptedPartnerEvidence(evidenceFile) && (
         <p className="error-text" role="alert">Choose a supported file up to 10 MB.</p>
       )}
       {error && <p className="error-text" role="alert">{error}</p>}
-      <button className="primary-button" disabled={!valid || busy} type="submit">
+      <button className="primary-button application-submit" disabled={!valid || busy} type="submit">
         {busy ? "Submitting..." : "Submit for review"}
       </button>
+      <p className="application-privacy"><ShieldCheck size={15} /> Your document is private and used only to review this application.</p>
     </form>
   );
 }

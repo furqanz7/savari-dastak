@@ -3,10 +3,11 @@ import { Check, X } from "lucide-react";
 import { isValidAccountProfile, type AccountProfile } from "./accountProfile";
 import { PhoneNumberField } from "./PhoneNumberField";
 
-export function AccountProfileSheet({ profile, busy, error, onDismiss, onSave }: {
+export function AccountProfileSheet({ profile, busy, error, contactMessage, onDismiss, onSave }: {
   profile: AccountProfile;
   busy: boolean;
   error?: string;
+  contactMessage?: string;
   onDismiss: () => void;
   onSave: (profile: AccountProfile) => Promise<void>;
 }) {
@@ -40,7 +41,7 @@ export function AccountProfileSheet({ profile, busy, error, onDismiss, onSave }:
         </header>
         <label><span>Full name</span><input autoComplete="name" maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
         <div className="phone-field-group"><label htmlFor="account-phone">Phone number</label><PhoneNumberField value={phoneNumber} onChange={setPhoneNumber} id="account-phone" /></div>
-        <small>Your number is shared only when an active delivery requires contact. It is not used to sign in.</small>
+        <small>{contactMessage ?? "Your number is shared only when an active delivery requires contact. It is not used to sign in."}</small>
         {error && <p className="order-error" role="alert">{error}</p>}
         <button className="primary-button customer-sheet-action" type="submit" disabled={busy || !isValidAccountProfile(draft)}>
           <Check size={18} /> {busy ? "Saving..." : "Save changes"}

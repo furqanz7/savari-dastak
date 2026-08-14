@@ -160,3 +160,63 @@ struct DastakLoadingOverlay: View {
         .marketplaceGlass(cornerRadius: MarketplaceMetrics.controlCornerRadius)
     }
 }
+
+struct DastakApplicationProgress: View {
+    let currentStep: Int
+    private let steps = ["Account", "Application", "Review"]
+
+    init(currentStep: Int = 2) {
+        self.currentStep = currentStep
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, title in
+                let step = index + 1
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 0) {
+                        ZStack {
+                            Circle()
+                                .fill(step <= currentStep
+                                    ? MarketplaceColors.dastakAccent.color
+                                    : MarketplaceColors.dastakSurface.color)
+                                .overlay {
+                                    Circle().stroke(
+                                        step <= currentStep
+                                            ? MarketplaceColors.dastakAccent.color
+                                            : MarketplaceColors.dividerDark.color,
+                                        lineWidth: 1
+                                    )
+                                }
+                            if step < currentStep {
+                                Image(systemName: "checkmark")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(MarketplaceColors.dastakIconBackground.color)
+                            } else {
+                                Text(step.formatted())
+                                    .font(.caption.bold())
+                                    .foregroundStyle(step == currentStep
+                                        ? MarketplaceColors.dastakIconBackground.color
+                                        : .secondary)
+                            }
+                        }
+                        .frame(width: 28, height: 28)
+
+                        if step < steps.count {
+                            Rectangle()
+                                .fill(MarketplaceColors.dividerDark.color)
+                                .frame(height: 1)
+                                .padding(.horizontal, 6)
+                        }
+                    }
+                    Text(title)
+                        .font(.caption.bold())
+                        .foregroundStyle(step <= currentStep ? .primary : .secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Step \(currentStep) of \(steps.count), \(steps[currentStep - 1])")
+    }
+}

@@ -9,6 +9,23 @@ type AuthenticatedInput = {
   publishableKey: string;
 };
 
+export class AccountProfileRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+    this.name = "AccountProfileRequestError";
+  }
+}
+
+export async function snapshotAccountProfile(
+  input: AuthenticatedInput,
+  fetcher: typeof fetch = fetch,
+) {
+  const body = await callAccountProfile(input, { operation: "snapshot" }, fetcher);
+  const profile = (body as { profile?: unknown }).profile;
+  if (!isAccountProfile(profile)) throw new Error("Dastak returned an invalid account profile.");
+  return profile;
+}
+
 export async function updateAccountProfile(
   input: AuthenticatedInput & AccountProfile,
   fetcher: typeof fetch = fetch,
@@ -59,7 +76,10 @@ async function callAccountProfile(
     throw new Error("Dastak could not reach your account. Check your connection and try again.");
   }
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(readError(body, "The account request could not be completed."));
+  if (!response.ok) {
+    const { code, message } = readError(body, "The account request could not be completed.");
+    throw new AccountProfileRequestError(message, response.status, code);
+  }
   return body;
 }
 
@@ -72,5 +92,8 @@ function isAccountProfile(value: unknown): value is AccountProfile {
 function readError(body: unknown, fallback: string) {
   const record = body && typeof body === "object" ? body as Record<string, unknown> : undefined;
   const error = record?.error && typeof record.error === "object" ? record.error as Record<string, unknown> : undefined;
-  return typeof error?.message === "string" ? error.message : fallback;
+  return {
+    code: typeof error?.code === "string" ? error.code : undefined,
+    message: typeof error?.message === "string" ? error.message : fallback,
+  };
 }

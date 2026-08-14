@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { deleteAccount, isValidAccountProfile, updateAccountProfile } from "./accountProfile";
+import {
+  deleteAccount,
+  isValidAccountProfile,
+  snapshotAccountProfile,
+  updateAccountProfile,
+} from "./accountProfile";
 
 const auth = {
   supabaseUrl: "https://example.supabase.co",
@@ -8,6 +13,17 @@ const auth = {
 };
 
 describe("account profile", () => {
+  it("loads the authenticated profile snapshot", async () => {
+    const profile = await snapshotAccountProfile(auth, (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ operation: "snapshot" });
+      return Promise.resolve(new Response(JSON.stringify({
+        profile: { displayName: "Furqan", phoneNumber: "+919876543210" },
+      }), { status: 200 }));
+    });
+
+    expect(profile).toEqual({ displayName: "Furqan", phoneNumber: "+919876543210" });
+  });
+
   it("updates the authenticated profile", async () => {
     let body: unknown;
     const profile = await updateAccountProfile({
@@ -42,5 +58,18 @@ describe("account profile", () => {
     expect(isValidAccountProfile({ displayName: "F", phoneNumber: "+919876543210" })).toBe(true);
     expect(isValidAccountProfile({ displayName: "F", phoneNumber: "9876543210" })).toBe(false);
     expect(isValidAccountProfile({ displayName: "F".repeat(81), phoneNumber: "+919876543210" })).toBe(false);
+  });
+
+  it("preserves authentication errors for session recovery", async () => {
+    const request = snapshotAccountProfile(auth, () => Promise.resolve(
+      new Response(JSON.stringify({
+        error: { code: "authentication_required", message: "Sign in again to continue." },
+      }), { status: 401 }),
+    ));
+
+    await expect(request).rejects.toMatchObject({
+      status: 401,
+      code: "authentication_required",
+    });
   });
 });

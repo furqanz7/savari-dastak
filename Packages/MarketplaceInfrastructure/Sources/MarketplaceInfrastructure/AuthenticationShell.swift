@@ -257,6 +257,7 @@ private struct AuthenticationRouteView: View {
     @State private var appleNonce: String?
     @State private var errorMessage: String?
     @State private var restored = false
+    @State private var showsSignOutConfirmation = false
 
     var body: some View {
         Group {
@@ -284,6 +285,18 @@ private struct AuthenticationRouteView: View {
             if product == .dastak, route == .needsProfile, phoneNumber.isEmpty {
                 phoneNumber = "+91"
             }
+        }
+        .confirmationDialog(
+            "Sign out of Dastak?",
+            isPresented: $showsSignOutConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Sign out", role: .destructive) {
+                Task { await signOut() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You'll need to sign in again to continue with a different account.")
         }
     }
 
@@ -342,7 +355,7 @@ private struct AuthenticationRouteView: View {
                 .background(product == .dastak ? dastakAccent : .white)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .buttonStyle(.plain)
-                Button("Sign out") { Task { await signOut() } }
+                Button("Sign out") { showsSignOutConfirmation = true }
                     .foregroundStyle(.secondary)
                 if let errorMessage {
                     Text(errorMessage)
@@ -673,6 +686,15 @@ private struct AuthenticationRouteView: View {
             .disabled(
                 !profileInputIsValid || coordinator.isProfileSubmissionInFlight
             )
+
+            Button("Use a different account") {
+                dismissKeyboard()
+                showsSignOutConfirmation = true
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(dastakSecondaryText)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .buttonStyle(.plain)
         }
     }
 
@@ -759,16 +781,39 @@ private struct AuthenticationRouteView: View {
         message: String
     ) -> some View {
         if let restrictedContent {
-            VStack(spacing: 16) {
-                restrictedContent(route)
-                Button("Check status") {
-                    Task { await coordinator.restore() }
+            if product == .dastak {
+                VStack(spacing: 0) {
+                    restrictedContent(route)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    HStack(spacing: 12) {
+                        Button("Refresh status") {
+                            Task { await coordinator.restore() }
+                        }
+                        .buttonStyle(MarketplacePrimaryButtonStyle())
+
+                        Button("Sign out") {
+                            showsSignOutConfirmation = true
+                        }
+                        .buttonStyle(MarketplaceSecondaryButtonStyle())
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background(dastakSurface)
                 }
-                .buttonStyle(.borderedProminent)
-                Button("Sign out") {
-                    Task { await signOut() }
+                .background(dastakCanvas.ignoresSafeArea())
+            } else {
+                VStack(spacing: 16) {
+                    restrictedContent(route)
+                    Button("Check status") {
+                        Task { await coordinator.restore() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button("Sign out") {
+                        showsSignOutConfirmation = true
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
         } else {
             VStack(spacing: 12) {
@@ -782,7 +827,7 @@ private struct AuthenticationRouteView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 Button("Sign out") {
-                    Task { await signOut() }
+                    showsSignOutConfirmation = true
                 }
                 .buttonStyle(.bordered)
             }

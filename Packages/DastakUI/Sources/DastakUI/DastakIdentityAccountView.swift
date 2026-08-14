@@ -80,6 +80,7 @@ public struct DastakIdentityAccountView: View {
     @Environment(\.marketplaceSignOut) private var signOut
     @State private var showsProfileEditor = false
     @State private var accountAlert: AccountAlert?
+    @State private var notificationStatus: DastakNotificationPermissionState = .notRequested
 
     public init(
         roleName: String,
@@ -114,16 +115,23 @@ public struct DastakIdentityAccountView: View {
             }
             .navigationTitle("Account")
             .sheet(isPresented: $showsProfileEditor) {
-                DastakProfileEditor(customer: model.customer) { name, phone in
+                DastakProfileEditor(
+                    customer: model.customer,
+                    subtitle: profileSubtitle,
+                    contactMessage: contactPrivacyMessage
+                ) { name, phone in
                     try await model.update(displayName: name, phoneNumber: phone)
                 }
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
             .alert(item: $accountAlert, content: makeAccountAlert)
         }
         .marketplacePage()
-        .task { await model.load() }
+        .task {
+            await model.load()
+            notificationStatus = await DastakNotificationPreferences.status()
+        }
     }
 
     private var identity: some View {
@@ -147,9 +155,14 @@ public struct DastakIdentityAccountView: View {
                     }
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.caption.bold())
-                    .foregroundStyle(.tertiary)
+                VStack(alignment: .trailing, spacing: 8) {
+                    Text(accessLabel)
+                        .font(.caption.bold())
+                        .foregroundStyle(MarketplaceColors.success.color)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.tertiary)
+                }
             }
             .padding(MarketplaceSpacing.medium)
             .contentShape(Rectangle())
@@ -164,15 +177,27 @@ public struct DastakIdentityAccountView: View {
             VStack(spacing: 0) {
                 row(title: "Access", value: accessLabel, symbol: "checkmark.shield")
                 Divider()
-                Button(action: DastakNotificationPreferences.openSystemSettings) {
-                    row(title: "Language", value: "Follows iPhone", symbol: "globe")
+                Button { Task { await manageNotifications() } } label: {
+                    row(
+                        title: "Notifications",
+                        value: notificationStatus.title,
+                        symbol: "bell",
+                        showsDisclosure: true
+                    )
                 }
                 .buttonStyle(.plain)
                 Divider()
+                row(title: "Language", value: "Follows iPhone", symbol: "globe")
+                Divider()
                 NavigationLink {
-                    DastakPrivacyAndDataView()
+                    DastakPrivacyAndDataView(roleName: roleName)
                 } label: {
-                    row(title: "Privacy and data", value: nil, symbol: "hand.raised")
+                    row(
+                        title: "Privacy and data",
+                        value: nil,
+                        symbol: "hand.raised",
+                        showsDisclosure: true
+                    )
                 }
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
@@ -180,7 +205,12 @@ public struct DastakIdentityAccountView: View {
         }
     }
 
-    private func row(title: String, value: String?, symbol: String) -> some View {
+    private func row(
+        title: String,
+        value: String?,
+        symbol: String,
+        showsDisclosure: Bool = false
+    ) -> some View {
         HStack(spacing: MarketplaceSpacing.compact) {
             Image(systemName: symbol)
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -188,7 +218,7 @@ public struct DastakIdentityAccountView: View {
             Text(title).font(.headline).foregroundStyle(.primary)
             Spacer()
             if let value { Text(value).font(.subheadline).foregroundStyle(.secondary) }
-            if value == nil {
+            if showsDisclosure {
                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
             }
         }
@@ -197,25 +227,54 @@ public struct DastakIdentityAccountView: View {
     }
 
     private var actions: some View {
-        VStack(spacing: 0) {
-            Button { accountAlert = .signOut } label: {
-                Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
-            }
-            if allowsAccountDeletion {
-                Divider()
-                Button(role: .destructive) { accountAlert = .deleteAccount } label: {
-                    Label(model.isDeleting ? "Deleting account..." : "Delete account", systemImage: "trash")
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Account controls").font(MarketplaceTypography.sectionTitle)
+            VStack(spacing: 0) {
+                Button { accountAlert = .signOut } label: {
+                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
                 }
-                .disabled(model.isDeleting)
+                if allowsAccountDeletion {
+                    Divider()
+                    Button(role: .destructive) { accountAlert = .deleteAccount } label: {
+                        Label(model.isDeleting ? "Deleting account..." : "Delete account", systemImage: "trash")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+                    }
+                    .disabled(model.isDeleting)
+                }
             }
+            .font(.headline)
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
         }
-        .font(.headline)
-        .padding(.horizontal, MarketplaceSpacing.medium)
-        .marketplaceFlatSurface()
+    }
+
+    @MainActor
+    private func manageNotifications() async {
+        switch notificationStatus {
+        case .notRequested:
+            notificationStatus = await DastakNotificationPreferences.request()
+        case .enabled, .disabled, .unavailable:
+            DastakNotificationPreferences.openSystemSettings()
+        }
+    }
+
+    private var profileSubtitle: String {
+        roleName == "Merchant"
+            ? "Keep your store contact accurate."
+            : roleName == "Delivery Partner"
+                ? "Keep your delivery contact accurate."
+                : "Keep this account's contact accurate."
+    }
+
+    private var contactPrivacyMessage: String {
+        roleName == "Merchant"
+            ? "Used only when an active order requires store contact. It is not used to sign in."
+            : roleName == "Delivery Partner"
+                ? "Shared only during an assigned delivery when contact is required. It is not used to sign in."
+                : "Used only when an active task requires contact. It is not used to sign in."
     }
 
     private func makeAccountAlert(_ alert: AccountAlert) -> Alert {

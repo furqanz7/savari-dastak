@@ -131,9 +131,15 @@ private enum DastakMerchantApplicationError: Error {
 }
 
 public struct DastakMerchantAccessView: View {
+    private enum Field: Hashable {
+        case businessName
+        case businessAddress
+    }
+
     private let route: AccountRoute
     @StateObject private var model: DastakMerchantApplicationModel
     @State private var showsImporter = false
+    @FocusState private var focusedField: Field?
 
     public init(route: AccountRoute, services: MarketplaceAuthenticatedServices) {
         self.route = route
@@ -143,30 +149,50 @@ public struct DastakMerchantAccessView: View {
     }
 
     public var body: some View {
-        Group {
-            switch route {
-            case .accessDenied where !model.isSubmitted:
-                applicationForm
-            case .pendingApproval, .accessDenied:
-                status(
-                    symbol: "clock.badge.checkmark",
-                    title: "Application under review",
-                    message: "Dastak will unlock your merchant workspace after approval."
-                )
-            case .suspended:
-                status(
-                    symbol: "exclamationmark.shield",
-                    title: "Merchant access suspended",
-                    message: "Your store cannot use the merchant app right now."
-                )
-            default:
-                status(
-                    symbol: "lock",
-                    title: "Merchant access unavailable",
-                    message: "Sign in again or contact Dastak support."
-                )
+        NavigationStack {
+            ScrollView {
+                Group {
+                    switch route {
+                    case .accessDenied where !model.isSubmitted:
+                        applicationForm
+                    case .pendingApproval, .accessDenied:
+                        status(
+                            symbol: "clock.badge.checkmark",
+                            title: "Application under review",
+                            message: "Dastak will unlock your merchant workspace after approval."
+                        )
+                    case .suspended:
+                        status(
+                            symbol: "exclamationmark.shield",
+                            title: "Merchant access suspended",
+                            message: "Your store cannot use the merchant app right now."
+                        )
+                    default:
+                        status(
+                            symbol: "lock",
+                            title: "Merchant access unavailable",
+                            message: "Sign in again or contact Dastak support."
+                        )
+                    }
+                }
+                .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+                .padding(MarketplaceSpacing.large)
+                .frame(maxWidth: .infinity)
+            }
+#if os(iOS)
+            .scrollDismissesKeyboard(.interactively)
+#endif
+            .navigationTitle("Merchant")
+            .toolbar {
+#if os(iOS)
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                }
+#endif
             }
         }
+        .marketplacePage()
         .fileImporter(
             isPresented: $showsImporter,
             allowedContentTypes: [.pdf, .jpeg, .png],
@@ -181,48 +207,91 @@ public struct DastakMerchantAccessView: View {
     }
 
     private var applicationForm: some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-            Image(systemName: "storefront")
-                .font(.title2)
-                .foregroundStyle(MarketplaceColors.dastakAccent.color)
-
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                Text("Merchant registration")
-                    .font(.caption.bold())
+                Image(systemName: "storefront.fill")
+                    .font(.title2)
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                Text("Apply to sell")
-                    .font(MarketplaceTypography.sectionTitle)
-                Text("Add your business details and one proof document.")
-                    .font(.subheadline)
+                Text("MERCHANT REGISTRATION")
+                    .font(.caption.bold())
+                    .tracking(1)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Text("Bring your store to Dastak")
+                    .font(MarketplaceTypography.hero)
+                Text("Tell us where you trade and provide one document for owner review.")
+                    .font(MarketplaceTypography.supporting)
                     .foregroundStyle(.secondary)
             }
 
-            TextField("Business name", text: $model.businessName)
-                .textFieldStyle(.roundedBorder)
-                .textContentType(.organizationName)
+            DastakApplicationProgress()
 
-            TextField(
-                "Business address",
-                text: $model.businessAddress,
-                axis: .vertical
-            )
-            .lineLimit(3...5)
-            .textFieldStyle(.roundedBorder)
-            .textContentType(.fullStreetAddress)
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                Label("Store details", systemImage: "storefront")
+                    .font(MarketplaceTypography.sectionTitle)
 
-            Button {
-                showsImporter = true
-            } label: {
-                Label(
-                    model.evidenceName ?? "Choose business document",
-                    systemImage: "doc.badge.plus"
+                Text("Business name")
+                    .font(.subheadline.bold())
+                TextField("Your store name", text: $model.businessName)
+                    .textContentType(.organizationName)
+                    .focused($focusedField, equals: .businessName)
+                    .padding(.horizontal, MarketplaceSpacing.compact)
+                    .frame(minHeight: 54)
+                    .marketplaceFlatSurface()
+
+                Text("Business address")
+                    .font(.subheadline.bold())
+                TextField(
+                    "Shop number, street, area and city",
+                    text: $model.businessAddress,
+                    axis: .vertical
                 )
+                .lineLimit(3...5)
+                .textContentType(.fullStreetAddress)
+                .focused($focusedField, equals: .businessAddress)
+                .padding(MarketplaceSpacing.compact)
+                .frame(minHeight: 96, alignment: .topLeading)
+                .marketplaceFlatSurface()
             }
-            .buttonStyle(MarketplaceSecondaryButtonStyle())
+            .padding(.top, MarketplaceSpacing.medium)
+            .overlay(alignment: .top) { Divider() }
 
-            Text("PDF, JPG, or PNG, up to 10 MB.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                Label("Verification document", systemImage: "checkmark.shield")
+                    .font(MarketplaceTypography.sectionTitle)
+                Text("Business registration or the owner's identity proof.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    focusedField = nil
+                    showsImporter = true
+                } label: {
+                    HStack(spacing: MarketplaceSpacing.compact) {
+                        Image(systemName: model.evidenceName == nil ? "doc.badge.plus" : "doc.badge.checkmark")
+                            .font(.title3)
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            .frame(width: 36)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(model.evidenceName ?? "Choose a document")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Text("PDF, JPG or PNG, up to 10 MB")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(MarketplaceSpacing.compact)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .marketplaceFlatSurface()
+            }
+            .padding(.top, MarketplaceSpacing.medium)
+            .overlay(alignment: .top) { Divider() }
 
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
@@ -235,6 +304,14 @@ public struct DastakMerchantAccessView: View {
             }
             .buttonStyle(MarketplacePrimaryButtonStyle())
             .disabled(!model.canSubmit)
+
+            Label(
+                "Your document is private and used only to review this application.",
+                systemImage: "lock.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 

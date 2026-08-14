@@ -297,20 +297,49 @@ struct DastakAccountView: View {
 }
 
 struct DastakPrivacyAndDataView: View {
+    let roleName: String?
+
+    init(roleName: String? = nil) {
+        self.roleName = roleName
+    }
+
     var body: some View {
         List {
             Section("Contact") {
                 Text("Your phone number is unverified at launch and is not used to sign in, recover your account, or prove payment.")
-                Text("It is shared only when an active delivery requires customer and partner contact.")
+                Text(contactMessage)
             }
-            Section("Location") {
-                Text("Your saved delivery address is used for discovery, pricing and fulfilment. Current location is requested only when you choose to use it.")
+            if roleName == nil {
+                Section("Location") {
+                    Text("Your saved delivery address is used for discovery, pricing and fulfilment. Current location is requested only when you choose to use it.")
+                }
+            } else {
+                Section("Role access") {
+                    Text("Dastak uses owner-approved access to decide which workspace this account can open. Profile details cannot grant or change that access.")
+                }
             }
             Section("Control") {
-                Text("You can edit your profile and delivery address, change permissions in iPhone Settings, sign out, or permanently delete your account from Account.")
+                Text(controlMessage)
             }
         }
         .navigationTitle("Privacy and data")
+    }
+
+    private var contactMessage: String {
+        switch roleName {
+        case "Merchant":
+            "It is shared only when an active order requires store contact."
+        case "Delivery Partner":
+            "It is shared only during an assigned delivery when customer, merchant, or partner contact is required."
+        default:
+            "It is shared only when an active delivery requires customer and partner contact."
+        }
+    }
+
+    private var controlMessage: String {
+        roleName == nil
+            ? "You can edit your profile and delivery address, change permissions in iPhone Settings, sign out, or permanently delete your account from Account."
+            : "You can edit your profile, change permissions in iPhone Settings, sign out, or permanently delete your account from Account."
     }
 }
 
@@ -320,6 +349,8 @@ struct DastakProfileEditor: View {
     }
 
     let customer: MarketplaceCheckoutCustomer?
+    let subtitle: String
+    let contactMessage: String
     let updateProfile: (String, String) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -331,9 +362,13 @@ struct DastakProfileEditor: View {
 
     init(
         customer: MarketplaceCheckoutCustomer?,
+        subtitle: String = "Keep your delivery contact accurate.",
+        contactMessage: String = "Used only when an active delivery requires contact. It is not used to sign in.",
         updateProfile: @escaping (String, String) async throws -> Void
     ) {
         self.customer = customer
+        self.subtitle = subtitle
+        self.contactMessage = contactMessage
         self.updateProfile = updateProfile
         _displayName = State(initialValue: customer?.displayName ?? "")
         _phoneNumber = State(initialValue: customer?.phoneNumber ?? "+91")
@@ -346,7 +381,7 @@ struct DastakProfileEditor: View {
                     VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
                         Text("Personal details")
                             .font(.largeTitle.bold())
-                        Text("Keep your delivery contact accurate.")
+                        Text(subtitle)
                             .font(MarketplaceTypography.supporting)
                             .foregroundStyle(.secondary)
                     }
@@ -371,7 +406,7 @@ struct DastakProfileEditor: View {
                             .font(.subheadline.weight(.semibold))
                         DastakPhoneNumberField(phoneNumber: $phoneNumber)
                         Label(
-                            "Used only when an active delivery requires contact. It is not used to sign in.",
+                            contactMessage,
                             systemImage: "lock.fill"
                         )
                         .font(.footnote)

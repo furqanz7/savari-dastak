@@ -165,6 +165,9 @@ public struct DastakDeliveryPartnerAccessView: View {
                 .padding(MarketplaceSpacing.large)
                 .frame(maxWidth: .infinity)
             }
+#if os(iOS)
+            .scrollDismissesKeyboard(.interactively)
+#endif
             .navigationTitle("Delivery Partner")
         }
         .marketplacePage()
@@ -185,7 +188,11 @@ public struct DastakDeliveryPartnerAccessView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
                 Image(systemName: "figure.delivery")
-                    .font(.title)
+                    .font(.title2)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Text(access == .rejected ? "APPLICATION UPDATE" : "DELIVERY PARTNER")
+                    .font(.caption.bold())
+                    .tracking(1)
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 Text(access == .rejected ? "Apply again" : "Deliver with Dastak")
                     .font(MarketplaceTypography.hero)
@@ -196,8 +203,14 @@ public struct DastakDeliveryPartnerAccessView: View {
                     .foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                Text("Delivery method").font(MarketplaceTypography.sectionTitle)
+            DastakApplicationProgress()
+
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                Label("Delivery method", systemImage: "location.north.line")
+                    .font(MarketplaceTypography.sectionTitle)
+                Text("Choose the method you will actively use.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 Picker("Delivery method", selection: $model.deliveryMethod) {
                     Text("Walking").tag(MarketplaceInfrastructure.DeliveryMethod.walking)
                     Text("Bicycle").tag(MarketplaceInfrastructure.DeliveryMethod.bicycle)
@@ -210,26 +223,43 @@ public struct DastakDeliveryPartnerAccessView: View {
                 .padding(.horizontal, MarketplaceSpacing.medium)
                 .marketplaceFlatSurface()
             }
+            .padding(.top, MarketplaceSpacing.medium)
+            .overlay(alignment: .top) { Divider() }
 
-            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                Text("Identity proof").font(MarketplaceTypography.sectionTitle)
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                Label("Identity proof", systemImage: "checkmark.shield")
+                    .font(MarketplaceTypography.sectionTitle)
+                Text("Upload one clear document that belongs to you.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
                 Button { showsImporter = true } label: {
-                    HStack {
-                        Image(systemName: "doc.badge.plus")
-                        Text(model.evidenceName ?? "Choose PDF, JPG or PNG")
-                            .lineLimit(1)
-                        Spacer()
+                    HStack(spacing: MarketplaceSpacing.compact) {
+                        Image(systemName: model.evidenceName == nil ? "doc.badge.plus" : "doc.badge.checkmark")
+                            .font(.title3)
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            .frame(width: 36)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(model.evidenceName ?? "Choose a document")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Text("PDF, JPG or PNG, up to 10 MB")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
+                            .foregroundStyle(.tertiary)
                     }
-                    .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
-                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .padding(MarketplaceSpacing.compact)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .marketplaceFlatSurface()
-                Text("Maximum file size 10 MB.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
+            .padding(.top, MarketplaceSpacing.medium)
+            .overlay(alignment: .top) { Divider() }
 
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
@@ -244,6 +274,14 @@ public struct DastakDeliveryPartnerAccessView: View {
             }
             .buttonStyle(MarketplacePrimaryButtonStyle())
             .disabled(!model.canSubmit)
+
+            Label(
+                "Your document is private and used only to review this application.",
+                systemImage: "lock.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 

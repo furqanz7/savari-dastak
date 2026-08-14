@@ -1,4 +1,5 @@
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import { AccountProfileRequestError, snapshotAccountProfile } from "./accountProfile";
 import type { AppConfig } from "./config";
 
 export type AccessState = "signed_out" | "needs_profile" | "active" | "pending" | "suspended" | "denied";
@@ -154,11 +155,9 @@ async function resolveDastakAccess(
     if (!response.ok) throw new Error(readErrorMessage(response.body, "Delivery access could not be verified."));
     const result = mapDeliverySnapshot(response.body as DeliverySnapshot);
     if (result.state === "active") {
-      const { data } = await client.from("accounts").select("display_name,phone_number").eq("id", session.user.id).maybeSingle<{
-        display_name: string;
-        phone_number: string;
-      }>();
-      if (data) result.profile = { displayName: data.display_name, phoneNumber: data.phone_number };
+      const profile = await resolveDastakProfile(session, config);
+      if (!profile) return { state: "signed_out" } satisfies AccessResult;
+      result.profile = profile;
     }
     return result;
   }
@@ -171,13 +170,24 @@ async function resolveDastakAccess(
   if (!response.ok) throw new Error(readErrorMessage(response.body, "Account access could not be verified."));
   const result = mapDastakRoute((response.body as { route?: unknown }).route);
   if (result.state === "active") {
-    const { data } = await client.from("accounts").select("display_name,phone_number").eq("id", session.user.id).maybeSingle<{
-      display_name: string;
-      phone_number: string;
-    }>();
-    if (data) result.profile = { displayName: data.display_name, phoneNumber: data.phone_number };
+    const profile = await resolveDastakProfile(session, config);
+    if (!profile) return { state: "signed_out" } satisfies AccessResult;
+    result.profile = profile;
   }
   return result;
+}
+
+async function resolveDastakProfile(session: Session, config: AppConfig) {
+  try {
+    return await snapshotAccountProfile({
+      accessToken: session.access_token,
+      supabaseUrl: config.supabaseUrl,
+      publishableKey: config.supabasePublishableKey,
+    });
+  } catch (error) {
+    if (error instanceof AccountProfileRequestError && error.status === 401) return undefined;
+    throw error;
+  }
 }
 
 async function callFunction(
