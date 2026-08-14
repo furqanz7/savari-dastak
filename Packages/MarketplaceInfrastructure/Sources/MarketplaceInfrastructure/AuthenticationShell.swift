@@ -440,66 +440,111 @@ private struct AuthenticationRouteView: View {
 
     private var dastakAuthenticationView: some View {
         ZStack {
-            dastakCanvas.ignoresSafeArea()
+            dastakCanvas
+                .ignoresSafeArea()
+                .onTapGesture { dismissKeyboard() }
 
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 10) {
-                    DastakAuthWordmark(size: 40)
-                    Text(dastakRoleLabel)
-                        .font(.caption.weight(.semibold))
-                        .textCase(.uppercase)
-                        .tracking(1.2)
-                        .foregroundStyle(dastakAccent)
-                    Text(routeSubtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(dastakSecondaryText)
-                }
-                .padding(.top, 28)
-
-                Spacer(minLength: 72)
-
-                Group {
-                    switch coordinator.route {
-                    case .signedOut:
-                        dastakSignedOutView
-                    case .needsProfile:
-                        dastakProfileView
-                    case .pendingApproval:
-                        resolvedRestrictedView(
-                            route: .pendingApproval,
-                            title: "Approval pending",
-                            message: "This account is waiting for approval to use this app."
-                        )
-                    case .suspended:
-                        resolvedRestrictedView(
-                            route: .suspended,
-                            title: "Account suspended",
-                            message: "This account cannot use this app right now."
-                        )
-                    case .accessDenied:
-                        resolvedRestrictedView(
-                            route: .accessDenied,
-                            title: "Access denied",
-                            message: "This account does not have access to this app."
-                        )
-                    case .active:
-                        EmptyView()
-                    }
-                }
-                .frame(maxWidth: .infinity)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(dastakError)
-                        .padding(.top, 20)
-                }
+            if coordinator.route == .needsProfile {
+                dastakProfileAuthenticationView
+            } else {
+                dastakStandardAuthenticationView
             }
-            .frame(maxWidth: 430, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.horizontal, 28)
-            .padding(.vertical, 36)
         }
         .preferredColorScheme(.dark)
+    }
+
+    private var dastakProfileAuthenticationView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                dastakAuthenticationHeader(showsSubtitle: false)
+                dastakProfileView
+                    .padding(.top, 46)
+                dastakErrorView
+            }
+            .frame(maxWidth: 430, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.top, 36)
+            .padding(.bottom, 32)
+        }
+#if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { dismissKeyboard() }
+            }
+        }
+#endif
+    }
+
+    private var dastakStandardAuthenticationView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            dastakAuthenticationHeader(showsSubtitle: true)
+            Spacer(minLength: 72)
+            dastakRouteContent
+                .frame(maxWidth: .infinity)
+            dastakErrorView
+        }
+        .frame(maxWidth: 430, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 36)
+    }
+
+    private func dastakAuthenticationHeader(showsSubtitle: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DastakAuthWordmark(size: 40)
+            Text(dastakRoleLabel)
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
+                .tracking(1.2)
+                .foregroundStyle(dastakAccent)
+            if showsSubtitle {
+                Text(routeSubtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(dastakSecondaryText)
+            }
+        }
+        .padding(.top, 28)
+    }
+
+    @ViewBuilder
+    private var dastakRouteContent: some View {
+        switch coordinator.route {
+        case .signedOut:
+            dastakSignedOutView
+        case .needsProfile:
+            dastakProfileView
+        case .pendingApproval:
+            resolvedRestrictedView(
+                route: .pendingApproval,
+                title: "Approval pending",
+                message: "This account is waiting for approval to use this app."
+            )
+        case .suspended:
+            resolvedRestrictedView(
+                route: .suspended,
+                title: "Account suspended",
+                message: "This account cannot use this app right now."
+            )
+        case .accessDenied:
+            resolvedRestrictedView(
+                route: .accessDenied,
+                title: "Access denied",
+                message: "This account does not have access to this app."
+            )
+        case .active:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var dastakErrorView: some View {
+        if let errorMessage {
+            Text(errorMessage)
+                .font(.footnote)
+                .foregroundStyle(dastakError)
+                .padding(.top, 20)
+        }
     }
 
     private var signedOutView: some View {
@@ -580,29 +625,48 @@ private struct AuthenticationRouteView: View {
     }
 
     private var dastakProfileView: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Tell us about you")
-                    .font(.title2.weight(.semibold))
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Your details")
+                    .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(.white)
-                Text("Your name and phone number are required for deliveries.")
+                Text(dastakProfilePurpose)
                     .font(.subheadline)
                     .foregroundStyle(dastakSecondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.bottom, 4)
-            #if os(iOS)
-            TextField("Full name", text: $displayName)
-                .textContentType(.name)
-                .textFieldStyle(DastakTextFieldStyle())
-            #else
-            TextField("Full name", text: $displayName)
-                .textFieldStyle(DastakTextFieldStyle())
-            #endif
-            dastakPhoneNumberField
-            Text("Include the country code. Your number is used only for delivery contact.")
-                .font(.caption)
-                .foregroundStyle(dastakSecondaryText)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Full name")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+#if os(iOS)
+                TextField("Enter your full name", text: $displayName)
+                    .textContentType(.name)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .onSubmit { dismissKeyboard() }
+                    .textFieldStyle(DastakTextFieldStyle())
+#else
+                TextField("Enter your full name", text: $displayName)
+                    .textFieldStyle(DastakTextFieldStyle())
+#endif
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Phone number")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                DastakPhoneNumberField(phoneNumber: $phoneNumber)
+                Label(dastakPhonePrivacyText, systemImage: "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(dastakSecondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Button(coordinator.isProfileSubmissionInFlight ? "Completing profile" : "Continue") {
+                dismissKeyboard()
                 Task { await completeProfile() }
             }
             .buttonStyle(DastakPrimaryButtonStyle())
@@ -622,19 +686,6 @@ private struct AuthenticationRouteView: View {
         #else
         TextField("Phone number (unverified)", text: $phoneNumber)
             .textFieldStyle(.roundedBorder)
-        #endif
-    }
-
-    @ViewBuilder
-    private var dastakPhoneNumberField: some View {
-        #if os(iOS)
-        TextField("Phone number", text: $phoneNumber)
-            .textContentType(.telephoneNumber)
-            .keyboardType(.phonePad)
-            .textFieldStyle(DastakTextFieldStyle())
-        #else
-        TextField("Phone number", text: $phoneNumber)
-            .textFieldStyle(DastakTextFieldStyle())
         #endif
     }
 
@@ -848,6 +899,42 @@ private struct AuthenticationRouteView: View {
         }
     }
 
+    private var dastakProfilePurpose: String {
+        switch requiredAccess {
+        case .dastakCustomer:
+            "Add the contact details used for your deliveries."
+        case .dastakMerchant:
+            "Add the contact details used for your store and orders."
+        case .dastakAdmin:
+            "Add the contact details for this owner account."
+        case .profileOnly:
+            "Add the contact details used for your account."
+        }
+    }
+
+    private var dastakPhonePrivacyText: String {
+        switch requiredAccess {
+        case .dastakCustomer:
+            "Not used to sign in. Shared only when an active delivery needs contact."
+        case .dastakMerchant:
+            "Not used to sign in. Shared only when an active order needs contact."
+        case .dastakAdmin, .profileOnly:
+            "Not used to sign in, recover your account, or confirm payments."
+        }
+    }
+
+    @MainActor
+    private func dismissKeyboard() {
+#if canImport(UIKit)
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+#endif
+    }
+
     private var profileInputIsValid: Bool {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let phone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -871,6 +958,7 @@ private struct DastakTextFieldStyle: TextFieldStyle {
             .padding(.horizontal, 15)
             .frame(minHeight: 52)
             .foregroundStyle(Color(red: 245 / 255, green: 242 / 255, blue: 236 / 255))
+            .tint(Color(red: 176 / 255, green: 141 / 255, blue: 87 / 255))
             .background(Color(red: 24 / 255, green: 23 / 255, blue: 22 / 255))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -881,6 +969,8 @@ private struct DastakTextFieldStyle: TextFieldStyle {
 }
 
 private struct DastakPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .frame(maxWidth: .infinity)
@@ -889,7 +979,7 @@ private struct DastakPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(Color(red: 33 / 255, green: 19 / 255, blue: 14 / 255))
             .background(Color(red: 176 / 255, green: 141 / 255, blue: 87 / 255))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .opacity(configuration.isPressed ? 0.82 : 1)
+            .opacity(!isEnabled ? 0.42 : configuration.isPressed ? 0.82 : 1)
     }
 }
 
