@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
+import { AccountActionDialog } from "./AccountActionDialog";
 import { deleteAccount, updateAccountProfile, type AccountProfile } from "./accountProfile";
 import {
   browseCatalogue,
@@ -163,6 +164,7 @@ export function CatalogueView({
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileError, setProfileError] = useState<string>();
+  const [showSignOutConfirmation, setShowSignOutConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderSnapshot>();
   const [searchQuery, setSearchQuery] = useState("");
@@ -694,7 +696,7 @@ export function CatalogueView({
             <strong>Privacy and data</strong>
             <p>Your number is unverified and is shared only when an active delivery requires contact. Your saved address is used for discovery, pricing and fulfilment.</p>
           </section>
-          <button className="customer-sign-out" type="button" onClick={onSignOut}>Sign out</button>
+          <button className="customer-sign-out" type="button" onClick={() => setShowSignOutConfirmation(true)}>Sign out</button>
           <button className="customer-delete-account" type="button" onClick={() => setShowDeleteConfirmation(true)}>Delete account</button>
           {profileError && !profileEditorOpen && <p className="error-text" role="alert">{profileError}</p>}
         </section>
@@ -715,14 +717,19 @@ export function CatalogueView({
         onDismiss={() => { setProfileEditorOpen(false); setProfileError(undefined); }}
         onSave={saveProfile}
       />}
-      {showDeleteConfirmation && <div className="customer-sheet-backdrop" role="presentation">
-        <section className="customer-sheet delete-account-sheet" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title">
-          <header><div><p className="eyebrow">Permanent action</p><h2 id="delete-account-title">Delete your account?</h2></div></header>
-          <p>Completed order records may be retained without your identity where legally required. This cannot be undone.</p>
-          <button className="danger-button" type="button" disabled={profileBusy} onClick={() => void confirmAccountDeletion()}>{profileBusy ? "Deleting..." : "Delete account"}</button>
-          <button className="secondary-button" type="button" disabled={profileBusy} onClick={() => setShowDeleteConfirmation(false)}>Keep account</button>
-        </section>
-      </div>}
+      {showSignOutConfirmation && <AccountActionDialog
+        action="sign-out"
+        message="You'll need to sign in again to access your account and orders."
+        onConfirm={onSignOut}
+        onDismiss={() => setShowSignOutConfirmation(false)}
+      />}
+      {showDeleteConfirmation && <AccountActionDialog
+        action="delete-account"
+        busy={profileBusy}
+        message="Completed order records may be retained without your identity where legally required. This cannot be undone."
+        onConfirm={() => void confirmAccountDeletion()}
+        onDismiss={() => setShowDeleteConfirmation(false)}
+      />}
       {cancellingOrder && <CancellationSheet
         title={merchantOrderPresentation(cancellingOrder.status, cancellingOrder.paymentState).primaryAction === "request_cancellation" ? "Request cancellation?" : "Cancel this order?"}
         busy={orderBusy}

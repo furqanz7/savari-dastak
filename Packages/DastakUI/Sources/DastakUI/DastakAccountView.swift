@@ -3,6 +3,20 @@ import MarketplaceInfrastructure
 import SwiftUI
 
 struct DastakAccountView: View {
+    private enum AccountAlert: Identifiable {
+        case signOut
+        case deleteAccount
+        case error(String)
+
+        var id: String {
+            switch self {
+            case .signOut: "sign-out"
+            case .deleteAccount: "delete-account"
+            case .error: "error"
+            }
+        }
+    }
+
     let customer: MarketplaceCheckoutCustomer?
     let location: DastakDeliveryLocation?
     let discoveryRadiusKilometres: Int
@@ -15,9 +29,8 @@ struct DastakAccountView: View {
 
     @Environment(\.marketplaceSignOut) private var signOut
     @State private var showingProfileEditor = false
-    @State private var showingDeleteConfirmation = false
+    @State private var accountAlert: AccountAlert?
     @State private var isDeleting = false
-    @State private var errorMessage: String?
     @State private var notificationStatus: DastakNotificationPermissionState = .notRequested
 
     var body: some View {
@@ -44,26 +57,7 @@ struct DastakAccountView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        .confirmationDialog(
-            "Delete your Dastak account?",
-            isPresented: $showingDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete account", role: .destructive) {
-                Task { await performAccountDeletion() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This signs you out and permanently removes your account. Completed order records are retained without your identity where legally required.")
-        }
-        .alert("Dastak", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
-        }
+        .alert(item: $accountAlert, content: makeAccountAlert)
         .task {
             notificationStatus = await DastakNotificationPreferences.status()
         }
@@ -240,15 +234,13 @@ struct DastakAccountView: View {
 
     private var accountActions: some View {
         VStack(spacing: 0) {
-            Button {
-                Task { await signOut() }
-            } label: {
+            Button { accountAlert = .signOut } label: {
                 Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
             }
             Divider()
-            Button(role: .destructive) { showingDeleteConfirmation = true } label: {
+            Button(role: .destructive) { accountAlert = .deleteAccount } label: {
                 Label(isDeleting ? "Deleting account..." : "Delete account", systemImage: "trash")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
@@ -260,6 +252,35 @@ struct DastakAccountView: View {
         .marketplaceFlatSurface()
     }
 
+    private func makeAccountAlert(_ alert: AccountAlert) -> Alert {
+        switch alert {
+        case .signOut:
+            Alert(
+                title: Text("Sign out of Dastak?"),
+                message: Text("You'll need to sign in again to access your account and orders."),
+                primaryButton: .cancel(Text("Cancel")),
+                secondaryButton: .destructive(Text("Sign out")) {
+                    Task { await signOut() }
+                }
+            )
+        case .deleteAccount:
+            Alert(
+                title: Text("Delete your Dastak account?"),
+                message: Text("This permanently deletes your account and signs you out. Completed order records may be retained without your identity where legally required."),
+                primaryButton: .cancel(Text("Cancel")),
+                secondaryButton: .destructive(Text("Delete account")) {
+                    Task { await performAccountDeletion() }
+                }
+            )
+        case let .error(message):
+            Alert(
+                title: Text("Dastak"),
+                message: Text(message),
+                dismissButton: .cancel(Text("OK"))
+            )
+        }
+    }
+
     @MainActor
     private func performAccountDeletion() async {
         isDeleting = true
@@ -267,7 +288,7 @@ struct DastakAccountView: View {
         do {
             try await deleteAccount()
         } catch {
-            errorMessage = "Your account could not be deleted. Please try again."
+            accountAlert = .error("Your account could not be deleted. Please try again.")
         }
     }
 }

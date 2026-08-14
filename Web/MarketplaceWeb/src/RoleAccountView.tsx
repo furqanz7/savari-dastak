@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Globe2, LogOut, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
+import { AccountActionDialog } from "./AccountActionDialog";
 import { deleteAccount, updateAccountProfile, type AccountProfile } from "./accountProfile";
 
 type Props = {
@@ -24,6 +25,7 @@ export function RoleAccountView({
   const auth = { accessToken, supabaseUrl, publishableKey };
   const [profile, setProfile] = useState<AccountProfile>({ displayName: displayName ?? "", phoneNumber: phoneNumber ?? "" });
   const [editing, setEditing] = useState(false);
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -64,16 +66,23 @@ export function RoleAccountView({
     {children}
     {error && <p className="order-error" role="alert">{error}</p>}
     <div className="role-account-actions">
-      <button className="secondary-button" type="button" onClick={onSignOut}><LogOut size={18} /> Sign out</button>
+      <button className="secondary-button" type="button" onClick={() => setConfirmingSignOut(true)}><LogOut size={18} /> Sign out</button>
       {allowsAccountDeletion && <button className="danger-button" type="button" onClick={() => setConfirmingDelete(true)}><Trash2 size={18} /> Delete account</button>}
     </div>
     {editing && <AccountProfileSheet profile={profile} busy={busy} error={error} onDismiss={() => { setEditing(false); setError(undefined); }} onSave={save} />}
-    {confirmingDelete && <div className="customer-sheet-backdrop" role="presentation"><section className="customer-sheet delete-account-sheet" role="alertdialog" aria-modal="true" aria-labelledby="role-delete-account-title">
-      <header><div><p className="eyebrow">Permanent action</p><h2 id="role-delete-account-title">Delete your account?</h2></div></header>
-      <p>Your role access is removed and retained records are detached from your identity. This cannot be undone.</p>
-      <button className="danger-button" type="button" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting..." : "Delete account"}</button>
-      <button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmingDelete(false)}>Keep account</button>
-    </section></div>}
+    {confirmingSignOut && <AccountActionDialog
+      action="sign-out"
+      message="You'll need to sign in again to access this account."
+      onConfirm={onSignOut}
+      onDismiss={() => setConfirmingSignOut(false)}
+    />}
+    {confirmingDelete && <AccountActionDialog
+      action="delete-account"
+      busy={busy}
+      message="Your role access is removed and retained records are detached from your identity. This cannot be undone."
+      onConfirm={() => void remove()}
+      onDismiss={() => setConfirmingDelete(false)}
+    />}
   </section>;
 }
 

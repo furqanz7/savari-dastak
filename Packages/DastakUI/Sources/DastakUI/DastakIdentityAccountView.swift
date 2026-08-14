@@ -61,13 +61,25 @@ private final class DastakIdentityAccountModel: ObservableObject {
 }
 
 public struct DastakIdentityAccountView: View {
+    private enum AccountAlert: Identifiable {
+        case signOut
+        case deleteAccount
+
+        var id: String {
+            switch self {
+            case .signOut: "sign-out"
+            case .deleteAccount: "delete-account"
+            }
+        }
+    }
+
     private let roleName: String
     private let accessLabel: String
     private let allowsAccountDeletion: Bool
     @StateObject private var model: DastakIdentityAccountModel
     @Environment(\.marketplaceSignOut) private var signOut
     @State private var showsProfileEditor = false
-    @State private var showsDeleteConfirmation = false
+    @State private var accountAlert: AccountAlert?
 
     public init(
         roleName: String,
@@ -108,18 +120,7 @@ public struct DastakIdentityAccountView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
             }
-            .confirmationDialog(
-                "Delete your Dastak account?",
-                isPresented: $showsDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete account", role: .destructive) {
-                    Task { await deleteAccount() }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This permanently removes your access and signs you out. Records that must be retained are detached from your identity.")
-            }
+            .alert(item: $accountAlert, content: makeAccountAlert)
         }
         .marketplacePage()
         .task { await model.load() }
@@ -197,14 +198,14 @@ public struct DastakIdentityAccountView: View {
 
     private var actions: some View {
         VStack(spacing: 0) {
-            Button { Task { await signOut() } } label: {
+            Button { accountAlert = .signOut } label: {
                 Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
             }
             if allowsAccountDeletion {
                 Divider()
-                Button(role: .destructive) { showsDeleteConfirmation = true } label: {
+                Button(role: .destructive) { accountAlert = .deleteAccount } label: {
                     Label(model.isDeleting ? "Deleting account..." : "Delete account", systemImage: "trash")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
@@ -215,6 +216,29 @@ public struct DastakIdentityAccountView: View {
         .font(.headline)
         .padding(.horizontal, MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
+    }
+
+    private func makeAccountAlert(_ alert: AccountAlert) -> Alert {
+        switch alert {
+        case .signOut:
+            Alert(
+                title: Text("Sign out of Dastak?"),
+                message: Text("You'll need to sign in again to access this account."),
+                primaryButton: .cancel(Text("Cancel")),
+                secondaryButton: .destructive(Text("Sign out")) {
+                    Task { await signOut() }
+                }
+            )
+        case .deleteAccount:
+            Alert(
+                title: Text("Delete your Dastak account?"),
+                message: Text("This permanently removes your access and signs you out. Records that must be retained are detached from your identity."),
+                primaryButton: .cancel(Text("Cancel")),
+                secondaryButton: .destructive(Text("Delete account")) {
+                    Task { await deleteAccount() }
+                }
+            )
+        }
     }
 
     @MainActor
