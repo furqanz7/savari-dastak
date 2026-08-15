@@ -122,7 +122,7 @@ export default function App() {
         <Brand />
         {view.phase !== "signed_out" && view.phase !== "loading" && !(
           config.product === "dastak" &&
-          view.phase === "ready"
+          (view.phase === "ready" || view.phase === "restricted")
         ) && (
           <button className="icon-button" type="button" onClick={signOut} disabled={busy} aria-label="Sign out" title="Sign out">
             <LogOut size={19} />
@@ -479,10 +479,13 @@ function Restricted({
   onSubmitted: () => void;
   onSignOut: () => void;
 }) {
-  if (config.variant === "dastak-merchant" && access.state === "denied") {
+  if (config.variant === "dastak-merchant") {
     return (
       <RestrictedShell onSignOut={onSignOut}>
         <MerchantApplicationForm
+          accessState={access.state === "pending" || access.state === "suspended"
+            ? access.state
+            : "denied"}
           client={supabase}
           session={session}
           supabaseUrl={config.supabaseUrl}

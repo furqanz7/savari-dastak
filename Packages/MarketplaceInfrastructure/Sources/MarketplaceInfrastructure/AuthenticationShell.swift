@@ -22,14 +22,36 @@ public struct MarketplaceSignOutAction: @unchecked Sendable {
     }
 }
 
+public struct MarketplaceAccessRefreshAction: @unchecked Sendable {
+    private let action: @MainActor () async -> Void
+
+    public init(action: @escaping @MainActor () async -> Void) {
+        self.action = action
+    }
+
+    @MainActor
+    public func callAsFunction() async {
+        await action()
+    }
+}
+
 private struct MarketplaceSignOutEnvironmentKey: EnvironmentKey {
     static let defaultValue = MarketplaceSignOutAction(action: {})
+}
+
+private struct MarketplaceAccessRefreshEnvironmentKey: EnvironmentKey {
+    static let defaultValue = MarketplaceAccessRefreshAction(action: {})
 }
 
 public extension EnvironmentValues {
     var marketplaceSignOut: MarketplaceSignOutAction {
         get { self[MarketplaceSignOutEnvironmentKey.self] }
         set { self[MarketplaceSignOutEnvironmentKey.self] = newValue }
+    }
+
+    var marketplaceAccessRefresh: MarketplaceAccessRefreshAction {
+        get { self[MarketplaceAccessRefreshEnvironmentKey.self] }
+        set { self[MarketplaceAccessRefreshEnvironmentKey.self] = newValue }
     }
 }
 
@@ -459,6 +481,12 @@ private struct AuthenticationRouteView: View {
 
             if coordinator.route == .needsProfile {
                 dastakProfileAuthenticationView
+            } else if restrictedContent != nil,
+                      coordinator.route == .pendingApproval
+                        || coordinator.route == .suspended
+                        || coordinator.route == .accessDenied {
+                dastakRouteContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 dastakStandardAuthenticationView
             }
@@ -782,26 +810,16 @@ private struct AuthenticationRouteView: View {
     ) -> some View {
         if let restrictedContent {
             if product == .dastak {
-                VStack(spacing: 0) {
-                    restrictedContent(route)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    HStack(spacing: 12) {
-                        Button("Refresh status") {
-                            Task { await coordinator.restore() }
-                        }
-                        .buttonStyle(MarketplacePrimaryButtonStyle())
-
-                        Button("Sign out") {
-                            showsSignOutConfirmation = true
-                        }
-                        .buttonStyle(MarketplaceSecondaryButtonStyle())
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 14)
-                    .background(dastakSurface)
-                }
-                .background(dastakCanvas.ignoresSafeArea())
+                restrictedContent(route)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .environment(
+                        \.marketplaceSignOut,
+                        MarketplaceSignOutAction { await signOut() }
+                    )
+                    .environment(
+                        \.marketplaceAccessRefresh,
+                        MarketplaceAccessRefreshAction { await coordinator.restore() }
+                    )
             } else {
                 VStack(spacing: 16) {
                     restrictedContent(route)

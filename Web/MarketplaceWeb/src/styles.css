@@ -908,6 +908,67 @@ button:disabled { cursor: wait; opacity: .55; }
   margin: 0 auto;
   padding: 8px 0 20px;
 }
+.merchant-application-panel,
+.merchant-access-state { width: min(100%, 620px); }
+.merchant-application-panel .application-heading h1,
+.merchant-access-state h1 {
+  font-family: var(--font-dastak-wordmark);
+  font-size: 46px;
+  font-weight: 400;
+  line-height: 1.02;
+}
+.merchant-access-state {
+  display: grid;
+  gap: 26px;
+  margin: 0 auto;
+  padding: 34px 0 18px;
+}
+.merchant-access-loading {
+  min-height: 360px;
+  place-content: center;
+  justify-items: center;
+  color: var(--text-secondary);
+}
+.merchant-state-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--divider);
+  border-top-color: var(--dastak-accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+.merchant-state-copy { display: grid; gap: 9px; }
+.merchant-state-copy h1 { margin: 0; }
+.merchant-state-copy > p:last-child {
+  max-width: 520px;
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.merchant-application-summary {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.merchant-application-summary small {
+  color: var(--dastak-accent);
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+.merchant-application-summary strong { font-size: 18px; }
+.merchant-application-summary span { color: var(--text-secondary); line-height: 1.45; }
+.merchant-access-state > .application-submit,
+.merchant-application-panel > .application-submit {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
 .application-heading {
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr);
@@ -989,7 +1050,19 @@ button:disabled { cursor: wait; opacity: .55; }
 .application-section > header { display: flex; gap: 12px; align-items: flex-start; color: var(--dastak-accent); }
 .application-section > header h2 { margin: 0; color: var(--text-primary); font-size: 20px; }
 .application-section > header p { margin: 4px 0 0; color: var(--text-secondary); font-size: 14px; }
+.application-section-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--dastak-accent);
+  background: var(--dastak-accent-soft);
+}
 .application-section > label:not(.application-file-picker) { position: relative; display: grid; gap: 8px; font-size: 14px; font-weight: 700; }
+.application-field-label { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
+.application-field-label small { color: var(--text-secondary); font-size: 11px; font-weight: 600; }
 .application-step-number {
   width: 29px;
   height: 29px;
@@ -1073,10 +1146,36 @@ button:disabled { cursor: wait; opacity: .55; }
 .application-file-picker small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .application-file-picker small { margin-top: 4px; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
 .application-file-status { color: var(--dastak-accent); }
+.application-remove-file {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  color: var(--destructive);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+}
 .field-error { margin: -8px 0 0; color: var(--error); font-size: 12px; }
 .application-submit-panel { display: grid; gap: 12px; }
 .application-submit { width: 100%; margin: 0; }
 .application-privacy { display: flex; align-items: flex-start; justify-content: center; gap: 7px; margin: 0; color: var(--text-secondary); font-size: 12px; text-align: center; }
+.application-error {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--destructive) 38%, var(--divider));
+  border-radius: 8px;
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+}
+.application-error strong { color: var(--text-primary); }
+.application-error p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; }
+.spin { animation: spin .8s linear infinite; }
 .dastak-profile-form {
   width: min(100%, 540px);
   padding: 20px 0;
@@ -1150,6 +1249,9 @@ button:disabled { cursor: wait; opacity: .55; }
   .application-heading { grid-template-columns: 44px minmax(0, 1fr); gap: 12px; }
   .application-heading-icon { width: 44px; height: 44px; }
   .application-heading h1 { font-size: 31px; }
+  .merchant-application-panel .application-heading h1,
+  .merchant-access-state h1 { font-size: 39px; }
+  .merchant-access-state { gap: 22px; padding-top: 20px; }
   .application-progress small { font-size: 11px; }
   .application-section { padding-top: 20px; }
   .delivery-method-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
