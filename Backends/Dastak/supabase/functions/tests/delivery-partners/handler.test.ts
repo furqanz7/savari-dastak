@@ -7,6 +7,7 @@ import {
 const accountId = "11111111-1111-4111-8111-111111111111";
 const applicationId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
 const evidencePath = `dastak-partner/${accountId}/identity.pdf`;
+const vehicleEvidencePath = `dastak-partner/${accountId}/vehicle.pdf`;
 
 Deno.test("delivery partners accept browser CORS preflight", async () => {
   let authenticationAttempts = 0;
@@ -55,6 +56,9 @@ Deno.test("partner submission forwards normalized self-owned evidence only", asy
         accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         deliveryMethod: "bike",
         identityEvidenceObjectPath: evidencePath,
+        vehicleRegistrationNumber: " tn 23 ab 1234 ",
+        vehicleMakeModel: "  Honda   Activa 6G ",
+        vehicleEvidenceObjectPath: vehicleEvidencePath,
         approved: true,
       },
     }),
@@ -73,9 +77,56 @@ Deno.test("partner submission forwards normalized self-owned evidence only", asy
   assertEquals(recorded?.accountId, accountId);
   assertEquals(recorded?.deliveryMethod, "bike");
   assertEquals(recorded?.identityEvidenceObjectPath, evidencePath);
+  assertEquals(recorded?.vehicleRegistrationNumber, "TN 23 AB 1234");
+  assertEquals(recorded?.vehicleMakeModel, "Honda Activa 6G");
+  assertEquals(recorded?.vehicleEvidenceObjectPath, vehicleEvidencePath);
   assertEquals(recorded?.idempotencyKey, "test-key");
   assertEquals(typeof recorded?.requestDigest, "string");
   assertEquals("approved" in (recorded ?? {}), false);
+});
+
+Deno.test("motor delivery methods require self-owned vehicle details and proof", async () => {
+  const missingVehicle = await handleDeliveryPartners(
+    request({
+      body: {
+        operation: "submit",
+        deliveryMethod: "auto",
+        identityEvidenceObjectPath: evidencePath,
+      },
+    }),
+    dependencies(),
+  );
+  await assertError(missingVehicle, 400, "validation_failed");
+
+  const sameDocument = await handleDeliveryPartners(
+    request({
+      body: {
+        operation: "submit",
+        deliveryMethod: "car",
+        identityEvidenceObjectPath: evidencePath,
+        vehicleRegistrationNumber: "TN 23 AB 1234",
+        vehicleMakeModel: "Maruti Suzuki Swift",
+        vehicleEvidenceObjectPath: evidencePath,
+      },
+    }),
+    dependencies(),
+  );
+  await assertError(sameDocument, 400, "validation_failed");
+});
+
+Deno.test("walking and bicycle applications cannot smuggle vehicle data", async () => {
+  const response = await handleDeliveryPartners(
+    request({
+      body: {
+        operation: "submit",
+        deliveryMethod: "walking",
+        identityEvidenceObjectPath: evidencePath,
+        vehicleRegistrationNumber: "TN 23 AB 1234",
+      },
+    }),
+    dependencies(),
+  );
+  await assertError(response, 400, "validation_failed");
 });
 
 Deno.test("partner submission rejects unsupported methods and foreign evidence", async () => {

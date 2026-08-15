@@ -12,6 +12,9 @@ final class DeliveryPartnerClientTests: XCTestCase {
         let result = try await client.submit(
             deliveryMethod: .bike,
             identityEvidenceObjectPath: "dastak-partner/account/identity.pdf",
+            vehicleRegistrationNumber: "TN 23 AB 1234",
+            vehicleMakeModel: "Honda Activa 6G",
+            vehicleEvidenceObjectPath: "dastak-partner/account/vehicle.pdf",
             idempotencyKey: key
         )
 
@@ -25,6 +28,9 @@ final class DeliveryPartnerClientTests: XCTestCase {
         XCTAssertEqual(request.operation, "submit")
         XCTAssertEqual(request.deliveryMethod, "bike")
         XCTAssertEqual(request.identityEvidenceObjectPath, "dastak-partner/account/identity.pdf")
+        XCTAssertEqual(request.vehicleRegistrationNumber, "TN 23 AB 1234")
+        XCTAssertEqual(request.vehicleMakeModel, "Honda Activa 6G")
+        XCTAssertEqual(request.vehicleEvidenceObjectPath, "dastak-partner/account/vehicle.pdf")
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
         XCTAssertNil(object["accountId"])
         XCTAssertNil(object["approved"])
@@ -127,6 +133,9 @@ private struct CapturedDeliveryPartnerRequest: Decodable {
     let operation: String
     let deliveryMethod: String?
     let identityEvidenceObjectPath: String?
+    let vehicleRegistrationNumber: String?
+    let vehicleMakeModel: String?
+    let vehicleEvidenceObjectPath: String?
     let applicationId: UUID?
     let decision: String?
     let reason: String?
@@ -156,9 +165,9 @@ private actor RecordingDeliveryPartnerFunctionClient: FunctionClient {
         case "submit":
             response = #"{"applicationId":"22222222-2222-4222-8222-222222222222","status":"pending","deliveryMethod":"bike"}"#.data(using: .utf8)!
         case "selfSnapshot":
-            response = #"{"onboardingState":"approved","applicationId":"22222222-2222-4222-8222-222222222222","deliveryMethod":"bike","identityEvidenceObjectPath":"dastak-partner/account/identity.pdf","reviewReason":null,"availability":{"status":"online","location":{"latitude":12.68,"longitude":78.62},"serviceZoneId":"33333333-3333-4333-8333-333333333333","availableUntil":"2026-07-16T12:15:00Z","stateVersion":3}}"#.data(using: .utf8)!
+            response = #"{"onboardingState":"approved","applicationId":"22222222-2222-4222-8222-222222222222","deliveryMethod":"bike","identityEvidenceObjectPath":"dastak-partner/account/identity.pdf","vehicleRegistrationNumber":"TN 23 AB 1234","vehicleMakeModel":"Honda Activa 6G","vehicleEvidenceObjectPath":"dastak-partner/account/vehicle.pdf","reviewReason":null,"availability":{"status":"online","location":{"latitude":12.68,"longitude":78.62},"serviceZoneId":"33333333-3333-4333-8333-333333333333","availableUntil":"2026-07-16T12:15:00Z","stateVersion":3}}"#.data(using: .utf8)!
         case "listPending":
-            response = #"{"applications":[{"applicationId":"22222222-2222-4222-8222-222222222222","accountId":"11111111-1111-4111-8111-111111111111","displayName":"Delivery Partner","phoneNumber":"+919876543210","deliveryMethod":"bike","identityEvidenceObjectPath":"dastak-partner/account/identity.pdf","status":"pending","submittedAt":"2026-07-16T12:00:00Z"}]}"#.data(using: .utf8)!
+            response = #"{"applications":[{"applicationId":"22222222-2222-4222-8222-222222222222","accountId":"11111111-1111-4111-8111-111111111111","displayName":"Delivery Partner","phoneNumber":"+919876543210","deliveryMethod":"bike","identityEvidenceObjectPath":"dastak-partner/account/identity.pdf","vehicleRegistrationNumber":"TN 23 AB 1234","vehicleMakeModel":"Honda Activa 6G","vehicleEvidenceObjectPath":"dastak-partner/account/vehicle.pdf","status":"pending","submittedAt":"2026-07-16T12:00:00Z"}]}"#.data(using: .utf8)!
         case "review":
             response = #"{"applicationId":"22222222-2222-4222-8222-222222222222","status":"approved","deliveryMethod":"bike"}"#.data(using: .utf8)!
         case "setAvailability":

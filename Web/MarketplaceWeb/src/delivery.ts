@@ -13,6 +13,9 @@ export type DeliveryPartnerSnapshot = {
   onboardingState: "not_applied" | "pending" | "approved" | "rejected";
   applicationId: string | null;
   deliveryMethod: DeliveryMethod | null;
+  vehicleRegistrationNumber: string | null;
+  vehicleMakeModel: string | null;
+  vehicleEvidenceObjectPath: string | null;
   reviewReason: string | null;
   availability: PartnerAvailability | null;
 };
@@ -59,6 +62,7 @@ const evidenceExtensions = new Map([
 const maximumEvidenceBytes = 10 * 1024 * 1024;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const deliveryMethods = new Set<DeliveryMethod>(["walking", "bicycle", "bike", "auto", "car"]);
+const motorVehicleMethods = new Set<DeliveryMethod>(["bike", "auto", "car"]);
 const orderStatuses = new Set<MerchantOrderStatus>([
   "payment_pending", "paid", "merchant_accepted", "ready", "assigned", "en_route_to_pickup",
   "at_store", "picked_up", "in_transit", "delivered", "cancelled", "returning_to_merchant",
@@ -68,21 +72,48 @@ export function isAcceptedPartnerEvidence(file: EvidenceFile) {
   return evidenceExtensions.has(file.type) && file.size > 0 && file.size <= maximumEvidenceBytes;
 }
 
-export function partnerEvidenceObjectPath(accountId: string, contentType: string, uniqueId: string) {
-  const extension = evidenceExtensions.get(contentType);
-  if (!uuidPattern.test(accountId) || !uuidPattern.test(uniqueId) || !extension) throw validationError();
-  return `dastak-partner/${accountId.toLowerCase()}/${uniqueId.toLowerCase()}.${extension}`;
+export function requiresVehicleVerification(method: DeliveryMethod) {
+  return motorVehicleMethods.has(method);
 }
 
-export async function uploadPartnerEvidence(client: SupabaseClient, accountId: string, file: File) {
+export function normalizeVehicleRegistration(value: string) {
+  return value.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+export function isValidVehicleRegistration(value: string) {
+  const normalized = normalizeVehicleRegistration(value);
+  return normalized.length >= 4 && normalized.length <= 20 && /^[A-Z0-9 -]+$/.test(normalized);
+}
+
+export function partnerEvidenceObjectPath(
+  accountId: string,
+  contentType: string,
+  uniqueId: string,
+  kind: "identity" | "vehicle" = "identity",
+) {
+  const extension = evidenceExtensions.get(contentType);
+  if (!uuidPattern.test(accountId) || !uuidPattern.test(uniqueId) || !extension) throw validationError();
+  return `dastak-partner/${accountId.toLowerCase()}/${kind}-${uniqueId.toLowerCase()}.${extension}`;
+}
+
+export async function uploadPartnerEvidence(
+  client: SupabaseClient,
+  accountId: string,
+  file: File,
+  kind: "identity" | "vehicle" = "identity",
+) {
   if (!isAcceptedPartnerEvidence(file)) throw validationError("Choose a PDF, JPG or PNG file up to 10 MB.");
-  const objectPath = partnerEvidenceObjectPath(accountId, file.type, crypto.randomUUID());
+  const objectPath = partnerEvidenceObjectPath(accountId, file.type, crypto.randomUUID(), kind);
   const { error } = await client.storage.from("dastak-evidence").upload(objectPath, file, {
     cacheControl: "3600",
     contentType: file.type,
     upsert: false,
   });
-  if (error) throw new DeliveryRequestError("evidence_upload_failed", "The identity document could not be uploaded.", 0);
+  if (error) throw new DeliveryRequestError(
+    "evidence_upload_failed",
+    kind === "vehicle" ? "The vehicle document could not be uploaded." : "The identity document could not be uploaded.",
+    0,
+  );
   return objectPath;
 }
 
@@ -90,15 +121,35 @@ export async function submitDeliveryPartnerApplication(
   input: AuthenticatedInput & {
     deliveryMethod: DeliveryMethod;
     identityEvidenceObjectPath: string;
+    vehicleRegistrationNumber?: string | null;
+    vehicleMakeModel?: string | null;
+    vehicleEvidenceObjectPath?: string | null;
     idempotencyKey: string;
   },
   fetcher: Fetcher = fetch,
 ) {
   if (!deliveryMethods.has(input.deliveryMethod) || !input.identityEvidenceObjectPath) throw validationError();
+  const vehicleRequired = requiresVehicleVerification(input.deliveryMethod);
+  const registration = input.vehicleRegistrationNumber
+    ? normalizeVehicleRegistration(input.vehicleRegistrationNumber)
+    : null;
+  const makeModel = input.vehicleMakeModel?.trim().replace(/\s+/g, " ") || null;
+  const vehicleEvidence = input.vehicleEvidenceObjectPath || null;
+  if (vehicleRequired && (
+    !registration || !isValidVehicleRegistration(registration) ||
+    !makeModel || makeModel.length < 2 || makeModel.length > 80 ||
+    !vehicleEvidence || vehicleEvidence === input.identityEvidenceObjectPath
+  )) {
+    throw validationError("Add valid vehicle details and registration proof.");
+  }
+  if (!vehicleRequired && (registration || makeModel || vehicleEvidence)) throw validationError();
   const payload = record(await call("delivery-partners", input, {
     operation: "submit",
     deliveryMethod: input.deliveryMethod,
     identityEvidenceObjectPath: input.identityEvidenceObjectPath,
+    vehicleRegistrationNumber: vehicleRequired ? registration : null,
+    vehicleMakeModel: vehicleRequired ? makeModel : null,
+    vehicleEvidenceObjectPath: vehicleRequired ? vehicleEvidence : null,
   }, input.idempotencyKey, fetcher));
   if (!payload || payload.status !== "pending") invalid();
   return {
@@ -229,6 +280,9 @@ function parsePartnerSnapshot(value: unknown): DeliveryPartnerSnapshot {
     onboardingState: onboardingState as DeliveryPartnerSnapshot["onboardingState"],
     applicationId: source.applicationId === null ? null : requiredUUID(source.applicationId),
     deliveryMethod: source.deliveryMethod === null ? null : requiredDeliveryMethod(source.deliveryMethod),
+    vehicleRegistrationNumber: nullableText(source.vehicleRegistrationNumber, 20),
+    vehicleMakeModel: nullableText(source.vehicleMakeModel, 80),
+    vehicleEvidenceObjectPath: nullableText(source.vehicleEvidenceObjectPath, 500),
     reviewReason: source.reviewReason === null || source.reviewReason === undefined
       ? null
       : requiredText(source.reviewReason, 500),
@@ -340,6 +394,9 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 function optionalText(value: unknown, maximum: number) {
   return typeof value === "string" && value.length > 0 && value.length <= maximum ? value : undefined;
+}
+function nullableText(value: unknown, maximum: number) {
+  return value === null || value === undefined ? null : requiredText(value, maximum);
 }
 function requiredText(value: unknown, maximum: number) {
   const text = optionalText(value, maximum);

@@ -7,6 +7,13 @@ public enum DeliveryMethod: String, Codable, Equatable, Sendable {
     case bike
     case auto
     case car
+
+    public var requiresVehicleVerification: Bool {
+        switch self {
+        case .bike, .auto, .car: true
+        case .walking, .bicycle: false
+        }
+    }
 }
 
 public enum DeliveryPartnerApplicationStatus: String, Codable, Equatable, Sendable {
@@ -51,6 +58,9 @@ public struct DeliveryPartnerApplication: Codable, Equatable, Sendable {
     public let phoneNumber: String
     public let deliveryMethod: DeliveryMethod
     public let identityEvidenceObjectPath: String
+    public let vehicleRegistrationNumber: String?
+    public let vehicleMakeModel: String?
+    public let vehicleEvidenceObjectPath: String?
     public let status: DeliveryPartnerApplicationStatus
     public let submittedAt: String
 
@@ -61,6 +71,9 @@ public struct DeliveryPartnerApplication: Codable, Equatable, Sendable {
         case phoneNumber
         case deliveryMethod
         case identityEvidenceObjectPath
+        case vehicleRegistrationNumber
+        case vehicleMakeModel
+        case vehicleEvidenceObjectPath
         case status
         case submittedAt
     }
@@ -87,6 +100,9 @@ public struct DeliveryPartnerSnapshot: Codable, Equatable, Sendable {
     public let applicationID: UUID?
     public let deliveryMethod: DeliveryMethod?
     public let identityEvidenceObjectPath: String?
+    public let vehicleRegistrationNumber: String?
+    public let vehicleMakeModel: String?
+    public let vehicleEvidenceObjectPath: String?
     public let reviewReason: String?
     public let availability: DeliveryPartnerAvailability?
 
@@ -95,6 +111,9 @@ public struct DeliveryPartnerSnapshot: Codable, Equatable, Sendable {
         case applicationID = "applicationId"
         case deliveryMethod
         case identityEvidenceObjectPath
+        case vehicleRegistrationNumber
+        case vehicleMakeModel
+        case vehicleEvidenceObjectPath
         case reviewReason
         case availability
     }
@@ -104,6 +123,9 @@ public protocol DeliveryPartnerClient: Sendable {
     func submit(
         deliveryMethod: DeliveryMethod,
         identityEvidenceObjectPath: String,
+        vehicleRegistrationNumber: String?,
+        vehicleMakeModel: String?,
+        vehicleEvidenceObjectPath: String?,
         idempotencyKey: IdempotencyKey
     ) async throws -> DeliveryPartnerApplicationResult
 
@@ -134,6 +156,9 @@ public struct SupabaseDeliveryPartnerClient: DeliveryPartnerClient {
         let operation: String
         let deliveryMethod: DeliveryMethod?
         let identityEvidenceObjectPath: String?
+        let vehicleRegistrationNumber: String?
+        let vehicleMakeModel: String?
+        let vehicleEvidenceObjectPath: String?
         let applicationId: UUID?
         let decision: DeliveryPartnerReviewDecision?
         let reason: String?
@@ -144,6 +169,9 @@ public struct SupabaseDeliveryPartnerClient: DeliveryPartnerClient {
             operation: String,
             deliveryMethod: DeliveryMethod? = nil,
             identityEvidenceObjectPath: String? = nil,
+            vehicleRegistrationNumber: String? = nil,
+            vehicleMakeModel: String? = nil,
+            vehicleEvidenceObjectPath: String? = nil,
             applicationId: UUID? = nil,
             decision: DeliveryPartnerReviewDecision? = nil,
             reason: String? = nil,
@@ -153,6 +181,9 @@ public struct SupabaseDeliveryPartnerClient: DeliveryPartnerClient {
             self.operation = operation
             self.deliveryMethod = deliveryMethod
             self.identityEvidenceObjectPath = identityEvidenceObjectPath
+            self.vehicleRegistrationNumber = vehicleRegistrationNumber
+            self.vehicleMakeModel = vehicleMakeModel
+            self.vehicleEvidenceObjectPath = vehicleEvidenceObjectPath
             self.applicationId = applicationId
             self.decision = decision
             self.reason = reason
@@ -174,13 +205,19 @@ public struct SupabaseDeliveryPartnerClient: DeliveryPartnerClient {
     public func submit(
         deliveryMethod: DeliveryMethod,
         identityEvidenceObjectPath: String,
+        vehicleRegistrationNumber: String?,
+        vehicleMakeModel: String?,
+        vehicleEvidenceObjectPath: String?,
         idempotencyKey: IdempotencyKey
     ) async throws -> DeliveryPartnerApplicationResult {
         try await invoke(
             Request(
                 operation: "submit",
                 deliveryMethod: deliveryMethod,
-                identityEvidenceObjectPath: identityEvidenceObjectPath
+                identityEvidenceObjectPath: identityEvidenceObjectPath,
+                vehicleRegistrationNumber: vehicleRegistrationNumber,
+                vehicleMakeModel: vehicleMakeModel,
+                vehicleEvidenceObjectPath: vehicleEvidenceObjectPath
             ),
             key: idempotencyKey
         )

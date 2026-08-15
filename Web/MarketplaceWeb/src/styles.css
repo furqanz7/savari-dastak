@@ -914,6 +914,10 @@ button:disabled { cursor: wait; opacity: .55; }
   gap: 16px;
   align-items: start;
 }
+.application-heading-compact {
+  display: block;
+}
+.application-heading-compact .eyebrow { margin: 0 0 8px; }
 .application-heading-icon {
   width: 52px;
   height: 52px;
@@ -986,6 +990,50 @@ button:disabled { cursor: wait; opacity: .55; }
 .application-section > header h2 { margin: 0; color: var(--text-primary); font-size: 20px; }
 .application-section > header p { margin: 4px 0 0; color: var(--text-secondary); font-size: 14px; }
 .application-section > label:not(.application-file-picker) { position: relative; display: grid; gap: 8px; font-size: 14px; font-weight: 700; }
+.application-step-number {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 29px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--dastak-icon-background);
+  background: var(--dastak-accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+.delivery-method-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 9px;
+}
+.delivery-method-option {
+  min-width: 0;
+  min-height: 104px;
+  display: grid;
+  grid-template-rows: 25px auto auto;
+  gap: 6px;
+  place-items: center;
+  padding: 13px 7px;
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: var(--surface);
+  text-align: center;
+}
+.delivery-method-option svg { color: var(--text-secondary); }
+.delivery-method-option strong { font-size: 14px; }
+.delivery-method-option small { color: var(--text-secondary); font-size: 10px; line-height: 1.2; }
+.delivery-method-option:hover { border-color: color-mix(in srgb, var(--dastak-accent) 55%, var(--divider)); }
+.delivery-method-option:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
+.delivery-method-option.selected {
+  border-color: var(--dastak-accent);
+  color: var(--dastak-accent);
+  background: var(--dastak-accent-soft);
+}
+.delivery-method-option.selected svg { color: var(--dastak-accent); }
+.vehicle-details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.vehicle-details-grid label { display: grid; gap: 8px; font-size: 14px; font-weight: 700; }
 .application-section input,
 .application-section textarea,
 .application-section select {
@@ -1007,7 +1055,7 @@ button:disabled { cursor: wait; opacity: .55; }
   position: relative;
   min-height: 76px;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr) 22px;
   gap: 14px;
   align-items: center;
   padding: 14px;
@@ -1017,14 +1065,18 @@ button:disabled { cursor: wait; opacity: .55; }
   background: var(--surface);
   cursor: pointer;
 }
+.application-file-picker.selected { border-color: color-mix(in srgb, var(--dastak-accent) 72%, var(--divider)); }
 .application-file-picker:focus-within { outline: 3px solid var(--accent-soft); border-color: var(--dastak-accent); }
 .application-file-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .application-file-picker > span:first-of-type { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; color: var(--dastak-accent); background: var(--dastak-accent-soft); }
 .application-file-picker strong,
 .application-file-picker small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .application-file-picker small { margin-top: 4px; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.application-file-status { color: var(--dastak-accent); }
+.field-error { margin: -8px 0 0; color: var(--error); font-size: 12px; }
+.application-submit-panel { display: grid; gap: 12px; }
 .application-submit { width: 100%; margin: 0; }
-.application-privacy { display: flex; align-items: flex-start; justify-content: center; gap: 7px; margin: -14px 0 0; color: var(--text-secondary); font-size: 12px; text-align: center; }
+.application-privacy { display: flex; align-items: flex-start; justify-content: center; gap: 7px; margin: 0; color: var(--text-secondary); font-size: 12px; text-align: center; }
 .dastak-profile-form {
   width: min(100%, 540px);
   padding: 20px 0;
@@ -1100,6 +1152,9 @@ button:disabled { cursor: wait; opacity: .55; }
   .application-heading h1 { font-size: 31px; }
   .application-progress small { font-size: 11px; }
   .application-section { padding-top: 20px; }
+  .delivery-method-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .delivery-method-option { min-height: 94px; }
+  .vehicle-details-grid { grid-template-columns: 1fr; }
   .application-input-icon { top: 46px; }
   .role-account-heading h1 { font-size: 32px; }
   .role-profile { grid-template-columns: 46px minmax(0, 1fr) auto; padding: 15px; }

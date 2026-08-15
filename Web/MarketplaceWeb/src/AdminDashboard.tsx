@@ -196,7 +196,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
                 title={application.businessName}
                 subtitle={application.businessAddress}
                 facts={[`Account ${shortId(application.accountId)}`]}
-                evidencePath={application.evidenceObjectPath}
+                evidence={[{ label: "View business evidence", path: application.evidenceObjectPath }]}
                 busy={Boolean(busy)}
                 onEvidence={openEvidence}
                 onReview={(decision, reason) => review("merchant", application.applicationId, decision, reason)}
@@ -211,8 +211,19 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
                 icon={<Bike size={20} />}
                 title={application.displayName}
                 subtitle={application.phoneNumber}
-                facts={[methodLabel(application.deliveryMethod), `Submitted ${formatDate(application.submittedAt)}`]}
-                evidencePath={application.identityEvidenceObjectPath}
+                facts={[
+                  methodLabel(application.deliveryMethod),
+                  ...(application.vehicleRegistrationNumber
+                    ? [`${application.vehicleRegistrationNumber} · ${application.vehicleMakeModel}`]
+                    : []),
+                  `Submitted ${formatDate(application.submittedAt)}`,
+                ]}
+                evidence={[
+                  { label: "View identity proof", path: application.identityEvidenceObjectPath },
+                  ...(application.vehicleEvidenceObjectPath
+                    ? [{ label: "View vehicle RC", path: application.vehicleEvidenceObjectPath }]
+                    : []),
+                ]}
                 busy={Boolean(busy)}
                 onEvidence={openEvidence}
                 onReview={(decision, reason) => review("partner", application.applicationId, decision, reason)}
@@ -245,12 +256,12 @@ function ApprovalSection({ title, count, empty, children }: { title: string; cou
   );
 }
 
-function ReviewCard({ icon, title, subtitle, facts, evidencePath, busy, onEvidence, onReview }: {
+function ReviewCard({ icon, title, subtitle, facts, evidence, busy, onEvidence, onReview }: {
   icon: ReactNode;
   title: string;
   subtitle: string;
   facts: string[];
-  evidencePath: string;
+  evidence: Array<{ label: string; path: string }>;
   busy: boolean;
   onEvidence: (path: string) => Promise<void>;
   onReview: (decision: ReviewDecision, reason?: string) => Promise<void>;
@@ -273,9 +284,11 @@ function ReviewCard({ icon, title, subtitle, facts, evidencePath, busy, onEviden
     <article className="review-card">
       <header><span className="review-icon">{icon}</span><div><h3>{title}</h3><p>{subtitle}</p></div></header>
       <div className="review-facts">{facts.map((fact) => <span key={fact}>{fact}</span>)}</div>
-      <button className="evidence-button" type="button" disabled={busy} onClick={() => void onEvidence(evidencePath)}>
-        <FileText size={17} /> View evidence <ExternalLink size={14} />
-      </button>
+      {evidence.map((document) => (
+        <button key={document.path} className="evidence-button" type="button" disabled={busy} onClick={() => void onEvidence(document.path)}>
+          <FileText size={17} /> {document.label} <ExternalLink size={14} />
+        </button>
+      ))}
       {!mode ? (
         <div className="review-actions">
           <button className="danger-button" type="button" disabled={busy} onClick={() => setMode("reject")}><X size={17} /> Reject</button>

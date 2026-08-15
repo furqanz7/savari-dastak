@@ -11,6 +11,9 @@ export type DeliveryPartnerApplication = {
   phoneNumber: string;
   deliveryMethod: DeliveryMethod;
   identityEvidenceObjectPath: string;
+  vehicleRegistrationNumber: string | null;
+  vehicleMakeModel: string | null;
+  vehicleEvidenceObjectPath: string | null;
   status: DeliveryPartnerApplicationStatus;
   submittedAt: string;
 };
@@ -21,6 +24,9 @@ export type SubmitDeliveryPartnerApplicationInput = {
   accountId: string;
   deliveryMethod: DeliveryMethod;
   identityEvidenceObjectPath: string;
+  vehicleRegistrationNumber: string | null;
+  vehicleMakeModel: string | null;
+  vehicleEvidenceObjectPath: string | null;
   idempotencyKey: string;
   requestDigest: string;
 };
@@ -60,6 +66,7 @@ const deliveryMethods = new Set<DeliveryMethod>([
   "auto",
   "car",
 ]);
+const motorVehicleMethods = new Set<DeliveryMethod>(["bike", "auto", "car"]);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function handleDeliveryPartners(
@@ -117,14 +124,36 @@ async function submit(
   const identityEvidenceObjectPath = typeof body.identityEvidenceObjectPath === "string"
     ? body.identityEvidenceObjectPath
     : "";
+  const vehicleRegistrationNumber = normalizeVehicleRegistration(body.vehicleRegistrationNumber);
+  const vehicleMakeModel = normalizeRequiredText(body.vehicleMakeModel, 80);
+  const vehicleEvidenceObjectPath = typeof body.vehicleEvidenceObjectPath === "string"
+    ? body.vehicleEvidenceObjectPath
+    : "";
+  const requiresVehicle = deliveryMethod ? motorVehicleMethods.has(deliveryMethod) : false;
   if (
     !idempotencyKey || !deliveryMethod ||
-    !validEvidencePath(identityEvidenceObjectPath, accountId)
+    !validEvidencePath(identityEvidenceObjectPath, accountId) ||
+    (requiresVehicle && (
+      !vehicleRegistrationNumber || !vehicleMakeModel ||
+      !validEvidencePath(vehicleEvidenceObjectPath, accountId) ||
+      vehicleEvidenceObjectPath === identityEvidenceObjectPath
+    )) ||
+    (!requiresVehicle && (
+      body.vehicleRegistrationNumber !== undefined && body.vehicleRegistrationNumber !== null ||
+      body.vehicleMakeModel !== undefined && body.vehicleMakeModel !== null ||
+      body.vehicleEvidenceObjectPath !== undefined && body.vehicleEvidenceObjectPath !== null
+    ))
   ) {
     return validationError();
   }
 
-  const normalized = { deliveryMethod, identityEvidenceObjectPath };
+  const normalized = {
+    deliveryMethod,
+    identityEvidenceObjectPath,
+    vehicleRegistrationNumber: requiresVehicle ? vehicleRegistrationNumber! : null,
+    vehicleMakeModel: requiresVehicle ? vehicleMakeModel! : null,
+    vehicleEvidenceObjectPath: requiresVehicle ? vehicleEvidenceObjectPath : null,
+  };
   const result = await dependencies.submitApplication({
     accountId,
     ...normalized,
@@ -244,6 +273,13 @@ function normalizeRequiredText(value: unknown, maximumLength: number) {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length >= 1 && normalized.length <= maximumLength ? normalized : undefined;
+}
+
+function normalizeVehicleRegistration(value: unknown) {
+  const normalized = normalizeRequiredText(value, 20)?.toUpperCase();
+  return normalized && normalized.length >= 4 && /^[A-Z0-9 -]+$/.test(normalized)
+    ? normalized
+    : undefined;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

@@ -6,8 +6,12 @@ import {
   getDeliveryDispatch,
   getDeliveryPartnerSnapshot,
   isAcceptedPartnerEvidence,
+  isValidVehicleRegistration,
+  normalizeVehicleRegistration,
   partnerEvidenceObjectPath,
+  requiresVehicleVerification,
   setDeliveryPartnerAvailability,
+  submitDeliveryPartnerApplication,
 } from "./delivery";
 
 const accountId = "11111111-1111-4111-8111-111111111111";
@@ -51,8 +55,54 @@ describe("delivery partner client", () => {
     expect(isAcceptedPartnerEvidence({ type: "text/plain", size: 100 })).toBe(false);
     expect(isAcceptedPartnerEvidence({ type: "image/png", size: 10 * 1024 * 1024 + 1 })).toBe(false);
     expect(partnerEvidenceObjectPath(accountId, "image/jpeg", applicationId)).toBe(
-      `dastak-partner/${accountId}/${applicationId}.jpg`,
+      `dastak-partner/${accountId}/identity-${applicationId}.jpg`,
     );
+  });
+
+  it("requires valid vehicle verification for motor methods", async () => {
+    expect(requiresVehicleVerification("walking")).toBe(false);
+    expect(requiresVehicleVerification("bicycle")).toBe(false);
+    expect(requiresVehicleVerification("bike")).toBe(true);
+    expect(normalizeVehicleRegistration(" tn 23  ab 1234 ")).toBe("TN 23 AB 1234");
+    expect(isValidVehicleRegistration("TN 23 AB 1234")).toBe(true);
+    expect(isValidVehicleRegistration("TN@23")).toBe(false);
+
+    await expect(submitDeliveryPartnerApplication({
+      ...auth,
+      deliveryMethod: "auto",
+      identityEvidenceObjectPath: `dastak-partner/${accountId}/identity-${applicationId}.pdf`,
+      idempotencyKey: "submit-key",
+    }, vi.fn())).rejects.toThrow("vehicle details");
+  });
+
+  it("submits motor vehicle details and proof", async () => {
+    let body: unknown;
+    const result = await submitDeliveryPartnerApplication({
+      ...auth,
+      deliveryMethod: "bike",
+      identityEvidenceObjectPath: `dastak-partner/${accountId}/identity-${applicationId}.pdf`,
+      vehicleRegistrationNumber: " tn 23 ab 1234 ",
+      vehicleMakeModel: "  Bajaj   Pulsar 150 ",
+      vehicleEvidenceObjectPath: `dastak-partner/${accountId}/vehicle-${applicationId}.pdf`,
+      idempotencyKey: "submit-key",
+    }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(new Response(JSON.stringify({
+        applicationId,
+        status: "pending",
+        deliveryMethod: "bike",
+      }), { status: 200 }));
+    });
+
+    expect(body).toEqual({
+      operation: "submit",
+      deliveryMethod: "bike",
+      identityEvidenceObjectPath: `dastak-partner/${accountId}/identity-${applicationId}.pdf`,
+      vehicleRegistrationNumber: "TN 23 AB 1234",
+      vehicleMakeModel: "Bajaj Pulsar 150",
+      vehicleEvidenceObjectPath: `dastak-partner/${accountId}/vehicle-${applicationId}.pdf`,
+    });
+    expect(result.status).toBe("pending");
   });
 
   it("parses the approved partner snapshot", async () => {

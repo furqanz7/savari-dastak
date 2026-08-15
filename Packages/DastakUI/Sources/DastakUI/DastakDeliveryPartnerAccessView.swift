@@ -4,11 +4,43 @@ import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
 import UniformTypeIdentifiers
+#if canImport(UIKit)
+import UIKit
+#endif
+
+private enum DastakPartnerEvidenceKind {
+    case identity
+    case vehicle
+}
 
 @MainActor
 private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
-    @Published var deliveryMethod: MarketplaceInfrastructure.DeliveryMethod = .bike
-    @Published private(set) var evidenceName: String?
+    private struct EvidencePayload {
+        let data: Data
+        let contentType: String
+        let name: String
+
+        var fingerprint: String {
+            "\(data.count):\(data.hashValue):\(contentType)"
+        }
+    }
+
+    private struct UploadedEvidence {
+        let fingerprint: String
+        let path: String
+    }
+
+    @Published var deliveryMethod: MarketplaceInfrastructure.DeliveryMethod = .bike {
+        didSet { if oldValue != deliveryMethod { submissionKey = nil } }
+    }
+    @Published var vehicleRegistrationNumber = "" {
+        didSet { if oldValue != vehicleRegistrationNumber { submissionKey = nil } }
+    }
+    @Published var vehicleMakeModel = "" {
+        didSet { if oldValue != vehicleMakeModel { submissionKey = nil } }
+    }
+    @Published private(set) var identityEvidenceName: String?
+    @Published private(set) var vehicleEvidenceName: String?
     @Published private(set) var isSubmitting = false
     @Published private(set) var isLoading = true
     @Published private(set) var reviewReason: String?
@@ -16,9 +48,10 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
 
     private let services: MarketplaceAuthenticatedServices
     private let client: any DeliveryPartnerClient
-    private var evidenceData: Data?
-    private var evidenceContentType: String?
-    private var uploadedEvidence: (fingerprint: String, path: String)?
+    private var identityEvidence: EvidencePayload?
+    private var vehicleEvidence: EvidencePayload?
+    private var uploadedIdentityEvidence: UploadedEvidence?
+    private var uploadedVehicleEvidence: UploadedEvidence?
     private var submissionKey: IdempotencyKey?
 
     init(services: MarketplaceAuthenticatedServices) {
@@ -27,15 +60,22 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
     }
 
     var canSubmit: Bool {
-        evidenceData != nil && !isSubmitting && !isLoading
+        guard identityEvidence != nil, !isSubmitting, !isLoading else { return false }
+        guard deliveryMethod.requiresVehicleVerification else { return true }
+        return vehicleEvidence != nil
+            && Self.isValidRegistration(normalizedRegistration)
+            && (2...80).contains(normalizedMakeModel.count)
     }
 
     func load() async {
         do {
-            let key = IdempotencyKey(rawValue: UUID().uuidString)!
-            let snapshot = try await client.selfSnapshot(idempotencyKey: key)
+            let snapshot = try await client.selfSnapshot(
+                idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
+            )
             if snapshot.onboardingState == .rejected {
                 deliveryMethod = snapshot.deliveryMethod ?? .bike
+                vehicleRegistrationNumber = snapshot.vehicleRegistrationNumber ?? ""
+                vehicleMakeModel = snapshot.vehicleMakeModel ?? ""
                 reviewReason = snapshot.reviewReason
             }
             errorMessage = nil
@@ -45,7 +85,7 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
         isLoading = false
     }
 
-    func selectEvidence(url: URL) {
+    func selectEvidence(url: URL, kind: DastakPartnerEvidenceKind) {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         do {
@@ -56,56 +96,75 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
                   let contentType = values.contentType?.preferredMIMEType,
                   Self.fileExtension(contentType) != nil
             else { throw DastakDeliveryPartnerApplicationError.invalidEvidence }
-            evidenceData = data
-            evidenceContentType = contentType
-            evidenceName = url.lastPathComponent
-            uploadedEvidence = nil
+
+            let payload = EvidencePayload(
+                data: data,
+                contentType: contentType,
+                name: url.lastPathComponent
+            )
+            switch kind {
+            case .identity:
+                identityEvidence = payload
+                identityEvidenceName = payload.name
+                uploadedIdentityEvidence = nil
+            case .vehicle:
+                vehicleEvidence = payload
+                vehicleEvidenceName = payload.name
+                uploadedVehicleEvidence = nil
+            }
             submissionKey = nil
             errorMessage = nil
         } catch {
-            evidenceData = nil
-            evidenceContentType = nil
-            evidenceName = nil
-            errorMessage = "Choose a PDF, JPG, or PNG document up to 10 MB."
+            switch kind {
+            case .identity:
+                identityEvidence = nil
+                identityEvidenceName = nil
+            case .vehicle:
+                vehicleEvidence = nil
+                vehicleEvidenceName = nil
+            }
+            errorMessage = "Choose a clear PDF, JPG, or PNG document up to 10 MB."
         }
     }
 
     func submit() async -> Bool {
-        guard canSubmit,
-              let evidenceData,
-              let evidenceContentType,
-              let fileExtension = Self.fileExtension(evidenceContentType)
-        else { return false }
+        guard canSubmit, let identityEvidence else { return false }
         isSubmitting = true
         errorMessage = nil
         defer { isSubmitting = false }
 
         do {
-            let fingerprint = "\(evidenceData.count):\(evidenceData.hashValue):\(evidenceContentType)"
-            let evidencePath: String
-            if let uploadedEvidence, uploadedEvidence.fingerprint == fingerprint {
-                evidencePath = uploadedEvidence.path
-            } else {
-                let accountID = try await services.accountID()
-                evidencePath = [
-                    "dastak-partner",
-                    accountID.uuidString.lowercased(),
-                    "\(UUID().uuidString.lowercased()).\(fileExtension)"
-                ].joined(separator: "/")
-                try await services.uploadObject(
-                    bucket: "dastak-evidence",
-                    path: evidencePath,
-                    data: evidenceData,
-                    contentType: evidenceContentType
+            let accountID = try await services.accountID()
+            let identity = try await upload(
+                identityEvidence,
+                role: "identity",
+                accountID: accountID,
+                cached: uploadedIdentityEvidence
+            )
+            uploadedIdentityEvidence = identity.uploaded
+
+            var vehiclePath: String?
+            if deliveryMethod.requiresVehicleVerification, let vehicleEvidence {
+                let vehicle = try await upload(
+                    vehicleEvidence,
+                    role: "vehicle",
+                    accountID: accountID,
+                    cached: uploadedVehicleEvidence
                 )
-                uploadedEvidence = (fingerprint, evidencePath)
+                uploadedVehicleEvidence = vehicle.uploaded
+                vehiclePath = vehicle.path
             }
 
             let key = submissionKey ?? IdempotencyKey(rawValue: UUID().uuidString)!
             submissionKey = key
             _ = try await client.submit(
                 deliveryMethod: deliveryMethod,
-                identityEvidenceObjectPath: evidencePath,
+                identityEvidenceObjectPath: identity.path,
+                vehicleRegistrationNumber: deliveryMethod.requiresVehicleVerification
+                    ? normalizedRegistration : nil,
+                vehicleMakeModel: deliveryMethod.requiresVehicleVerification
+                    ? normalizedMakeModel : nil,
+                vehicleEvidenceObjectPath: vehiclePath,
                 idempotencyKey: key
             )
             submissionKey = nil
@@ -118,6 +177,51 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
             errorMessage = "The application could not be submitted."
         }
         return false
+    }
+
+    private var normalizedRegistration: String {
+        vehicleRegistrationNumber
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .uppercased()
+    }
+
+    private var normalizedMakeModel: String {
+        vehicleMakeModel
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    private func upload(
+        _ evidence: EvidencePayload,
+        role: String,
+        accountID: UUID,
+        cached: UploadedEvidence?
+    ) async throws -> (path: String, uploaded: UploadedEvidence) {
+        if let cached, cached.fingerprint == evidence.fingerprint {
+            return (cached.path, cached)
+        }
+        guard let fileExtension = Self.fileExtension(evidence.contentType) else {
+            throw DastakDeliveryPartnerApplicationError.invalidEvidence
+        }
+        let path = [
+            "dastak-partner",
+            accountID.uuidString.lowercased(),
+            "\(role)-\(UUID().uuidString.lowercased()).\(fileExtension)"
+        ].joined(separator: "/")
+        try await services.uploadObject(
+            bucket: "dastak-evidence",
+            path: path,
+            data: evidence.data,
+            contentType: evidence.contentType
+        )
+        return (path, UploadedEvidence(fingerprint: evidence.fingerprint, path: path))
+    }
+
+    private static func isValidRegistration(_ value: String) -> Bool {
+        (4...20).contains(value.count) && value.allSatisfy {
+            $0.isLetter || $0.isNumber || $0 == " " || $0 == "-"
+        }
     }
 
     private static func fileExtension(_ contentType: String) -> String? {
@@ -135,10 +239,16 @@ private enum DastakDeliveryPartnerApplicationError: Error {
 }
 
 public struct DastakDeliveryPartnerAccessView: View {
+    private enum Field: Hashable {
+        case registration
+        case makeModel
+    }
+
     private let access: DeliveryPartnerAccess
     private let onRefresh: () async -> Void
     @StateObject private var model: DastakDeliveryPartnerApplicationModel
-    @State private var showsImporter = false
+    @State private var importingEvidence: DastakPartnerEvidenceKind?
+    @FocusState private var focusedField: Field?
 
     public init(
         access: DeliveryPartnerAccess,
@@ -157,13 +267,15 @@ public struct DastakDeliveryPartnerAccessView: View {
                     switch access {
                     case .notApplied where model.isLoading, .rejected where model.isLoading:
                         ProgressView("Loading application")
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, MarketplaceSpacing.xxLarge)
                     case .notApplied, .rejected:
                         applicationForm
                     case .pending:
                         status(
                             symbol: "clock.badge.checkmark",
                             title: "Application under review",
-                            message: "You can keep using Dastak as a customer. We will unlock Delivery Partner mode after approval."
+                            message: "You can keep using Dastak as a customer. Delivery Partner mode unlocks after approval."
                         )
                     case .suspended:
                         status(
@@ -181,56 +293,78 @@ public struct DastakDeliveryPartnerAccessView: View {
                         ProgressView("Opening Delivery Partner")
                     }
                 }
-                .frame(maxWidth: MarketplaceMetrics.contentMaxWidth)
-                .padding(MarketplaceSpacing.large)
+                .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+                .padding(.horizontal, MarketplaceSpacing.large)
+                .padding(.top, MarketplaceSpacing.medium)
+                .padding(.bottom, showsApplicationForm ? 112 : MarketplaceSpacing.large)
                 .frame(maxWidth: .infinity)
             }
 #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
 #endif
-            .navigationTitle("Delivery Partner")
+            .safeAreaInset(edge: .bottom) {
+                if showsApplicationForm && !model.isLoading { submitBar }
+            }
+            .navigationTitle("Apply to deliver")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+#if os(iOS)
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { dismissKeyboard() }
+                }
+#endif
+            }
         }
         .marketplacePage()
         .task {
             if access == .notApplied || access == .rejected { await model.load() }
         }
         .fileImporter(
-            isPresented: $showsImporter,
+            isPresented: Binding(
+                get: { importingEvidence != nil },
+                set: { if !$0 { importingEvidence = nil } }
+            ),
             allowedContentTypes: [.pdf, .jpeg, .png],
             allowsMultipleSelection: false
         ) { result in
+            let kind = importingEvidence
+            importingEvidence = nil
+            guard let kind else { return }
             if case let .success(urls) = result, let url = urls.first {
-                model.selectEvidence(url: url)
+                model.selectEvidence(url: url, kind: kind)
             } else if case .failure = result {
                 model.errorMessage = "The selected document could not be opened."
             }
         }
+        .onTapGesture { dismissKeyboard() }
+    }
+
+    private var showsApplicationForm: Bool {
+        access == .notApplied || access == .rejected
     }
 
     private var applicationForm: some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.xLarge) {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                Image(systemName: "figure.delivery")
-                    .font(.title2)
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 Text(access == .rejected ? "APPLICATION UPDATE" : "DELIVERY PARTNER")
                     .font(.caption.bold())
                     .tracking(1)
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                Text(access == .rejected ? "Apply again" : "Deliver with Dastak")
+                Text(access == .rejected ? "Update your application" : "Deliver with Dastak")
                     .font(MarketplaceTypography.hero)
                 Text(access == .rejected
-                    ? "Your previous application was not approved. Update the details and submit it again."
-                    : "Choose how you deliver and provide one identity document for owner review.")
+                    ? "Review the requested changes, then send your application again."
+                    : "Choose how you deliver. We verify your identity and, for motor vehicles, the vehicle you use.")
                     .font(MarketplaceTypography.supporting)
                     .foregroundStyle(.secondary)
             }
 
-            DastakApplicationProgress()
-
             if let reviewReason = model.reviewReason {
                 HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
-                    Image(systemName: "exclamationmark.bubble")
+                    Image(systemName: "exclamationmark.bubble.fill")
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Update requested").font(.headline)
@@ -241,69 +375,184 @@ public struct DastakDeliveryPartnerAccessView: View {
                 .marketplaceFlatSurface()
             }
 
-            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                Label("Delivery method", systemImage: "location.north.line")
-                    .font(MarketplaceTypography.sectionTitle)
-                Text("Choose the method you will actively use.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Picker("Delivery method", selection: $model.deliveryMethod) {
-                    Text("Walking").tag(MarketplaceInfrastructure.DeliveryMethod.walking)
-                    Text("Bicycle").tag(MarketplaceInfrastructure.DeliveryMethod.bicycle)
-                    Text("Bike").tag(MarketplaceInfrastructure.DeliveryMethod.bike)
-                    Text("Auto").tag(MarketplaceInfrastructure.DeliveryMethod.auto)
-                    Text("Car").tag(MarketplaceInfrastructure.DeliveryMethod.car)
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: .infinity, minHeight: MarketplaceMetrics.minimumTouchTarget, alignment: .leading)
-                .padding(.horizontal, MarketplaceSpacing.medium)
-                .marketplaceFlatSurface()
-            }
-            .padding(.top, MarketplaceSpacing.medium)
-            .overlay(alignment: .top) { Divider() }
-
-            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                Label("Identity proof", systemImage: "checkmark.shield")
-                    .font(MarketplaceTypography.sectionTitle)
-                Text("Upload one clear document that belongs to you.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Button { showsImporter = true } label: {
-                    HStack(spacing: MarketplaceSpacing.compact) {
-                        Image(systemName: model.evidenceName == nil ? "doc.badge.plus" : "doc.badge.checkmark")
-                            .font(.title3)
-                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                            .frame(width: 36)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(model.evidenceName ?? "Choose a document")
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            Text("PDF, JPG or PNG, up to 10 MB")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(.tertiary)
+            applicationSection(
+                number: "1",
+                title: "How will you deliver?",
+                description: "Choose the method you will actively use."
+            ) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 92), spacing: MarketplaceSpacing.small)],
+                    spacing: MarketplaceSpacing.small
+                ) {
+                    ForEach(Self.deliveryMethods, id: \.method) { option in
+                        methodButton(option.method, title: option.title, symbol: option.symbol)
                     }
-                    .padding(MarketplaceSpacing.compact)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .marketplaceFlatSurface()
             }
-            .padding(.top, MarketplaceSpacing.medium)
-            .overlay(alignment: .top) { Divider() }
+
+            applicationSection(
+                number: "2",
+                title: "Verify your identity",
+                description: "Upload one clear government-issued identity document."
+            ) {
+                evidenceButton(
+                    title: model.identityEvidenceName ?? "Choose identity proof",
+                    detail: model.identityEvidenceName == nil
+                        ? "Aadhaar, driving licence, voter ID or passport"
+                        : "Ready to upload",
+                    selected: model.identityEvidenceName != nil
+                ) { importingEvidence = .identity }
+            }
+
+            if model.deliveryMethod.requiresVehicleVerification {
+                applicationSection(
+                    number: "3",
+                    title: "Verify your vehicle",
+                    description: "Bike, Auto, and Car partners must verify the vehicle used for deliveries."
+                ) {
+                    VStack(spacing: MarketplaceSpacing.compact) {
+                        TextField("Registration number", text: $model.vehicleRegistrationNumber)
+                            .focused($focusedField, equals: .registration)
+#if os(iOS)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+#endif
+                            .padding(.horizontal, MarketplaceSpacing.medium)
+                            .frame(minHeight: 54)
+                            .marketplaceFlatSurface()
+
+                        TextField("Vehicle make and model", text: $model.vehicleMakeModel)
+                            .focused($focusedField, equals: .makeModel)
+                            .padding(.horizontal, MarketplaceSpacing.medium)
+                            .frame(minHeight: 54)
+                            .marketplaceFlatSurface()
+
+                        evidenceButton(
+                            title: model.vehicleEvidenceName ?? "Choose registration certificate",
+                            detail: model.vehicleEvidenceName == nil
+                                ? "Upload the vehicle RC as PDF, JPG, or PNG"
+                                : "Vehicle proof ready to upload",
+                            selected: model.vehicleEvidenceName != nil
+                        ) { importingEvidence = .vehicle }
+                    }
+                }
+            }
 
             if let errorMessage = model.errorMessage {
-                Text(errorMessage)
+                Label(errorMessage, systemImage: "exclamationmark.circle.fill")
                     .font(.footnote)
                     .foregroundStyle(MarketplaceColors.destructive.color)
             }
 
-            Button(model.isSubmitting ? "Submitting..." : access == .rejected ? "Resubmit for review" : "Submit for review") {
+            Label(
+                model.deliveryMethod.requiresVehicleVerification
+                    ? "Your identity and vehicle documents stay private and are used only for verification."
+                    : "Your identity document stays private and is used only for verification.",
+                systemImage: "lock.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func applicationSection<Content: View>(
+        number: String,
+        title: String,
+        description: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                Text(number)
+                    .font(.caption.bold())
+                    .foregroundStyle(MarketplaceColors.dastakIconBackground.color)
+                    .frame(width: 28, height: 28)
+                    .background(MarketplaceColors.dastakAccent.color)
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(MarketplaceTypography.sectionTitle)
+                    Text(description).font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
+            content()
+        }
+        .padding(.top, MarketplaceSpacing.medium)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private func methodButton(
+        _ method: MarketplaceInfrastructure.DeliveryMethod,
+        title: String,
+        symbol: String
+    ) -> some View {
+        let selected = model.deliveryMethod == method
+        return Button {
+            model.deliveryMethod = method
+            dismissKeyboard()
+        } label: {
+            VStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.title3)
+                    .frame(height: 24)
+                Text(title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text(method.requiresVehicleVerification ? "Vehicle check" : "Identity only")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 92)
+            .padding(.horizontal, 6)
+            .foregroundStyle(selected ? MarketplaceColors.dastakAccent.color : .primary)
+            .background(selected
+                ? MarketplaceColors.dastakAccent.color.opacity(0.12)
+                : MarketplaceColors.dastakSurface.color)
+            .clipShape(RoundedRectangle(cornerRadius: MarketplaceMetrics.controlCornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: MarketplaceMetrics.controlCornerRadius, style: .continuous)
+                    .stroke(selected ? MarketplaceColors.dastakAccent.color : MarketplaceColors.dividerDark.color)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title), \(method.requiresVehicleVerification ? "vehicle verification required" : "identity verification only")")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func evidenceButton(
+        title: String,
+        detail: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: MarketplaceSpacing.compact) {
+                Image(systemName: selected ? "checkmark.document.fill" : "doc.badge.plus")
+                    .font(.title3)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(width: 40, height: 40)
+                    .background(MarketplaceColors.dastakAccent.color.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.headline).foregroundStyle(.primary).lineLimit(1)
+                    Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: selected ? "checkmark.circle.fill" : "chevron.right")
+                    .foregroundStyle(selected ? MarketplaceColors.dastakAccent.color : Color.secondary)
+            }
+            .padding(MarketplaceSpacing.compact)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .marketplaceFlatSurface()
+    }
+
+    private var submitBar: some View {
+        VStack(spacing: 7) {
+            Button(
+                model.isSubmitting
+                    ? "Submitting..."
+                    : access == .rejected ? "Resubmit for review" : "Submit for review"
+            ) {
+                dismissKeyboard()
                 Task {
                     if await model.submit() { await onRefresh() }
                 }
@@ -311,14 +560,16 @@ public struct DastakDeliveryPartnerAccessView: View {
             .buttonStyle(MarketplacePrimaryButtonStyle())
             .disabled(!model.canSubmit)
 
-            Label(
-                "Your document is private and used only to review this application.",
-                systemImage: "lock.fill"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
+            Text(model.deliveryMethod.requiresVehicleVerification
+                ? "Identity and vehicle verification are required."
+                : "Identity verification is required.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
+        .padding(.horizontal, MarketplaceSpacing.large)
+        .padding(.top, MarketplaceSpacing.compact)
+        .padding(.bottom, MarketplaceSpacing.small)
+        .background(.ultraThinMaterial)
     }
 
     private func status(symbol: String, title: String, message: String) -> some View {
@@ -334,6 +585,32 @@ public struct DastakDeliveryPartnerAccessView: View {
             Button("Check status") { Task { await onRefresh() } }
                 .buttonStyle(MarketplaceSecondaryButtonStyle())
         }
+        .frame(maxWidth: .infinity)
         .padding(.top, MarketplaceSpacing.xxLarge)
     }
+
+    @MainActor
+    private func dismissKeyboard() {
+        focusedField = nil
+#if canImport(UIKit)
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+#endif
+    }
+
+    private static let deliveryMethods: [(
+        method: MarketplaceInfrastructure.DeliveryMethod,
+        title: String,
+        symbol: String
+    )] = [
+        (.walking, "Walk", "figure.walk"),
+        (.bicycle, "Bicycle", "bicycle"),
+        (.bike, "Bike", "fuelpump.fill"),
+        (.auto, "Auto", "car.side.fill"),
+        (.car, "Car", "car.fill")
+    ]
 }

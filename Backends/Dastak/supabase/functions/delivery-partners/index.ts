@@ -36,15 +36,18 @@ async function isActiveOwner(accountId: string) {
 }
 
 async function submitApplication(input: SubmitDeliveryPartnerApplicationInput) {
-  const { data, error } = await serviceClient.rpc("submit_delivery_partner_application", {
+  const { data, error } = await serviceClient.rpc("submit_delivery_partner_application_v2", {
     p_account_id: input.accountId,
     p_delivery_method: input.deliveryMethod,
     p_identity_evidence_object_path: input.identityEvidenceObjectPath,
+    p_vehicle_registration_number: input.vehicleRegistrationNumber,
+    p_vehicle_make_model: input.vehicleMakeModel,
+    p_vehicle_evidence_object_path: input.vehicleEvidenceObjectPath,
     p_idempotency_key: input.idempotencyKey,
     p_request_digest: input.requestDigest,
   });
   if (error) throw error;
-  return rpcResponse(data, "submit_delivery_partner_application");
+  return rpcResponse(data, "submit_delivery_partner_application_v2");
 }
 
 async function getSelfSnapshot(accountId: string) {
@@ -74,6 +77,11 @@ async function listPendingApplications(ownerId: string) {
       typeof row.phone_number !== "string" ||
       !isDeliveryMethod(deliveryMethod) ||
       typeof row.identity_evidence_object_path !== "string" ||
+      !(row.vehicle_registration_number === null ||
+        typeof row.vehicle_registration_number === "string") ||
+      !(row.vehicle_make_model === null || typeof row.vehicle_make_model === "string") ||
+      !(row.vehicle_evidence_object_path === null ||
+        typeof row.vehicle_evidence_object_path === "string") ||
       (status !== "pending" && status !== "approved" && status !== "rejected") ||
       typeof row.submitted_at !== "string"
     ) {
@@ -86,6 +94,9 @@ async function listPendingApplications(ownerId: string) {
       phoneNumber: row.phone_number,
       deliveryMethod,
       identityEvidenceObjectPath: row.identity_evidence_object_path,
+      vehicleRegistrationNumber: row.vehicle_registration_number as string | null,
+      vehicleMakeModel: row.vehicle_make_model as string | null,
+      vehicleEvidenceObjectPath: row.vehicle_evidence_object_path as string | null,
       status,
       submittedAt: row.submitted_at,
     };

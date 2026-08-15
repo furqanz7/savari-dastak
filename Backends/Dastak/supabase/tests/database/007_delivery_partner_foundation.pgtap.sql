@@ -56,6 +56,11 @@ select has_function(
   'submit_delivery_partner_application',
   array['uuid', 'text', 'text', 'text', 'text']
 );
+select has_function(
+  'public',
+  'submit_delivery_partner_application_v2',
+  array['uuid', 'text', 'text', 'text', 'text', 'text', 'text', 'text']
+);
 select has_function('public', 'get_delivery_partner_snapshot', array['uuid']);
 select has_function('public', 'list_delivery_partner_applications', array['uuid']);
 select has_function(
@@ -76,6 +81,24 @@ select is(
   ),
   false,
   'authenticated cannot bypass the partner Edge Function'
+);
+select is(
+  has_function_privilege(
+    'service_role',
+    'public.submit_delivery_partner_application_v2(uuid,text,text,text,text,text,text,text)',
+    'EXECUTE'
+  ),
+  true,
+  'service role can submit a vehicle-verified application'
+);
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.submit_delivery_partner_application_v2(uuid,text,text,text,text,text,text,text)',
+    'EXECUTE'
+  ),
+  false,
+  'authenticated cannot bypass vehicle verification through the RPC'
 );
 select is(
   has_function_privilege(
@@ -188,10 +211,12 @@ select is(
 select is(
   (
     select response_body #>> '{error,code}'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000002',
       'bike',
       'dastak-partner/70000000-0000-4000-8000-000000000003/identity.pdf',
+      'TN 23 AB 1234', 'Honda Activa 6G',
+      'dastak-partner/70000000-0000-4000-8000-000000000003/vehicle.pdf',
       'partner-foreign-evidence',
       'partner-foreign-evidence-digest'
     )
@@ -202,10 +227,11 @@ select is(
 select is(
   (
     select response_body #>> '{error,code}'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000002',
       'truck',
       'dastak-partner/70000000-0000-4000-8000-000000000002/identity.pdf',
+      null, null, null,
       'partner-invalid-method',
       'partner-invalid-method-digest'
     )
@@ -216,10 +242,12 @@ select is(
 select is(
   (
     select response_body #>> '{error,code}'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000002',
       'bike',
       'dastak-partner/70000000-0000-4000-8000-000000000002/identity.pdf',
+      'TN 23 AB 1234', 'Honda Activa 6G',
+      'dastak-partner/70000000-0000-4000-8000-000000000002/vehicle.pdf',
       'partner-missing-evidence',
       'partner-missing-evidence-digest'
     )
@@ -248,15 +276,27 @@ insert into storage.objects (bucket_id, name, owner_id) values
     'dastak-evidence',
     'dastak-partner/70000000-0000-4000-8000-000000000004/identity.pdf',
     '70000000-0000-4000-8000-000000000004'
+  ),
+  (
+    'dastak-evidence',
+    'dastak-partner/70000000-0000-4000-8000-000000000002/vehicle.pdf',
+    '70000000-0000-4000-8000-000000000002'
+  ),
+  (
+    'dastak-evidence',
+    'dastak-partner/70000000-0000-4000-8000-000000000004/vehicle.pdf',
+    '70000000-0000-4000-8000-000000000004'
   );
 
 select is(
   (
     select response_body ->> 'status'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000002',
       'bike',
       'dastak-partner/70000000-0000-4000-8000-000000000002/identity.pdf',
+      'TN 23 AB 1234', 'Honda Activa 6G',
+      'dastak-partner/70000000-0000-4000-8000-000000000002/vehicle.pdf',
       'partner-submit',
       'partner-submit-digest'
     )
@@ -267,10 +307,12 @@ select is(
 select is(
   (
     select response_body ->> 'applicationId'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000002',
       'bike',
       'dastak-partner/70000000-0000-4000-8000-000000000002/identity.pdf',
+      'TN 23 AB 1234', 'Honda Activa 6G',
+      'dastak-partner/70000000-0000-4000-8000-000000000002/vehicle.pdf',
       'partner-submit',
       'partner-submit-digest'
     )
@@ -285,10 +327,12 @@ select is(
 select is(
   (
     select response_body #>> '{error,code}'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000002',
       'car',
       'dastak-partner/70000000-0000-4000-8000-000000000002/identity.pdf',
+      'TN 23 AB 1234', 'Maruti Suzuki Swift',
+      'dastak-partner/70000000-0000-4000-8000-000000000002/vehicle.pdf',
       'partner-submit',
       'changed-partner-submit-digest'
     )
@@ -299,10 +343,12 @@ select is(
 select is(
   (
     select response_body #>> '{error,code}'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000002',
       'bike',
       'dastak-partner/70000000-0000-4000-8000-000000000002/identity.pdf',
+      'TN 23 AB 1234', 'Honda Activa 6G',
+      'dastak-partner/70000000-0000-4000-8000-000000000002/vehicle.pdf',
       'partner-submit-again',
       'partner-submit-again-digest'
     )
@@ -423,10 +469,11 @@ select is(
 select is(
   (
     select response_body ->> 'status'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000003',
       'walking',
       'dastak-partner/70000000-0000-4000-8000-000000000003/identity.pdf',
+      null, null, null,
       'partner-reject-submit',
       'partner-reject-submit-digest'
     )
@@ -465,10 +512,11 @@ select is(
 select is(
   (
     select response_body ->> 'status'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000003',
       'bicycle',
       'dastak-partner/70000000-0000-4000-8000-000000000003/identity-v2.pdf',
+      null, null, null,
       'partner-reapply',
       'partner-reapply-digest'
     )
@@ -480,10 +528,12 @@ select is(
 select is(
   (
     select response_body ->> 'status'
-    from public.submit_delivery_partner_application(
+    from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000004',
       'auto',
       'dastak-partner/70000000-0000-4000-8000-000000000004/identity.pdf',
+      'TN 23 CD 5678', 'Bajaj RE',
+      'dastak-partner/70000000-0000-4000-8000-000000000004/vehicle.pdf',
       'partner-pending-submit',
       'partner-pending-submit-digest'
     )

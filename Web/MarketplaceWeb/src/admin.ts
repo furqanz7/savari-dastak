@@ -16,6 +16,9 @@ export type PartnerAdminApplication = {
   phoneNumber: string;
   deliveryMethod: "walking" | "bicycle" | "bike" | "auto" | "car";
   identityEvidenceObjectPath: string;
+  vehicleRegistrationNumber: string | null;
+  vehicleMakeModel: string | null;
+  vehicleEvidenceObjectPath: string | null;
   status: "pending" | "approved" | "rejected";
   submittedAt: string;
 };
@@ -202,8 +205,18 @@ function partnerApplication(value: unknown): PartnerAdminApplication {
   const accountId = requiredUUID(source?.accountId);
   const method = source?.deliveryMethod;
   const evidenceObjectPath = requiredText(source?.identityEvidenceObjectPath, 500);
+  const vehicleRegistrationNumber = nullableText(source?.vehicleRegistrationNumber, 20);
+  const vehicleMakeModel = nullableText(source?.vehicleMakeModel, 80);
+  const vehicleEvidenceObjectPath = nullableText(source?.vehicleEvidenceObjectPath, 500);
+  const motorVehicle = ["bike", "auto", "car"].includes(String(method));
   if (!["walking", "bicycle", "bike", "auto", "car"].includes(String(method)) ||
-    !evidenceObjectPath.startsWith(`dastak-partner/${accountId}/`)) invalid();
+    !evidenceObjectPath.startsWith(`dastak-partner/${accountId}/`) ||
+    (motorVehicle && (
+      !vehicleRegistrationNumber || !vehicleMakeModel || !vehicleEvidenceObjectPath ||
+      vehicleEvidenceObjectPath === evidenceObjectPath ||
+      !vehicleEvidenceObjectPath.startsWith(`dastak-partner/${accountId}/`)
+    )) ||
+    (!motorVehicle && (vehicleRegistrationNumber || vehicleMakeModel || vehicleEvidenceObjectPath))) invalid();
   return {
     applicationId: requiredUUID(source?.applicationId),
     accountId,
@@ -211,6 +224,9 @@ function partnerApplication(value: unknown): PartnerAdminApplication {
     phoneNumber: requiredText(source?.phoneNumber, 30),
     deliveryMethod: method as PartnerAdminApplication["deliveryMethod"],
     identityEvidenceObjectPath: evidenceObjectPath,
+    vehicleRegistrationNumber,
+    vehicleMakeModel,
+    vehicleEvidenceObjectPath,
     status: applicationStatus(source?.status),
     submittedAt: timestamp(source?.submittedAt),
   };
@@ -309,6 +325,9 @@ function requiredText(value: unknown, maximum: number) {
   const text = optionalText(value, maximum);
   if (!text) invalid();
   return text;
+}
+function nullableText(value: unknown, maximum: number) {
+  return value === null || value === undefined ? null : requiredText(value, maximum);
 }
 function validationError() {
   return new AdminRequestError("validation_failed", "The admin request is invalid.", 400);

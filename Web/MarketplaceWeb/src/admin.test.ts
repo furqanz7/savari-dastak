@@ -36,6 +36,9 @@ describe("Dastak Admin client", () => {
       phoneNumber: "+919999999999",
       deliveryMethod: "bike",
       identityEvidenceObjectPath: `dastak-partner/${accountId}/identity.jpg`,
+      vehicleRegistrationNumber: "TN 23 AB 1234",
+      vehicleMakeModel: "Bajaj Pulsar 150",
+      vehicleEvidenceObjectPath: `dastak-partner/${accountId}/vehicle-rc.pdf`,
       status: "pending",
       submittedAt: "2026-07-22T06:00:00Z",
     };
