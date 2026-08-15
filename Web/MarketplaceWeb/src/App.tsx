@@ -3,6 +3,11 @@ import { LogOut, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
 import { completeProfile, isValidProfile, resolveAccess, type AccessResult } from "./access";
 import { AccountActionDialog } from "./AccountActionDialog";
+import {
+  callbackFailureMessage,
+  readAuthCallback,
+  sanitizedAuthCallbackUrl,
+} from "./auth-callback";
 import { shouldPreserveAuthenticatedView } from "./auth-state";
 import { DastakCustomerView } from "./DastakCustomerView";
 import { AdminDashboard } from "./AdminDashboard";
@@ -21,11 +26,13 @@ const config = readAppConfig({
   VITE_SUPABASE_PUBLISHABLE_KEY: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
 });
 document.title = `${config.brand} ${config.roleLabel}`;
+const initialAuthCallback = readAuthCallback(window.location.href);
 const supabase = createClient(config.supabaseUrl, config.supabasePublishableKey, {
   auth: {
     detectSessionInUrl: true,
     persistSession: true,
     autoRefreshToken: true,
+    flowType: initialAuthCallback?.kind === "implicit" ? "implicit" : "pkce",
   },
 });
 const dastakLaunchVideo = config.product === "dastak"
@@ -53,6 +60,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [showsDastakLaunch, setShowsDastakLaunch] = useState(config.product === "dastak");
   const knownUserId = useRef<string | undefined>(undefined);
+  const hasHandledAuthCallback = useRef(false);
   const finishDastakLaunch = useCallback(() => setShowsDastakLaunch(false), []);
   const usesFullDastakAuth = config.product === "dastak"
     && (view.phase === "loading" || view.phase === "signed_out" || view.phase === "profile");
@@ -82,6 +90,14 @@ export default function App() {
     let active = true;
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
+      if (initialAuthCallback && !hasHandledAuthCallback.current && (event === "INITIAL_SESSION" || event === "SIGNED_IN")) {
+        hasHandledAuthCallback.current = true;
+        window.history.replaceState(window.history.state, "", sanitizedAuthCallbackUrl(window.location.href));
+        if (!session) {
+          setView({ phase: "error", message: callbackFailureMessage(initialAuthCallback) });
+          return;
+        }
+      }
       if (shouldPreserveAuthenticatedView(event, session, knownUserId.current)) {
         setView((current) => updateViewSession(current, session));
         return;
