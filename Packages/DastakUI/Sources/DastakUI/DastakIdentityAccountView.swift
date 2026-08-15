@@ -6,16 +6,21 @@ import SwiftUI
 @MainActor
 private final class DastakIdentityAccountModel: ObservableObject {
     @Published private(set) var customer: MarketplaceCheckoutCustomer?
+    @Published private(set) var deliveryPartner: DeliveryPartnerSnapshot?
     @Published private(set) var isLoading = true
     @Published private(set) var isDeleting = false
     @Published var errorMessage: String?
 
     private let services: MarketplaceAuthenticatedServices
     private let profileClient: any AccountProfileClient
+    private let deliveryPartnerClient: any DeliveryPartnerClient
+    private let loadsDeliveryPartner: Bool
 
-    init(services: MarketplaceAuthenticatedServices) {
+    init(services: MarketplaceAuthenticatedServices, roleName: String) {
         self.services = services
         profileClient = SupabaseAccountProfileClient(functions: services.functions)
+        deliveryPartnerClient = SupabaseDeliveryPartnerClient(functions: services.functions)
+        loadsDeliveryPartner = roleName == "Delivery Partner"
     }
 
     func load() async {
@@ -29,6 +34,11 @@ private final class DastakIdentityAccountModel: ObservableObject {
                 email: identity?.email,
                 phoneNumber: profile.phoneNumber
             )
+            if loadsDeliveryPartner {
+                deliveryPartner = try await deliveryPartnerClient.selfSnapshot(
+                    idempotencyKey: key()
+                )
+            }
             errorMessage = nil
         } catch {
             errorMessage = "Your account details could not be loaded."
@@ -76,6 +86,7 @@ public struct DastakIdentityAccountView: View {
     private let roleName: String
     private let accessLabel: String
     private let allowsAccountDeletion: Bool
+    private let openWorkspace: () -> Void
     @StateObject private var model: DastakIdentityAccountModel
     @Environment(\.marketplaceSignOut) private var signOut
     @State private var showsProfileEditor = false
@@ -86,34 +97,47 @@ public struct DastakIdentityAccountView: View {
         roleName: String,
         accessLabel: String = "Active",
         allowsAccountDeletion: Bool = true,
+        openWorkspace: @escaping () -> Void = {},
         services: MarketplaceAuthenticatedServices
     ) {
         self.roleName = roleName
         self.accessLabel = accessLabel
         self.allowsAccountDeletion = allowsAccountDeletion
-        _model = StateObject(wrappedValue: DastakIdentityAccountModel(services: services))
+        self.openWorkspace = openWorkspace
+        _model = StateObject(
+            wrappedValue: DastakIdentityAccountModel(
+                services: services,
+                roleName: roleName
+            )
+        )
     }
 
     public var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.xLarge) {
+                    accountHeading
                     identity
-                    settings
-                    actions
                     if let errorMessage = model.errorMessage {
-                        Button("Try again") { Task { await model.load() } }
-                            .buttonStyle(MarketplaceSecondaryButtonStyle())
-                        Text(errorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(MarketplaceColors.destructive.color)
+                        accountError(errorMessage)
                     }
+                    if roleName == "Delivery Partner" {
+                        partnerCredentials
+                    }
+                    settings
+                    if roleName == "Delivery Partner" {
+                        partnerSupport
+                    }
+                    actions
                 }
                 .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
-                .padding(MarketplaceSpacing.medium)
+                .padding(.horizontal, MarketplaceSpacing.medium)
+                .padding(.top, MarketplaceSpacing.small)
                 .padding(.bottom, MarketplaceSpacing.xxLarge)
             }
+            .refreshable { await model.load() }
             .navigationTitle("Account")
+            .dastakInlineNavigationTitle()
             .sheet(isPresented: $showsProfileEditor) {
                 DastakProfileEditor(
                     customer: model.customer,
@@ -134,49 +158,143 @@ public struct DastakIdentityAccountView: View {
         }
     }
 
+    private var accountHeading: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+            Text(roleName == "Delivery Partner" ? "DELIVERY PARTNER" : roleName.uppercased())
+                .font(.caption.weight(.bold))
+                .tracking(1.4)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text("Your account")
+                .font(MarketplaceTypography.instrumentSerif(fixedSize: 38))
+            Text(accountIntroduction)
+                .font(MarketplaceTypography.supporting)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var identity: some View {
         Button { showsProfileEditor = true } label: {
-            HStack(spacing: MarketplaceSpacing.compact) {
-                Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 44))
+            HStack(spacing: MarketplaceSpacing.medium) {
+                Text(profileInitials)
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(width: 58, height: 58)
+                    .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
                 VStack(alignment: .leading, spacing: 3) {
                     Text(model.customer?.displayName ?? (model.isLoading ? "Loading account" : roleName))
-                        .font(.headline)
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text(roleName)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
                     if let phone = model.customer?.phoneNumber {
-                        Text(phone).font(.caption).foregroundStyle(.secondary)
+                        Text(phone).font(.subheadline).foregroundStyle(.secondary)
                     }
                     if let email = model.customer?.email, !email.isEmpty {
                         Text(email).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 8) {
-                    Text(accessLabel)
-                        .font(.caption.bold())
-                        .foregroundStyle(MarketplaceColors.success.color)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(.tertiary)
-                }
+                Image(systemName: "pencil")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(width: 38, height: 38)
+                    .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
             }
             .padding(MarketplaceSpacing.medium)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(model.isLoading)
         .marketplaceFlatSurface()
+        .accessibilityHint("Edit your name and contact number")
+    }
+
+    @ViewBuilder
+    private var partnerCredentials: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Work profile").font(MarketplaceTypography.sectionTitle)
+
+            VStack(spacing: 0) {
+                credentialHeader
+                if let partner = model.deliveryPartner {
+                    Divider().padding(.leading, 60)
+                    credentialRow(
+                        title: "Delivery method",
+                        value: partner.deliveryMethod.map(deliveryMethodName) ?? "Not available",
+                        symbol: partner.deliveryMethod.map(deliveryMethodSymbol) ?? "location"
+                    )
+                    if let registration = partner.vehicleRegistrationNumber {
+                        Divider().padding(.leading, 60)
+                        credentialRow(
+                            title: "Vehicle",
+                            value: partner.vehicleMakeModel ?? registration,
+                            detail: partner.vehicleMakeModel == nil ? nil : registration,
+                            symbol: "car.side"
+                        )
+                    }
+                    Divider().padding(.leading, 60)
+                    credentialRow(
+                        title: "Verification",
+                        value: verificationLabel(partner),
+                        symbol: "checkmark.seal"
+                    )
+                    Divider().padding(.leading, 60)
+                    credentialRow(
+                        title: "Availability",
+                        value: availabilityLabel(partner),
+                        symbol: partner.availability?.status == .online ? "location.fill" : "location.slash"
+                    )
+                }
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
+
+            Text("Identity, delivery method and vehicle changes require Dastak review to protect customers, merchants and partners.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 2)
+        }
+    }
+
+    private var credentialHeader: some View {
+        HStack(spacing: MarketplaceSpacing.compact) {
+            Image(systemName: partnerStatusSymbol)
+                .font(.headline)
+                .foregroundStyle(partnerStatusColor)
+                .frame(width: 40, height: 40)
+                .background(partnerStatusColor.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(partnerStatusTitle)
+                    .font(.headline)
+                Text(partnerStatusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(partnerAccessLabel.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(0.7)
+                .foregroundStyle(partnerStatusColor)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(partnerStatusColor.opacity(0.12))
+                .clipShape(Capsule())
+        }
+        .frame(minHeight: 66)
     }
 
     private var settings: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Settings").font(MarketplaceTypography.sectionTitle)
+            Text("Preferences").font(MarketplaceTypography.sectionTitle)
             VStack(spacing: 0) {
-                row(title: "Access", value: accessLabel, symbol: "checkmark.shield")
-                Divider()
+                if roleName != "Delivery Partner" {
+                    row(
+                        title: "Access",
+                        value: accessLabel,
+                        symbol: "checkmark.shield"
+                    )
+                    Divider()
+                }
                 Button { Task { await manageNotifications() } } label: {
                     row(
                         title: "Notifications",
@@ -203,19 +321,73 @@ public struct DastakIdentityAccountView: View {
         }
     }
 
+    private var partnerSupport: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Support and safety").font(MarketplaceTypography.sectionTitle)
+            VStack(spacing: 0) {
+                Button(action: openWorkspace) {
+                    row(
+                        title: "Delivery workspace",
+                        value: "Open your current assignment",
+                        symbol: "shippingbox",
+                        showsDisclosure: true
+                    )
+                }
+                .buttonStyle(.plain)
+                Divider().padding(.leading, 56)
+                Link(destination: URL(string: "tel:112")!) {
+                    row(
+                        title: "Emergency assistance",
+                        value: "Call India emergency services",
+                        symbol: "sos",
+                        showsDisclosure: true,
+                        isDestructive: true
+                    )
+                }
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
+        }
+    }
+
     private func row(
         title: String,
         value: String?,
         symbol: String,
-        showsDisclosure: Bool = false
+        showsDisclosure: Bool = false,
+        isDestructive: Bool = false
     ) -> some View {
         HStack(spacing: MarketplaceSpacing.compact) {
             Image(systemName: symbol)
-                .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                .frame(width: 24)
-            Text(title).font(.headline).foregroundStyle(.primary)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(
+                    isDestructive
+                        ? MarketplaceColors.destructive.color
+                        : MarketplaceColors.dastakAccent.color
+                )
+                .frame(width: 36, height: 36)
+                .background(
+                    (isDestructive
+                        ? MarketplaceColors.destructive.color
+                        : MarketplaceColors.dastakAccent.color
+                    ).opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(isDestructive ? MarketplaceColors.destructive.color : Color.primary)
+                if let value, value.count > 12 {
+                    Text(value)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Spacer()
-            if let value { Text(value).font(.subheadline).foregroundStyle(.secondary) }
+            if let value, value.count <= 12 {
+                Text(value).font(.subheadline).foregroundStyle(.secondary)
+            }
             if showsDisclosure {
                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
             }
@@ -229,24 +401,77 @@ public struct DastakIdentityAccountView: View {
             Text("Account controls").font(MarketplaceTypography.sectionTitle)
             VStack(spacing: 0) {
                 Button { accountAlert = .signOut } label: {
-                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+                    row(
+                        title: "Sign out",
+                        value: "End this session on this device",
+                        symbol: "rectangle.portrait.and.arrow.right",
+                        showsDisclosure: true
+                    )
                 }
                 if allowsAccountDeletion {
-                    Divider()
+                    Divider().padding(.leading, 56)
                     Button(role: .destructive) { accountAlert = .deleteAccount } label: {
-                        Label(model.isDeleting ? "Deleting account..." : "Delete account", systemImage: "trash")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+                        row(
+                            title: model.isDeleting ? "Deleting account..." : "Delete account",
+                            value: "Permanently remove your Dastak account",
+                            symbol: "trash",
+                            showsDisclosure: true,
+                            isDestructive: true
+                        )
                     }
                     .disabled(model.isDeleting)
                 }
             }
-            .font(.headline)
             .padding(.horizontal, MarketplaceSpacing.medium)
             .marketplaceFlatSurface()
         }
+    }
+
+    private func credentialRow(
+        title: String,
+        value: String,
+        detail: String? = nil,
+        symbol: String
+    ) -> some View {
+        HStack(spacing: MarketplaceSpacing.compact) {
+            Image(systemName: symbol)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 40)
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: MarketplaceSpacing.compact)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                if let detail {
+                    Text(detail)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .multilineTextAlignment(.trailing)
+        }
+        .frame(minHeight: 54)
+    }
+
+    private func accountError(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(MarketplaceColors.destructive.color)
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                Button("Try again") { Task { await model.load() } }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+            Spacer()
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
     }
 
     @MainActor
@@ -273,6 +498,103 @@ public struct DastakIdentityAccountView: View {
             : roleName == "Delivery Partner"
                 ? "Shared only during an assigned delivery when contact is required. It is not used to sign in."
                 : "Used only when an active task requires contact. It is not used to sign in."
+    }
+
+    private var accountIntroduction: String {
+        roleName == "Delivery Partner"
+            ? "Manage the identity, verified work details and permissions used while you deliver."
+            : "Manage your identity, permissions and account access."
+    }
+
+    private var profileInitials: String {
+        let words = (model.customer?.displayName ?? roleName)
+            .split(separator: " ")
+            .prefix(2)
+        let initials = words.compactMap(\.first).map(String.init).joined()
+        return initials.isEmpty ? "D" : initials.uppercased()
+    }
+
+    private var partnerStatusTitle: String {
+        guard let state = model.deliveryPartner?.onboardingState else {
+            return model.isLoading ? "Checking partner access" : "Partner access unavailable"
+        }
+        return switch state {
+        case .approved: "Verified partner"
+        case .pending: "Review in progress"
+        case .rejected: "Review required"
+        case .notApplied: "Application required"
+        }
+    }
+
+    private var partnerStatusMessage: String {
+        guard let state = model.deliveryPartner?.onboardingState else {
+            return model.isLoading ? "Loading your approved work details" : "Pull to refresh or try again"
+        }
+        return switch state {
+        case .approved: "Your identity and work method are approved"
+        case .pending: "Dastak is reviewing your application"
+        case .rejected: model.deliveryPartner?.reviewReason ?? "Update your application for another review"
+        case .notApplied: "Complete the partner application to deliver"
+        }
+    }
+
+    private var partnerStatusSymbol: String {
+        switch model.deliveryPartner?.onboardingState {
+        case .approved: "checkmark.seal.fill"
+        case .pending: "clock.fill"
+        case .rejected: "exclamationmark.shield.fill"
+        case .notApplied: "doc.badge.plus"
+        case nil: "wifi.exclamationmark"
+        }
+    }
+
+    private var partnerStatusColor: Color {
+        switch model.deliveryPartner?.onboardingState {
+        case .approved: MarketplaceColors.success.color
+        case .pending, .notApplied: MarketplaceColors.warning.color
+        case .rejected, nil: MarketplaceColors.destructive.color
+        }
+    }
+
+    private var partnerAccessLabel: String {
+        switch model.deliveryPartner?.onboardingState {
+        case .approved: accessLabel
+        case .pending: "Pending"
+        case .rejected: "Review"
+        case .notApplied: "Apply"
+        case nil: model.isLoading ? "Checking" : "Unavailable"
+        }
+    }
+
+    private func deliveryMethodName(_ method: DeliveryMethod) -> String {
+        switch method {
+        case .walking: "Walking"
+        case .bicycle: "Bicycle"
+        case .bike: "Motorbike"
+        case .auto: "Auto"
+        case .car: "Car"
+        }
+    }
+
+    private func deliveryMethodSymbol(_ method: DeliveryMethod) -> String {
+        switch method {
+        case .walking: "figure.walk"
+        case .bicycle: "bicycle"
+        case .bike: "motorcycle"
+        case .auto: "car.side"
+        case .car: "car"
+        }
+    }
+
+    private func verificationLabel(_ partner: DeliveryPartnerSnapshot) -> String {
+        guard partner.onboardingState == .approved else { return "Not verified" }
+        return partner.deliveryMethod?.requiresVehicleVerification == true
+            ? "Identity and vehicle verified"
+            : "Identity verified"
+    }
+
+    private func availabilityLabel(_ partner: DeliveryPartnerSnapshot) -> String {
+        partner.availability?.status == .online ? "Online" : "Offline"
     }
 
     private func makeAccountAlert(_ alert: AccountAlert) -> Alert {

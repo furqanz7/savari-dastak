@@ -184,8 +184,13 @@ export function DeliveryPartnerView({ accessToken, displayName, email, phoneNumb
         email={email}
         phoneNumber={phoneNumber}
         roleName="Delivery Partner"
+        deliveryPartner={partner}
+        deliveryPartnerLoading={loading}
+        deliveryPartnerError={partner ? undefined : error}
         supabaseUrl={supabaseUrl}
         publishableKey={publishableKey}
+        onRefreshPartner={() => void refresh(true)}
+        onOpenWorkspace={() => setSection("deliveries")}
         onSignOut={onSignOut}
       /> : <>
       <header className="delivery-heading">
