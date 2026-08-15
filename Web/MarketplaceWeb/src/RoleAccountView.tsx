@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  AlertTriangle,
   BadgeCheck,
   Bell,
   Bike,
@@ -21,7 +22,12 @@ import {
   updateAccountProfile,
   type AccountProfile,
 } from "./accountProfile";
-import type { DeliveryMethod, DeliveryPartnerSnapshot } from "./delivery";
+import {
+  deliveryPartnerVerificationState,
+  requiresVehicleVerification,
+  type DeliveryMethod,
+  type DeliveryPartnerSnapshot,
+} from "./delivery";
 
 type Props = {
   accessToken: string;
@@ -211,28 +217,38 @@ function PartnerCredentials({
 }) {
   const approved = partner?.onboardingState === "approved";
   const method = partner?.deliveryMethod;
-  const vehicleVerified = method === "bike" || method === "auto" || method === "car";
-  const statusLabel = approved ? accessLabel : loading ? "Checking" : partner?.onboardingState === "pending" ? "Pending" : partner?.onboardingState === "rejected" ? "Review" : "Unavailable";
-  const statusTitle = approved ? "Verified partner" : loading ? "Checking partner access" : "Partner access unavailable";
-  const statusMessage = approved ? "Your identity and work method are approved" : loading ? "Loading your approved work details" : "Refresh to check your work profile";
+  const verification = partner ? deliveryPartnerVerificationState(partner) : "unverified";
+  const needsVehicleReview = verification === "vehicle_review_required";
+  const fullyVerified = verification === "identity_verified" || verification === "identity_and_vehicle_verified";
+  const vehicleRequired = method ? requiresVehicleVerification(method) : false;
+  const statusLabel = needsVehicleReview ? "Action needed" : approved ? accessLabel : loading ? "Checking" : partner?.onboardingState === "pending" ? "Pending" : partner?.onboardingState === "rejected" ? "Review" : "Unavailable";
+  const statusTitle = needsVehicleReview ? "Vehicle review required" : approved ? "Verified partner" : loading ? "Checking partner access" : partner?.onboardingState === "pending" ? "Review in progress" : partner?.onboardingState === "rejected" ? "Review required" : "Partner access unavailable";
+  const statusMessage = needsVehicleReview ? "Vehicle details are missing from this legacy approval" : approved ? "Your identity and work method are approved" : loading ? "Loading your work details" : partner?.reviewReason ?? "Refresh to check your work profile";
+  const verificationLabel = verification === "identity_and_vehicle_verified"
+    ? "Identity and vehicle verified"
+    : verification === "identity_verified"
+      ? "Identity verified"
+      : needsVehicleReview ? "Vehicle verification required" : "Not verified";
 
   return <section className="role-account-section" aria-labelledby="role-work-profile-title">
     <h2 id="role-work-profile-title">Work profile</h2>
     <div className="partner-credentials">
       <header>
-        <span className={`partner-verification-icon ${approved ? "approved" : ""}`}><BadgeCheck size={21} /></span>
+        <span className={`partner-verification-icon ${fullyVerified ? "approved" : needsVehicleReview ? "review" : ""}`}>
+          {needsVehicleReview ? <AlertTriangle size={21} /> : <BadgeCheck size={21} />}
+        </span>
         <span><strong>{statusTitle}</strong><small>{statusMessage}</small></span>
-        <b>{statusLabel}</b>
+        <b className={needsVehicleReview ? "review" : undefined}>{statusLabel}</b>
       </header>
       <dl>
         <CredentialRow icon={methodIcon(method)} title="Delivery method" value={methodLabel(method)} />
-        {partner?.vehicleRegistrationNumber && <CredentialRow
+        {partner && vehicleRequired && <CredentialRow
           icon={<CarFront size={18} />}
           title="Vehicle"
-          value={partner.vehicleMakeModel || partner.vehicleRegistrationNumber}
-          detail={partner.vehicleMakeModel ? partner.vehicleRegistrationNumber : undefined}
+          value={partner.vehicleMakeModel || partner.vehicleRegistrationNumber || "Details missing"}
+          detail={partner.vehicleMakeModel && partner.vehicleRegistrationNumber ? partner.vehicleRegistrationNumber : undefined}
         />}
-        <CredentialRow icon={<ShieldCheck size={18} />} title="Verification" value={approved ? (vehicleVerified ? "Identity and vehicle verified" : "Identity verified") : "Not verified"} />
+        <CredentialRow icon={<ShieldCheck size={18} />} title="Verification" value={verificationLabel} />
         <CredentialRow icon={<BadgeCheck size={18} />} title="Availability" value={partner ? (partner.availability?.status === "online" ? "Online" : "Offline") : "Not available"} />
       </dl>
     </div>
@@ -284,7 +300,7 @@ function roleAccountCopy(roleName: string) {
     editorPrivacy: "Used only when an active order requires store contact. It is not used to sign in.",
   };
   if (roleName === "Delivery Partner") return {
-    introduction: "Manage the identity, verified work details and permissions used while you deliver.",
+    introduction: "Manage the identity, work details and permissions used while you deliver.",
     privacy: "Your number is shared only during an assigned delivery when contact is required.",
     editorPrivacy: "Shared only during an assigned delivery when contact is required. It is not used to sign in.",
   };

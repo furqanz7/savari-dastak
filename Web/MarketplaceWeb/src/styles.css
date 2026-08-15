@@ -1540,8 +1540,10 @@ button.role-account-row:hover, a.role-account-row:hover { background: color-mix(
 .partner-credentials header strong, .partner-credentials header small { display: block; }
 .partner-credentials header small { margin-top: 3px; color: var(--text-secondary); font-size: 12px; }
 .partner-credentials header b { padding: 6px 9px; border-radius: 999px; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.partner-credentials header b.review { color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent); }
 .partner-verification-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: var(--dastak-accent); background: var(--dastak-accent-soft); }
 .partner-verification-icon.approved { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
+.partner-verification-icon.review { color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent); }
 .partner-credentials dl { margin: 0; padding: 0 16px; }
 .partner-credentials dl > div { min-height: 56px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, auto); gap: 18px; align-items: center; border-top: 1px solid var(--divider); }
 .partner-credentials dt { display: inline-flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 13px; }

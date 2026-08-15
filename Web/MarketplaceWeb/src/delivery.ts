@@ -19,6 +19,11 @@ export type DeliveryPartnerSnapshot = {
   reviewReason: string | null;
   availability: PartnerAvailability | null;
 };
+export type DeliveryPartnerVerificationState =
+  | "unverified"
+  | "identity_verified"
+  | "identity_and_vehicle_verified"
+  | "vehicle_review_required";
 export type DeliveryAssignment = {
   assignmentId: string;
   orderId: string;
@@ -74,6 +79,24 @@ export function isAcceptedPartnerEvidence(file: EvidenceFile) {
 
 export function requiresVehicleVerification(method: DeliveryMethod) {
   return motorVehicleMethods.has(method);
+}
+
+export function deliveryPartnerVerificationState(
+  partner: Pick<
+    DeliveryPartnerSnapshot,
+    "onboardingState" | "deliveryMethod" | "vehicleRegistrationNumber" |
+    "vehicleMakeModel" | "vehicleEvidenceObjectPath"
+  >,
+): DeliveryPartnerVerificationState {
+  if (partner.onboardingState !== "approved" || !partner.deliveryMethod) return "unverified";
+  if (!requiresVehicleVerification(partner.deliveryMethod)) return "identity_verified";
+  return [
+    partner.vehicleRegistrationNumber,
+    partner.vehicleMakeModel,
+    partner.vehicleEvidenceObjectPath,
+  ].every((value) => Boolean(value?.trim()))
+    ? "identity_and_vehicle_verified"
+    : "vehicle_review_required";
 }
 
 export function normalizeVehicleRegistration(value: string) {

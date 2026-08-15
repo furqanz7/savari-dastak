@@ -3,6 +3,7 @@ import {
   acceptDeliveryOffer,
   advanceDeliveryJob,
   declineDeliveryOffer,
+  deliveryPartnerVerificationState,
   getDeliveryDispatch,
   getDeliveryPartnerSnapshot,
   isAcceptedPartnerEvidence,
@@ -73,6 +74,28 @@ describe("delivery partner client", () => {
       identityEvidenceObjectPath: `dastak-partner/${accountId}/identity-${applicationId}.pdf`,
       idempotencyKey: "submit-key",
     }, vi.fn())).rejects.toThrow("vehicle details");
+  });
+
+  it("does not overstate verification for legacy motor accounts", () => {
+    const base = {
+      onboardingState: "approved" as const,
+      deliveryMethod: "bike" as const,
+      vehicleRegistrationNumber: null,
+      vehicleMakeModel: null,
+      vehicleEvidenceObjectPath: null,
+    };
+
+    expect(deliveryPartnerVerificationState(base)).toBe("vehicle_review_required");
+    expect(deliveryPartnerVerificationState({
+      ...base,
+      vehicleRegistrationNumber: "TN 23 AB 1234",
+      vehicleMakeModel: "Honda Activa 6G",
+      vehicleEvidenceObjectPath: `dastak-partner/${accountId}/vehicle-${applicationId}.pdf`,
+    })).toBe("identity_and_vehicle_verified");
+    expect(deliveryPartnerVerificationState({
+      ...base,
+      deliveryMethod: "walking",
+    })).toBe("identity_verified");
   });
 
   it("submits motor vehicle details and proof", async () => {

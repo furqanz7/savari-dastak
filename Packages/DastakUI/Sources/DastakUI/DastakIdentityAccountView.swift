@@ -222,12 +222,16 @@ public struct DastakIdentityAccountView: View {
                         value: partner.deliveryMethod.map(deliveryMethodName) ?? "Not available",
                         symbol: partner.deliveryMethod.map(deliveryMethodSymbol) ?? "location"
                     )
-                    if let registration = partner.vehicleRegistrationNumber {
+                    if partner.deliveryMethod?.requiresVehicleVerification == true {
                         Divider().padding(.leading, 60)
                         credentialRow(
                             title: "Vehicle",
-                            value: partner.vehicleMakeModel ?? registration,
-                            detail: partner.vehicleMakeModel == nil ? nil : registration,
+                            value: partner.vehicleMakeModel
+                                ?? partner.vehicleRegistrationNumber
+                                ?? "Details missing",
+                            detail: partner.vehicleMakeModel != nil
+                                ? partner.vehicleRegistrationNumber
+                                : nil,
                             symbol: "car.side"
                         )
                     }
@@ -502,7 +506,7 @@ public struct DastakIdentityAccountView: View {
 
     private var accountIntroduction: String {
         roleName == "Delivery Partner"
-            ? "Manage the identity, verified work details and permissions used while you deliver."
+            ? "Manage the identity, work details and permissions used while you deliver."
             : "Manage your identity, permissions and account access."
     }
 
@@ -515,6 +519,7 @@ public struct DastakIdentityAccountView: View {
     }
 
     private var partnerStatusTitle: String {
+        if partnerNeedsVehicleReview { return "Vehicle review required" }
         guard let state = model.deliveryPartner?.onboardingState else {
             return model.isLoading ? "Checking partner access" : "Partner access unavailable"
         }
@@ -527,6 +532,9 @@ public struct DastakIdentityAccountView: View {
     }
 
     private var partnerStatusMessage: String {
+        if partnerNeedsVehicleReview {
+            return "Vehicle details are missing from this legacy approval"
+        }
         guard let state = model.deliveryPartner?.onboardingState else {
             return model.isLoading ? "Loading your approved work details" : "Pull to refresh or try again"
         }
@@ -539,7 +547,8 @@ public struct DastakIdentityAccountView: View {
     }
 
     private var partnerStatusSymbol: String {
-        switch model.deliveryPartner?.onboardingState {
+        if partnerNeedsVehicleReview { return "exclamationmark.triangle.fill" }
+        return switch model.deliveryPartner?.onboardingState {
         case .approved: "checkmark.seal.fill"
         case .pending: "clock.fill"
         case .rejected: "exclamationmark.shield.fill"
@@ -549,7 +558,8 @@ public struct DastakIdentityAccountView: View {
     }
 
     private var partnerStatusColor: Color {
-        switch model.deliveryPartner?.onboardingState {
+        if partnerNeedsVehicleReview { return MarketplaceColors.warning.color }
+        return switch model.deliveryPartner?.onboardingState {
         case .approved: MarketplaceColors.success.color
         case .pending, .notApplied: MarketplaceColors.warning.color
         case .rejected, nil: MarketplaceColors.destructive.color
@@ -557,7 +567,8 @@ public struct DastakIdentityAccountView: View {
     }
 
     private var partnerAccessLabel: String {
-        switch model.deliveryPartner?.onboardingState {
+        if partnerNeedsVehicleReview { return "Action needed" }
+        return switch model.deliveryPartner?.onboardingState {
         case .approved: accessLabel
         case .pending: "Pending"
         case .rejected: "Review"
@@ -588,9 +599,31 @@ public struct DastakIdentityAccountView: View {
 
     private func verificationLabel(_ partner: DeliveryPartnerSnapshot) -> String {
         guard partner.onboardingState == .approved else { return "Not verified" }
-        return partner.deliveryMethod?.requiresVehicleVerification == true
+        guard partner.deliveryMethod?.requiresVehicleVerification == true else {
+            return "Identity verified"
+        }
+        return hasCompleteVehicleVerification(partner)
             ? "Identity and vehicle verified"
-            : "Identity verified"
+            : "Vehicle verification required"
+    }
+
+    private var partnerNeedsVehicleReview: Bool {
+        guard let partner = model.deliveryPartner,
+              partner.onboardingState == .approved,
+              partner.deliveryMethod?.requiresVehicleVerification == true
+        else { return false }
+        return !hasCompleteVehicleVerification(partner)
+    }
+
+    private func hasCompleteVehicleVerification(_ partner: DeliveryPartnerSnapshot) -> Bool {
+        [
+            partner.vehicleRegistrationNumber,
+            partner.vehicleMakeModel,
+            partner.vehicleEvidenceObjectPath
+        ].allSatisfy { value in
+            guard let value else { return false }
+            return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 
     private func availabilityLabel(_ partner: DeliveryPartnerSnapshot) -> String {
