@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evidenceObjectPath,
+  getMerchantApplicationSnapshot,
   isAcceptedEvidenceFile,
   MerchantApplicationRequestError,
   submitMerchantApplication,
@@ -65,5 +66,23 @@ describe("merchant application", () => {
         409,
       ),
     );
+  });
+
+  it("loads the authenticated merchant's rejected application", async () => {
+    const snapshot = await getMerchantApplicationSnapshot(auth, (_url, init) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ operation: "selfSnapshot" });
+      return Promise.resolve(new Response(JSON.stringify({
+        onboardingState: "rejected",
+        applicationId,
+        businessName: "Corner Store",
+        businessAddress: "12 Main Road",
+        evidenceObjectPath: `merchant/${accountId}/evidence.pdf`,
+        reviewReason: "Upload a clearer document.",
+      }), { status: 200 }));
+    });
+
+    expect(snapshot.onboardingState).toBe("rejected");
+    expect(snapshot.businessName).toBe("Corner Store");
+    expect(snapshot.reviewReason).toBe("Upload a clearer document.");
   });
 });

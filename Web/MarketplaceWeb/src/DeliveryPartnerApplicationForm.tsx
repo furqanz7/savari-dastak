@@ -1,8 +1,10 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Bike, FileCheck2, FileUp, Navigation, ShieldCheck } from "lucide-react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { ApplicationProgress } from "./ApplicationProgress";
 import {
+  DeliveryRequestError,
+  getDeliveryPartnerSnapshot,
   isAcceptedPartnerEvidence,
   submitDeliveryPartnerApplication,
   uploadPartnerEvidence,
@@ -15,6 +17,7 @@ type Props = {
   supabaseUrl: string;
   publishableKey: string;
   onSubmitted: () => void;
+  onSessionExpired: () => void;
 };
 
 export function DeliveryPartnerApplicationForm({
@@ -23,14 +26,40 @@ export function DeliveryPartnerApplicationForm({
   supabaseUrl,
   publishableKey,
   onSubmitted,
+  onSessionExpired,
 }: Props) {
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("bike");
   const [evidenceFile, setEvidenceFile] = useState<File>();
   const [uploadedEvidence, setUploadedEvidence] = useState<{ file: File; path: string }>();
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [reviewReason, setReviewReason] = useState<string>();
   const requestKey = useRef(crypto.randomUUID());
-  const valid = !!evidenceFile && isAcceptedPartnerEvidence(evidenceFile);
+  const valid = !!evidenceFile && isAcceptedPartnerEvidence(evidenceFile) && !loading;
+
+  useEffect(() => {
+    let active = true;
+    void getDeliveryPartnerSnapshot({
+      supabaseUrl,
+      publishableKey,
+      accessToken: session.access_token,
+    }).then((snapshot) => {
+      if (!active || snapshot.onboardingState !== "rejected") return;
+      if (snapshot.deliveryMethod) setDeliveryMethod(snapshot.deliveryMethod);
+      setReviewReason(snapshot.reviewReason ?? undefined);
+    }).catch((loadError) => {
+      if (!active) return;
+      if (loadError instanceof DeliveryRequestError && loadError.status === 401) {
+        onSessionExpired();
+        return;
+      }
+      setError(loadError instanceof Error ? loadError.message : "The application could not be loaded.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [onSessionExpired, publishableKey, session.access_token, supabaseUrl]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -65,6 +94,11 @@ export function DeliveryPartnerApplicationForm({
       </header>
 
       <ApplicationProgress />
+
+      {reviewReason && <aside className="application-review-note" role="status">
+        <ShieldCheck size={19} />
+        <div><strong>Update requested</strong><p>{reviewReason}</p></div>
+      </aside>}
 
       <section className="application-section" aria-labelledby="partner-method-title">
         <header><Navigation size={20} /><div><h2 id="partner-method-title">Delivery method</h2><p>Choose the method you will actively use.</p></div></header>
@@ -102,7 +136,7 @@ export function DeliveryPartnerApplicationForm({
       )}
       {error && <p className="error-text" role="alert">{error}</p>}
       <button className="primary-button application-submit" disabled={!valid || busy} type="submit">
-        {busy ? "Submitting..." : "Submit for review"}
+        {loading ? "Loading details..." : busy ? "Submitting..." : reviewReason ? "Resubmit for review" : "Submit for review"}
       </button>
       <p className="application-privacy"><ShieldCheck size={15} /> Your document is private and used only to review this application.</p>
     </form>

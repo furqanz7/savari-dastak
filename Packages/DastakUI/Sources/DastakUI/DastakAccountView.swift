@@ -187,11 +187,6 @@ struct DastakAccountView: View {
                 }
                 .buttonStyle(.plain)
                 Divider()
-                Button(action: DastakNotificationPreferences.openSystemSettings) {
-                    accountRow(title: "Language", value: "Follows iPhone", symbol: "globe")
-                }
-                .buttonStyle(.plain)
-                Divider()
                 NavigationLink {
                     DastakPrivacyAndDataView()
                 } label: {

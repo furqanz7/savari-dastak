@@ -965,6 +965,17 @@ button:disabled { cursor: wait; opacity: .55; }
 .application-progress li.active > span,
 .application-progress li.complete > span { border-color: var(--dastak-accent); color: var(--dastak-icon-background); background: var(--dastak-accent); }
 .application-progress small { font-size: 12px; font-weight: 700; }
+.application-review-note {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px;
+  border-left: 3px solid var(--dastak-accent);
+  background: color-mix(in srgb, var(--dastak-accent) 9%, transparent);
+  color: var(--dastak-accent);
+}
+.application-review-note strong { color: var(--text-primary); }
+.application-review-note p { margin: 4px 0 0; color: var(--text-secondary); }
 .application-section {
   display: grid;
   gap: 18px;

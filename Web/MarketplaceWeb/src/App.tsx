@@ -144,7 +144,11 @@ export default function App() {
           <Restricted access={view.access} session={view.session} onSubmitted={() => evaluate(view.session)} onSignOut={signOut} />
         )}
         {view.phase === "error" && (
-          <ErrorState message={view.message} onRetry={() => evaluate(view.session ?? null)} />
+          <ErrorState
+            message={view.message}
+            onRetry={() => evaluate(view.session ?? null)}
+            onSignOut={view.session ? signOut : undefined}
+          />
         )}
       </section>
       {showsDastakLaunch && (
@@ -327,6 +331,7 @@ function ProfileForm({ session, onComplete, onSignOut }: {
   const [phoneNumber, setPhoneNumber] = useState("+91");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const valid = isValidProfile({ displayName, phoneNumber });
 
   const submit = async (event: FormEvent) => {
@@ -343,12 +348,12 @@ function ProfileForm({ session, onComplete, onSignOut }: {
     }
   };
 
-  return (
+  return <>
     <form className={`form-panel${config.product === "dastak" ? " dastak-profile-form" : ""}`} onSubmit={submit}>
       {config.product === "dastak" ? <header className="dastak-profile-heading">
         <div className="dastak-profile-topline">
           <p className="dastak-profile-wordmark"><span>Dastak</span> <span lang="ur">دستک</span></p>
-          <button type="button" onClick={onSignOut}>Use a different account</button>
+          <button type="button" onClick={() => setConfirmingSignOut(true)}>Use a different account</button>
         </div>
         <p className="eyebrow">{config.roleLabel}</p>
         <h1>Your details</h1>
@@ -370,7 +375,13 @@ function ProfileForm({ session, onComplete, onSignOut }: {
       {error && <p className="error-text" role="alert">{error}</p>}
       <button className="primary-button" disabled={!valid || busy} type="submit">Save and continue</button>
     </form>
-  );
+    {confirmingSignOut && <AccountActionDialog
+      action="sign-out"
+      message="You'll need to sign in again to continue with a different account."
+      onConfirm={onSignOut}
+      onDismiss={() => setConfirmingSignOut(false)}
+    />}
+  </>;
 }
 
 function Ready({ access, email, session, onSignOut }: {
@@ -477,6 +488,7 @@ function Restricted({
           supabaseUrl={config.supabaseUrl}
           publishableKey={config.supabasePublishableKey}
           onSubmitted={onSubmitted}
+          onSessionExpired={onSignOut}
         />
       </RestrictedShell>
     );
@@ -490,6 +502,7 @@ function Restricted({
           supabaseUrl={config.supabaseUrl}
           publishableKey={config.supabasePublishableKey}
           onSubmitted={onSubmitted}
+          onSessionExpired={onSignOut}
         />
       </RestrictedShell>
     );
@@ -526,14 +539,30 @@ function RestrictedShell({ children, onSignOut }: { children: ReactNode; onSignO
   </>;
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+function ErrorState({ message, onRetry, onSignOut }: {
+  message: string;
+  onRetry: () => void;
+  onSignOut?: () => void;
+}) {
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   return (
-    <div className="status-panel">
-      <p className="eyebrow">Connection error</p>
-      <h1>Unable to continue</h1>
-      <p className="error-text" role="alert">{message}</p>
-      <button className="secondary-button" type="button" onClick={onRetry}><RefreshCw size={17} /> Retry</button>
-    </div>
+    <>
+      <div className="status-panel">
+        <p className="eyebrow">Connection error</p>
+        <h1>Unable to continue</h1>
+        <p className="error-text" role="alert">{message}</p>
+        <button className="secondary-button" type="button" onClick={onRetry}><RefreshCw size={17} /> Retry</button>
+        {onSignOut && <button className="restricted-account-switch" type="button" onClick={() => setConfirmingSignOut(true)}>
+          <LogOut size={17} /> Use a different account
+        </button>}
+      </div>
+      {confirmingSignOut && onSignOut && <AccountActionDialog
+        action="sign-out"
+        message="You'll need to sign in again to continue with a different account."
+        onConfirm={onSignOut}
+        onDismiss={() => setConfirmingSignOut(false)}
+      />}
+    </>
   );
 }
 

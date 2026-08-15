@@ -19,6 +19,7 @@ Deno.serve((request) =>
     authenticateBearer: verifyBearerUser,
     isActiveOwner,
     submitMerchantApplication,
+    getMerchantApplicationSnapshot,
     listMerchantApplications,
     reviewMerchantApplication,
   })
@@ -43,6 +44,14 @@ async function submitMerchantApplication(input: SubmitMerchantApplicationInput) 
   });
   if (error) throw error;
   return rpcResponse(data, "submit_merchant_application");
+}
+
+async function getMerchantApplicationSnapshot(accountId: string) {
+  const { data, error } = await serviceClient.rpc("get_merchant_application_snapshot", {
+    p_account_id: accountId,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "get_merchant_application_snapshot");
 }
 
 async function listMerchantApplications(ownerId: string) {

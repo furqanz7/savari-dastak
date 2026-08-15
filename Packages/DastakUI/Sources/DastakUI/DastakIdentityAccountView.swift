@@ -187,8 +187,6 @@ public struct DastakIdentityAccountView: View {
                 }
                 .buttonStyle(.plain)
                 Divider()
-                row(title: "Language", value: "Follows iPhone", symbol: "globe")
-                Divider()
                 NavigationLink {
                     DastakPrivacyAndDataView(roleName: roleName)
                 } label: {

@@ -11,6 +11,9 @@ private final class DastakMerchantApplicationModel: ObservableObject {
     @Published private(set) var evidenceName: String?
     @Published private(set) var isSubmitting = false
     @Published private(set) var isSubmitted = false
+    @Published private(set) var isLoading = true
+    @Published private(set) var isRejected = false
+    @Published private(set) var reviewReason: String?
     @Published var errorMessage: String?
 
     private let services: MarketplaceAuthenticatedServices
@@ -30,6 +33,24 @@ private final class DastakMerchantApplicationModel: ObservableObject {
             && !businessAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && evidenceData != nil
             && !isSubmitting
+            && !isLoading
+    }
+
+    func load() async {
+        do {
+            let key = IdempotencyKey(rawValue: UUID().uuidString)!
+            let snapshot = try await applicationClient.selfSnapshot(idempotencyKey: key)
+            if snapshot.onboardingState == .rejected {
+                businessName = snapshot.businessName ?? ""
+                businessAddress = snapshot.businessAddress ?? ""
+                reviewReason = snapshot.reviewReason
+                isRejected = true
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = "Your merchant application could not be loaded. You can still enter the details again."
+        }
+        isLoading = false
     }
 
     func selectEvidence(url: URL) {
@@ -105,6 +126,8 @@ private final class DastakMerchantApplicationModel: ObservableObject {
             )
             submissionKey = nil
             isSubmitted = true
+            isRejected = false
+            reviewReason = nil
         } catch let error as FunctionClientError {
             if case let .api(_, _, message) = error {
                 errorMessage = message
@@ -153,6 +176,8 @@ public struct DastakMerchantAccessView: View {
             ScrollView {
                 Group {
                     switch route {
+                    case .accessDenied where model.isLoading:
+                        ProgressView("Loading application")
                     case .accessDenied where !model.isSubmitted:
                         applicationForm
                     case .pendingApproval, .accessDenied:
@@ -193,6 +218,9 @@ public struct DastakMerchantAccessView: View {
             }
         }
         .marketplacePage()
+        .task {
+            if route == .accessDenied { await model.load() }
+        }
         .fileImporter(
             isPresented: $showsImporter,
             allowedContentTypes: [.pdf, .jpeg, .png],
@@ -212,18 +240,33 @@ public struct DastakMerchantAccessView: View {
                 Image(systemName: "storefront.fill")
                     .font(.title2)
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                Text("MERCHANT REGISTRATION")
+                Text(model.isRejected ? "APPLICATION UPDATE" : "MERCHANT REGISTRATION")
                     .font(.caption.bold())
                     .tracking(1)
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                Text("Bring your store to Dastak")
+                Text(model.isRejected ? "Update your application" : "Bring your store to Dastak")
                     .font(MarketplaceTypography.hero)
-                Text("Tell us where you trade and provide one document for owner review.")
+                Text(model.isRejected
+                    ? "Review the feedback, update your details, and submit a new document."
+                    : "Tell us where you trade and provide one document for owner review.")
                     .font(MarketplaceTypography.supporting)
                     .foregroundStyle(.secondary)
             }
 
             DastakApplicationProgress()
+
+            if let reviewReason = model.reviewReason {
+                HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                    Image(systemName: "exclamationmark.bubble")
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Update requested").font(.headline)
+                        Text(reviewReason).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(MarketplaceSpacing.medium)
+                .marketplaceFlatSurface()
+            }
 
             VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
                 Label("Store details", systemImage: "storefront")
@@ -299,7 +342,7 @@ public struct DastakMerchantAccessView: View {
                     .foregroundStyle(MarketplaceColors.destructive.color)
             }
 
-            Button(model.isSubmitting ? "Submitting" : "Submit for review") {
+            Button(model.isSubmitting ? "Submitting" : model.isRejected ? "Resubmit for review" : "Submit for review") {
                 Task { await model.submit() }
             }
             .buttonStyle(MarketplacePrimaryButtonStyle())

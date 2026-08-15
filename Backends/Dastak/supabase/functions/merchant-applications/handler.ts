@@ -25,6 +25,10 @@ export type SubmitMerchantApplication = (
   input: SubmitMerchantApplicationInput,
 ) => Promise<{ responseBody: unknown; responseStatus: number }>;
 
+export type GetMerchantApplicationSnapshot = (
+  accountId: string,
+) => Promise<{ responseBody: unknown; responseStatus: number }>;
+
 export type ListMerchantApplications = (
   ownerId: string,
 ) => Promise<MerchantApplication[]>;
@@ -46,6 +50,7 @@ type Dependencies = {
   authenticateBearer: AuthenticateBearer;
   isActiveOwner: (accountId: string) => Promise<boolean>;
   submitMerchantApplication: SubmitMerchantApplication;
+  getMerchantApplicationSnapshot: GetMerchantApplicationSnapshot;
   listMerchantApplications: ListMerchantApplications;
   reviewMerchantApplication: ReviewMerchantApplication;
 };
@@ -76,6 +81,8 @@ export async function handleMerchantApplications(
     switch (body.operation) {
       case "submit":
         return await submit(request, body, actor.accountId, dependencies);
+      case "selfSnapshot":
+        return await selfSnapshot(actor.accountId, dependencies);
       case "list":
         return await list(actor.accountId, dependencies);
       case "review":
@@ -86,6 +93,11 @@ export async function handleMerchantApplications(
   } catch {
     return internalError();
   }
+}
+
+async function selfSnapshot(accountId: string, dependencies: Dependencies) {
+  const result = await dependencies.getMerchantApplicationSnapshot(accountId);
+  return json(result.responseBody, result.responseStatus);
 }
 
 async function submit(

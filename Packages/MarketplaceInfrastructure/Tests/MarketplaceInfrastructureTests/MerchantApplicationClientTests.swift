@@ -51,6 +51,25 @@ final class MerchantApplicationClientTests: XCTestCase {
         )
     }
 
+    func testSelfSnapshotRestoresRejectedMerchantDetails() async throws {
+        let functions = RecordingMerchantFunctionClient()
+        let client = SupabaseMerchantApplicationClient(functions: functions)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "merchant-snapshot-1"))
+
+        let snapshot = try await client.selfSnapshot(idempotencyKey: key)
+
+        XCTAssertEqual(snapshot.onboardingState, .rejected)
+        XCTAssertEqual(snapshot.businessName, "Corner Store")
+        XCTAssertEqual(snapshot.businessAddress, "12 Main Road")
+        XCTAssertEqual(snapshot.reviewReason, "Upload a clearer document.")
+        let recordedCall = await functions.lastCall()
+        let call = try XCTUnwrap(recordedCall)
+        XCTAssertEqual(
+            try JSONDecoder().decode(CapturedMerchantRequest.self, from: call.body).operation,
+            "selfSnapshot"
+        )
+    }
+
     func testReviewUsesTypedDecisionWithoutSupplyingOwnerIdentity() async throws {
         let functions = RecordingMerchantFunctionClient()
         let client = SupabaseMerchantApplicationClient(functions: functions)
@@ -108,6 +127,8 @@ private actor RecordingMerchantFunctionClient: FunctionClient {
             response = #"{"applicationId":"33333333-3333-4333-8333-333333333333","status":"pending"}"#.data(using: .utf8)!
         case "list":
             response = #"{"applications":[{"applicationId":"33333333-3333-4333-8333-333333333333","accountId":"22222222-2222-4222-8222-222222222222","businessName":"Corner Store","businessAddress":"12 Main Road","evidenceObjectPath":"merchant/22222222-2222-4222-8222-222222222222/registration.pdf","status":"pending"}]}"#.data(using: .utf8)!
+        case "selfSnapshot":
+            response = #"{"onboardingState":"rejected","applicationId":"33333333-3333-4333-8333-333333333333","businessName":"Corner Store","businessAddress":"12 Main Road","evidenceObjectPath":"merchant/22222222-2222-4222-8222-222222222222/registration.pdf","reviewReason":"Upload a clearer document."}"#.data(using: .utf8)!
         case "review":
             response = #"{"applicationId":"33333333-3333-4333-8333-333333333333","status":"approved"}"#.data(using: .utf8)!
         default:

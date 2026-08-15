@@ -10,6 +10,8 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
     @Published var deliveryMethod: MarketplaceInfrastructure.DeliveryMethod = .bike
     @Published private(set) var evidenceName: String?
     @Published private(set) var isSubmitting = false
+    @Published private(set) var isLoading = true
+    @Published private(set) var reviewReason: String?
     @Published var errorMessage: String?
 
     private let services: MarketplaceAuthenticatedServices
@@ -25,7 +27,22 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
     }
 
     var canSubmit: Bool {
-        evidenceData != nil && !isSubmitting
+        evidenceData != nil && !isSubmitting && !isLoading
+    }
+
+    func load() async {
+        do {
+            let key = IdempotencyKey(rawValue: UUID().uuidString)!
+            let snapshot = try await client.selfSnapshot(idempotencyKey: key)
+            if snapshot.onboardingState == .rejected {
+                deliveryMethod = snapshot.deliveryMethod ?? .bike
+                reviewReason = snapshot.reviewReason
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = "Your application could not be loaded. You can still enter the details again."
+        }
+        isLoading = false
     }
 
     func selectEvidence(url: URL) {
@@ -92,6 +109,7 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
                 idempotencyKey: key
             )
             submissionKey = nil
+            reviewReason = nil
             return true
         } catch let error as FunctionClientError {
             if case let .api(_, _, message) = error { errorMessage = message }
@@ -137,6 +155,8 @@ public struct DastakDeliveryPartnerAccessView: View {
             ScrollView {
                 Group {
                     switch access {
+                    case .notApplied where model.isLoading, .rejected where model.isLoading:
+                        ProgressView("Loading application")
                     case .notApplied, .rejected:
                         applicationForm
                     case .pending:
@@ -171,6 +191,9 @@ public struct DastakDeliveryPartnerAccessView: View {
             .navigationTitle("Delivery Partner")
         }
         .marketplacePage()
+        .task {
+            if access == .notApplied || access == .rejected { await model.load() }
+        }
         .fileImporter(
             isPresented: $showsImporter,
             allowedContentTypes: [.pdf, .jpeg, .png],
@@ -204,6 +227,19 @@ public struct DastakDeliveryPartnerAccessView: View {
             }
 
             DastakApplicationProgress()
+
+            if let reviewReason = model.reviewReason {
+                HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                    Image(systemName: "exclamationmark.bubble")
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Update requested").font(.headline)
+                        Text(reviewReason).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(MarketplaceSpacing.medium)
+                .marketplaceFlatSurface()
+            }
 
             VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
                 Label("Delivery method", systemImage: "location.north.line")
@@ -267,7 +303,7 @@ public struct DastakDeliveryPartnerAccessView: View {
                     .foregroundStyle(MarketplaceColors.destructive.color)
             }
 
-            Button(model.isSubmitting ? "Submitting..." : "Submit for review") {
+            Button(model.isSubmitting ? "Submitting..." : access == .rejected ? "Resubmit for review" : "Submit for review") {
                 Task {
                     if await model.submit() { await onRefresh() }
                 }

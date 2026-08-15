@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bell, Globe2, LogOut, ShieldCheck, Trash2, UserRound } from "lucide-react";
+import { Bell, LogOut, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
 import { AccountActionDialog } from "./AccountActionDialog";
 import {
@@ -93,7 +93,6 @@ export function RoleAccountView({
       <dl className="role-account-list">
         <div><dt><ShieldCheck size={18} /> Access</dt><dd>{accessLabel}</dd></div>
         <div><dt><Bell size={18} /> Updates</dt><dd>In app</dd></div>
-        <div><dt><Globe2 size={18} /> Language</dt><dd>Browser</dd></div>
       </dl>
     </section>
 

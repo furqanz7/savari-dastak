@@ -14,6 +14,15 @@ export type MerchantApplicationResult = {
   status: "pending";
 };
 
+export type MerchantApplicationSnapshot = {
+  onboardingState: "not_applied" | "pending" | "approved" | "rejected";
+  applicationId: string | null;
+  businessName: string | null;
+  businessAddress: string | null;
+  evidenceObjectPath: string | null;
+  reviewReason: string | null;
+};
+
 export class MerchantApplicationRequestError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) {
     super(message);
@@ -63,6 +72,46 @@ export async function uploadMerchantEvidence(
   return objectPath;
 }
 
+export async function getMerchantApplicationSnapshot(
+  input: AuthenticatedInput,
+  fetcher: Fetcher = fetch,
+): Promise<MerchantApplicationSnapshot> {
+  let response: Response;
+  try {
+    response = await fetcher(`${input.supabaseUrl.replace(/\/$/, "")}/functions/v1/merchant-applications`, {
+      method: "POST",
+      headers: {
+        apikey: input.publishableKey,
+        authorization: `Bearer ${input.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ operation: "selfSnapshot" }),
+    });
+  } catch {
+    throw new MerchantApplicationRequestError(
+      "network_error",
+      "Dastak could not reach the merchant application service.",
+      0,
+    );
+  }
+
+  const payload = await response.json().catch(() => undefined);
+  if (!response.ok) throw responseError(response.status, payload, "The merchant application could not be loaded.");
+  const result = record(payload);
+  const onboardingState = result?.onboardingState;
+  if (!result || !["not_applied", "pending", "approved", "rejected"].includes(String(onboardingState))) {
+    throw new MerchantApplicationRequestError("invalid_response", "Dastak received an invalid merchant application response.", 502);
+  }
+  return {
+    onboardingState: onboardingState as MerchantApplicationSnapshot["onboardingState"],
+    applicationId: nullableUUID(result.applicationId),
+    businessName: nullableText(result.businessName, 120),
+    businessAddress: nullableText(result.businessAddress, 300),
+    evidenceObjectPath: nullableText(result.evidenceObjectPath, 500),
+    reviewReason: nullableText(result.reviewReason, 500),
+  };
+}
+
 export async function submitMerchantApplication(
   input: AuthenticatedInput & {
     businessName: string;
@@ -109,12 +158,7 @@ export async function submitMerchantApplication(
 
   const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
-    const error = record(record(payload)?.error);
-    throw new MerchantApplicationRequestError(
-      text(error?.code, 80) ?? "application_unavailable",
-      text(error?.message, 300) ?? "The merchant application could not be submitted.",
-      response.status,
-    );
+    throw responseError(response.status, payload, "The merchant application could not be submitted.");
   }
 
   const result = record(payload);
@@ -140,6 +184,33 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function text(value: unknown, maximum: number) {
   return typeof value === "string" && value.length > 0 && value.length <= maximum ? value : undefined;
+}
+
+function nullableText(value: unknown, maximum: number) {
+  return value === null || value === undefined ? null : text(value, maximum) ?? invalidSnapshot();
+}
+
+function nullableUUID(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (!uuidPattern.test(String(value))) return invalidSnapshot();
+  return String(value).toLowerCase();
+}
+
+function invalidSnapshot(): never {
+  throw new MerchantApplicationRequestError(
+    "invalid_response",
+    "Dastak received an invalid merchant application response.",
+    502,
+  );
+}
+
+function responseError(status: number, payload: unknown, fallback: string) {
+  const error = record(record(payload)?.error);
+  return new MerchantApplicationRequestError(
+    text(error?.code, 80) ?? "application_unavailable",
+    text(error?.message, 300) ?? fallback,
+    status,
+  );
 }
 
 function validationError(message = "Enter valid business details and choose a business document.") {

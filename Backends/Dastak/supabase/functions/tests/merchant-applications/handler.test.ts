@@ -1,6 +1,7 @@
 import { assert, assertEquals } from "jsr:@std/assert";
 import {
   handleMerchantApplications,
+  type GetMerchantApplicationSnapshot,
   type ListMerchantApplications,
   type ReviewMerchantApplication,
   type ReviewMerchantApplicationInput,
@@ -116,6 +117,31 @@ Deno.test("merchant submission rejects another account evidence path", async () 
   assertEquals((await jsonBody(response)).error.code, "validation_failed");
 });
 
+Deno.test("merchant self snapshot is scoped to the authenticated account", async () => {
+  let recordedAccountId: string | undefined;
+  const snapshot = {
+    onboardingState: "rejected",
+    applicationId,
+    businessName: "Corner Store",
+    businessAddress: "12 Main Road",
+    evidenceObjectPath: `merchant/${accountId}/registration.pdf`,
+    reviewReason: "Document is unclear.",
+  };
+  const response = await handleMerchantApplications(
+    request({ operation: "selfSnapshot", accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }, "Bearer session-token"),
+    dependencies({
+      getMerchantApplicationSnapshot: (authenticatedAccountId) => {
+        recordedAccountId = authenticatedAccountId;
+        return Promise.resolve({ responseBody: snapshot, responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recordedAccountId, accountId);
+  assertEquals(await jsonBody(response), snapshot);
+});
+
 Deno.test("merchant application list denies a non-owner", async () => {
   let listCalls = 0;
   const response = await handleMerchantApplications(
@@ -215,6 +241,7 @@ function dependencies(
     authenticateBearer: AuthenticateBearer;
     isActiveOwner: (accountId: string) => Promise<boolean>;
     submitMerchantApplication: SubmitMerchantApplication;
+    getMerchantApplicationSnapshot: GetMerchantApplicationSnapshot;
     listMerchantApplications: ListMerchantApplications;
     reviewMerchantApplication: ReviewMerchantApplication;
   }> = {},
@@ -224,6 +251,8 @@ function dependencies(
       (() => Promise.resolve({ accountId })),
     isActiveOwner: overrides.isActiveOwner ?? (() => Promise.resolve(false)),
     submitMerchantApplication: overrides.submitMerchantApplication ??
+      (() => Promise.resolve({ responseBody: {}, responseStatus: 200 })),
+    getMerchantApplicationSnapshot: overrides.getMerchantApplicationSnapshot ??
       (() => Promise.resolve({ responseBody: {}, responseStatus: 200 })),
     listMerchantApplications: overrides.listMerchantApplications ??
       (() => Promise.resolve([])),

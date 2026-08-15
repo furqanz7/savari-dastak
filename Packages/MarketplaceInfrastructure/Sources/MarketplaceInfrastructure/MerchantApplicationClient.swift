@@ -7,6 +7,13 @@ public enum MerchantApplicationStatus: String, Codable, Equatable, Sendable {
     case rejected
 }
 
+public enum MerchantOnboardingState: String, Codable, Equatable, Sendable {
+    case notApplied = "not_applied"
+    case pending
+    case approved
+    case rejected
+}
+
 public enum MerchantReviewDecision: String, Codable, Equatable, Sendable {
     case approve
     case reject
@@ -40,6 +47,24 @@ public struct MerchantApplication: Codable, Equatable, Sendable {
     }
 }
 
+public struct MerchantApplicationSnapshot: Codable, Equatable, Sendable {
+    public let onboardingState: MerchantOnboardingState
+    public let applicationID: UUID?
+    public let businessName: String?
+    public let businessAddress: String?
+    public let evidenceObjectPath: String?
+    public let reviewReason: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case onboardingState
+        case applicationID = "applicationId"
+        case businessName
+        case businessAddress
+        case evidenceObjectPath
+        case reviewReason
+    }
+}
+
 public protocol MerchantApplicationClient: Sendable {
     func submit(
         businessName: String,
@@ -47,6 +72,10 @@ public protocol MerchantApplicationClient: Sendable {
         evidenceObjectPath: String,
         idempotencyKey: IdempotencyKey
     ) async throws -> MerchantApplicationResult
+
+    func selfSnapshot(
+        idempotencyKey: IdempotencyKey
+    ) async throws -> MerchantApplicationSnapshot
 
     func listPending(
         idempotencyKey: IdempotencyKey
@@ -94,6 +123,24 @@ public struct SupabaseMerchantApplicationClient: MerchantApplicationClient {
                 businessName: businessName,
                 businessAddress: businessAddress,
                 evidenceObjectPath: evidenceObjectPath,
+                applicationId: nil,
+                decision: nil,
+                reason: nil
+            ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func selfSnapshot(
+        idempotencyKey: IdempotencyKey
+    ) async throws -> MerchantApplicationSnapshot {
+        try await functions.invoke(
+            "merchant-applications",
+            request: Request(
+                operation: "selfSnapshot",
+                businessName: nil,
+                businessAddress: nil,
+                evidenceObjectPath: nil,
                 applicationId: nil,
                 decision: nil,
                 reason: nil

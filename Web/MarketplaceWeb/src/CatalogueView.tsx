@@ -6,7 +6,6 @@ import {
   ChevronRight,
   CircleHelp,
   CreditCard,
-  Globe2,
   Hand,
   ImageOff,
   LocateFixed,
@@ -28,7 +27,7 @@ import {
 } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
 import { AccountActionDialog } from "./AccountActionDialog";
-import { deleteAccount, updateAccountProfile, type AccountProfile } from "./accountProfile";
+import { AccountProfileRequestError, deleteAccount, updateAccountProfile, type AccountProfile } from "./accountProfile";
 import {
   browseCatalogue,
   catalogueImageUrl,
@@ -66,6 +65,7 @@ import type { CustomerSection } from "./customerNavigation";
 import {
   getCustomerAddresses,
   saveDefaultCustomerAddress,
+  CustomerAddressRequestError,
   type CustomerDeliveryAddress,
 } from "./customerAddresses";
 import { CustomerAddressSheet, type CustomerAddressDraft } from "./CustomerAddressSheet";
@@ -240,9 +240,13 @@ export function CatalogueView({
       const requestError = error instanceof CatalogueRequestError
         ? error
         : new CatalogueRequestError("catalogue_unavailable", "The catalogue is unavailable right now.", 0);
+      if (requestError.status === 401) {
+        onSignOut();
+        return;
+      }
       setState({ phase: "error", code: requestError.code, message: requestError.message });
     }
-  }, [auth]);
+  }, [auth, onSignOut]);
 
   useEffect(() => {
     if (restoredDiscovery.current || !selectedLocation) return;
@@ -264,6 +268,10 @@ export function CatalogueView({
       }
     }).catch((error) => {
       if (active) {
+        if (error instanceof CustomerAddressRequestError && error.status === 401) {
+          onSignOut();
+          return;
+        }
         setAddressError(orderMessage(error));
         setAddressEditorOpen(true);
       }
@@ -271,7 +279,7 @@ export function CatalogueView({
       if (active) setAddressLoading(false);
     });
     return () => { active = false; };
-  }, [auth, initialDiscovery.radiusKm, load]);
+  }, [auth, initialDiscovery.radiusKm, load, onSignOut]);
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -396,6 +404,10 @@ export function CatalogueView({
         void load(location, discoveryRadiusKm);
       }
     } catch (error) {
+      if (error instanceof CustomerAddressRequestError && error.status === 401) {
+        onSignOut();
+        return;
+      }
       setAddressError(orderMessage(error));
     } finally {
       setOrderBusy(false);
@@ -410,6 +422,10 @@ export function CatalogueView({
       setAccountProfile(updated);
       setProfileEditorOpen(false);
     } catch (error) {
+      if (error instanceof AccountProfileRequestError && error.status === 401) {
+        onSignOut();
+        return;
+      }
       setProfileError(orderMessage(error));
     } finally {
       setProfileBusy(false);
@@ -423,6 +439,10 @@ export function CatalogueView({
       await deleteAccount(auth);
       onSignOut();
     } catch (error) {
+      if (error instanceof AccountProfileRequestError && error.status === 401) {
+        onSignOut();
+        return;
+      }
       setProfileError(orderMessage(error));
       setShowDeleteConfirmation(false);
     } finally {
@@ -710,7 +730,6 @@ export function CatalogueView({
             <h2 id="account-preferences-title">Preferences</h2>
             <div className="customer-account-rows">
               <div className="customer-account-row"><Bell size={20} /><span><strong>Order updates</strong><small>Shown in Dastak</small></span><b>On</b></div>
-              <div className="customer-account-row"><Globe2 size={20} /><span><strong>Language</strong><small>Uses your browser language</small></span><b>Auto</b></div>
             </div>
           </section>
 
