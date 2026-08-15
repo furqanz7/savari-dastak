@@ -20,6 +20,15 @@ extension View {
     }
 
     @ViewBuilder
+    func dastakNavigationBarVisible() -> some View {
+        #if os(iOS)
+        toolbar(.visible, for: .navigationBar)
+        #else
+        self
+        #endif
+    }
+
+    @ViewBuilder
     func dastakPhoneKeyboard() -> some View {
         #if os(iOS)
         keyboardType(.phonePad)

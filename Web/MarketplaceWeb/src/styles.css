@@ -1599,24 +1599,27 @@ button:disabled { cursor: wait; opacity: .55; }
 .customer-account .account-list div { border-bottom-color: var(--divider); }
 .customer-account .account-list dt { color: var(--text-secondary); }
 .customer-preferences { margin-top: 20px; }
-.role-account { width: min(680px, 100%); padding: 4px 0 28px; }
+.role-account { width: min(680px, 100%); padding: 4px 0 40px; }
 .role-account-heading { max-width: 560px; }
-.role-account-heading h1 { margin: 7px 0 8px; font-family: var(--font-display); font-size: 42px; font-weight: 400; line-height: 1.02; }
+.role-account-heading h1 { margin: 7px 0 8px; font-family: var(--font-display); font-size: 38px; font-weight: 400; line-height: 1.06; }
 .role-account-heading p:last-child { margin: 0; color: var(--text-secondary); line-height: 1.55; }
 .role-profile {
-  width: 100%; min-height: 100px; display: grid; grid-template-columns: 58px minmax(0, 1fr) auto;
-  gap: 16px; align-items: center; margin-top: 22px; padding: 17px; border: 1px solid var(--divider);
+  width: 100%; display: block; margin-top: 22px; padding: 17px; border: 1px solid var(--divider);
   border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); text-align: left;
 }
 .role-profile:hover { border-color: color-mix(in srgb, var(--dastak-accent) 42%, var(--divider)); }
 .role-profile:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
 .role-profile:disabled { cursor: progress; opacity: .65; }
+.role-profile-main { display: grid; grid-template-columns: 58px minmax(0, 1fr) 40px; gap: 16px; align-items: center; }
 .role-profile-avatar { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 50%; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-size: 18px; font-weight: 750; }
 .role-profile-copy { min-width: 0; }
-.role-profile-copy strong, .role-profile-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-profile-copy strong, .role-profile-copy small { display: block; overflow-wrap: anywhere; }
 .role-profile-copy strong { font-size: 18px; }
-.role-profile-copy small { margin-top: 4px; color: var(--text-secondary); }
-.role-profile-edit { min-height: 34px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 17px; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-size: 12px; font-weight: 800; }
+.role-profile-copy small { margin-top: 4px; color: var(--dastak-accent); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+.role-profile-edit { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: var(--dastak-accent); background: var(--dastak-accent-soft); }
+.role-profile-contacts { display: grid; gap: 9px; margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--divider); }
+.role-profile-contacts > span { min-width: 0; display: flex; align-items: flex-start; gap: 9px; color: var(--text-secondary); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.role-profile-contacts svg { flex: 0 0 auto; margin-top: 2px; color: var(--dastak-accent); }
 .role-account-section { margin-top: 32px; }
 .role-account-section > h2 { margin: 0 0 11px; font-size: 20px; }
 .role-account-group, .partner-credentials { overflow: hidden; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
@@ -1635,6 +1638,8 @@ button.role-account-row:hover, a.role-account-row:hover { background: color-mix(
 .role-account-row small { max-width: 480px; margin-top: 4px; color: var(--text-secondary); font-size: 12px; line-height: 1.4; }
 .role-account-row > b { color: var(--text-secondary); font-size: 13px; }
 .role-account-row > svg { color: var(--text-secondary); }
+.role-row-trailing { display: inline-flex; align-items: center; justify-content: flex-end; gap: 9px; color: var(--text-secondary); }
+.role-row-trailing b { font-size: 13px; white-space: nowrap; }
 .role-account-row.destructive strong, .role-account-row.destructive > svg { color: var(--error); }
 .role-account-row.destructive .role-row-icon { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
 .partner-credentials > header { min-height: 78px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 16px; }
@@ -1658,6 +1663,21 @@ button.role-account-row:hover, a.role-account-row:hover { background: color-mix(
 .role-account-error { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--error) 35%, var(--divider)); border-radius: 8px; background: var(--surface-raised); }
 .role-account-error p { margin: 0; color: var(--error); font-size: 13px; }
 .role-account-error button { min-height: 36px; padding: 0 12px; border: 0; border-radius: 18px; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-weight: 750; }
+.role-account-detail-sheet { width: min(540px, 100%); }
+.role-account-detail-sheet > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.role-account-detail-sheet h2 { margin: 5px 0 0; font-family: var(--font-display); font-size: 34px; font-weight: 400; line-height: 1.05; }
+.role-detail-introduction { margin: 16px 0 0; color: var(--text-secondary); line-height: 1.55; }
+.role-detail-status { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: center; margin-top: 22px; padding: 14px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
+.role-detail-status > svg { width: 40px; height: 40px; padding: 10px; border-radius: 50%; color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
+.role-detail-status strong, .role-detail-status small { display: block; }
+.role-detail-status small { margin-top: 3px; color: var(--text-secondary); font-size: 12px; line-height: 1.4; }
+.role-detail-list { overflow: hidden; margin-top: 18px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
+.role-detail-list > div { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; align-items: start; padding: 14px; }
+.role-detail-list > div + div { border-top: 1px solid var(--divider); }
+.role-detail-list strong, .role-detail-list small { display: block; }
+.role-detail-list strong { font-size: 14px; }
+.role-detail-list small { margin-top: 4px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.role-detail-done { width: 100%; justify-content: center; margin-top: 20px; }
 .customer-sign-out {
   min-height: 44px;
   margin-top: 24px;
@@ -1699,7 +1719,8 @@ button.role-account-row:hover, a.role-account-row:hover { background: color-mix(
 @media (max-width: 820px) {
   .app:has(.customer-workspace) { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
   .role-account-heading h1 { font-size: 36px; }
-  .role-profile { grid-template-columns: 52px minmax(0, 1fr) auto; padding: 14px; }
+  .role-profile { padding: 14px; }
+  .role-profile-main { grid-template-columns: 52px minmax(0, 1fr) 40px; }
   .role-profile-avatar { width: 52px; height: 52px; }
   .partner-credentials dl > div { grid-template-columns: minmax(0, 1fr) minmax(120px, auto); }
   .app:has(.customer-workspace) .content { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
@@ -1749,16 +1770,18 @@ button.role-account-row:hover, a.role-account-row:hover { background: color-mix(
 }
 
 @media (max-width: 480px) {
-  .role-account { padding-bottom: 18px; }
+  .role-account { padding-bottom: 112px; }
   .role-account-heading h1 { font-size: 34px; }
-  .role-profile { grid-template-columns: 50px minmax(0, 1fr) auto; gap: 11px; }
+  .role-profile-main { grid-template-columns: 50px minmax(0, 1fr) 38px; gap: 11px; }
   .role-profile-avatar { width: 50px; height: 50px; }
-  .role-profile-edit { min-height: 32px; padding: 0 10px; }
+  .role-profile-edit { width: 38px; height: 38px; }
   .partner-credentials > header { grid-template-columns: 40px minmax(0, 1fr); }
   .partner-credentials > header b { grid-column: 2; justify-self: start; }
   .partner-credentials dl > div { grid-template-columns: 1fr; gap: 4px; padding: 11px 0; }
   .partner-credentials dd { padding-left: 28px; text-align: left; }
   .role-account-row { grid-template-columns: 38px minmax(0, 1fr) auto; gap: 11px; padding: 12px; }
+  .role-row-trailing b { display: none; }
+  .role-account-detail-sheet { max-height: min(760px, 92dvh); overflow-y: auto; }
 }
 
 @media (max-width: 390px) {

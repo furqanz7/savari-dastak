@@ -182,8 +182,9 @@ export function MerchantOrdersView({
           roleName="Merchant"
           supabaseUrl={supabaseUrl}
           publishableKey={publishableKey}
+          onOpenWorkspace={() => setSection("store")}
           onSignOut={onSignOut}
-        ><button className="secondary-button" type="button" onClick={() => setSection("store")}><Store size={18} /> Manage store</button></RoleAccountView>
+        />
       ) : (
       <div className="merchant-orders-shell">
       <header className="merchant-orders-heading">

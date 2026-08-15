@@ -89,6 +89,7 @@ public struct DastakIdentityAccountView: View {
     private let openWorkspace: () -> Void
     @StateObject private var model: DastakIdentityAccountModel
     @Environment(\.marketplaceSignOut) private var signOut
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showsProfileEditor = false
     @State private var accountAlert: AccountAlert?
     @State private var notificationStatus: DastakNotificationPermissionState = .notRequested
@@ -115,7 +116,8 @@ public struct DastakIdentityAccountView: View {
     public var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.xLarge) {
+                LazyVStack(alignment: .leading, spacing: 26) {
+                    rootTitle
                     accountHeading
                     identity
                     if let errorMessage = model.errorMessage {
@@ -123,6 +125,9 @@ public struct DastakIdentityAccountView: View {
                     }
                     if roleName == "Delivery Partner" {
                         partnerCredentials
+                    }
+                    if roleName == "Merchant" {
+                        merchantWorkspace
                     }
                     settings
                     if roleName == "Delivery Partner" {
@@ -132,12 +137,12 @@ public struct DastakIdentityAccountView: View {
                 }
                 .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
                 .padding(.horizontal, MarketplaceSpacing.medium)
-                .padding(.top, MarketplaceSpacing.small)
-                .padding(.bottom, MarketplaceSpacing.xxLarge)
+                .padding(.top, MarketplaceSpacing.compact)
+                .padding(.bottom, 132)
             }
+            .scrollIndicators(.hidden)
             .refreshable { await model.load() }
-            .navigationTitle("Account")
-            .dastakInlineNavigationTitle()
+            .dastakNavigationBarHidden()
             .sheet(isPresented: $showsProfileEditor) {
                 DastakProfileEditor(
                     customer: model.customer,
@@ -156,6 +161,18 @@ public struct DastakIdentityAccountView: View {
             await model.load()
             notificationStatus = await DastakNotificationPreferences.status()
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { notificationStatus = await DastakNotificationPreferences.status() }
+        }
+    }
+
+    private var rootTitle: some View {
+        Text("Account")
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private var accountHeading: some View {
@@ -164,8 +181,8 @@ public struct DastakIdentityAccountView: View {
                 .font(.caption.weight(.bold))
                 .tracking(1.4)
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
-            Text("Your account")
-                .font(MarketplaceTypography.instrumentSerif(fixedSize: 38))
+            Text(roleName == "Merchant" ? "Your store identity" : "Your account")
+                .font(MarketplaceTypography.instrumentSerif(fixedSize: 36))
             Text(accountIntroduction)
                 .font(MarketplaceTypography.supporting)
                 .foregroundStyle(.secondary)
@@ -175,37 +192,81 @@ public struct DastakIdentityAccountView: View {
 
     private var identity: some View {
         Button { showsProfileEditor = true } label: {
-            HStack(spacing: MarketplaceSpacing.medium) {
-                Text(profileInitials)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    .frame(width: 58, height: 58)
-                    .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(model.customer?.displayName ?? (model.isLoading ? "Loading account" : roleName))
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                HStack(spacing: MarketplaceSpacing.medium) {
+                    Text(profileInitials)
                         .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    if let phone = model.customer?.phoneNumber {
-                        Text(phone).font(.subheadline).foregroundStyle(.secondary)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        .frame(width: 58, height: 58)
+                        .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(model.customer?.displayName ?? (model.isLoading ? "Loading account" : roleName))
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                        Text(roleName)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     }
-                    if let email = model.customer?.email, !email.isEmpty {
-                        Text(email).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Spacer(minLength: 8)
+                    Image(systemName: "pencil")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        .frame(width: 40, height: 40)
+                        .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
+                }
+
+                if model.isLoading {
+                    HStack(spacing: MarketplaceSpacing.small) {
+                        ProgressView().tint(MarketplaceColors.dastakAccent.color)
+                        Text("Loading contact details")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Divider()
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                        contactLine(
+                            symbol: "phone",
+                            value: model.customer?.phoneNumber,
+                            fallback: "Add a contact number"
+                        )
+                        contactLine(
+                            symbol: "envelope",
+                            value: model.customer?.email,
+                            fallback: "Sign-in email unavailable"
+                        )
                     }
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "pencil")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    .frame(width: 38, height: 38)
-                    .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
             }
             .padding(MarketplaceSpacing.medium)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(model.isLoading)
         .marketplaceFlatSurface()
         .accessibilityHint("Edit your name and contact number")
+    }
+
+    private func contactLine(symbol: String, value: String?, fallback: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.compact) {
+            Image(systemName: symbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 18)
+            Text(nonEmpty(value) ?? fallback)
+                .font(.subheadline)
+                .foregroundStyle(
+                    nonEmpty(value) == nil
+                        ? Color.secondary.opacity(0.62)
+                        : Color.secondary
+                )
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
     }
 
     @ViewBuilder
@@ -292,14 +353,25 @@ public struct DastakIdentityAccountView: View {
             Text("Preferences").font(MarketplaceTypography.sectionTitle)
             VStack(spacing: 0) {
                 if roleName != "Delivery Partner" {
-                    row(
-                        title: "Access",
-                        value: accessLabel,
-                        symbol: "checkmark.shield"
-                    )
+                    NavigationLink {
+                        DastakRoleAccessView(roleName: roleName, accessLabel: accessLabel)
+                    } label: {
+                        row(
+                            title: "Access and approval",
+                            value: accessLabel,
+                            symbol: "checkmark.shield",
+                            showsDisclosure: true
+                        )
+                    }
+                    .buttonStyle(.plain)
                     Divider()
                 }
-                Button { Task { await manageNotifications() } } label: {
+                NavigationLink {
+                    DastakNotificationSettingsView(
+                        roleName: roleName,
+                        status: $notificationStatus
+                    )
+                } label: {
                     row(
                         title: "Notifications",
                         value: notificationStatus.title,
@@ -319,7 +391,25 @@ public struct DastakIdentityAccountView: View {
                         showsDisclosure: true
                     )
                 }
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
+        }
+    }
+
+    private var merchantWorkspace: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Store workspace").font(MarketplaceTypography.sectionTitle)
+            Button(action: openWorkspace) {
+                row(
+                    title: "Manage your store",
+                    value: "Catalogue, availability and store details",
+                    symbol: "storefront",
+                    showsDisclosure: true
+                )
+            }
+            .buttonStyle(.plain)
             .padding(.horizontal, MarketplaceSpacing.medium)
             .marketplaceFlatSurface()
         }
@@ -478,16 +568,6 @@ public struct DastakIdentityAccountView: View {
         .marketplaceFlatSurface()
     }
 
-    @MainActor
-    private func manageNotifications() async {
-        switch notificationStatus {
-        case .notRequested:
-            notificationStatus = await DastakNotificationPreferences.request()
-        case .enabled, .disabled, .unavailable:
-            DastakNotificationPreferences.openSystemSettings()
-        }
-    }
-
     private var profileSubtitle: String {
         roleName == "Merchant"
             ? "Keep your store contact accurate."
@@ -516,6 +596,13 @@ public struct DastakIdentityAccountView: View {
             .prefix(2)
         let initials = words.compactMap(\.first).map(String.init).joined()
         return initials.isEmpty ? "D" : initials.uppercased()
+    }
+
+    private func nonEmpty(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else { return nil }
+        return value
     }
 
     private var partnerStatusTitle: String {
@@ -660,6 +747,300 @@ public struct DastakIdentityAccountView: View {
             await signOut()
         } catch {
             model.errorMessage = "Your account could not be deleted. Please try again."
+        }
+    }
+}
+
+private struct DastakRoleAccessView: View {
+    let roleName: String
+    let accessLabel: String
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                    Text(roleName.uppercased())
+                        .font(.caption.weight(.bold))
+                        .tracking(1.4)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text("Workspace access")
+                        .font(MarketplaceTypography.instrumentSerif(fixedSize: 36))
+                    Text("Your permissions are approved by Dastak and cannot be changed from profile details.")
+                        .font(MarketplaceTypography.supporting)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: MarketplaceSpacing.medium) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.title3)
+                        .foregroundStyle(MarketplaceColors.success.color)
+                        .frame(width: 48, height: 48)
+                        .background(MarketplaceColors.success.color.opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Access \(accessLabel.lowercased())")
+                            .font(.headline)
+                        Text(accessMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Text(accessLabel.uppercased())
+                        .font(.caption2.weight(.bold))
+                        .tracking(0.7)
+                        .foregroundStyle(MarketplaceColors.success.color)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .background(MarketplaceColors.success.color.opacity(0.12), in: Capsule())
+                }
+                .padding(MarketplaceSpacing.medium)
+                .marketplaceFlatSurface()
+
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                    Text("Included workspace").font(MarketplaceTypography.sectionTitle)
+                    VStack(spacing: 0) {
+                        ForEach(Array(capabilities.enumerated()), id: \.offset) { index, capability in
+                            accessRow(capability)
+                            if index < capabilities.count - 1 {
+                                Divider().padding(.leading, 52)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .marketplaceFlatSurface()
+                }
+
+                Label(
+                    "If your access is incorrect, contact Dastak support. Signing out or editing your profile does not change approval.",
+                    systemImage: "lock.shield"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+            .padding(MarketplaceSpacing.medium)
+            .padding(.bottom, MarketplaceSpacing.xxLarge)
+        }
+        .scrollIndicators(.hidden)
+        .marketplacePage()
+        .navigationTitle("Access")
+        .dastakInlineNavigationTitle()
+        .dastakNavigationBarVisible()
+    }
+
+    private var capabilities: [(symbol: String, title: String, detail: String)] {
+        switch roleName {
+        case "Merchant":
+            [
+                ("list.bullet.clipboard", "Orders", "Receive and manage orders for your approved store."),
+                ("square.grid.2x2", "Catalogue", "Maintain products, prices and availability."),
+                ("storefront", "Store", "Manage trading status and store details.")
+            ]
+        case "Admin":
+            [
+                ("checkmark.shield", "Reviews", "Review marketplace access and submitted evidence."),
+                ("chart.bar", "Operations", "Monitor marketplace activity and exceptions."),
+                ("gearshape", "Controls", "Manage approved operational settings.")
+            ]
+        default:
+            [
+                ("shippingbox", "Deliveries", "Access deliveries assigned to this approved account."),
+                ("indianrupeesign", "Earnings", "Review completed delivery earnings."),
+                ("person.text.rectangle", "Work profile", "View approved identity and work details.")
+            ]
+        }
+    }
+
+    private var accessMessage: String {
+        roleName == "Merchant"
+            ? "This account can operate its approved store."
+            : "This account can use its approved Dastak workspace."
+    }
+
+    private func accessRow(_ capability: (symbol: String, title: String, detail: String)) -> some View {
+        HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+            Image(systemName: capability.symbol)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 36, height: 36)
+                .background(
+                    MarketplaceColors.dastakAccent.color.opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                Text(capability.title).font(.headline)
+                Text(capability.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, MarketplaceSpacing.compact)
+    }
+}
+
+private struct DastakNotificationSettingsView: View {
+    let roleName: String
+    @Binding var status: DastakNotificationPermissionState
+    @State private var isRequesting = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                    Text("NOTIFICATIONS")
+                        .font(.caption.weight(.bold))
+                        .tracking(1.4)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text("Stay ready")
+                        .font(MarketplaceTypography.instrumentSerif(fixedSize: 36))
+                    Text(introduction)
+                        .font(MarketplaceTypography.supporting)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: MarketplaceSpacing.medium) {
+                    Image(systemName: statusSymbol)
+                        .font(.title3)
+                        .foregroundStyle(statusColor)
+                        .frame(width: 48, height: 48)
+                        .background(statusColor.opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(statusTitle).font(.headline)
+                        Text(statusDetail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(MarketplaceSpacing.medium)
+                .marketplaceFlatSurface()
+
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                    Text("You may receive").font(MarketplaceTypography.sectionTitle)
+                    VStack(spacing: 0) {
+                        notificationRow("New orders and urgent changes", symbol: "bell.badge")
+                        Divider().padding(.leading, 52)
+                        notificationRow("Cancellations and pickup updates", symbol: "arrow.triangle.2.circlepath")
+                        Divider().padding(.leading, 52)
+                        notificationRow("Account and approval updates", symbol: "checkmark.shield")
+                    }
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .marketplaceFlatSurface()
+                }
+
+                Button(action: managePermission) {
+                    HStack {
+                        if isRequesting { ProgressView().tint(.black) }
+                        Text(primaryActionTitle)
+                            .font(.headline)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.black)
+                .background(MarketplaceColors.dastakAccent.color)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .disabled(isRequesting || status == .unavailable)
+                .opacity(status == .unavailable ? 0.5 : 1)
+
+                Label(
+                    "Order status remains available inside Dastak even when system notifications are off.",
+                    systemImage: "info.circle"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+            .padding(MarketplaceSpacing.medium)
+            .padding(.bottom, MarketplaceSpacing.xxLarge)
+        }
+        .scrollIndicators(.hidden)
+        .marketplacePage()
+        .navigationTitle("Notifications")
+        .dastakInlineNavigationTitle()
+        .dastakNavigationBarVisible()
+        .task { status = await DastakNotificationPreferences.status() }
+    }
+
+    private var introduction: String {
+        roleName == "Merchant"
+            ? "Receive time-sensitive store and order updates without keeping Dastak open."
+            : "Receive time-sensitive work and account updates without keeping Dastak open."
+    }
+
+    private var statusTitle: String {
+        switch status {
+        case .notRequested: "Notifications are not set up"
+        case .enabled: "Notifications are on"
+        case .disabled: "Notifications are off"
+        case .unavailable: "Notifications are unavailable"
+        }
+    }
+
+    private var statusDetail: String {
+        switch status {
+        case .notRequested: "Allow alerts so important updates reach you promptly."
+        case .enabled: "Dastak can send alerts, sounds and badge updates."
+        case .disabled: "Turn notifications on in iPhone Settings to receive alerts."
+        case .unavailable: "This device does not currently provide notification settings."
+        }
+    }
+
+    private var statusSymbol: String {
+        switch status {
+        case .enabled: "bell.badge.fill"
+        case .disabled: "bell.slash.fill"
+        case .notRequested: "bell.fill"
+        case .unavailable: "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        switch status {
+        case .enabled: MarketplaceColors.success.color
+        case .notRequested: MarketplaceColors.dastakAccent.color
+        case .disabled, .unavailable: MarketplaceColors.warning.color
+        }
+    }
+
+    private var primaryActionTitle: String {
+        switch status {
+        case .notRequested: "Enable notifications"
+        case .enabled, .disabled: "Open iPhone Settings"
+        case .unavailable: "Unavailable on this device"
+        }
+    }
+
+    private func notificationRow(_ title: String, symbol: String) -> some View {
+        HStack(spacing: MarketplaceSpacing.compact) {
+            Image(systemName: symbol)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 36)
+            Text(title).font(.subheadline.weight(.medium))
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 54)
+    }
+
+    private func managePermission() {
+        switch status {
+        case .notRequested:
+            isRequesting = true
+            Task {
+                status = await DastakNotificationPreferences.request()
+                isRequesting = false
+            }
+        case .enabled, .disabled:
+            DastakNotificationPreferences.openSystemSettings()
+        case .unavailable:
+            break
         }
     }
 }

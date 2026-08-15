@@ -475,42 +475,173 @@ struct DastakPrivacyAndDataView: View {
     }
 
     var body: some View {
-        List {
-            Section("Contact") {
-                Text("Your phone number is unverified at launch and is not used to sign in, recover your account, or prove payment.")
-                Text(contactMessage)
-            }
-            if roleName == nil {
-                Section("Location") {
-                    Text("Your browse area is stored separately from your saved delivery address. The delivery address is used only for pricing and fulfilling an order. Current location is requested only when you choose to use it.")
+        ScrollView {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                    Text((roleName ?? "Customer").uppercased())
+                        .font(.caption.weight(.bold))
+                        .tracking(1.4)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text("Your data")
+                        .font(MarketplaceTypography.instrumentSerif(fixedSize: 36))
+                    Text("Clear controls and only the information Dastak needs to operate your account.")
+                        .font(MarketplaceTypography.supporting)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            } else {
-                Section("Role access") {
-                    Text("Dastak uses owner-approved access to decide which workspace this account can open. Profile details cannot grant or change that access.")
+
+                privacySection(title: "Contact", items: contactItems)
+
+                if roleName == nil {
+                    privacySection(title: "Location", items: locationItems)
+                } else {
+                    privacySection(title: "Permissions and access", items: accessItems)
                 }
+
+                privacySection(title: "Records and control", items: controlItems)
+
+                Label(
+                    "Dastak never uses your profile phone number to sign in, recover your account or prove payment.",
+                    systemImage: "lock.shield"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            Section("Control") {
-                Text(controlMessage)
-            }
+            .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+            .padding(MarketplaceSpacing.medium)
+            .padding(.bottom, MarketplaceSpacing.xxLarge)
         }
+        .scrollIndicators(.hidden)
+        .marketplacePage()
         .navigationTitle("Privacy and data")
+        .dastakInlineNavigationTitle()
+        .dastakNavigationBarVisible()
+    }
+
+    private typealias PrivacyItem = (symbol: String, title: String, detail: String)
+
+    private var contactItems: [PrivacyItem] {
+        [
+            (
+                "phone",
+                "Contact number",
+                contactMessage
+            ),
+            (
+                "person.text.rectangle",
+                "Profile identity",
+                "Your name and sign-in email identify this account across approved Dastak services."
+            )
+        ]
+    }
+
+    private var locationItems: [PrivacyItem] {
+        [
+            (
+                "location",
+                "Browse area",
+                "Stored separately from delivery addresses and used to find nearby stores."
+            ),
+            (
+                "house",
+                "Delivery addresses",
+                "Used for pricing and fulfilling an order. Current location is requested only when you choose it."
+            )
+        ]
+    }
+
+    private var accessItems: [PrivacyItem] {
+        [
+            (
+                "checkmark.shield",
+                "Approved workspace",
+                "Server-approved access decides which workspace this account can open. Profile edits cannot grant access."
+            ),
+            (
+                "doc.text.magnifyingglass",
+                "Review evidence",
+                verificationMessage
+            )
+        ]
+    }
+
+    private var controlItems: [PrivacyItem] {
+        [
+            (
+                "clock.arrow.circlepath",
+                "Operational records",
+                "Order and financial records may be retained where required for settlement, fraud prevention or law."
+            ),
+            (
+                "slider.horizontal.3",
+                "Your controls",
+                controlMessage
+            )
+        ]
+    }
+
+    private func privacySection(title: String, items: [PrivacyItem]) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text(title).font(MarketplaceTypography.sectionTitle)
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                        Image(systemName: item.symbol)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                MarketplaceColors.dastakAccent.color.opacity(0.10),
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.title).font(.headline)
+                            Text(item.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, MarketplaceSpacing.compact)
+
+                    if index < items.count - 1 {
+                        Divider().padding(.leading, 52)
+                    }
+                }
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
+        }
     }
 
     private var contactMessage: String {
         switch roleName {
         case "Merchant":
-            "It is shared only when an active order requires store contact."
+            "Shared only when an active order requires contact with your store."
         case "Delivery Partner":
-            "It is shared only during an assigned delivery when customer, merchant, or partner contact is required."
+            "Shared only during an assigned delivery when customer, merchant or partner contact is required."
         default:
-            "It is shared only when an active delivery requires contact."
+            "Shared only when an active delivery requires contact."
+        }
+    }
+
+    private var verificationMessage: String {
+        switch roleName {
+        case "Merchant":
+            "Store and identity evidence is restricted to authorised reviewers and used to approve merchant access."
+        case "Delivery Partner":
+            "Identity and vehicle evidence is restricted to authorised reviewers and used to approve delivery access."
+        default:
+            "Evidence is restricted to authorised reviewers and used only for account approval."
         }
     }
 
     private var controlMessage: String {
         roleName == nil
-            ? "You can edit your profile and delivery address, change permissions in iPhone Settings, sign out, or permanently delete your account from Account."
-            : "You can edit your profile, change permissions in iPhone Settings, sign out, or permanently delete your account from Account."
+            ? "Edit your profile and addresses, manage device permissions, sign out or request permanent account deletion from Account."
+            : "Edit your profile, manage device permissions, sign out or request permanent account deletion from Account."
     }
 }
 

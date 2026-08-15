@@ -6,12 +6,19 @@ import {
   Bike,
   CarFront,
   ChevronRight,
+  ClipboardList,
   Footprints,
   Hand,
+  LayoutGrid,
   LogOut,
+  Mail,
+  Pencil,
+  Phone,
   ShieldCheck,
   Siren,
+  Store,
   Trash2,
+  X,
 } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
 import { AccountActionDialog } from "./AccountActionDialog";
@@ -45,14 +52,15 @@ type Props = {
   onRefreshPartner?: () => void;
   onOpenWorkspace?: () => void;
   onSignOut: () => void;
-  children?: ReactNode;
 };
+
+type AccountDetail = "access" | "notifications" | "privacy";
 
 export function RoleAccountView({
   accessToken, displayName, email, phoneNumber, roleName, accessLabel = "Active",
   supabaseUrl, publishableKey, allowsAccountDeletion = true, deliveryPartner,
   deliveryPartnerLoading = false, deliveryPartnerError, onRefreshPartner,
-  onOpenWorkspace, onSignOut, children,
+  onOpenWorkspace, onSignOut,
 }: Props) {
   const auth = useMemo(
     () => ({ accessToken, supabaseUrl, publishableKey }),
@@ -64,6 +72,7 @@ export function RoleAccountView({
   const [editing, setEditing] = useState(false);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [detail, setDetail] = useState<AccountDetail>();
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -113,18 +122,23 @@ export function RoleAccountView({
   return <section className="role-account">
     <header className="role-account-heading">
       <p className="eyebrow">{roleName}</p>
-      <h1>Your account</h1>
+      <h1>{roleName === "Merchant" ? "Your store identity" : "Your account"}</h1>
       <p>{copy.introduction}</p>
     </header>
 
     <button className="role-profile" type="button" onClick={() => setEditing(true)} disabled={loading}>
-      <span className="role-profile-avatar" aria-hidden="true">{initials(profile.displayName || roleName)}</span>
-      <span className="role-profile-copy">
-        <strong>{loading ? "Loading account" : profile.displayName || `${roleName} account`}</strong>
-        {profile.phoneNumber && <small>{profile.phoneNumber}</small>}
-        {email && <small>{email}</small>}
+      <span className="role-profile-main">
+        <span className="role-profile-avatar" aria-hidden="true">{initials(profile.displayName || roleName)}</span>
+        <span className="role-profile-copy">
+          <strong>{loading ? "Loading account" : profile.displayName || `${roleName} account`}</strong>
+          <small>{roleName}</small>
+        </span>
+        <span className="role-profile-edit" aria-hidden="true"><Pencil size={16} /></span>
       </span>
-      <span className="role-profile-edit">Edit</span>
+      {!loading && <span className="role-profile-contacts">
+        <span><Phone size={15} />{profile.phoneNumber || "Add a contact number"}</span>
+        <span><Mail size={15} />{email || "Sign-in email unavailable"}</span>
+      </span>}
     </button>
 
     {isDeliveryPartner && <PartnerCredentials
@@ -135,18 +149,41 @@ export function RoleAccountView({
       onRetry={onRefreshPartner}
     />}
 
-    {!isDeliveryPartner && <section className="role-account-section" aria-labelledby="role-access-title">
-      <h2 id="role-access-title">Work profile</h2>
+    {roleName === "Merchant" && onOpenWorkspace && <section className="role-account-section" aria-labelledby="role-store-workspace-title">
+      <h2 id="role-store-workspace-title">Store workspace</h2>
       <div className="role-account-group">
-        <AccountRow icon={<ShieldCheck size={19} />} title="Access" detail="Your current Dastak workspace permission" value={accessLabel} />
+        <AccountButtonRow
+          icon={<Store size={19} />}
+          title="Manage your store"
+          detail="Catalogue, availability and store details"
+          onClick={onOpenWorkspace}
+        />
       </div>
     </section>}
 
     <section className="role-account-section" aria-labelledby="role-preferences-title">
       <h2 id="role-preferences-title">Preferences</h2>
       <div className="role-account-group">
-        <AccountRow icon={<Bell size={19} />} title="Notifications" detail="In-app and delivery updates" value="In app" />
-        <AccountRow icon={<Hand size={19} />} title="Privacy and data" detail={copy.privacy} />
+        {!isDeliveryPartner && <AccountButtonRow
+          icon={<ShieldCheck size={19} />}
+          title="Access and approval"
+          detail="Server-approved workspace permissions"
+          value={accessLabel}
+          onClick={() => setDetail("access")}
+        />}
+        <AccountButtonRow
+          icon={<Bell size={19} />}
+          title="Notifications"
+          detail="Order and account updates"
+          value="In app"
+          onClick={() => setDetail("notifications")}
+        />
+        <AccountButtonRow
+          icon={<Hand size={19} />}
+          title="Privacy and data"
+          detail={copy.privacy}
+          onClick={() => setDetail("privacy")}
+        />
       </div>
     </section>
 
@@ -165,8 +202,6 @@ export function RoleAccountView({
         </a>
       </div>
     </section>}
-
-    {children}
 
     <section className="role-account-section" aria-labelledby="role-controls-title">
       <h2 id="role-controls-title">Account controls</h2>
@@ -190,6 +225,12 @@ export function RoleAccountView({
     </div>}
 
     {editing && <AccountProfileSheet profile={profile} busy={busy} error={error} contactMessage={copy.editorPrivacy} onDismiss={() => { setEditing(false); setError(undefined); }} onSave={save} />}
+    {detail && <RoleAccountDetailSheet
+      detail={detail}
+      roleName={roleName}
+      accessLabel={accessLabel}
+      onDismiss={() => setDetail(undefined)}
+    />}
     {confirmingSignOut && <AccountActionDialog
       action="sign-out"
       message="You'll need to sign in again to access this account."
@@ -204,6 +245,81 @@ export function RoleAccountView({
       onDismiss={() => setConfirmingDelete(false)}
     />}
   </section>;
+}
+
+function RoleAccountDetailSheet({ detail, roleName, accessLabel, onDismiss }: {
+  detail: AccountDetail;
+  roleName: string;
+  accessLabel: string;
+  onDismiss: () => void;
+}) {
+  const content = accountDetailContent(detail, roleName, accessLabel);
+
+  useEffect(() => {
+    const dismissOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onDismiss(); };
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => document.removeEventListener("keydown", dismissOnEscape);
+  }, [onDismiss]);
+
+  return <div className="customer-sheet-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onDismiss(); }}>
+    <section className="customer-sheet role-account-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="account-detail-title">
+      <header>
+        <div><p className="eyebrow">{content.eyebrow}</p><h2 id="account-detail-title">{content.title}</h2></div>
+        <button className="icon-button" type="button" onClick={onDismiss} aria-label="Close" title="Close"><X size={19} /></button>
+      </header>
+      <p className="role-detail-introduction">{content.introduction}</p>
+      {content.status && <div className="role-detail-status"><ShieldCheck size={20} /><span><strong>{content.status}</strong><small>{content.statusDetail}</small></span></div>}
+      <div className="role-detail-list">
+        {content.items.map((item) => <div key={item.title}>
+          <span className="role-row-icon">{item.icon}</span>
+          <span><strong>{item.title}</strong><small>{item.detail}</small></span>
+        </div>)}
+      </div>
+      <button type="button" className="primary-button role-detail-done" onClick={onDismiss}>Done</button>
+    </section>
+  </div>;
+}
+
+function accountDetailContent(detail: AccountDetail, roleName: string, accessLabel: string) {
+  if (detail === "access") return {
+    eyebrow: roleName,
+    title: "Workspace access",
+    introduction: "Dastak approves permissions on the server. Editing profile details cannot grant or change access.",
+    status: `Access ${accessLabel.toLowerCase()}`,
+    statusDetail: roleName === "Merchant" ? "This account can operate its approved store." : "This account can use its approved workspace.",
+    items: roleName === "Merchant" ? [
+      { icon: <ClipboardList size={18} />, title: "Orders", detail: "Receive and manage orders for your approved store." },
+      { icon: <LayoutGrid size={18} />, title: "Catalogue", detail: "Maintain products, prices and availability." },
+      { icon: <Store size={18} />, title: "Store", detail: "Manage trading status and store details." },
+    ] : [
+      { icon: <ShieldCheck size={18} />, title: "Approved operations", detail: "Use only the workspace granted to this account." },
+    ],
+  };
+  if (detail === "notifications") return {
+    eyebrow: "Notifications",
+    title: "Stay ready",
+    introduction: roleName === "Merchant"
+      ? "Time-sensitive store and order updates remain visible in your Orders workspace."
+      : "Time-sensitive work and account updates remain visible inside Dastak.",
+    status: "In-app updates active",
+    statusDetail: "Browser push is not requested by this web app.",
+    items: [
+      { icon: <Bell size={18} />, title: "Order updates", detail: "New orders, cancellations and fulfilment changes." },
+      { icon: <ShieldCheck size={18} />, title: "Account updates", detail: "Approval and account status changes." },
+    ],
+  };
+  return {
+    eyebrow: "Privacy",
+    title: "Your data",
+    introduction: "Dastak uses the minimum account information required to operate your approved workspace.",
+    status: undefined,
+    statusDetail: undefined,
+    items: [
+      { icon: <Phone size={18} />, title: "Contact number", detail: roleName === "Merchant" ? "Shared only when an active order requires store contact." : "Shared only when active work requires contact." },
+      { icon: <ShieldCheck size={18} />, title: "Approved access", detail: "Server permissions, not profile fields, determine which workspace opens." },
+      { icon: <Hand size={18} />, title: "Records and control", detail: "Order and financial records may be retained where required; account controls remain available here." },
+    ],
+  };
 }
 
 function PartnerCredentials({
@@ -257,12 +373,18 @@ function PartnerCredentials({
   </section>;
 }
 
-function AccountRow({ icon, title, detail, value }: { icon: ReactNode; title: string; detail: string; value?: string }) {
-  return <div className="role-account-row">
+function AccountButtonRow({ icon, title, detail, value, onClick }: {
+  icon: ReactNode;
+  title: string;
+  detail: string;
+  value?: string;
+  onClick: () => void;
+}) {
+  return <button type="button" className="role-account-row" onClick={onClick}>
     <span className="role-row-icon">{icon}</span>
     <span><strong>{title}</strong><small>{detail}</small></span>
-    {value && <b>{value}</b>}
-  </div>;
+    <span className="role-row-trailing">{value && <b>{value}</b>}<ChevronRight size={18} /></span>
+  </button>;
 }
 
 function CredentialRow({ icon, title, value, detail }: { icon: ReactNode; title: string; value: string; detail?: string }) {
