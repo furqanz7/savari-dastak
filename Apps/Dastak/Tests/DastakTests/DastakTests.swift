@@ -14,6 +14,7 @@ final class DastakTests: XCTestCase {
 
         XCTAssertEqual(model.selectedRoot, .deliveryPartner)
         XCTAssertEqual(model.rootState.activeRoot, .deliveryPartner)
+        XCTAssertTrue(model.hasLoadedPartnerAccess)
         XCTAssertNil(model.errorMessage)
     }
 
@@ -28,6 +29,7 @@ final class DastakTests: XCTestCase {
 
         XCTAssertEqual(model.rootState.activeRoot, .customer)
         XCTAssertEqual(model.rootState.deliveryPartnerAccess, .unavailable)
+        XCTAssertTrue(model.hasLoadedPartnerAccess)
         XCTAssertNotNil(model.errorMessage)
     }
 

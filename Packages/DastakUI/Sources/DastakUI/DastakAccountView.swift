@@ -1,3 +1,4 @@
+import DastakDomain
 import MarketplaceDesignSystem
 import MarketplaceInfrastructure
 import SwiftUI
@@ -24,6 +25,8 @@ struct DastakAccountView: View {
     let location: DastakDeliveryLocation?
     let discoveryRadiusKilometres: Int
     let refreshFailure: DastakCustomerRefreshFailure?
+    let deliveryPartnerAccess: DeliveryPartnerAccess
+    let isDeliveryPartnerAccessLoading: Bool
     let chooseLocation: () -> Void
     let openOrders: () -> Void
     let becomeDeliveryPartner: () -> Void
@@ -150,6 +153,7 @@ struct DastakAccountView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(isDeliveryPartnerAccessLoading)
             .marketplaceFlatSurface()
             .accessibilityHint(location == nil ? "Add a saved delivery address" : "Edit your saved delivery address")
         }
@@ -265,31 +269,116 @@ struct DastakAccountView: View {
 
     private var partnerOpportunity: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Earn with Dastak")
-                .font(MarketplaceTypography.sectionTitle)
+            HStack(alignment: .firstTextBaseline) {
+                Text(partnerPresentation.sectionTitle)
+                    .font(MarketplaceTypography.sectionTitle)
+                Spacer()
+                if let status = partnerPresentation.status {
+                    Text(status)
+                        .font(.caption2.bold())
+                        .foregroundStyle(partnerPresentation.isAttention ? MarketplaceColors.destructive.color : MarketplaceColors.dastakAccent.color)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(
+                            (partnerPresentation.isAttention ? MarketplaceColors.destructive.color : MarketplaceColors.dastakAccent.color).opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        )
+                }
+            }
 
             Button(action: becomeDeliveryPartner) {
                 HStack(spacing: MarketplaceSpacing.compact) {
-                    accountIcon("figure.delivery")
+                    accountIcon("shippingbox.fill")
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Become a Delivery Partner")
+                        Text(partnerPresentation.title)
                             .font(.headline)
                             .foregroundStyle(.primary)
-                        Text("Apply once, then choose when you want to earn.")
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(partnerPresentation.detail)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: MarketplaceSpacing.small)
-                    Image(systemName: "arrow.up.right")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    if isDeliveryPartnerAccessLoading {
+                        ProgressView()
+                            .tint(MarketplaceColors.dastakAccent.color)
+                    } else {
+                        Image(systemName: deliveryPartnerAccess == .notApplied ? "arrow.up.right" : "chevron.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    }
                 }
                 .padding(MarketplaceSpacing.medium)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .marketplaceFlatSurface()
+            .accessibilityLabel(partnerPresentation.title)
+            .accessibilityHint(partnerPresentation.detail)
         }
+    }
+
+    private var partnerPresentation: PartnerPresentation {
+        if isDeliveryPartnerAccessLoading {
+            return PartnerPresentation(
+                sectionTitle: "Delivery Partner",
+                title: "Checking your partner access",
+                detail: "This will only take a moment."
+            )
+        }
+        switch deliveryPartnerAccess {
+        case .approved:
+            return PartnerPresentation(
+                sectionTitle: "Delivery Partner",
+                title: "Switch to Delivery Partner mode",
+                detail: "Open your delivery workspace and continue earning.",
+                status: "APPROVED"
+            )
+        case .pending:
+            return PartnerPresentation(
+                sectionTitle: "Delivery Partner",
+                title: "View your application",
+                detail: "Your application is under review. We will notify you when it is approved.",
+                status: "IN REVIEW"
+            )
+        case .rejected:
+            return PartnerPresentation(
+                sectionTitle: "Delivery Partner",
+                title: "Update your application",
+                detail: "Review the feedback, update your details and submit again.",
+                status: "ACTION NEEDED",
+                isAttention: true
+            )
+        case .suspended:
+            return PartnerPresentation(
+                sectionTitle: "Delivery Partner",
+                title: "Delivery Partner access paused",
+                detail: "Open your partner workspace to review your account status and next steps.",
+                status: "PAUSED",
+                isAttention: true
+            )
+        case .notApplied:
+            return PartnerPresentation(
+                sectionTitle: "Earn with Dastak",
+                title: "Become a Delivery Partner",
+                detail: "Apply once, then choose when you want to earn."
+            )
+        case .unavailable:
+            return PartnerPresentation(
+                sectionTitle: "Delivery Partner",
+                title: "Open Delivery Partner",
+                detail: "Check your application or access your delivery workspace."
+            )
+        }
+    }
+
+    private struct PartnerPresentation {
+        let sectionTitle: String
+        let title: String
+        let detail: String
+        var status: String?
+        var isAttention = false
     }
 
     @MainActor

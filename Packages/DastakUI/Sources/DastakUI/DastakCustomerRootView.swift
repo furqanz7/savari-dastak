@@ -1,4 +1,5 @@
 import Combine
+import DastakDomain
 import Foundation
 import MarketplaceDesignSystem
 import MarketplaceInfrastructure
@@ -31,12 +32,16 @@ public struct DastakCustomerRootView: View {
     @State private var isConfirmingPayment = false
     @Environment(\.marketplaceSignOut) private var signOut
     private let isPreview: Bool
+    private let deliveryPartnerAccess: DeliveryPartnerAccess
+    private let isDeliveryPartnerAccessLoading: Bool
     private let becomeDeliveryPartner: () -> Void
 
     public init(
         functions: any FunctionClient,
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
+        deliveryPartnerAccess: DeliveryPartnerAccess = .unavailable,
+        isDeliveryPartnerAccessLoading: Bool = false,
         becomeDeliveryPartner: @escaping () -> Void = {}
     ) {
         _model = StateObject(
@@ -47,6 +52,8 @@ public struct DastakCustomerRootView: View {
             )
         )
         isPreview = false
+        self.deliveryPartnerAccess = deliveryPartnerAccess
+        self.isDeliveryPartnerAccessLoading = isDeliveryPartnerAccessLoading
         self.becomeDeliveryPartner = becomeDeliveryPartner
     }
 
@@ -54,6 +61,8 @@ public struct DastakCustomerRootView: View {
     public init(preview: Bool) {
         _model = StateObject(wrappedValue: DastakCustomerModel.preview())
         isPreview = preview
+        deliveryPartnerAccess = .notApplied
+        isDeliveryPartnerAccessLoading = false
         becomeDeliveryPartner = {}
     }
     #endif
@@ -94,6 +103,8 @@ public struct DastakCustomerRootView: View {
                     location: model.deliveryAddress,
                     discoveryRadiusKilometres: model.discoveryRadiusKilometres,
                     refreshFailure: model.accountRefreshFailure,
+                    deliveryPartnerAccess: deliveryPartnerAccess,
+                    isDeliveryPartnerAccessLoading: isDeliveryPartnerAccessLoading,
                     chooseLocation: { showingDeliveryAddressEditor = true },
                     openOrders: { selectedTab = .orders },
                     becomeDeliveryPartner: becomeDeliveryPartner,

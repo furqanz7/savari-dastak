@@ -148,6 +148,7 @@ final class DastakRootModel: ObservableObject {
         application: .customerAndPartner
     )
     @Published private(set) var isRefreshing = false
+    @Published private(set) var hasLoadedPartnerAccess = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var selectedRoot: DastakAppRoot = .customer
 
@@ -171,6 +172,7 @@ final class DastakRootModel: ObservableObject {
             rootState.updateDeliveryPartnerAccess(.unavailable)
             errorMessage = "Delivery Partner access could not be refreshed."
         }
+        hasLoadedPartnerAccess = true
     }
 
     func select(_ root: DastakAppRoot) {
@@ -208,6 +210,10 @@ private struct DastakCustomerPartnerRoot: View {
     var body: some View {
         activeRoot
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .task {
+                guard !model.hasLoadedPartnerAccess else { return }
+                await model.refreshPartnerAccess()
+            }
     }
 
     @ViewBuilder
@@ -218,6 +224,8 @@ private struct DastakCustomerPartnerRoot: View {
                 functions: services.functions,
                 checkoutCustomerProvider: services.checkoutCustomer,
                 accountIDProvider: services.accountID,
+                deliveryPartnerAccess: model.rootState.deliveryPartnerAccess,
+                isDeliveryPartnerAccessLoading: !model.hasLoadedPartnerAccess || model.isRefreshing,
                 becomeDeliveryPartner: {
                     Task { await model.openDeliveryPartner() }
                 }

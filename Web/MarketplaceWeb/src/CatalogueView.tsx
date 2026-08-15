@@ -72,6 +72,11 @@ import {
 import { CustomerAddressSheet, type CustomerAddressDraft } from "./CustomerAddressSheet";
 import { CancellationSheet, CustomerRouteMap, CustomerTimeline } from "./CustomerDeliveryDetails";
 import { merchantOrderPresentation, paymentStateLabel } from "./customerLifecycle";
+import { getDeliveryPartnerSnapshot } from "./delivery";
+import {
+  deliveryPartnerAccountPresentation,
+  type DeliveryPartnerAccountState,
+} from "./deliveryPartnerAccount";
 
 type Props = {
   accessToken: string;
@@ -173,6 +178,7 @@ export function CatalogueView({
   const [profileError, setProfileError] = useState<string>();
   const [showSignOutConfirmation, setShowSignOutConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deliveryPartnerAccountState, setDeliveryPartnerAccountState] = useState<DeliveryPartnerAccountState>("loading");
   const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderSnapshot>();
   const [searchQuery, setSearchQuery] = useState("");
   const catalogueRequest = useRef(0);
@@ -184,6 +190,20 @@ export function CatalogueView({
   useEffect(() => {
     saveCustomerDiscovery(selectedLocation, discoveryRadiusKm);
   }, [selectedLocation, discoveryRadiusKm]);
+
+  useEffect(() => {
+    if (section !== "account") return;
+    let active = true;
+    setDeliveryPartnerAccountState("loading");
+    void getDeliveryPartnerSnapshot(auth)
+      .then((snapshot) => {
+        if (active) setDeliveryPartnerAccountState(snapshot.onboardingState);
+      })
+      .catch(() => {
+        if (active) setDeliveryPartnerAccountState("unavailable");
+      });
+    return () => { active = false; };
+  }, [auth, section]);
 
   const refreshOrders = useCallback(async () => {
     if (ordersRefreshInFlight.current) return;
@@ -565,6 +585,7 @@ export function CatalogueView({
     .map((part) => part[0] ?? "")
     .join("")
     .toUpperCase();
+  const partnerAccountPresentation = deliveryPartnerAccountPresentation(deliveryPartnerAccountState);
 
   return (
     <div className={`catalogue-shell customer-section customer-section-${section}`}>
@@ -762,11 +783,30 @@ export function CatalogueView({
           </section>
 
           <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">
-            <h2 id="account-earn-title">Earn with Dastak</h2>
-            <a className="customer-partner-cta" href="https://dastak-delivery.vercel.app" role="button">
+            <div className="customer-account-section-heading">
+              <h2 id="account-earn-title">{partnerAccountPresentation.sectionTitle}</h2>
+              {partnerAccountPresentation.status && (
+                <span className={`customer-partner-status ${partnerAccountPresentation.tone}`}>
+                  {partnerAccountPresentation.status}
+                </span>
+              )}
+            </div>
+            <a
+              className={`customer-partner-cta ${partnerAccountPresentation.tone}`}
+              href="https://dastak-delivery.vercel.app"
+              role="button"
+              aria-busy={deliveryPartnerAccountState === "loading" || undefined}
+            >
               <span className="customer-account-icon"><Bike size={21} /></span>
-              <span><strong>Become a Delivery Partner</strong><small>Apply once, then choose when you want to earn.</small></span>
-              <ArrowUpRight size={19} />
+              <span>
+                <strong>{partnerAccountPresentation.title}</strong>
+                <small>{partnerAccountPresentation.detail}</small>
+              </span>
+              {deliveryPartnerAccountState === "loading"
+                ? <RefreshCw className="customer-partner-loading" size={18} />
+                : deliveryPartnerAccountState === "not_applied"
+                  ? <ArrowUpRight size={19} />
+                  : <ChevronRight size={19} />}
             </a>
           </section>
 
