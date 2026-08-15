@@ -20,6 +20,14 @@ struct DastakDeliveryAddressEditor: View {
             }
         }
 
+        var symbol: String {
+            switch self {
+            case .home: "house.fill"
+            case .work: "briefcase.fill"
+            case .custom: "mappin.and.ellipse"
+            }
+        }
+
         init(savedLabel: String?) {
             switch savedLabel?.lowercased() {
             case "home": self = .home
@@ -44,6 +52,12 @@ struct DastakDeliveryAddressEditor: View {
     @State private var showingLocationPicker = false
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case customLabel
+        case details
+    }
 
     init(
         requiresCompletion: Bool,
@@ -83,7 +97,7 @@ struct DastakDeliveryAddressEditor: View {
                 }
                 .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
                 .padding(.horizontal, MarketplaceSpacing.medium)
-                .padding(.top, MarketplaceSpacing.large)
+                .padding(.top, MarketplaceSpacing.medium)
                 .padding(.bottom, 104)
             }
             .scrollIndicators(.hidden)
@@ -97,10 +111,11 @@ struct DastakDeliveryAddressEditor: View {
                     .background(.bar)
             }
             .toolbar {
-                if !requiresCompletion {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
                     }
+                    .accessibilityLabel("Close")
                 }
 #if os(iOS)
                 ToolbarItemGroup(placement: .keyboard) {
@@ -125,12 +140,42 @@ struct DastakDeliveryAddressEditor: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-            Text(requiresCompletion ? "Add delivery address" : "Delivery address")
-                .font(.largeTitle.bold())
-            Text(requiresCompletion ? "This is where your order will be delivered." : "Update the address for future orders.")
+            Text(requiresCompletion ? "CHECKOUT" : "SAVED ADDRESS")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+
+            Text(requiresCompletion ? "Where should we bring it?" : "Your delivery address")
+                .font(MarketplaceTypography.instrumentSerif(fixedSize: 44))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(requiresCompletion
+                ? "Confirm the pin, then add the detail that helps your delivery partner find the right door."
+                : "Keep a precise address ready for faster checkout.")
                 .font(MarketplaceTypography.supporting)
                 .foregroundStyle(.secondary)
+
+            if requiresCompletion {
+                HStack(spacing: MarketplaceSpacing.small) {
+                    step("1", "Pin location", isComplete: selectedLocation != nil)
+                    Rectangle()
+                        .fill(.quaternary)
+                        .frame(height: 1)
+                    step("2", "Doorstep", isComplete: !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(.top, MarketplaceSpacing.small)
+            }
         }
+    }
+
+    private func step(_ number: String, _ title: String, isComplete: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: isComplete ? "checkmark.circle.fill" : "\(number).circle")
+                .foregroundStyle(isComplete ? MarketplaceColors.dastakAccent.color : .secondary)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isComplete ? .primary : .secondary)
+        }
+        .fixedSize()
     }
 
     private var locationSelector: some View {
@@ -145,7 +190,7 @@ struct DastakDeliveryAddressEditor: View {
                     .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(selectedLocation == nil ? "Choose location" : "Delivery location")
+                    Text(selectedLocation == nil ? "Choose the delivery pin" : "Delivery pin")
                         .font(.headline)
                         .foregroundStyle(.primary)
                     Text(selectedLocation?.address ?? "Search an area, street or landmark")
@@ -170,35 +215,66 @@ struct DastakDeliveryAddressEditor: View {
 
     private var addressTypePicker: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Address type")
+            Text("Save as")
                 .font(.headline)
 
-            Picker("Address type", selection: $addressKind) {
+            HStack(spacing: MarketplaceSpacing.small) {
                 ForEach(AddressKind.allCases) { kind in
-                    Text(kind.title).tag(kind)
+                    Button {
+                        addressKind = kind
+                    } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: kind.symbol)
+                            Text(kind.title)
+                                .font(.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(addressKind == kind ? MarketplaceColors.dastakAccent.color : .secondary)
+                        .frame(maxWidth: .infinity, minHeight: 62)
+                        .background(
+                            addressKind == kind
+                                ? MarketplaceColors.dastakAccentSoft.color
+                                : MarketplaceColors.dastakSurface.color,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(
+                                    addressKind == kind ? MarketplaceColors.dastakAccent.color.opacity(0.7) : Color.secondary.opacity(0.16),
+                                    lineWidth: 1
+                                )
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.segmented)
 
             if addressKind == .custom {
-                TextField("Address label", text: $customLabel)
+                TextField("Label, for example Parents' home", text: $customLabel)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, MarketplaceSpacing.compact)
-                    .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+                    .frame(minHeight: 52)
                     .marketplaceFlatSurface()
+                    .focused($focusedField, equals: .customLabel)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .details }
             }
         }
     }
 
     private var addressDetails: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("House, flat or landmark")
+            Text("Doorstep details")
                 .font(.headline)
-            TextField("For example: 128 Mandi Street, second floor", text: $details, axis: .vertical)
+            Text("House or flat number, floor, building and a nearby landmark.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("For example: Flat 4B, second floor, opposite the post office", text: $details, axis: .vertical)
                 .textFieldStyle(.plain)
-                .lineLimit(2 ... 4)
-                .padding(MarketplaceSpacing.compact)
+                .lineLimit(3 ... 5)
+                .padding(MarketplaceSpacing.medium)
                 .marketplaceFlatSurface()
+                .focused($focusedField, equals: .details)
+                .submitLabel(.done)
         }
     }
 
@@ -210,7 +286,11 @@ struct DastakDeliveryAddressEditor: View {
                 ProgressView()
                     .tint(MarketplaceColors.primaryActionForeground.color)
             } else {
-                Text(requiresCompletion ? "Continue" : "Save address")
+                HStack {
+                    Text(requiresCompletion ? "Save and review order" : "Save address")
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                }
             }
         }
         .buttonStyle(MarketplacePrimaryButtonStyle())
@@ -257,6 +337,7 @@ struct DastakDeliveryAddressEditor: View {
 
     @MainActor
     private func dismissKeyboard() {
+        focusedField = nil
 #if canImport(UIKit)
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder),

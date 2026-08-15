@@ -18,19 +18,12 @@ public struct DastakCustomerRootView: View {
         case account
     }
 
-    private enum DeliveryAddressEditorMode: String, Identifiable {
-        case onboarding
-        case edit
-
-        var id: String { rawValue }
-        var requiresCompletion: Bool { self == .onboarding }
-    }
-
     @StateObject private var model: DastakCustomerModel
     @StateObject private var locationManager = DastakLocationManager()
     @State private var selectedTab: Tab = .home
     @State private var ordersPath: [DastakCustomerDestination] = []
-    @State private var deliveryAddressEditorMode: DeliveryAddressEditorMode?
+    @State private var showingDeliveryAddressEditor = false
+    @State private var showingDiscoveryLocationPicker = false
     @State private var onboardingStep: DastakCustomerOnboardingStep?
     @State private var showingCart = false
     @State private var showingParcel = false
@@ -66,7 +59,7 @@ public struct DastakCustomerRootView: View {
             NavigationStack {
                 DastakHomeView(
                     model: model,
-                    chooseLocation: { deliveryAddressEditorMode = .edit },
+                    chooseLocation: { showingDiscoveryLocationPicker = true },
                     openSearch: { selectedTab = .search },
                     openCart: { showingCart = true },
                     sendParcel: { showingParcel = true }
@@ -78,6 +71,7 @@ public struct DastakCustomerRootView: View {
             NavigationStack {
                 DastakSearchView(
                     model: model,
+                    chooseLocation: { showingDiscoveryLocationPicker = true },
                     openCart: { showingCart = true }
                 )
             }
@@ -93,10 +87,10 @@ public struct DastakCustomerRootView: View {
             NavigationStack {
                 DastakAccountView(
                     customer: model.checkoutCustomer,
-                    location: model.selectedLocation,
+                    location: model.deliveryAddress,
                     discoveryRadiusKilometres: model.discoveryRadiusKilometres,
                     refreshFailure: model.accountRefreshFailure,
-                    chooseLocation: { deliveryAddressEditorMode = .edit },
+                    chooseLocation: { showingDeliveryAddressEditor = true },
                     openOrders: { selectedTab = .orders },
                     retryAccount: { Task { await model.refreshCheckoutCustomer() } },
                     updateProfile: { displayName, phoneNumber in
@@ -129,7 +123,6 @@ public struct DastakCustomerRootView: View {
             guard !isPreview else { return }
             await model.bootstrap()
             onboardingStep = DastakCustomerOnboardingStep.next(
-                hasAddress: model.hasCompleteDeliveryAddress,
                 hasCompleted: model.hasCompletedOnboarding
             )
             if let destination = consumePendingDestination() {
@@ -145,31 +138,31 @@ public struct DastakCustomerRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: dastakDeviceTokenRegistered)) { _ in
             Task { await model.registerDeviceTokenIfAvailable() }
         }
-        .sheet(item: $deliveryAddressEditorMode) { mode in
+        .sheet(isPresented: $showingDeliveryAddressEditor) {
             DastakDeliveryAddressEditor(
-                requiresCompletion: mode.requiresCompletion,
-                initialLocation: model.selectedLocation,
+                requiresCompletion: false,
+                initialLocation: model.deliveryAddress ?? model.selectedLocation,
                 currentLocation: locationManager.location,
                 requestCurrentLocation: locationManager.requestLocation,
                 save: { location in
                     await model.setLocation(location)
                 }
             )
-            .interactiveDismissDisabled(mode.requiresCompletion)
-            .presentationDetents(mode.requiresCompletion ? [.large] : [.medium, .large])
+            .presentationDetents([.large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingDiscoveryLocationPicker) {
+            DastakLocationPicker(
+                title: "Browse near",
+                currentLocation: locationManager.location,
+                useLocation: { location in
+                    Task { await model.selectDiscoveryLocation(location) }
+                },
+                requestCurrentLocation: locationManager.requestLocation
+            )
         }
         .dastakOnboardingCover(item: $onboardingStep) { step in
             switch step {
-            case .address:
-                DastakDeliveryAddressEditor(
-                    requiresCompletion: true,
-                    initialLocation: model.selectedLocation,
-                    currentLocation: locationManager.location,
-                    requestCurrentLocation: locationManager.requestLocation,
-                    save: { location in await model.setLocation(location) },
-                    onSaved: { onboardingStep = .notifications }
-                )
             case .notifications:
                 DastakNotificationOnboardingView(
                     enableNotifications: {

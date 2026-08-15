@@ -4,6 +4,7 @@ import SwiftUI
 
 struct DastakSearchView: View {
     @ObservedObject var model: DastakCustomerModel
+    let chooseLocation: () -> Void
     let openCart: () -> Void
 
     @State private var pendingStoreReplacement: CatalogueProduct?
@@ -13,8 +14,10 @@ struct DastakSearchView: View {
             if model.selectedLocation == nil {
                 DastakEmptyState(
                     symbol: "location",
-                    title: "Location needed",
-                    message: "Choose a delivery location from Home before searching."
+                    title: "Choose where to browse",
+                    message: "Pick an area to search nearby stores and products.",
+                    actionTitle: "Choose an area",
+                    action: chooseLocation
                 )
             } else if model.catalogue == nil, let failure = model.catalogueRefreshFailure {
                 DastakEmptyState(

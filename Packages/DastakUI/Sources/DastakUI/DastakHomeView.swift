@@ -63,7 +63,7 @@ struct DastakHomeView: View {
                         Image(systemName: "location.fill")
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("Deliver to")
+                            Text("Browse near")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Text(model.selectedLocation?.displayAddress ?? "Choose location")
@@ -158,9 +158,9 @@ struct DastakHomeView: View {
         if model.selectedLocation == nil {
             DastakEmptyState(
                 symbol: "location",
-                title: "Choose a delivery location",
-                message: "Dastak will show stores within your selected range.",
-                actionTitle: "Choose location",
+                title: "Choose where to browse",
+                message: "Pick an area to see stores within your selected range. Add a doorstep address only at checkout.",
+                actionTitle: "Choose an area",
                 action: chooseLocation
             )
             .frame(minHeight: 320)

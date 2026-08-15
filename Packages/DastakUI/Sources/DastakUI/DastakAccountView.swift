@@ -109,8 +109,8 @@ struct DastakAccountView: View {
             Text("Delivery")
                 .font(MarketplaceTypography.sectionTitle)
 
-            Button(action: chooseLocation) {
-                VStack(spacing: MarketplaceSpacing.medium) {
+            VStack(spacing: 0) {
+                Button(action: chooseLocation) {
                     HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
                         Image(systemName: "location.fill")
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -129,21 +129,24 @@ struct DastakAccountView: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.tertiary)
                     }
-                    Divider()
-                    HStack {
-                        Label("Delivery range", systemImage: "scope")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(discoveryRadiusKilometres) km")
-                            .font(.subheadline.bold().monospacedDigit())
-                            .foregroundStyle(.primary)
-                    }
+                    .padding(MarketplaceSpacing.medium)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Divider().padding(.leading, 48)
+
+                HStack {
+                    Label("Browse range", systemImage: "scope")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(discoveryRadiusKilometres) km")
+                        .font(.subheadline.bold().monospacedDigit())
+                        .foregroundStyle(.primary)
                 }
                 .padding(MarketplaceSpacing.medium)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .marketplaceFlatSurface()
         }
     }
@@ -306,7 +309,7 @@ struct DastakPrivacyAndDataView: View {
             }
             if roleName == nil {
                 Section("Location") {
-                    Text("Your saved delivery address is used for discovery, pricing and fulfilment. Current location is requested only when you choose to use it.")
+                    Text("Your browse area is stored separately from your saved delivery address. The delivery address is used only for pricing and fulfilling an order. Current location is requested only when you choose to use it.")
                 }
             } else {
                 Section("Role access") {

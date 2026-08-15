@@ -59,7 +59,7 @@ struct DastakCartView: View {
                     await model.prepareQuote()
                 }
             }
-            .onChange(of: model.selectedLocation) { _, _ in
+            .onChange(of: model.deliveryAddress) { _, _ in
                 guard !model.cart.entries.isEmpty else { return }
                 Task { await model.prepareQuote() }
             }
@@ -67,14 +67,13 @@ struct DastakCartView: View {
         .sheet(isPresented: $showingDeliveryAddressEditor) {
             DastakDeliveryAddressEditor(
                 requiresCompletion: true,
-                initialLocation: model.selectedLocation,
+                initialLocation: model.deliveryAddress ?? model.selectedLocation,
                 currentLocation: currentLocation,
                 requestCurrentLocation: requestCurrentLocation,
                 save: { location in
                     await model.setLocation(location)
                 }
             )
-            .interactiveDismissDisabled()
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -150,7 +149,7 @@ struct DastakCartView: View {
                         .foregroundStyle(.primary)
                     Text(
                         model.hasCompleteDeliveryAddress
-                            ? model.selectedLocation?.displayAddress ?? ""
+                            ? model.deliveryAddress?.displayAddress ?? ""
                             : "Add your house, flat or landmark before payment."
                     )
                     .font(.subheadline)

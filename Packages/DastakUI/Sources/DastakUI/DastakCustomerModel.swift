@@ -59,6 +59,7 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var isLoadingParcels = false
     @Published private(set) var isCheckingOut = false
     @Published var selectedLocation: DastakDeliveryLocation?
+    @Published private(set) var deliveryAddress: DastakDeliveryLocation?
     @Published var discoveryRadiusKilometres = 10
     @Published var searchText = ""
     @Published var cart = DastakCart()
@@ -140,7 +141,10 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     var hasCompleteDeliveryAddress: Bool {
-        isDeliveryAddressConfirmed && selectedLocation?.isReadyForDelivery == true
+        guard isDeliveryAddressConfirmed,
+              let deliveryAddress,
+              deliveryAddress.isReadyForDelivery else { return false }
+        return true
     }
 
     var ordersAndParcelsRefreshFailure: DastakCustomerRefreshFailure? {
@@ -215,12 +219,11 @@ final class DastakCustomerModel: ObservableObject {
                 location: location.point,
                 idempotencyKey: makeKey()
             )
-            selectedLocation = response.addresses.first(where: \.isDefault)
+            let savedAddress = response.addresses.first(where: \.isDefault)
                 .map(Self.deliveryLocation) ?? location
+            deliveryAddress = savedAddress
             isDeliveryAddressConfirmed = true
             addressErrorMessage = nil
-            persistDiscoveryPreferences()
-            await refreshCatalogue()
             return true
         } catch {
             addressErrorMessage = message(
@@ -229,6 +232,15 @@ final class DastakCustomerModel: ObservableObject {
             )
             return false
         }
+    }
+
+    func selectDiscoveryLocation(_ location: DastakDeliveryLocation) async {
+        selectedLocation = Self.discoveryLocation(from: location)
+        quote = nil
+        orderPlacementAttempt.reset()
+        cartErrorMessage = nil
+        persistDiscoveryPreferences()
+        await refreshCatalogue()
     }
 
     func setDiscoveryRadius(_ kilometres: Int) async {
@@ -319,7 +331,7 @@ final class DastakCustomerModel: ObservableObject {
     func prepareQuote() async {
         guard hasCompleteDeliveryAddress,
               let storeID = cart.storeID,
-              let selectedLocation,
+              let deliveryAddress,
               !cart.entries.isEmpty else { return }
         isCheckingOut = true
         defer { isCheckingOut = false }
@@ -327,7 +339,7 @@ final class DastakCustomerModel: ObservableObject {
             quote = try await orderClient.quote(
                 storeID: storeID,
                 lines: cart.orderLines,
-                dropoff: selectedLocation.point,
+                dropoff: deliveryAddress.point,
                 idempotencyKey: makeKey()
             )
             orderPlacementAttempt.reset()
@@ -546,7 +558,7 @@ final class DastakCustomerModel: ObservableObject {
         if let accountIDProvider, let accountID = try? await accountIDProvider() {
             preferenceScope = accountID.uuidString.lowercased()
         }
-        selectedLocation = Self.savedDeliveryLocation(scope: preferenceScope)
+        selectedLocation = Self.savedDiscoveryLocation(scope: preferenceScope)
         discoveryRadiusKilometres = Self.savedDiscoveryRadius(scope: preferenceScope)
         hasCompletedOnboarding = UserDefaults.standard.bool(
             forKey: preferenceKey("onboardingCompleted")
@@ -555,13 +567,14 @@ final class DastakCustomerModel: ObservableObject {
         do {
             let response = try await addressClient.snapshot(idempotencyKey: makeKey())
             if let saved = response.addresses.first(where: \.isDefault) {
-                selectedLocation = Self.deliveryLocation(saved)
+                deliveryAddress = Self.deliveryLocation(saved)
+                if selectedLocation == nil {
+                    selectedLocation = Self.discoveryLocation(from: Self.deliveryLocation(saved))
+                }
                 isDeliveryAddressConfirmed = true
                 persistDiscoveryPreferences()
-            } else if let selectedLocation, selectedLocation.isReadyForDelivery {
-                _ = await setLocation(selectedLocation)
             } else {
-                selectedLocation = nil
+                deliveryAddress = nil
                 isDeliveryAddressConfirmed = false
             }
             addressErrorMessage = nil
@@ -578,19 +591,26 @@ final class DastakCustomerModel: ObservableObject {
         defaults.set(discoveryRadiusKilometres, forKey: preferenceKey("discoveryRadiusKilometres"))
         if let selectedLocation,
            let data = try? JSONEncoder().encode(selectedLocation) {
-            defaults.set(data, forKey: preferenceKey("deliveryLocation"))
+            defaults.set(data, forKey: preferenceKey("discoveryLocation"))
         }
+        defaults.removeObject(forKey: preferenceKey("deliveryLocation"))
     }
 
     private func preferenceKey(_ name: String) -> String {
         "dastak.customer.\(preferenceScope).\(name)"
     }
 
-    private static func savedDeliveryLocation(scope: String) -> DastakDeliveryLocation? {
-        guard let data = UserDefaults.standard.data(forKey: "dastak.customer.\(scope).deliveryLocation") else {
+    private static func savedDiscoveryLocation(scope: String) -> DastakDeliveryLocation? {
+        let defaults = UserDefaults.standard
+        let keyPrefix = "dastak.customer.\(scope)."
+        guard let data = defaults.data(forKey: keyPrefix + "discoveryLocation")
+            ?? defaults.data(forKey: keyPrefix + "deliveryLocation") else {
             return nil
         }
-        return try? JSONDecoder().decode(DastakDeliveryLocation.self, from: data)
+        guard let saved = try? JSONDecoder().decode(DastakDeliveryLocation.self, from: data) else {
+            return nil
+        }
+        return discoveryLocation(from: saved)
     }
 
     private static func savedDiscoveryRadius(scope: String) -> Int {
@@ -605,6 +625,12 @@ final class DastakCustomerModel: ObservableObject {
             label: address.label,
             details: address.details
         )
+    }
+
+    nonisolated static func discoveryLocation(
+        from location: DastakDeliveryLocation
+    ) -> DastakDeliveryLocation {
+        DastakDeliveryLocation(address: location.address, point: location.point)
     }
 
     private func canCancel(_ status: ParcelDeliveryStatus) -> Bool {
@@ -672,6 +698,10 @@ extension DastakCustomerModel {
         let functions = DastakPreviewFunctionClient()
         let model = DastakCustomerModel(functions: functions)
         model.selectedLocation = DastakDeliveryLocation(
+            address: "Gandhi Road, Vaniyambadi",
+            point: GeoPoint(latitude: 12.6819, longitude: 78.6201)
+        )
+        model.deliveryAddress = DastakDeliveryLocation(
             address: "Gandhi Road, Vaniyambadi",
             point: GeoPoint(latitude: 12.6819, longitude: 78.6201),
             label: "Home",

@@ -5,22 +5,30 @@ import XCTest
 @testable import DastakUI
 
 final class DastakCustomerLifecycleTests: XCTestCase {
-    func testCustomerOnboardingRequiresAddressBeforeOptionalNotifications() {
+    func testCustomerOnboardingNeverRequiresDeliveryAddress() {
         XCTAssertEqual(
-            DastakCustomerOnboardingStep.next(hasAddress: false, hasCompleted: false),
-            .address
-        )
-        XCTAssertEqual(
-            DastakCustomerOnboardingStep.next(hasAddress: true, hasCompleted: false),
+            DastakCustomerOnboardingStep.next(hasCompleted: false),
             .notifications
         )
         XCTAssertNil(
-            DastakCustomerOnboardingStep.next(hasAddress: true, hasCompleted: true)
+            DastakCustomerOnboardingStep.next(hasCompleted: true)
         )
-        XCTAssertEqual(
-            DastakCustomerOnboardingStep.next(hasAddress: false, hasCompleted: true),
-            .address
+    }
+
+    func testDiscoveryLocationNeverRetainsDoorstepDetails() {
+        let savedAddress = DastakDeliveryLocation(
+            address: "128 Mandi Street",
+            point: GeoPoint(latitude: 12.6819, longitude: 78.6201),
+            label: "Home",
+            details: "Second floor"
         )
+
+        let discovery = DastakCustomerModel.discoveryLocation(from: savedAddress)
+
+        XCTAssertEqual(discovery.address, savedAddress.address)
+        XCTAssertEqual(discovery.point, savedAddress.point)
+        XCTAssertNil(discovery.label)
+        XCTAssertNil(discovery.details)
     }
 
     func testEveryMerchantOrderStateHasOneHumanLabelAndPrimaryAction() {

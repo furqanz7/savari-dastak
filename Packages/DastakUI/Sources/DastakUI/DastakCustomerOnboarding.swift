@@ -3,13 +3,11 @@ import MarketplaceDesignSystem
 import SwiftUI
 
 enum DastakCustomerOnboardingStep: String, Identifiable {
-    case address
     case notifications
 
     var id: String { rawValue }
 
-    static func next(hasAddress: Bool, hasCompleted: Bool) -> Self? {
-        guard hasAddress else { return .address }
+    static func next(hasCompleted: Bool) -> Self? {
         return hasCompleted ? nil : .notifications
     }
 }

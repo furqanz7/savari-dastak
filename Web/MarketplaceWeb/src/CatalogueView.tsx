@@ -261,10 +261,8 @@ export function CatalogueView({
       const saved = snapshot.addresses.find((address) => address.isDefault) ?? snapshot.addresses[0];
       setDeliveryAddress(saved);
       setAddressError(undefined);
-      if (saved) {
+      if (saved && !initialDiscovery.location) {
         void load({ label: saved.displayAddress, coordinates: saved.location }, initialDiscovery.radiusKm);
-      } else {
-        setAddressEditorOpen(true);
       }
     }).catch((error) => {
       if (active) {
@@ -273,13 +271,12 @@ export function CatalogueView({
           return;
         }
         setAddressError(orderMessage(error));
-        setAddressEditorOpen(true);
       }
     }).finally(() => {
       if (active) setAddressLoading(false);
     });
     return () => { active = false; };
-  }, [auth, initialDiscovery.radiusKm, load, onSignOut]);
+  }, [auth, initialDiscovery.location, initialDiscovery.radiusKm, load, onSignOut]);
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -368,12 +365,15 @@ export function CatalogueView({
 
   const reviewOrder = () => {
     if (!selectedLocation || !cartStoreId || cartEntries.length === 0 || addressLoading) return;
-    if (!deliveryAddress || !sameLocation(deliveryAddress.location, selectedLocation.coordinates)) {
+    if (!deliveryAddress) {
       setReviewAfterAddress(true);
       setAddressEditorOpen(true);
       return;
     }
-    void requestOrderQuote(selectedLocation);
+    void requestOrderQuote({
+      label: deliveryAddress.displayAddress,
+      coordinates: deliveryAddress.location,
+    });
   };
 
   const saveAddress = async (draft: CustomerAddressDraft) => {
@@ -394,14 +394,11 @@ export function CatalogueView({
       addressSaveRequest.current = undefined;
       setDeliveryAddress(saved);
       const location = { label: saved.displayAddress, coordinates: saved.location };
-      setSelectedLocation(location);
       setAddressEditorOpen(false);
       setAddressLoading(false);
       if (reviewAfterAddress) {
         setReviewAfterAddress(false);
         await requestOrderQuote(location);
-      } else {
-        void load(location, discoveryRadiusKm);
       }
     } catch (error) {
       if (error instanceof CustomerAddressRequestError && error.status === 401) {
@@ -597,7 +594,13 @@ export function CatalogueView({
               onReview={reviewOrder}
             />
           )}
-          {quote && <CheckoutSection quote={quote} address={deliveryAddress} busy={orderBusy} onPlaceOrder={placeOrder} />}
+          {quote && <CheckoutSection
+            quote={quote}
+            address={deliveryAddress}
+            busy={orderBusy}
+            onChangeAddress={() => { setReviewAfterAddress(true); setAddressEditorOpen(true); }}
+            onPlaceOrder={placeOrder}
+          />}
           {!ordersLoading && hasActiveOrders && (
             <div className="customer-active-order">
               <OrdersSection
@@ -658,7 +661,13 @@ export function CatalogueView({
               onReview={reviewOrder}
             />
           )}
-          {quote && <CheckoutSection quote={quote} address={deliveryAddress} busy={orderBusy} onPlaceOrder={placeOrder} />}
+          {quote && <CheckoutSection
+            quote={quote}
+            address={deliveryAddress}
+            busy={orderBusy}
+            onChangeAddress={() => { setReviewAfterAddress(true); setAddressEditorOpen(true); }}
+            onPlaceOrder={placeOrder}
+          />}
           <CatalogueContent
             state={state}
             stores={visibleStores}
@@ -712,14 +721,14 @@ export function CatalogueView({
           <section className="customer-account-group" aria-labelledby="account-delivery-title">
             <h2 id="account-delivery-title">Delivery</h2>
             <div className="customer-account-rows">
-              <button className="customer-account-row" type="button" onClick={() => setAddressEditorOpen(true)} disabled={addressLoading}>
+              <button className="customer-account-row" type="button" onClick={() => { setReviewAfterAddress(false); setAddressEditorOpen(true); }} disabled={addressLoading}>
                 <MapPin size={20} />
                 <span><strong>Delivery address</strong><small>{deliveryAddress?.displayAddress ?? "Add a house, flat or landmark"}</small></span>
                 <ChevronRight size={18} />
               </button>
               <div className="customer-account-row">
                 <LocateFixed size={20} />
-                <span><strong>Discovery range</strong><small>Stores shown around your delivery location</small></span>
+                <span><strong>Browse range</strong><small>Stores shown around your browse area</small></span>
                 <b>{discoveryRadiusKm} km</b>
               </div>
             </div>
@@ -749,7 +758,7 @@ export function CatalogueView({
             <h2 id="account-privacy-title">Privacy and account</h2>
             <div className="customer-account-rows">
               <div className="customer-account-row customer-privacy-row">
-                <Hand size={20} /><span><strong>Privacy and data</strong><small>Your unverified number is shared only for an active delivery. Your saved address is used for discovery, pricing and fulfilment.</small></span>
+                <Hand size={20} /><span><strong>Privacy and data</strong><small>Your unverified number is shared only for an active delivery. Your browse area is separate; the saved address is used to price and fulfil an order.</small></span>
               </div>
               <button className="customer-account-row" type="button" onClick={() => setShowSignOutConfirmation(true)}>
                 <LogOut size={20} /><span><strong>Sign out</strong><small>Keep this account and end this session</small></span><ChevronRight size={18} />
@@ -764,11 +773,15 @@ export function CatalogueView({
       )}
       {addressEditorOpen && <CustomerAddressSheet
         address={deliveryAddress}
-        initialPlace={selectedLocation ? { address: selectedLocation.label, latitude: selectedLocation.coordinates.latitude, longitude: selectedLocation.coordinates.longitude } : undefined}
+        initialPlace={reviewAfterAddress && selectedLocation ? {
+          address: selectedLocation.label,
+          latitude: selectedLocation.coordinates.latitude,
+          longitude: selectedLocation.coordinates.longitude,
+        } : undefined}
         busy={orderBusy}
         error={addressError}
-        required={!addressLoading && !deliveryAddress}
-        onDismiss={() => { if (!deliveryAddress) return; addressSaveRequest.current = undefined; setAddressEditorOpen(false); setReviewAfterAddress(false); setAddressError(undefined); }}
+        context={reviewAfterAddress ? "checkout" : "account"}
+        onDismiss={() => { addressSaveRequest.current = undefined; setAddressEditorOpen(false); setReviewAfterAddress(false); setAddressError(undefined); }}
         onSave={saveAddress}
       />}
       {profileEditorOpen && <AccountProfileSheet
@@ -847,8 +860,8 @@ function LocationControls({ selectedLocation, discoveryRadiusKm, loading, compac
   } : undefined;
 
   return (
-    <section className={`customer-location-band ${compact ? "compact" : ""}`} aria-label="Delivery area">
-      <LocationSearchField label="Delivery location" value={place} onChange={onChooseLocation} disabled={loading} />
+    <section className={`customer-location-band ${compact ? "compact" : ""}`} aria-label="Browse area">
+      <LocationSearchField label="Browse near" value={place} onChange={onChooseLocation} disabled={loading} />
       <button type="button" className="location-current-button" onClick={onUseCurrentLocation} disabled={loading} aria-label="Use current location" title="Use current location">
         <LocateFixed size={18} />
       </button>
@@ -880,8 +893,8 @@ function CatalogueContent({ state, stores, selectedLocation, supabaseUrl, cartSt
     <section className="customer-catalogue">
       {state.phase === "ready" && state.stores.length > 0 && <h2>{heading}</h2>}
       {state.phase === "idle" && (
-        <CatalogueMessage icon={<MapPin size={25} />} title="Choose a delivery location">
-          Search any city where Dastak has an active service area.
+        <CatalogueMessage icon={<MapPin size={25} />} title="Choose where to browse">
+          Pick an area in any city where Dastak has an active service zone. Your doorstep address is only needed at checkout.
         </CatalogueMessage>
       )}
       {state.phase === "loading" && <div className="catalogue-loading" role="status"><span /> Finding nearby stores</div>}
@@ -1051,10 +1064,11 @@ function CartSummary({ itemCount, subtotal, storeName, busy, onClear, onReview }
   );
 }
 
-function CheckoutSection({ quote, address, busy, onPlaceOrder }: {
+function CheckoutSection({ quote, address, busy, onChangeAddress, onPlaceOrder }: {
   quote: MerchantOrderQuote;
   address?: CustomerDeliveryAddress;
   busy: boolean;
+  onChangeAddress: () => void;
   onPlaceOrder: () => void;
 }) {
   return (
@@ -1073,7 +1087,11 @@ function CheckoutSection({ quote, address, busy, onPlaceOrder }: {
         </div>
         <div className="checkout-grand-total"><dt>Total</dt><dd>{formatPrice(quote.total.paise)}</dd></div>
       </dl>
-      {address && <div className="checkout-address"><MapPin size={18} /><span><small>Deliver to {address.label}</small><strong>{address.displayAddress}</strong></span></div>}
+      {address && <div className="checkout-address">
+        <MapPin size={18} />
+        <span><small>Deliver to {address.label}</small><strong>{address.displayAddress}</strong></span>
+        <button type="button" onClick={onChangeAddress} disabled={busy}>Change</button>
+      </div>}
       <button className="primary-button checkout-button" type="button" onClick={onPlaceOrder} disabled={busy}>
         <CreditCard size={17} /> Pay {formatPrice(quote.total.paise)}
       </button>
@@ -1174,10 +1192,6 @@ function orderMessage(error: unknown) {
   return error instanceof Error
     ? error.message
     : "The order request is unavailable right now.";
-}
-
-function sameLocation(left: CatalogueLocation, right: CatalogueLocation) {
-  return Math.abs(left.latitude - right.latitude) < .00001 && Math.abs(left.longitude - right.longitude) < .00001;
 }
 
 function filterCatalogueStores(stores: GroupedCatalogueStore[], query: string) {
