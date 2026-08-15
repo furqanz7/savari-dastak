@@ -1,6 +1,7 @@
 import DastakDomain
 import DastakLaunchUI
 import DastakUI
+import Foundation
 import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
@@ -122,6 +123,36 @@ protocol DeliveryPartnerAccessProviding: Sendable {
     func currentAccess() async throws -> DeliveryPartnerAccess
 }
 
+@MainActor
+protocol DastakRootSelectionStoring {
+    func load() -> DastakAppRoot?
+    func save(_ root: DastakAppRoot)
+}
+
+@MainActor
+private struct UserDefaultsDastakRootSelectionStore: DastakRootSelectionStoring {
+    private let defaults: UserDefaults
+    private let key = "dastak.last-active-root.v1"
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func load() -> DastakAppRoot? {
+        guard let rawValue = defaults.string(forKey: key),
+              let root = DastakAppRoot(rawValue: rawValue),
+              root == .customer || root == .deliveryPartner else {
+            return nil
+        }
+        return root
+    }
+
+    func save(_ root: DastakAppRoot) {
+        guard root == .customer || root == .deliveryPartner else { return }
+        defaults.set(root.rawValue, forKey: key)
+    }
+}
+
 private struct LiveDeliveryPartnerAccessProvider: DeliveryPartnerAccessProviding {
     let client: any DeliveryPartnerClient
 
@@ -150,12 +181,25 @@ final class DastakRootModel: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var hasLoadedPartnerAccess = false
     @Published private(set) var errorMessage: String?
-    @Published private(set) var selectedRoot: DastakAppRoot = .customer
+    @Published private(set) var selectedRoot: DastakAppRoot
 
     private let accessProvider: any DeliveryPartnerAccessProviding
+    private let selectionStore: any DastakRootSelectionStoring
 
-    init(accessProvider: any DeliveryPartnerAccessProviding) {
+    convenience init(accessProvider: any DeliveryPartnerAccessProviding) {
+        self.init(
+            accessProvider: accessProvider,
+            selectionStore: UserDefaultsDastakRootSelectionStore()
+        )
+    }
+
+    init(
+        accessProvider: any DeliveryPartnerAccessProviding,
+        selectionStore: any DastakRootSelectionStoring
+    ) {
         self.accessProvider = accessProvider
+        self.selectionStore = selectionStore
+        selectedRoot = selectionStore.load() ?? .customer
     }
 
     func refreshPartnerAccess() async {
@@ -164,9 +208,11 @@ final class DastakRootModel: ObservableObject {
         defer { isRefreshing = false }
 
         do {
-            rootState.updateDeliveryPartnerAccess(
-                try await accessProvider.currentAccess()
-            )
+            let access = try await accessProvider.currentAccess()
+            rootState.updateDeliveryPartnerAccess(access)
+            if selectedRoot == .deliveryPartner, access == .approved {
+                try? rootState.select(.deliveryPartner)
+            }
             errorMessage = nil
         } catch {
             rootState.updateDeliveryPartnerAccess(.unavailable)
@@ -181,6 +227,7 @@ final class DastakRootModel: ObservableObject {
             return
         }
         selectedRoot = root
+        selectionStore.save(root)
         if root == .customer || rootState.deliveryPartnerAccess == .approved {
             try? rootState.select(root)
         }

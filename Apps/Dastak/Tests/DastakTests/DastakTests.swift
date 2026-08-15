@@ -6,7 +6,8 @@ import XCTest
 final class DastakTests: XCTestCase {
     func testApprovedPartnerAccessEnablesModeSwitch() async {
         let model = DastakRootModel(
-            accessProvider: StubPartnerAccessProvider(result: .success(.approved))
+            accessProvider: StubPartnerAccessProvider(result: .success(.approved)),
+            selectionStore: StubRootSelectionStore()
         )
 
         await model.refreshPartnerAccess()
@@ -22,7 +23,8 @@ final class DastakTests: XCTestCase {
         let model = DastakRootModel(
             accessProvider: StubPartnerAccessProvider(
                 result: .failure(TestAccessError.unavailable)
-            )
+            ),
+            selectionStore: StubRootSelectionStore()
         )
 
         await model.refreshPartnerAccess()
@@ -35,13 +37,70 @@ final class DastakTests: XCTestCase {
 
     func testUnapprovedAccountCanOpenPartnerApplicationStatus() {
         let model = DastakRootModel(
-            accessProvider: StubPartnerAccessProvider(result: .success(.pending))
+            accessProvider: StubPartnerAccessProvider(result: .success(.pending)),
+            selectionStore: StubRootSelectionStore()
         )
 
         model.select(.deliveryPartner)
 
         XCTAssertEqual(model.selectedRoot, .deliveryPartner)
         XCTAssertEqual(model.rootState.activeRoot, .customer)
+    }
+
+    func testRestoresDeliveryPartnerModeAfterRelaunch() async {
+        let store = StubRootSelectionStore(storedRoot: .deliveryPartner)
+        let model = DastakRootModel(
+            accessProvider: StubPartnerAccessProvider(result: .success(.approved)),
+            selectionStore: store
+        )
+
+        XCTAssertEqual(model.selectedRoot, .deliveryPartner)
+
+        await model.refreshPartnerAccess()
+
+        XCTAssertEqual(model.selectedRoot, .deliveryPartner)
+        XCTAssertEqual(model.rootState.activeRoot, .deliveryPartner)
+    }
+
+    func testRestoresCustomerModeAfterRelaunch() {
+        let model = DastakRootModel(
+            accessProvider: StubPartnerAccessProvider(result: .success(.approved)),
+            selectionStore: StubRootSelectionStore(storedRoot: .customer)
+        )
+
+        XCTAssertEqual(model.selectedRoot, .customer)
+        XCTAssertEqual(model.rootState.activeRoot, .customer)
+    }
+
+    func testModeSwitchesArePersistedImmediately() {
+        let store = StubRootSelectionStore()
+        let model = DastakRootModel(
+            accessProvider: StubPartnerAccessProvider(result: .success(.approved)),
+            selectionStore: store
+        )
+
+        model.select(.deliveryPartner)
+        XCTAssertEqual(store.storedRoot, .deliveryPartner)
+
+        model.select(.customer)
+        XCTAssertEqual(store.storedRoot, .customer)
+    }
+}
+
+@MainActor
+private final class StubRootSelectionStore: DastakRootSelectionStoring {
+    var storedRoot: DastakAppRoot?
+
+    init(storedRoot: DastakAppRoot? = nil) {
+        self.storedRoot = storedRoot
+    }
+
+    func load() -> DastakAppRoot? {
+        storedRoot
+    }
+
+    func save(_ root: DastakAppRoot) {
+        storedRoot = root
     }
 }
 
