@@ -1,3 +1,4 @@
+import MapKit
 import MarketplaceDesignSystem
 import SwiftUI
 #if canImport(UIKit)
@@ -48,7 +49,8 @@ struct DastakDeliveryAddressEditor: View {
     @State private var selectedLocation: DastakDeliveryLocation?
     @State private var addressKind: AddressKind
     @State private var customLabel: String
-    @State private var details: String
+    @State private var building: String
+    @State private var landmark: String
     @State private var showingLocationPicker = false
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -56,7 +58,8 @@ struct DastakDeliveryAddressEditor: View {
 
     private enum Field {
         case customLabel
-        case details
+        case building
+        case landmark
     }
 
     init(
@@ -75,16 +78,18 @@ struct DastakDeliveryAddressEditor: View {
         self.onSaved = onSaved
 
         let kind = AddressKind(savedLabel: initialLocation?.label)
+        let savedDetails = Self.splitDetails(initialLocation?.details)
         _selectedLocation = State(initialValue: initialLocation)
         _addressKind = State(initialValue: kind)
         _customLabel = State(initialValue: kind == .custom ? initialLocation?.label ?? "" : "")
-        _details = State(initialValue: initialLocation?.details ?? "")
+        _building = State(initialValue: savedDetails.building)
+        _landmark = State(initialValue: savedDetails.landmark)
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
                     header
                     locationSelector
                     addressTypePicker
@@ -129,7 +134,7 @@ struct DastakDeliveryAddressEditor: View {
         .sheet(isPresented: $showingLocationPicker) {
             DastakLocationPicker(
                 title: "Choose location",
-                currentLocation: currentLocation,
+                currentLocation: selectedLocation ?? currentLocation,
                 useLocation: { location in
                     selectedLocation = location
                 },
@@ -145,11 +150,11 @@ struct DastakDeliveryAddressEditor: View {
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
 
             Text(requiresCompletion ? "Where should we bring it?" : "Your delivery address")
-                .font(MarketplaceTypography.instrumentSerif(fixedSize: 44))
+                .font(MarketplaceTypography.instrumentSerif(fixedSize: 40))
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(requiresCompletion
-                ? "Confirm the pin, then add the detail that helps your delivery partner find the right door."
+                ? "Confirm the pin, then add the details that help us find the right door."
                 : "Keep a precise address ready for faster checkout.")
                 .font(MarketplaceTypography.supporting)
                 .foregroundStyle(.secondary)
@@ -160,7 +165,7 @@ struct DastakDeliveryAddressEditor: View {
                     Rectangle()
                         .fill(.quaternary)
                         .frame(height: 1)
-                    step("2", "Doorstep", isComplete: !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    step("2", "Doorstep", isComplete: !building.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 .padding(.top, MarketplaceSpacing.small)
             }
@@ -179,37 +184,86 @@ struct DastakDeliveryAddressEditor: View {
     }
 
     private var locationSelector: some View {
-        Button {
-            showingLocationPicker = true
-        } label: {
-            HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
-                Image(systemName: "location.fill")
-                    .font(.title3)
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    .frame(width: 34, height: 34)
-                    .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        Group {
+            if let selectedLocation {
+                VStack(spacing: 0) {
+                    Map(
+                        initialPosition: Self.camera(for: selectedLocation),
+                        interactionModes: []
+                    ) {
+                        Marker(
+                            "Delivery pin",
+                            coordinate: CLLocationCoordinate2D(
+                                latitude: selectedLocation.point.latitude,
+                                longitude: selectedLocation.point.longitude
+                            )
+                        )
+                        .tint(MarketplaceColors.dastakAccent.color)
+                    }
+                    .mapStyle(.standard(elevation: .flat))
+                    .frame(height: 154)
+                    .allowsHitTesting(false)
+                    .id("\(selectedLocation.point.latitude)-\(selectedLocation.point.longitude)")
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(selectedLocation == nil ? "Choose the delivery pin" : "Delivery pin")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Text(selectedLocation?.address ?? "Search an area, street or landmark")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    Button {
+                        showingLocationPicker = true
+                    } label: {
+                        HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Delivery pin")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text(selectedLocation.address)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: MarketplaceSpacing.small)
+                            Text("Change")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        }
+                        .padding(MarketplaceSpacing.compact)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-
-                Spacer(minLength: MarketplaceSpacing.small)
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 6)
+                .marketplaceFlatSurface()
+            } else {
+                Button {
+                    showingLocationPicker = true
+                } label: {
+                    HStack(spacing: MarketplaceSpacing.compact) {
+                        Image(systemName: "map.fill")
+                            .font(.title2)
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            .frame(width: 46, height: 46)
+                            .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Choose the delivery pin")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Text("Search any area, street, building or landmark")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
+                        }
+                        Spacer(minLength: MarketplaceSpacing.small)
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(MarketplaceSpacing.medium)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .marketplaceFlatSurface()
             }
-            .padding(MarketplaceSpacing.medium)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .marketplaceFlatSurface()
         .accessibilityHint("Search for or select your current delivery location")
     }
 
@@ -229,7 +283,7 @@ struct DastakDeliveryAddressEditor: View {
                                 .font(.caption.weight(.semibold))
                         }
                         .foregroundStyle(addressKind == kind ? MarketplaceColors.dastakAccent.color : .secondary)
-                        .frame(maxWidth: .infinity, minHeight: 62)
+                        .frame(maxWidth: .infinity, minHeight: 54)
                         .background(
                             addressKind == kind
                                 ? MarketplaceColors.dastakAccentSoft.color
@@ -256,7 +310,7 @@ struct DastakDeliveryAddressEditor: View {
                     .marketplaceFlatSurface()
                     .focused($focusedField, equals: .customLabel)
                     .submitLabel(.next)
-                    .onSubmit { focusedField = .details }
+                    .onSubmit { focusedField = .building }
             }
         }
     }
@@ -265,16 +319,29 @@ struct DastakDeliveryAddressEditor: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             Text("Doorstep details")
                 .font(.headline)
-            Text("House or flat number, floor, building and a nearby landmark.")
+            Text("Tell us exactly where to stop. Only the first field is required.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            TextField("For example: Flat 4B, second floor, opposite the post office", text: $details, axis: .vertical)
+
+            VStack(spacing: 0) {
+                TextField("House, flat or building", text: $building)
+                    .textContentType(.fullStreetAddress)
+                    .focused($focusedField, equals: .building)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .landmark }
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .frame(minHeight: 52)
+
+                Divider().padding(.leading, MarketplaceSpacing.medium)
+
+                TextField("Landmark or delivery note (optional)", text: $landmark, axis: .vertical)
+                    .lineLimit(2 ... 4)
+                    .focused($focusedField, equals: .landmark)
+                    .submitLabel(.done)
+                    .padding(MarketplaceSpacing.medium)
+            }
                 .textFieldStyle(.plain)
-                .lineLimit(3 ... 5)
-                .padding(MarketplaceSpacing.medium)
                 .marketplaceFlatSurface()
-                .focused($focusedField, equals: .details)
-                .submitLabel(.done)
         }
     }
 
@@ -299,7 +366,7 @@ struct DastakDeliveryAddressEditor: View {
 
     private var canSave: Bool {
         guard selectedLocation != nil,
-              !details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+              !building.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         return addressKind != .custom || !customLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -319,7 +386,7 @@ struct DastakDeliveryAddressEditor: View {
                 address: selectedLocation.address,
                 point: selectedLocation.point,
                 label: resolvedLabel,
-                details: details
+                details: resolvedDetails
             )
         )
         isSaving = false
@@ -346,5 +413,33 @@ struct DastakDeliveryAddressEditor: View {
             for: nil
         )
 #endif
+    }
+
+    private var resolvedDetails: String {
+        [building, landmark]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " • ")
+    }
+
+    private static func splitDetails(_ details: String?) -> (building: String, landmark: String) {
+        guard let details else { return ("", "") }
+        let parts = details.components(separatedBy: " • ")
+        return (
+            parts.first ?? "",
+            parts.dropFirst().joined(separator: " • ")
+        )
+    }
+
+    private static func camera(for location: DastakDeliveryLocation) -> MapCameraPosition {
+        .region(
+            MKCoordinateRegion(
+                center: CLLocationCoordinate2D(
+                    latitude: location.point.latitude,
+                    longitude: location.point.longitude
+                ),
+                span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)
+            )
+        )
     }
 }

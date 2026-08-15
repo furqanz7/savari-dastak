@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { LocateFixed, MapPin, Search } from "lucide-react";
-import { searchLocations, type LocationSearchResult } from "./location-search";
+import { reverseGeocodeLocation, searchLocations, type LocationSearchResult } from "./location-search";
 
 export type SelectedPlace = { address: string; latitude: number; longitude: number };
 
@@ -41,15 +41,17 @@ export function LocationSearchField({ label, value, onChange, disabled }: {
     }
     setBusy(true);
     navigator.geolocation.getCurrentPosition((position) => {
-      const place = {
-        address: label === "Pickup" ? "Current pickup location" : "Current drop-off location",
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      };
-      setQuery(place.address);
-      setResults([]);
-      onChange(place);
-      setBusy(false);
+      void (async () => {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        const address = await reverseGeocodeLocation(latitude, longitude).catch(() => "Current location");
+        const place = { address, latitude, longitude };
+        setQuery(place.address);
+        setResults([]);
+        setError(undefined);
+        onChange(place);
+        setBusy(false);
+      })();
     }, () => {
       setError("Location access was not allowed.");
       setBusy(false);

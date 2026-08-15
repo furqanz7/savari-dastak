@@ -26,6 +26,7 @@ struct DastakAccountView: View {
     let refreshFailure: DastakCustomerRefreshFailure?
     let chooseLocation: () -> Void
     let openOrders: () -> Void
+    let becomeDeliveryPartner: () -> Void
     let retryAccount: () -> Void
     let updateProfile: (String, String) async throws -> Void
     let deleteAccount: () async throws -> Void
@@ -46,6 +47,7 @@ struct DastakAccountView: View {
                 deliverySection
                 preferencesSection
                 supportSection
+                partnerOpportunity
                 accountActions
             }
             .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
@@ -67,87 +69,89 @@ struct DastakAccountView: View {
     }
 
     private var profileSection: some View {
+        Button { showingProfileEditor = true } label: {
+            HStack(spacing: MarketplaceSpacing.medium) {
+                ZStack {
+                    Circle()
+                        .fill(MarketplaceColors.dastakAccentSoft.color)
+                    Text(profileInitials)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                }
+                .frame(width: 64, height: 64)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(customer?.displayName ?? "Your account")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(customer?.phoneNumber ?? customer?.email ?? "Complete your details")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if let email = customer?.email,
+                       !email.isEmpty,
+                       customer?.phoneNumber != nil {
+                        Text(email)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "pencil")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(width: 38, height: 38)
+                    .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
+            }
+            .padding(MarketplaceSpacing.medium)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .marketplaceFlatSurface()
+        .accessibilityHint("Edit your name and contact number")
+    }
+
+    private var deliverySection: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Personal details")
+            Text("Saved place")
                 .font(MarketplaceTypography.sectionTitle)
 
-            Button { showingProfileEditor = true } label: {
-                HStack(spacing: MarketplaceSpacing.compact) {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(customer?.displayName ?? "Your account")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                        Text(customer?.phoneNumber ?? "Phone number unavailable")
+            Button(action: chooseLocation) {
+                HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                    accountIcon("location.fill")
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: MarketplaceSpacing.small) {
+                            Text(location?.displayName ?? "Add delivery address")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            if location != nil {
+                                Text("DEFAULT")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            }
+                        }
+                        Text(location?.displayAddress ?? "Save a precise pin and doorstep details for checkout.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        if let email = customer?.email, !email.isEmpty {
-                            Text(email)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(3)
                     }
-                    Spacer(minLength: 0)
+                    Spacer(minLength: MarketplaceSpacing.small)
                     Image(systemName: "chevron.right")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .padding(.top, 8)
                 }
                 .padding(MarketplaceSpacing.medium)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .marketplaceFlatSurface()
-        }
-    }
-
-    private var deliverySection: some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Delivery")
-                .font(MarketplaceTypography.sectionTitle)
-
-            VStack(spacing: 0) {
-                Button(action: chooseLocation) {
-                    HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
-                        Image(systemName: "location.fill")
-                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(location?.displayName ?? "Add delivery address")
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            Text(location?.displayAddress ?? "Add a house, flat or landmark")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(2)
-                        }
-                        Spacer(minLength: MarketplaceSpacing.small)
-                        Image(systemName: "chevron.right")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(MarketplaceSpacing.medium)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                Divider().padding(.leading, 48)
-
-                HStack {
-                    Label("Browse range", systemImage: "scope")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(discoveryRadiusKilometres) km")
-                        .font(.subheadline.bold().monospacedDigit())
-                        .foregroundStyle(.primary)
-                }
-                .padding(MarketplaceSpacing.medium)
-            }
-            .marketplaceFlatSurface()
+            .accessibilityHint(location == nil ? "Add a saved delivery address" : "Edit your saved delivery address")
         }
     }
 
@@ -155,22 +159,26 @@ struct DastakAccountView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             Text("Support")
                 .font(MarketplaceTypography.sectionTitle)
-            Button(action: openOrders) {
-                Label("Help with an order", systemImage: "questionmark.bubble")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+            VStack(spacing: 0) {
+                Button(action: openOrders) {
+                    accountRow(
+                        title: "Help with an order",
+                        value: "Get support for a current or past order",
+                        symbol: "questionmark.bubble"
+                    )
+                }
+                .buttonStyle(.plain)
+                Divider().padding(.leading, 56)
+                Link(destination: URL(string: "tel:112")!) {
+                    accountRow(
+                        title: "Emergency assistance",
+                        value: "Call India emergency services",
+                        symbol: "sos",
+                        isDestructive: true
+                    )
+                }
             }
-            .buttonStyle(.plain)
             .padding(.horizontal, MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
-            Link(destination: URL(string: "tel:112")!) {
-                Label("Emergency assistance", systemImage: "sos")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(MarketplaceSpacing.medium)
-            }
-            .foregroundStyle(MarketplaceColors.destructive.color)
             .marketplaceFlatSurface()
         }
     }
@@ -189,7 +197,14 @@ struct DastakAccountView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                Divider()
+                Divider().padding(.leading, 56)
+                accountRow(
+                    title: "Browse range",
+                    value: "\(discoveryRadiusKilometres) km",
+                    symbol: "scope",
+                    showsDisclosure: false
+                )
+                Divider().padding(.leading, 56)
                 NavigationLink {
                     DastakPrivacyAndDataView()
                 } label: {
@@ -201,26 +216,80 @@ struct DastakAccountView: View {
         }
     }
 
-    private func accountRow(title: String, value: String?, symbol: String) -> some View {
+    private func accountRow(
+        title: String,
+        value: String?,
+        symbol: String,
+        showsDisclosure: Bool = true,
+        isDestructive: Bool = false
+    ) -> some View {
         HStack(spacing: MarketplaceSpacing.compact) {
-            Image(systemName: symbol)
-                .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                .frame(width: 24)
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.primary)
+            accountIcon(symbol, isDestructive: isDestructive)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(isDestructive ? MarketplaceColors.destructive.color : Color.primary)
+                if let value, value.count > 12 {
+                    Text(value)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Spacer()
-            if let value {
+            if let value, value.count <= 12 {
                 Text(value)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            Image(systemName: "chevron.right")
-                .font(.caption.bold())
-                .foregroundStyle(.tertiary)
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.tertiary)
+            }
         }
-        .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+        .frame(minHeight: 64)
         .contentShape(Rectangle())
+    }
+
+    private func accountIcon(_ symbol: String, isDestructive: Bool = false) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(isDestructive ? MarketplaceColors.destructive.color : MarketplaceColors.dastakAccent.color)
+            .frame(width: 36, height: 36)
+            .background(
+                (isDestructive ? MarketplaceColors.destructive.color : MarketplaceColors.dastakAccent.color).opacity(0.12),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+    }
+
+    private var partnerOpportunity: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Earn with Dastak")
+                .font(MarketplaceTypography.sectionTitle)
+
+            Button(action: becomeDeliveryPartner) {
+                HStack(spacing: MarketplaceSpacing.compact) {
+                    accountIcon("figure.delivery")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Become a Delivery Partner")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text("Apply once, then choose when you want to earn.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: MarketplaceSpacing.small)
+                    Image(systemName: "arrow.up.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                }
+                .padding(MarketplaceSpacing.medium)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .marketplaceFlatSurface()
+        }
     }
 
     @MainActor
@@ -234,23 +303,38 @@ struct DastakAccountView: View {
     }
 
     private var accountActions: some View {
-        VStack(spacing: 0) {
-            Button { accountAlert = .signOut } label: {
-                Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Account security")
+                .font(MarketplaceTypography.sectionTitle)
+            VStack(spacing: 0) {
+                Button { accountAlert = .signOut } label: {
+                    accountRow(
+                        title: "Sign out",
+                        value: "End this session on this device",
+                        symbol: "rectangle.portrait.and.arrow.right"
+                    )
+                }
+                Divider().padding(.leading, 56)
+                Button(role: .destructive) { accountAlert = .deleteAccount } label: {
+                    accountRow(
+                        title: isDeleting ? "Deleting account..." : "Delete account",
+                        value: "Permanently remove your Dastak account",
+                        symbol: "trash",
+                        isDestructive: true
+                    )
+                }
+                .disabled(isDeleting)
             }
-            Divider()
-            Button(role: .destructive) { accountAlert = .deleteAccount } label: {
-                Label(isDeleting ? "Deleting account..." : "Delete account", systemImage: "trash")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
-            }
-            .disabled(isDeleting)
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
         }
-        .font(.headline)
-        .padding(.horizontal, MarketplaceSpacing.medium)
-        .marketplaceFlatSurface()
+    }
+
+    private var profileInitials: String {
+        let parts = (customer?.displayName ?? "Dastak")
+            .split(whereSeparator: \.isWhitespace)
+            .prefix(2)
+        return parts.compactMap(\.first).map(String.init).joined().uppercased()
     }
 
     private func makeAccountAlert(_ alert: AccountAlert) -> Alert {
@@ -330,7 +414,7 @@ struct DastakPrivacyAndDataView: View {
         case "Delivery Partner":
             "It is shared only during an assigned delivery when customer, merchant, or partner contact is required."
         default:
-            "It is shared only when an active delivery requires customer and partner contact."
+            "It is shared only when an active delivery requires contact."
         }
     }
 

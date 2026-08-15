@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchLocations } from "./location-search";
+import { reverseGeocodeLocation, searchLocations } from "./location-search";
 
 describe("location search", () => {
   it("normalizes a valid geocoding response", async () => {
@@ -21,5 +21,14 @@ describe("location search", () => {
     let called = false;
     expect(await searchLocations("ab", () => { called = true; return Promise.reject(); })).toEqual([]);
     expect(called).toBe(false);
+  });
+
+  it("turns current coordinates into a human address", async () => {
+    const fetcher = () => Promise.resolve(new Response(JSON.stringify({
+      display_name: "CL Road, Vaniyambadi, Tamil Nadu, India",
+    }), { status: 200 }));
+    await expect(reverseGeocodeLocation(12.6819, 78.6201, fetcher)).resolves.toBe(
+      "CL Road, Vaniyambadi, Tamil Nadu, India",
+    );
   });
 });

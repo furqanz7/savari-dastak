@@ -183,6 +183,11 @@ final class DastakRootModel: ObservableObject {
             try? rootState.select(root)
         }
     }
+
+    func openDeliveryPartner() async {
+        await refreshPartnerAccess()
+        select(.deliveryPartner)
+    }
 }
 
 private struct DastakCustomerPartnerRoot: View {
@@ -201,37 +206,8 @@ private struct DastakCustomerPartnerRoot: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker(
-                "Mode",
-                selection: Binding(
-                    get: { model.selectedRoot },
-                    set: { model.select($0) }
-                )
-            ) {
-                Text("Customer").tag(DastakAppRoot.customer)
-                Text("Delivery Partner").tag(DastakAppRoot.deliveryPartner)
-            }
-            .pickerStyle(.segmented)
-            .padding()
-
-            activeRoot
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            if model.isRefreshing {
-                ProgressView()
-                    .padding(.bottom)
-            } else if let errorMessage = model.errorMessage,
-                      model.selectedRoot == .customer {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding()
-            }
-        }
-        .task {
-            await model.refreshPartnerAccess()
-        }
+        activeRoot
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -241,17 +217,38 @@ private struct DastakCustomerPartnerRoot: View {
             DastakCustomerRootView(
                 functions: services.functions,
                 checkoutCustomerProvider: services.checkoutCustomer,
-                accountIDProvider: services.accountID
+                accountIDProvider: services.accountID,
+                becomeDeliveryPartner: {
+                    Task { await model.openDeliveryPartner() }
+                }
             )
         case .deliveryPartner:
-            if model.rootState.deliveryPartnerAccess == .approved {
-                DastakDeliveryPartnerRootView(services: services)
-            } else {
-                DastakDeliveryPartnerAccessView(
-                    access: model.rootState.deliveryPartnerAccess,
-                    services: services,
-                    onRefresh: { await model.refreshPartnerAccess() }
-                )
+            VStack(spacing: 0) {
+                HStack {
+                    Button {
+                        model.select(.customer)
+                    } label: {
+                        Label("Back to Dastak", systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if model.isRefreshing {
+                        ProgressView()
+                    }
+                }
+                .padding(.horizontal)
+                .frame(minHeight: 52)
+
+                if model.rootState.deliveryPartnerAccess == .approved {
+                    DastakDeliveryPartnerRootView(services: services)
+                } else {
+                    DastakDeliveryPartnerAccessView(
+                        access: model.rootState.deliveryPartnerAccess,
+                        services: services,
+                        onRefresh: { await model.refreshPartnerAccess() }
+                    )
+                }
             }
         case .merchant, .admin:
             EmptyView()

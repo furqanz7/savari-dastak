@@ -34,6 +34,27 @@ export async function searchLocations(query: string, fetcher: Fetcher = fetch) {
   });
 }
 
+export async function reverseGeocodeLocation(latitude: number, longitude: number, fetcher: Fetcher = fetch) {
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+    !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    throw new Error("Location coordinates are invalid.");
+  }
+  const url = new URL("https://nominatim.openstreetmap.org/reverse");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("zoom", "18");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("lat", String(latitude));
+  url.searchParams.set("lon", String(longitude));
+  const response = await fetcher(url, { headers: { accept: "application/json" } });
+  if (!response.ok) throw new Error("The address for this location is unavailable.");
+  const source = record(await response.json());
+  const label = source?.display_name;
+  if (typeof label !== "string" || label.length === 0 || label.length > 500) {
+    throw new Error("The address for this location is unavailable.");
+  }
+  return label;
+}
+
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }

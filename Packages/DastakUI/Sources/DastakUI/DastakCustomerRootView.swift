@@ -31,11 +31,13 @@ public struct DastakCustomerRootView: View {
     @State private var isConfirmingPayment = false
     @Environment(\.marketplaceSignOut) private var signOut
     private let isPreview: Bool
+    private let becomeDeliveryPartner: () -> Void
 
     public init(
         functions: any FunctionClient,
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
-        accountIDProvider: (@Sendable () async throws -> UUID)? = nil
+        accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
+        becomeDeliveryPartner: @escaping () -> Void = {}
     ) {
         _model = StateObject(
             wrappedValue: DastakCustomerModel(
@@ -45,12 +47,14 @@ public struct DastakCustomerRootView: View {
             )
         )
         isPreview = false
+        self.becomeDeliveryPartner = becomeDeliveryPartner
     }
 
     #if DEBUG
     public init(preview: Bool) {
         _model = StateObject(wrappedValue: DastakCustomerModel.preview())
         isPreview = preview
+        becomeDeliveryPartner = {}
     }
     #endif
 
@@ -92,6 +96,7 @@ public struct DastakCustomerRootView: View {
                     refreshFailure: model.accountRefreshFailure,
                     chooseLocation: { showingDeliveryAddressEditor = true },
                     openOrders: { selectedTab = .orders },
+                    becomeDeliveryPartner: becomeDeliveryPartner,
                     retryAccount: { Task { await model.refreshCheckoutCustomer() } },
                     updateProfile: { displayName, phoneNumber in
                         try await model.updateAccountProfile(

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ArrowLeft,
+  ArrowUpRight,
   Bell,
   Bike,
   ChevronRight,
@@ -13,6 +14,7 @@ import {
   MapPin,
   Minus,
   PackageOpen,
+  Pencil,
   Plus,
   Phone,
   ReceiptText,
@@ -22,7 +24,6 @@ import {
   ShoppingBag,
   Store,
   Trash2,
-  UserRound,
   X,
 } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
@@ -557,10 +558,18 @@ export function CatalogueView({
     }
   };
 
+  const accountInitials = (accountProfile.displayName || "Dastak")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .toUpperCase();
+
   return (
     <div className={`catalogue-shell customer-section customer-section-${section}`}>
       {(orderError ?? cartState.error) && <p className="order-error" role="alert">{orderError ?? cartState.error}</p>}
-      {ordersRefreshIssue && <CustomerDataNotice issue={ordersRefreshIssue} onRetry={refreshOrders} onSignOut={onSignOut} />}
+      {ordersRefreshIssue && section === "home" && hasActiveOrders && <CustomerDataNotice issue={ordersRefreshIssue} onRetry={refreshOrders} onSignOut={onSignOut} />}
       {paymentMessage && <p className="payment-message" role="status">{paymentMessage}</p>}
       {section === "home" && (
         <>
@@ -711,27 +720,24 @@ export function CatalogueView({
 
       {section === "account" && (
         <section className="customer-account">
-          <header className="customer-page-heading"><p className="eyebrow">Dastak account</p><h1>{accountProfile.displayName || "Your account"}</h1></header>
+          <header className="customer-page-heading customer-account-heading">
+            <p className="eyebrow">Account</p>
+            <h1>Your Dastak</h1>
+            <p>Personal details, saved places and account controls.</p>
+          </header>
           <button className="customer-profile-card" type="button" onClick={() => setProfileEditorOpen(true)}>
-            <span className="customer-account-icon"><UserRound size={25} /></span>
-            <span><strong>{accountProfile.displayName}</strong><small>{accountProfile.phoneNumber}</small>{email && <small>{email}</small>}</span>
-            <ChevronRight size={19} />
+            <span className="customer-profile-avatar" aria-hidden="true">{accountInitials}</span>
+            <span><strong>{accountProfile.displayName || "Your account"}</strong><small>{accountProfile.phoneNumber || "Add a contact number"}</small>{email && <small>{email}</small>}</span>
+            <span className="customer-profile-edit"><Pencil size={15} /> Edit</span>
           </button>
 
           <section className="customer-account-group" aria-labelledby="account-delivery-title">
-            <h2 id="account-delivery-title">Delivery</h2>
-            <div className="customer-account-rows">
-              <button className="customer-account-row" type="button" onClick={() => { setReviewAfterAddress(false); setAddressEditorOpen(true); }} disabled={addressLoading}>
-                <MapPin size={20} />
-                <span><strong>Delivery address</strong><small>{deliveryAddress?.displayAddress ?? "Add a house, flat or landmark"}</small></span>
-                <ChevronRight size={18} />
-              </button>
-              <div className="customer-account-row">
-                <LocateFixed size={20} />
-                <span><strong>Browse range</strong><small>Stores shown around your browse area</small></span>
-                <b>{discoveryRadiusKm} km</b>
-              </div>
-            </div>
+            <div className="customer-account-section-heading"><h2 id="account-delivery-title">Saved place</h2><span>Used at checkout</span></div>
+            <button className="customer-saved-place" type="button" onClick={() => { setReviewAfterAddress(false); setAddressEditorOpen(true); }} disabled={addressLoading}>
+              <span className="customer-account-icon"><MapPin size={20} /></span>
+              <span><strong>{deliveryAddress?.label ?? "Add delivery address"}</strong><small>{deliveryAddress?.displayAddress ?? "Save a precise pin and doorstep details for checkout."}</small></span>
+              <span className="customer-saved-place-action">{deliveryAddress ? "Edit" : "Add"}<ChevronRight size={17} /></span>
+            </button>
             {addressError && <small className="error-text customer-account-error">{addressError}</small>}
           </section>
 
@@ -739,6 +745,7 @@ export function CatalogueView({
             <h2 id="account-preferences-title">Preferences</h2>
             <div className="customer-account-rows">
               <div className="customer-account-row"><Bell size={20} /><span><strong>Order updates</strong><small>Shown in Dastak</small></span><b>On</b></div>
+              <div className="customer-account-row"><LocateFixed size={20} /><span><strong>Browse range</strong><small>Stores shown around your browse area</small></span><b>{discoveryRadiusKm} km</b></div>
             </div>
           </section>
 
@@ -754,8 +761,17 @@ export function CatalogueView({
             </div>
           </section>
 
+          <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">
+            <h2 id="account-earn-title">Earn with Dastak</h2>
+            <a className="customer-partner-cta" href="https://dastak-delivery.vercel.app" role="button">
+              <span className="customer-account-icon"><Bike size={21} /></span>
+              <span><strong>Become a Delivery Partner</strong><small>Apply once, then choose when you want to earn.</small></span>
+              <ArrowUpRight size={19} />
+            </a>
+          </section>
+
           <section className="customer-account-group" aria-labelledby="account-privacy-title">
-            <h2 id="account-privacy-title">Privacy and account</h2>
+            <h2 id="account-privacy-title">Privacy and account security</h2>
             <div className="customer-account-rows">
               <div className="customer-account-row customer-privacy-row">
                 <Hand size={20} /><span><strong>Privacy and data</strong><small>Your unverified number is shared only for an active delivery. Your browse area is separate; the saved address is used to price and fulfil an order.</small></span>
