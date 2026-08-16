@@ -17,7 +17,7 @@ public struct DastakDeliveryPartnerRootView: View {
 
     public var body: some View {
         TabView(selection: $selectedTab) {
-            DastakDeliveryPartnerWorkspaceView(functions: services.functions)
+            DastakDeliveryPartnerWorkspaceView(services: services)
                 .tabItem { Label("Deliveries", systemImage: "shippingbox") }
                 .tag(Tab.deliveries)
 

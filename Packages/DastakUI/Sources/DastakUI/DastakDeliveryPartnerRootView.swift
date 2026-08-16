@@ -8,9 +8,12 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     @StateObject private var locationManager = DastakLocationManager()
     @State private var handoffCode = ""
     @State private var pendingOnlineRequest = false
+    @Environment(\.scenePhase) private var scenePhase
+    private let services: MarketplaceAuthenticatedServices
 
-    init(functions: any FunctionClient) {
-        _model = StateObject(wrappedValue: DastakDeliveryPartnerModel(functions: functions))
+    init(services: MarketplaceAuthenticatedServices) {
+        self.services = services
+        _model = StateObject(wrappedValue: DastakDeliveryPartnerModel(functions: services.functions))
     }
 
     var body: some View {
@@ -18,11 +21,20 @@ struct DastakDeliveryPartnerWorkspaceView: View {
         .marketplacePage()
         .task {
             await model.bootstrap()
+        }
+        .task {
+            await observeOrderChanges()
+        }
+        .task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(30))
                 guard !Task.isCancelled else { return }
                 await model.refresh()
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await model.refresh() }
         }
         .onReceive(locationManager.$location) { location in
             guard pendingOnlineRequest, let location else { return }
@@ -39,6 +51,23 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             Button("OK", role: .cancel) { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "")
+        }
+    }
+
+    private func observeOrderChanges() async {
+        while !Task.isCancelled {
+            do {
+                let accountID = try await services.accountID()
+                for try await _ in services.orderEvents.events(accountID: accountID) {
+                    guard !Task.isCancelled else { return }
+                    await model.refresh()
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // The fallback poll keeps assignments current while realtime reconnects.
+            }
+            try? await Task.sleep(for: .seconds(3))
         }
     }
 

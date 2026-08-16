@@ -37,6 +37,7 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     private let parcelClient: any ParcelDeliveryClient
     private let earningsClient: any DastakEarningsClient
     private var actionKeys: [String: IdempotencyKey] = [:]
+    private var refreshQueued = false
 
     init(
         partnerClient: any DeliveryPartnerClient,
@@ -77,23 +78,27 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     }
 
     func refresh() async {
+        refreshQueued = true
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
-        do {
-            async let partnerSnapshot = partnerClient.selfSnapshot(idempotencyKey: makeKey())
-            async let courierSnapshot = courierClient.partnerSnapshot(idempotencyKey: makeKey())
-            async let parcelSnapshot = parcelClient.partnerSnapshot(idempotencyKey: makeKey())
-            async let earningsSnapshot = earningsClient.deliveryPartnerSnapshot(idempotencyKey: makeKey())
-            let snapshots = try await (partnerSnapshot, courierSnapshot, parcelSnapshot, earningsSnapshot)
-            partner = snapshots.0
-            courierDispatch = snapshots.1
-            parcelDispatch = snapshots.2
-            earnings = snapshots.3
-            errorMessage = nil
-        } catch {
-            errorMessage = message(for: error, fallback: "The delivery queue could not be refreshed.")
+        while refreshQueued, !Task.isCancelled {
+            refreshQueued = false
+            do {
+                async let partnerSnapshot = partnerClient.selfSnapshot(idempotencyKey: makeKey())
+                async let courierSnapshot = courierClient.partnerSnapshot(idempotencyKey: makeKey())
+                async let parcelSnapshot = parcelClient.partnerSnapshot(idempotencyKey: makeKey())
+                async let earningsSnapshot = earningsClient.deliveryPartnerSnapshot(idempotencyKey: makeKey())
+                let snapshots = try await (partnerSnapshot, courierSnapshot, parcelSnapshot, earningsSnapshot)
+                partner = snapshots.0
+                courierDispatch = snapshots.1
+                parcelDispatch = snapshots.2
+                earnings = snapshots.3
+                errorMessage = nil
+            } catch {
+                errorMessage = message(for: error, fallback: "The delivery queue could not be refreshed.")
+            }
         }
     }
 

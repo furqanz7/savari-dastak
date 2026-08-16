@@ -82,4 +82,19 @@ final class DeliveryStatusTests: XCTestCase {
             )
         )
     }
+
+    func testUnclaimedAssignmentsCanReturnToDispatchableState() {
+        XCTAssertTrue(
+            DeliveryStatus.assigned.canTransition(to: .paid, for: .parcel)
+        )
+        XCTAssertTrue(
+            DeliveryStatus.assigned.canTransition(to: .ready, for: .merchantOrder)
+        )
+        XCTAssertFalse(
+            DeliveryStatus.enRouteToPickup.canTransition(to: .paid, for: .parcel)
+        )
+        XCTAssertFalse(
+            DeliveryStatus.enRouteToPickup.canTransition(to: .ready, for: .merchantOrder)
+        )
+    }
 }

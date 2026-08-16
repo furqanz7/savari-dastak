@@ -82,6 +82,7 @@ import {
   deliveryPartnerAccountPresentation,
   type DeliveryPartnerAccountState,
 } from "./deliveryPartnerAccount";
+import { RefreshQueue } from "./orderRealtime";
 
 type Props = {
   accessToken: string;
@@ -90,6 +91,7 @@ type Props = {
   phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  orderRefreshToken: number;
   section: CustomerSection;
   selectedOrderId?: string;
   onNavigate: (section: CustomerSection) => void;
@@ -148,6 +150,7 @@ export function CatalogueView({
   phoneNumber,
   supabaseUrl,
   publishableKey,
+  orderRefreshToken,
   section,
   selectedOrderId,
   onNavigate,
@@ -193,7 +196,7 @@ export function CatalogueView({
   const catalogueRequest = useRef(0);
   const orderCreationRequest = useRef<{ quoteId: string; idempotencyKey: string } | undefined>(undefined);
   const restoredDiscovery = useRef(false);
-  const ordersRefreshInFlight = useRef(false);
+  const ordersRefreshQueue = useRef(new RefreshQueue());
   const addressSaveRequest = useRef<string | undefined>(undefined);
 
   useEffect(() => {
@@ -215,29 +218,32 @@ export function CatalogueView({
   }, [auth, section]);
 
   const refreshOrders = useCallback(async () => {
-    if (ordersRefreshInFlight.current) return;
-    ordersRefreshInFlight.current = true;
-    try {
-      const snapshot = await getCustomerOrders(auth);
-      setOrders(snapshot.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)));
-      setOrdersRefreshIssue(undefined);
-    } catch (error) {
-      setOrdersRefreshIssue(customerDataIssue(error));
-    } finally {
-      setOrdersLoading(false);
-      ordersRefreshInFlight.current = false;
-    }
+    await ordersRefreshQueue.current.request(false, async () => {
+      try {
+        const snapshot = await getCustomerOrders(auth);
+        setOrders(snapshot.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)));
+        setOrdersRefreshIssue(undefined);
+      } catch (error) {
+        setOrdersRefreshIssue(customerDataIssue(error));
+      } finally {
+        setOrdersLoading(false);
+      }
+    });
   }, [auth]);
 
   useEffect(() => {
     void refreshOrders();
   }, [refreshOrders]);
 
+  useEffect(() => {
+    if (orderRefreshToken > 0) void refreshOrders();
+  }, [orderRefreshToken, refreshOrders]);
+
   const hasActiveOrders = orders.some((order) => !isFinalOrder(order));
 
   useEffect(() => {
     if (!hasActiveOrders || ordersRefreshIssue?.kind === "session") return;
-    const interval = window.setInterval(() => void refreshOrders(), 10_000);
+    const interval = window.setInterval(() => void refreshOrders(), 30_000);
     const onVisible = () => {
       if (document.visibilityState === "visible") void refreshOrders();
     };
@@ -693,7 +699,14 @@ export function CatalogueView({
             quote={quote}
             address={deliveryAddress}
             busy={orderBusy}
-            onChangeAddress={() => { setReviewAfterAddress(true); savedAddresses.length ? setAddressBookOpen(true) : setAddressEditorOpen(true); }}
+            onChangeAddress={() => {
+              setReviewAfterAddress(true);
+              if (savedAddresses.length) {
+                setAddressBookOpen(true);
+              } else {
+                setAddressEditorOpen(true);
+              }
+            }}
             onPlaceOrder={placeOrder}
           />}
           {!ordersLoading && hasActiveOrders && (
@@ -760,7 +773,14 @@ export function CatalogueView({
             quote={quote}
             address={deliveryAddress}
             busy={orderBusy}
-            onChangeAddress={() => { setReviewAfterAddress(true); savedAddresses.length ? setAddressBookOpen(true) : setAddressEditorOpen(true); }}
+            onChangeAddress={() => {
+              setReviewAfterAddress(true);
+              if (savedAddresses.length) {
+                setAddressBookOpen(true);
+              } else {
+                setAddressEditorOpen(true);
+              }
+            }}
             onPlaceOrder={placeOrder}
           />}
           <CatalogueContent

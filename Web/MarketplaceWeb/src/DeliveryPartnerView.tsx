@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Bike, Check, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, X } from "lucide-react";
 import {
   acceptDeliveryOffer,
@@ -23,9 +24,12 @@ import {
 } from "./parcels";
 import { getEarnings, type EarningsSnapshot } from "./earnings";
 import { RoleAccountView } from "./RoleAccountView";
+import { RefreshQueue, useOrderRealtime } from "./orderRealtime";
 
 type Props = {
   accessToken: string;
+  accountId: string;
+  client: SupabaseClient;
   displayName?: string;
   email?: string;
   phoneNumber?: string;
@@ -36,7 +40,7 @@ type Props = {
 
 type DispatchAction = "accept" | "decline" | DeliveryJobOperation;
 
-export function DeliveryPartnerView({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey, onSignOut }: Props) {
+export function DeliveryPartnerView({ accessToken, accountId, client, displayName, email, phoneNumber, supabaseUrl, publishableKey, onSignOut }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [partner, setPartner] = useState<DeliveryPartnerSnapshot>();
   const [dispatch, setDispatch] = useState<DeliveryDispatchSnapshot>({ offer: null, currentJob: null });
@@ -47,38 +51,49 @@ export function DeliveryPartnerView({ accessToken, displayName, email, phoneNumb
   const [error, setError] = useState<string>();
   const [verificationCode, setVerificationCode] = useState("");
   const [section, setSection] = useState<"deliveries" | "account">("deliveries");
-  const refreshInFlight = useRef(false);
+  const refreshQueue = useRef(new RefreshQueue());
   const actionKeys = useRef(new Map<string, string>());
 
   const refresh = useCallback(async (showProgress = false) => {
-    if (refreshInFlight.current) return;
-    refreshInFlight.current = true;
-    if (showProgress) setBusy("refresh");
-    try {
-      const [partnerSnapshot, dispatchSnapshot, parcelSnapshot, earningsSnapshot] = await Promise.all([
-        getDeliveryPartnerSnapshot(auth),
-        getDeliveryDispatch(auth),
-        getParcelPartnerSnapshot(auth),
-        getEarnings(auth, "deliveryPartnerSnapshot").catch(() => undefined),
-      ]);
-      setPartner(partnerSnapshot);
-      setDispatch(dispatchSnapshot);
-      setParcelDispatch(parcelSnapshot);
-      setEarnings(earningsSnapshot);
-      setError(undefined);
-    } catch (refreshError) {
-      setError(message(refreshError));
-    } finally {
-      refreshInFlight.current = false;
-      setLoading(false);
-      if (showProgress) setBusy(undefined);
-    }
+    await refreshQueue.current.request(showProgress, async (progress) => {
+      if (progress) setBusy("refresh");
+      try {
+        const [partnerSnapshot, dispatchSnapshot, parcelSnapshot, earningsSnapshot] = await Promise.all([
+          getDeliveryPartnerSnapshot(auth),
+          getDeliveryDispatch(auth),
+          getParcelPartnerSnapshot(auth),
+          getEarnings(auth, "deliveryPartnerSnapshot").catch(() => undefined),
+        ]);
+        setPartner(partnerSnapshot);
+        setDispatch(dispatchSnapshot);
+        setParcelDispatch(parcelSnapshot);
+        setEarnings(earningsSnapshot);
+        setError(undefined);
+      } catch (refreshError) {
+        setError(message(refreshError));
+      } finally {
+        setLoading(false);
+        if (progress) setBusy(undefined);
+      }
+    });
   }, [auth]);
+
+  useOrderRealtime({ client, accountId, accessToken, onChange: () => void refresh() });
 
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), 5_000);
-    return () => window.clearInterval(interval);
+    const interval = window.setInterval(() => void refresh(), 30_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    const onOnline = () => void refresh();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+    };
   }, [refresh]);
 
   const changeAvailability = async (online: boolean) => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Home, ReceiptText, Search, UserRound } from "lucide-react";
 import { CatalogueView } from "./CatalogueView";
 import { ParcelCustomerView } from "./ParcelCustomerView";
@@ -8,9 +9,12 @@ import {
   type CustomerDestination,
   type CustomerSection,
 } from "./customerNavigation";
+import { useOrderRealtime } from "./orderRealtime";
 
 type Props = {
   accessToken: string;
+  accountId: string;
+  client: SupabaseClient;
   displayName?: string;
   email?: string;
   phoneNumber?: string;
@@ -20,11 +24,19 @@ type Props = {
 };
 
 export function DastakCustomerView(props: Props) {
+  const [orderRefreshToken, setOrderRefreshToken] = useState(0);
   const [destination, setDestination] = useState<CustomerDestination>(() =>
     parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
   );
   const section = destination.section;
   const catalogueSection = section === "parcel" ? "home" : section;
+
+  useOrderRealtime({
+    client: props.client,
+    accountId: props.accountId,
+    accessToken: props.accessToken,
+    onChange: () => setOrderRefreshToken((current) => current + 1),
+  });
 
   const navigate = useCallback((next: CustomerDestination, replace = false) => {
     const hash = serializeCustomerDestination(next);
@@ -59,6 +71,7 @@ export function DastakCustomerView(props: Props) {
       <div className="customer-view" hidden={section === "parcel"}>
         <CatalogueView
           {...props}
+          orderRefreshToken={orderRefreshToken}
           section={catalogueSection}
           selectedOrderId={destination.entityType === "merchantOrder" ? destination.entityId : undefined}
           onNavigate={navigateSection}
@@ -74,6 +87,7 @@ export function DastakCustomerView(props: Props) {
           </button>}
           <ParcelCustomerView
             {...props}
+            orderRefreshToken={orderRefreshToken}
             selectedParcelId={destination.entityType === "parcel" ? destination.entityId : undefined}
             onOpenParcel={(parcelId) => navigate({ section: "parcel", entityType: "parcel", entityId: parcelId })}
             onCloseParcel={() => navigate({ section: "parcel" })}

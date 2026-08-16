@@ -26,6 +26,7 @@ import {
 } from "./orders";
 import { processOrderRefund } from "./payments";
 import { getEarnings, type EarningsSnapshot } from "./earnings";
+import { RefreshQueue, useOrderRealtime } from "./orderRealtime";
 
 type Props = {
   accessToken: string;
@@ -63,34 +64,45 @@ export function MerchantOrdersView({
   const [rejectingOrderId, setRejectingOrderId] = useState<string>();
   const [rejectionReason, setRejectionReason] = useState("");
   const [section, setSection] = useState<MerchantSection>("orders");
-  const refreshInFlight = useRef(false);
+  const refreshQueue = useRef(new RefreshQueue());
   const mutationKeys = useRef(new Map<string, string>());
 
   const refreshOrders = useCallback(async (showProgress = false) => {
-    if (refreshInFlight.current) return;
-    refreshInFlight.current = true;
-    if (showProgress) setRefreshing(true);
-    try {
-      const [snapshot, earningsSnapshot] = await Promise.all([
-        getMerchantOrders(auth),
-        getEarnings(auth, "merchantSnapshot").catch(() => undefined),
-      ]);
-      setOrders(snapshot.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)));
-      setEarnings(earningsSnapshot);
-      setError(undefined);
-    } catch (refreshError) {
-      setError(orderMessage(refreshError));
-    } finally {
-      refreshInFlight.current = false;
-      setLoading(false);
-      setRefreshing(false);
-    }
+    await refreshQueue.current.request(showProgress, async (progress) => {
+      if (progress) setRefreshing(true);
+      try {
+        const [snapshot, earningsSnapshot] = await Promise.all([
+          getMerchantOrders(auth),
+          getEarnings(auth, "merchantSnapshot").catch(() => undefined),
+        ]);
+        setOrders(snapshot.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)));
+        setEarnings(earningsSnapshot);
+        setError(undefined);
+      } catch (refreshError) {
+        setError(orderMessage(refreshError));
+      } finally {
+        setLoading(false);
+        if (progress) setRefreshing(false);
+      }
+    });
   }, [auth]);
+
+  useOrderRealtime({ client, accountId, accessToken, onChange: () => void refreshOrders() });
 
   useEffect(() => {
     void refreshOrders();
-    const interval = window.setInterval(() => void refreshOrders(), 5_000);
-    return () => window.clearInterval(interval);
+    const interval = window.setInterval(() => void refreshOrders(), 30_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshOrders();
+    };
+    const onOnline = () => void refreshOrders();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+    };
   }, [refreshOrders]);
 
   const updateOrder = (updated: MerchantOrderSnapshot) => {

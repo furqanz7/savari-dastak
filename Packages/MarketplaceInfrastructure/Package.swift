@@ -27,7 +27,11 @@ let package = Package(
         ),
         .testTarget(
             name: "MarketplaceInfrastructureTests",
-            dependencies: ["MarketplaceInfrastructure", "MarketplaceFoundation"]
+            dependencies: [
+                "MarketplaceInfrastructure",
+                "MarketplaceFoundation",
+                .product(name: "Supabase", package: "supabase-swift")
+            ]
         )
     ]
 )

@@ -117,6 +117,12 @@ private final class AuthenticationShellModel: ObservableObject {
         )
         services = MarketplaceAuthenticatedServices(
             functions: functionClient,
+            orderEvents: SupabaseOrderEventClient(
+                configuration: configuration,
+                accessTokenProvider: {
+                    try await operations.currentAccessToken()
+                }
+            ),
             accountIDProvider: {
                 guard let accountID = await operations.currentAccountID() else {
                     throw MarketplaceAuthenticatedServicesError.authenticationRequired

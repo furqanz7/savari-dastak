@@ -19,6 +19,7 @@ public struct MarketplaceCheckoutCustomer: Equatable, Sendable {
 
 public struct MarketplaceAuthenticatedServices: Sendable {
     public let functions: any FunctionClient
+    public let orderEvents: any OrderEventClient
 
     private let accountIDProvider: @Sendable () async throws -> UUID
     private let objectUploader: @Sendable (
@@ -32,6 +33,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
 
     init(
         functions: any FunctionClient,
+        orderEvents: any OrderEventClient = NoopOrderEventClient(),
         accountIDProvider: @escaping @Sendable () async throws -> UUID,
         objectUploader: @escaping @Sendable (
             String,
@@ -43,6 +45,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer? = { nil }
     ) {
         self.functions = functions
+        self.orderEvents = orderEvents
         self.accountIDProvider = accountIDProvider
         self.objectUploader = objectUploader
         self.checkoutCustomerProvider = checkoutCustomerProvider

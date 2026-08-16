@@ -22,7 +22,12 @@ export function CustomerAddressBookSheet({
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) deleting ? setDeleting(undefined) : onDismiss();
+      if (event.key !== "Escape" || busy) return;
+      if (deleting) {
+        setDeleting(undefined);
+      } else {
+        onDismiss();
+      }
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);

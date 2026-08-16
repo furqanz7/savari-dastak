@@ -66,6 +66,8 @@ final class DastakMerchantModel: ObservableObject {
     private let checkoutClient: any DastakCheckoutClient
     private let earningsClient: any DastakEarningsClient
     private var actionKeys: [String: IdempotencyKey] = [:]
+    private var ordersRefreshInFlight = false
+    private var ordersRefreshQueued = false
 
     init(
         services: MarketplaceAuthenticatedServices,
@@ -146,13 +148,21 @@ final class DastakMerchantModel: ObservableObject {
     }
 
     func refreshOrders() async {
-        guard !isRefreshing, !isBusy else { return }
-        do {
-            orders = Self.sorted(
-                try await orderClient.merchantSnapshot(idempotencyKey: makeKey()).orders
-            )
-        } catch {
-            errorMessage = message(for: error, fallback: "Orders could not be refreshed.")
+        ordersRefreshQueued = true
+        guard !ordersRefreshInFlight else { return }
+        ordersRefreshInFlight = true
+        defer { ordersRefreshInFlight = false }
+
+        while ordersRefreshQueued, !Task.isCancelled {
+            ordersRefreshQueued = false
+            do {
+                orders = Self.sorted(
+                    try await orderClient.merchantSnapshot(idempotencyKey: makeKey()).orders
+                )
+                errorMessage = nil
+            } catch {
+                errorMessage = message(for: error, fallback: "Orders could not be refreshed.")
+            }
         }
     }
 

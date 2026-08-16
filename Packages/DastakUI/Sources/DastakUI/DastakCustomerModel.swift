@@ -90,6 +90,8 @@ final class DastakCustomerModel: ObservableObject {
     private var preferenceScope = "default"
     private var orderPlacementAttempt = DastakOrderPlacementAttempt()
     private var parcelPlacementAttempt = DastakOrderPlacementAttempt()
+    private var ordersRefreshQueued = false
+    private var parcelsRefreshQueued = false
 
     init(
         catalogueClient: any CatalogueClient,
@@ -310,35 +312,45 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func refreshOrders() async {
+        ordersRefreshQueued = true
         guard !isLoadingOrders else { return }
         isLoadingOrders = true
         defer { isLoadingOrders = false }
-        do {
-            orders = try await orderClient.customerSnapshot(
-                idempotencyKey: makeKey()
-            ).orders
-            .sorted { $0.updatedAt > $1.updatedAt }
-            ordersRefreshFailure = nil
-        } catch {
-            ordersRefreshFailure = refreshFailure(for: error)
+
+        while ordersRefreshQueued, !Task.isCancelled {
+            ordersRefreshQueued = false
+            do {
+                orders = try await orderClient.customerSnapshot(
+                    idempotencyKey: makeKey()
+                ).orders
+                .sorted { $0.updatedAt > $1.updatedAt }
+                ordersRefreshFailure = nil
+            } catch {
+                ordersRefreshFailure = refreshFailure(for: error)
+            }
         }
     }
 
     func refreshParcels() async {
+        parcelsRefreshQueued = true
         guard !isLoadingParcels else { return }
         isLoadingParcels = true
         defer { isLoadingParcels = false }
-        do {
-            parcels = try await parcelClient.customerSnapshot(
-                idempotencyKey: makeKey()
-            )
-            .sorted {
-                ($0.parcel.updatedAt ?? $0.parcel.createdAt ?? "") >
-                    ($1.parcel.updatedAt ?? $1.parcel.createdAt ?? "")
+
+        while parcelsRefreshQueued, !Task.isCancelled {
+            parcelsRefreshQueued = false
+            do {
+                parcels = try await parcelClient.customerSnapshot(
+                    idempotencyKey: makeKey()
+                )
+                .sorted {
+                    ($0.parcel.updatedAt ?? $0.parcel.createdAt ?? "") >
+                        ($1.parcel.updatedAt ?? $1.parcel.createdAt ?? "")
+                }
+                parcelsRefreshFailure = nil
+            } catch {
+                parcelsRefreshFailure = refreshFailure(for: error)
             }
-            parcelsRefreshFailure = nil
-        } catch {
-            parcelsRefreshFailure = refreshFailure(for: error)
         }
     }
 

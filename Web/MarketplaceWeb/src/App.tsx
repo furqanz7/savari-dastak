@@ -449,6 +449,8 @@ function Ready({ access, email, session, onSignOut }: {
     return (
       <DastakCustomerView
         accessToken={session.access_token}
+        accountId={session.user.id}
+        client={supabase}
         displayName={access.profile?.displayName}
         email={email}
         phoneNumber={access.profile?.phoneNumber}
@@ -477,6 +479,8 @@ function Ready({ access, email, session, onSignOut }: {
     return (
       <DeliveryPartnerView
         accessToken={session.access_token}
+        accountId={session.user.id}
+        client={supabase}
         displayName={access.profile?.displayName}
         email={email}
         phoneNumber={access.profile?.phoneNumber}

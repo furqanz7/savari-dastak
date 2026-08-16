@@ -16,6 +16,7 @@ import { createParcelCheckoutSession, openRazorpayCheckout, processParcelRefund 
 import { customerDataIssue, type CustomerDataIssue } from "./customerDataState";
 import { CancellationSheet, CustomerRouteMap, CustomerTimeline } from "./CustomerDeliveryDetails";
 import { parcelPaymentStateLabel, parcelPresentation } from "./customerLifecycle";
+import { RefreshQueue } from "./orderRealtime";
 
 type Props = {
   accessToken: string;
@@ -24,13 +25,14 @@ type Props = {
   phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  orderRefreshToken: number;
   selectedParcelId?: string;
   onOpenParcel: (parcelId: string) => void;
   onCloseParcel: () => void;
   onSignOut: () => void;
 };
 
-export function ParcelCustomerView({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey, selectedParcelId, onOpenParcel, onCloseParcel, onSignOut }: Props) {
+export function ParcelCustomerView({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey, orderRefreshToken, selectedParcelId, onOpenParcel, onCloseParcel, onSignOut }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [parcels, setParcels] = useState<CustomerParcelDelivery[]>([]);
   const [pickup, setPickup] = useState<SelectedPlace>();
@@ -47,32 +49,39 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
   const [notice, setNotice] = useState<string>();
   const [refreshIssue, setRefreshIssue] = useState<CustomerDataIssue>();
   const [cancellingParcel, setCancellingParcel] = useState<CustomerParcelDelivery>();
-  const refreshInFlight = useRef(false);
+  const refreshQueue = useRef(new RefreshQueue());
   const creationRequest = useRef<{ quoteId: string; idempotencyKey: string } | undefined>(undefined);
   const hasActiveParcels = parcels.some((parcel) => !isFinal(parcel));
 
   const refresh = useCallback(async () => {
-    if (refreshInFlight.current) return;
-    refreshInFlight.current = true;
-    try {
-      setParcels(await getCustomerParcels(auth));
-      setRefreshIssue(undefined);
-    } catch (refreshError) {
-      setRefreshIssue(customerDataIssue(refreshError));
-    } finally {
-      setLoading(false);
-      refreshInFlight.current = false;
-    }
+    await refreshQueue.current.request(false, async () => {
+      try {
+        setParcels(await getCustomerParcels(auth));
+        setRefreshIssue(undefined);
+      } catch (refreshError) {
+        setRefreshIssue(customerDataIssue(refreshError));
+      } finally {
+        setLoading(false);
+      }
+    });
   }, [auth]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
+    if (orderRefreshToken > 0) void refresh();
+  }, [orderRefreshToken, refresh]);
+  useEffect(() => {
     if (!hasActiveParcels || refreshIssue?.kind === "session") return;
-    const interval = window.setInterval(() => void refresh(), 10_000);
+    const interval = window.setInterval(() => void refresh(), 30_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
     const onOnline = () => void refresh();
+    document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onOnline);
     return () => {
       window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
   }, [hasActiveParcels, refresh, refreshIssue?.kind]);

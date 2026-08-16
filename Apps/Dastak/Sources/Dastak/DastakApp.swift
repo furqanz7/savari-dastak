@@ -269,6 +269,7 @@ private struct DastakCustomerPartnerRoot: View {
         case .customer:
             DastakCustomerRootView(
                 functions: services.functions,
+                orderEvents: services.orderEvents,
                 checkoutCustomerProvider: services.checkoutCustomer,
                 accountIDProvider: services.accountID,
                 deliveryPartnerAccess: model.rootState.deliveryPartnerAccess,

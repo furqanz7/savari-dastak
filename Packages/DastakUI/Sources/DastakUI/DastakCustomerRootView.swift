@@ -31,14 +31,18 @@ public struct DastakCustomerRootView: View {
     @State private var showingCheckout = false
     @State private var isConfirmingPayment = false
     @Environment(\.marketplaceSignOut) private var signOut
+    @Environment(\.scenePhase) private var scenePhase
     private let isPreview: Bool
     private let deliveryPartnerAccess: DeliveryPartnerAccess
     private let isDeliveryPartnerAccessLoading: Bool
     private let becomeDeliveryPartner: () -> Void
     private let accountSessionClient: any AccountSessionClient
+    private let orderEvents: any OrderEventClient
+    private let accountIDProvider: (@Sendable () async throws -> UUID)?
 
     public init(
         functions: any FunctionClient,
+        orderEvents: any OrderEventClient = NoopOrderEventClient(),
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
         deliveryPartnerAccess: DeliveryPartnerAccess = .unavailable,
@@ -57,6 +61,8 @@ public struct DastakCustomerRootView: View {
         self.isDeliveryPartnerAccessLoading = isDeliveryPartnerAccessLoading
         self.becomeDeliveryPartner = becomeDeliveryPartner
         accountSessionClient = SupabaseAccountSessionClient(functions: functions)
+        self.orderEvents = orderEvents
+        self.accountIDProvider = accountIDProvider
     }
 
     #if DEBUG
@@ -67,6 +73,8 @@ public struct DastakCustomerRootView: View {
         isDeliveryPartnerAccessLoading = false
         becomeDeliveryPartner = {}
         accountSessionClient = DastakPreviewAccountSessionClient()
+        orderEvents = NoopOrderEventClient()
+        accountIDProvider = nil
     }
     #endif
 
@@ -149,6 +157,18 @@ public struct DastakCustomerRootView: View {
             if let destination = consumePendingDestination() {
                 open(destination)
             }
+        }
+        .task {
+            guard !isPreview else { return }
+            await observeOrderChanges()
+        }
+        .task {
+            guard !isPreview else { return }
+            await pollOrderChanges()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard !isPreview, phase == .active else { return }
+            Task { await model.refreshOrdersAndParcels() }
         }
         .onReceive(NotificationCenter.default.publisher(for: dastakOrderNotificationOpened)) { notification in
             guard let destination = DastakCustomerDestination(
@@ -289,6 +309,32 @@ public struct DastakCustomerRootView: View {
             return nil
         }
         return DastakCustomerDestination(notificationPayload: ["orderId": orderID])
+    }
+
+    private func observeOrderChanges() async {
+        guard let accountIDProvider else { return }
+        while !Task.isCancelled {
+            do {
+                let accountID = try await accountIDProvider()
+                for try await _ in orderEvents.events(accountID: accountID) {
+                    guard !Task.isCancelled else { return }
+                    await model.refreshOrdersAndParcels()
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // The fallback poll keeps orders current while realtime reconnects.
+            }
+            try? await Task.sleep(for: .seconds(3))
+        }
+    }
+
+    private func pollOrderChanges() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(30))
+            guard !Task.isCancelled else { return }
+            await model.refreshOrdersAndParcels()
+        }
     }
 }
 
