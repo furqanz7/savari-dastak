@@ -3,6 +3,7 @@ import { LogOut, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
 import { completeProfile, isValidProfile, resolveAccess, type AccessResult } from "./access";
 import { AccountActionDialog } from "./AccountActionDialog";
+import { endCurrentAccountSession, getAccountSessions, webSessionMetadata } from "./accountSessions";
 import {
   callbackFailureMessage,
   readAuthCallback,
@@ -60,6 +61,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [showsDastakLaunch, setShowsDastakLaunch] = useState(config.product === "dastak");
   const knownUserId = useRef<string | undefined>(undefined);
+  const registeredSessionToken = useRef<string | undefined>(undefined);
   const hasHandledAuthCallback = useRef(false);
   const finishDastakLaunch = useCallback(() => setShowsDastakLaunch(false), []);
   const usesFullDastakAuth = config.product === "dastak"
@@ -110,6 +112,21 @@ export default function App() {
     };
   }, [evaluate]);
 
+  useEffect(() => {
+    if (config.product !== "dastak") return;
+    const session = view.phase === "ready" || view.phase === "restricted" ? view.session : undefined;
+    if (!session || registeredSessionToken.current === session.access_token) return;
+    registeredSessionToken.current = session.access_token;
+    void getAccountSessions({
+      accessToken: session.access_token,
+      supabaseUrl: config.supabaseUrl,
+      publishableKey: config.supabasePublishableKey,
+      ...webSessionMetadata(config.roleLabel),
+    }).catch(() => {
+      registeredSessionToken.current = undefined;
+    });
+  }, [view]);
+
   const signIn = async (provider: Provider) => {
     setBusy(true);
     const { error } = await supabase.auth.signInWithOAuth({
@@ -127,6 +144,18 @@ export default function App() {
 
   const signOut = useCallback(async () => {
     setBusy(true);
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token && config.product === "dastak") {
+      try {
+        await endCurrentAccountSession({
+          accessToken: data.session.access_token,
+          supabaseUrl: config.supabaseUrl,
+          publishableKey: config.supabasePublishableKey,
+        });
+      } catch {
+        // Local sign-out must remain available if the session registry is offline.
+      }
+    }
     const { error } = await supabase.auth.signOut({ scope: "local" });
     setBusy(false);
     if (error) setView({ phase: "error", message: "Dastak could not sign you out. Try again." });

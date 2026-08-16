@@ -3,36 +3,55 @@ import Foundation
 import MapKit
 import MarketplaceFoundation
 
-public struct DastakDeliveryLocation: Codable, Equatable, Sendable {
+public struct DastakDeliveryLocation: Codable, Equatable, Sendable, Identifiable {
+    public let addressID: UUID?
     public let address: String
     public let point: GeoPoint
     public let label: String?
     public let details: String?
+    public let building: String?
+    public let floor: String?
+    public let landmark: String?
+    public let deliveryNotes: String?
 
     public init(
+        addressID: UUID? = nil,
         address: String,
         point: GeoPoint,
         label: String? = nil,
-        details: String? = nil
+        details: String? = nil,
+        building: String? = nil,
+        floor: String? = nil,
+        landmark: String? = nil,
+        deliveryNotes: String? = nil
     ) {
+        self.addressID = addressID
         self.address = address
         self.point = point
         self.label = Self.cleaned(label)
         self.details = Self.cleaned(details)
+        self.building = Self.cleaned(building) ?? Self.cleaned(details)?.components(separatedBy: " • ").first
+        self.floor = Self.cleaned(floor)
+        self.landmark = Self.cleaned(landmark)
+        self.deliveryNotes = Self.cleaned(deliveryNotes)
     }
 
     public var displayName: String {
         label ?? "Delivery address"
     }
 
+    public var id: String {
+        addressID?.uuidString ?? "\(point.latitude),\(point.longitude)|\(label ?? "")|\(address)"
+    }
+
     public var displayAddress: String {
-        [details, address]
+        [building, floor, landmark, address]
             .compactMap { $0 }
             .joined(separator: ", ")
     }
 
     public var isReadyForDelivery: Bool {
-        label != nil && details != nil
+        label != nil && building != nil
     }
 
     private static func cleaned(_ value: String?) -> String? {

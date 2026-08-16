@@ -87,6 +87,8 @@ public struct DastakIdentityAccountView: View {
     private let accessLabel: String
     private let allowsAccountDeletion: Bool
     private let openWorkspace: () -> Void
+    private let accountSessionClient: any AccountSessionClient
+    private let sessionApplicationName: String
     @StateObject private var model: DastakIdentityAccountModel
     @Environment(\.marketplaceSignOut) private var signOut
     @Environment(\.scenePhase) private var scenePhase
@@ -105,6 +107,13 @@ public struct DastakIdentityAccountView: View {
         self.accessLabel = accessLabel
         self.allowsAccountDeletion = allowsAccountDeletion
         self.openWorkspace = openWorkspace
+        accountSessionClient = SupabaseAccountSessionClient(functions: services.functions)
+        sessionApplicationName = switch roleName {
+        case "Delivery Partner": "Dastak"
+        case "Merchant": "Dastak Merchant"
+        case "Owner": "Dastak Admin"
+        default: "Dastak \(roleName)"
+        }
         _model = StateObject(
             wrappedValue: DastakIdentityAccountModel(
                 services: services,
@@ -494,6 +503,21 @@ public struct DastakIdentityAccountView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             Text("Account controls").font(MarketplaceTypography.sectionTitle)
             VStack(spacing: 0) {
+                NavigationLink {
+                    DastakAccountSessionsView(
+                        client: accountSessionClient,
+                        applicationName: sessionApplicationName
+                    )
+                } label: {
+                    row(
+                        title: "Devices and sessions",
+                        value: "Review signed-in devices",
+                        symbol: "laptopcomputer.and.iphone",
+                        showsDisclosure: true
+                    )
+                }
+                .buttonStyle(.plain)
+                Divider().padding(.leading, 56)
                 Button { accountAlert = .signOut } label: {
                     row(
                         title: "Sign out",
@@ -725,7 +749,7 @@ public struct DastakIdentityAccountView: View {
                 message: Text("You'll need to sign in again to access this account."),
                 primaryButton: .cancel(Text("Cancel")),
                 secondaryButton: .destructive(Text("Sign out")) {
-                    Task { await signOut() }
+                    Task { await endCurrentSessionAndSignOut() }
                 }
             )
         case .deleteAccount:
@@ -738,6 +762,14 @@ public struct DastakIdentityAccountView: View {
                 }
             )
         }
+    }
+
+    @MainActor
+    private func endCurrentSessionAndSignOut() async {
+        try? await accountSessionClient.endCurrent(
+            idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
+        )
+        await signOut()
     }
 
     @MainActor

@@ -35,6 +35,7 @@ public struct DastakCustomerRootView: View {
     private let deliveryPartnerAccess: DeliveryPartnerAccess
     private let isDeliveryPartnerAccessLoading: Bool
     private let becomeDeliveryPartner: () -> Void
+    private let accountSessionClient: any AccountSessionClient
 
     public init(
         functions: any FunctionClient,
@@ -55,6 +56,7 @@ public struct DastakCustomerRootView: View {
         self.deliveryPartnerAccess = deliveryPartnerAccess
         self.isDeliveryPartnerAccessLoading = isDeliveryPartnerAccessLoading
         self.becomeDeliveryPartner = becomeDeliveryPartner
+        accountSessionClient = SupabaseAccountSessionClient(functions: functions)
     }
 
     #if DEBUG
@@ -64,6 +66,7 @@ public struct DastakCustomerRootView: View {
         deliveryPartnerAccess = .notApplied
         isDeliveryPartnerAccessLoading = false
         becomeDeliveryPartner = {}
+        accountSessionClient = DastakPreviewAccountSessionClient()
     }
     #endif
 
@@ -101,6 +104,8 @@ public struct DastakCustomerRootView: View {
                 DastakAccountView(
                     customer: model.checkoutCustomer,
                     location: model.deliveryAddress,
+                    savedAddressCount: model.savedAddresses.count,
+                    accountSessionClient: accountSessionClient,
                     discoveryRadiusKilometres: model.discoveryRadiusKilometres,
                     refreshFailure: model.accountRefreshFailure,
                     deliveryPartnerAccess: deliveryPartnerAccess,
@@ -155,14 +160,11 @@ public struct DastakCustomerRootView: View {
             Task { await model.registerDeviceTokenIfAvailable() }
         }
         .sheet(isPresented: $showingDeliveryAddressEditor) {
-            DastakDeliveryAddressEditor(
+            DastakAddressBookView(
+                model: model,
                 requiresCompletion: false,
-                initialLocation: model.deliveryAddress ?? model.selectedLocation,
                 currentLocation: locationManager.location,
-                requestCurrentLocation: locationManager.requestLocation,
-                save: { location in
-                    await model.setLocation(location)
-                }
+                requestCurrentLocation: locationManager.requestLocation
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)

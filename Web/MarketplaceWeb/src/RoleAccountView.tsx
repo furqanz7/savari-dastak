@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   LogOut,
   Mail,
+  MonitorSmartphone,
   Pencil,
   Phone,
   ShieldCheck,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
 import { AccountActionDialog } from "./AccountActionDialog";
+import { AccountSessionsSheet } from "./AccountSessionsSheet";
 import {
   AccountProfileRequestError,
   deleteAccount,
@@ -72,6 +74,7 @@ export function RoleAccountView({
   const [editing, setEditing] = useState(false);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [detail, setDetail] = useState<AccountDetail>();
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -184,6 +187,12 @@ export function RoleAccountView({
           detail={copy.privacy}
           onClick={() => setDetail("privacy")}
         />
+        <AccountButtonRow
+          icon={<MonitorSmartphone size={19} />}
+          title="Devices and sessions"
+          detail="Review active sign-ins and sign out other devices"
+          onClick={() => setSessionsOpen(true)}
+        />
       </div>
     </section>
 
@@ -230,6 +239,14 @@ export function RoleAccountView({
       roleName={roleName}
       accessLabel={accessLabel}
       onDismiss={() => setDetail(undefined)}
+    />}
+    {sessionsOpen && <AccountSessionsSheet
+      accessToken={accessToken}
+      supabaseUrl={supabaseUrl}
+      publishableKey={publishableKey}
+      appName={roleName}
+      onDismiss={() => setSessionsOpen(false)}
+      onSessionExpired={onSignOut}
     />}
     {confirmingSignOut && <AccountActionDialog
       action="sign-out"

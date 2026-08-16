@@ -65,14 +65,11 @@ struct DastakCartView: View {
             }
         }
         .sheet(isPresented: $showingDeliveryAddressEditor) {
-            DastakDeliveryAddressEditor(
+            DastakAddressBookView(
+                model: model,
                 requiresCompletion: true,
-                initialLocation: model.deliveryAddress ?? model.selectedLocation,
                 currentLocation: currentLocation,
-                requestCurrentLocation: requestCurrentLocation,
-                save: { location in
-                    await model.setLocation(location)
-                }
+                requestCurrentLocation: requestCurrentLocation
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)

@@ -247,15 +247,76 @@ public struct MarketplaceAuthenticationShell: View {
                     requiredAccess: requiredAccess,
                     coordinator: coordinator,
                     showsPersistentSignOut: showsPersistentSignOut,
-                    activeContent: activeContent(services),
+                    activeContent: sessionRegistered(
+                        activeContent(services),
+                        services: services
+                    ),
                     restrictedContent: restrictedContent.map { content in
-                        { route in content(route, services) }
+                        { route in
+                            sessionRegistered(
+                                content(route, services),
+                                services: services
+                            )
+                        }
                     }
                 )
             } else {
                 ShellUnavailableView(applicationName: applicationName)
             }
         }
+    }
+
+    private func sessionRegistered(
+        _ content: AnyView,
+        services: MarketplaceAuthenticatedServices
+    ) -> AnyView {
+        guard product == .dastak else { return content }
+        return AnyView(
+            content.modifier(
+                DastakSessionRegistrationModifier(
+                    client: SupabaseAccountSessionClient(functions: services.functions),
+                    applicationName: applicationName
+                )
+            )
+        )
+    }
+}
+
+private struct DastakSessionRegistrationModifier: ViewModifier {
+    let client: any AccountSessionClient
+    let applicationName: String
+
+    @State private var hasRegistered = false
+
+    func body(content: Content) -> some View {
+        content.task {
+            guard !hasRegistered else { return }
+            hasRegistered = true
+            _ = try? await client.snapshot(
+                device: currentDevice,
+                idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
+            )
+        }
+    }
+
+    private var currentDevice: AccountSessionDevice {
+        #if canImport(UIKit)
+        let name = UIDevice.current.name
+        let model = UIDevice.current.model
+        return AccountSessionDevice(
+            deviceName: name.isEmpty ? model : name,
+            platform: "ios",
+            appName: applicationName,
+            userAgent: "Dastak iOS"
+        )
+        #else
+        return AccountSessionDevice(
+            deviceName: Host.current().localizedName ?? "Apple device",
+            platform: "ios",
+            appName: applicationName,
+            userAgent: "Dastak Apple app"
+        )
+        #endif
     }
 }
 

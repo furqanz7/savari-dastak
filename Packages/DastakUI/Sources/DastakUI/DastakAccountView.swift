@@ -1,5 +1,6 @@
 import DastakDomain
 import MarketplaceDesignSystem
+import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
 #if canImport(UIKit)
@@ -23,6 +24,8 @@ struct DastakAccountView: View {
 
     let customer: MarketplaceCheckoutCustomer?
     let location: DastakDeliveryLocation?
+    let savedAddressCount: Int
+    let accountSessionClient: any AccountSessionClient
     let discoveryRadiusKilometres: Int
     let refreshFailure: DastakCustomerRefreshFailure?
     let deliveryPartnerAccess: DeliveryPartnerAccess
@@ -120,8 +123,14 @@ struct DastakAccountView: View {
 
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Saved place")
-                .font(MarketplaceTypography.sectionTitle)
+            HStack {
+                Text("Saved addresses")
+                    .font(MarketplaceTypography.sectionTitle)
+                Spacer()
+                Text("\(savedAddressCount)/10")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Button(action: chooseLocation) {
                 HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
@@ -155,7 +164,7 @@ struct DastakAccountView: View {
             .buttonStyle(.plain)
             .disabled(isDeliveryPartnerAccessLoading)
             .marketplaceFlatSurface()
-            .accessibilityHint(location == nil ? "Add a saved delivery address" : "Edit your saved delivery address")
+            .accessibilityHint(location == nil ? "Add a saved delivery address" : "Manage your saved delivery addresses")
         }
     }
 
@@ -396,6 +405,19 @@ struct DastakAccountView: View {
             Text("Account security")
                 .font(MarketplaceTypography.sectionTitle)
             VStack(spacing: 0) {
+                NavigationLink {
+                    DastakAccountSessionsView(
+                        client: accountSessionClient,
+                        applicationName: "Dastak"
+                    )
+                } label: {
+                    accountRow(
+                        title: "Devices and sessions",
+                        value: "Review signed-in devices",
+                        symbol: "laptopcomputer.and.iphone"
+                    )
+                }
+                Divider().padding(.leading, 56)
                 Button { accountAlert = .signOut } label: {
                     accountRow(
                         title: "Sign out",
@@ -434,7 +456,7 @@ struct DastakAccountView: View {
                 message: Text("You'll need to sign in again to access your account and orders."),
                 primaryButton: .cancel(Text("Cancel")),
                 secondaryButton: .destructive(Text("Sign out")) {
-                    Task { await signOut() }
+                    Task { await endCurrentSessionAndSignOut() }
                 }
             )
         case .deleteAccount:
@@ -453,6 +475,14 @@ struct DastakAccountView: View {
                 dismissButton: .cancel(Text("OK"))
             )
         }
+    }
+
+    @MainActor
+    private func endCurrentSessionAndSignOut() async {
+        try? await accountSessionClient.endCurrent(
+            idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
+        )
+        await signOut()
     }
 
     @MainActor

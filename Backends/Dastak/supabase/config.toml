@@ -420,6 +420,13 @@ verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/account-profile/index.ts"
 
+[functions.account-sessions]
+enabled = true
+# The handler authenticates bearer tokens after serving browser CORS preflight.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/account-sessions/index.ts"
+
 [functions.issue-evidence-url]
 enabled = true
 verify_jwt = true

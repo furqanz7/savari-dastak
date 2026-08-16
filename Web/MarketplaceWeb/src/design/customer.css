@@ -96,13 +96,63 @@
 .customer-address-label input { width: 100%; padding: 14px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); }
 .customer-address-label input { min-height: 52px; }
 .customer-address-details > div { overflow: hidden; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
-.customer-address-details input { width: 100%; min-height: 54px; padding: 0 14px; border: 0; color: var(--text-primary); background: transparent; }
-.customer-address-details input + input { border-top: 1px solid var(--divider); }
+.customer-address-details label { display: grid; gap: 6px; padding: 11px 14px; }
+.customer-address-details label + label { border-top: 1px solid var(--divider); }
+.customer-address-details label > span { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .04em; }
+.customer-address-details label > span small { font-weight: 500; text-transform: none; letter-spacing: 0; }
+.customer-address-details input,
+.customer-address-details textarea { width: 100%; min-height: 32px; padding: 0; border: 0; outline: 0; color: var(--text-primary); background: transparent; resize: vertical; }
+.customer-address-details textarea { min-height: 64px; line-height: 1.45; }
 .address-preview { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; margin-top: 18px; padding: 16px 0; border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); color: var(--dastak-accent); }
 .address-preview span { min-width: 0; display: grid; gap: 4px; color: var(--text-primary); }
 .address-preview small { color: var(--text-secondary); overflow-wrap: anywhere; }
 .customer-address-footer { flex: 0 0 auto; padding: 16px 26px 26px; border-top: 1px solid var(--divider); background: var(--surface); }
 .customer-sheet-action { width: 100%; min-height: 54px; margin: 0; display: inline-flex; justify-content: center; align-items: center; gap: 8px; }
+
+.customer-address-book > header,
+.account-sessions-sheet > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.customer-address-book > header p:last-child,
+.account-sessions-sheet > header p:last-child { margin: 9px 0 0; color: var(--text-secondary); line-height: 1.45; }
+.customer-address-book-list,
+.account-session-list { display: grid; gap: 9px; margin-top: 22px; }
+.customer-address-book-row { overflow: hidden; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
+.customer-address-book-row.selected { border-color: color-mix(in srgb, var(--dastak-accent) 58%, var(--divider)); }
+.customer-address-book-select { width: 100%; min-height: 94px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 13px; align-items: center; padding: 14px; border: 0; color: var(--text-primary); background: transparent; text-align: left; }
+.customer-address-book-select > span:nth-child(2) { min-width: 0; display: grid; gap: 4px; }
+.customer-address-book-select small { color: var(--text-secondary); line-height: 1.4; overflow-wrap: anywhere; }
+.customer-address-book-select small.instructions { color: var(--dastak-accent); }
+.customer-address-selected { display: inline-flex; align-items: center; gap: 4px; color: var(--dastak-accent); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.customer-address-book-actions { display: flex; justify-content: flex-end; gap: 7px; padding: 0 12px 11px; }
+.customer-address-book-actions button { width: 38px; height: 34px; display: grid; place-items: center; border: 1px solid var(--divider); border-radius: 7px; color: var(--text-secondary); background: var(--surface); }
+.customer-address-book-actions button:last-child { color: var(--destructive); }
+.customer-address-book-empty { min-height: 180px; display: grid; place-items: center; align-content: center; gap: 7px; border: 1px dashed var(--divider); border-radius: 8px; color: var(--text-secondary); text-align: center; }
+.customer-address-book-empty svg { color: var(--dastak-accent); }
+.customer-address-book-empty strong { color: var(--text-primary); }
+.customer-address-add { width: 100%; min-height: 52px; justify-content: center; margin-top: 18px; }
+.customer-address-confirm { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(15 15 16 / 72%); backdrop-filter: blur(10px); }
+.customer-address-book { position: relative; overflow: hidden; }
+.customer-address-confirm > section { width: min(390px, 100%); padding: 22px; border: 1px solid var(--glass-border); border-radius: 12px; background: var(--surface-raised); box-shadow: var(--glass-shadow); }
+.customer-address-confirm h3 { margin: 0; font-size: 21px; }
+.customer-address-confirm p { margin: 8px 0 0; color: var(--text-secondary); line-height: 1.45; }
+.customer-address-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 18px; }
+.customer-address-confirm button { min-height: 46px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface); font-weight: 750; }
+.customer-address-confirm button.destructive { color: var(--destructive); }
+
+.account-sessions-loading,
+.account-sessions-empty { min-height: 150px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--text-secondary); }
+.account-sessions-loading svg { color: var(--dastak-accent); animation: customer-partner-spin 900ms linear infinite; }
+.account-session-list article { min-height: 72px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 13px 14px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
+.account-session-list article.current { border-color: color-mix(in srgb, var(--dastak-accent) 48%, var(--divider)); }
+.account-session-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 8px; color: var(--dastak-accent); background: var(--dastak-accent-soft); }
+.account-session-list article > span:nth-child(2) { min-width: 0; display: grid; gap: 4px; }
+.account-session-list small { color: var(--text-secondary); }
+.account-session-list b { padding: 5px 7px; border-radius: 5px; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-size: 10px; text-transform: uppercase; }
+.account-sessions-note { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; margin-top: 18px; padding: 14px; border: 1px solid var(--divider); border-radius: 8px; color: var(--success); background: color-mix(in srgb, var(--success) 7%, var(--surface-raised)); }
+.account-sessions-note p { display: grid; gap: 4px; margin: 0; color: var(--text-primary); }
+.account-sessions-note span { color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.account-sessions-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; color: var(--destructive); font-size: 13px; }
+.account-sessions-error button { min-height: 34px; padding: 0 10px; border: 0; border-radius: 7px; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-weight: 750; }
+.account-sessions-action { width: 100%; min-height: 50px; display: inline-flex; justify-content: center; gap: 8px; margin-top: 16px; }
 
 .account-profile-sheet > label { display: grid; gap: 8px; margin-top: 20px; color: var(--text-secondary); font-size: 13px; font-weight: 700; }
 .account-profile-sheet > .phone-field-group { margin-top: 20px; }
@@ -272,6 +322,8 @@ button.customer-account-row:not(:disabled):hover { color: var(--dastak-accent); 
   .customer-profile-card { grid-template-columns: 54px minmax(0, 1fr) auto; padding: 14px; }
   .customer-profile-avatar { width: 54px; height: 54px; font-size: 18px; }
   .customer-partner-cta { padding: 14px; }
+  .customer-address-book-select { grid-template-columns: 40px minmax(0, 1fr); }
+  .customer-address-selected { grid-column: 2; justify-self: start; }
 }
 
 @media (max-width: 390px) {

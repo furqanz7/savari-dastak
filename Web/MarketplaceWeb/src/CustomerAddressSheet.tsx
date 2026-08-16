@@ -2,11 +2,15 @@ import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { BriefcaseBusiness, Check, House, MapPin, MapPinned, X } from "lucide-react";
 import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
 import type { CustomerDeliveryAddress } from "./customerAddresses";
-import { combineDoorstepDetails, splitDoorstepDetails } from "./customerAddressDetails";
+import { splitDoorstepDetails } from "./customerAddressDetails";
 
 export type CustomerAddressDraft = {
+  addressId?: string;
   label: string;
-  details: string;
+  building: string;
+  floor?: string;
+  landmark?: string;
+  deliveryNotes?: string;
   place: SelectedPlace;
 };
 
@@ -26,8 +30,10 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
   const [kind, setKind] = useState<AddressKind>(initialKind);
   const [customLabel, setCustomLabel] = useState(initialKind === "Other" ? address?.label ?? "" : "");
   const initialDetails = splitDoorstepDetails(address?.details);
-  const [building, setBuilding] = useState(initialDetails.building);
-  const [landmark, setLandmark] = useState(initialDetails.landmark);
+  const [building, setBuilding] = useState(address?.building ?? initialDetails.building);
+  const [floor, setFloor] = useState(address?.floor ?? "");
+  const [landmark, setLandmark] = useState(address?.landmark ?? initialDetails.landmark);
+  const [deliveryNotes, setDeliveryNotes] = useState(address?.deliveryNotes ?? "");
   const [place, setPlace] = useState<SelectedPlace | undefined>(initialPlace ?? (address ? {
     address: address.address,
     latitude: address.location.latitude,
@@ -48,7 +54,15 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (place && building.trim() && resolvedLabel) {
-      void onSave({ label: resolvedLabel, details: combineDoorstepDetails(building, landmark), place });
+      void onSave({
+        addressId: address?.addressId,
+        label: resolvedLabel,
+        building: building.trim(),
+        floor: floor.trim() || undefined,
+        landmark: landmark.trim() || undefined,
+        deliveryNotes: deliveryNotes.trim() || undefined,
+        place,
+      });
     }
   };
 
@@ -95,13 +109,15 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
           </label>}
           <fieldset className="customer-address-details">
             <legend>Doorstep details</legend>
-            <small>Tell us exactly where to stop. Only the first field is required.</small>
+            <small>Help the delivery partner find the right entrance without calling.</small>
             <div>
-              <input value={building} maxLength={180} onChange={(event) => setBuilding(event.target.value)} placeholder="House, flat or building" required autoComplete="street-address" />
-              <input value={landmark} maxLength={110} onChange={(event) => setLandmark(event.target.value)} placeholder="Landmark or delivery note (optional)" />
+              <label><span>House, flat or building</span><input value={building} maxLength={180} onChange={(event) => setBuilding(event.target.value)} placeholder="For example, 12 Mandi Street" required autoComplete="street-address" /></label>
+              <label><span>Floor or unit <small>Optional</small></span><input value={floor} maxLength={80} onChange={(event) => setFloor(event.target.value)} placeholder="For example, second floor" /></label>
+              <label><span>Nearby landmark <small>Optional</small></span><input value={landmark} maxLength={110} onChange={(event) => setLandmark(event.target.value)} placeholder="For example, opposite the post office" /></label>
+              <label><span>Delivery instructions <small>Optional</small></span><textarea value={deliveryNotes} maxLength={240} onChange={(event) => setDeliveryNotes(event.target.value)} placeholder="Gate, bell, security or hand-off instructions" rows={3} /></label>
             </div>
           </fieldset>
-          {place && <div className="address-preview"><MapPin size={18} /><span><strong>{resolvedLabel || "Delivery address"}</strong><small>{combineDoorstepDetails(building, landmark) || "Add doorstep details"}</small><small>{place.address}</small></span></div>}
+          {place && <div className="address-preview"><MapPin size={18} /><span><strong>{resolvedLabel || "Delivery address"}</strong><small>{[building, floor, landmark].filter((value) => value.trim()).join(", ") || "Add doorstep details"}</small><small>{place.address}</small></span></div>}
           {error && <p className="order-error" role="alert">{error}</p>}
         </div>
         <footer className="customer-address-footer">

@@ -13,6 +13,7 @@ import {
   LogOut,
   MapPin,
   Minus,
+  MonitorSmartphone,
   PackageOpen,
   Pencil,
   Plus,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
 import { AccountActionDialog } from "./AccountActionDialog";
+import { AccountSessionsSheet } from "./AccountSessionsSheet";
 import { AccountProfileRequestError, deleteAccount, updateAccountProfile, type AccountProfile } from "./accountProfile";
 import {
   browseCatalogue,
@@ -64,12 +66,15 @@ import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
 import { customerDataIssue, type CustomerDataIssue } from "./customerDataState";
 import type { CustomerSection } from "./customerNavigation";
 import {
+  deleteCustomerAddress,
   getCustomerAddresses,
-  saveDefaultCustomerAddress,
+  saveCustomerAddress,
+  setDefaultCustomerAddress,
   CustomerAddressRequestError,
   type CustomerDeliveryAddress,
 } from "./customerAddresses";
 import { CustomerAddressSheet, type CustomerAddressDraft } from "./CustomerAddressSheet";
+import { CustomerAddressBookSheet } from "./CustomerAddressBookSheet";
 import { CancellationSheet, CustomerRouteMap, CustomerTimeline } from "./CustomerDeliveryDetails";
 import { merchantOrderPresentation, paymentStateLabel } from "./customerLifecycle";
 import { getDeliveryPartnerSnapshot } from "./delivery";
@@ -164,9 +169,12 @@ export function CatalogueView({
   const [orderError, setOrderError] = useState<string>();
   const [ordersRefreshIssue, setOrdersRefreshIssue] = useState<CustomerDataIssue>();
   const [paymentMessage, setPaymentMessage] = useState<string>();
+  const [savedAddresses, setSavedAddresses] = useState<CustomerDeliveryAddress[]>([]);
   const [deliveryAddress, setDeliveryAddress] = useState<CustomerDeliveryAddress>();
   const [addressLoading, setAddressLoading] = useState(true);
+  const [addressBookOpen, setAddressBookOpen] = useState(false);
   const [addressEditorOpen, setAddressEditorOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<CustomerDeliveryAddress>();
   const [addressError, setAddressError] = useState<string>();
   const [reviewAfterAddress, setReviewAfterAddress] = useState(false);
   const [accountProfile, setAccountProfile] = useState<AccountProfile>({
@@ -178,6 +186,7 @@ export function CatalogueView({
   const [profileError, setProfileError] = useState<string>();
   const [showSignOutConfirmation, setShowSignOutConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [deliveryPartnerAccountState, setDeliveryPartnerAccountState] = useState<DeliveryPartnerAccountState>("loading");
   const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderSnapshot>();
   const [searchQuery, setSearchQuery] = useState("");
@@ -280,6 +289,7 @@ export function CatalogueView({
     void getCustomerAddresses(auth).then((snapshot) => {
       if (!active) return;
       const saved = snapshot.addresses.find((address) => address.isDefault) ?? snapshot.addresses[0];
+      setSavedAddresses(snapshot.addresses);
       setDeliveryAddress(saved);
       setAddressError(undefined);
       if (saved && !initialDiscovery.location) {
@@ -388,6 +398,7 @@ export function CatalogueView({
     if (!selectedLocation || !cartStoreId || cartEntries.length === 0 || addressLoading) return;
     if (!deliveryAddress) {
       setReviewAfterAddress(true);
+      setEditingAddress(undefined);
       setAddressEditorOpen(true);
       return;
     }
@@ -402,30 +413,84 @@ export function CatalogueView({
     setAddressError(undefined);
     try {
       addressSaveRequest.current ??= crypto.randomUUID();
-      const snapshot = await saveDefaultCustomerAddress({
+      const snapshot = await saveCustomerAddress({
         ...auth,
+        addressId: draft.addressId,
         label: draft.label,
         address: draft.place.address,
-        details: draft.details,
+        building: draft.building,
+        floor: draft.floor,
+        landmark: draft.landmark,
+        deliveryNotes: draft.deliveryNotes,
         location: { latitude: draft.place.latitude, longitude: draft.place.longitude },
+        makeDefault: true,
         idempotencyKey: addressSaveRequest.current,
       });
       const saved = snapshot.addresses.find((address) => address.isDefault) ?? snapshot.addresses[0];
       if (!saved) throw new Error("The saved delivery address was not returned.");
       addressSaveRequest.current = undefined;
+      setSavedAddresses(snapshot.addresses);
       setDeliveryAddress(saved);
       const location = { label: saved.displayAddress, coordinates: saved.location };
       setAddressEditorOpen(false);
+      setEditingAddress(undefined);
       setAddressLoading(false);
       if (reviewAfterAddress) {
         setReviewAfterAddress(false);
         await requestOrderQuote(location);
+      } else {
+        setAddressBookOpen(true);
       }
     } catch (error) {
       if (error instanceof CustomerAddressRequestError && error.status === 401) {
         onSignOut();
         return;
       }
+      setAddressError(orderMessage(error));
+    } finally {
+      setOrderBusy(false);
+    }
+  };
+
+  const selectAddress = async (address: CustomerDeliveryAddress) => {
+    setOrderBusy(true);
+    setAddressError(undefined);
+    try {
+      const snapshot = address.isDefault ? { addresses: savedAddresses } : await setDefaultCustomerAddress({
+        ...auth,
+        addressId: address.addressId,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      const selected = snapshot.addresses.find((item) => item.addressId === address.addressId) ?? address;
+      setSavedAddresses(snapshot.addresses);
+      setDeliveryAddress({ ...selected, isDefault: true });
+      setAddressBookOpen(false);
+      if (reviewAfterAddress) {
+        setReviewAfterAddress(false);
+        await requestOrderQuote({ label: selected.displayAddress, coordinates: selected.location });
+      }
+    } catch (error) {
+      if (error instanceof CustomerAddressRequestError && error.status === 401) return onSignOut();
+      setAddressError(orderMessage(error));
+    } finally {
+      setOrderBusy(false);
+    }
+  };
+
+  const removeAddress = async (address: CustomerDeliveryAddress) => {
+    setOrderBusy(true);
+    setAddressError(undefined);
+    try {
+      const snapshot = await deleteCustomerAddress({
+        ...auth,
+        addressId: address.addressId,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      const selected = snapshot.addresses.find((item) => item.isDefault) ?? snapshot.addresses[0];
+      setSavedAddresses(snapshot.addresses);
+      setDeliveryAddress(selected);
+    } catch (error) {
+      if (error instanceof CustomerAddressRequestError && error.status === 401) return onSignOut();
       setAddressError(orderMessage(error));
     } finally {
       setOrderBusy(false);
@@ -628,7 +693,7 @@ export function CatalogueView({
             quote={quote}
             address={deliveryAddress}
             busy={orderBusy}
-            onChangeAddress={() => { setReviewAfterAddress(true); setAddressEditorOpen(true); }}
+            onChangeAddress={() => { setReviewAfterAddress(true); savedAddresses.length ? setAddressBookOpen(true) : setAddressEditorOpen(true); }}
             onPlaceOrder={placeOrder}
           />}
           {!ordersLoading && hasActiveOrders && (
@@ -695,7 +760,7 @@ export function CatalogueView({
             quote={quote}
             address={deliveryAddress}
             busy={orderBusy}
-            onChangeAddress={() => { setReviewAfterAddress(true); setAddressEditorOpen(true); }}
+            onChangeAddress={() => { setReviewAfterAddress(true); savedAddresses.length ? setAddressBookOpen(true) : setAddressEditorOpen(true); }}
             onPlaceOrder={placeOrder}
           />}
           <CatalogueContent
@@ -753,11 +818,11 @@ export function CatalogueView({
           </button>
 
           <section className="customer-account-group" aria-labelledby="account-delivery-title">
-            <div className="customer-account-section-heading"><h2 id="account-delivery-title">Saved place</h2><span>Used at checkout</span></div>
-            <button className="customer-saved-place" type="button" onClick={() => { setReviewAfterAddress(false); setAddressEditorOpen(true); }} disabled={addressLoading}>
+            <div className="customer-account-section-heading"><h2 id="account-delivery-title">Saved addresses</h2><span>{savedAddresses.length}/10</span></div>
+            <button className="customer-saved-place" type="button" onClick={() => { setReviewAfterAddress(false); setAddressBookOpen(true); }} disabled={addressLoading}>
               <span className="customer-account-icon"><MapPin size={20} /></span>
-              <span><strong>{deliveryAddress?.label ?? "Add delivery address"}</strong><small>{deliveryAddress?.displayAddress ?? "Save a precise pin and doorstep details for checkout."}</small></span>
-              <span className="customer-saved-place-action">{deliveryAddress ? "Edit" : "Add"}<ChevronRight size={17} /></span>
+              <span><strong>{deliveryAddress?.label ?? "Add delivery address"}</strong><small>{deliveryAddress?.displayAddress ?? "Save precise pins and doorstep instructions for checkout."}</small></span>
+              <span className="customer-saved-place-action">Manage<ChevronRight size={17} /></span>
             </button>
             {addressError && <small className="error-text customer-account-error">{addressError}</small>}
           </section>
@@ -816,6 +881,9 @@ export function CatalogueView({
               <div className="customer-account-row customer-privacy-row">
                 <Hand size={20} /><span><strong>Privacy and data</strong><small>Your unverified number is shared only for an active delivery. Your browse area is separate; the saved address is used to price and fulfil an order.</small></span>
               </div>
+              <button className="customer-account-row" type="button" onClick={() => setSessionsOpen(true)}>
+                <MonitorSmartphone size={20} /><span><strong>Devices and sessions</strong><small>Review sign-ins and sign out other devices</small></span><ChevronRight size={18} />
+              </button>
               <button className="customer-account-row" type="button" onClick={() => setShowSignOutConfirmation(true)}>
                 <LogOut size={20} /><span><strong>Sign out</strong><small>Keep this account and end this session</small></span><ChevronRight size={18} />
               </button>
@@ -827,8 +895,20 @@ export function CatalogueView({
           {profileError && !profileEditorOpen && <p className="error-text" role="alert">{profileError}</p>}
         </section>
       )}
+      {addressBookOpen && <CustomerAddressBookSheet
+        addresses={savedAddresses}
+        selectedAddressId={deliveryAddress?.addressId}
+        busy={orderBusy}
+        error={addressError}
+        context={reviewAfterAddress ? "checkout" : "account"}
+        onDismiss={() => { setAddressBookOpen(false); setReviewAfterAddress(false); setAddressError(undefined); }}
+        onAdd={() => { setEditingAddress(undefined); setAddressBookOpen(false); setAddressEditorOpen(true); }}
+        onEdit={(address) => { setEditingAddress(address); setAddressBookOpen(false); setAddressEditorOpen(true); }}
+        onSelect={selectAddress}
+        onDelete={removeAddress}
+      />}
       {addressEditorOpen && <CustomerAddressSheet
-        address={deliveryAddress}
+        address={editingAddress}
         initialPlace={reviewAfterAddress && selectedLocation ? {
           address: selectedLocation.label,
           latitude: selectedLocation.coordinates.latitude,
@@ -837,7 +917,7 @@ export function CatalogueView({
         busy={orderBusy}
         error={addressError}
         context={reviewAfterAddress ? "checkout" : "account"}
-        onDismiss={() => { addressSaveRequest.current = undefined; setAddressEditorOpen(false); setReviewAfterAddress(false); setAddressError(undefined); }}
+        onDismiss={() => { addressSaveRequest.current = undefined; setAddressEditorOpen(false); setEditingAddress(undefined); if (!reviewAfterAddress) setAddressBookOpen(true); else setReviewAfterAddress(false); setAddressError(undefined); }}
         onSave={saveAddress}
       />}
       {profileEditorOpen && <AccountProfileSheet
@@ -846,6 +926,14 @@ export function CatalogueView({
         error={profileError}
         onDismiss={() => { setProfileEditorOpen(false); setProfileError(undefined); }}
         onSave={saveProfile}
+      />}
+      {sessionsOpen && <AccountSessionsSheet
+        accessToken={accessToken}
+        supabaseUrl={supabaseUrl}
+        publishableKey={publishableKey}
+        appName="Customer"
+        onDismiss={() => setSessionsOpen(false)}
+        onSessionExpired={onSignOut}
       />}
       {showSignOutConfirmation && <AccountActionDialog
         action="sign-out"

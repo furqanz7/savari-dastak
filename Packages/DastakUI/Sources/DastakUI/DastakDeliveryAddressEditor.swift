@@ -50,7 +50,9 @@ struct DastakDeliveryAddressEditor: View {
     @State private var addressKind: AddressKind
     @State private var customLabel: String
     @State private var building: String
+    @State private var floor: String
     @State private var landmark: String
+    @State private var deliveryNotes: String
     @State private var showingLocationPicker = false
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -59,7 +61,9 @@ struct DastakDeliveryAddressEditor: View {
     private enum Field {
         case customLabel
         case building
+        case floor
         case landmark
+        case deliveryNotes
     }
 
     init(
@@ -82,8 +86,10 @@ struct DastakDeliveryAddressEditor: View {
         _selectedLocation = State(initialValue: initialLocation)
         _addressKind = State(initialValue: kind)
         _customLabel = State(initialValue: kind == .custom ? initialLocation?.label ?? "" : "")
-        _building = State(initialValue: savedDetails.building)
-        _landmark = State(initialValue: savedDetails.landmark)
+        _building = State(initialValue: initialLocation?.building ?? savedDetails.building)
+        _floor = State(initialValue: initialLocation?.floor ?? "")
+        _landmark = State(initialValue: initialLocation?.landmark ?? savedDetails.landmark)
+        _deliveryNotes = State(initialValue: initialLocation?.deliveryNotes ?? "")
     }
 
     var body: some View {
@@ -319,7 +325,7 @@ struct DastakDeliveryAddressEditor: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             Text("Doorstep details")
                 .font(.headline)
-            Text("Tell us exactly where to stop. Only the first field is required.")
+            Text("Help the delivery partner find the right entrance without calling.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -328,15 +334,33 @@ struct DastakDeliveryAddressEditor: View {
                     .textContentType(.fullStreetAddress)
                     .focused($focusedField, equals: .building)
                     .submitLabel(.next)
+                    .onSubmit { focusedField = .floor }
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .frame(minHeight: 52)
+
+                Divider().padding(.leading, MarketplaceSpacing.medium)
+
+                TextField("Floor or unit (optional)", text: $floor)
+                    .focused($focusedField, equals: .floor)
+                    .submitLabel(.next)
                     .onSubmit { focusedField = .landmark }
                     .padding(.horizontal, MarketplaceSpacing.medium)
                     .frame(minHeight: 52)
 
                 Divider().padding(.leading, MarketplaceSpacing.medium)
 
-                TextField("Landmark or delivery note (optional)", text: $landmark, axis: .vertical)
-                    .lineLimit(2 ... 4)
+                TextField("Nearby landmark (optional)", text: $landmark)
                     .focused($focusedField, equals: .landmark)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .deliveryNotes }
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .frame(minHeight: 52)
+
+                Divider().padding(.leading, MarketplaceSpacing.medium)
+
+                TextField("Gate, bell or hand-off instructions (optional)", text: $deliveryNotes, axis: .vertical)
+                    .lineLimit(2 ... 4)
+                    .focused($focusedField, equals: .deliveryNotes)
                     .submitLabel(.done)
                     .padding(MarketplaceSpacing.medium)
             }
@@ -383,10 +407,15 @@ struct DastakDeliveryAddressEditor: View {
         isSaving = true
         let didSave = await save(
             DastakDeliveryLocation(
+                addressID: initialLocation?.addressID,
                 address: selectedLocation.address,
                 point: selectedLocation.point,
                 label: resolvedLabel,
-                details: resolvedDetails
+                details: resolvedDetails,
+                building: building,
+                floor: floor,
+                landmark: landmark,
+                deliveryNotes: deliveryNotes
             )
         )
         isSaving = false
@@ -416,7 +445,7 @@ struct DastakDeliveryAddressEditor: View {
     }
 
     private var resolvedDetails: String {
-        [building, landmark]
+        [building, floor, landmark]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: " • ")

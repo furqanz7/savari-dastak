@@ -59,6 +59,7 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var isLoadingParcels = false
     @Published private(set) var isCheckingOut = false
     @Published var selectedLocation: DastakDeliveryLocation?
+    @Published private(set) var savedAddresses: [DastakDeliveryLocation] = []
     @Published private(set) var deliveryAddress: DastakDeliveryLocation?
     @Published var discoveryRadiusKilometres = 10
     @Published var searchText = ""
@@ -207,18 +208,24 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func setLocation(_ location: DastakDeliveryLocation) async -> Bool {
-        guard let label = location.label, let details = location.details else {
+        guard let label = location.label, let building = location.building else {
             addressErrorMessage = "Add a label and doorstep details before saving."
             return false
         }
         do {
-            let response = try await addressClient.saveDefault(
+            let response = try await addressClient.save(
+                addressID: location.addressID,
                 label: label,
                 address: location.address,
-                details: details,
+                building: building,
+                floor: location.floor,
+                landmark: location.landmark,
+                deliveryNotes: location.deliveryNotes,
                 location: location.point,
+                makeDefault: true,
                 idempotencyKey: makeKey()
             )
+            savedAddresses = response.addresses.map(Self.deliveryLocation)
             let savedAddress = response.addresses.first(where: \.isDefault)
                 .map(Self.deliveryLocation) ?? location
             deliveryAddress = savedAddress
@@ -230,6 +237,42 @@ final class DastakCustomerModel: ObservableObject {
                 for: error,
                 fallback: "The address could not be saved. Check your connection and try again."
             )
+            return false
+        }
+    }
+
+    func selectSavedAddress(_ location: DastakDeliveryLocation) async -> Bool {
+        guard let addressID = location.addressID else { return await setLocation(location) }
+        do {
+            let response = try await addressClient.setDefault(
+                addressID: addressID,
+                idempotencyKey: makeKey()
+            )
+            savedAddresses = response.addresses.map(Self.deliveryLocation)
+            deliveryAddress = response.addresses.first(where: \.isDefault).map(Self.deliveryLocation)
+            isDeliveryAddressConfirmed = deliveryAddress?.isReadyForDelivery == true
+            addressErrorMessage = nil
+            return true
+        } catch {
+            addressErrorMessage = message(for: error, fallback: "That address could not be selected. Try again.")
+            return false
+        }
+    }
+
+    func deleteSavedAddress(_ location: DastakDeliveryLocation) async -> Bool {
+        guard let addressID = location.addressID else { return false }
+        do {
+            let response = try await addressClient.delete(
+                addressID: addressID,
+                idempotencyKey: makeKey()
+            )
+            savedAddresses = response.addresses.map(Self.deliveryLocation)
+            deliveryAddress = response.addresses.first(where: \.isDefault).map(Self.deliveryLocation)
+            isDeliveryAddressConfirmed = deliveryAddress?.isReadyForDelivery == true
+            addressErrorMessage = nil
+            return true
+        } catch {
+            addressErrorMessage = message(for: error, fallback: "That address could not be deleted. Try again.")
             return false
         }
     }
@@ -566,6 +609,7 @@ final class DastakCustomerModel: ObservableObject {
 
         do {
             let response = try await addressClient.snapshot(idempotencyKey: makeKey())
+            savedAddresses = response.addresses.map(Self.deliveryLocation)
             if let saved = response.addresses.first(where: \.isDefault) {
                 deliveryAddress = Self.deliveryLocation(saved)
                 if selectedLocation == nil {
@@ -620,10 +664,15 @@ final class DastakCustomerModel: ObservableObject {
 
     private static func deliveryLocation(_ address: CustomerDeliveryAddress) -> DastakDeliveryLocation {
         DastakDeliveryLocation(
+            addressID: address.addressID,
             address: address.address,
             point: address.location,
             label: address.label,
-            details: address.details
+            details: address.details,
+            building: address.building,
+            floor: address.floor,
+            landmark: address.landmark,
+            deliveryNotes: address.deliveryNotes
         )
     }
 

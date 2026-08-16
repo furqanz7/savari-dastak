@@ -2,6 +2,10 @@ export type CustomerDeliveryAddress = {
   addressId: string;
   label: string;
   address: string;
+  building: string;
+  floor?: string;
+  landmark?: string;
+  deliveryNotes?: string;
   details: string;
   displayAddress: string;
   location: { latitude: number; longitude: number };
@@ -25,6 +29,56 @@ export async function getCustomerAddresses(input: AuthenticatedInput, fetcher: F
   return parseCollection(await call(input, { operation: "snapshot" }, undefined, fetcher));
 }
 
+export async function saveCustomerAddress(
+  input: AuthenticatedInput & {
+    addressId?: string;
+    label: string;
+    address: string;
+    building: string;
+    floor?: string;
+    landmark?: string;
+    deliveryNotes?: string;
+    location: { latitude: number; longitude: number };
+    makeDefault?: boolean;
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return parseCollection(await call(input, {
+    operation: "save",
+    addressId: input.addressId,
+    label: input.label,
+    address: input.address,
+    building: input.building,
+    floor: input.floor,
+    landmark: input.landmark,
+    deliveryNotes: input.deliveryNotes,
+    location: input.location,
+    makeDefault: input.makeDefault ?? true,
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function setDefaultCustomerAddress(
+  input: AuthenticatedInput & { addressId: string; idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  return parseCollection(await call(input, {
+    operation: "setDefault",
+    addressId: input.addressId,
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function deleteCustomerAddress(
+  input: AuthenticatedInput & { addressId: string; idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  return parseCollection(await call(input, {
+    operation: "delete",
+    addressId: input.addressId,
+  }, input.idempotencyKey, fetcher));
+}
+
+// Kept while older screens transition to the address-book contract.
 export async function saveDefaultCustomerAddress(
   input: AuthenticatedInput & {
     label: string;
@@ -35,13 +89,13 @@ export async function saveDefaultCustomerAddress(
   },
   fetcher: Fetcher = fetch,
 ) {
-  return parseCollection(await call(input, {
-    operation: "saveDefault",
-    label: input.label,
-    address: input.address,
-    details: input.details,
-    location: input.location,
-  }, input.idempotencyKey, fetcher));
+  const [building = input.details, ...remainder] = input.details.split(" • ");
+  return saveCustomerAddress({
+    ...input,
+    building,
+    landmark: remainder.join(" • ") || undefined,
+    makeDefault: true,
+  }, fetcher);
 }
 
 async function call(auth: AuthenticatedInput, body: unknown, idempotencyKey: string | undefined, fetcher: Fetcher) {
@@ -88,12 +142,18 @@ function parseAddress(value: unknown): CustomerDeliveryAddress {
     typeof longitude !== "number" || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) invalid();
   const updatedAt = requiredText(source.updatedAt, 50);
   if (Number.isNaN(Date.parse(updatedAt))) invalid();
+  const details = requiredText(source.details, 700);
+  const legacy = details.split(" • ");
   return {
     addressId: uuid(source.addressId),
     label: requiredText(source.label, 40),
     address: requiredText(source.address, 300),
-    details: requiredText(source.details, 300),
-    displayAddress: requiredText(source.displayAddress, 620),
+    building: optional(source.building, 180) ?? legacy[0] ?? invalid(),
+    floor: optional(source.floor, 80),
+    landmark: optional(source.landmark, 110) ?? (legacy.slice(1).join(" • ") || undefined),
+    deliveryNotes: optional(source.deliveryNotes, 240),
+    details,
+    displayAddress: requiredText(source.displayAddress, 1020),
     location: { latitude, longitude },
     isDefault: source.isDefault,
     updatedAt,
@@ -105,6 +165,9 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 function text(value: unknown, maximum: number) {
   return typeof value === "string" && value.length > 0 && value.length <= maximum ? value : undefined;
+}
+function optional(value: unknown, maximum: number) {
+  return value === null || value === undefined ? undefined : text(value, maximum) ?? invalid();
 }
 function requiredText(value: unknown, maximum: number) { return text(value, maximum) ?? invalid(); }
 function uuid(value: unknown) {
