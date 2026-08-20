@@ -4,6 +4,7 @@ import { verifyBearerUser } from "../_shared/auth.ts";
 import {
   type DeliveryPartnerApplication,
   handleDeliveryPartners,
+  type PublishDeliveryPartnerLocationInput,
   type ReviewDeliveryPartnerApplicationInput,
   type SetDeliveryPartnerAvailabilityInput,
   type SubmitDeliveryPartnerApplicationInput,
@@ -24,6 +25,7 @@ Deno.serve((request) =>
     listPendingApplications,
     reviewApplication,
     setAvailability,
+    publishLocation,
   })
 );
 
@@ -127,6 +129,18 @@ async function setAvailability(input: SetDeliveryPartnerAvailabilityInput) {
   });
   if (error) throw error;
   return rpcResponse(data, "set_delivery_partner_availability");
+}
+
+async function publishLocation(input: PublishDeliveryPartnerLocationInput) {
+  const { data, error } = await serviceClient.rpc("publish_delivery_partner_location", {
+    p_account_id: input.accountId,
+    p_latitude: input.latitude,
+    p_longitude: input.longitude,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "publish_delivery_partner_location");
 }
 
 function isDeliveryMethod(value: unknown): value is DeliveryPartnerApplication["deliveryMethod"] {

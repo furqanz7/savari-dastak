@@ -7,6 +7,7 @@ import {
   type ParcelAssignmentMutationInput,
   type ParcelCancellationInput,
   type ParcelCreateInput,
+  type ParcelCustomerSupportInput,
   type ParcelLifecycleInput,
   type ParcelQuoteInput,
   type ParcelRouteInput,
@@ -33,6 +34,7 @@ Deno.serve((request) =>
     declineAssignment,
     advanceParcel,
     cancelParcel,
+    createCustomerSupport,
     reportSafetyIncident,
   })
 );
@@ -164,6 +166,18 @@ async function cancelParcel(input: ParcelCancellationInput) {
     p_account_id: input.accountId,
     p_parcel_id: input.parcelId,
     p_reason: input.reason,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+}
+
+async function createCustomerSupport(input: ParcelCustomerSupportInput) {
+  return rpc("create_customer_order_support_case", {
+    p_account_id: input.accountId,
+    p_entity_kind: "parcel_delivery",
+    p_entity_id: input.parcelId,
+    p_category: input.category,
+    p_message: input.message,
     p_idempotency_key: input.idempotencyKey,
     p_request_digest: input.requestDigest,
   });

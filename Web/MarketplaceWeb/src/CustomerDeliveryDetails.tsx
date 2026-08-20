@@ -1,4 +1,6 @@
+import { useState, type FormEvent } from "react";
 import { ExternalLink, MapPin, Navigation } from "lucide-react";
+import type { CustomerOrderSupportCase, CustomerOrderSupportCategory } from "./orders";
 
 export type CustomerMapPoint = {
   label: string;
@@ -64,6 +66,38 @@ export function CancellationSheet({ title, busy, onDismiss, onConfirm }: {
       </section>
     </div>
   );
+}
+
+export function CustomerSupportSheet({ cases, busy, onDismiss, onSubmit }: {
+  cases: CustomerOrderSupportCase[];
+  busy: boolean;
+  onDismiss: () => void;
+  onSubmit: (category: CustomerOrderSupportCategory, message: string) => Promise<void>;
+}) {
+  const [category, setCategory] = useState<CustomerOrderSupportCategory>("delivery_status");
+  const [message, setMessage] = useState("");
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (message.trim().length < 10) return;
+    void onSubmit(category, message.trim());
+  };
+  return (
+    <div className="customer-sheet-backdrop" role="presentation">
+      <section className="customer-sheet customer-support-sheet" aria-modal="true" aria-labelledby="support-title" role="dialog">
+        <header><div><p className="eyebrow">Dastak support</p><h2 id="support-title">Help with this order</h2></div><button className="icon-button" type="button" onClick={onDismiss} disabled={busy} aria-label="Close" title="Close">×</button></header>
+        {cases.length > 0 && <div className="support-case-list">{cases.map((item) => <article key={item.caseId}><strong>{item.reference}</strong><span>{supportStatus(item.status)}</span><p>{item.message}</p>{item.resolution && <small>{item.resolution}</small>}</article>)}</div>}
+        <form onSubmit={submit}>
+          <label>What do you need help with?<select value={category} onChange={(event) => setCategory(event.target.value as CustomerOrderSupportCategory)}><option value="delivery_status">Delivery status</option><option value="merchant_or_items">Store or items</option><option value="payment">Payment</option><option value="refund">Refund</option><option value="cancellation">Cancellation</option><option value="safety">Safety</option><option value="other">Something else</option></select></label>
+          <label>Tell us what happened<textarea value={message} onChange={(event) => setMessage(event.target.value)} maxLength={1000} placeholder="Include the details that will help us resolve this quickly." /></label>
+          <button className="primary-button customer-sheet-action" type="submit" disabled={busy || message.trim().length < 10}>{busy ? "Sending..." : "Send to support"}</button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function supportStatus(status: CustomerOrderSupportCase["status"]) {
+  return ({ open: "Open", in_review: "In review", resolved: "Resolved", closed: "Closed" } as const)[status];
 }
 
 function formatDate(value: string) {

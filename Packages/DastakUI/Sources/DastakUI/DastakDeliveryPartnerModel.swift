@@ -31,6 +31,7 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var busyOperation: String?
     @Published var errorMessage: String?
+    @Published var noticeMessage: String?
 
     private let partnerClient: any DeliveryPartnerClient
     private let courierClient: any CourierDispatchClient
@@ -38,6 +39,7 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     private let earningsClient: any DastakEarningsClient
     private var actionKeys: [String: IdempotencyKey] = [:]
     private var refreshQueued = false
+    private var lastLocationPublishedAt: Date?
 
     init(
         partnerClient: any DeliveryPartnerClient,
@@ -117,9 +119,30 @@ final class DastakDeliveryPartnerModel: ObservableObject {
                 location: online ? location?.point : nil,
                 idempotencyKey: makeKey()
             )
+            lastLocationPublishedAt = online ? .now : nil
             await refresh()
         } catch {
             errorMessage = message(for: error, fallback: "Availability could not be changed.")
+        }
+    }
+
+    func publishLocation(_ location: DastakDeliveryLocation) async {
+        guard isOnline, busyOperation == nil else { return }
+        if let lastLocationPublishedAt,
+           Date.now.timeIntervalSince(lastLocationPublishedAt) < 10 {
+            return
+        }
+        do {
+            _ = try await partnerClient.publishLocation(
+                location: location.point,
+                idempotencyKey: makeKey()
+            )
+            lastLocationPublishedAt = .now
+        } catch let FunctionClientError.api(_, code, _) where code == "partner_offline" {
+            lastLocationPublishedAt = nil
+            await refresh()
+        } catch {
+            // Polling and the next location update recover transient publication failures.
         }
     }
 
@@ -187,6 +210,7 @@ final class DastakDeliveryPartnerModel: ObservableObject {
             courierDispatch = snapshot
             actionKeys[identity] = nil
             errorMessage = nil
+            noticeMessage = successMessage(for: action)
             await refresh()
         } catch {
             errorMessage = message(for: error, fallback: "The delivery could not be updated.")
@@ -252,6 +276,7 @@ final class DastakDeliveryPartnerModel: ObservableObject {
             parcelDispatch = snapshot
             actionKeys[identity] = nil
             errorMessage = nil
+            noticeMessage = successMessage(for: action)
             await refresh()
         } catch {
             errorMessage = message(for: error, fallback: "The parcel delivery could not be updated.")
@@ -276,5 +301,21 @@ final class DastakDeliveryPartnerModel: ObservableObject {
             return fallback
         }
         return message
+    }
+
+    private func successMessage(for action: DastakCourierAction) -> String? {
+        switch action {
+        case .confirmPickup: "Pickup verified. The order is now in your care."
+        case .completeDelivery: "Delivery verified and completed."
+        default: nil
+        }
+    }
+
+    private func successMessage(for action: DastakParcelPartnerAction) -> String? {
+        switch action {
+        case .confirmPickup: "Pickup verified. The parcel is now in your care."
+        case .completeDelivery: "Parcel delivery verified and completed."
+        default: nil
+        }
     }
 }

@@ -28,11 +28,6 @@ private struct DastakAdminRoot: View {
     let services: MarketplaceAuthenticatedServices
 
     var body: some View {
-        DastakIdentityAccountView(
-            roleName: "Owner",
-            accessLabel: "Full access",
-            allowsAccountDeletion: false,
-            services: services
-        )
+        DastakOwnerOperationsRootView(services: services)
     }
 }

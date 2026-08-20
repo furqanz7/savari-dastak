@@ -233,6 +233,33 @@ Deno.test("cancellation and safety reports use the authenticated customer", asyn
   assertEquals(incident?.accountId, accountId);
 });
 
+Deno.test("parcel support is validated and owned by the authenticated customer", async () => {
+  let recorded: Record<string, unknown> | undefined;
+  const response = await handleParcelDeliveries(
+    request({
+      body: {
+        operation: "customerSupport",
+        parcelId,
+        category: "delivery_status",
+        message: "  My parcel has not moved.  ",
+      },
+      idempotencyKey: "support-key-1",
+    }),
+    dependencies({
+      createCustomerSupport: (input) => {
+        recorded = input;
+        return Promise.resolve({ responseBody: { supportCase: {} }, responseStatus: 201 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 201);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.parcelId, parcelId);
+  assertEquals(recorded?.category, "delivery_status");
+  assertEquals(recorded?.message, "My parcel has not moved.");
+});
+
 Deno.test("dependency failures do not leak private details", async () => {
   const response = await handleParcelDeliveries(
     request({ body: { operation: "partnerSnapshot" } }),
@@ -261,6 +288,8 @@ function dependencies(
     declineAssignment: () => ok(partnerSnapshot()),
     advanceParcel: () => ok(partnerSnapshot()),
     cancelParcel: () => ok(parcel({ status: "cancelled" })),
+    createCustomerSupport: () =>
+      Promise.resolve({ responseBody: { supportCase: {} }, responseStatus: 201 }),
     reportSafetyIncident: () =>
       ok({ incidentId: assignmentId, status: "open", emergencyNumber: "112" }),
     ...overrides,

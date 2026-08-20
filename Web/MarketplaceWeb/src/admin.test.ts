@@ -3,7 +3,10 @@ import {
   getAdminOrders,
   getEvidenceUrl,
   getMerchantApplications,
+  getOwnerOperations,
   getPartnerApplications,
+  reconcileOwnerOrders,
+  resolveOwnerSupportCase,
   reviewMerchantApplication,
   reviewOrderRefund,
   reviewPartnerApplication,
@@ -167,6 +170,72 @@ describe("Dastak Admin client", () => {
     await expect(getAdminOrders(auth, () => Promise.resolve(new Response(JSON.stringify({
       error: { code: "access_denied", message: "An active Dastak owner account is required." },
     }), { status: 403 })))).rejects.toMatchObject({ code: "access_denied", status: 403 });
+  });
+
+  it("loads the owner exception summary and resolves support", async () => {
+    const exception = {
+      exceptionId: `support:${applicationId}`,
+      kind: "support",
+      severity: "attention",
+      entityKind: "merchant_order",
+      entityId: applicationId,
+      title: "Customer support request",
+      detail: "The customer needs an update.",
+      status: "open",
+      purpose: null,
+      occurredAt: "2026-07-22T06:00:00Z",
+    };
+    const operations = await getOwnerOperations({ ...auth, limit: 25 }, response({
+      summary: { openSupport: 1, refundReviews: 0, lockedHandoffs: 0, stalledOrders: 0, totalExceptions: 1 },
+      exceptions: [exception],
+      parcels: [],
+    }));
+    expect(operations.exceptions).toEqual([exception]);
+
+    let requestBody: unknown;
+    const resolved = await resolveOwnerSupportCase({
+      ...auth,
+      caseId: applicationId,
+      resolution: "  Partner contacted and delivery confirmed. ",
+      idempotencyKey: "support-key",
+    }, (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return Promise.resolve(new Response(JSON.stringify({
+        caseId: applicationId,
+        reference: "DST-22222222",
+        entityKind: "merchant_order",
+        entityId: orderId,
+        category: "delivery_status",
+        message: "Where is my order?",
+        status: "resolved",
+        resolution: "Partner contacted and delivery confirmed.",
+        createdAt: "2026-07-22T06:00:00Z",
+        updatedAt: "2026-07-22T06:05:00Z",
+        resolvedAt: "2026-07-22T06:05:00Z",
+      }), { status: 200 }));
+    });
+    expect(resolved.status).toBe("resolved");
+    expect(requestBody).toEqual({
+      operation: "ownerResolveSupport",
+      caseId: applicationId,
+      resolution: "Partner contacted and delivery confirmed.",
+    });
+  });
+
+  it("runs idempotent lifecycle recovery", async () => {
+    let body: unknown;
+    const result = await reconcileOwnerOrders(auth, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(new Response(JSON.stringify({
+        merchantOrdersRecovered: 1,
+        parcelsRecovered: 0,
+        merchantOffersCreated: 1,
+        parcelOffersCreated: 0,
+        reconciledAt: "2026-07-22T06:10:00Z",
+      }), { status: 200 }));
+    });
+    expect(body).toEqual({ operation: "ownerReconcile" });
+    expect(result.merchantOrdersRecovered).toBe(1);
   });
 });
 

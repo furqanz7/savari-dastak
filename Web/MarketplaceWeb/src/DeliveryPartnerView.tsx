@@ -7,7 +7,9 @@ import {
   declineDeliveryOffer,
   getDeliveryDispatch,
   getDeliveryPartnerSnapshot,
+  publishDeliveryPartnerLocation,
   setDeliveryPartnerAvailability,
+  DeliveryRequestError,
   type DeliveryAssignment,
   type DeliveryDispatchSnapshot,
   type DeliveryJobOperation,
@@ -49,6 +51,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const [verificationCode, setVerificationCode] = useState("");
   const [section, setSection] = useState<"deliveries" | "account">("deliveries");
   const refreshQueue = useRef(new RefreshQueue());
@@ -145,6 +148,8 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       actionKeys.current.delete(requestIdentity);
       setParcelDispatch(snapshot);
       setVerificationCode("");
+      if (operation === "confirmPickup") setNotice("Pickup verified. The parcel is now in your care.");
+      if (operation === "completeDelivery") setNotice("Parcel delivery verified and completed.");
     } catch (actionError) {
       setError(message(actionError));
     } finally {
@@ -177,6 +182,8 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       actionKeys.current.delete(requestIdentity);
       setDispatch(snapshot);
       setVerificationCode("");
+      if (action === "confirmPickup") setNotice("Pickup verified. The order is now in your care.");
+      if (action === "completeDelivery") setNotice("Delivery verified and completed.");
     } catch (actionError) {
       setError(message(actionError));
     } finally {
@@ -186,6 +193,35 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
 
   const online = partner?.availability?.status === "online";
   const hasJob = Boolean(dispatch.currentJob || parcelDispatch.currentJob);
+
+  useEffect(() => {
+    if (!online || !navigator.geolocation) return;
+    let lastPublishedAt = 0;
+    const watch = navigator.geolocation.watchPosition(
+      (position) => {
+        const now = Date.now();
+        if (now - lastPublishedAt < 15_000) return;
+        lastPublishedAt = now;
+        void publishDeliveryPartnerLocation({
+          ...auth,
+          location: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          },
+          idempotencyKey: crypto.randomUUID(),
+        }).then((availability) => {
+          setPartner((current) => current ? { ...current, availability } : current);
+        }).catch((locationError) => {
+          if (locationError instanceof DeliveryRequestError && locationError.code === "partner_offline") {
+            void refresh();
+          }
+        });
+      },
+      () => undefined,
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 12_000 },
+    );
+    return () => navigator.geolocation.clearWatch(watch);
+  }, [auth, online, refresh]);
 
   return (
     <div className="delivery-shell">
@@ -220,6 +256,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       </header>
 
       {error && <p className="order-error" role="alert">{error}</p>}
+      {notice && <div className="delivery-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div>}
       {loading ? <div className="catalogue-loading" role="status"><span /> Loading delivery queue</div> : (
         <>
           <section className="delivery-availability" aria-label="Availability">

@@ -302,6 +302,23 @@ button.customer-account-row:not(:disabled):hover { color: var(--dastak-accent); 
 .customer-timeline time { color: var(--text-secondary); font-size: 13px; }
 .customer-detail-actions { display: grid; gap: 10px; margin-top: 26px; }
 .customer-detail-actions button { width: 100%; min-height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.customer-support-sheet form { display: grid; gap: 16px; }
+.customer-support-sheet label { display: grid; gap: 8px; color: var(--text-secondary); font-size: 13px; font-weight: 650; }
+.customer-support-sheet select,
+.customer-support-sheet textarea { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); font: inherit; }
+.customer-support-sheet select { min-height: 50px; padding: 0 14px; }
+.customer-support-sheet textarea { min-height: 112px; padding: 14px; resize: vertical; }
+.support-case-list { display: grid; gap: 9px; margin-bottom: 18px; max-height: 210px; overflow: auto; }
+.support-case-list article { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; padding: 13px; border: 1px solid var(--divider); border-radius: var(--radius-control); background: var(--surface-subtle); }
+.support-case-list article span,
+.customer-support-summary b { color: var(--dastak-accent); font-size: 12px; text-transform: capitalize; }
+.support-case-list article p,
+.support-case-list article small { grid-column: 1 / -1; margin: 0; color: var(--text-secondary); }
+.customer-support-summary { display: grid; gap: 10px; margin-top: 28px; }
+.customer-support-summary h2 { margin: 0 0 4px; font-size: 20px; }
+.customer-support-summary > button { width: 100%; display: flex; justify-content: space-between; gap: 16px; padding: 15px; border: 1px solid var(--divider); border-radius: var(--radius-control); background: var(--surface); color: var(--text-primary); text-align: left; }
+.customer-support-summary > button span { display: grid; gap: 4px; min-width: 0; }
+.customer-support-summary > button small { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
 
 .cancellation-reasons { display: grid; gap: 8px; margin-top: 22px; }
 .cancellation-reasons button { min-height: 50px; padding: 0 14px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); text-align: left; font-weight: 650; }

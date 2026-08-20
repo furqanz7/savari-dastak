@@ -1,3 +1,6 @@
+import { parseCustomerOrderSupportCase } from "./orders";
+import type { CustomerOrderActions, CustomerOrderSupportCase, CustomerOrderSupportCategory } from "./orders";
+
 export type ParcelDeliveryMethod = "walking" | "bicycle" | "bike" | "auto";
 export type ParcelStatus = "payment_pending" | "paid" | "assigned" | "en_route_to_pickup" | "picked_up" | "in_transit" | "delivered" | "cancelled";
 export type ParcelPoint = { latitude: number; longitude: number; address: string };
@@ -47,9 +50,15 @@ export type ParcelDelivery = {
   createdAt?: string;
   updatedAt?: string;
   handoffCode: { purpose: "pickup" | "delivery"; code: string; expiresAt: string } | null;
+  customerActions?: CustomerOrderActions;
+  supportCases?: CustomerOrderSupportCase[];
 };
 
-export type CustomerParcelDelivery = ParcelDelivery & { audience: "sender" | "recipient" };
+export type CustomerParcelDelivery = ParcelDelivery & {
+  audience: "sender" | "recipient";
+  customerActions?: CustomerOrderActions;
+  supportCases?: CustomerOrderSupportCase[];
+};
 
 export type ParcelAssignment = {
   assignmentId: string;
@@ -121,6 +130,29 @@ export async function getParcelSnapshot(
   fetcher: Fetcher = fetch,
 ) {
   return parseParcel(await call(input, { operation: "parcelSnapshot", parcelId: input.parcelId }, undefined, fetcher));
+}
+
+export async function getCustomerParcelDetail(
+  input: AuthenticatedInput & { parcelId: string },
+  fetcher: Fetcher = fetch,
+) {
+  const source = record(await call(input, { operation: "parcelSnapshot", parcelId: input.parcelId }, undefined, fetcher));
+  if (!source || (source.audience !== "sender" && source.audience !== "recipient")) invalid();
+  return { ...parseParcel(source), audience: source.audience } as CustomerParcelDelivery;
+}
+
+export async function createParcelSupport(
+  input: AuthenticatedInput & { parcelId: string; category: CustomerOrderSupportCategory; message: string; idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  const payload = record(await call(input, {
+    operation: "customerSupport",
+    parcelId: input.parcelId,
+    category: input.category,
+    message: input.message,
+  }, input.idempotencyKey, fetcher));
+  if (!payload) invalid();
+  return parseCustomerOrderSupportCase(payload.supportCase);
 }
 
 export async function cancelParcel(
@@ -223,6 +255,28 @@ export function parseParcel(value: unknown): ParcelDelivery {
       code: code(handoff.code),
       expiresAt: dateText(handoff.expiresAt),
     } : null,
+    customerActions: customerActions(source.customerActions),
+    supportCases: source.supportCases === null || source.supportCases === undefined
+      ? undefined
+      : Array.isArray(source.supportCases)
+        ? source.supportCases.map(parseCustomerOrderSupportCase)
+        : invalid(),
+  };
+}
+
+function customerActions(value: unknown): CustomerOrderActions | undefined {
+  const source = record(value);
+  if (!source) return undefined;
+  const cancellationMode = source.cancellationMode;
+  if (!["cancel", "request_review", "pending_review", "none"].includes(String(cancellationMode))) invalid();
+  const boolean = (key: string) => typeof source[key] === "boolean" ? source[key] as boolean : invalid();
+  return {
+    canPay: boolean("canPay"),
+    cancellationMode: cancellationMode as CustomerOrderActions["cancellationMode"],
+    canTrack: boolean("canTrack"),
+    canContactStore: boolean("canContactStore"),
+    canContactCourier: boolean("canContactCourier"),
+    canRequestSupport: boolean("canRequestSupport"),
   };
 }
 

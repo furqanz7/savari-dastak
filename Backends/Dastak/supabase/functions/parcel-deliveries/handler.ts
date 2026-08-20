@@ -74,6 +74,22 @@ export type ParcelSafetyIncidentInput = {
   requestDigest: string;
 };
 
+export type ParcelCustomerSupportInput = {
+  accountId: string;
+  parcelId: string;
+  category:
+    | "delivery_status"
+    | "merchant_or_items"
+    | "payment"
+    | "refund"
+    | "cancellation"
+    | "safety"
+    | "other";
+  message: string;
+  idempotencyKey: string;
+  requestDigest: string;
+};
+
 export type ParcelDeliveryDependencies = {
   authenticateBearer: AuthenticateBearer;
   routeParcel: (input: ParcelRouteInput) => Promise<ParcelRoute>;
@@ -86,6 +102,7 @@ export type ParcelDeliveryDependencies = {
   declineAssignment: (input: ParcelAssignmentDeclineInput) => Promise<RpcResult>;
   advanceParcel: (input: ParcelLifecycleInput) => Promise<RpcResult>;
   cancelParcel: (input: ParcelCancellationInput) => Promise<RpcResult>;
+  createCustomerSupport: (input: ParcelCustomerSupportInput) => Promise<RpcResult>;
   reportSafetyIncident: (input: ParcelSafetyIncidentInput) => Promise<RpcResult>;
 };
 
@@ -181,6 +198,13 @@ export async function handleParcelDeliveries(
           body,
           actor.accountId,
           dependencies.cancelParcel,
+        );
+      case "customerSupport":
+        return await supportMutation(
+          request,
+          body,
+          actor.accountId,
+          dependencies.createCustomerSupport,
         );
       case "reportSafetyIncident":
         return await safetyMutation(
@@ -402,6 +426,28 @@ async function safetyMutation(
   );
 }
 
+async function supportMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependency: (input: ParcelCustomerSupportInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const parcelId = validUUID(body.parcelId);
+  const category = validSupportCategory(body.category);
+  const message = normalizedText(body.message, 10, 1000);
+  if (!idempotencyKey || !parcelId || !category || !message) return validationError();
+  const normalized = { parcelId, category, message };
+  return rpcResponse(
+    await dependency({
+      accountId,
+      ...normalized,
+      idempotencyKey,
+      requestDigest: await canonicalDigest(normalized),
+    }),
+  );
+}
+
 function rpcResponse(result: RpcResult) {
   return json(result.responseBody, result.responseStatus);
 }
@@ -431,6 +477,20 @@ function validDeliveryMethod(value: unknown) {
 
 function validUUID(value: unknown) {
   return typeof value === "string" && uuidPattern.test(value) ? value.toLowerCase() : undefined;
+}
+
+function validSupportCategory(value: unknown): ParcelCustomerSupportInput["category"] | undefined {
+  return typeof value === "string" && [
+      "delivery_status",
+      "merchant_or_items",
+      "payment",
+      "refund",
+      "cancellation",
+      "safety",
+      "other",
+    ].includes(value)
+    ? value as ParcelCustomerSupportInput["category"]
+    : undefined;
 }
 
 function validVerificationCode(value: unknown) {

@@ -4,7 +4,9 @@ import { formatPrice } from "./catalogue";
 import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
 import {
   cancelParcel,
+  createParcelSupport,
   createParcel,
+  getCustomerParcelDetail,
   getCustomerParcels,
   quoteParcel,
   type ParcelDelivery,
@@ -12,9 +14,10 @@ import {
   type ParcelQuote,
   type CustomerParcelDelivery,
 } from "./parcels";
+import type { CustomerOrderSupportCategory } from "./orders";
 import { createParcelCheckoutSession, openRazorpayCheckout, processParcelRefund } from "./payments";
 import { customerDataIssue, type CustomerDataIssue } from "./customerDataState";
-import { CancellationSheet, CustomerRouteMap, CustomerTimeline } from "./CustomerDeliveryDetails";
+import { CancellationSheet, CustomerRouteMap, CustomerSupportSheet, CustomerTimeline } from "./CustomerDeliveryDetails";
 import { parcelPaymentStateLabel, parcelPresentation } from "./customerLifecycle";
 import { RefreshQueue } from "./orderRealtime";
 
@@ -49,6 +52,7 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
   const [notice, setNotice] = useState<string>();
   const [refreshIssue, setRefreshIssue] = useState<CustomerDataIssue>();
   const [cancellingParcel, setCancellingParcel] = useState<CustomerParcelDelivery>();
+  const [supportingParcel, setSupportingParcel] = useState<CustomerParcelDelivery>();
   const refreshQueue = useRef(new RefreshQueue());
   const creationRequest = useRef<{ quoteId: string; idempotencyKey: string } | undefined>(undefined);
   const hasActiveParcels = parcels.some((parcel) => !isFinal(parcel));
@@ -67,6 +71,16 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
   }, [auth]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!selectedParcelId) return;
+    let active = true;
+    setBusy(true);
+    void getCustomerParcelDetail({ ...auth, parcelId: selectedParcelId })
+      .then((detail) => { if (active) setParcels((current) => [detail, ...current.filter((item) => item.parcelId !== detail.parcelId)]); })
+      .catch((detailError) => { if (active) setError(message(detailError)); })
+      .finally(() => { if (active) setBusy(false); });
+    return () => { active = false; };
+  }, [auth, selectedParcelId]);
   useEffect(() => {
     if (orderRefreshToken > 0) void refresh();
   }, [orderRefreshToken, refresh]);
@@ -200,6 +214,23 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
     }
   };
 
+  const requestSupport = async (category: CustomerOrderSupportCategory, supportMessage: string) => {
+    if (!supportingParcel) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await createParcelSupport({ ...auth, parcelId: supportingParcel.parcelId, category, message: supportMessage, idempotencyKey: crypto.randomUUID() });
+      const detail = await getCustomerParcelDetail({ ...auth, parcelId: supportingParcel.parcelId });
+      setParcels((current) => [detail, ...current.filter((item) => item.parcelId !== detail.parcelId)]);
+      setSupportingParcel(detail);
+      setNotice("Support request sent. You can follow its status here.");
+    } catch (supportError) {
+      setError(message(supportError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const resetForm = () => {
     setPickup(undefined);
     setDropoff(undefined);
@@ -215,7 +246,10 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
 
   return (
     <div className="parcel-customer-shell">
-      {selectedParcel ? <ParcelDetail parcel={selectedParcel} busy={busy} onBack={onCloseParcel} onPay={pay} onCancel={setCancellingParcel} onRefresh={refresh} /> : <>
+      {selectedParcel ? <ParcelDetail parcel={selectedParcel} busy={busy} onBack={onCloseParcel} onPay={pay} onCancel={setCancellingParcel} onSupport={setSupportingParcel} onRefresh={async () => {
+        const detail = await getCustomerParcelDetail({ ...auth, parcelId: selectedParcel.parcelId });
+        setParcels((current) => [detail, ...current.filter((item) => item.parcelId !== detail.parcelId)]);
+      }} /> : <>
       <header className="catalogue-heading">
         <div><p className="eyebrow">{displayName ? `Hello, ${displayName}` : "Dastak customer"}</p><h1>Send a parcel</h1><p>Immediate pickup and delivery inside an active service area.</p></div>
         <button className="icon-button" type="button" onClick={() => void refresh()} disabled={busy} aria-label="Refresh parcels" title="Refresh parcels"><RefreshCw size={19} /></button>
@@ -259,6 +293,7 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
       <small className="map-attribution">Location search data © OpenStreetMap contributors</small>
       </>}
       {cancellingParcel && <CancellationSheet title="Cancel this parcel delivery?" busy={busy} onDismiss={() => setCancellingParcel(undefined)} onConfirm={(reason) => cancel(cancellingParcel, reason)} />}
+      {supportingParcel && <CustomerSupportSheet cases={supportingParcel.supportCases ?? []} busy={busy} onDismiss={() => setSupportingParcel(undefined)} onSubmit={requestSupport} />}
     </div>
   );
 }
@@ -309,12 +344,13 @@ function ParcelCard({ parcel, busy, onPay, onCancel, onOpen }: {
   );
 }
 
-function ParcelDetail({ parcel, busy, onBack, onPay, onCancel, onRefresh }: {
+function ParcelDetail({ parcel, busy, onBack, onPay, onCancel, onSupport, onRefresh }: {
   parcel: CustomerParcelDelivery;
   busy: boolean;
   onBack: () => void;
   onPay: (parcel: ParcelDelivery) => Promise<void>;
   onCancel: (parcel: CustomerParcelDelivery) => void;
+  onSupport: (parcel: CustomerParcelDelivery) => void;
   onRefresh: () => Promise<void>;
 }) {
   const presentation = parcelPresentation(parcel.status, parcel.paymentStatus, parcel.audience);
@@ -343,6 +379,8 @@ function ParcelDetail({ parcel, busy, onBack, onPay, onCancel, onRefresh }: {
         { label: "Cancelled", value: timeline?.cancelledAt },
       ]} />
       <div className="customer-detail-actions">{presentation.primaryAction === "pay" && <button className="primary-button" type="button" disabled={busy} onClick={() => void onPay(parcel)}><CreditCard size={18} /> Pay {formatPrice(parcel.deliveryFee.paise)}</button>}{presentation.primaryAction === "cancel" && <button className="danger-button" type="button" disabled={busy} onClick={() => onCancel(parcel)}><X size={18} /> Cancel parcel</button>}</div>
+      <div className="customer-detail-actions">{(parcel.customerActions?.canRequestSupport ?? true) && <button className="secondary-button" type="button" disabled={busy} onClick={() => onSupport(parcel)}><ShieldCheck size={18} /> Get help</button>}</div>
+      {(parcel.supportCases?.length ?? 0) > 0 && <section className="customer-support-summary"><h2>Support</h2>{parcel.supportCases!.map((item) => <button key={item.caseId} type="button" onClick={() => onSupport(parcel)}><span><strong>{item.reference}</strong><small>{item.message}</small></span><b>{item.status.replace("_", " ")}</b></button>)}</section>}
     </article>
   );
 }

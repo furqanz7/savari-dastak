@@ -4,11 +4,14 @@ import { verifyBearerUser } from "../_shared/auth.ts";
 import {
   type CreateMerchantOrderInput,
   type CustomerCancelOrderInput,
+  type CustomerOrderSupportInput,
   handleMerchantOrders,
   type MerchantConfirmReturnInput,
   type MerchantOrderMutationInput,
   type MerchantRejectOrderInput,
   type OwnerResetHandoffInput,
+  type OwnerResetParcelHandoffInput,
+  type OwnerResolveSupportInput,
   type OwnerReviewRefundInput,
   type QuoteMerchantOrderInput,
 } from "./handler.ts";
@@ -25,8 +28,11 @@ Deno.serve((request) =>
     quoteOrder,
     createOrder,
     getCustomerOrders,
+    getCustomerOrder,
+    createCustomerSupport,
     getMerchantOrders,
     getOwnerOrders,
+    getOwnerOperations,
     merchantAccept,
     merchantReject,
     merchantMarkReady,
@@ -34,6 +40,9 @@ Deno.serve((request) =>
     merchantConfirmReturn,
     ownerReviewRefund,
     ownerResetHandoff,
+    ownerResolveSupport,
+    ownerResetParcelHandoff,
+    ownerReconcile,
   })
 );
 
@@ -70,6 +79,29 @@ async function getCustomerOrders(accountId: string) {
   return rpcResponse(data, "get_customer_orders");
 }
 
+async function getCustomerOrder(accountId: string, orderId: string) {
+  const { data, error } = await serviceClient.rpc("get_customer_order_snapshot", {
+    p_account_id: accountId,
+    p_order_id: orderId,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "get_customer_order_snapshot");
+}
+
+async function createCustomerSupport(input: CustomerOrderSupportInput) {
+  const { data, error } = await serviceClient.rpc("create_customer_order_support_case", {
+    p_account_id: input.accountId,
+    p_entity_kind: "merchant_order",
+    p_entity_id: input.orderId,
+    p_category: input.category,
+    p_message: input.message,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "create_customer_order_support_case");
+}
+
 async function getMerchantOrders(accountId: string) {
   const { data, error } = await serviceClient.rpc("get_merchant_orders", {
     p_account_id: accountId,
@@ -85,6 +117,15 @@ async function getOwnerOrders(accountId: string, limit: number) {
   });
   if (error) throw error;
   return rpcResponse(data, "get_owner_merchant_orders");
+}
+
+async function getOwnerOperations(accountId: string, limit: number) {
+  const { data, error } = await serviceClient.rpc("get_owner_order_operations", {
+    p_account_id: accountId,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "get_owner_order_operations");
 }
 
 async function merchantAccept(input: MerchantOrderMutationInput) {
@@ -159,6 +200,39 @@ async function ownerResetHandoff(input: OwnerResetHandoffInput) {
   });
   if (error) throw error;
   return rpcResponse(data, "owner_reset_order_handoff_code");
+}
+
+async function ownerResolveSupport(input: OwnerResolveSupportInput) {
+  const { data, error } = await serviceClient.rpc("owner_resolve_customer_support_case", {
+    p_account_id: input.accountId,
+    p_case_id: input.caseId,
+    p_resolution: input.resolution,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "owner_resolve_customer_support_case");
+}
+
+async function ownerResetParcelHandoff(input: OwnerResetParcelHandoffInput) {
+  const { data, error } = await serviceClient.rpc("owner_reset_parcel_handoff_code", {
+    p_account_id: input.accountId,
+    p_parcel_id: input.parcelId,
+    p_purpose: input.purpose,
+    p_reason: input.reason,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "owner_reset_parcel_handoff_code");
+}
+
+async function ownerReconcile(accountId: string) {
+  const { data, error } = await serviceClient.rpc("owner_reconcile_order_lifecycle", {
+    p_account_id: accountId,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "owner_reconcile_order_lifecycle");
 }
 
 async function orderMutation(

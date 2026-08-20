@@ -417,6 +417,19 @@ button:disabled { cursor: wait; opacity: .55; }
 .merchant-reject-form button { min-height: 42px; margin: 0; }
 
 .delivery-shell { width: min(100%, 960px); margin: 0 auto; color: var(--text-primary); }
+.delivery-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--success) 34%, var(--divider));
+  background: color-mix(in srgb, var(--success) 10%, var(--surface));
+  color: var(--text-primary);
+}
+.delivery-notice > svg { color: var(--success); }
+.delivery-notice button { border: 0; background: transparent; color: var(--text-secondary); padding: 8px; }
 .delivery-heading {
   display: flex;
   align-items: end;
@@ -529,7 +542,7 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 .admin-heading h1 { margin: 5px 0 8px; font-size: 38px; line-height: 1.08; }
 .admin-heading p:last-child { margin: 0; color: #68706b; }
-.admin-summary { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid #d8d9d6; }
+.admin-summary { min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #d8d9d6; }
 .admin-summary > div { min-width: 0; display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: 11px; padding: 18px 20px; }
 .admin-summary > div:first-child { padding-left: 0; }
 .admin-summary > div + div { border-left: 1px solid #d8d9d6; }
@@ -581,6 +594,37 @@ button:disabled { cursor: wait; opacity: .55; }
 .admin-status.status-delivered { color: #17603a; background: #e1f0e6; }
 .admin-status.status-cancelled, .admin-status.status-returning_to_merchant { color: #8d3430; background: #f5e3e1; }
 .admin-status.status-assigned, .admin-status.status-en_route_to_pickup, .admin-status.status-at_store, .admin-status.status-picked_up, .admin-status.status-in_transit { color: #17615c; background: #dff0ed; }
+.admin-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--divider));
+  border-radius: var(--radius-compact);
+  background: color-mix(in srgb, var(--success) 10%, var(--surface));
+}
+.admin-notice > svg { color: var(--success); }
+.admin-notice button { padding: 8px; border: 0; background: transparent; color: var(--text-secondary); }
+.admin-exceptions > header { justify-content: space-between; align-items: flex-start; }
+.admin-exceptions > header p { margin: 5px 0 0; color: var(--text-secondary); }
+.admin-exceptions > header button { min-height: 42px; margin: 0; display: inline-flex; align-items: center; gap: 7px; }
+.exception-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; margin-top: 18px; }
+.exception-card { min-width: 0; padding: 16px; border: 1px solid var(--divider); border-radius: var(--radius-compact); background: var(--surface); }
+.exception-card.critical { border-color: color-mix(in srgb, var(--destructive) 45%, var(--divider)); }
+.exception-card > header { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: start; gap: 11px; }
+.exception-card > header > span { width: 38px; height: 38px; display: grid; place-items: center; color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, var(--surface)); }
+.exception-card.critical > header > span { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, var(--surface)); }
+.exception-card h3 { margin: 2px 0 0; font-size: 17px; }
+.exception-card .eyebrow { margin: 0; }
+.exception-card time { color: var(--text-secondary); font-size: 12px; }
+.exception-card > p { margin: 14px 0 8px; color: var(--text-secondary); line-height: 1.5; }
+.exception-card > small { display: block; color: var(--text-secondary); text-transform: capitalize; }
+.exception-card > button { min-height: 42px; margin: 14px 0 0; display: inline-flex; align-items: center; gap: 7px; }
+.exception-action { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; margin-top: 14px; }
+.exception-action input { min-width: 0; min-height: 44px; padding: 0 11px; border: 1px solid var(--divider); border-radius: var(--radius-compact); color: var(--text-primary); background: var(--surface); }
+.exception-action button { min-height: 44px; margin: 0; }
 
 .merchant-workspace { width: min(100%, 1120px); min-width: 0; margin: 0 auto; }
 .merchant-catalogue-shell { width: 100%; min-width: 0; }
@@ -1344,6 +1388,8 @@ button:disabled { cursor: wait; opacity: .55; }
   .admin-approvals .admin-section + .admin-section { border-top: 1px solid #d8d9d6; }
   .admin-order-table { overflow-x: auto; }
   .admin-order-header, .admin-order-row { min-width: 760px; }
+  .exception-list { grid-template-columns: 1fr; }
+  .exception-action { grid-template-columns: 1fr; }
   .admin-refund-review { grid-template-columns: 1fr 1fr; }
   .location-actions { display: grid; width: 100%; justify-content: stretch; }
   .range-filter { width: 100%; min-width: 0; }

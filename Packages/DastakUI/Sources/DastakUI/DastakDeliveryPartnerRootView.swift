@@ -32,14 +32,25 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 await model.refresh()
             }
         }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                guard !Task.isCancelled, model.isOnline else { continue }
+                locationManager.requestLocation()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task { await model.refresh() }
         }
         .onReceive(locationManager.$location) { location in
-            guard pendingOnlineRequest, let location else { return }
-            pendingOnlineRequest = false
-            Task { await model.setAvailability(online: true, location: location) }
+            guard let location else { return }
+            if pendingOnlineRequest {
+                pendingOnlineRequest = false
+                Task { await model.setAvailability(online: true, location: location) }
+            } else if model.isOnline {
+                Task { await model.publishLocation(location) }
+            }
         }
         .alert(
             "Dastak",
@@ -106,6 +117,11 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, MarketplaceSpacing.xxLarge)
         } else {
+            if let notice = model.noticeMessage {
+                DastakPartnerNotice(message: notice) {
+                    model.noticeMessage = nil
+                }
+            }
             if let earnings = model.earnings {
                 DastakEarningsCard(earnings: earnings, title: "Earnings")
             }
@@ -278,6 +294,28 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 handoffCode = ""
             }
         }
+    }
+}
+
+private struct DastakPartnerNotice: View {
+    let message: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: MarketplaceSpacing.compact) {
+            Image(systemName: "checkmark.seal.fill")
+                .foregroundStyle(MarketplaceColors.success.color)
+            Text(message)
+                .font(.subheadline)
+            Spacer()
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(MarketplaceIconButtonStyle())
+            .accessibilityLabel("Dismiss confirmation")
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
     }
 }
 

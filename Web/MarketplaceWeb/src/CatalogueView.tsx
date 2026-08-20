@@ -43,10 +43,13 @@ import {
 } from "./catalogue";
 import {
   cancelMerchantOrder,
+  createMerchantOrderSupport,
   createMerchantOrder,
   formatDeliveryDistance,
+  getCustomerOrderDetail,
   getCustomerOrders,
   quoteMerchantOrder,
+  type CustomerOrderSupportCategory,
   type MerchantOrderQuote,
   type MerchantOrderSnapshot,
 } from "./orders";
@@ -75,7 +78,7 @@ import {
 } from "./customerAddresses";
 import { CustomerAddressSheet, type CustomerAddressDraft } from "./CustomerAddressSheet";
 import { CustomerAddressBookSheet } from "./CustomerAddressBookSheet";
-import { CancellationSheet, CustomerRouteMap, CustomerTimeline } from "./CustomerDeliveryDetails";
+import { CancellationSheet, CustomerRouteMap, CustomerSupportSheet, CustomerTimeline } from "./CustomerDeliveryDetails";
 import { merchantOrderPresentation, paymentStateLabel } from "./customerLifecycle";
 import { getDeliveryPartnerSnapshot } from "./delivery";
 import {
@@ -192,6 +195,7 @@ export function CatalogueView({
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [deliveryPartnerAccountState, setDeliveryPartnerAccountState] = useState<DeliveryPartnerAccountState>("loading");
   const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderSnapshot>();
+  const [supportingOrder, setSupportingOrder] = useState<MerchantOrderSnapshot>();
   const [searchQuery, setSearchQuery] = useState("");
   const catalogueRequest = useRef(0);
   const orderCreationRequest = useRef<{ quoteId: string; idempotencyKey: string } | undefined>(undefined);
@@ -234,6 +238,19 @@ export function CatalogueView({
   useEffect(() => {
     void refreshOrders();
   }, [refreshOrders]);
+
+  useEffect(() => {
+    if (!selectedOrderId) return;
+    let active = true;
+    setOrderBusy(true);
+    void getCustomerOrderDetail({ ...auth, orderId: selectedOrderId })
+      .then((detail) => {
+        if (active) setOrders((current) => [detail, ...current.filter((item) => item.orderId !== detail.orderId)]);
+      })
+      .catch((error) => { if (active) setOrderError(orderMessage(error)); })
+      .finally(() => { if (active) setOrderBusy(false); });
+    return () => { active = false; };
+  }, [auth, selectedOrderId]);
 
   useEffect(() => {
     if (orderRefreshToken > 0) void refreshOrders();
@@ -649,6 +666,23 @@ export function CatalogueView({
     }
   };
 
+  const requestOrderSupport = async (category: CustomerOrderSupportCategory, message: string) => {
+    if (!supportingOrder) return;
+    setOrderBusy(true);
+    setOrderError(undefined);
+    try {
+      await createMerchantOrderSupport({ ...auth, orderId: supportingOrder.orderId, category, message, idempotencyKey: crypto.randomUUID() });
+      const detail = await getCustomerOrderDetail({ ...auth, orderId: supportingOrder.orderId });
+      setOrders((current) => [detail, ...current.filter((item) => item.orderId !== detail.orderId)]);
+      setSupportingOrder(detail);
+      setPaymentMessage("Support request sent. You can follow its status here.");
+    } catch (error) {
+      setOrderError(orderMessage(error));
+    } finally {
+      setOrderBusy(false);
+    }
+  };
+
   const accountInitials = (accountProfile.displayName || "Dastak")
     .trim()
     .split(/\s+/)
@@ -807,7 +841,11 @@ export function CatalogueView({
               onBack={onCloseOrder}
               onPay={retryPayment}
               onCancel={setCancellingOrder}
-              onRefresh={refreshOrders}
+              onSupport={setSupportingOrder}
+              onRefresh={async () => {
+                const detail = await getCustomerOrderDetail({ ...auth, orderId: selectedOrderId });
+                setOrders((current) => [detail, ...current.filter((item) => item.orderId !== detail.orderId)]);
+              }}
             />
           ) : <>
             <header className="customer-page-heading"><p className="eyebrow">Purchases</p><h1>Orders</h1></header>
@@ -974,6 +1012,12 @@ export function CatalogueView({
         onDismiss={() => setCancellingOrder(undefined)}
         onConfirm={(reason) => cancelOrder(cancellingOrder, reason)}
       />}
+      {supportingOrder && <CustomerSupportSheet
+        cases={supportingOrder.supportCases ?? []}
+        busy={orderBusy}
+        onDismiss={() => setSupportingOrder(undefined)}
+        onSubmit={requestOrderSupport}
+      />}
     </div>
   );
 }
@@ -1137,12 +1181,13 @@ function OrdersSection({ orders, busy, onCancel, onPay, onOpen, onRefresh, title
   );
 }
 
-function CustomerOrderDetail({ order, busy, onBack, onPay, onCancel, onRefresh }: {
+function CustomerOrderDetail({ order, busy, onBack, onPay, onCancel, onSupport, onRefresh }: {
   order: MerchantOrderSnapshot;
   busy: boolean;
   onBack: () => void;
   onPay: (order: MerchantOrderSnapshot) => void;
   onCancel: (order: MerchantOrderSnapshot) => void;
+  onSupport: (order: MerchantOrderSnapshot) => void;
   onRefresh: () => Promise<void>;
 }) {
   const presentation = merchantOrderPresentation(order.status, order.paymentState);
@@ -1188,7 +1233,9 @@ function CustomerOrderDetail({ order, busy, onBack, onPay, onCancel, onRefresh }
       <div className="customer-detail-actions">
         {presentation.primaryAction === "pay" && <button className="primary-button" type="button" disabled={busy} onClick={() => onPay(order)}><CreditCard size={18} /> Pay {formatPrice(order.total.paise)}</button>}
         {(presentation.primaryAction === "cancel" || presentation.primaryAction === "request_cancellation") && <button className="danger-button" type="button" disabled={busy} onClick={() => onCancel(order)}><X size={18} /> {presentation.primaryAction === "request_cancellation" ? "Request cancellation" : "Cancel order"}</button>}
+        {(order.customerActions?.canRequestSupport ?? true) && <button className="secondary-button" type="button" disabled={busy} onClick={() => onSupport(order)}><CircleHelp size={18} /> Get help</button>}
       </div>
+      {(order.supportCases?.length ?? 0) > 0 && <section className="customer-support-summary"><h2>Support</h2>{order.supportCases!.map((item) => <button key={item.caseId} type="button" onClick={() => onSupport(order)}><span><strong>{item.reference}</strong><small>{item.message}</small></span><b>{item.status.replace("_", " ")}</b></button>)}</section>}
     </article>
   );
 }

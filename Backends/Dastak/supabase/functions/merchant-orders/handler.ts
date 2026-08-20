@@ -117,14 +117,46 @@ export type OwnerResetHandoffInput = MerchantOrderMutationInput & {
   purpose: "pickup" | "delivery";
   reason: string;
 };
+export type OwnerResolveSupportInput = {
+  accountId: string;
+  caseId: string;
+  resolution: string;
+  idempotencyKey: string;
+  requestDigest: string;
+};
+export type OwnerResetParcelHandoffInput = {
+  accountId: string;
+  parcelId: string;
+  purpose: "pickup" | "delivery";
+  reason: string;
+  idempotencyKey: string;
+  requestDigest: string;
+};
+
+export type CustomerOrderSupportCategory =
+  | "delivery_status"
+  | "merchant_or_items"
+  | "payment"
+  | "refund"
+  | "cancellation"
+  | "safety"
+  | "other";
+
+export type CustomerOrderSupportInput = MerchantOrderMutationInput & {
+  category: CustomerOrderSupportCategory;
+  message: string;
+};
 
 export type MerchantOrderDependencies = {
   authenticateBearer: AuthenticateBearer;
   quoteOrder: (input: QuoteMerchantOrderInput) => Promise<RpcResult>;
   createOrder: (input: CreateMerchantOrderInput) => Promise<RpcResult>;
   getCustomerOrders: (accountId: string) => Promise<RpcResult>;
+  getCustomerOrder: (accountId: string, orderId: string) => Promise<RpcResult>;
+  createCustomerSupport: (input: CustomerOrderSupportInput) => Promise<RpcResult>;
   getMerchantOrders: (accountId: string) => Promise<RpcResult>;
   getOwnerOrders: (accountId: string, limit: number) => Promise<RpcResult>;
+  getOwnerOperations: (accountId: string, limit: number) => Promise<RpcResult>;
   merchantAccept: (input: MerchantOrderMutationInput) => Promise<RpcResult>;
   merchantReject: (input: MerchantRejectOrderInput) => Promise<RpcResult>;
   merchantMarkReady: (input: MerchantOrderMutationInput) => Promise<RpcResult>;
@@ -132,6 +164,9 @@ export type MerchantOrderDependencies = {
   merchantConfirmReturn: (input: MerchantConfirmReturnInput) => Promise<RpcResult>;
   ownerReviewRefund: (input: OwnerReviewRefundInput) => Promise<RpcResult>;
   ownerResetHandoff: (input: OwnerResetHandoffInput) => Promise<RpcResult>;
+  ownerResolveSupport: (input: OwnerResolveSupportInput) => Promise<RpcResult>;
+  ownerResetParcelHandoff: (input: OwnerResetParcelHandoffInput) => Promise<RpcResult>;
+  ownerReconcile: (accountId: string) => Promise<RpcResult>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -166,6 +201,19 @@ export async function handleMerchantOrders(
         const result = await dependencies.getCustomerOrders(actor.accountId);
         return json(result.responseBody, result.responseStatus);
       }
+      case "customerDetail": {
+        const orderId = validUUID(body.orderId);
+        if (!orderId) return validationError();
+        const result = await dependencies.getCustomerOrder(actor.accountId, orderId);
+        return json(result.responseBody, result.responseStatus);
+      }
+      case "customerSupport":
+        return await supportMutation(
+          request,
+          body,
+          actor.accountId,
+          dependencies.createCustomerSupport,
+        );
       case "merchantSnapshot": {
         const result = await dependencies.getMerchantOrders(actor.accountId);
         return json(result.responseBody, result.responseStatus);
@@ -174,6 +222,12 @@ export async function handleMerchantOrders(
         const limit = validOwnerLimit(body.limit);
         if (!limit) return validationError();
         const result = await dependencies.getOwnerOrders(actor.accountId, limit);
+        return json(result.responseBody, result.responseStatus);
+      }
+      case "ownerOperations": {
+        const limit = validOwnerLimit(body.limit);
+        if (!limit) return validationError();
+        const result = await dependencies.getOwnerOperations(actor.accountId, limit);
         return json(result.responseBody, result.responseStatus);
       }
       case "merchantAccept":
@@ -225,12 +279,74 @@ export async function handleMerchantOrders(
           actor.accountId,
           dependencies.ownerResetHandoff,
         );
+      case "ownerResolveSupport":
+        return await ownerResolveSupportMutation(
+          request,
+          body,
+          actor.accountId,
+          dependencies.ownerResolveSupport,
+        );
+      case "ownerResetParcelHandoff":
+        return await ownerResetParcelMutation(
+          request,
+          body,
+          actor.accountId,
+          dependencies.ownerResetParcelHandoff,
+        );
+      case "ownerReconcile": {
+        const result = await dependencies.ownerReconcile(actor.accountId);
+        return json(result.responseBody, result.responseStatus);
+      }
       default:
         return validationError();
     }
   } catch {
     return internalError();
   }
+}
+
+async function ownerResolveSupportMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependency: (input: OwnerResolveSupportInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const caseId = validUUID(body.caseId);
+  const resolution = normalizeRequiredText(body.resolution, 500);
+  if (!idempotencyKey || !caseId || !resolution || resolution.length < 5) return validationError();
+  const normalized = { caseId, resolution };
+  const result = await dependency({
+    accountId,
+    ...normalized,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
+}
+
+async function ownerResetParcelMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependency: (input: OwnerResetParcelHandoffInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const parcelId = validUUID(body.parcelId);
+  const purpose: OwnerResetParcelHandoffInput["purpose"] | undefined =
+    body.purpose === "pickup" || body.purpose === "delivery" ? body.purpose : undefined;
+  const reason = normalizeRequiredText(body.reason, 300);
+  if (!idempotencyKey || !parcelId || !purpose || !reason || reason.length < 5) {
+    return validationError();
+  }
+  const normalized = { parcelId, purpose, reason };
+  const result = await dependency({
+    accountId,
+    ...normalized,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
 }
 
 async function ownerReviewRefundMutation(
@@ -381,6 +497,30 @@ async function reasonedMutation(
   return json(result.responseBody, result.responseStatus);
 }
 
+async function supportMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependency: (input: CustomerOrderSupportInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const orderId = validUUID(body.orderId);
+  const category = validSupportCategory(body.category);
+  const message = normalizeRequiredText(body.message, 1000);
+  if (!idempotencyKey || !orderId || !category || !message || message.length < 10) {
+    return validationError();
+  }
+
+  const normalized = { orderId, category, message };
+  const result = await dependency({
+    accountId,
+    ...normalized,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
+}
+
 function parseLines(value: unknown): OrderLineInput[] | undefined {
   if (!Array.isArray(value) || value.length < 1 || value.length > 50) return undefined;
   const seen = new Set<string>();
@@ -433,6 +573,20 @@ function normalizeRequiredText(value: unknown, maximumLength: number) {
 
 function validUUID(value: unknown) {
   return typeof value === "string" && uuidPattern.test(value) ? value.toLowerCase() : undefined;
+}
+
+function validSupportCategory(value: unknown): CustomerOrderSupportCategory | undefined {
+  return typeof value === "string" && [
+      "delivery_status",
+      "merchant_or_items",
+      "payment",
+      "refund",
+      "cancellation",
+      "safety",
+      "other",
+    ].includes(value)
+    ? value as CustomerOrderSupportCategory
+    : undefined;
 }
 
 function validOwnerLimit(value: unknown) {

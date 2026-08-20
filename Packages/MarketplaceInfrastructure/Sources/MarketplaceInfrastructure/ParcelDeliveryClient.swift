@@ -105,6 +105,8 @@ public struct ParcelDelivery: Codable, Equatable, Sendable {
     public let createdAt: String?
     public let updatedAt: String?
     public let handoffCode: ParcelHandoffCode?
+    public var customerActions: CustomerOrderActions? = nil
+    public var supportCases: [CustomerOrderSupportCase]? = nil
 
     private enum CodingKeys: String, CodingKey {
         case parcelID = "parcelId"
@@ -125,6 +127,8 @@ public struct ParcelDelivery: Codable, Equatable, Sendable {
         case createdAt
         case updatedAt
         case handoffCode
+        case customerActions
+        case supportCases
     }
 }
 
@@ -224,9 +228,21 @@ public protocol ParcelDeliveryClient: Sendable {
         idempotencyKey: IdempotencyKey
     ) async throws -> ParcelDelivery
 
+    func customerParcelDetail(
+        parcelID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CustomerParcelDelivery
+
     func customerSnapshot(
         idempotencyKey: IdempotencyKey
     ) async throws -> [CustomerParcelDelivery]
+
+    func createCustomerSupport(
+        parcelID: UUID,
+        category: CustomerOrderSupportCategory,
+        message: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CustomerOrderSupportResponse
 
     func partnerSnapshot(
         idempotencyKey: IdempotencyKey
@@ -296,6 +312,8 @@ public struct SupabaseParcelDeliveryClient: ParcelDeliveryClient {
         let verificationCode: String?
         let incidentType: String?
         let reportText: String?
+        let category: CustomerOrderSupportCategory?
+        let message: String?
 
         init(
             operation: String,
@@ -312,7 +330,9 @@ public struct SupabaseParcelDeliveryClient: ParcelDeliveryClient {
             reason: String? = nil,
             verificationCode: String? = nil,
             incidentType: String? = nil,
-            reportText: String? = nil
+            reportText: String? = nil,
+            category: CustomerOrderSupportCategory? = nil,
+            message: String? = nil
         ) {
             self.operation = operation
             self.deliveryMethod = deliveryMethod
@@ -329,6 +349,8 @@ public struct SupabaseParcelDeliveryClient: ParcelDeliveryClient {
             self.verificationCode = verificationCode
             self.incidentType = incidentType
             self.reportText = reportText
+            self.category = category
+            self.message = message
         }
     }
 
@@ -386,10 +408,37 @@ public struct SupabaseParcelDeliveryClient: ParcelDeliveryClient {
         )
     }
 
+    public func customerParcelDetail(
+        parcelID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CustomerParcelDelivery {
+        try await invoke(
+            Request(operation: "parcelSnapshot", parcelId: parcelID),
+            key: idempotencyKey
+        )
+    }
+
     public func customerSnapshot(
         idempotencyKey: IdempotencyKey
     ) async throws -> [CustomerParcelDelivery] {
         try await invoke(Request(operation: "customerSnapshot"), key: idempotencyKey)
+    }
+
+    public func createCustomerSupport(
+        parcelID: UUID,
+        category: CustomerOrderSupportCategory,
+        message: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CustomerOrderSupportResponse {
+        try await invoke(
+            Request(
+                operation: "customerSupport",
+                parcelId: parcelID,
+                category: category,
+                message: message
+            ),
+            key: idempotencyKey
+        )
     }
 
     public func partnerSnapshot(

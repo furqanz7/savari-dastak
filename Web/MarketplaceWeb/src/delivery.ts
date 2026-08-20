@@ -204,6 +204,16 @@ export async function setDeliveryPartnerAvailability(
   }, input.idempotencyKey, fetcher));
 }
 
+export async function publishDeliveryPartnerLocation(
+  input: AuthenticatedInput & { location: OrderLocation; idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  return parseAvailability(await call("delivery-partners", input, {
+    operation: "publishLocation",
+    location: input.location,
+  }, input.idempotencyKey, fetcher));
+}
+
 export async function getDeliveryDispatch(input: AuthenticatedInput, fetcher: Fetcher = fetch) {
   return parseDispatch(await call("courier-dispatch", input, { operation: "partnerSnapshot" }, undefined, fetcher));
 }

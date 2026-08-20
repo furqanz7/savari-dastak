@@ -149,6 +149,11 @@ public protocol DeliveryPartnerClient: Sendable {
         location: GeoPoint?,
         idempotencyKey: IdempotencyKey
     ) async throws -> DeliveryPartnerAvailability
+
+    func publishLocation(
+        location: GeoPoint,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DeliveryPartnerAvailability
 }
 
 public struct SupabaseDeliveryPartnerClient: DeliveryPartnerClient {
@@ -263,6 +268,16 @@ public struct SupabaseDeliveryPartnerClient: DeliveryPartnerClient {
     ) async throws -> DeliveryPartnerAvailability {
         try await invoke(
             Request(operation: "setAvailability", online: online, location: location),
+            key: idempotencyKey
+        )
+    }
+
+    public func publishLocation(
+        location: GeoPoint,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DeliveryPartnerAvailability {
+        try await invoke(
+            Request(operation: "publishLocation", location: location),
             key: idempotencyKey
         )
     }

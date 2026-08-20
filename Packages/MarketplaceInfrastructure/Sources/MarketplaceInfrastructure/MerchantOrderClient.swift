@@ -184,6 +184,8 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
     public let refundDecision: MerchantOrderRefundDecision?
     public let handoffCode: MerchantOrderHandoffCode?
     public let controlledCategory: ControlledOrderMetadata?
+    public var customerActions: CustomerOrderActions? = nil
+    public var supportCases: [CustomerOrderSupportCase]? = nil
     public let createdAt: String
     public let updatedAt: String
 
@@ -206,6 +208,8 @@ public struct MerchantOrderSnapshot: Codable, Equatable, Sendable {
         case refundDecision
         case handoffCode
         case controlledCategory
+        case customerActions
+        case supportCases
         case createdAt
         case updatedAt
     }
@@ -231,6 +235,18 @@ public protocol MerchantOrderClient: Sendable {
     func customerSnapshot(
         idempotencyKey: IdempotencyKey
     ) async throws -> MerchantOrderCollection
+
+    func customerDetail(
+        orderID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> MerchantOrderSnapshot
+
+    func createCustomerSupport(
+        orderID: UUID,
+        category: CustomerOrderSupportCategory,
+        message: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CustomerOrderSupportResponse
 
     func merchantSnapshot(
         idempotencyKey: IdempotencyKey
@@ -282,6 +298,8 @@ public struct SupabaseMerchantOrderClient: MerchantOrderClient {
         let dropoff: GeoPoint?
         let reason: String?
         let purpose: MerchantOrderHandoffPurpose?
+        let category: CustomerOrderSupportCategory?
+        let message: String?
 
         init(
             operation: String,
@@ -291,7 +309,9 @@ public struct SupabaseMerchantOrderClient: MerchantOrderClient {
             lines: [MerchantOrderLineInput]? = nil,
             dropoff: GeoPoint? = nil,
             reason: String? = nil,
-            purpose: MerchantOrderHandoffPurpose? = nil
+            purpose: MerchantOrderHandoffPurpose? = nil,
+            category: CustomerOrderSupportCategory? = nil,
+            message: String? = nil
         ) {
             self.operation = operation
             self.storeId = storeId
@@ -301,6 +321,8 @@ public struct SupabaseMerchantOrderClient: MerchantOrderClient {
             self.dropoff = dropoff
             self.reason = reason
             self.purpose = purpose
+            self.category = category
+            self.message = message
         }
     }
 
@@ -336,6 +358,33 @@ public struct SupabaseMerchantOrderClient: MerchantOrderClient {
         idempotencyKey: IdempotencyKey
     ) async throws -> MerchantOrderCollection {
         try await invoke(Request(operation: "customerSnapshot"), key: idempotencyKey)
+    }
+
+    public func customerDetail(
+        orderID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> MerchantOrderSnapshot {
+        try await invoke(
+            Request(operation: "customerDetail", orderId: orderID),
+            key: idempotencyKey
+        )
+    }
+
+    public func createCustomerSupport(
+        orderID: UUID,
+        category: CustomerOrderSupportCategory,
+        message: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> CustomerOrderSupportResponse {
+        try await invoke(
+            Request(
+                operation: "customerSupport",
+                orderId: orderID,
+                category: category,
+                message: message
+            ),
+            key: idempotencyKey
+        )
     }
 
     public func merchantSnapshot(

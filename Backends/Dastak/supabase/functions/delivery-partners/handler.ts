@@ -49,6 +49,14 @@ export type SetDeliveryPartnerAvailabilityInput = {
   requestDigest: string;
 };
 
+export type PublishDeliveryPartnerLocationInput = {
+  accountId: string;
+  latitude: number;
+  longitude: number;
+  idempotencyKey: string;
+  requestDigest: string;
+};
+
 export type DeliveryPartnerDependencies = {
   authenticateBearer: AuthenticateBearer;
   isActiveOwner: (accountId: string) => Promise<boolean>;
@@ -57,6 +65,7 @@ export type DeliveryPartnerDependencies = {
   listPendingApplications: (ownerId: string) => Promise<DeliveryPartnerApplication[]>;
   reviewApplication: (input: ReviewDeliveryPartnerApplicationInput) => Promise<RpcResult>;
   setAvailability: (input: SetDeliveryPartnerAvailabilityInput) => Promise<RpcResult>;
+  publishLocation: (input: PublishDeliveryPartnerLocationInput) => Promise<RpcResult>;
 };
 
 const deliveryMethods = new Set<DeliveryMethod>([
@@ -103,12 +112,33 @@ export async function handleDeliveryPartners(
         return await review(request, body, actor.accountId, dependencies);
       case "setAvailability":
         return await setAvailability(request, body, actor.accountId, dependencies);
+      case "publishLocation":
+        return await publishLocation(request, body, actor.accountId, dependencies);
       default:
         return validationError();
     }
   } catch {
     return internalError();
   }
+}
+
+async function publishLocation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependencies: DeliveryPartnerDependencies,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const location = parseLocation(body.location);
+  if (!idempotencyKey || !location) return validationError();
+
+  const result = await dependencies.publishLocation({
+    accountId,
+    ...location,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(location),
+  });
+  return json(result.responseBody, result.responseStatus);
 }
 
 async function submit(

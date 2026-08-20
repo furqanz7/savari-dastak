@@ -10,6 +10,7 @@ import {
   isValidVehicleRegistration,
   normalizeVehicleRegistration,
   partnerEvidenceObjectPath,
+  publishDeliveryPartnerLocation,
   requiresVehicleVerification,
   setDeliveryPartnerAvailability,
   submitDeliveryPartnerApplication,
@@ -158,6 +159,21 @@ describe("delivery partner client", () => {
     expect(body).toEqual({ operation: "setAvailability", online: true, location });
     expect(idempotencyKey).toBe("availability-key");
     expect(result.status).toBe("online");
+  });
+
+  it("publishes live location without extending availability", async () => {
+    let body: unknown;
+    const result = await publishDeliveryPartnerLocation({
+      ...auth,
+      location,
+      idempotencyKey: "location-key",
+    }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(new Response(JSON.stringify(availability), { status: 200 }));
+    });
+
+    expect(body).toEqual({ operation: "publishLocation", location });
+    expect(result.availableUntil).toBe(availability.availableUntil);
   });
 
   it("parses a ready-order offer without private account identities", async () => {

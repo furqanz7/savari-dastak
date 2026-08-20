@@ -7,6 +7,7 @@ import SwiftUI
 struct DastakOrdersView: View {
     @ObservedObject var model: DastakCustomerModel
     @Environment(\.scenePhase) private var scenePhase
+    @State private var scope: DastakOrderHistoryScope = .active
 
     var body: some View {
         Group {
@@ -30,6 +31,22 @@ struct DastakOrdersView: View {
                 }
             } else {
                 List {
+                    Section {
+                        Picker("Order history", selection: $scope) {
+                            ForEach(DastakOrderHistoryScope.allCases) { value in
+                                Text(value.title).tag(value)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .listRowInsets(EdgeInsets(
+                            top: MarketplaceSpacing.small,
+                            leading: MarketplaceSpacing.medium,
+                            bottom: MarketplaceSpacing.small,
+                            trailing: MarketplaceSpacing.medium
+                        ))
+                        .listRowBackground(Color.clear)
+                    }
+
                     if let failure = model.ordersAndParcelsRefreshFailure {
                         Section {
                             DastakRefreshNotice(
@@ -41,21 +58,40 @@ struct DastakOrdersView: View {
                         }
                     }
 
-                    if !model.parcels.isEmpty {
+                    if !filteredParcels.isEmpty {
                         Section("Parcel deliveries") {
-                            ForEach(model.parcels, id: \.parcel.parcelID) { customerParcel in
+                            ForEach(filteredParcels, id: \.parcel.parcelID) { customerParcel in
                                 NavigationLink(value: DastakCustomerDestination.parcel(customerParcel.parcel.parcelID)) {
                                     DastakParcelHistoryRow(customerParcel: customerParcel)
                                 }
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
                             }
                         }
                     }
 
-                    Section("Store orders") {
-                        ForEach(model.orders, id: \.orderID) { order in
+                    if !filteredOrders.isEmpty {
+                        Section("Store orders") {
+                        ForEach(filteredOrders, id: \.orderID) { order in
                             NavigationLink(value: DastakCustomerDestination.merchantOrder(order.orderID)) {
                                 DastakOrderRow(order: order)
                             }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        }
+                        }
+                    }
+
+                    if filteredOrders.isEmpty, filteredParcels.isEmpty {
+                        Section {
+                            DastakEmptyState(
+                                symbol: scope == .active ? "checkmark.circle" : "clock.arrow.circlepath",
+                                title: scope == .active ? "Nothing active" : "No past orders",
+                                message: scope == .active
+                                    ? "New and ongoing orders will stay here until they are complete."
+                                    : "Completed and cancelled orders will appear here."
+                            )
+                            .listRowBackground(Color.clear)
                         }
                     }
                 }
@@ -79,17 +115,45 @@ struct DastakOrdersView: View {
         }
         .task {
             await model.refreshOrdersAndParcels()
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(10))
-                guard !Task.isCancelled, scenePhase == .active else { continue }
-                await model.refreshOrdersAndParcels()
-            }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
                 await model.refreshOrdersAndParcels()
             }
+        }
+    }
+
+    private var filteredOrders: [MerchantOrderSnapshot] {
+        model.orders.filter { scope.includes(isActive: isActive($0.status)) }
+    }
+
+    private var filteredParcels: [CustomerParcelDelivery] {
+        model.parcels.filter { scope.includes(isActive: isActive($0.parcel.status)) }
+    }
+
+    private func isActive(_ status: MerchantOrderStatus) -> Bool {
+        status != .delivered && status != .cancelled
+    }
+
+    private func isActive(_ status: ParcelDeliveryStatus) -> Bool {
+        status != .delivered && status != .cancelled
+    }
+}
+
+private enum DastakOrderHistoryScope: String, CaseIterable, Identifiable {
+    case active
+    case past
+    case all
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+
+    func includes(isActive: Bool) -> Bool {
+        switch self {
+        case .active: isActive
+        case .past: !isActive
+        case .all: true
         }
     }
 }
@@ -102,37 +166,74 @@ private struct DastakCustomerDeliveryDestinationView: View {
     var body: some View {
         switch destination {
         case let .merchantOrder(orderID):
-            if let order = model.orders.first(where: { $0.orderID == orderID }) {
+            if let order = model.order(withID: orderID) {
                 DastakOrderDetailView(
                     order: order,
                     store: model.catalogue?.stores.first { $0.storeID == order.storeID },
                     cancel: { reason in await model.cancel(order, reason: reason) },
-                    pay: { await model.retryPayment(for: order) }
+                    pay: { await model.retryPayment(for: order) },
+                    support: { category, message in
+                        try await model.requestSupport(for: order, category: category, message: message)
+                    }
                 )
+                .task { await model.refreshOrderDetail(orderID: orderID) }
             } else {
-                missing(title: "Order unavailable")
+                missing(
+                    title: "Loading order",
+                    failure: model.orderDetailFailures[orderID],
+                    loading: model.loadingOrderDetailIDs.contains(orderID),
+                    action: { await model.refreshOrderDetail(orderID: orderID) }
+                )
+                .task { await model.refreshOrderDetail(orderID: orderID) }
             }
         case let .parcel(parcelID):
-            if let parcel = model.parcels.first(where: { $0.parcel.parcelID == parcelID }) {
+            if let parcel = model.customerParcel(withID: parcelID) {
                 DastakParcelDetailView(
                     customerParcel: parcel,
                     pay: { await model.retryPayment(for: parcel) },
-                    cancel: { reason in await model.cancel(parcel, reason: reason) }
+                    cancel: { reason in await model.cancel(parcel, reason: reason) },
+                    support: { category, message in
+                        try await model.requestSupport(for: parcel, category: category, message: message)
+                    }
                 )
+                .task { await model.refreshParcelDetail(parcelID: parcelID) }
             } else {
-                missing(title: "Delivery unavailable")
+                missing(
+                    title: "Loading delivery",
+                    failure: model.parcelDetailFailures[parcelID],
+                    loading: model.loadingParcelDetailIDs.contains(parcelID),
+                    action: {
+                        await model.refreshParcels()
+                        await model.refreshParcelDetail(parcelID: parcelID)
+                    }
+                )
+                .task {
+                    await model.refreshParcels()
+                    await model.refreshParcelDetail(parcelID: parcelID)
+                }
             }
         }
     }
 
-    private func missing(title: String) -> some View {
-        DastakEmptyState(
-            symbol: "arrow.clockwise",
-            title: title,
-            message: "Refresh to load the latest details.",
-            actionTitle: "Refresh",
-            action: { Task { await model.refreshOrdersAndParcels() } }
-        )
+    private func missing(
+        title: String,
+        failure: DastakCustomerRefreshFailure?,
+        loading: Bool,
+        action: @escaping () async -> Void
+    ) -> some View {
+        Group {
+            if loading, failure == nil {
+                ProgressView(title)
+            } else {
+                DastakEmptyState(
+                    symbol: failure?.symbol ?? "arrow.clockwise",
+                    title: failure?.title ?? title,
+                    message: failure?.message ?? "Refresh to load the latest details.",
+                    actionTitle: failure?.actionTitle ?? "Refresh",
+                    action: { Task { await action() } }
+                )
+            }
+        }
     }
 }
 
@@ -160,7 +261,8 @@ private struct DastakOrderRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, MarketplaceSpacing.xSmall)
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
     }
 
     private func isActive(_ status: MerchantOrderStatus) -> Bool {
@@ -189,6 +291,8 @@ private struct DastakParcelHistoryRow: View {
             Text(DastakFormatting.money(parcel.deliveryFee))
                 .font(.subheadline.bold().monospacedDigit())
         }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
     }
 }
 
@@ -196,21 +300,25 @@ private struct DastakParcelDetailView: View {
     let customerParcel: CustomerParcelDelivery
     let pay: () async -> Void
     let cancel: (String) async -> Void
+    let support: (CustomerOrderSupportCategory, String) async throws -> CustomerOrderSupportCase
 
     @State private var mapPosition: MapCameraPosition
     @State private var isCancelling = false
     @State private var showingCancellationReasons = false
+    @State private var showingSupport = false
 
     private var parcel: ParcelDelivery { customerParcel.parcel }
 
     init(
         customerParcel: CustomerParcelDelivery,
         pay: @escaping () async -> Void,
-        cancel: @escaping (String) async -> Void
+        cancel: @escaping (String) async -> Void,
+        support: @escaping (CustomerOrderSupportCategory, String) async throws -> CustomerOrderSupportCase
     ) {
         self.customerParcel = customerParcel
         self.pay = pay
         self.cancel = cancel
+        self.support = support
         let center = CLLocationCoordinate2D(
             latitude: (customerParcel.parcel.pickup.latitude + customerParcel.parcel.dropoff.latitude) / 2,
             longitude: (customerParcel.parcel.pickup.longitude + customerParcel.parcel.dropoff.longitude) / 2
@@ -238,6 +346,11 @@ private struct DastakParcelDetailView: View {
                 route
                 timeline
                 payment
+                DastakOrderSupportCard(
+                    cases: parcel.supportCases ?? [],
+                    action: { showingSupport = true }
+                )
+                .padding(.horizontal, MarketplaceSpacing.medium)
                 if canPay {
                     Button {
                         Task { await pay() }
@@ -272,6 +385,12 @@ private struct DastakParcelDetailView: View {
             cancellationButton("Delivery is delayed")
         } message: {
             Text("Before pickup, an eligible captured payment is refunded to its original method.")
+        }
+        .sheet(isPresented: $showingSupport) {
+            DastakOrderSupportSheet(
+                orderReference: parcel.parcelID.uuidString,
+                submit: support
+            )
         }
     }
 
@@ -394,11 +513,14 @@ private struct DastakParcelDetailView: View {
     }
 
     private var canPay: Bool {
-        presentation.primaryAction == .pay
+        parcel.customerActions?.canPay ?? (presentation.primaryAction == .pay)
     }
 
     private var canCancel: Bool {
         guard customerParcel.audience == .sender else { return false }
+        if let actions = parcel.customerActions {
+            return actions.cancellationMode == .cancel
+        }
         return switch parcel.status {
         case .paymentPending, .paid, .assigned, .enRouteToPickup: true
         case .pickedUp, .inTransit, .delivered, .cancelled: false
@@ -451,21 +573,25 @@ private struct DastakOrderDetailView: View {
     let store: CatalogueStore?
     let cancel: (String) async -> Void
     let pay: () async -> Void
+    let support: (CustomerOrderSupportCategory, String) async throws -> CustomerOrderSupportCase
 
     @State private var mapPosition: MapCameraPosition
     @State private var isCancelling = false
     @State private var showingCancellationReasons = false
+    @State private var showingSupport = false
 
     init(
         order: MerchantOrderSnapshot,
         store: CatalogueStore?,
         cancel: @escaping (String) async -> Void,
-        pay: @escaping () async -> Void
+        pay: @escaping () async -> Void,
+        support: @escaping (CustomerOrderSupportCategory, String) async throws -> CustomerOrderSupportCase
     ) {
         self.order = order
         self.store = store
         self.cancel = cancel
         self.pay = pay
+        self.support = support
         let center = CLLocationCoordinate2D(
             latitude: order.dropoff.latitude,
             longitude: order.dropoff.longitude
@@ -494,11 +620,27 @@ private struct DastakOrderDetailView: View {
                 items
                 timeline
                 payment
-                if order.paymentState == .paymentPending {
+                DastakOrderSupportCard(
+                    cases: order.supportCases ?? [],
+                    action: { showingSupport = true }
+                )
+                .padding(.horizontal, MarketplaceSpacing.medium)
+                if canPay {
                     payButton
                 }
                 if canCancel {
                     cancelButton
+                }
+                if order.customerActions?.cancellationMode == .pendingReview {
+                    Label(
+                        "Your cancellation is under review. We will update the refund here.",
+                        systemImage: "clock.badge.checkmark"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(MarketplaceSpacing.medium)
+                    .marketplaceFlatSurface()
+                    .padding(.horizontal, MarketplaceSpacing.medium)
                 }
             }
             .padding(.bottom, MarketplaceSpacing.xLarge)
@@ -515,6 +657,12 @@ private struct DastakOrderDetailView: View {
             cancellationButton("Delivery is delayed")
         } message: {
             Text(cancellationMessage)
+        }
+        .sheet(isPresented: $showingSupport) {
+            DastakOrderSupportSheet(
+                orderReference: order.orderID.uuidString,
+                submit: support
+            )
         }
     }
 
@@ -735,13 +883,20 @@ private struct DastakOrderDetailView: View {
     }
 
     private var canCancel: Bool {
+        if let mode = order.customerActions?.cancellationMode {
+            return mode == .cancel || mode == .requestReview
+        }
         switch order.status {
         case .paymentPending, .paid, .merchantAccepted, .ready, .assigned,
              .enRouteToPickup, .atStore, .pickedUp, .inTransit:
-            true
+            return true
         case .delivered, .cancelled, .returningToMerchant:
-            false
+            return false
         }
+    }
+
+    private var canPay: Bool {
+        order.customerActions?.canPay ?? (order.paymentState == .paymentPending)
     }
 
     private var presentation: DastakCustomerLifecyclePresentation {
@@ -820,6 +975,198 @@ private struct DastakCourierCard: View {
         let number = courier.phoneNumber.filter { $0.isNumber || $0 == "+" }
         guard !number.isEmpty else { return nil }
         return URL(string: "tel:\(number)")
+    }
+}
+
+private struct DastakOrderSupportCard: View {
+    let cases: [CustomerOrderSupportCase]
+    let action: () -> Void
+
+    private var latestCase: CustomerOrderSupportCase? {
+        cases.first
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: MarketplaceSpacing.compact) {
+                Image(systemName: latestCase == nil ? "questionmark.bubble" : "checkmark.bubble.fill")
+                    .font(.title3)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(latestCase == nil ? "Help with this order" : "Support · \(latestCase?.reference ?? "")")
+                        .font(.headline)
+                    Text(latestCase.map { $0.status.customerTitle }
+                         ?? "Payments, refunds, items, cancellations or delivery")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.bold())
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+        .accessibilityHint("Opens order support")
+    }
+}
+
+private struct DastakOrderSupportSheet: View {
+    let orderReference: String
+    let submit: (CustomerOrderSupportCategory, String) async throws -> CustomerOrderSupportCase
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var category: CustomerOrderSupportCategory = .deliveryStatus
+    @State private var message = ""
+    @State private var isSubmitting = false
+    @State private var createdCase: CustomerOrderSupportCase?
+    @State private var errorMessage: String?
+
+    private var normalizedMessage: String {
+        message.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                    if let createdCase {
+                        success(createdCase)
+                    } else {
+                        Text("Tell us what happened")
+                            .font(MarketplaceTypography.sectionTitle)
+                        Text("Your message is attached to order #\(orderReference.prefix(8).uppercased()).")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                            Text("Topic")
+                                .font(.headline)
+                            Picker("Support topic", selection: $category) {
+                                ForEach(CustomerOrderSupportCategory.allCases, id: \.self) { value in
+                                    Text(value.customerTitle).tag(value)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(MarketplaceColors.dastakAccent.color)
+                        }
+
+                        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                            Text("Details")
+                                .font(.headline)
+                            TextEditor(text: $message)
+                                .frame(minHeight: 150)
+                                .padding(MarketplaceSpacing.small)
+                                .scrollContentBackground(.hidden)
+                                .background(.primary.opacity(0.04))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(.primary.opacity(0.12), lineWidth: 1)
+                                }
+                                .accessibilityLabel("Describe the issue")
+                            Text("Include what you expected and what happened. Do not share card or UPI credentials.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let errorMessage {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+                .padding(MarketplaceSpacing.large)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle("Order support")
+            .dastakInlineNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if createdCase == nil {
+                    Button {
+                        Task { await submitRequest() }
+                    } label: {
+                        if isSubmitting {
+                            ProgressView()
+                        } else {
+                            Text("Send request")
+                        }
+                    }
+                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                    .disabled(normalizedMessage.count < 10 || isSubmitting)
+                    .padding(MarketplaceSpacing.medium)
+                    .background(.bar)
+                }
+            }
+        }
+    }
+
+    private func success(_ supportCase: CustomerOrderSupportCase) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(MarketplaceColors.success.color)
+            Text("Request received")
+                .font(MarketplaceTypography.sectionTitle)
+            Text(supportCase.reference)
+                .font(.headline.monospaced())
+            Text("You can close this page. The current status will remain visible inside this order.")
+                .foregroundStyle(.secondary)
+            Button("Done") { dismiss() }
+                .buttonStyle(MarketplacePrimaryButtonStyle())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func submitRequest() async {
+        guard normalizedMessage.count >= 10, !isSubmitting else { return }
+        isSubmitting = true
+        errorMessage = nil
+        defer { isSubmitting = false }
+        do {
+            createdCase = try await submit(category, normalizedMessage)
+        } catch {
+            errorMessage = "Your request could not be sent. Please try again."
+        }
+    }
+}
+
+private extension CustomerOrderSupportCategory {
+    var customerTitle: String {
+        switch self {
+        case .deliveryStatus: "Delivery status"
+        case .merchantOrItems: "Store or items"
+        case .payment: "Payment"
+        case .refund: "Refund"
+        case .cancellation: "Cancellation"
+        case .safety: "Safety concern"
+        case .other: "Something else"
+        }
+    }
+}
+
+private extension CustomerOrderSupportStatus {
+    var customerTitle: String {
+        switch self {
+        case .open: "Request received"
+        case .inReview: "Under review"
+        case .resolved: "Resolved"
+        case .closed: "Closed"
+        }
     }
 }
 

@@ -30,6 +30,31 @@ export type MerchantOrderTimeline = {
   cancelledAt?: string;
 };
 
+export type CustomerOrderActions = {
+  canPay: boolean;
+  cancellationMode: "cancel" | "request_review" | "pending_review" | "none";
+  canTrack: boolean;
+  canContactStore: boolean;
+  canContactCourier: boolean;
+  canRequestSupport: boolean;
+};
+
+export type CustomerOrderSupportCategory = "delivery_status" | "merchant_or_items" | "payment" | "refund" | "cancellation" | "safety" | "other";
+
+export type CustomerOrderSupportCase = {
+  caseId: string;
+  reference: string;
+  entityKind: "merchant_order" | "parcel_delivery";
+  entityId: string;
+  category: CustomerOrderSupportCategory;
+  message: string;
+  status: "open" | "in_review" | "resolved" | "closed";
+  resolution?: string;
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type MerchantOrderLine = {
   productId: string;
   name: string;
@@ -85,6 +110,8 @@ export type MerchantOrderSnapshot = MerchantOrderPricing & {
     deliveryFeeRefund: { paise: number } | null;
     reason: string;
   } | null;
+  customerActions?: CustomerOrderActions;
+  supportCases?: CustomerOrderSupportCase[];
   createdAt: string;
   updatedAt: string;
 };
@@ -140,6 +167,30 @@ export async function getCustomerOrders(
   const payload = record(await call(input, { operation: "customerSnapshot" }, undefined, fetcher));
   if (!payload || !Array.isArray(payload.orders)) invalid();
   return payload.orders.map(parseMerchantOrder);
+}
+
+export async function getCustomerOrderDetail(
+  input: AuthenticatedInput & { orderId: string },
+  fetcher: Fetcher = fetch,
+) {
+  return parseMerchantOrder(await call(input, {
+    operation: "customerDetail",
+    orderId: input.orderId,
+  }, undefined, fetcher));
+}
+
+export async function createMerchantOrderSupport(
+  input: AuthenticatedInput & { orderId: string; category: CustomerOrderSupportCategory; message: string; idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  const payload = record(await call(input, {
+    operation: "customerSupport",
+    orderId: input.orderId,
+    category: input.category,
+    message: input.message,
+  }, input.idempotencyKey, fetcher));
+  if (!payload) invalid();
+  return parseCustomerOrderSupportCase(payload.supportCase);
 }
 
 export async function getMerchantOrders(
@@ -255,6 +306,54 @@ export function parseMerchantOrder(value: unknown): MerchantOrderSnapshot {
     stateVersion,
     handoffCode: handoffCode(source.handoffCode),
     refundDecision: refundDecision(source.refundDecision),
+    customerActions: customerActions(source.customerActions),
+    supportCases: supportCases(source.supportCases),
+    createdAt: timestamp(source.createdAt),
+    updatedAt: timestamp(source.updatedAt),
+  };
+}
+
+function customerActions(value: unknown): CustomerOrderActions | undefined {
+  if (value === null || value === undefined) return undefined;
+  const source = record(value);
+  const cancellationMode = source?.cancellationMode;
+  if (!source || !["cancel", "request_review", "pending_review", "none"].includes(String(cancellationMode))) invalid();
+  const fields = ["canPay", "canTrack", "canContactStore", "canContactCourier", "canRequestSupport"] as const;
+  if (fields.some((field) => typeof source[field] !== "boolean")) invalid();
+  return {
+    canPay: source.canPay as boolean,
+    cancellationMode: cancellationMode as CustomerOrderActions["cancellationMode"],
+    canTrack: source.canTrack as boolean,
+    canContactStore: source.canContactStore as boolean,
+    canContactCourier: source.canContactCourier as boolean,
+    canRequestSupport: source.canRequestSupport as boolean,
+  };
+}
+
+function supportCases(value: unknown): CustomerOrderSupportCase[] | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (!Array.isArray(value)) invalid();
+  return value.map(parseCustomerOrderSupportCase);
+}
+
+export function parseCustomerOrderSupportCase(value: unknown): CustomerOrderSupportCase {
+  const source = record(value);
+  const entityKind = source?.entityKind;
+  const category = source?.category;
+  const status = source?.status;
+  if (!source || !["merchant_order", "parcel_delivery"].includes(String(entityKind)) ||
+    !["delivery_status", "merchant_or_items", "payment", "refund", "cancellation", "safety", "other"].includes(String(category)) ||
+    !["open", "in_review", "resolved", "closed"].includes(String(status))) invalid();
+  return {
+    caseId: requiredUUID(source.caseId),
+    reference: requiredText(source.reference, 40),
+    entityKind: entityKind as CustomerOrderSupportCase["entityKind"],
+    entityId: requiredUUID(source.entityId),
+    category: category as CustomerOrderSupportCategory,
+    message: requiredText(source.message, 1000),
+    status: status as CustomerOrderSupportCase["status"],
+    resolution: optionalText(source.resolution, 1000),
+    resolvedAt: optionalTimestamp(source.resolvedAt),
     createdAt: timestamp(source.createdAt),
     updatedAt: timestamp(source.updatedAt),
   };

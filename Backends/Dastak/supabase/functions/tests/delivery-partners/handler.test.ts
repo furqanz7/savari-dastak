@@ -287,6 +287,51 @@ Deno.test("availability rejects missing online location and offline location pay
   await assertError(offlineLocation, 400, "validation_failed");
 });
 
+Deno.test("location publication uses the authenticated partner and exact coordinates", async () => {
+  let recorded: Record<string, unknown> | undefined;
+  const response = await handleDeliveryPartners(
+    request({
+      body: {
+        operation: "publishLocation",
+        accountId: applicationId,
+        location: { latitude: 12.681, longitude: 78.623 },
+        availableUntil: "2099-01-01T00:00:00Z",
+      },
+    }),
+    dependencies({
+      publishLocation: (input) => {
+        recorded = input;
+        return Promise.resolve({
+          responseBody: {
+            status: "online",
+            location: { latitude: input.latitude, longitude: input.longitude },
+            serviceZoneId: applicationId,
+            availableUntil: "2026-07-16T12:15:00Z",
+            stateVersion: 2,
+          },
+          responseStatus: 200,
+        });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.latitude, 12.681);
+  assertEquals(recorded?.longitude, 78.623);
+  assertEquals(recorded?.idempotencyKey, "test-key");
+  assertEquals(typeof recorded?.requestDigest, "string");
+  assertEquals("availableUntil" in (recorded ?? {}), false);
+});
+
+Deno.test("location publication rejects invalid coordinates", async () => {
+  const response = await handleDeliveryPartners(
+    request({ body: { operation: "publishLocation", location: { latitude: 91, longitude: 78.62 } } }),
+    dependencies(),
+  );
+  await assertError(response, 400, "validation_failed");
+});
+
 Deno.test("delivery partner dependency failures do not leak details", async () => {
   const response = await handleDeliveryPartners(
     request({ body: { operation: "selfSnapshot" } }),
@@ -330,6 +375,17 @@ function dependencies(
           serviceZoneId: null,
           availableUntil: null,
           stateVersion: 1,
+        },
+        responseStatus: 200,
+      }),
+    publishLocation: () =>
+      Promise.resolve({
+        responseBody: {
+          status: "online",
+          location: { latitude: 12.68, longitude: 78.62 },
+          serviceZoneId: applicationId,
+          availableUntil: "2026-07-16T12:15:00Z",
+          stateVersion: 2,
         },
         responseStatus: 200,
       }),

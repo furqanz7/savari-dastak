@@ -118,6 +118,21 @@ final class ParcelDeliveryClientTests: XCTestCase {
         let operation = try await functions.lastOperation()
         XCTAssertEqual(operation, "customerSnapshot")
     }
+
+    func testCustomerDetailKeepsAudienceForColdDeepLinks() async throws {
+        let functions = RecordingParcelFunctionClient()
+        let client = SupabaseParcelDeliveryClient(functions: functions)
+
+        let detail = try await client.customerParcelDetail(
+            parcelID: UUID(uuidString: "22222222-2222-4222-8222-222222222222")!,
+            idempotencyKey: try XCTUnwrap(IdempotencyKey(rawValue: "parcel-customer-detail-1"))
+        )
+
+        XCTAssertEqual(detail.audience, .sender)
+        XCTAssertEqual(detail.parcel.status, .inTransit)
+        let operation = try await functions.lastOperation()
+        XCTAssertEqual(operation, "parcelSnapshot")
+    }
 }
 
 private struct CapturedParcelRequest: Decodable {
@@ -146,11 +161,12 @@ private actor RecordingParcelFunctionClient: FunctionClient {
         case "quote":
             response = quoteJSON
         case "parcelSnapshot":
-            response = parcelJSON(
+            let parcel = String(data: parcelJSON(
                 status: "in_transit",
                 paymentStatus: "paid",
                 handoffCode: #"{"purpose":"delivery","code":"654321","expiresAt":"2026-07-20T12:00:00Z"}"#
-            )
+            ), encoding: .utf8)!
+            response = "\(parcel.dropLast()),\"audience\":\"sender\"}".data(using: .utf8)!
         case "createParcel":
             response = parcelJSON(status: "payment_pending", paymentStatus: "pending")
         case "customerSnapshot":

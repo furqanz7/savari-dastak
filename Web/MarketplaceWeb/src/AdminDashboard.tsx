@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   Bike,
   Check,
+  CircleAlert,
   ExternalLink,
   FileText,
   PackageSearch,
   RefreshCw,
+  RotateCcw,
   Store,
   UserRound,
   X,
@@ -15,12 +17,18 @@ import {
   getAdminOrders,
   getEvidenceUrl,
   getMerchantApplications,
+  getOwnerOperations,
   getPartnerApplications,
+  reconcileOwnerOrders,
+  resetOwnerHandoff,
+  resolveOwnerSupportCase,
   reviewOrderRefund,
   reviewMerchantApplication,
   reviewPartnerApplication,
   type AdminOrder,
   type MerchantAdminApplication,
+  type OwnerOperationsSnapshot,
+  type OwnerOrderException,
   type PartnerAdminApplication,
   type ReviewDecision,
 } from "./admin";
@@ -43,23 +51,27 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
   const [merchants, setMerchants] = useState<MerchantAdminApplication[]>([]);
   const [partners, setPartners] = useState<PartnerAdminApplication[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
-  const [tab, setTab] = useState<"approvals" | "orders" | "account">("approvals");
+  const [operations, setOperations] = useState<OwnerOperationsSnapshot>();
+  const [tab, setTab] = useState<"approvals" | "exceptions" | "orders" | "account">("approvals");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const reviewKeys = useRef(new Map<string, string>());
 
   const refresh = useCallback(async (showProgress = false) => {
     if (showProgress) setBusy("refresh");
     try {
-      const [merchantApplications, partnerApplications, recentOrders] = await Promise.all([
+      const [merchantApplications, partnerApplications, recentOrders, ownerOperations] = await Promise.all([
         getMerchantApplications(auth),
         getPartnerApplications(auth),
         getAdminOrders({ ...auth, limit: 50 }),
+        getOwnerOperations({ ...auth, limit: 50 }),
       ]);
       setMerchants(merchantApplications.filter((application) => application.status === "pending"));
       setPartners(partnerApplications.filter((application) => application.status === "pending"));
       setOrders(recentOrders);
+      setOperations(ownerOperations);
       setError(undefined);
     } catch (refreshError) {
       setError(message(refreshError));
@@ -146,6 +158,68 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     }
   };
 
+  const resolveSupport = async (exception: OwnerOrderException, resolution: string) => {
+    const identity = `support:${exception.entityId}:${resolution}`;
+    const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
+    reviewKeys.current.set(identity, idempotencyKey);
+    setBusy(identity);
+    setError(undefined);
+    try {
+      await resolveOwnerSupportCase({ ...auth, caseId: exception.entityId, resolution, idempotencyKey });
+      reviewKeys.current.delete(identity);
+      setNotice("Support case resolved and recorded.");
+      await refresh();
+    } catch (supportError) {
+      setError(message(supportError));
+      throw supportError;
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const resetHandoff = async (exception: OwnerOrderException, reason: string) => {
+    if (!exception.purpose) return;
+    const identity = `handoff:${exception.entityKind}:${exception.entityId}:${exception.purpose}:${reason}`;
+    const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
+    reviewKeys.current.set(identity, idempotencyKey);
+    setBusy(identity);
+    setError(undefined);
+    try {
+      await resetOwnerHandoff({
+        ...auth,
+        entityKind: exception.entityKind,
+        entityId: exception.entityId,
+        purpose: exception.purpose,
+        reason,
+        idempotencyKey,
+      });
+      reviewKeys.current.delete(identity);
+      setNotice("Handoff code unlocked and securely regenerated.");
+      await refresh();
+    } catch (handoffError) {
+      setError(message(handoffError));
+      throw handoffError;
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const reconcile = async () => {
+    setBusy("reconcile");
+    setError(undefined);
+    try {
+      const result = await reconcileOwnerOrders(auth);
+      const recovered = result.merchantOrdersRecovered + result.parcelsRecovered;
+      const offers = result.merchantOffersCreated + result.parcelOffersCreated;
+      setNotice(`Recovery complete: ${recovered} records repaired, ${offers} offers created.`);
+      await refresh();
+    } catch (reconcileError) {
+      setError(message(reconcileError));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
   const activeOrders = orders.filter((order) => !["delivered", "cancelled"].includes(order.status)).length;
 
   return (
@@ -162,15 +236,18 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
       </header>
 
       {error && <p className="order-error" role="alert">{error}</p>}
+      {notice && <div className="admin-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div>}
 
       <section className="admin-summary" aria-label="Operations summary">
         <Summary label="Merchant reviews" value={merchants.length} icon={<Store size={19} />} />
         <Summary label="Partner reviews" value={partners.length} icon={<Bike size={19} />} />
         <Summary label="Active orders" value={activeOrders} icon={<PackageSearch size={19} />} />
+        <Summary label="Exceptions" value={operations?.summary.totalExceptions ?? 0} icon={<CircleAlert size={19} />} />
       </section>
 
       <div className="admin-tabs" role="tablist" aria-label="Admin views">
         <button type="button" role="tab" aria-selected={tab === "approvals"} className={tab === "approvals" ? "selected" : ""} onClick={() => setTab("approvals")}>Approvals</button>
+        <button type="button" role="tab" aria-selected={tab === "exceptions"} className={tab === "exceptions" ? "selected" : ""} onClick={() => setTab("exceptions")}>Exceptions {operations?.summary.totalExceptions ? `(${operations.summary.totalExceptions})` : ""}</button>
         <button type="button" role="tab" aria-selected={tab === "orders"} className={tab === "orders" ? "selected" : ""} onClick={() => setTab("orders")}>Orders</button>
         <button type="button" role="tab" aria-selected={tab === "account"} className={tab === "account" ? "selected" : ""} onClick={() => setTab("account")}><UserRound size={17} /> Account</button>
       </div>
@@ -231,15 +308,95 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
             ))}
           </ApprovalSection>
         </div>
-      ) : (
+      ) : tab === "orders" ? (
         <OrdersPanel
           orders={orders}
           busy={Boolean(busy)}
           onReview={reviewRefund}
           onRefund={retryRefund}
         />
+      ) : (
+        <ExceptionsPanel
+          operations={operations}
+          busy={Boolean(busy)}
+          onResolve={resolveSupport}
+          onReset={resetHandoff}
+          onReconcile={reconcile}
+          onReviewRefund={() => setTab("orders")}
+        />
       )}
     </div>
+  );
+}
+
+function ExceptionsPanel({ operations, busy, onResolve, onReset, onReconcile, onReviewRefund }: {
+  operations?: OwnerOperationsSnapshot;
+  busy: boolean;
+  onResolve: (exception: OwnerOrderException, resolution: string) => Promise<void>;
+  onReset: (exception: OwnerOrderException, reason: string) => Promise<void>;
+  onReconcile: () => Promise<void>;
+  onReviewRefund: () => void;
+}) {
+  const exceptions = operations?.exceptions ?? [];
+  return (
+    <section className="admin-section admin-exceptions" role="tabpanel">
+      <header>
+        <div><h2>Exceptions</h2><p>Support, locked handoffs, refunds and stalled deliveries.</p></div>
+        <button className="secondary-button" type="button" disabled={busy} onClick={() => void onReconcile()}><RotateCcw size={17} /> Run recovery</button>
+      </header>
+      {exceptions.length === 0 ? <p className="admin-empty">No marketplace exceptions need attention.</p> : (
+        <div className="exception-list">
+          {exceptions.map((exception) => (
+            <ExceptionCard
+              key={exception.exceptionId}
+              exception={exception}
+              busy={busy}
+              onResolve={onResolve}
+              onReset={onReset}
+              onReviewRefund={onReviewRefund}
+              onReconcile={onReconcile}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ExceptionCard({ exception, busy, onResolve, onReset, onReviewRefund, onReconcile }: {
+  exception: OwnerOrderException;
+  busy: boolean;
+  onResolve: (exception: OwnerOrderException, resolution: string) => Promise<void>;
+  onReset: (exception: OwnerOrderException, reason: string) => Promise<void>;
+  onReviewRefund: () => void;
+  onReconcile: () => Promise<void>;
+}) {
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const requiresNote = exception.kind === "support" || exception.kind === "handoff_locked";
+
+  const submit = async () => {
+    if (note.trim().length < 5) return;
+    setSubmitting(true);
+    try {
+      if (exception.kind === "support") await onResolve(exception, note.trim());
+      if (exception.kind === "handoff_locked") await onReset(exception, note.trim());
+    } catch {
+      // The dashboard keeps the note in place and displays the action error.
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <article className={`exception-card ${exception.severity}`}>
+      <header><span><CircleAlert size={19} /></span><div><p className="eyebrow">{exception.kind.replaceAll("_", " ")}</p><h3>{exception.title}</h3></div><time>{formatDate(exception.occurredAt)}</time></header>
+      <p>{exception.detail}</p>
+      <small>{exception.entityKind.replaceAll("_", " ")} · {shortId(exception.entityId)} · {exception.status.replaceAll("_", " ")}</small>
+      {requiresNote && <div className="exception-action"><input value={note} maxLength={exception.kind === "support" ? 500 : 300} onChange={(event) => setNote(event.target.value)} placeholder={exception.kind === "support" ? "Resolution shared with the customer" : "Reason for secure code reset"} /><button className="primary-button" type="button" disabled={busy || submitting || note.trim().length < 5} onClick={() => void submit()}>{exception.kind === "support" ? "Resolve case" : "Reset code"}</button></div>}
+      {exception.kind === "refund_review" && <button className="primary-button" type="button" disabled={busy} onClick={onReviewRefund}>Review refund</button>}
+      {exception.kind === "stalled_order" && <button className="secondary-button" type="button" disabled={busy} onClick={() => void onReconcile()}><RotateCcw size={17} /> Recover lifecycle</button>}
+    </article>
   );
 }
 

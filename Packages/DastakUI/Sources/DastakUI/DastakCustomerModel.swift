@@ -54,6 +54,12 @@ final class DastakCustomerModel: ObservableObject {
     @Published var selectedPaymentMethod: DastakPaymentMethod = .googlePay
     @Published private(set) var parcelQuote: ParcelQuote?
     @Published private(set) var parcels: [CustomerParcelDelivery] = []
+    @Published private(set) var orderDetails: [UUID: MerchantOrderSnapshot] = [:]
+    @Published private(set) var parcelDetails: [UUID: CustomerParcelDelivery] = [:]
+    @Published private(set) var loadingOrderDetailIDs: Set<UUID> = []
+    @Published private(set) var loadingParcelDetailIDs: Set<UUID> = []
+    @Published private(set) var orderDetailFailures: [UUID: DastakCustomerRefreshFailure] = [:]
+    @Published private(set) var parcelDetailFailures: [UUID: DastakCustomerRefreshFailure] = [:]
     @Published private(set) var isLoadingCatalogue = false
     @Published private(set) var isLoadingOrders = false
     @Published private(set) var isLoadingParcels = false
@@ -320,10 +326,14 @@ final class DastakCustomerModel: ObservableObject {
         while ordersRefreshQueued, !Task.isCancelled {
             ordersRefreshQueued = false
             do {
-                orders = try await orderClient.customerSnapshot(
+                let refreshed = try await orderClient.customerSnapshot(
                     idempotencyKey: makeKey()
                 ).orders
                 .sorted { $0.updatedAt > $1.updatedAt }
+                orders = refreshed
+                for order in refreshed where orderDetails[order.orderID] != nil {
+                    orderDetails[order.orderID] = order
+                }
                 ordersRefreshFailure = nil
             } catch {
                 ordersRefreshFailure = refreshFailure(for: error)
@@ -340,12 +350,17 @@ final class DastakCustomerModel: ObservableObject {
         while parcelsRefreshQueued, !Task.isCancelled {
             parcelsRefreshQueued = false
             do {
-                parcels = try await parcelClient.customerSnapshot(
+                let refreshed = try await parcelClient.customerSnapshot(
                     idempotencyKey: makeKey()
                 )
                 .sorted {
                     ($0.parcel.updatedAt ?? $0.parcel.createdAt ?? "") >
                         ($1.parcel.updatedAt ?? $1.parcel.createdAt ?? "")
+                }
+                parcels = refreshed
+                for customerParcel in refreshed
+                where parcelDetails[customerParcel.parcel.parcelID] != nil {
+                    parcelDetails[customerParcel.parcel.parcelID] = customerParcel
                 }
                 parcelsRefreshFailure = nil
             } catch {
@@ -358,6 +373,78 @@ final class DastakCustomerModel: ObservableObject {
         async let orders: Void = refreshOrders()
         async let parcels: Void = refreshParcels()
         _ = await (orders, parcels)
+    }
+
+    func order(withID orderID: UUID) -> MerchantOrderSnapshot? {
+        orderDetails[orderID] ?? orders.first { $0.orderID == orderID }
+    }
+
+    func customerParcel(withID parcelID: UUID) -> CustomerParcelDelivery? {
+        parcelDetails[parcelID] ?? parcels.first { $0.parcel.parcelID == parcelID }
+    }
+
+    func refreshOrderDetail(orderID: UUID) async {
+        guard !loadingOrderDetailIDs.contains(orderID) else { return }
+        loadingOrderDetailIDs.insert(orderID)
+        defer { loadingOrderDetailIDs.remove(orderID) }
+        do {
+            let detail = try await orderClient.customerDetail(
+                orderID: orderID,
+                idempotencyKey: makeKey()
+            )
+            orderDetails[orderID] = detail
+            orders = [detail] + orders.filter { $0.orderID != orderID }
+            orderDetailFailures[orderID] = nil
+        } catch {
+            orderDetailFailures[orderID] = refreshFailure(for: error)
+        }
+    }
+
+    func refreshParcelDetail(parcelID: UUID) async {
+        guard !loadingParcelDetailIDs.contains(parcelID) else { return }
+        loadingParcelDetailIDs.insert(parcelID)
+        defer { loadingParcelDetailIDs.remove(parcelID) }
+        do {
+            let detail = try await parcelClient.customerParcelDetail(
+                parcelID: parcelID,
+                idempotencyKey: makeKey()
+            )
+            parcelDetails[parcelID] = detail
+            parcels = [detail] + parcels.filter { $0.parcel.parcelID != parcelID }
+            parcelDetailFailures[parcelID] = nil
+        } catch {
+            parcelDetailFailures[parcelID] = refreshFailure(for: error)
+        }
+    }
+
+    func requestSupport(
+        for order: MerchantOrderSnapshot,
+        category: CustomerOrderSupportCategory,
+        message: String
+    ) async throws -> CustomerOrderSupportCase {
+        let response = try await orderClient.createCustomerSupport(
+            orderID: order.orderID,
+            category: category,
+            message: message,
+            idempotencyKey: makeKey()
+        )
+        await refreshOrderDetail(orderID: order.orderID)
+        return response.supportCase
+    }
+
+    func requestSupport(
+        for parcel: CustomerParcelDelivery,
+        category: CustomerOrderSupportCategory,
+        message: String
+    ) async throws -> CustomerOrderSupportCase {
+        let response = try await parcelClient.createCustomerSupport(
+            parcelID: parcel.parcel.parcelID,
+            category: category,
+            message: message,
+            idempotencyKey: makeKey()
+        )
+        await refreshParcelDetail(parcelID: parcel.parcel.parcelID)
+        return response.supportCase
     }
 
     /// Checkout completion is not payment authority. Wait briefly for the

@@ -9,6 +9,8 @@ import {
   type MerchantOrderSnapshot,
   type MerchantRejectOrderInput,
   type OwnerResetHandoffInput,
+  type OwnerResetParcelHandoffInput,
+  type OwnerResolveSupportInput,
   type OwnerReviewRefundInput,
   type QuoteMerchantOrderInput,
 } from "../../merchant-orders/handler.ts";
@@ -210,6 +212,74 @@ Deno.test("customer and merchant snapshots use only the authenticated account", 
   assertEquals(customerResponse.status, 200);
   assertEquals(merchantResponse.status, 200);
   assertEquals(requested, [`customer:${accountId}`, `merchant:${accountId}`]);
+});
+
+Deno.test("customer detail and support use authenticated ownership", async () => {
+  const requested: Array<Record<string, unknown>> = [];
+  const detail = await handleMerchantOrders(
+    request({ operation: "customerDetail", orderId, accountId: otherAccountId }, "Bearer valid"),
+    dependencies({
+      getCustomerOrder: (actor, requestedOrder) => {
+        requested.push({ operation: "detail", actor, requestedOrder });
+        return Promise.resolve({ responseBody: order, responseStatus: 200 });
+      },
+    }),
+  );
+  const support = await handleMerchantOrders(
+    request(
+      {
+        operation: "customerSupport",
+        orderId,
+        category: "refund",
+        message: "  Please   check my refund status. ",
+      },
+      "Bearer valid",
+      "support-key-1",
+    ),
+    dependencies({
+      createCustomerSupport: (input) => {
+        requested.push({ operation: "support", ...input });
+        return Promise.resolve({ responseBody: { supportCase: {} }, responseStatus: 201 });
+      },
+    }),
+  );
+
+  assertEquals(detail.status, 200);
+  assertEquals(support.status, 201);
+  assertEquals(requested[0], { operation: "detail", actor: accountId, requestedOrder: orderId });
+  assertEquals(requested[1].accountId, accountId);
+  assertEquals(requested[1].message, "Please check my refund status.");
+  assertEquals(requested[1].category, "refund");
+  assert((requested[1].requestDigest as string).match(/^[0-9a-f]{64}$/));
+});
+
+Deno.test("customer support rejects short messages and unknown categories", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    createCustomerSupport: () => {
+      calls += 1;
+      return Promise.resolve({ responseBody: {}, responseStatus: 201 });
+    },
+  });
+  const short = await handleMerchantOrders(
+    request(
+      { operation: "customerSupport", orderId, category: "refund", message: "Help" },
+      "Bearer valid",
+      "support-key-2",
+    ),
+    deps,
+  );
+  const unknown = await handleMerchantOrders(
+    request(
+      { operation: "customerSupport", orderId, category: "unknown", message: "Please help me." },
+      "Bearer valid",
+      "support-key-3",
+    ),
+    deps,
+  );
+  assertEquals(short.status, 400);
+  assertEquals(unknown.status, 400);
+  assertEquals(calls, 0);
 });
 
 Deno.test("owner snapshot uses only the authenticated owner and a bounded limit", async () => {
@@ -453,6 +523,80 @@ Deno.test("owner handoff recovery validates purpose and reason", async () => {
   }
 });
 
+Deno.test("owner operations use the authenticated owner and bounded limit", async () => {
+  let requested: { accountId: string; limit: number } | undefined;
+  const response = await handleMerchantOrders(
+    request({ operation: "ownerOperations", accountId: otherAccountId, limit: 40 }, "Bearer owner"),
+    dependencies({
+      getOwnerOperations: (requestedAccountId, limit) => {
+        requested = { accountId: requestedAccountId, limit };
+        return Promise.resolve({ responseBody: { exceptions: [] }, responseStatus: 200 });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(requested, { accountId, limit: 40 });
+});
+
+Deno.test("owner support resolution forwards normalized server intent", async () => {
+  let recorded: OwnerResolveSupportInput | undefined;
+  const response = await handleMerchantOrders(
+    request({
+      operation: "ownerResolveSupport",
+      caseId: orderId,
+      resolution: "  Customer   contacted and issue resolved. ",
+    }, "Bearer owner", "resolve-support-1"),
+    dependencies({
+      ownerResolveSupport: (input) => {
+        recorded = input;
+        return Promise.resolve({ responseBody: { caseId: orderId }, responseStatus: 200 });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.caseId, orderId);
+  assertEquals(recorded?.resolution, "Customer contacted and issue resolved.");
+  assert(recorded?.requestDigest.match(/^[0-9a-f]{64}$/));
+});
+
+Deno.test("owner parcel handoff recovery validates and forwards recovery intent", async () => {
+  let recorded: OwnerResetParcelHandoffInput | undefined;
+  const response = await handleMerchantOrders(
+    request({
+      operation: "ownerResetParcelHandoff",
+      parcelId,
+      purpose: "delivery",
+      reason: "Recipient identity confirmed.",
+    }, "Bearer owner", "reset-parcel-1"),
+    dependencies({
+      ownerResetParcelHandoff: (input) => {
+        recorded = input;
+        return Promise.resolve({ responseBody: { parcelId }, responseStatus: 200 });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.parcelId, parcelId);
+  assertEquals(recorded?.purpose, "delivery");
+});
+
+Deno.test("owner can request lifecycle reconciliation without client state", async () => {
+  let requestedAccount: string | undefined;
+  const response = await handleMerchantOrders(
+    request({ operation: "ownerReconcile", status: "delivered" }, "Bearer owner"),
+    dependencies({
+      ownerReconcile: (requestedAccountId) => {
+        requestedAccount = requestedAccountId;
+        return Promise.resolve({ responseBody: { merchantOrdersRecovered: 0 }, responseStatus: 200 });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(requestedAccount, accountId);
+});
+
 Deno.test("payment confirmation is not exposed to authenticated app users", async () => {
   const response = await handleMerchantOrders(
     request(
@@ -494,6 +638,7 @@ const storeId = "33333333-3333-4333-8333-333333333333";
 const productId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
 const quoteId = "66666666-6666-4666-8666-666666666666";
 const orderId = "77777777-7777-4777-8777-777777777777";
+const parcelId = "99999999-9999-4999-8999-999999999999";
 
 const line = {
   productId,
@@ -568,10 +713,16 @@ function dependencies(
       (() => Promise.resolve({ responseBody: order, responseStatus: 201 })),
     getCustomerOrders: overrides.getCustomerOrders ??
       (() => Promise.resolve({ responseBody: snapshot, responseStatus: 200 })),
+    getCustomerOrder: overrides.getCustomerOrder ??
+      (() => Promise.resolve({ responseBody: order, responseStatus: 200 })),
+    createCustomerSupport: overrides.createCustomerSupport ??
+      (() => Promise.resolve({ responseBody: { supportCase: {} }, responseStatus: 201 })),
     getMerchantOrders: overrides.getMerchantOrders ??
       (() => Promise.resolve({ responseBody: snapshot, responseStatus: 200 })),
     getOwnerOrders: overrides.getOwnerOrders ??
       (() => Promise.resolve({ responseBody: snapshot, responseStatus: 200 })),
+    getOwnerOperations: overrides.getOwnerOperations ??
+      (() => Promise.resolve({ responseBody: { exceptions: [] }, responseStatus: 200 })),
     merchantAccept: overrides.merchantAccept ??
       (() => Promise.resolve({ responseBody: acceptedOrder, responseStatus: 200 })),
     merchantReject: overrides.merchantReject ??
@@ -586,6 +737,12 @@ function dependencies(
       (() => Promise.resolve({ responseBody: cancelledOrder, responseStatus: 200 })),
     ownerResetHandoff: overrides.ownerResetHandoff ??
       (() => Promise.resolve({ responseBody: order, responseStatus: 200 })),
+    ownerResolveSupport: overrides.ownerResolveSupport ??
+      (() => Promise.resolve({ responseBody: { caseId: orderId }, responseStatus: 200 })),
+    ownerResetParcelHandoff: overrides.ownerResetParcelHandoff ??
+      (() => Promise.resolve({ responseBody: { parcelId }, responseStatus: 200 })),
+    ownerReconcile: overrides.ownerReconcile ??
+      (() => Promise.resolve({ responseBody: {}, responseStatus: 200 })),
   };
 }
 

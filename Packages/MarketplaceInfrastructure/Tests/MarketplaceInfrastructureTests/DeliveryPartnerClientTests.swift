@@ -127,6 +127,23 @@ final class DeliveryPartnerClientTests: XCTestCase {
         XCTAssertEqual(request.online, false)
         XCTAssertNil(request.location)
     }
+
+    func testLocationPublicationDoesNotSendAvailabilityIntent() async throws {
+        let functions = RecordingDeliveryPartnerFunctionClient()
+        let client = SupabaseDeliveryPartnerClient(functions: functions)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "partner-location-1"))
+        let location = GeoPoint(latitude: 12.681, longitude: 78.623)
+
+        let availability = try await client.publishLocation(location: location, idempotencyKey: key)
+
+        XCTAssertEqual(availability.location, location)
+        let recordedCall = await functions.lastCall()
+        let call = try XCTUnwrap(recordedCall)
+        let request = try JSONDecoder().decode(CapturedDeliveryPartnerRequest.self, from: call.body)
+        XCTAssertEqual(request.operation, "publishLocation")
+        XCTAssertEqual(request.location, location)
+        XCTAssertNil(request.online)
+    }
 }
 
 private struct CapturedDeliveryPartnerRequest: Decodable {
@@ -175,6 +192,8 @@ private actor RecordingDeliveryPartnerFunctionClient: FunctionClient {
             response = request.online == true
                 ? #"{"status":"online","location":{"latitude":12.68,"longitude":78.62},"serviceZoneId":"33333333-3333-4333-8333-333333333333","availableUntil":"2026-07-16T12:15:00Z","stateVersion":2}"#.data(using: .utf8)!
                 : #"{"status":"offline","location":null,"serviceZoneId":null,"availableUntil":null,"stateVersion":3}"#.data(using: .utf8)!
+        case "publishLocation":
+            response = #"{"status":"online","location":{"latitude":12.681,"longitude":78.623},"serviceZoneId":"33333333-3333-4333-8333-333333333333","availableUntil":"2026-07-16T12:15:00Z","stateVersion":4}"#.data(using: .utf8)!
         default:
             throw FunctionClientError.invalidResponse
         }
