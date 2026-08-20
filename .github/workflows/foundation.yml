@@ -74,7 +74,9 @@ jobs:
       - run: supabase start
       - run: supabase db reset --local
       - run: ../../scripts/test-backend-security.sh Dastak --local
+      - run: supabase test db
       - run: scripts/test-v1-batch1-concurrency.sh
+      - run: scripts/test-v1-wave1-concurrency.sh
       - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-env supabase/functions/tests/
       - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-read supabase/tests/database/
       - run: find supabase/functions -name '*.ts' -print0 | xargs -0 deno check --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen
