@@ -2,8 +2,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyBearerUser } from "../_shared/auth.ts";
 import {
-  handleCustomerAddresses,
   type AddressActionInput,
+  handleCustomerAddresses,
   type SaveCustomerAddressInput,
 } from "./handler.ts";
 

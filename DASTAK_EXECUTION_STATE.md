@@ -1,0 +1,8 @@
+- Authoritative spec path: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`
+- Authoritative branch: `codex/dastak-v1-launch`
+- Last checkpoint: Step 0 — corrected Wave 1 runtime checkpoint at branch HEAD
+- Completed V1 capabilities: kernel, secure submit, Wave 1 matching, exact reservation, capacity, cancellation, runtime race gates
+- Current launch target: Customer iOS + Customer Web with founder-operated Merchant Web, Delivery Web and Admin Web
+- Deferred surfaces: Android, Merchant iOS, Delivery iOS, Admin iOS
+- Next implementation batch: canonical catalogue → Customer V1 entry
+- Deployment status: local-only; not merged or deployed

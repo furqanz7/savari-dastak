@@ -63,10 +63,12 @@ Deno.test("customer address save accepts structured doorstep instructions", asyn
       location: { latitude: 12.6819, longitude: 78.6201 },
       makeDefault: false,
     }),
-    dependencies({ save: async (input) => {
-      received = input;
-      return { responseBody: { addresses: [] }, responseStatus: 200 };
-    } }),
+    dependencies({
+      save: async (input) => {
+        received = input;
+        return { responseBody: { addresses: [] }, responseStatus: 200 };
+      },
+    }),
   );
   assertEquals(response.status, 200);
   assertEquals(received.floor, "Second floor");
@@ -80,10 +82,12 @@ Deno.test("customer address selection is scoped to the authenticated account", a
   const addressId = "22222222-2222-4222-8222-222222222222";
   const response = await handleCustomerAddresses(
     request({ operation: "setDefault", addressId }),
-    dependencies({ setDefault: async (input) => {
-      received = input;
-      return { responseBody: { addresses: [] }, responseStatus: 200 };
-    } }),
+    dependencies({
+      setDefault: async (input) => {
+        received = input;
+        return { responseBody: { addresses: [] }, responseStatus: 200 };
+      },
+    }),
   );
   assertEquals(response.status, 200);
   assertEquals(received.accountId, accountId);

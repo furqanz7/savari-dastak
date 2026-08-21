@@ -36,6 +36,7 @@ insert into auth.users (
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated', 'wave1-race-merchant-b@example.test', '',
   now(), now(), now()
+)
 on conflict (id) do nothing;
 
 insert into public.accounts (id, display_name, phone_number) values

@@ -1,7 +1,7 @@
 import { assert, assertEquals } from "jsr:@std/assert";
 import {
-  handleMerchantApplications,
   type GetMerchantApplicationSnapshot,
+  handleMerchantApplications,
   type ListMerchantApplications,
   type ReviewMerchantApplication,
   type ReviewMerchantApplicationInput,
@@ -128,7 +128,10 @@ Deno.test("merchant self snapshot is scoped to the authenticated account", async
     reviewReason: "Document is unclear.",
   };
   const response = await handleMerchantApplications(
-    request({ operation: "selfSnapshot", accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }, "Bearer session-token"),
+    request(
+      { operation: "selfSnapshot", accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+      "Bearer session-token",
+    ),
     dependencies({
       getMerchantApplicationSnapshot: (authenticatedAccountId) => {
         recordedAccountId = authenticatedAccountId;

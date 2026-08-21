@@ -336,7 +336,7 @@ $$;
 
 -- Wave 1 merchant operations never inherit legacy platform-owner access.
 -- Platform intervention must use a separate, named and audited command.
-create or replace function dastak_v1_api.actor_has_merchant_permission(
+create function dastak_v1_api.actor_has_wave1_merchant_permission(
   p_actor_id uuid,
   p_organization_id uuid,
   p_permission_key text,
@@ -571,13 +571,12 @@ begin
   end if;
 
   if new.status is distinct from old.status
-    and not case old.status
-      when 'RESERVED_PREPAYMENT' then new.status in ('PREPARING', 'RELEASED')
-      when 'PREPARING' then new.status = 'READY'
-      when 'READY' then new.status = 'PICKED_UP'
-      when 'PICKED_UP' then new.status = 'COMPLETED'
-      else false
-    end then
+    and not (
+      (old.status = 'RESERVED_PREPAYMENT' and new.status in ('PREPARING', 'RELEASED'))
+      or (old.status = 'PREPARING' and new.status = 'READY')
+      or (old.status = 'READY' and new.status = 'PICKED_UP')
+      or (old.status = 'PICKED_UP' and new.status = 'COMPLETED')
+    ) then
     raise exception 'invalid fulfilment transition: % -> %', old.status, new.status;
   end if;
 
@@ -1260,7 +1259,7 @@ begin
     raise exception using errcode = 'P0002', message = 'branch not found';
   end if;
 
-  if not dastak_v1_api.actor_has_merchant_permission(
+  if not dastak_v1_api.actor_has_wave1_merchant_permission(
     p_actor_id,
     v_branch.organization_id,
     'merchant.branch.manage',
@@ -1410,7 +1409,7 @@ begin
     raise exception using errcode = 'P0002', message = 'opportunity not found';
   end if;
 
-  if not dastak_v1_api.actor_has_merchant_permission(
+  if not dastak_v1_api.actor_has_wave1_merchant_permission(
     p_actor_id,
     v_opportunity.organization_id,
     'merchant.opportunities.respond',
@@ -1438,10 +1437,10 @@ begin
     ),
     'startedAt', v_opportunity.started_at,
     'expiresAt', v_opportunity.expires_at,
-    'secondsRemaining', pg_catalog.greatest(
+    'secondsRemaining', greatest(
       0,
       pg_catalog.floor(
-        pg_catalog.extract(
+        extract(
           epoch from (v_opportunity.expires_at - pg_catalog.clock_timestamp())
         )
       )::integer
@@ -1528,7 +1527,7 @@ begin
   from (
     select opportunity.id, opportunity.status, opportunity.expires_at
     from dastak_v1.merchant_opportunities opportunity
-    where dastak_v1_api.actor_has_merchant_permission(
+    where dastak_v1_api.actor_has_wave1_merchant_permission(
       p_actor_id,
       opportunity.organization_id,
       'merchant.opportunities.respond',
@@ -1650,13 +1649,13 @@ begin
   where state.branch_id = v_branch.id
   for update;
 
-  if not dastak_v1_api.actor_has_merchant_permission(
+  if not dastak_v1_api.actor_has_wave1_merchant_permission(
     p_actor_id,
     v_opportunity.organization_id,
     'merchant.opportunities.respond',
     v_opportunity.branch_id
   ) then
-    raise exception using errcode = 'P0002', message = 'opportunity not found';
+    raise exception using errcode = '42501', message = 'permission denied';
   end if;
 
   if v_opportunity.version is distinct from p_expected_version then
@@ -2033,13 +2032,13 @@ begin
   where opportunity.id = p_opportunity_id
   for update;
 
-  if not dastak_v1_api.actor_has_merchant_permission(
+  if not dastak_v1_api.actor_has_wave1_merchant_permission(
     p_actor_id,
     v_opportunity.organization_id,
     'merchant.opportunities.respond',
     v_opportunity.branch_id
   ) then
-    raise exception using errcode = 'P0002', message = 'opportunity not found';
+    raise exception using errcode = '42501', message = 'permission denied';
   end if;
 
   if v_opportunity.version is distinct from p_expected_version then

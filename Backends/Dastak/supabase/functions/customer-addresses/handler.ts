@@ -51,7 +51,10 @@ export async function handleCustomerAddresses(request: Request, dependencies: De
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return validationError();
   if (body.operation === "snapshot") {
-    return runRpc(() => dependencies.snapshot(actor.accountId), "Saved addresses could not be loaded.");
+    return runRpc(
+      () => dependencies.snapshot(actor.accountId),
+      "Saved addresses could not be loaded.",
+    );
   }
 
   const idempotencyKey = request.headers.get("x-idempotency-key")?.trim() ?? "";
@@ -63,12 +66,13 @@ export async function handleCustomerAddresses(request: Request, dependencies: De
       : normalizeAddress(body);
     if (!normalized) return validationError();
     return runRpc(
-      async () => dependencies.save({
-        accountId: actor.accountId,
-        ...normalized,
-        idempotencyKey,
-        requestDigest: await canonicalDigest(normalized),
-      }),
+      async () =>
+        dependencies.save({
+          accountId: actor.accountId,
+          ...normalized,
+          idempotencyKey,
+          requestDigest: await canonicalDigest(normalized),
+        }),
       "The delivery address could not be saved.",
     );
   }
@@ -83,9 +87,10 @@ export async function handleCustomerAddresses(request: Request, dependencies: De
       requestDigest: await canonicalDigest({ addressId }),
     };
     return runRpc(
-      () => body.operation === "setDefault"
-        ? dependencies.setDefault(input)
-        : dependencies.deleteAddress(input),
+      () =>
+        body.operation === "setDefault"
+          ? dependencies.setDefault(input)
+          : dependencies.deleteAddress(input),
       body.operation === "setDefault"
         ? "The checkout address could not be selected."
         : "The saved address could not be removed.",
@@ -116,12 +121,14 @@ function normalizeAddress(body: Record<string, unknown>) {
     ? undefined
     : uuid(body.addressId);
   const location = coordinates(body.location);
-  if (!label || !address || !building || !location ||
+  if (
+    !label || !address || !building || !location ||
     ((body.addressId !== undefined && body.addressId !== null) && !addressId) ||
     (body.floor !== undefined && body.floor !== null && floor === null) ||
     (body.landmark !== undefined && body.landmark !== null && landmark === null) ||
     (body.deliveryNotes !== undefined && body.deliveryNotes !== null && deliveryNotes === null) ||
-    (body.makeDefault !== undefined && typeof body.makeDefault !== "boolean")) return null;
+    (body.makeDefault !== undefined && typeof body.makeDefault !== "boolean")
+  ) return null;
   return {
     addressId,
     label,
@@ -148,9 +155,11 @@ function coordinates(value: unknown) {
   if (!value || typeof value !== "object") return null;
   const latitude = "latitude" in value ? value.latitude : null;
   const longitude = "longitude" in value ? value.longitude : null;
-  if (typeof latitude !== "number" || typeof longitude !== "number" ||
+  if (
+    typeof latitude !== "number" || typeof longitude !== "number" ||
     !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
-    latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+    latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180
+  ) return null;
   return { latitude, longitude };
 }
 

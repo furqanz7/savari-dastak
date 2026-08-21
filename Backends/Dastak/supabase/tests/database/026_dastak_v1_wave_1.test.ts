@@ -65,7 +65,7 @@ Deno.test("Dastak V1 Wave 1 implements the locked matching contract", async () =
 
   const merchantAuthorization = functionBlock(
     migration,
-    "dastak_v1_api\\.actor_has_merchant_permission",
+    "dastak_v1_api\\.actor_has_wave1_merchant_permission",
   );
   assertNotMatch(merchantAuthorization, /is_active_owner/i);
   assertMatch(merchantAuthorization, /dastak_v1\.merchant_users/i);

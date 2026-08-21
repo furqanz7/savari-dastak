@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyBearerUser } from "../_shared/auth.ts";
-import { handleAccountProfile, type AccountProfile } from "./handler.ts";
+import { type AccountProfile, handleAccountProfile } from "./handler.ts";
 
 const supabaseUrl = requiredEnv("SUPABASE_URL");
 const serviceRoleClient = createClient(supabaseUrl, requiredEnv("SUPABASE_SERVICE_ROLE_KEY"), {

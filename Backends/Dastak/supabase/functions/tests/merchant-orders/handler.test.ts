@@ -541,11 +541,15 @@ Deno.test("owner operations use the authenticated owner and bounded limit", asyn
 Deno.test("owner support resolution forwards normalized server intent", async () => {
   let recorded: OwnerResolveSupportInput | undefined;
   const response = await handleMerchantOrders(
-    request({
-      operation: "ownerResolveSupport",
-      caseId: orderId,
-      resolution: "  Customer   contacted and issue resolved. ",
-    }, "Bearer owner", "resolve-support-1"),
+    request(
+      {
+        operation: "ownerResolveSupport",
+        caseId: orderId,
+        resolution: "  Customer   contacted and issue resolved. ",
+      },
+      "Bearer owner",
+      "resolve-support-1",
+    ),
     dependencies({
       ownerResolveSupport: (input) => {
         recorded = input;
@@ -563,12 +567,16 @@ Deno.test("owner support resolution forwards normalized server intent", async ()
 Deno.test("owner parcel handoff recovery validates and forwards recovery intent", async () => {
   let recorded: OwnerResetParcelHandoffInput | undefined;
   const response = await handleMerchantOrders(
-    request({
-      operation: "ownerResetParcelHandoff",
-      parcelId,
-      purpose: "delivery",
-      reason: "Recipient identity confirmed.",
-    }, "Bearer owner", "reset-parcel-1"),
+    request(
+      {
+        operation: "ownerResetParcelHandoff",
+        parcelId,
+        purpose: "delivery",
+        reason: "Recipient identity confirmed.",
+      },
+      "Bearer owner",
+      "reset-parcel-1",
+    ),
     dependencies({
       ownerResetParcelHandoff: (input) => {
         recorded = input;
@@ -589,7 +597,10 @@ Deno.test("owner can request lifecycle reconciliation without client state", asy
     dependencies({
       ownerReconcile: (requestedAccountId) => {
         requestedAccount = requestedAccountId;
-        return Promise.resolve({ responseBody: { merchantOrdersRecovered: 0 }, responseStatus: 200 });
+        return Promise.resolve({
+          responseBody: { merchantOrdersRecovered: 0 },
+          responseStatus: 200,
+        });
       },
     }),
   );

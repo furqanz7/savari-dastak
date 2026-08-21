@@ -5,6 +5,37 @@ set local search_path = public, extensions;
 
 select no_plan();
 
+create function pg_temp.advance_merchant_order_to_in_transit(p_order_id uuid)
+returns void
+language plpgsql
+as $$
+declare
+  v_status text;
+begin
+  update private.merchant_orders as merchant_order
+  set status = 'paid',
+      payment_state = 'paid',
+      state_version = merchant_order.state_version + 1
+  where merchant_order.id = p_order_id;
+
+  foreach v_status in array array[
+    'merchant_accepted',
+    'ready',
+    'assigned',
+    'en_route_to_pickup',
+    'at_store',
+    'picked_up',
+    'in_transit'
+  ]::text[]
+  loop
+    update private.merchant_orders as merchant_order
+    set status = v_status,
+        state_version = merchant_order.state_version + 1
+    where merchant_order.id = p_order_id;
+  end loop;
+end;
+$$;
+
 select has_table('private', 'controlled_category_policies', 'controlled-category policies are private');
 select has_table('private', 'controlled_store_compliance', 'store compliance is private');
 select has_table('private', 'adult_attestations', 'adult attestations are private');
@@ -499,15 +530,9 @@ insert into private.delivery_partner_profiles (
   '93000000-0000-4000-8000-000000000050', 'bike'
 );
 
-update private.merchant_orders
-set payment_state = 'paid'
-where id = (select value from controlled_test_state where name = 'order-return');
-update private.merchant_orders
-set status = 'picked_up'
-where id = (select value from controlled_test_state where name = 'order-return');
-update private.merchant_orders
-set status = 'in_transit'
-where id = (select value from controlled_test_state where name = 'order-return');
+select pg_temp.advance_merchant_order_to_in_transit(
+  (select value from controlled_test_state where name = 'order-return')
+);
 
 insert into private.delivery_assignment_attempts (
   id, order_id, partner_account_id, attempt_number, status,
@@ -611,15 +636,9 @@ from public.create_controlled_merchant_order(
   (select value from controlled_test_state where name = 'quote-pass'),
   'controlled-create-pass', 'controlled-create-pass-digest'
 );
-update private.merchant_orders
-set payment_state = 'paid'
-where id = (select value from controlled_test_state where name = 'order-pass');
-update private.merchant_orders
-set status = 'picked_up'
-where id = (select value from controlled_test_state where name = 'order-pass');
-update private.merchant_orders
-set status = 'in_transit'
-where id = (select value from controlled_test_state where name = 'order-pass');
+select pg_temp.advance_merchant_order_to_in_transit(
+  (select value from controlled_test_state where name = 'order-pass')
+);
 insert into private.delivery_assignment_attempts (
   id, order_id, partner_account_id, attempt_number, status,
   distance_meters, offered_at, respond_by, responded_at

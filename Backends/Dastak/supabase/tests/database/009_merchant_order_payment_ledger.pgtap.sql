@@ -335,9 +335,29 @@ select is(
   'provider event identifier rejects a different payload'
 );
 
-update private.merchant_orders
-set status = 'delivered', updated_at = now()
-where id = '82000000-0000-4000-8000-000000000081';
+do $$
+declare
+  v_status text;
+begin
+  foreach v_status in array array[
+    'merchant_accepted',
+    'ready',
+    'assigned',
+    'en_route_to_pickup',
+    'at_store',
+    'picked_up',
+    'in_transit',
+    'delivered'
+  ]::text[]
+  loop
+    update private.merchant_orders as merchant_order
+    set status = v_status,
+        state_version = merchant_order.state_version + 1,
+        updated_at = now()
+    where merchant_order.id = '82000000-0000-4000-8000-000000000081';
+  end loop;
+end;
+$$;
 
 select is(
   (

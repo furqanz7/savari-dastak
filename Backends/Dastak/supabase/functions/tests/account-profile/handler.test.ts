@@ -1,7 +1,7 @@
 import { assertEquals } from "jsr:@std/assert";
 import {
-  handleAccountProfile,
   type AccountProfileDependencies,
+  handleAccountProfile,
 } from "../../account-profile/handler.ts";
 
 const accountId = "22222222-2222-4222-8222-222222222222";
@@ -11,14 +11,22 @@ Deno.test("account profile serves CORS preflight without authentication", async 
   let attempts = 0;
   const response = await handleAccountProfile(
     new Request("https://example.test", { method: "OPTIONS" }),
-    dependencies({ authenticateBearer: () => { attempts += 1; return Promise.resolve({ accountId }); } }),
+    dependencies({
+      authenticateBearer: () => {
+        attempts += 1;
+        return Promise.resolve({ accountId });
+      },
+    }),
   );
   assertEquals(response.status, 204);
   assertEquals(attempts, 0);
 });
 
 Deno.test("account profile requires a bearer token", async () => {
-  const response = await handleAccountProfile(request({ operation: "snapshot" }, false), dependencies());
+  const response = await handleAccountProfile(
+    request({ operation: "snapshot" }, false),
+    dependencies(),
+  );
   assertEquals(response.status, 401);
 });
 
@@ -56,7 +64,12 @@ Deno.test("account profile deletes only the authenticated account", async () => 
   let deletedAccountId: string | undefined;
   const response = await handleAccountProfile(
     request({ operation: "delete" }),
-    dependencies({ deleteAccount: (value) => { deletedAccountId = value; return Promise.resolve(); } }),
+    dependencies({
+      deleteAccount: (value) => {
+        deletedAccountId = value;
+        return Promise.resolve();
+      },
+    }),
   );
   assertEquals(response.status, 200);
   assertEquals(deletedAccountId, accountId);
@@ -74,7 +87,9 @@ function request(body: unknown, authenticated = true) {
   });
 }
 
-function dependencies(overrides: Partial<AccountProfileDependencies> = {}): AccountProfileDependencies {
+function dependencies(
+  overrides: Partial<AccountProfileDependencies> = {},
+): AccountProfileDependencies {
   return {
     authenticateBearer: overrides.authenticateBearer ?? (() => Promise.resolve({ accountId })),
     snapshotProfile: overrides.snapshotProfile ?? (() => Promise.resolve(profile)),

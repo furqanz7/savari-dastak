@@ -44,7 +44,10 @@ export async function handleAccountProfile(
 
   const body = await readBody(request);
   if (!body) {
-    return json({ error: { code: "validation_failed", message: "A valid operation is required." } }, 400);
+    return json(
+      { error: { code: "validation_failed", message: "A valid operation is required." } },
+      400,
+    );
   }
 
   try {
@@ -80,7 +83,9 @@ function normalizeProfile(displayName: string, phoneNumber: string): AccountProf
   const normalizedPhone = phoneNumber.trim();
   if (!e164Pattern.test(normalizedPhone)) {
     return json(
-      { error: { code: "invalid_phone_number", message: "Enter a phone number with country code." } },
+      {
+        error: { code: "invalid_phone_number", message: "Enter a phone number with country code." },
+      },
       400,
     );
   }

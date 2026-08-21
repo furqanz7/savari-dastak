@@ -458,6 +458,14 @@ select is(
   'opportunity state and asynchronous notification intent commit together'
 );
 
+create temp table tap_wave1_opportunity_ids on commit drop as
+select opportunity.branch_id, opportunity.id as opportunity_id
+from dastak_v1.merchant_opportunities opportunity
+where opportunity.order_id = (
+  select (body ->> 'id')::uuid from tap_wave1_order
+);
+grant select on tap_wave1_opportunity_ids to authenticated;
+
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
@@ -475,12 +483,9 @@ select throws_ok(
   pg_catalog.format(
     'select public.dastak_v1_get_merchant_opportunity(%L::uuid)',
     (
-      select opportunity.id
-      from dastak_v1.merchant_opportunities opportunity
-      where opportunity.order_id = (
-        select (body ->> 'id')::uuid from tap_wave1_order
-      )
-        and opportunity.branch_id = '97000000-0000-4000-8000-000000000021'
+      select opportunity_id
+      from tap_wave1_opportunity_ids
+      where branch_id = '97000000-0000-4000-8000-000000000021'
     )
   ),
   'P0002',
@@ -491,12 +496,9 @@ select throws_ok(
   pg_catalog.format(
     'select public.dastak_v1_accept_wave1_opportunity(%L::uuid, %L, 1, 10)',
     (
-      select opportunity.id
-      from dastak_v1.merchant_opportunities opportunity
-      where opportunity.order_id = (
-        select (body ->> 'id')::uuid from tap_wave1_order
-      )
-        and opportunity.branch_id = '97000000-0000-4000-8000-000000000021'
+      select opportunity_id
+      from tap_wave1_opportunity_ids
+      where branch_id = '97000000-0000-4000-8000-000000000021'
     ),
     'wave1-owner-accept-denied'
   ),
@@ -508,12 +510,9 @@ select throws_ok(
   pg_catalog.format(
     'select public.dastak_v1_decline_opportunity(%L::uuid, %L, 1)',
     (
-      select opportunity.id
-      from dastak_v1.merchant_opportunities opportunity
-      where opportunity.order_id = (
-        select (body ->> 'id')::uuid from tap_wave1_order
-      )
-        and opportunity.branch_id = '97000000-0000-4000-8000-000000000021'
+      select opportunity_id
+      from tap_wave1_opportunity_ids
+      where branch_id = '97000000-0000-4000-8000-000000000021'
     ),
     'wave1-owner-decline-denied'
   ),
@@ -554,12 +553,9 @@ select throws_ok(
   pg_catalog.format(
     'select public.dastak_v1_get_merchant_opportunity(%L::uuid)',
     (
-      select opportunity.id
-      from dastak_v1.merchant_opportunities opportunity
-      where opportunity.order_id = (
-        select (body ->> 'id')::uuid from tap_wave1_order
-      )
-        and opportunity.branch_id = '97000000-0000-4000-8000-000000000031'
+      select opportunity_id
+      from tap_wave1_opportunity_ids
+      where branch_id = '97000000-0000-4000-8000-000000000031'
     )
   ),
   'P0002',
@@ -570,12 +566,9 @@ select throws_ok(
   pg_catalog.format(
     'select public.dastak_v1_accept_wave1_opportunity(%L::uuid, %L, 1, 10)',
     (
-      select opportunity.id
-      from dastak_v1.merchant_opportunities opportunity
-      where opportunity.order_id = (
-        select (body ->> 'id')::uuid from tap_wave1_order
-      )
-        and opportunity.branch_id = '97000000-0000-4000-8000-000000000031'
+      select opportunity_id
+      from tap_wave1_opportunity_ids
+      where branch_id = '97000000-0000-4000-8000-000000000031'
     ),
     'wave1-cross-merchant-accept-denied'
   ),
@@ -587,12 +580,9 @@ select throws_ok(
   pg_catalog.format(
     'select public.dastak_v1_decline_opportunity(%L::uuid, %L, 1)',
     (
-      select opportunity.id
-      from dastak_v1.merchant_opportunities opportunity
-      where opportunity.order_id = (
-        select (body ->> 'id')::uuid from tap_wave1_order
-      )
-        and opportunity.branch_id = '97000000-0000-4000-8000-000000000031'
+      select opportunity_id
+      from tap_wave1_opportunity_ids
+      where branch_id = '97000000-0000-4000-8000-000000000031'
     ),
     'wave1-cross-merchant-decline-denied'
   ),
@@ -625,12 +615,9 @@ select set_config(
 create temp table tap_wave1_accept on commit drop as
 select public.dastak_v1_accept_wave1_opportunity(
   (
-    select opportunity.id
-    from dastak_v1.merchant_opportunities opportunity
-    where opportunity.order_id = (
-      select (body ->> 'id')::uuid from tap_wave1_order
-    )
-      and opportunity.branch_id = '97000000-0000-4000-8000-000000000021'
+    select opportunity_id
+    from tap_wave1_opportunity_ids
+    where branch_id = '97000000-0000-4000-8000-000000000021'
   ),
   'wave1-accept-a',
   1,

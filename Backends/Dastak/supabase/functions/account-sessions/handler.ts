@@ -70,8 +70,10 @@ function normalizeMetadata(body: Record<string, unknown>): DeviceMetadata | null
   const userAgent = body.userAgent === undefined || body.userAgent === null || body.userAgent === ""
     ? undefined
     : clean(body.userAgent, 500);
-  if (!deviceName || !appName || (platform !== "ios" && platform !== "web") ||
-    (body.userAgent !== undefined && body.userAgent !== null && body.userAgent !== "" && !userAgent)) return null;
+  if (
+    !deviceName || !appName || (platform !== "ios" && platform !== "web") ||
+    (body.userAgent !== undefined && body.userAgent !== null && body.userAgent !== "" && !userAgent)
+  ) return null;
   return { deviceName, appName, platform, userAgent: userAgent ?? undefined };
 }
 

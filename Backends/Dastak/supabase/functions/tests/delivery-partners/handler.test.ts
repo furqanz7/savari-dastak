@@ -326,7 +326,9 @@ Deno.test("location publication uses the authenticated partner and exact coordin
 
 Deno.test("location publication rejects invalid coordinates", async () => {
   const response = await handleDeliveryPartners(
-    request({ body: { operation: "publishLocation", location: { latitude: 91, longitude: 78.62 } } }),
+    request({
+      body: { operation: "publishLocation", location: { latitude: 91, longitude: 78.62 } },
+    }),
     dependencies(),
   );
   await assertError(response, 400, "validation_failed");
