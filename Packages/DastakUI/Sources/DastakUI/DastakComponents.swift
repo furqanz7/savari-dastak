@@ -57,7 +57,18 @@ struct DastakRefreshNotice: View {
 }
 
 struct DastakProductArtwork: View {
-    let kind: CatalogueKind
+    private let kind: CatalogueKind?
+    private let customSymbol: String?
+
+    init(kind: CatalogueKind) {
+        self.kind = kind
+        customSymbol = nil
+    }
+
+    init(symbol: String) {
+        kind = nil
+        customSymbol = symbol
+    }
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -79,8 +90,9 @@ struct DastakProductArtwork: View {
     }
 
     private var symbol: String {
-        switch kind {
-        case .general: "shippingbox"
+        if let customSymbol { return customSymbol }
+        return switch kind {
+        case .general, .none: "shippingbox"
         case .otcMedicine, .prescriptionMedicine: "cross.case"
         case .paanCorner: "checkmark.shield"
         }

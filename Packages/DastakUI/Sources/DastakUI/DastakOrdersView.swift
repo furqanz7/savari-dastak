@@ -8,12 +8,14 @@ struct DastakOrdersView: View {
     @ObservedObject var model: DastakCustomerModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var scope: DastakOrderHistoryScope = .active
+    @State private var showingV1Order = false
 
     var body: some View {
         Group {
-            if model.isLoadingOrders, model.isLoadingParcels, model.orders.isEmpty, model.parcels.isEmpty {
+            if model.isLoadingOrders, model.isLoadingParcels, model.orders.isEmpty,
+               model.v1Orders.isEmpty, model.parcels.isEmpty {
                 ProgressView("Refreshing orders")
-            } else if model.orders.isEmpty, model.parcels.isEmpty {
+            } else if model.orders.isEmpty, model.v1Orders.isEmpty, model.parcels.isEmpty {
                 if let failure = model.ordersAndParcelsRefreshFailure {
                     DastakEmptyState(
                         symbol: failure.symbol,
@@ -58,6 +60,22 @@ struct DastakOrdersView: View {
                         }
                     }
 
+                    if !filteredV1Orders.isEmpty {
+                        Section("Dastak orders") {
+                            ForEach(filteredV1Orders) { order in
+                                Button {
+                                    model.focusV1Order(order)
+                                    showingV1Order = true
+                                } label: {
+                                    DastakV1OrderHistoryRow(order: order)
+                                }
+                                .buttonStyle(.plain)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                            }
+                        }
+                    }
+
                     if !filteredParcels.isEmpty {
                         Section("Parcel deliveries") {
                             ForEach(filteredParcels, id: \.parcel.parcelID) { customerParcel in
@@ -82,7 +100,7 @@ struct DastakOrdersView: View {
                         }
                     }
 
-                    if filteredOrders.isEmpty, filteredParcels.isEmpty {
+                    if filteredV1Orders.isEmpty, filteredOrders.isEmpty, filteredParcels.isEmpty {
                         Section {
                             DastakEmptyState(
                                 symbol: scope == .active ? "checkmark.circle" : "clock.arrow.circlepath",
@@ -122,6 +140,15 @@ struct DastakOrdersView: View {
                 await model.refreshOrdersAndParcels()
             }
         }
+        .sheet(isPresented: $showingV1Order) {
+            DastakV1MatchingView(model: model)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var filteredV1Orders: [DastakV1OrderSnapshot] {
+        model.v1Orders.filter { scope.includes(isActive: isActive($0.status)) }
     }
 
     private var filteredOrders: [MerchantOrderSnapshot] {
@@ -138,6 +165,56 @@ struct DastakOrdersView: View {
 
     private func isActive(_ status: ParcelDeliveryStatus) -> Bool {
         status != .delivered && status != .cancelled
+    }
+
+    private func isActive(_ status: DastakV1OrderStatus) -> Bool {
+        ![.delivered, .unavailable, .paymentExpired, .cancelledPrepayment].contains(status)
+    }
+}
+
+private struct DastakV1OrderHistoryRow: View {
+    let order: DastakV1OrderSnapshot
+
+    var body: some View {
+        HStack(spacing: MarketplaceSpacing.compact) {
+            Image(systemName: "checkmark.shield")
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 42, height: 42)
+                .background(
+                    MarketplaceColors.dastakAccentSoft.color,
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text("\(order.displayOrderNumber) · \(order.lines.count) products")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(DastakFormatting.money(order.price.total))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, MarketplaceSpacing.small)
+        .contentShape(Rectangle())
+    }
+
+    private var title: String {
+        switch order.status {
+        case .created, .matching: "Finding every item"
+        case .fullySecured, .awaitingPayment: "Basket secured"
+        case .paid, .preparing: "Preparing"
+        case .pickupInProgress: "Pickup in progress"
+        case .outForDelivery: "On the way"
+        case .delivered: "Delivered"
+        case .unavailable: "Basket unavailable"
+        case .paymentExpired: "Payment expired"
+        case .cancelledPrepayment: "Cancelled"
+        case .fulfilmentFailure: "Needs attention"
+        }
     }
 }
 

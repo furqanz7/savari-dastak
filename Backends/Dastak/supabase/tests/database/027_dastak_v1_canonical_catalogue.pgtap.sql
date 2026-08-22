@@ -1,0 +1,393 @@
+begin;
+
+create extension if not exists pgtap with schema extensions;
+set local search_path = public, extensions;
+
+select no_plan();
+
+select has_column('dastak_v1', 'skus', 'barcode', 'canonical SKUs support barcodes');
+select has_column(
+  'dastak_v1',
+  'skus',
+  'logistics_attributes',
+  'canonical SKUs include validated logistics attributes'
+);
+select has_index('dastak_v1', 'skus', 'skus_search_gin', 'canonical SKU search is indexed');
+select has_table(
+  'dastak_v1',
+  'platform_permission_grants',
+  'catalogue admin uses explicit platform permission grants'
+);
+select is(
+  has_table_privilege('authenticated', 'dastak_v1.skus', 'SELECT'),
+  false,
+  'authenticated clients cannot read private canonical SKU rows'
+);
+select is(
+  has_table_privilege('authenticated', 'dastak_v1.skus', 'UPDATE'),
+  false,
+  'retail merchants and customers cannot mutate canonical SKU truth'
+);
+select is(
+  has_function_privilege(
+    'anon',
+    'public.dastak_v1_customer_catalogue(text,uuid,uuid,integer,text,uuid)',
+    'EXECUTE'
+  ),
+  false,
+  'anonymous clients cannot browse the V1 catalogue'
+);
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.dastak_v1_customer_catalogue(text,uuid,uuid,integer,text,uuid)',
+    'EXECUTE'
+  ),
+  true,
+  'authenticated customers can browse the canonical catalogue'
+);
+select is(
+  (
+    select procedure.prosecdef
+    from pg_catalog.pg_proc procedure
+    where procedure.oid =
+      'public.dastak_v1_customer_catalogue(text,uuid,uuid,integer,text,uuid)'::regprocedure
+  ),
+  false,
+  'the public customer catalogue wrapper is a security invoker'
+);
+
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at
+) values
+(
+  '97000000-0000-4000-8000-000000000001',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'catalogue-owner@example.test', '',
+  now(), now(), now()
+),
+(
+  '97000000-0000-4000-8000-000000000002',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'catalogue-customer@example.test', '',
+  now(), now(), now()
+),
+(
+  '97000000-0000-4000-8000-000000000003',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'catalogue-outsider@example.test', '',
+  now(), now(), now()
+);
+
+insert into public.accounts (id, display_name, phone_number) values
+  ('97000000-0000-4000-8000-000000000001', 'Catalogue Owner', '+919700000001'),
+  ('97000000-0000-4000-8000-000000000002', 'Catalogue Customer', '+919700000002'),
+  ('97000000-0000-4000-8000-000000000003', 'Catalogue Outsider', '+919700000003');
+
+insert into private.account_memberships (account_id, role, approved_at) values
+  ('97000000-0000-4000-8000-000000000001', 'owner', now()),
+  ('97000000-0000-4000-8000-000000000002', 'customer', null),
+  ('97000000-0000-4000-8000-000000000003', 'customer', null);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '97000000-0000-4000-8000-000000000001',
+  true
+);
+
+create temp table tap_catalogue_import on commit drop as
+select public.dastak_v1_import_catalogue(
+  'tap-catalogue-import-1',
+  '{
+    "categories":[{
+      "slug":"groceries",
+      "name":"Groceries",
+      "status":"ACTIVE",
+      "sortOrder":1
+    }],
+    "subcategories":[{
+      "categorySlug":"groceries",
+      "slug":"dairy",
+      "name":"Dairy",
+      "status":"ACTIVE",
+      "sortOrder":1
+    }],
+    "brands":[{
+      "slug":"dastak-daily",
+      "name":"Dastak Daily",
+      "status":"ACTIVE"
+    }],
+    "skus":[{
+      "categorySlug":"groceries",
+      "subcategorySlug":"dairy",
+      "brandSlug":"dastak-daily",
+      "slug":"whole-milk-1-litre",
+      "canonicalName":"Whole Milk",
+      "variant":"Full cream",
+      "packSize":"1 litre",
+      "description":"Fresh full-cream milk",
+      "barcode":"8901000000001",
+      "listPricePaise":7200,
+      "sellingPricePaise":6900,
+      "currencyCode":"INR",
+      "taxRateBps":0,
+      "logisticsAttributes":{
+        "weightGrams":1030,
+        "temperatureClass":"CHILLED",
+        "fragile":false,
+        "bulky":false
+      },
+      "status":"ACTIVE"
+    }]
+  }'::jsonb
+) as body;
+
+select is(
+  (select body #>> '{counts,skus}' from tap_catalogue_import),
+  '1',
+  'catalogue admin atomically imports canonical SKUs'
+);
+select is(
+  (
+    select public.dastak_v1_import_catalogue(
+      'tap-catalogue-import-1',
+      '{
+        "categories":[{"slug":"groceries","name":"Groceries","status":"ACTIVE","sortOrder":1}],
+        "subcategories":[{"categorySlug":"groceries","slug":"dairy","name":"Dairy","status":"ACTIVE","sortOrder":1}],
+        "brands":[{"slug":"dastak-daily","name":"Dastak Daily","status":"ACTIVE"}],
+        "skus":[{
+          "categorySlug":"groceries","subcategorySlug":"dairy","brandSlug":"dastak-daily",
+          "slug":"whole-milk-1-litre","canonicalName":"Whole Milk","variant":"Full cream",
+          "packSize":"1 litre","description":"Fresh full-cream milk","barcode":"8901000000001",
+          "listPricePaise":7200,"sellingPricePaise":6900,"currencyCode":"INR","taxRateBps":0,
+          "logisticsAttributes":{"weightGrams":1030,"temperatureClass":"CHILLED","fragile":false,"bulky":false},
+          "status":"ACTIVE"
+        }]
+      }'::jsonb
+    ) ->> 'importId'
+  ),
+  (select body ->> 'importId' from tap_catalogue_import),
+  'catalogue import replay returns the original result'
+);
+create temp table tap_admin_catalogue on commit drop as
+select public.dastak_v1_admin_catalogue_snapshot(1000) as body;
+select is(
+  pg_catalog.jsonb_array_length(
+    (select body -> 'skus' from tap_admin_catalogue)
+  ),
+  1,
+  'catalogue admin sees imported SKU activation and pricing state'
+);
+select ok(
+  (select body ? 'configuration' from tap_admin_catalogue),
+  'catalogue admin sees launch configuration readiness data'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  '97000000-0000-4000-8000-000000000002',
+  true
+);
+create temp table tap_customer_catalogue on commit drop as
+select public.dastak_v1_customer_catalogue(null, null, null, 100, null, null) as body;
+
+select is(
+  pg_catalog.jsonb_array_length(
+    (select body -> 'categories' from tap_customer_catalogue)
+  ),
+  1,
+  'customer sees canonical categories'
+);
+select is(
+  (select body #>> '{skus,0,sellingPricePaise}' from tap_customer_catalogue),
+  '6900',
+  'customer sees the server-authoritative standardized selling price'
+);
+select ok(
+  (select body::text from tap_customer_catalogue)
+    !~* '(merchant|organizationName|branchId|storeId)',
+  'customer catalogue projection contains no retail merchant identity'
+);
+select is(
+  pg_catalog.jsonb_array_length(
+    public.dastak_v1_customer_catalogue(
+      'whole mi', null, null, 100, null, null
+    ) -> 'skus'
+  ),
+  1,
+  'indexed canonical search supports safe word-prefix matching'
+);
+select is(
+  pg_catalog.jsonb_array_length(
+    public.dastak_v1_customer_catalogue(
+      'unrelated', null, null, 100, null, null
+    ) -> 'skus'
+  ),
+  0,
+  'canonical search excludes unrelated products'
+);
+
+create temp table tap_v1_catalogue_order on commit drop as
+select public.dastak_v1_submit_order(
+  'tap-catalogue-order-1',
+  0,
+  pg_catalog.jsonb_build_object(
+    'deliveryAddress', pg_catalog.jsonb_build_object(
+      'line1', '1 Launch Road',
+      'city', 'Vaniyambadi',
+      'countryCode', 'IN',
+      'latitude', 12.6819,
+      'longitude', 78.6201
+    ),
+    'recipient', pg_catalog.jsonb_build_object(
+      'name', 'Catalogue Customer',
+      'phoneNumber', '+919700000002'
+    ),
+    'lines', pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object(
+        'lineType', 'RETAIL_SKU',
+        'skuId', (
+          select (body #>> '{skus,0,id}')::uuid from tap_admin_catalogue
+        ),
+        'quantity', 2
+      )
+    )
+  )
+) as body;
+
+select is(
+  (select body #>> '{price,totalPaise}' from tap_v1_catalogue_order),
+  '13800',
+  'V1 order submission consumes canonical SKU identity and authoritative price'
+);
+select is(
+  (select body ->> 'status' from tap_v1_catalogue_order),
+  'MATCHING',
+  'placing the order starts matching without charging the customer'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  '97000000-0000-4000-8000-000000000001',
+  true
+);
+create temp table tap_sku_update on commit drop as
+select public.dastak_v1_update_catalogue_sku(
+  (select (body #>> '{skus,0,id}')::uuid from tap_admin_catalogue),
+  'tap-sku-price-1',
+  1,
+  '{"sellingPricePaise":6500}'::jsonb
+) as body;
+
+select is(
+  (select body ->> 'version' from tap_sku_update),
+  '2',
+  'catalogue SKU updates use optimistic versioning'
+);
+select throws_ok(
+  format(
+    'select public.dastak_v1_update_catalogue_sku(%L::uuid, %L, 1, %L::jsonb)',
+    (select (body #>> '{skus,0,id}')::uuid from tap_admin_catalogue),
+    'tap-sku-stale',
+    '{"sellingPricePaise":6400}'
+  ),
+  '40001',
+  'stale SKU version',
+  'stale catalogue writes are rejected'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  '97000000-0000-4000-8000-000000000002',
+  true
+);
+select is(
+  public.dastak_v1_get_order(
+    (select (body ->> 'id')::uuid from tap_v1_catalogue_order)
+  ) #>> '{price,totalPaise}',
+  '13800',
+  'catalogue price changes never rewrite historical order price snapshots'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  '97000000-0000-4000-8000-000000000001',
+  true
+);
+select lives_ok(
+  format(
+    'select public.dastak_v1_update_catalogue_sku(%L::uuid, %L, 2, %L::jsonb)',
+    (select (body #>> '{skus,0,id}')::uuid from tap_admin_catalogue),
+    'tap-sku-inactive',
+    '{"status":"INACTIVE"}'
+  ),
+  'catalogue admin can deactivate an SKU without deleting product history'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  '97000000-0000-4000-8000-000000000002',
+  true
+);
+select is(
+  pg_catalog.jsonb_array_length(
+    public.dastak_v1_customer_catalogue(null, null, null, 100, null, null) -> 'skus'
+  ),
+  0,
+  'inactive SKUs disappear from customer projections'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  '97000000-0000-4000-8000-000000000003',
+  true
+);
+select throws_ok(
+  $$
+    select public.dastak_v1_import_catalogue(
+      'tap-unauthorized-import',
+      '{"categories":[]}'::jsonb
+    )
+  $$,
+  '42501',
+  'platform permission required',
+  'ordinary customers cannot manage the canonical catalogue'
+);
+
+reset role;
+
+select is(
+  (
+    select count(*)
+    from dastak_v1.audit_events
+    where action in ('CATALOGUE_IMPORTED', 'CATALOGUE_SKU_UPDATED')
+      and actor_id = '97000000-0000-4000-8000-000000000001'
+  ),
+  3::bigint,
+  'every catalogue write is attributed in the audit trail'
+);
+select is(
+  (
+    select count(*)
+    from dastak_v1.domain_events_outbox
+    where event_type = 'CATALOGUE_IMPORTED'
+      and actor_id = '97000000-0000-4000-8000-000000000001'
+  ),
+  1::bigint,
+  'idempotent import creates one transactional catalogue event'
+);
+select is(
+  (
+    select count(*)
+    from dastak_v1.domain_events_outbox
+    where event_type = 'CATALOGUE_SKU_UPDATED'
+      and actor_id = '97000000-0000-4000-8000-000000000001'
+  ),
+  2::bigint,
+  'each successful catalogue SKU update creates one transactional event'
+);
+
+select * from finish();
+rollback;

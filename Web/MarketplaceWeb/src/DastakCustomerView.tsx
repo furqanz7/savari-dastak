@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Home, ReceiptText, Search, UserRound } from "lucide-react";
 import { CatalogueView } from "./CatalogueView";
+import { DastakV1CustomerExperience } from "./DastakV1CustomerExperience";
 import { ParcelCustomerView } from "./ParcelCustomerView";
 import {
   parseCustomerDestination,
@@ -29,7 +30,7 @@ export function DastakCustomerView(props: Props) {
     parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
   );
   const section = destination.section;
-  const catalogueSection = section === "parcel" ? "home" : section;
+  const v1Section = section === "search" || section === "orders" ? section : "home";
 
   useOrderRealtime({
     client: props.client,
@@ -68,18 +69,31 @@ export function DastakCustomerView(props: Props) {
         <CustomerNavigationButton icon={<ReceiptText />} label="Orders" selected={section === "orders"} onClick={() => navigateSection("orders")} />
         <CustomerNavigationButton icon={<UserRound />} label="Account" selected={section === "account"} onClick={() => navigateSection("account")} />
       </nav>
-      <div className="customer-view" hidden={section === "parcel"}>
+      <div className="customer-view" hidden={section === "parcel" || section === "account"}>
+        <DastakV1CustomerExperience
+          accessToken={props.accessToken}
+          accountId={props.accountId}
+          displayName={props.displayName}
+          phoneNumber={props.phoneNumber}
+          supabaseUrl={props.supabaseUrl}
+          publishableKey={props.publishableKey}
+          orderRefreshToken={orderRefreshToken}
+          section={v1Section}
+          onNavigate={navigateSection}
+          onOpenParcel={() => navigate({ section: "parcel" })}
+        />
+      </div>
+      {section === "account" && <div className="customer-view">
         <CatalogueView
           {...props}
           orderRefreshToken={orderRefreshToken}
-          section={catalogueSection}
-          selectedOrderId={destination.entityType === "merchantOrder" ? destination.entityId : undefined}
+          section="account"
           onNavigate={navigateSection}
           onOpenOrder={(orderId) => navigate({ section: "orders", entityType: "merchantOrder", entityId: orderId })}
           onCloseOrder={() => navigate({ section: "orders" })}
           onOpenParcel={() => navigate({ section: "parcel" })}
         />
-      </div>
+      </div>}
       {section === "parcel" && (
         <div className="customer-view parcel-experience">
           {!destination.entityId && <button className="customer-back-button" type="button" onClick={() => navigate({ section: "home" })}>

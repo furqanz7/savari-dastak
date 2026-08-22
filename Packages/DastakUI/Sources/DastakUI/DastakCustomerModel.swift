@@ -47,6 +47,10 @@ enum DastakCustomerRefreshFailure: Equatable {
 @MainActor
 final class DastakCustomerModel: ObservableObject {
     @Published private(set) var catalogue: CatalogueSnapshot?
+    @Published private(set) var v1Catalogue: DastakV1CatalogueSnapshot?
+    @Published private(set) var v1SearchResults: [DastakV1CatalogueSKU] = []
+    @Published private(set) var v1Orders: [DastakV1OrderSnapshot] = []
+    @Published private(set) var activeV1Order: DastakV1OrderSnapshot?
     @Published private(set) var orders: [MerchantOrderSnapshot] = []
     @Published private(set) var quote: MerchantOrderQuote?
     @Published private(set) var checkoutSession: DastakCheckoutSession?
@@ -61,6 +65,9 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var orderDetailFailures: [UUID: DastakCustomerRefreshFailure] = [:]
     @Published private(set) var parcelDetailFailures: [UUID: DastakCustomerRefreshFailure] = [:]
     @Published private(set) var isLoadingCatalogue = false
+    @Published private(set) var isLoadingV1Catalogue = false
+    @Published private(set) var isSearchingV1Catalogue = false
+    @Published private(set) var isSubmittingV1Order = false
     @Published private(set) var isLoadingOrders = false
     @Published private(set) var isLoadingParcels = false
     @Published private(set) var isCheckingOut = false
@@ -72,10 +79,12 @@ final class DastakCustomerModel: ObservableObject {
     @Published var cart = DastakCart()
     @Published var errorMessage: String?
     @Published var cartErrorMessage: String?
+    @Published var v1OrderErrorMessage: String?
     @Published var parcelErrorMessage: String?
     @Published var ordersActionMessage: String?
     @Published private(set) var addressErrorMessage: String?
     @Published private(set) var catalogueRefreshFailure: DastakCustomerRefreshFailure?
+    @Published private(set) var v1CatalogueRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var accountRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var ordersRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var parcelsRefreshFailure: DastakCustomerRefreshFailure?
@@ -86,6 +95,7 @@ final class DastakCustomerModel: ObservableObject {
     let parcelClient: any ParcelDeliveryClient
 
     private let catalogueClient: any CatalogueClient
+    private let v1Client: any DastakV1CustomerClient
     private let orderClient: any MerchantOrderClient
     private let checkoutClient: any DastakCheckoutClient
     private let addressClient: any CustomerAddressClient
@@ -95,12 +105,14 @@ final class DastakCustomerModel: ObservableObject {
     private let accountIDProvider: (@Sendable () async throws -> UUID)?
     private var preferenceScope = "default"
     private var orderPlacementAttempt = DastakOrderPlacementAttempt()
+    private var v1SubmissionAttempt: (fingerprint: String, key: IdempotencyKey)?
     private var parcelPlacementAttempt = DastakOrderPlacementAttempt()
     private var ordersRefreshQueued = false
     private var parcelsRefreshQueued = false
 
     init(
         catalogueClient: any CatalogueClient,
+        v1Client: any DastakV1CustomerClient,
         orderClient: any MerchantOrderClient,
         parcelClient: any ParcelDeliveryClient,
         checkoutClient: any DastakCheckoutClient,
@@ -111,6 +123,7 @@ final class DastakCustomerModel: ObservableObject {
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil
     ) {
         self.catalogueClient = catalogueClient
+        self.v1Client = v1Client
         self.orderClient = orderClient
         self.parcelClient = parcelClient
         self.checkoutClient = checkoutClient
@@ -128,6 +141,7 @@ final class DastakCustomerModel: ObservableObject {
     ) {
         self.init(
             catalogueClient: SupabaseCatalogueClient(functions: functions),
+            v1Client: SupabaseDastakV1CustomerClient(functions: functions),
             orderClient: SupabaseMerchantOrderClient(functions: functions),
             parcelClient: SupabaseParcelDeliveryClient(functions: functions),
             checkoutClient: SupabaseDastakCheckoutClient(functions: functions),
@@ -139,14 +153,17 @@ final class DastakCustomerModel: ObservableObject {
         )
     }
 
-    var activeProducts: [CatalogueProduct] {
-        guard let products = catalogue?.products else { return [] }
+    var activeProducts: [DastakV1CatalogueSKU] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return products }
-        return products.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-                ($0.description?.localizedCaseInsensitiveContains(query) ?? false)
-        }
+        return query.isEmpty ? v1Catalogue?.skus ?? [] : v1SearchResults
+    }
+
+    var canonicalCategories: [DastakV1CatalogueCategory] {
+        v1Catalogue?.categories ?? []
+    }
+
+    func products(in categoryID: UUID) -> [DastakV1CatalogueSKU] {
+        (v1Catalogue?.skus ?? []).filter { $0.categoryID == categoryID }
     }
 
     var hasCompleteDeliveryAddress: Bool {
@@ -164,15 +181,19 @@ final class DastakCustomerModel: ObservableObject {
     func bootstrap() async {
         await restorePreferencesAndAddress()
         async let orders: Void = refreshOrders()
+        async let v1Orders: Void = refreshV1Orders()
+        async let v1Catalogue: Void = refreshV1Catalogue()
         async let parcels: Void = refreshParcels()
         async let deviceToken: Void = registerDeviceTokenIfAvailable()
         async let checkoutCustomer: Void = refreshCheckoutCustomer()
-        if selectedLocation != nil {
-            async let catalogue: Void = refreshCatalogue()
-            _ = await (orders, parcels, catalogue, deviceToken, checkoutCustomer)
-        } else {
-            _ = await (orders, parcels, deviceToken, checkoutCustomer)
-        }
+        _ = await (
+            orders,
+            v1Orders,
+            v1Catalogue,
+            parcels,
+            deviceToken,
+            checkoutCustomer
+        )
     }
 
     func registerDeviceTokenIfAvailable() async {
@@ -289,9 +310,9 @@ final class DastakCustomerModel: ObservableObject {
         selectedLocation = Self.discoveryLocation(from: location)
         quote = nil
         orderPlacementAttempt.reset()
+        v1SubmissionAttempt = nil
         cartErrorMessage = nil
         persistDiscoveryPreferences()
-        await refreshCatalogue()
     }
 
     func setDiscoveryRadius(_ kilometres: Int) async {
@@ -315,6 +336,198 @@ final class DastakCustomerModel: ObservableObject {
         } catch {
             catalogueRefreshFailure = refreshFailure(for: error)
         }
+    }
+
+    func refreshV1Catalogue() async {
+        guard !isLoadingV1Catalogue else { return }
+        isLoadingV1Catalogue = true
+        defer { isLoadingV1Catalogue = false }
+        do {
+            v1Catalogue = try await v1Client.catalogue(
+                query: nil,
+                categoryID: nil,
+                subcategoryID: nil,
+                limit: 250,
+                cursor: nil,
+                idempotencyKey: makeKey()
+            )
+            v1CatalogueRefreshFailure = nil
+        } catch {
+            v1CatalogueRefreshFailure = refreshFailure(for: error)
+        }
+    }
+
+    func searchV1Catalogue() async {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            v1SearchResults = []
+            return
+        }
+        guard !isSearchingV1Catalogue else { return }
+        isSearchingV1Catalogue = true
+        defer { isSearchingV1Catalogue = false }
+        do {
+            let result = try await v1Client.catalogue(
+                query: query,
+                categoryID: nil,
+                subcategoryID: nil,
+                limit: 100,
+                cursor: nil,
+                idempotencyKey: makeKey()
+            )
+            guard query == searchText.trimmingCharacters(in: .whitespacesAndNewlines) else {
+                return
+            }
+            v1SearchResults = result.skus
+            v1CatalogueRefreshFailure = nil
+        } catch {
+            v1CatalogueRefreshFailure = refreshFailure(for: error)
+        }
+    }
+
+    func refreshV1Orders() async {
+        do {
+            let result = try await v1Client.orders(
+                limit: 50,
+                cursor: nil,
+                idempotencyKey: makeKey()
+            )
+            v1Orders = result.orders
+            if activeV1Order == nil {
+                activeV1Order = result.orders.first(where: {
+                    [.created, .matching, .fullySecured, .awaitingPayment].contains($0.status)
+                })
+            }
+        } catch {
+            // Legacy orders and parcels remain independently refreshable.
+        }
+    }
+
+    func refreshActiveV1Order() async {
+        guard let activeV1Order else { return }
+        do {
+            let refreshed = try await v1Client.order(
+                id: activeV1Order.id,
+                idempotencyKey: makeKey()
+            )
+            self.activeV1Order = refreshed
+            v1Orders = [refreshed] + v1Orders.filter { $0.id != refreshed.id }
+            v1OrderErrorMessage = nil
+        } catch {
+            v1OrderErrorMessage = message(
+                for: error,
+                fallback: "Your matching status could not be refreshed."
+            )
+        }
+    }
+
+    func focusV1Order(_ order: DastakV1OrderSnapshot) {
+        activeV1Order = order
+        v1OrderErrorMessage = nil
+    }
+
+    func submitV1Order() async -> Bool {
+        guard !cart.entries.isEmpty, !isSubmittingV1Order else { return false }
+        guard hasCompleteDeliveryAddress, let deliveryAddress else {
+            v1OrderErrorMessage = "Add a complete delivery address before placing your order."
+            return false
+        }
+        guard let customer = checkoutCustomer else {
+            v1OrderErrorMessage = "Your account details are still loading. Try again in a moment."
+            return false
+        }
+
+        let fingerprint = cart.entries
+            .sorted { $0.id.uuidString < $1.id.uuidString }
+            .map { "\($0.id.uuidString):\($0.quantity)" }
+            .joined(separator: "|")
+            + "|\(deliveryAddress.id)|\(customer.phoneNumber)"
+        let key: IdempotencyKey
+        if let attempt = v1SubmissionAttempt, attempt.fingerprint == fingerprint {
+            key = attempt.key
+        } else {
+            key = makeKey()
+            v1SubmissionAttempt = (fingerprint, key)
+        }
+
+        let address = DastakV1DeliveryAddressInput(
+            label: deliveryAddress.label,
+            line1: deliveryAddress.address,
+            line2: [deliveryAddress.building, deliveryAddress.floor]
+                .compactMap { $0 }
+                .joined(separator: ", ")
+                .nilIfEmpty,
+            landmark: deliveryAddress.landmark,
+            city: nil,
+            state: nil,
+            postalCode: nil,
+            latitude: deliveryAddress.point.latitude,
+            longitude: deliveryAddress.point.longitude,
+            instructions: deliveryAddress.deliveryNotes
+        )
+
+        isSubmittingV1Order = true
+        defer { isSubmittingV1Order = false }
+        do {
+            let order = try await v1Client.submit(
+                DastakV1OrderSubmission(
+                    deliveryAddress: address,
+                    recipient: DastakV1RecipientInput(
+                        name: customer.displayName,
+                        phoneNumber: customer.phoneNumber
+                    ),
+                    lines: cart.orderLines
+                ),
+                idempotencyKey: key
+            )
+            activeV1Order = order
+            v1Orders = [order] + v1Orders.filter { $0.id != order.id }
+            cart.removeAll()
+            v1SubmissionAttempt = nil
+            v1OrderErrorMessage = nil
+            cartErrorMessage = nil
+            return true
+        } catch {
+            v1OrderErrorMessage = message(
+                for: error,
+                fallback: "Your order could not be submitted. Try again without changing your basket."
+            )
+            return false
+        }
+    }
+
+    func cancelActiveV1Order() async {
+        guard let activeV1Order else { return }
+        do {
+            let cancelled = try await v1Client.cancel(
+                id: activeV1Order.id,
+                expectedVersion: activeV1Order.version,
+                idempotencyKey: makeKey()
+            )
+            self.activeV1Order = cancelled
+            v1Orders = [cancelled] + v1Orders.filter { $0.id != cancelled.id }
+            v1OrderErrorMessage = nil
+        } catch {
+            v1OrderErrorMessage = message(
+                for: error,
+                fallback: "This order could not be cancelled. Refresh and try again."
+            )
+        }
+    }
+
+    func addToCart(_ product: DastakV1CatalogueSKU) {
+        if cart.add(product) == .quantityLimit {
+            cartErrorMessage = "You can add up to \(DastakCart.maximumQuantity) of one item."
+        } else {
+            cartErrorMessage = nil
+            v1SubmissionAttempt = nil
+        }
+    }
+
+    func decrementCartItem(_ productID: UUID) {
+        cart.decrement(productID)
+        v1SubmissionAttempt = nil
+        cartErrorMessage = nil
     }
 
     func refreshOrders() async {
@@ -371,8 +584,9 @@ final class DastakCustomerModel: ObservableObject {
 
     func refreshOrdersAndParcels() async {
         async let orders: Void = refreshOrders()
+        async let v1Orders: Void = refreshV1Orders()
         async let parcels: Void = refreshParcels()
-        _ = await (orders, parcels)
+        _ = await (orders, v1Orders, parcels)
     }
 
     func order(withID orderID: UUID) -> MerchantOrderSnapshot? {
@@ -468,56 +682,6 @@ final class DastakCustomerModel: ObservableObject {
             try? await Task.sleep(for: .seconds(1.5))
         }
         return false
-    }
-
-    func prepareQuote() async {
-        guard hasCompleteDeliveryAddress,
-              let storeID = cart.storeID,
-              let deliveryAddress,
-              !cart.entries.isEmpty else { return }
-        isCheckingOut = true
-        defer { isCheckingOut = false }
-        do {
-            quote = try await orderClient.quote(
-                storeID: storeID,
-                lines: cart.orderLines,
-                dropoff: deliveryAddress.point,
-                idempotencyKey: makeKey()
-            )
-            orderPlacementAttempt.reset()
-            cartErrorMessage = nil
-        } catch {
-            cartErrorMessage = message(for: error, fallback: "The final price could not be calculated.")
-        }
-    }
-
-    func createOrderAndCheckout() async -> MerchantOrderSnapshot? {
-        guard hasCompleteDeliveryAddress, let quote, !isCheckingOut else { return nil }
-        isCheckingOut = true
-        defer { isCheckingOut = false }
-        do {
-            let order = try await orderClient.create(
-                quoteID: quote.quoteID,
-                idempotencyKey: orderPlacementAttempt.key(for: quote.quoteID, makeKey: makeKey)
-            )
-            orders = [order] + orders.filter { $0.orderID != order.orderID }
-            cart.removeAll()
-            self.quote = nil
-            orderPlacementAttempt.reset()
-            cartErrorMessage = nil
-            do {
-                checkoutSession = try await checkoutClient.createMerchantOrderCheckout(
-                    orderID: order.orderID,
-                    idempotencyKey: makeKey()
-                )
-            } catch {
-                ordersActionMessage = "Your order is saved. Payment could not start, so you can retry from Orders."
-            }
-            return order
-        } catch {
-            cartErrorMessage = message(for: error, fallback: "The order could not be placed. Try again without changing your basket.")
-            return nil
-        }
     }
 
     func cancel(_ order: MerchantOrderSnapshot, reason: String = "Cancelled by customer") async {
@@ -617,6 +781,9 @@ final class DastakCustomerModel: ObservableObject {
         cart.removeAll()
         quote = nil
         orderPlacementAttempt.reset()
+        v1SubmissionAttempt = nil
+        cartErrorMessage = nil
+        v1OrderErrorMessage = nil
     }
 
     func resetParcelQuote() {
@@ -856,8 +1023,8 @@ extension DastakCustomerModel {
             details: "12, Gandhi Road"
         )
         model.isDeliveryAddressConfirmed = true
-        model.catalogue = try? JSONDecoder().decode(
-            CatalogueSnapshot.self,
+        model.v1Catalogue = try? JSONDecoder().decode(
+            DastakV1CatalogueSnapshot.self,
             from: Data(Self.previewCatalogueJSON.utf8)
         )
         return model
@@ -865,82 +1032,59 @@ extension DastakCustomerModel {
 
     private static let previewCatalogueJSON = """
     {
-      "serviceZoneId":"66666666-6666-4666-8666-666666666666",
-      "discoveryRadiusMeters":10000,
-      "stores":[{
-        "storeId":"33333333-3333-4333-8333-333333333333",
-        "name":"Namma Daily",
-        "address":"Flower Bazaar, Vaniyambadi",
-        "location":{"latitude":12.6824,"longitude":78.6211},
-        "serviceZoneId":"66666666-6666-4666-8666-666666666666",
-        "isPublished":true,
-        "acceptingOrders":true
-      }],
-      "categories":[{
-        "categoryId":"44444444-4444-4444-8444-444444444444",
-        "storeId":"33333333-3333-4333-8333-333333333333",
-        "name":"Everyday essentials",
-        "displayOrder":1,
-        "isActive":true
-      }],
-      "products":[
+      "catalogueVersion":"2026-08-22T10:00:00Z",
+      "categories":[
         {
-          "productId":"11111111-1111-4111-8111-111111111111",
-          "storeId":"33333333-3333-4333-8333-333333333333",
-          "categoryId":"44444444-4444-4444-8444-444444444444",
-          "name":"Fresh whole milk",
-          "description":"Local dairy milk",
-          "unitLabel":"1 litre",
-          "price":{"paise":6800},
-          "imageObjectPath":null,
-          "availability":"in_stock",
-          "catalogueKind":"general",
-          "restrictedApprovalState":"not_applicable",
-          "isActive":true
+          "id":"44444444-4444-4444-8444-444444444444",
+          "name":"Everyday essentials","slug":"essentials","imageKey":null,"sortOrder":1
         },
         {
-          "productId":"22222222-2222-4222-8222-222222222222",
-          "storeId":"33333333-3333-4333-8333-333333333333",
+          "id":"99999999-9999-4999-8999-999999999999",
+          "name":"Health & care","slug":"health-care","imageKey":null,"sortOrder":2
+        }
+      ],
+      "subcategories":[
+        {
+          "id":"55555555-5555-4555-8555-555555555555",
           "categoryId":"44444444-4444-4444-8444-444444444444",
-          "name":"Farm eggs",
-          "description":"Six fresh eggs",
-          "unitLabel":"6 pieces",
-          "price":{"paise":7200},
-          "imageObjectPath":null,
-          "availability":"in_stock",
-          "catalogueKind":"general",
-          "restrictedApprovalState":"not_applicable",
-          "isActive":true
+          "name":"Dairy & breakfast","slug":"dairy-breakfast","imageKey":null,"sortOrder":1
         },
         {
-          "productId":"77777777-7777-4777-8777-777777777777",
-          "storeId":"33333333-3333-4333-8333-333333333333",
+          "id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "categoryId":"99999999-9999-4999-8999-999999999999",
+          "name":"Everyday care","slug":"everyday-care","imageKey":null,"sortOrder":1
+        }
+      ],
+      "skus":[
+        {
+          "id":"11111111-1111-4111-8111-111111111111",
           "categoryId":"44444444-4444-4444-8444-444444444444",
-          "name":"Pain relief tablets",
-          "description":"10 tablet strip",
-          "unitLabel":"10 tablets",
-          "price":{"paise":4500},
-          "imageObjectPath":null,
-          "availability":"in_stock",
-          "catalogueKind":"otc_medicine",
-          "restrictedApprovalState":"not_applicable",
-          "isActive":true
+          "subcategoryId":"55555555-5555-4555-8555-555555555555",
+          "brand":null,"name":"Fresh whole milk","slug":"fresh-whole-milk","variant":null,
+          "packSize":"1 litre","description":"Local dairy milk","imageKey":null,"barcode":null,
+          "listPricePaise":7200,"sellingPricePaise":6800,"currencyCode":"INR",
+          "logisticsAttributes":{"weightGrams":1030,"temperatureClass":"CHILLED"}
         },
         {
-          "productId":"88888888-8888-4888-8888-888888888888",
-          "storeId":"33333333-3333-4333-8333-333333333333",
+          "id":"22222222-2222-4222-8222-222222222222",
           "categoryId":"44444444-4444-4444-8444-444444444444",
-          "name":"Basmati rice",
-          "description":"Long grain rice",
-          "unitLabel":"1 kilogram",
-          "price":{"paise":16500},
-          "imageObjectPath":null,
-          "availability":"in_stock",
-          "catalogueKind":"general",
-          "restrictedApprovalState":"not_applicable",
-          "isActive":true
+          "subcategoryId":"55555555-5555-4555-8555-555555555555",
+          "brand":null,"name":"Farm eggs","slug":"farm-eggs","variant":null,
+          "packSize":"6 pieces","description":"Six fresh eggs","imageKey":null,"barcode":null,
+          "listPricePaise":7600,"sellingPricePaise":7200,"currencyCode":"INR",
+          "logisticsAttributes":{"fragile":true}
+        },
+        {
+          "id":"77777777-7777-4777-8777-777777777777",
+          "categoryId":"99999999-9999-4999-8999-999999999999",
+          "subcategoryId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "brand":null,"name":"Pain relief tablets","slug":"pain-relief-tablets","variant":null,
+          "packSize":"10 tablets","description":"Everyday pain relief","imageKey":null,"barcode":null,
+          "listPricePaise":4500,"sellingPricePaise":4500,"currencyCode":"INR",
+          "logisticsAttributes":{}
         }
       ]
+      ,"nextCursor":null
     }
     """
 }
@@ -955,3 +1099,9 @@ private actor DastakPreviewFunctionClient: FunctionClient {
     }
 }
 #endif
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+}

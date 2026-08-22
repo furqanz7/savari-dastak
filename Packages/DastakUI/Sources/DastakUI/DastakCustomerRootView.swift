@@ -27,6 +27,7 @@ public struct DastakCustomerRootView: View {
     @State private var showingDiscoveryLocationPicker = false
     @State private var onboardingStep: DastakCustomerOnboardingStep?
     @State private var showingCart = false
+    @State private var showingV1Order = false
     @State private var showingParcel = false
     @State private var showingCheckout = false
     @State private var isConfirmingPayment = false
@@ -157,6 +158,7 @@ public struct DastakCustomerRootView: View {
             if let destination = consumePendingDestination() {
                 open(destination)
             }
+            showingV1Order = model.activeV1Order != nil
         }
         .task {
             guard !isPreview else { return }
@@ -220,8 +222,14 @@ public struct DastakCustomerRootView: View {
             DastakCartView(
                 model: model,
                 currentLocation: locationManager.location,
-                requestCurrentLocation: locationManager.requestLocation
+                requestCurrentLocation: locationManager.requestLocation,
+                orderSubmitted: { showingV1Order = true }
             )
+        }
+        .sheet(isPresented: $showingV1Order) {
+            DastakV1MatchingView(model: model)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingParcel) {
             DastakParcelComposerView(

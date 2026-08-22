@@ -3,6 +3,7 @@ import {
   Bike,
   Check,
   CircleAlert,
+  Database,
   ExternalLink,
   FileText,
   PackageSearch,
@@ -13,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { RoleAccountView } from "./RoleAccountView";
+import { AdminCataloguePanel } from "./AdminCataloguePanel";
 import {
   getAdminOrders,
   getEvidenceUrl,
@@ -52,7 +54,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
   const [partners, setPartners] = useState<PartnerAdminApplication[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [operations, setOperations] = useState<OwnerOperationsSnapshot>();
-  const [tab, setTab] = useState<"approvals" | "exceptions" | "orders" | "account">("approvals");
+  const [tab, setTab] = useState<"approvals" | "exceptions" | "orders" | "catalogue" | "account">("approvals");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
@@ -249,10 +251,11 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
         <button type="button" role="tab" aria-selected={tab === "approvals"} className={tab === "approvals" ? "selected" : ""} onClick={() => setTab("approvals")}>Approvals</button>
         <button type="button" role="tab" aria-selected={tab === "exceptions"} className={tab === "exceptions" ? "selected" : ""} onClick={() => setTab("exceptions")}>Exceptions {operations?.summary.totalExceptions ? `(${operations.summary.totalExceptions})` : ""}</button>
         <button type="button" role="tab" aria-selected={tab === "orders"} className={tab === "orders" ? "selected" : ""} onClick={() => setTab("orders")}>Orders</button>
+        <button type="button" role="tab" aria-selected={tab === "catalogue"} className={tab === "catalogue" ? "selected" : ""} onClick={() => setTab("catalogue")}><Database size={17} /> Catalogue</button>
         <button type="button" role="tab" aria-selected={tab === "account"} className={tab === "account" ? "selected" : ""} onClick={() => setTab("account")}><UserRound size={17} /> Account</button>
       </div>
 
-      {tab === "account" ? <RoleAccountView
+      {tab === "catalogue" ? <AdminCataloguePanel auth={auth} /> : tab === "account" ? <RoleAccountView
         accessToken={accessToken}
         displayName={displayName}
         email={email}

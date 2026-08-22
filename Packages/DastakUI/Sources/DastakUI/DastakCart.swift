@@ -3,23 +3,22 @@ import MarketplaceFoundation
 import MarketplaceInfrastructure
 
 public struct DastakCartEntry: Identifiable, Equatable, Sendable {
-    public let product: CatalogueProduct
+    public let product: DastakV1CatalogueSKU
     public var quantity: Int
 
-    public var id: UUID { product.productID }
+    public var id: UUID { product.id }
     public var subtotal: Money {
-        Money(paise: product.price.paise * quantity)
+        Money(paise: product.sellingPricePaise * quantity)
     }
 }
 
 public enum DastakCartAddResult: Equatable, Sendable {
     case added
-    case differentStore
-    case unavailable
+    case quantityLimit
 }
 
 public struct DastakCart: Equatable, Sendable {
-    public private(set) var storeID: UUID?
+    public static let maximumQuantity = 99
     public private(set) var entries: [DastakCartEntry] = []
 
     public init() {}
@@ -32,22 +31,18 @@ public struct DastakCart: Equatable, Sendable {
         Money(paise: entries.reduce(0) { $0 + $1.subtotal.paise })
     }
 
-    public var orderLines: [MerchantOrderLineInput] {
+    public var orderLines: [DastakV1OrderLineInput] {
         entries.map {
-            MerchantOrderLineInput(productID: $0.product.productID, quantity: $0.quantity)
+            DastakV1OrderLineInput(skuID: $0.product.id, quantity: $0.quantity)
         }
     }
 
     @discardableResult
-    public mutating func add(_ product: CatalogueProduct) -> DastakCartAddResult {
-        guard product.isActive, product.availability == .inStock else {
-            return .unavailable
-        }
-        if let storeID, storeID != product.storeID, !entries.isEmpty {
-            return .differentStore
-        }
-        storeID = product.storeID
-        if let index = entries.firstIndex(where: { $0.product.productID == product.productID }) {
+    public mutating func add(_ product: DastakV1CatalogueSKU) -> DastakCartAddResult {
+        if let index = entries.firstIndex(where: { $0.product.id == product.id }) {
+            guard entries[index].quantity < Self.maximumQuantity else {
+                return .quantityLimit
+            }
             entries[index].quantity += 1
         } else {
             entries.append(DastakCartEntry(product: product, quantity: 1))
@@ -56,7 +51,7 @@ public struct DastakCart: Equatable, Sendable {
     }
 
     public mutating func decrement(_ productID: UUID) {
-        guard let index = entries.firstIndex(where: { $0.product.productID == productID }) else {
+        guard let index = entries.firstIndex(where: { $0.product.id == productID }) else {
             return
         }
         if entries[index].quantity > 1 {
@@ -64,18 +59,9 @@ public struct DastakCart: Equatable, Sendable {
         } else {
             entries.remove(at: index)
         }
-        if entries.isEmpty {
-            storeID = nil
-        }
-    }
-
-    public mutating func replaceStore(with product: CatalogueProduct) {
-        removeAll()
-        _ = add(product)
     }
 
     public mutating func removeAll() {
         entries.removeAll()
-        storeID = nil
     }
 }

@@ -6,9 +6,9 @@ struct DastakCartView: View {
     @ObservedObject var model: DastakCustomerModel
     let currentLocation: DastakDeliveryLocation?
     let requestCurrentLocation: () -> Void
+    let orderSubmitted: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var showingPaymentMethods = false
     @State private var showingDeliveryAddressEditor = false
 
     var body: some View {
@@ -18,29 +18,29 @@ struct DastakCartView: View {
                     DastakEmptyState(
                         symbol: "bag",
                         title: "Your basket is empty",
-                        message: "Add products from one nearby store to continue."
+                        message: "Add products from the Dastak catalogue to continue."
                     )
                 } else {
                     ScrollView {
                         VStack(spacing: MarketplaceSpacing.large) {
+                            securityPromise
                             items
                             totals
                             deliveryAddress
-                            if let errorMessage = model.cartErrorMessage {
+                            if let errorMessage = model.cartErrorMessage ?? model.v1OrderErrorMessage {
                                 DastakActionNotice(message: errorMessage) {
                                     model.cartErrorMessage = nil
+                                    model.v1OrderErrorMessage = nil
                                 }
                             }
                         }
                         .padding(MarketplaceSpacing.medium)
-                        .padding(.bottom, 100)
+                        .padding(.bottom, 108)
                     }
-                    .safeAreaInset(edge: .bottom) {
-                        checkoutButton
-                    }
+                    .safeAreaInset(edge: .bottom) { submitButton }
                 }
             }
-            .navigationTitle("Basket")
+            .navigationTitle("Your basket")
             .dastakInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -48,20 +48,9 @@ struct DastakCartView: View {
                 }
                 if !model.cart.entries.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
-                        Button("Clear", role: .destructive) {
-                            model.clearCart()
-                        }
+                        Button("Clear", role: .destructive) { model.clearCart() }
                     }
                 }
-            }
-            .task {
-                if !model.cart.entries.isEmpty {
-                    await model.prepareQuote()
-                }
-            }
-            .onChange(of: model.deliveryAddress) { _, _ in
-                guard !model.cart.entries.isEmpty else { return }
-                Task { await model.prepareQuote() }
             }
         }
         .sheet(isPresented: $showingDeliveryAddressEditor) {
@@ -76,34 +65,47 @@ struct DastakCartView: View {
         }
     }
 
+    private var securityPromise: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Matched before payment")
+                    .font(.subheadline.weight(.semibold))
+                Text("Dastak secures your complete basket first. You are not charged at submission.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } icon: {
+            Image(systemName: "checkmark.shield.fill")
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+        }
+        .padding(MarketplaceSpacing.compact)
+        .marketplaceFlatSurface()
+    }
+
     private var items: some View {
         VStack(spacing: 0) {
             ForEach(model.cart.entries) { entry in
                 HStack(spacing: MarketplaceSpacing.compact) {
-                    DastakProductArtwork(kind: entry.product.catalogueKind)
+                    DastakProductArtwork(symbol: "basket")
                         .frame(width: 68)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(entry.product.name)
                             .font(.headline)
                             .lineLimit(2)
+                        Text(entry.product.packSize)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         Text(DastakFormatting.money(entry.subtotal))
                             .font(.subheadline.monospacedDigit())
-                            .foregroundStyle(.secondary)
                     }
 
-                    Spacer()
+                    Spacer(minLength: 4)
 
                     DastakQuantityControl(
                         quantity: entry.quantity,
-                        decrement: {
-                            model.cart.decrement(entry.product.productID)
-                            Task { await model.prepareQuote() }
-                        },
-                        increment: {
-                            _ = model.cart.add(entry.product)
-                            Task { await model.prepareQuote() }
-                        }
+                        decrement: { model.decrementCartItem(entry.id) },
+                        increment: { model.addToCart(entry.product) }
                     )
                 }
                 .padding(MarketplaceSpacing.compact)
@@ -118,25 +120,19 @@ struct DastakCartView: View {
 
     private var totals: some View {
         VStack(spacing: MarketplaceSpacing.compact) {
-            totalRow("Items", value: model.quote?.itemSubtotal ?? model.cart.subtotal)
-            if let deliveryFee = model.quote?.deliveryFee {
-                totalRow("Delivery", value: deliveryFee)
-            }
+            totalRow("Catalogue subtotal", value: model.cart.subtotal, emphasized: true)
             Divider()
-            totalRow(
-                "Total",
-                value: model.quote?.total ?? model.cart.subtotal,
-                emphasized: true
-            )
+            Text("Delivery, platform fees and final total are shown only after every item is secured.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
     }
 
     private var deliveryAddress: some View {
-        Button {
-            showingDeliveryAddressEditor = true
-        } label: {
+        Button { showingDeliveryAddressEditor = true } label: {
             HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
                 Image(systemName: "location.fill")
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -147,7 +143,7 @@ struct DastakCartView: View {
                     Text(
                         model.hasCompleteDeliveryAddress
                             ? model.deliveryAddress?.displayAddress ?? ""
-                            : "Add your house, flat or landmark before payment."
+                            : "Add doorstep details before placing your order."
                     )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -166,51 +162,42 @@ struct DastakCartView: View {
         .marketplaceFlatSurface()
     }
 
-    private var checkoutButton: some View {
+    private var submitButton: some View {
         VStack(spacing: 0) {
             Divider()
             Button {
-                if model.hasCompleteDeliveryAddress {
-                    showingPaymentMethods = true
-                } else {
+                guard model.hasCompleteDeliveryAddress else {
                     showingDeliveryAddressEditor = true
+                    return
+                }
+                Task {
+                    if await model.submitV1Order() {
+                        dismiss()
+                        try? await Task.sleep(for: .milliseconds(350))
+                        orderSubmitted()
+                    }
                 }
             } label: {
-                if model.isCheckingOut {
-                    ProgressView()
-                        .tint(.white)
+                if model.isSubmittingV1Order {
+                    ProgressView().tint(.white)
                 } else {
                     HStack {
-                        Text(model.hasCompleteDeliveryAddress ? "Continue to payment" : "Add delivery address")
+                        Text(model.hasCompleteDeliveryAddress ? "Place order" : "Add delivery address")
                         Spacer()
-                        if model.hasCompleteDeliveryAddress {
-                            Text(DastakFormatting.money(model.quote?.total ?? model.cart.subtotal))
-                                .monospacedDigit()
-                        }
+                        if model.hasCompleteDeliveryAddress { Image(systemName: "arrow.right") }
                     }
                 }
             }
             .buttonStyle(MarketplacePrimaryButtonStyle())
-            .disabled(model.isCheckingOut || (model.hasCompleteDeliveryAddress && model.quote == nil))
+            .disabled(model.isSubmittingV1Order)
             .padding(MarketplaceSpacing.medium)
         }
         .background(.bar)
-        .sheet(isPresented: $showingPaymentMethods) {
-            DastakPaymentMethodView(model: model) {
-                showingPaymentMethods = false
-                Task {
-                    if model.quote == nil { await model.prepareQuote() }
-                    if await model.createOrderAndCheckout() != nil { dismiss() }
-                }
-            }
-            .presentationDetents([.medium, .large])
-        }
     }
 
     private func totalRow(_ title: String, value: Money, emphasized: Bool = false) -> some View {
         HStack {
-            Text(title)
-                .font(emphasized ? .headline : .body)
+            Text(title).font(emphasized ? .headline : .body)
             Spacer()
             Text(DastakFormatting.money(value))
                 .font(emphasized ? .headline.monospacedDigit() : .body.monospacedDigit())

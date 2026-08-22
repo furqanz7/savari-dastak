@@ -451,6 +451,20 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/catalogue/index.ts"
 
+[functions.dastak-v1-catalogue]
+enabled = true
+# The handler serves CORS preflight, then verifies the bearer session itself.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/dastak-v1-catalogue/index.ts"
+
+[functions.dastak-v1-orders]
+enabled = true
+# The handler serves CORS preflight, then verifies the bearer session itself.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/dastak-v1-orders/index.ts"
+
 [functions.customer-addresses]
 enabled = true
 # The handler authenticates bearer tokens after serving browser CORS preflight.
