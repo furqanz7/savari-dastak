@@ -21,7 +21,25 @@ const job: V1NotificationJob = {
   attempt: 1,
 };
 
-Deno.test("V1 outbox worker rejects callers without its internal secret", async () => {
+Deno.test("V1 outbox worker rejects a missing internal secret before privileged work", async () => {
+  const calls: string[] = [];
+  const response = await handleV1OutboxWorker(
+    new Request("http://localhost/functions/v1/process-v1-outbox", {
+      method: "POST",
+      body: "{}",
+    }),
+    dependencies({
+      fanout: () => {
+        calls.push("fanout");
+        return Promise.resolve({});
+      },
+    }),
+  );
+  assertEquals(response.status, 403);
+  assertEquals(calls, []);
+});
+
+Deno.test("V1 outbox worker rejects an incorrect internal secret", async () => {
   const response = await handleV1OutboxWorker(request("wrong"), dependencies());
   assertEquals(response.status, 403);
 });

@@ -6,6 +6,12 @@ const migration = await Deno.readTextFile(
     import.meta.url,
   ),
 );
+const config = await Deno.readTextFile(
+  new URL("../../config.toml", import.meta.url),
+);
+const workerIndex = await Deno.readTextFile(
+  new URL("../../functions/process-v1-outbox/index.ts", import.meta.url),
+);
 
 function functionBlock(name: string): string {
   const block = migration.match(
@@ -73,4 +79,29 @@ Deno.test("Step 6 hardening uses explicit RBAC and durable asynchronous delivery
       assertMatch(block[0], /set search_path = ''/i);
     }
   }
+});
+
+Deno.test("V1 outbox deployment and schedule share the internal-secret contract", () => {
+  const workerConfig = config.match(
+    /\[functions\.process-v1-outbox\][\s\S]*?(?=\n\[|$)/,
+  )?.[0];
+  assert(workerConfig, "missing process-v1-outbox function configuration");
+  assertMatch(workerConfig, /\benabled\s*=\s*true\b/);
+  assertMatch(workerConfig, /\bverify_jwt\s*=\s*false\b/);
+  assertMatch(
+    workerConfig,
+    /\bimport_map\s*=\s*"\.\/functions\/deno\.json"/,
+  );
+  assertMatch(
+    workerConfig,
+    /\bentrypoint\s*=\s*"\.\/functions\/process-v1-outbox\/index\.ts"/,
+  );
+
+  assertMatch(
+    workerIndex,
+    /expectedSecret:\s*requiredEnv\("DASTAK_NOTIFICATION_SECRET"\)/,
+  );
+  assertMatch(migration, /\/functions\/v1\/process-v1-outbox/i);
+  assertMatch(migration, /'x-dastak-internal-secret'/i);
+  assertMatch(migration, /secret\.name\s*=\s*'dastak_notification_secret'/i);
 });
