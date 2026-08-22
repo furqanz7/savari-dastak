@@ -3,6 +3,7 @@ import {
   Bike,
   Check,
   CircleAlert,
+  Activity,
   Database,
   ExternalLink,
   FileText,
@@ -39,6 +40,7 @@ import { formatPrice } from "./catalogue";
 import { orderStatusLabel } from "./orders";
 import { processOrderRefund } from "./payments";
 import { AdminV1ExecutionPanel } from "./AdminV1ExecutionPanel";
+import { AdminSystemHealthPanel } from "./AdminSystemHealthPanel";
 
 type Props = {
   accessToken: string;
@@ -56,7 +58,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
   const [partners, setPartners] = useState<PartnerAdminApplication[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [operations, setOperations] = useState<OwnerOperationsSnapshot>();
-  const [tab, setTab] = useState<"approvals" | "exceptions" | "orders" | "execution" | "catalogue" | "account">("approvals");
+  const [tab, setTab] = useState<"approvals" | "exceptions" | "orders" | "execution" | "health" | "catalogue" | "account">("approvals");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
@@ -254,11 +256,12 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
         <button type="button" role="tab" aria-selected={tab === "exceptions"} className={tab === "exceptions" ? "selected" : ""} onClick={() => setTab("exceptions")}>Exceptions {operations?.summary.totalExceptions ? `(${operations.summary.totalExceptions})` : ""}</button>
         <button type="button" role="tab" aria-selected={tab === "orders"} className={tab === "orders" ? "selected" : ""} onClick={() => setTab("orders")}>Orders</button>
         <button type="button" role="tab" aria-selected={tab === "execution"} className={tab === "execution" ? "selected" : ""} onClick={() => setTab("execution")}><ShieldCheck size={17} /> V1 trace</button>
+        <button type="button" role="tab" aria-selected={tab === "health"} className={tab === "health" ? "selected" : ""} onClick={() => setTab("health")}><Activity size={17} /> Health</button>
         <button type="button" role="tab" aria-selected={tab === "catalogue"} className={tab === "catalogue" ? "selected" : ""} onClick={() => setTab("catalogue")}><Database size={17} /> Catalogue</button>
         <button type="button" role="tab" aria-selected={tab === "account"} className={tab === "account" ? "selected" : ""} onClick={() => setTab("account")}><UserRound size={17} /> Account</button>
       </div>
 
-      {tab === "catalogue" ? <AdminCataloguePanel auth={auth} /> : tab === "execution" ? <AdminV1ExecutionPanel auth={auth} /> : tab === "account" ? <RoleAccountView
+      {tab === "catalogue" ? <AdminCataloguePanel auth={auth} /> : tab === "execution" ? <AdminV1ExecutionPanel auth={auth} /> : tab === "health" ? <AdminSystemHealthPanel auth={auth} /> : tab === "account" ? <RoleAccountView
         accessToken={accessToken}
         displayName={displayName}
         email={email}

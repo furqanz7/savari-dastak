@@ -90,6 +90,15 @@ insert into private.account_memberships (account_id, role, approved_at) values
   ('97000000-0000-4000-8000-000000000002', 'customer', null),
   ('97000000-0000-4000-8000-000000000003', 'customer', null);
 
+insert into dastak_v1.platform_permission_grants (
+  account_id, bundle_id, granted_by, grant_reason
+) values (
+  '97000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-00000000000c',
+  '97000000-0000-4000-8000-000000000001',
+  'Canonical catalogue explicit platform administration fixture.'
+);
+
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
@@ -173,11 +182,14 @@ select is(
 );
 create temp table tap_admin_catalogue on commit drop as
 select public.dastak_v1_admin_catalogue_snapshot(1000) as body;
+create temp table tap_admin_catalogue_sku on commit drop as
+select sku
+from tap_admin_catalogue,
+  lateral pg_catalog.jsonb_array_elements(body -> 'skus') as sku
+where sku ->> 'slug' = 'whole-milk-1-litre';
 select is(
-  pg_catalog.jsonb_array_length(
-    (select body -> 'skus' from tap_admin_catalogue)
-  ),
-  1,
+  (select pg_catalog.count(*) from tap_admin_catalogue_sku),
+  1::bigint,
   'catalogue admin sees imported SKU activation and pricing state'
 );
 select ok(
@@ -192,16 +204,24 @@ select set_config(
 );
 create temp table tap_customer_catalogue on commit drop as
 select public.dastak_v1_customer_catalogue(null, null, null, 100, null, null) as body;
+create temp table tap_customer_catalogue_sku on commit drop as
+select sku
+from tap_customer_catalogue,
+  lateral pg_catalog.jsonb_array_elements(body -> 'skus') as sku
+where sku ->> 'slug' = 'whole-milk-1-litre';
 
 select is(
-  pg_catalog.jsonb_array_length(
-    (select body -> 'categories' from tap_customer_catalogue)
+  (
+    select pg_catalog.count(*)
+    from tap_customer_catalogue,
+      lateral pg_catalog.jsonb_array_elements(body -> 'categories') as category
+    where category ->> 'slug' = 'groceries'
   ),
-  1,
+  1::bigint,
   'customer sees canonical categories'
 );
 select is(
-  (select body #>> '{skus,0,sellingPricePaise}' from tap_customer_catalogue),
+  (select sku ->> 'sellingPricePaise' from tap_customer_catalogue_sku),
   '6900',
   'customer sees the server-authoritative standardized selling price'
 );
@@ -249,7 +269,7 @@ select public.dastak_v1_submit_order(
       pg_catalog.jsonb_build_object(
         'lineType', 'RETAIL_SKU',
         'skuId', (
-          select (body #>> '{skus,0,id}')::uuid from tap_admin_catalogue
+          select (sku ->> 'id')::uuid from tap_admin_catalogue_sku
         ),
         'quantity', 2
       )
@@ -275,7 +295,7 @@ select set_config(
 );
 create temp table tap_sku_update on commit drop as
 select public.dastak_v1_update_catalogue_sku(
-  (select (body #>> '{skus,0,id}')::uuid from tap_admin_catalogue),
+  (select (sku ->> 'id')::uuid from tap_admin_catalogue_sku),
   'tap-sku-price-1',
   1,
   '{"sellingPricePaise":6500}'::jsonb
@@ -289,7 +309,7 @@ select is(
 select throws_ok(
   format(
     'select public.dastak_v1_update_catalogue_sku(%L::uuid, %L, 1, %L::jsonb)',
-    (select (body #>> '{skus,0,id}')::uuid from tap_admin_catalogue),
+    (select (sku ->> 'id')::uuid from tap_admin_catalogue_sku),
     'tap-sku-stale',
     '{"sellingPricePaise":6400}'
   ),
@@ -319,7 +339,7 @@ select set_config(
 select lives_ok(
   format(
     'select public.dastak_v1_update_catalogue_sku(%L::uuid, %L, 2, %L::jsonb)',
-    (select (body #>> '{skus,0,id}')::uuid from tap_admin_catalogue),
+    (select (sku ->> 'id')::uuid from tap_admin_catalogue_sku),
     'tap-sku-inactive',
     '{"status":"INACTIVE"}'
   ),
@@ -332,10 +352,14 @@ select set_config(
   true
 );
 select is(
-  pg_catalog.jsonb_array_length(
-    public.dastak_v1_customer_catalogue(null, null, null, 100, null, null) -> 'skus'
+  (
+    select pg_catalog.count(*)
+    from pg_catalog.jsonb_array_elements(
+      public.dastak_v1_customer_catalogue(null, null, null, 100, null, null) -> 'skus'
+    ) as sku
+    where sku ->> 'slug' = 'whole-milk-1-litre'
   ),
-  0,
+  0::bigint,
   'inactive SKUs disappear from customer projections'
 );
 

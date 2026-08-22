@@ -139,6 +139,20 @@ final class DastakCustomerLifecycleTests: XCTestCase {
         let parcelID = UUID()
 
         XCTAssertEqual(
+            DastakCustomerDestination(notificationPayload: [
+                "entityType": "dastakV1Order",
+                "orderId": orderID.uuidString,
+            ]),
+            .dastakV1Order(orderID)
+        )
+        XCTAssertEqual(
+            DastakCustomerDestination(notificationPayload: [
+                "entityType": "dastakV1Order",
+                "entityId": orderID.uuidString,
+            ]),
+            .dastakV1Order(orderID)
+        )
+        XCTAssertEqual(
             DastakCustomerDestination(notificationPayload: ["orderId": orderID.uuidString]),
             .merchantOrder(orderID)
         )

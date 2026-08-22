@@ -164,6 +164,15 @@ insert into private.account_memberships (account_id, role, approved_at) values
   ('98000000-0000-4000-8000-000000000003', 'owner', now()),
   ('98000000-0000-4000-8000-000000000004', 'merchant', now());
 
+insert into dastak_v1.platform_permission_grants (
+  account_id, bundle_id, granted_by, grant_reason
+) values (
+  '98000000-0000-4000-8000-000000000003',
+  '10000000-0000-4000-8000-00000000000c',
+  '98000000-0000-4000-8000-000000000003',
+  'Batch 1 explicit platform administration fixture.'
+);
+
 insert into dastak_v1.categories (
   id, name, slug, status, created_by
 ) values (

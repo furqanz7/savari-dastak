@@ -17,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -31,7 +31,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSApplicationQueriesSchemes</key>
@@ -67,7 +67,7 @@
 	<key>MarketplaceSupabaseURL</key>
 	<string>$(MARKETPLACE_SUPABASE_URL)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Dastak uses your location to show nearby stores, price deliveries, and track active orders.</string>
+	<string>Dastak uses your location to confirm service availability and help you choose a delivery address.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

@@ -82,6 +82,7 @@ export type V1OrderDependencies = {
     accessToken: string;
     orderId: string;
   }) => Promise<unknown>;
+  getAdminSystemHealth: (input: { accessToken: string }) => Promise<unknown>;
   authorizeExceptionalDeliveryHandoff: (input: {
     accessToken: string;
     missionId: string;
@@ -418,6 +419,10 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           }),
         );
       }
+      case "adminSystemHealth":
+        return json(
+          await dependencies.getAdminSystemHealth({ accessToken: actor.accessToken }),
+        );
       case "authorizeExceptionalDeliveryHandoff": {
         const missionId = requiredUUID(body.missionId);
         const deliveryEvidenceId = requiredUUID(body.deliveryEvidenceId);

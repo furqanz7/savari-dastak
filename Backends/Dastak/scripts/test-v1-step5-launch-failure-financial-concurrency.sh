@@ -70,6 +70,23 @@ insert into private.account_memberships (account_id,role,approved_at) values
 ('99600000-0000-4000-8000-000000000008','dastak_partner',now())
 on conflict (account_id,role) do update set approved_at=excluded.approved_at;
 
+insert into dastak_v1.platform_permission_grants (
+  account_id,bundle_id,granted_by,grant_reason
+)
+select '99600000-0000-4000-8000-000000000001', bundle.id,
+  '99600000-0000-4000-8000-000000000001',
+  'Step 5 explicit recovery and finance Operations fixture.'
+from dastak_v1.permission_bundles bundle
+where bundle.id in (
+  '10000000-0000-4000-8000-000000000008',
+  '10000000-0000-4000-8000-000000000009'
+)
+and not exists (
+  select 1 from dastak_v1.platform_permission_grants grant_row
+  where grant_row.account_id='99600000-0000-4000-8000-000000000001'
+    and grant_row.bundle_id=bundle.id and grant_row.revoked_at is null
+);
+
 insert into private.delivery_partner_applications (
   id,account_id,delivery_method,identity_evidence_object_path,verification_version,
   vehicle_registration_number,vehicle_make_model,vehicle_evidence_object_path,

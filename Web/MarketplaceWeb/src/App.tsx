@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { LogOut, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
 import { completeProfile, isValidProfile, resolveAccess, type AccessResult } from "./access";
@@ -10,16 +20,17 @@ import {
   sanitizedAuthCallbackUrl,
 } from "./auth-callback";
 import { shouldPreserveAuthenticatedView } from "./auth-state";
-import { DastakCustomerView } from "./DastakCustomerView";
-import { AdminDashboard } from "./AdminDashboard";
 import { canCompleteDastakLaunch, dastakLaunchVideos, takeNextDastakLaunchVideo } from "./dastak-launch";
-import { DeliveryPartnerApplicationForm } from "./DeliveryPartnerApplicationForm";
-import { DeliveryPartnerView } from "./DeliveryPartnerView";
 import { readAppConfig } from "./config";
-import { MerchantApplicationForm } from "./MerchantApplicationForm";
-import { MerchantOrdersView } from "./MerchantOrdersView";
 import { PhoneNumberField } from "./PhoneNumberField";
-import { SavariRideView } from "./SavariRideView";
+
+const AdminDashboard = lazy(() => import("./AdminDashboard").then((module) => ({ default: module.AdminDashboard })));
+const DastakCustomerView = lazy(() => import("./DastakCustomerView").then((module) => ({ default: module.DastakCustomerView })));
+const DeliveryPartnerApplicationForm = lazy(() => import("./DeliveryPartnerApplicationForm").then((module) => ({ default: module.DeliveryPartnerApplicationForm })));
+const DeliveryPartnerView = lazy(() => import("./DeliveryPartnerView").then((module) => ({ default: module.DeliveryPartnerView })));
+const MerchantApplicationForm = lazy(() => import("./MerchantApplicationForm").then((module) => ({ default: module.MerchantApplicationForm })));
+const MerchantOrdersView = lazy(() => import("./MerchantOrdersView").then((module) => ({ default: module.MerchantOrdersView })));
+const SavariRideView = lazy(() => import("./SavariRideView").then((module) => ({ default: module.SavariRideView })));
 
 const config = readAppConfig({
   VITE_APP_VARIANT: import.meta.env.VITE_APP_VARIANT,
@@ -184,9 +195,9 @@ export default function App() {
         {view.phase === "profile" && (
           <ProfileForm session={view.session} onComplete={() => evaluate(view.session)} onSignOut={signOut} />
         )}
-        {view.phase === "ready" && <Ready access={view.access} email={view.session.user.email} session={view.session} onSignOut={signOut} />}
+        {view.phase === "ready" && <Suspense fallback={<Loading />}><Ready access={view.access} email={view.session.user.email} session={view.session} onSignOut={signOut} /></Suspense>}
         {view.phase === "restricted" && (
-          <Restricted access={view.access} session={view.session} onSubmitted={() => evaluate(view.session)} onSignOut={signOut} />
+          <Suspense fallback={<Loading />}><Restricted access={view.access} session={view.session} onSubmitted={() => evaluate(view.session)} onSignOut={signOut} /></Suspense>
         )}
         {view.phase === "error" && (
           <ErrorState

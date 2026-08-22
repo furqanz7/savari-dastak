@@ -89,8 +89,9 @@ enum DastakNotificationRoute {
 
     nonisolated static func route(from payload: [AnyHashable: Any]) -> (type: String, id: String)? {
         if let entityType = payload["entityType"] as? String,
-           let entityID = payload["entityId"] as? String,
-           ["merchantOrder", "parcel"].contains(entityType),
+           ["dastakV1Order", "merchantOrder", "parcel"].contains(entityType),
+           let entityID = (payload["entityId"] as? String) ??
+               (entityType == "dastakV1Order" ? payload["orderId"] as? String : nil),
            UUID(uuidString: entityID) != nil {
             return (entityType, entityID)
         }

@@ -242,6 +242,9 @@ private struct DastakCustomerDeliveryDestinationView: View {
     @ViewBuilder
     var body: some View {
         switch destination {
+        case let .dastakV1Order(orderID):
+            DastakV1MatchingView(model: model)
+                .task { _ = await model.focusV1Order(id: orderID) }
         case let .merchantOrder(orderID):
             if let order = model.order(withID: orderID) {
                 DastakOrderDetailView(

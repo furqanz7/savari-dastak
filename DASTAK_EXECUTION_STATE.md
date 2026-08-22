@@ -1,8 +1,8 @@
 - Authoritative spec path: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`
 - Authoritative branch: `codex/dastak-v1-launch`
-- Last checkpoint: Step 5 — launch failure recovery and financial completion at branch HEAD
-- Completed V1 capabilities: kernel, catalogue/submit, Wave 1/2, Fully Secured/payment, preparation/Ready, rider matching/assignment, verified pickup/final handoff, exact-SKU and Delivery Recovery, customer issues, reverse custody, original-method refunds, and settlement eligibility/history
+- Last checkpoint: Step 6 — launch hardening at branch HEAD
+- Completed V1 capabilities: launch order lifecycle through settlement/recovery, explicit RBAC, durable outbox notifications, invariant monitoring, minimum system health, customer deep links, Web release gates, and iOS release metadata/privacy manifest
 - Current launch target: Customer iOS + Customer Web with founder-operated Merchant Web, Delivery Web and Admin Web
 - Deferred surfaces: Android, Merchant iOS, Delivery iOS, Admin iOS
-- Next implementation batch: Step 6 — launch hardening, observability, outbox delivery, E2E and release gates
+- Next implementation batch: signed launch-candidate archive plus staging/production configuration rehearsal after explicit authorization
 - Deployment status: local-only; not pushed, merged or deployed

@@ -97,6 +97,8 @@ Deno.serve((request) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_execution_trace", {
         p_order_id: input.orderId,
       }),
+    getAdminSystemHealth: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_system_health", {}),
     authorizeExceptionalDeliveryHandoff: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

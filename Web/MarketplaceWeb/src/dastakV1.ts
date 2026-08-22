@@ -316,6 +316,37 @@ export type V1AdminExecutionTrace = {
   };
 };
 
+export type V1SystemHealth = {
+  healthy: boolean;
+  workerConfigured: boolean;
+  openCriticalIncidentCount: number;
+  incidents: Array<{
+    id: string;
+    invariantKey: string;
+    entityType: string;
+    entityId: string;
+    details: Record<string, unknown>;
+    firstDetectedAt: string;
+    lastDetectedAt: string;
+    occurrenceCount: number;
+  }>;
+  lastMonitorRun?: {
+    id: string;
+    findingCount: number;
+    startedAt: string;
+    completedAt: string;
+  };
+  outbox: {
+    pending: number;
+    deadLetter: number;
+    oldestPendingSeconds: number;
+    staleThresholdSeconds: number;
+  };
+  notifications: { pending: number; inFlight: number; deadLetter: number };
+  paymentReconciliationOpen: number;
+  observedAt: string;
+};
+
 export type V1OrderSubmission = {
   deliveryAddress: {
     label?: string;
@@ -834,6 +865,15 @@ export async function getV1AdminExecutionTrace(
       permissions: requiredRecord(failureAndFinance.permissions),
     } : undefined,
   };
+}
+
+export async function getV1AdminSystemHealth(
+  input: DastakV1Auth & { signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1SystemHealth> {
+  return parseV1SystemHealth(await invoke(input, "dastak-v1-orders", {
+    operation: "adminSystemHealth",
+  }, undefined, fetcher));
 }
 
 export async function authorizeV1ExceptionalDeliveryHandoff(
@@ -1364,6 +1404,52 @@ function parseAdminExecutionOrder(value: unknown): V1AdminExecutionOrder {
     paidAt: optionalTimestamp(source.paidAt),
     updatedAt: requiredTimestamp(source.updatedAt),
     deliveredAt: optionalTimestamp(source.deliveredAt),
+  };
+}
+
+export function parseV1SystemHealth(value: unknown): V1SystemHealth {
+  const source = requiredRecord(value);
+  const outbox = requiredRecord(source.outbox);
+  const notifications = requiredRecord(source.notifications);
+  const monitor = source.lastMonitorRun === null || source.lastMonitorRun === undefined
+    ? undefined
+    : requiredRecord(source.lastMonitorRun);
+  return {
+    healthy: requiredBoolean(source.healthy),
+    workerConfigured: requiredBoolean(source.workerConfigured),
+    openCriticalIncidentCount: requiredInteger(source.openCriticalIncidentCount, 0),
+    incidents: requiredArray(source.incidents).map((value) => {
+      const incident = requiredRecord(value);
+      return {
+        id: requiredUuid(incident.id),
+        invariantKey: requiredText(incident.invariantKey, 120),
+        entityType: requiredText(incident.entityType, 80),
+        entityId: requiredUuid(incident.entityId),
+        details: requiredRecord(incident.details),
+        firstDetectedAt: requiredTimestamp(incident.firstDetectedAt),
+        lastDetectedAt: requiredTimestamp(incident.lastDetectedAt),
+        occurrenceCount: requiredInteger(incident.occurrenceCount, 1),
+      };
+    }),
+    lastMonitorRun: monitor ? {
+      id: requiredUuid(monitor.id),
+      findingCount: requiredInteger(monitor.findingCount, 0),
+      startedAt: requiredTimestamp(monitor.startedAt),
+      completedAt: requiredTimestamp(monitor.completedAt),
+    } : undefined,
+    outbox: {
+      pending: requiredInteger(outbox.pending, 0),
+      deadLetter: requiredInteger(outbox.deadLetter, 0),
+      oldestPendingSeconds: requiredInteger(outbox.oldestPendingSeconds, 0),
+      staleThresholdSeconds: requiredInteger(outbox.staleThresholdSeconds, 1),
+    },
+    notifications: {
+      pending: requiredInteger(notifications.pending, 0),
+      inFlight: requiredInteger(notifications.inFlight, 0),
+      deadLetter: requiredInteger(notifications.deadLetter, 0),
+    },
+    paymentReconciliationOpen: requiredInteger(source.paymentReconciliationOpen, 0),
+    observedAt: requiredTimestamp(source.observedAt),
   };
 }
 

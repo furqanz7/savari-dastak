@@ -187,6 +187,7 @@ Deno.test("V1 merchant opportunities preserve scope, quantity, and optimistic st
 Deno.test("V1 execution trace is a permission-checked authenticated RPC surface", async () => {
   let listInput: unknown;
   let traceInput: unknown;
+  let healthInput: unknown;
   const deps = dependencies({
     listAdminExecutionOrders: (input) => {
       listInput = input;
@@ -196,16 +197,23 @@ Deno.test("V1 execution trace is a permission-checked authenticated RPC surface"
       traceInput = input;
       return Promise.resolve({ order: { id: orderId } });
     },
+    getAdminSystemHealth: (input) => {
+      healthInput = input;
+      return Promise.resolve({ healthy: true });
+    },
   });
   const list = await handleV1Orders(
     request({ operation: "adminExecutionOrders", limit: 25 }),
     deps,
   );
   const trace = await handleV1Orders(request({ operation: "adminExecutionTrace", orderId }), deps);
+  const health = await handleV1Orders(request({ operation: "adminSystemHealth" }), deps);
   assertEquals(list.status, 200);
   assertEquals(trace.status, 200);
+  assertEquals(health.status, 200);
   assertEquals(listInput, { accessToken: actor.accessToken, limit: 25 });
   assertEquals(traceInput, { accessToken: actor.accessToken, orderId });
+  assertEquals(healthInput, { accessToken: actor.accessToken });
 });
 
 Deno.test("V1 exceptional handoff preserves evidence, reason, version and authenticated boundary", async () => {
@@ -632,6 +640,7 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
       (() => Promise.resolve({ orders: [] })),
     getAdminExecutionTrace: overrides.getAdminExecutionTrace ??
       (() => Promise.resolve({})),
+    getAdminSystemHealth: overrides.getAdminSystemHealth ?? (() => Promise.resolve({})),
     authorizeExceptionalDeliveryHandoff: overrides.authorizeExceptionalDeliveryHandoff ??
       (() => Promise.resolve({})),
     reportExactSkuFailure: overrides.reportExactSkuFailure ?? (() => Promise.resolve({})),

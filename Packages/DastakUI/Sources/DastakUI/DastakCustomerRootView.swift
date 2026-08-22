@@ -159,8 +159,9 @@ public struct DastakCustomerRootView: View {
             )
             if let destination = consumePendingDestination() {
                 open(destination)
+            } else {
+                showingV1Order = model.activeV1Order != nil
             }
-            showingV1Order = model.activeV1Order != nil
         }
         .task {
             guard !isPreview else { return }
@@ -326,8 +327,18 @@ public struct DastakCustomerRootView: View {
 
     private func open(_ destination: DastakCustomerDestination) {
         selectedTab = .orders
-        ordersPath = [destination]
-        Task { await model.refreshOrdersAndParcels() }
+        switch destination {
+        case let .dastakV1Order(orderID):
+            ordersPath = []
+            Task {
+                if await model.focusV1Order(id: orderID) {
+                    showingV1Order = true
+                }
+            }
+        case .merchantOrder, .parcel:
+            ordersPath = [destination]
+            Task { await model.refreshOrdersAndParcels() }
+        }
     }
 
     private func consumePendingDestination() -> DastakCustomerDestination? {

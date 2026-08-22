@@ -94,3 +94,33 @@
   .v1-execution-layout > nav { max-height: 240px; }
   .v1-trace-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.v1-health-panel { padding-top: 24px; }
+.v1-health-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.v1-health-panel h2 { margin: 5px 0; font-size: 26px; }
+.v1-health-panel > header span, .v1-health-monitor p { color: var(--text-secondary); font-size: 13px; }
+.v1-health-state { display: flex; align-items: center; gap: 11px; margin-top: 20px; padding: 14px; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface-raised); }
+.v1-health-state > div { display: grid; gap: 2px; }
+.v1-health-state span { color: var(--text-secondary); font-size: 11px; }
+.v1-health-state.healthy { border-color: color-mix(in srgb, var(--success) 45%, var(--divider)); color: var(--success); }
+.v1-health-state.degraded { border-color: color-mix(in srgb, var(--destructive) 45%, var(--divider)); color: var(--destructive); }
+.v1-health-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.v1-health-grid article { min-width: 0; display: flex; gap: 10px; padding: 14px; border: 1px solid var(--divider); border-radius: 11px; background: var(--surface-raised); }
+.v1-health-grid article > svg { flex: 0 0 auto; color: var(--dastak-accent); }
+.v1-health-grid article > div { min-width: 0; display: grid; gap: 3px; }
+.v1-health-grid span, .v1-health-grid small { color: var(--text-secondary); font-size: 11px; }
+.v1-health-grid article.attention { border-color: color-mix(in srgb, var(--destructive) 42%, var(--divider)); }
+.v1-health-grid article.attention strong, .v1-health-grid article.attention > svg { color: var(--destructive); }
+.v1-health-monitor, .v1-health-incidents { padding: 18px 0; border-top: 1px solid var(--divider); }
+.v1-health-monitor h3, .v1-health-incidents h3 { margin: 0 0 7px; font-size: 16px; }
+.v1-health-monitor p { margin: 0; }
+.v1-health-incidents > header { display: flex; align-items: center; justify-content: space-between; }
+.v1-health-incidents > header span { min-width: 26px; padding: 4px 8px; border-radius: 999px; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, var(--surface)); font-size: 11px; font-weight: 800; text-align: center; }
+.v1-health-incidents article { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--divider); font-size: 12px; }
+.v1-health-incidents article > div { display: grid; gap: 3px; }
+.v1-health-incidents article span { color: var(--text-secondary); }
+
+@media (max-width: 720px) {
+  .v1-health-grid { grid-template-columns: 1fr; }
+  .v1-health-incidents article { display: grid; gap: 5px; }
+}

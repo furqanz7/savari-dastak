@@ -168,14 +168,17 @@ struct DastakOrderPlacementAttempt: Equatable {
 }
 
 enum DastakCustomerDestination: Hashable {
+    case dastakV1Order(UUID)
     case merchantOrder(UUID)
     case parcel(UUID)
 
     init?(notificationPayload: [AnyHashable: Any]) {
         if let entityType = notificationPayload["entityType"] as? String,
-           let rawEntityID = notificationPayload["entityId"] as? String,
+           let rawEntityID = (notificationPayload["entityId"] as? String) ??
+               (entityType == "dastakV1Order" ? notificationPayload["orderId"] as? String : nil),
            let entityID = UUID(uuidString: rawEntityID) {
             switch entityType {
+            case "dastakV1Order": self = .dastakV1Order(entityID)
             case "parcel": self = .parcel(entityID)
             case "merchantOrder": self = .merchantOrder(entityID)
             default: return nil

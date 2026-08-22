@@ -20,6 +20,7 @@
 		8BD8AB4722E60D5D1B9E394E /* DastakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F4AF8EF952C8FE288A2E29 /* DastakTests.swift */; };
 		8D69905E9C394A25AFD4CBC4 /* DastakMerchantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C142CB347F221ACF0D27CD /* DastakMerchantTests.swift */; };
 		9406EE4208344F5EE4BBDDEA /* DastakAdminTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B904E5C6BCAD41FF8BEE5FC /* DastakAdminTests.swift */; };
+		A60000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000002 /* PrivacyInfo.xcprivacy */; };
 		ABCDABCDABCDABCDABCDABCD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ABCDABCDABCDABCDABCDABCE /* Assets.xcassets */; };
 		D1355344301AA9830029B36C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ABCDABCDABCDABCDABCDABCE /* Assets.xcassets */; };
 		D1355345301AA9830029B36C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ABCDABCDABCDABCDABCDABCE /* Assets.xcassets */; };
@@ -76,6 +77,7 @@
 		8D878A197BA6A8D855996FD1 /* Dastak.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dastak.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E456A8A893F0026149CA7C8 /* DastakApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakApp.swift; sourceTree = "<group>"; };
 		96E4578B39A3763443EF5598 /* DastakAdmin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DastakAdmin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A60000000000000000000002 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		ABCDABCDABCDABCDABCDABCE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B1B1B1B1B1B1B1B1B1B1B1B1 /* Defaults.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Defaults.xcconfig; sourceTree = "<group>"; };
 		B1F4AF8EF952C8FE288A2E29 /* DastakTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakTests.swift; sourceTree = "<group>"; };
@@ -193,6 +195,7 @@
 			children = (
 				6D6D6D6D6D6D6D6D6D6D6D6D /* Info.plist */,
 				6E6E6E6E6E6E6E6E6E6E6E6E /* SignInWithApple.entitlements */,
+				A60000000000000000000002 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Supporting;
 			sourceTree = "<group>";
@@ -431,6 +434,9 @@
 					};
 					51D58DF103DED824F85DD03F = {
 						SystemCapabilities = {
+							com.apple.Push = {
+								enabled = 1;
+							};
 							com.apple.SignInWithApple = {
 								enabled = 1;
 							};
@@ -489,6 +495,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D1355344301AA9830029B36C /* Assets.xcassets in Resources */,
+				A60000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

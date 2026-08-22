@@ -13,12 +13,11 @@ Deno.serve((request) =>
   handleRegisterDeviceToken(request, {
     authenticateBearer: verifyBearerUser,
     upsertToken: async (accountId, token, platform) => {
-      const { error } = await serviceClient.from("dastak_device_tokens").upsert({
-        account_id: accountId,
-        device_token: token,
-        platform,
-        last_seen_at: new Date().toISOString(),
-      }, { onConflict: "device_token" });
+      const { error } = await serviceClient.rpc("dastak_v1_register_device_token", {
+        p_account_id: accountId,
+        p_device_token: token,
+        p_platform: platform,
+      });
       if (error) throw error;
     },
   })

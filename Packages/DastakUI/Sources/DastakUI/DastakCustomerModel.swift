@@ -437,6 +437,30 @@ final class DastakCustomerModel: ObservableObject {
         v1OrderErrorMessage = nil
     }
 
+    @discardableResult
+    func focusV1Order(id orderID: UUID) async -> Bool {
+        if let order = v1Orders.first(where: { $0.id == orderID }) {
+            focusV1Order(order)
+            return true
+        }
+        do {
+            let order = try await v1Client.order(
+                id: orderID,
+                idempotencyKey: makeKey()
+            )
+            activeV1Order = order
+            v1Orders = [order] + v1Orders.filter { $0.id != order.id }
+            v1OrderErrorMessage = nil
+            return true
+        } catch {
+            v1OrderErrorMessage = message(
+                for: error,
+                fallback: "This order could not be opened. Try again from Orders."
+            )
+            return false
+        }
+    }
+
     func submitV1Order() async -> Bool {
         guard !cart.entries.isEmpty, !isSubmittingV1Order else { return false }
         guard hasCompleteDeliveryAddress, let deliveryAddress else {

@@ -5,6 +5,7 @@ import {
   authorizeV1ExceptionalDeliveryHandoff,
   declareV1FulfilmentPackages,
   getV1AdminExecutionTrace,
+  getV1AdminSystemHealth,
   getV1Catalogue,
   getV1MerchantFulfilments,
   getV1MerchantOpportunities,
@@ -197,6 +198,51 @@ describe("Dastak V1 web contract", () => {
     expect(result.payment?.status).toBe("RESERVED");
     expect(result.preparation?.fulfilments).toEqual([]);
     expect(result.delivery?.mission?.status).toBe("ASSIGNED");
+  });
+
+  it("decodes the audited minimum system health projection", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const result = await getV1AdminSystemHealth(auth, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        healthy: false,
+        workerConfigured: true,
+        openCriticalIncidentCount: 1,
+        incidents: [{
+          id: categoryId,
+          invariantKey: "ORDER_MULTIPLE_ACTIVE_MISSIONS",
+          entityType: "ORDER",
+          entityId: orderId,
+          details: { missionCount: 2 },
+          firstDetectedAt: "2026-08-23T00:00:00Z",
+          lastDetectedAt: "2026-08-23T00:01:00Z",
+          occurrenceCount: 2,
+        }],
+        lastMonitorRun: {
+          id: subcategoryId,
+          findingCount: 1,
+          startedAt: "2026-08-23T00:01:00Z",
+          completedAt: "2026-08-23T00:01:01Z",
+        },
+        outbox: {
+          pending: 3,
+          deadLetter: 0,
+          oldestPendingSeconds: 12,
+          staleThresholdSeconds: 300,
+        },
+        notifications: { pending: 2, inFlight: 1, deadLetter: 0 },
+        paymentReconciliationOpen: 1,
+        observedAt: "2026-08-23T00:01:02Z",
+      });
+    });
+    expect(requestBody).toEqual({ operation: "adminSystemHealth" });
+    expect(result).toMatchObject({
+      healthy: false,
+      openCriticalIncidentCount: 1,
+      outbox: { pending: 3 },
+      notifications: { inFlight: 1 },
+    });
+    expect(result.incidents[0].invariantKey).toBe("ORDER_MULTIPLE_ACTIVE_MISSIONS");
   });
 
   it("sends a separate evidence-backed Operations override command", async () => {
