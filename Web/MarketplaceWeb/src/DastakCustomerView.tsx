@@ -73,6 +73,7 @@ export function DastakCustomerView(props: Props) {
         <DastakV1CustomerExperience
           accessToken={props.accessToken}
           accountId={props.accountId}
+          client={props.client}
           displayName={props.displayName}
           phoneNumber={props.phoneNumber}
           supabaseUrl={props.supabaseUrl}

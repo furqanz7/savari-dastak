@@ -106,6 +106,22 @@ export async function processParcelRefund(
   return { parcelId, refundState };
 }
 
+export async function processV1Refund(
+  input: AuthenticatedInput & { orderId: string; refundId: string; idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  const payload = record(await call(input, {
+    operation: "processRefund",
+    entityType: "dastak_v1_order",
+    orderId: input.orderId,
+    refundId: input.refundId,
+  }, input.idempotencyKey, fetcher));
+  const refundId = requiredUUID(payload?.refundId ?? input.refundId);
+  const refundState = payload?.refundState;
+  if (refundState !== "pending" && refundState !== "processed") invalid();
+  return { refundId, refundState };
+}
+
 export async function openRazorpayCheckout(
   session: CheckoutSession,
   customer: { name?: string; email?: string; phoneNumber?: string },

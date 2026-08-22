@@ -6,6 +6,7 @@ type RpcResult = { responseBody: unknown; responseStatus: number };
 export type PaymentActionInput = {
   accountId: string;
   orderId: string;
+  refundId: string | null;
   entityType: "merchant_order" | "parcel" | "dastak_v1_order";
   idempotencyKey: string;
   requestDigest: string;
@@ -51,8 +52,12 @@ export async function handleDastakPayments(
     ? "merchant_order"
     : undefined;
   const orderId = validUUID(entityType === "parcel" ? body?.parcelId : body?.orderId);
+  const refundId = validUUID(body?.refundId) ?? null;
   const idempotencyKey = requiredIdempotencyKey(request);
-  if (!body || !entityType || !orderId || !idempotencyKey) return validationError();
+  if (
+    !body || !entityType || !orderId || !idempotencyKey ||
+    (body.operation === "processRefund" && entityType === "dastak_v1_order" && !refundId)
+  ) return validationError();
 
   const attemptId = validUUID(body.paymentAttemptId);
   const failureCode = validFailureCode(body.failureCode);
@@ -62,10 +67,12 @@ export async function handleDastakPayments(
     orderId,
     ...(attemptId ? { attemptId } : {}),
     ...(failureCode ? { failureCode } : {}),
+    ...(refundId ? { refundId } : {}),
   };
   const input: PaymentActionInput = {
     accountId: actor.accountId,
     orderId,
+    refundId,
     entityType,
     idempotencyKey,
     requestDigest: await canonicalDigest(normalized),
@@ -76,7 +83,7 @@ export async function handleDastakPayments(
       const result = await dependencies.createCheckout(input);
       return json(result.responseBody, result.responseStatus);
     }
-    if (body.operation === "processRefund" && entityType !== "dastak_v1_order") {
+    if (body.operation === "processRefund") {
       const result = await dependencies.processRefund(input);
       return json(result.responseBody, result.responseStatus);
     }

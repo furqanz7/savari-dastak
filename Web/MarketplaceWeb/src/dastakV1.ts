@@ -95,6 +95,33 @@ export type V1Order = {
     deliveredAt?: string;
     recipientAccountRequired: false;
   };
+  support?: {
+    canReportIssue: boolean;
+    recovery: Array<{
+      id: string; type: string; status: string; orderLineId?: string;
+      openedAt: string; resolvedAt?: string; customerMessage: string;
+    }>;
+    issues: Array<{
+      id: string; orderLineId?: string; category: string; status: string;
+      description: string; reportedAt: string; resolution?: string;
+      resolvedAt?: string; version: number;
+      evidence: Array<{ id: string; objectPath: string; contentType: string; capturedAt: string }>;
+    }>;
+    returns: Array<{
+      id: string; source: string; status: string; physicalReturnRequired: boolean;
+      reason: string; requestedAt: string; completedAt?: string; packageCount: number;
+      mission?: {
+        id: string; status: string; assignedAt?: string; arrivedCustomerAt?: string;
+        pickupCompletedAt?: string; completedAt?: string;
+        pickupVerificationStatus: string; pickupCode?: string;
+      };
+    }>;
+    refunds: Array<{
+      id: string; orderLineId?: string; status: string; destination: string;
+      amountPaise: number; currency: "INR"; reason: string;
+      createdAt: string; completedAt?: string;
+    }>;
+  };
   price: {
     snapshotKind: string;
     subtotalPaise: number;
@@ -147,7 +174,8 @@ export type V1MerchantFulfilment = {
   orderId: string;
   displayOrderNumber: string;
   orderStatus: string;
-  status: "RESERVED_PREPAYMENT" | "PREPARING" | "READY" | "PICKED_UP";
+  status: "RESERVED_PREPAYMENT" | "PREPARING" | "READY" | "PICKED_UP" | "RELEASED";
+  fulfilmentType?: string;
   version: number;
   branch: { id: string; displayName: string };
   promisedPrepMinutes: number;
@@ -208,7 +236,34 @@ export type V1MerchantFulfilment = {
   canAddEvidence: boolean;
   canMarkReady: boolean;
   readyIsIrreversible: boolean;
+  canReportExactSkuFailure?: boolean;
+  recoveryCases?: Array<{
+    id: string; orderLineId: string; status: string; reason: string;
+    openedAt: string; resolvedAt?: string;
+  }>;
   lines: V1MerchantOpportunity["lines"];
+};
+
+export type V1RecoveryOpportunity = {
+  id: string;
+  recoveryCaseId: string;
+  orderId: string;
+  orderLineId: string;
+  status: string;
+  requestedQuantity: number;
+  startedAt: string;
+  expiresAt: string;
+  promisedPrepMinutes?: number;
+  version: number;
+  branch: { id: string; displayName: string };
+  sku: { id: string; name: string; variantName?: string; packSize: string; imageKey?: string };
+};
+
+export type V1MerchantOperations = {
+  fulfilments: V1MerchantFulfilment[];
+  recoveryOpportunities: V1RecoveryOpportunity[];
+  returnReceipts: Record<string, unknown>[];
+  settlements: Record<string, unknown>[];
 };
 
 export type V1AdminExecutionOrder = {
@@ -250,6 +305,14 @@ export type V1AdminExecutionTrace = {
     deliveryEvidence: Record<string, unknown>[];
     exceptionalHandoffs: Record<string, unknown>[];
     canAuthorizeExceptionalHandoff: boolean;
+  };
+  failureAndFinance?: {
+    recoveryCases: Record<string, unknown>[];
+    customerIssues: Record<string, unknown>[];
+    returns: Record<string, unknown>[];
+    refunds: Record<string, unknown>[];
+    settlements: Record<string, unknown>[];
+    permissions: Record<string, unknown>;
   };
 };
 
@@ -425,6 +488,134 @@ export async function getV1MerchantFulfilments(
   return source.fulfilments.map(parseMerchantFulfilment);
 }
 
+export async function getV1MerchantOperations(
+  input: DastakV1Auth & { limit?: number; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1MerchantOperations> {
+  const source = record(await invoke(input, "dastak-v1-orders", {
+    operation: "merchantFulfilments",
+    limit: input.limit ?? 50,
+  }, undefined, fetcher));
+  if (!source || !Array.isArray(source.fulfilments) ||
+    !Array.isArray(source.recoveryOpportunities) ||
+    !Array.isArray(source.returnReceipts) || !Array.isArray(source.settlements)) {
+    invalid("merchant operations");
+  }
+  return {
+    fulfilments: source.fulfilments.map(parseMerchantFulfilment),
+    recoveryOpportunities: source.recoveryOpportunities.map(parseRecoveryOpportunity),
+    returnReceipts: source.returnReceipts.map(requiredRecord),
+    settlements: source.settlements.map(requiredRecord),
+  };
+}
+
+export async function reportV1ExactSkuFailure(
+  input: DastakV1Auth & {
+    fulfilmentId: string; orderLineId: string; reason: string;
+    expectedVersion: number; idempotencyKey: string; signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "reportExactSkuFailure",
+    fulfilmentId: requiredUuid(input.fulfilmentId),
+    orderLineId: requiredUuid(input.orderLineId),
+    reason: requiredText(input.reason.trim(), 500),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function createV1ExactSkuRecoveryOffer(
+  input: DastakV1Auth & {
+    recoveryCaseId: string; branchId: string; expectedVersion: number;
+    idempotencyKey: string; signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "createExactSkuRecoveryOffer",
+    recoveryCaseId: requiredUuid(input.recoveryCaseId),
+    branchId: requiredUuid(input.branchId),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function failV1ExactSkuRecovery(
+  input: DastakV1Auth & {
+    recoveryCaseId: string; reason: string; expectedVersion: number;
+    idempotencyKey: string; signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "failExactSkuRecovery",
+    recoveryCaseId: requiredUuid(input.recoveryCaseId),
+    reason: requiredText(input.reason.trim(), 500),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function respondV1ExactSkuRecoveryOffer(
+  input: DastakV1Auth & {
+    recoveryOpportunityId: string; response: "ACCEPT" | "UNAVAILABLE";
+    promisedPrepMinutes?: number; expectedVersion: number;
+    idempotencyKey: string; signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "respondExactSkuRecoveryOffer",
+    recoveryOpportunityId: requiredUuid(input.recoveryOpportunityId),
+    response: input.response,
+    promisedPrepMinutes: input.response === "ACCEPT"
+      ? requiredInteger(input.promisedPrepMinutes, 1)
+      : null,
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function reportV1CustomerIssue(
+  input: DastakV1Auth & {
+    orderId: string; orderLineId?: string; category: string; description: string;
+    objectPath?: string; contentType?: string; idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "reportCustomerIssue",
+    orderId: requiredUuid(input.orderId),
+    orderLineId: input.orderLineId ? requiredUuid(input.orderLineId) : null,
+    category: requiredText(input.category, 80),
+    description: requiredText(input.description.trim(), 1000),
+    objectPath: input.objectPath ? requiredText(input.objectPath, 500) : null,
+    contentType: input.contentType ? requiredText(input.contentType, 100) : null,
+  }, input.idempotencyKey, fetcher));
+}
+
+const customerIssueEvidenceExtensions = new Map([
+  ["image/jpeg", "jpg"], ["image/png", "png"], ["image/heic", "heic"],
+]);
+
+export async function uploadV1CustomerIssueEvidence(
+  client: SupabaseClient,
+  accountId: string,
+  file: File,
+) {
+  const extension = customerIssueEvidenceExtensions.get(file.type);
+  if (!extension || file.size < 1 || file.size > 10 * 1024 * 1024) {
+    invalidInput("Choose a JPG, PNG or HEIC photo up to 10 MB.");
+  }
+  const objectPath = `customer-issue/${requiredUuid(accountId)}/${crypto.randomUUID()}.${extension}`;
+  const { error } = await client.storage.from("dastak-evidence").upload(objectPath, file, {
+    cacheControl: "3600", contentType: file.type, upsert: false,
+  });
+  if (error) throw new DastakV1RequestError(
+    "evidence_upload_failed", "The issue photo could not be uploaded. Try again.", 0,
+  );
+  return objectPath;
+}
+
 export async function declareV1FulfilmentPackages(
   input: DastakV1Auth & {
     fulfilmentId: string;
@@ -569,6 +760,10 @@ export async function getV1AdminExecutionTrace(
   const delivery = source.delivery === null || source.delivery === undefined
     ? undefined
     : record(source.delivery);
+  const failureAndFinance = source.failureAndFinance === null ||
+      source.failureAndFinance === undefined
+    ? undefined
+    : record(source.failureAndFinance);
   if (
     !Array.isArray(source.matchingAttempts) || !Array.isArray(source.provisionalHolds) ||
     !Array.isArray(source.plans) || !Array.isArray(source.capacity) ||
@@ -576,6 +771,8 @@ export async function getV1AdminExecutionTrace(
     (source.payment !== null && source.payment !== undefined && !payment) ||
     (source.preparation !== null && source.preparation !== undefined && !preparation) ||
     (source.delivery !== null && source.delivery !== undefined && !delivery) ||
+    (source.failureAndFinance !== null && source.failureAndFinance !== undefined &&
+      !failureAndFinance) ||
     (preparation && (
       !record(preparation.riderMatchEligibility) || !Array.isArray(preparation.fulfilments) ||
       !Array.isArray(preparation.packages) || !Array.isArray(preparation.evidence) ||
@@ -588,6 +785,13 @@ export async function getV1AdminExecutionTrace(
       !Array.isArray(delivery.problems) || !Array.isArray(delivery.deliveryEvidence) ||
       !Array.isArray(delivery.exceptionalHandoffs) ||
       typeof delivery.canAuthorizeExceptionalHandoff !== "boolean"
+    )) || (failureAndFinance && (
+      !Array.isArray(failureAndFinance.recoveryCases) ||
+      !Array.isArray(failureAndFinance.customerIssues) ||
+      !Array.isArray(failureAndFinance.returns) ||
+      !Array.isArray(failureAndFinance.refunds) ||
+      !Array.isArray(failureAndFinance.settlements) ||
+      !record(failureAndFinance.permissions)
     ))
   ) invalid("execution trace");
   return {
@@ -621,6 +825,14 @@ export async function getV1AdminExecutionTrace(
         delivery.canAuthorizeExceptionalHandoff,
       ),
     } : undefined,
+    failureAndFinance: failureAndFinance ? {
+      recoveryCases: (failureAndFinance.recoveryCases as unknown[]).map(requiredRecord),
+      customerIssues: (failureAndFinance.customerIssues as unknown[]).map(requiredRecord),
+      returns: (failureAndFinance.returns as unknown[]).map(requiredRecord),
+      refunds: (failureAndFinance.refunds as unknown[]).map(requiredRecord),
+      settlements: (failureAndFinance.settlements as unknown[]).map(requiredRecord),
+      permissions: requiredRecord(failureAndFinance.permissions),
+    } : undefined,
   };
 }
 
@@ -643,6 +855,88 @@ export async function authorizeV1ExceptionalDeliveryHandoff(
     deliveryEvidenceId: requiredUuid(input.deliveryEvidenceId),
     reason,
     expectedMissionVersion: requiredInteger(input.expectedMissionVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function decideV1CustomerIssue(
+  input: DastakV1Auth & {
+    issueId: string; decision: "REJECT" | "RESOLVE_NO_REFUND" |
+      "REFUND_WITHOUT_RETURN" | "PHYSICAL_RETURN";
+    refundAmountPaise?: number; faultSource?: string; returnPackageCount?: number;
+    reason: string; expectedVersion: number; idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "decideCustomerIssue",
+    issueId: requiredUuid(input.issueId), decision: input.decision,
+    refundAmountPaise: input.refundAmountPaise ?? null,
+    faultSource: input.faultSource ?? null,
+    returnPackageCount: input.returnPackageCount ?? null,
+    reason: requiredText(input.reason.trim(), 1000),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function assignV1ReturnRider(
+  input: DastakV1Auth & {
+    returnMissionId: string; riderId: string; expectedVersion: number;
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "assignReturnRider",
+    returnMissionId: requiredUuid(input.returnMissionId),
+    riderId: requiredUuid(input.riderId),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function manageV1DeliveryRecovery(
+  input: DastakV1Auth & {
+    recoveryCaseId: string; action: "RESUME_DELIVERY" | "RETURN_TO_ORIGIN";
+    faultSource: string; refundAmountPaise?: number;
+    correctedAddress?: Record<string, unknown>; reason: string;
+    expectedVersion: number; idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "manageDeliveryRecovery",
+    recoveryCaseId: requiredUuid(input.recoveryCaseId), action: input.action,
+    faultSource: requiredText(input.faultSource, 40),
+    refundAmountPaise: input.refundAmountPaise ?? null,
+    correctedAddress: input.correctedAddress ?? null,
+    reason: requiredText(input.reason.trim(), 500),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function finalizeV1SettlementCalculation(
+  input: DastakV1Auth & {
+    settlementEntryId: string; expectedVersion: number; idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "finalizeSettlementCalculation",
+    settlementEntryId: requiredUuid(input.settlementEntryId),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function settleV1Entry(
+  input: DastakV1Auth & {
+    settlementEntryId: string; settlementReference: string;
+    expectedVersion: number; idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "settleEntry", settlementEntryId: requiredUuid(input.settlementEntryId),
+    settlementReference: requiredText(input.settlementReference.trim(), 200),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
   }, input.idempotencyKey, fetcher));
 }
 
@@ -672,8 +966,14 @@ export function parseV1Order(value: unknown): V1Order {
   const delivery = source.delivery === null || source.delivery === undefined
     ? undefined
     : record(source.delivery);
+  const support = source.support === null || source.support === undefined
+    ? undefined
+    : record(source.support);
   if (source.delivery !== null && source.delivery !== undefined && !delivery) {
     invalid("delivery state");
+  }
+  if (source.support !== null && source.support !== undefined && !support) {
+    invalid("support state");
   }
   return {
     id: requiredUuid(source.id),
@@ -689,6 +989,7 @@ export function parseV1Order(value: unknown): V1Order {
       ? undefined
       : parseOrderPayment(source.payment),
     delivery: delivery ? parseOrderDelivery(delivery) : undefined,
+    support: support ? parseOrderSupport(support) : undefined,
     price: {
       snapshotKind: requiredText(price.snapshotKind, 40),
       subtotalPaise: requiredInteger(price.subtotalPaise, 0),
@@ -707,6 +1008,80 @@ export function parseV1Order(value: unknown): V1Order {
     deliveredAt: optionalTimestamp(source.deliveredAt),
     createdAt: requiredTimestamp(source.createdAt),
     updatedAt: requiredTimestamp(source.updatedAt),
+  };
+}
+
+function parseOrderSupport(source: Record<string, unknown>): NonNullable<V1Order["support"]> {
+  if (!Array.isArray(source.recovery) || !Array.isArray(source.issues) ||
+    !Array.isArray(source.returns) || !Array.isArray(source.refunds)) invalid("support state");
+  return {
+    canReportIssue: requiredBoolean(source.canReportIssue),
+    recovery: source.recovery.map((item) => {
+      const value = requiredRecord(item);
+      return {
+        id: requiredUuid(value.id), type: requiredText(value.type, 40),
+        status: requiredText(value.status, 60),
+        orderLineId: value.orderLineId ? requiredUuid(value.orderLineId) : undefined,
+        openedAt: requiredTimestamp(value.openedAt),
+        resolvedAt: optionalTimestamp(value.resolvedAt),
+        customerMessage: requiredText(value.customerMessage, 300),
+      };
+    }),
+    issues: source.issues.map((item) => {
+      const value = requiredRecord(item);
+      const evidence = requiredArray(value.evidence);
+      return {
+        id: requiredUuid(value.id),
+        orderLineId: value.orderLineId ? requiredUuid(value.orderLineId) : undefined,
+        category: requiredText(value.category, 80), status: requiredText(value.status, 40),
+        description: requiredText(value.description, 1000),
+        reportedAt: requiredTimestamp(value.reportedAt),
+        resolution: optionalText(value.resolution, 1000),
+        resolvedAt: optionalTimestamp(value.resolvedAt),
+        version: requiredInteger(value.version, 1),
+        evidence: evidence.map((entry) => {
+          const photo = requiredRecord(entry);
+          return {
+            id: requiredUuid(photo.id), objectPath: requiredText(photo.objectPath, 500),
+            contentType: requiredText(photo.contentType, 100),
+            capturedAt: requiredTimestamp(photo.capturedAt),
+          };
+        }),
+      };
+    }),
+    returns: source.returns.map((item) => {
+      const value = requiredRecord(item);
+      const mission = value.mission === null || value.mission === undefined
+        ? undefined : requiredRecord(value.mission);
+      return {
+        id: requiredUuid(value.id), source: requiredText(value.source, 40),
+        status: requiredText(value.status, 60),
+        physicalReturnRequired: requiredBoolean(value.physicalReturnRequired),
+        reason: requiredText(value.reason, 1000), requestedAt: requiredTimestamp(value.requestedAt),
+        completedAt: optionalTimestamp(value.completedAt),
+        packageCount: requiredInteger(value.packageCount, 0),
+        mission: mission ? {
+          id: requiredUuid(mission.id), status: requiredText(mission.status, 60),
+          assignedAt: optionalTimestamp(mission.assignedAt),
+          arrivedCustomerAt: optionalTimestamp(mission.arrivedCustomerAt),
+          pickupCompletedAt: optionalTimestamp(mission.pickupCompletedAt),
+          completedAt: optionalTimestamp(mission.completedAt),
+          pickupVerificationStatus: requiredText(mission.pickupVerificationStatus, 40),
+          pickupCode: optionalText(mission.pickupCode, 6),
+        } : undefined,
+      };
+    }),
+    refunds: source.refunds.map((item) => {
+      const value = requiredRecord(item);
+      return {
+        id: requiredUuid(value.id),
+        orderLineId: value.orderLineId ? requiredUuid(value.orderLineId) : undefined,
+        status: requiredText(value.status, 40), destination: requiredText(value.destination, 80),
+        amountPaise: requiredInteger(value.amountPaise, 1), currency: currency(value.currency),
+        reason: requiredText(value.reason, 500), createdAt: requiredTimestamp(value.createdAt),
+        completedAt: optionalTimestamp(value.completedAt),
+      };
+    }),
   };
 }
 
@@ -824,7 +1199,7 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
     (source.delivery !== null && source.delivery !== undefined && !delivery)
   ) invalid("merchant fulfilment");
   const status = requiredText(source.status, 40);
-  if (!["RESERVED_PREPAYMENT", "PREPARING", "READY", "PICKED_UP"].includes(status)) {
+  if (!["RESERVED_PREPAYMENT", "PREPARING", "READY", "PICKED_UP", "RELEASED"].includes(status)) {
     invalid("merchant fulfilment status");
   }
   return {
@@ -833,6 +1208,7 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
     displayOrderNumber: requiredText(source.displayOrderNumber, 80),
     orderStatus: requiredText(source.orderStatus, 60),
     status: status as V1MerchantFulfilment["status"],
+    fulfilmentType: optionalText(source.fulfilmentType, 40),
     version: requiredInteger(source.version, 1),
     branch: {
       id: requiredUuid(branch.id),
@@ -899,6 +1275,19 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
     canAddEvidence: requiredBoolean(source.canAddEvidence),
     canMarkReady: requiredBoolean(source.canMarkReady),
     readyIsIrreversible: requiredBoolean(source.readyIsIrreversible),
+    canReportExactSkuFailure: source.canReportExactSkuFailure === undefined
+      ? undefined : requiredBoolean(source.canReportExactSkuFailure),
+    recoveryCases: source.recoveryCases === undefined
+      ? undefined
+      : requiredArray(source.recoveryCases).map((item) => {
+        const recovery = requiredRecord(item);
+        return {
+          id: requiredUuid(recovery.id), orderLineId: requiredUuid(recovery.orderLineId),
+          status: requiredText(recovery.status, 60), reason: requiredText(recovery.reason, 500),
+          openedAt: requiredTimestamp(recovery.openedAt),
+          resolvedAt: optionalTimestamp(recovery.resolvedAt),
+        };
+      }),
     lines: source.lines.map((item) => {
       const line = requiredRecord(item);
       return {
@@ -910,6 +1299,27 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
         quantity: requiredInteger(line.quantity, 1),
       };
     }),
+  };
+}
+
+function parseRecoveryOpportunity(value: unknown): V1RecoveryOpportunity {
+  const source = requiredRecord(value);
+  const branch = requiredRecord(source.branch);
+  const sku = requiredRecord(source.sku);
+  return {
+    id: requiredUuid(source.id), recoveryCaseId: requiredUuid(source.recoveryCaseId),
+    orderId: requiredUuid(source.orderId), orderLineId: requiredUuid(source.orderLineId),
+    status: requiredText(source.status, 40),
+    requestedQuantity: requiredInteger(source.requestedQuantity, 1),
+    startedAt: requiredTimestamp(source.startedAt), expiresAt: requiredTimestamp(source.expiresAt),
+    promisedPrepMinutes: optionalInteger(source.promisedPrepMinutes, 1),
+    version: requiredInteger(source.version, 1),
+    branch: { id: requiredUuid(branch.id), displayName: requiredText(branch.displayName, 100) },
+    sku: {
+      id: requiredUuid(sku.id), name: requiredText(sku.name, 160),
+      variantName: optionalText(sku.variantName, 160), packSize: requiredText(sku.packSize, 80),
+      imageKey: optionalText(sku.imageKey, 500),
+    },
   };
 }
 
@@ -1110,6 +1520,9 @@ function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 function requiredRecord(value: unknown) { return record(value) ?? invalid("object"); }
+function requiredArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : invalid("array");
+}
 function requiredText(value: unknown, maximum: number) { return optionalText(value, maximum) ?? invalid("text"); }
 function optionalText(value: unknown, maximum: number) {
   return value === null || value === undefined ? undefined

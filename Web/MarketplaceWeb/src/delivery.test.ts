@@ -3,6 +3,7 @@ import {
   acceptV1DeliveryOffer,
   acceptDeliveryOffer,
   advanceV1DeliveryMission,
+  advanceV1ReturnMission,
   advanceDeliveryJob,
   declineDeliveryOffer,
   deliveryPartnerVerificationState,
@@ -440,5 +441,55 @@ describe("delivery partner client", () => {
       { operation: "v1AddDeliveryEvidence", missionId: orderId, objectPath },
       { operation: "v1VerifyDelivery", missionId: orderId, verificationCode: "654321" },
     ]);
+  });
+
+  it("parses and advances founder-operated reverse custody without rider spoofing", async () => {
+    const evidenceId = "88888888-8888-4888-8888-888888888888";
+    const returnMission = {
+      id: orderId, returnId: assignmentId, orderId: applicationId,
+      status: "RETURNING_TO_MERCHANTS", transportType: "MOTORBIKE",
+      assignedAt: "2026-08-22T10:00:00Z", arrivedCustomerAt: "2026-08-22T10:05:00Z",
+      pickupCompletedAt: "2026-08-22T10:10:00Z", completedAt: null, version: 4,
+      customerDestination: {
+        address: { line1: "10 Customer Road", latitude: 12.69, longitude: 78.63 },
+        recipient: { name: "Customer", phoneNumber: "+919900000000" },
+      },
+      packageCount: 1,
+      pickupVerification: { status: "CONSUMED", failedAttempts: 1 },
+      evidence: [{
+        id: evidenceId, objectPath: `return-pickup/${accountId}/${evidenceId}.jpg`,
+        contentType: "image/jpeg", capturedAt: "2026-08-22T10:08:00Z",
+      }],
+      stops: [{
+        id: storeId, sequence: 1, status: "PENDING", packageCount: 1,
+        arrivedAt: null, completedAt: null, verificationStatus: "ACTIVE", failedAttempts: 0,
+        branch: {
+          id: productId, displayName: "Operational Return Branch",
+          address: { line1: "1 Merchant Road" },
+        },
+      }],
+      canArriveCustomer: false, canCaptureEvidence: false,
+      canVerifyPickup: false, canCompleteReturnStops: true,
+    };
+    const parsed = await getV1DeliveryDispatch(auth, () => Promise.resolve(Response.json({
+      offer: null, currentMission: null, returnMission,
+    })));
+    expect(parsed.returnMission?.pickupVerification.status).toBe("CONSUMED");
+    expect(parsed.returnMission?.stops[0].packageCount).toBe(1);
+
+    let body: Record<string, unknown> | undefined;
+    await advanceV1ReturnMission({
+      ...auth, returnMissionId: orderId, returnStopId: storeId,
+      operation: "v1VerifyReturnReceipt", verificationCode: "654321",
+      idempotencyKey: "return-receipt",
+    }, async (_url, init) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({ offer: null, currentMission: null, returnMission });
+    });
+    expect(body).toEqual({
+      operation: "v1VerifyReturnReceipt", returnMissionId: orderId,
+      returnStopId: storeId, verificationCode: "654321",
+    });
+    expect(body).not.toHaveProperty("riderId");
   });
 });

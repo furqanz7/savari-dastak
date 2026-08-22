@@ -140,6 +140,93 @@ final class DastakV1CustomerClientTests: XCTestCase {
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("merchant"))
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("branch"))
     }
+
+    func testIssueReportCarriesOptionalImmutableEvidenceWithoutFinancialInput() async throws {
+        let functions = RecordingV1FunctionClient()
+        let client = SupabaseDastakV1CustomerClient(functions: functions)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "issue-1"))
+        let evidencePath = "customer-issue/\(orderID.uuidString.lowercased())/photo.jpg"
+
+        let result = try await client.reportIssue(
+            orderID: orderID,
+            orderLineID: lineID,
+            category: .damaged,
+            description: "  The package seal was damaged.  ",
+            objectPath: evidencePath,
+            contentType: "image/jpeg",
+            idempotencyKey: key
+        )
+
+        XCTAssertEqual(result.issueID, subcategoryID)
+        let recorded = await functions.lastCall()
+        let call = try XCTUnwrap(recorded)
+        let request = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: call.body) as? [String: Any]
+        )
+        XCTAssertEqual(request["operation"] as? String, "reportCustomerIssue")
+        XCTAssertEqual(request["description"] as? String, "The package seal was damaged.")
+        XCTAssertEqual(request["objectPath"] as? String, evidencePath)
+        XCTAssertEqual(request["contentType"] as? String, "image/jpeg")
+        XCTAssertNil(request["refundAmountPaise"])
+        XCTAssertNil(request["merchantId"])
+    }
+
+    func testOrderDecodesRecoveryReturnAndOriginalMethodRefundWithoutMerchantIdentity() throws {
+        var source = try XCTUnwrap(JSONSerialization.jsonObject(with: orderJSON) as? [String: Any])
+        source["support"] = [
+            "canReportIssue": true,
+            "recovery": [[
+                "id": categoryID.uuidString,
+                "type": "EXACT_SKU",
+                "status": "RECOVERED",
+                "orderLineId": lineID.uuidString,
+                "openedAt": "2026-08-22T10:03:00Z",
+                "resolvedAt": "2026-08-22T10:04:00Z",
+                "customerMessage": "We secured the exact item.",
+            ]],
+            "issues": [],
+            "returns": [[
+                "id": subcategoryID.uuidString,
+                "source": "CUSTOMER_ISSUE",
+                "status": "CUSTOMER_PICKUP",
+                "physicalReturnRequired": true,
+                "reason": "Approved return",
+                "requestedAt": "2026-08-22T10:05:00Z",
+                "completedAt": NSNull(),
+                "packageCount": 1,
+                "mission": [
+                    "id": skuID.uuidString,
+                    "status": "ASSIGNED",
+                    "assignedAt": "2026-08-22T10:06:00Z",
+                    "arrivedCustomerAt": NSNull(),
+                    "pickupCompletedAt": NSNull(),
+                    "completedAt": NSNull(),
+                    "pickupVerificationStatus": "ACTIVE",
+                    "pickupCode": "123456",
+                ],
+            ]],
+            "refunds": [[
+                "id": categoryID.uuidString,
+                "orderLineId": lineID.uuidString,
+                "status": "PROCESSING",
+                "destination": "ORIGINAL_PAYMENT_METHOD",
+                "amountPaise": 900,
+                "currency": "INR",
+                "reason": "Approved return",
+                "createdAt": "2026-08-22T10:07:00Z",
+                "completedAt": NSNull(),
+            ]],
+        ]
+
+        let data = try JSONSerialization.data(withJSONObject: source)
+        let order = try JSONDecoder().decode(DastakV1OrderSnapshot.self, from: data)
+
+        XCTAssertEqual(order.support?.recovery.first?.customerMessage, "We secured the exact item.")
+        XCTAssertEqual(order.support?.returns.first?.mission?.pickupCode, "123456")
+        XCTAssertEqual(order.support?.refunds.first?.destination, "ORIGINAL_PAYMENT_METHOD")
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("merchantId"))
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("branchId"))
+    }
 }
 
 private actor RecordingV1FunctionClient: FunctionClient {
@@ -158,7 +245,12 @@ private actor RecordingV1FunctionClient: FunctionClient {
         let body = try JSONEncoder().encode(request)
         call = Call(name: name, body: body)
         let operation = try JSONDecoder().decode(Operation.self, from: body).operation
-        let response = operation == "customerCatalogue" ? catalogueJSON : orderJSON
+        let response: Data
+        switch operation {
+        case "customerCatalogue": response = catalogueJSON
+        case "reportCustomerIssue": response = issueResultJSON
+        default: response = orderJSON
+        }
         return try JSONDecoder().decode(Response.self, from: response)
     }
 
@@ -197,5 +289,13 @@ private let orderJSON = """
   "lines":[{"id":"\(lineID)","lineType":"RETAIL_SKU","skuId":"\(skuID)","name":"Whole Milk","variant":"Full cream","packSize":"1 litre","quantity":2,"unitPricePaise":6900,"lineTotalPaise":13800,"status":"ORDERED"}],
   "submittedAt":"2026-08-22T10:00:00Z","fullySecuredAt":null,"paymentExpiresAt":null,"paidAt":null,"deliveredAt":null,
   "createdAt":"2026-08-22T10:00:00Z","updatedAt":"2026-08-22T10:00:00Z"
+}
+""".data(using: .utf8)!
+
+private let issueResultJSON = """
+{
+  "issueId":"\(subcategoryID)","orderId":"\(orderID)","orderLineId":"\(lineID)",
+  "category":"DAMAGED","status":"OPEN","reportedAt":"2026-08-22T10:20:00Z",
+  "evidenceId":"\(categoryID)"
 }
 """.data(using: .utf8)!

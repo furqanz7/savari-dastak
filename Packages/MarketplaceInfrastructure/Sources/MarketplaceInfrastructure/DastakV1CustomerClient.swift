@@ -248,6 +248,127 @@ public struct DastakV1DeliveryProgress: Codable, Equatable, Sendable {
     public let recipientAccountRequired: Bool
 }
 
+public enum DastakV1CustomerIssueCategory: String, Codable, CaseIterable, Equatable, Sendable {
+    case wrongSKU = "WRONG_SKU"
+    case wrongQuantity = "WRONG_QUANTITY"
+    case damaged = "DAMAGED"
+    case defective = "DEFECTIVE"
+    case expired = "EXPIRED"
+    case tamperedOrBrokenSeal = "TAMPERED_OR_BROKEN_SEAL"
+    case incorrectPackage = "INCORRECT_PACKAGE"
+    case suspectedMerchantMisfulfilment = "SUSPECTED_MERCHANT_MISFULFILMENT"
+    case deliveryProblem = "DELIVERY_PROBLEM"
+    case other = "OTHER"
+}
+
+public struct DastakV1RecoveryProgress: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let type: String
+    public let status: String
+    public let orderLineID: UUID?
+    public let openedAt: String
+    public let resolvedAt: String?
+    public let customerMessage: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, type, status, openedAt, resolvedAt, customerMessage
+        case orderLineID = "orderLineId"
+    }
+}
+
+public struct DastakV1CustomerIssueEvidence: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let objectPath: String
+    public let contentType: String
+    public let capturedAt: String
+}
+
+public struct DastakV1CustomerIssue: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let orderLineID: UUID?
+    public let category: DastakV1CustomerIssueCategory
+    public let status: String
+    public let description: String
+    public let reportedAt: String
+    public let resolution: String?
+    public let resolvedAt: String?
+    public let version: Int
+    public let evidence: [DastakV1CustomerIssueEvidence]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, category, status, description, reportedAt, resolution, resolvedAt, version, evidence
+        case orderLineID = "orderLineId"
+    }
+}
+
+public struct DastakV1ReturnMissionProgress: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let status: String
+    public let assignedAt: String?
+    public let arrivedCustomerAt: String?
+    public let pickupCompletedAt: String?
+    public let completedAt: String?
+    public let pickupVerificationStatus: String
+    public let pickupCode: String?
+}
+
+public struct DastakV1ReturnProgress: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let source: String
+    public let status: String
+    public let physicalReturnRequired: Bool
+    public let reason: String
+    public let requestedAt: String
+    public let completedAt: String?
+    public let packageCount: Int
+    public let mission: DastakV1ReturnMissionProgress?
+}
+
+public struct DastakV1RefundProgress: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let orderLineID: UUID?
+    public let status: String
+    public let destination: String
+    public let amountPaise: Int
+    public let currency: String
+    public let reason: String
+    public let createdAt: String
+    public let completedAt: String?
+
+    public var amount: Money { Money(paise: amountPaise) }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, status, destination, amountPaise, currency, reason, createdAt, completedAt
+        case orderLineID = "orderLineId"
+    }
+}
+
+public struct DastakV1OrderSupport: Codable, Equatable, Sendable {
+    public let canReportIssue: Bool
+    public let recovery: [DastakV1RecoveryProgress]
+    public let issues: [DastakV1CustomerIssue]
+    public let returns: [DastakV1ReturnProgress]
+    public let refunds: [DastakV1RefundProgress]
+}
+
+public struct DastakV1CustomerIssueCommandResult: Codable, Equatable, Sendable {
+    public let issueID: UUID
+    public let orderID: UUID
+    public let orderLineID: UUID?
+    public let category: DastakV1CustomerIssueCategory
+    public let status: String
+    public let reportedAt: String
+    public let evidenceID: UUID?
+
+    private enum CodingKeys: String, CodingKey {
+        case status, category, reportedAt
+        case issueID = "issueId"
+        case orderID = "orderId"
+        case orderLineID = "orderLineId"
+        case evidenceID = "evidenceId"
+    }
+}
+
 public struct DastakV1OrderPrice: Codable, Equatable, Sendable {
     public let snapshotKind: String
     public let subtotalPaise: Int
@@ -297,6 +418,7 @@ public struct DastakV1OrderSnapshot: Codable, Equatable, Identifiable, Sendable 
     public let fulfilmentProgress: DastakV1FulfilmentProgress?
     public let payment: DastakV1PaymentReservation?
     public let delivery: DastakV1DeliveryProgress?
+    public let support: DastakV1OrderSupport?
     public let price: DastakV1OrderPrice
     public let lines: [DastakV1OrderLine]
     public let submittedAt: String?
@@ -359,6 +481,16 @@ public protocol DastakV1CustomerClient: Sendable {
         expectedVersion: Int,
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakV1OrderSnapshot
+
+    func reportIssue(
+        orderID: UUID,
+        orderLineID: UUID?,
+        category: DastakV1CustomerIssueCategory,
+        description: String,
+        objectPath: String?,
+        contentType: String?,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1CustomerIssueCommandResult
 }
 
 public struct SupabaseDastakV1CustomerClient: DastakV1CustomerClient {
@@ -378,6 +510,16 @@ public struct SupabaseDastakV1CustomerClient: DastakV1CustomerClient {
         let orderId: UUID?
         let limit: Int?
         let cursor: DastakV1OrderCursor?
+    }
+
+    private struct IssueRequest: Encodable, Sendable {
+        let operation = "reportCustomerIssue"
+        let orderId: UUID
+        let orderLineId: UUID?
+        let category: DastakV1CustomerIssueCategory
+        let description: String
+        let objectPath: String?
+        let contentType: String?
     }
 
     private let functions: any FunctionClient
@@ -477,6 +619,32 @@ public struct SupabaseDastakV1CustomerClient: DastakV1CustomerClient {
                 cursor: nil
             ),
             key: idempotencyKey
+        )
+    }
+
+    public func reportIssue(
+        orderID: UUID,
+        orderLineID: UUID?,
+        category: DastakV1CustomerIssueCategory,
+        description: String,
+        objectPath: String? = nil,
+        contentType: String? = nil,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1CustomerIssueCommandResult {
+        let normalized = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition((3...1_000).contains(normalized.count))
+        precondition((objectPath == nil) == (contentType == nil))
+        return try await functions.invoke(
+            "dastak-v1-orders",
+            request: IssueRequest(
+                orderId: orderID,
+                orderLineId: orderLineID,
+                category: category,
+                description: normalized,
+                objectPath: objectPath,
+                contentType: contentType
+            ),
+            idempotencyKey: idempotencyKey
         )
     }
 

@@ -159,10 +159,53 @@ export type V1CompletedMission = {
   packageCount: number;
   deliveredAt: string;
 };
+export type V1ReturnStop = {
+  id: string;
+  sequence: number;
+  status: "PENDING" | "ARRIVED" | "COMPLETED";
+  packageCount: number;
+  arrivedAt: string | null;
+  completedAt: string | null;
+  verificationStatus: "INACTIVE" | "ACTIVE" | "CONSUMED" | "BLOCKED";
+  failedAttempts: number;
+  branch: { id: string; displayName: string; address: string };
+};
+export type V1ReturnMission = {
+  id: string;
+  returnId: string;
+  orderId: string;
+  status: "ASSIGNED" | "AT_CUSTOMER" | "RETURNING_TO_MERCHANTS";
+  transportType: V1TransportType;
+  assignedAt: string;
+  arrivedCustomerAt: string | null;
+  pickupCompletedAt: string | null;
+  completedAt: string | null;
+  version: number;
+  customerDestination: {
+    address: string;
+    location: OrderLocation | null;
+    recipientName: string | null;
+    recipientPhoneNumber: string | null;
+  };
+  packageCount: number;
+  pickupVerification: {
+    status: "INACTIVE" | "ACTIVE" | "CONSUMED" | "BLOCKED";
+    failedAttempts: number;
+  };
+  evidence: Array<{
+    id: string; objectPath: string; contentType: string; capturedAt: string;
+  }>;
+  stops: V1ReturnStop[];
+  canArriveCustomer: boolean;
+  canCaptureEvidence: boolean;
+  canVerifyPickup: boolean;
+  canCompleteReturnStops: boolean;
+};
 export type V1DeliveryDispatchSnapshot = {
   offer: V1RiderOffer | null;
   currentMission: V1DeliveryMission | null;
   completedMission: V1CompletedMission | null;
+  returnMission: V1ReturnMission | null;
 };
 
 type AuthenticatedInput = { supabaseUrl: string; publishableKey: string; accessToken: string };
@@ -291,6 +334,27 @@ export async function uploadV1DeliveryEvidence(
       0,
     );
   }
+  return objectPath;
+}
+
+export async function uploadV1ReturnEvidence(
+  client: SupabaseClient,
+  accountId: string,
+  file: File,
+) {
+  const extension = deliveryEvidenceExtensions.get(file.type);
+  if (!uuidPattern.test(accountId) || !extension || file.size < 1 || file.size > maximumEvidenceBytes) {
+    throw validationError("Capture a JPG, PNG or HEIC return-package photo up to 10 MB.");
+  }
+  const objectPath = `return-pickup/${accountId.toLowerCase()}/${crypto.randomUUID()}.${extension}`;
+  const { error } = await client.storage.from("dastak-evidence").upload(objectPath, file, {
+    cacheControl: "3600",
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) throw new DeliveryRequestError(
+    "evidence_upload_failed", "The return-package photo could not be uploaded.", 0,
+  );
   return objectPath;
 }
 
@@ -458,6 +522,44 @@ export async function advanceV1DeliveryMission(
   }, fetcher);
 }
 
+export type V1ReturnMissionOperation =
+  | "v1ReturnArriveAtCustomer"
+  | "v1AddReturnEvidence"
+  | "v1VerifyReturnPickup"
+  | "v1ArriveAtReturnStop"
+  | "v1VerifyReturnReceipt";
+
+export async function advanceV1ReturnMission(
+  input: AuthenticatedInput & {
+    returnMissionId: string;
+    operation: V1ReturnMissionOperation;
+    returnStopId?: string;
+    objectPath?: string;
+    verificationCode?: string;
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  const needsStop = input.operation === "v1ArriveAtReturnStop" ||
+    input.operation === "v1VerifyReturnReceipt";
+  const needsCode = input.operation === "v1VerifyReturnPickup" ||
+    input.operation === "v1VerifyReturnReceipt";
+  if (!uuidPattern.test(input.returnMissionId) ||
+    (needsStop && !uuidPattern.test(input.returnStopId ?? "")) ||
+    (needsCode && !/^\d{6}$/.test(input.verificationCode ?? "")) ||
+    (input.operation === "v1AddReturnEvidence" &&
+      !input.objectPath?.startsWith("return-pickup/"))) {
+    throw validationError("Complete the required return handoff details.");
+  }
+  return parseV1Dispatch(await call("courier-dispatch", input, {
+    operation: input.operation,
+    returnMissionId: input.returnMissionId,
+    ...(input.returnStopId ? { returnStopId: input.returnStopId } : {}),
+    ...(input.objectPath ? { objectPath: input.objectPath } : {}),
+    ...(input.verificationCode ? { verificationCode: input.verificationCode } : {}),
+  }, input.idempotencyKey, fetcher));
+}
+
 export async function acceptDeliveryOffer(
   input: AuthenticatedInput & { assignmentId: string; idempotencyKey: string },
   fetcher: Fetcher = fetch,
@@ -614,7 +716,82 @@ function parseV1Dispatch(value: unknown): V1DeliveryDispatchSnapshot {
     completedMission: source.completedMission === null || source.completedMission === undefined
       ? null
       : v1CompletedMission(source.completedMission),
+    returnMission: source.returnMission === null || source.returnMission === undefined
+      ? null
+      : v1ReturnMission(source.returnMission),
   };
+}
+
+function v1ReturnMission(value: unknown): V1ReturnMission {
+  const source = record(value);
+  const statuses = ["ASSIGNED", "AT_CUSTOMER", "RETURNING_TO_MERCHANTS"] as const;
+  const destination = record(source?.customerDestination);
+  const address = record(destination?.address);
+  const recipient = destination?.recipient === null ? undefined : record(destination?.recipient);
+  const verification = record(source?.pickupVerification);
+  if (!source || !statuses.includes(source.status as typeof statuses[number]) ||
+    !destination || !address || !verification || !Array.isArray(source.evidence) ||
+    !Array.isArray(source.stops)) invalid();
+  return {
+    id: requiredUUID(source.id), returnId: requiredUUID(source.returnId),
+    orderId: requiredUUID(source.orderId),
+    status: source.status as V1ReturnMission["status"],
+    transportType: requiredV1Transport(source.transportType),
+    assignedAt: timestamp(source.assignedAt),
+    arrivedCustomerAt: nullableTimestamp(source.arrivedCustomerAt),
+    pickupCompletedAt: nullableTimestamp(source.pickupCompletedAt),
+    completedAt: nullableTimestamp(source.completedAt), version: positiveInteger(source.version),
+    customerDestination: {
+      address: addressLabel(address),
+      location: typeof address.latitude === "number" && typeof address.longitude === "number"
+        ? location(address) : null,
+      recipientName: nullableText(recipient?.name, 160),
+      recipientPhoneNumber: nullableText(recipient?.phoneNumber, 40),
+    },
+    packageCount: positiveInteger(source.packageCount),
+    pickupVerification: {
+      status: requiredReturnVerificationStatus(verification.status),
+      failedAttempts: nonNegativeInteger(verification.failedAttempts),
+    },
+    evidence: source.evidence.map((item) => {
+      const evidence = record(item);
+      if (!evidence) invalid();
+      return {
+        id: requiredUUID(evidence.id), objectPath: requiredText(evidence.objectPath, 500),
+        contentType: requiredText(evidence.contentType, 100), capturedAt: timestamp(evidence.capturedAt),
+      };
+    }),
+    stops: source.stops.map(v1ReturnStop),
+    canArriveCustomer: requiredBoolean(source.canArriveCustomer),
+    canCaptureEvidence: requiredBoolean(source.canCaptureEvidence),
+    canVerifyPickup: requiredBoolean(source.canVerifyPickup),
+    canCompleteReturnStops: requiredBoolean(source.canCompleteReturnStops),
+  };
+}
+
+function v1ReturnStop(value: unknown): V1ReturnStop {
+  const source = record(value);
+  const branch = record(source?.branch);
+  if (!source || !branch || !["PENDING", "ARRIVED", "COMPLETED"].includes(String(source.status))) {
+    invalid();
+  }
+  return {
+    id: requiredUUID(source.id), sequence: positiveInteger(source.sequence),
+    status: source.status as V1ReturnStop["status"],
+    packageCount: positiveInteger(source.packageCount),
+    arrivedAt: nullableTimestamp(source.arrivedAt), completedAt: nullableTimestamp(source.completedAt),
+    verificationStatus: requiredReturnVerificationStatus(source.verificationStatus),
+    failedAttempts: nonNegativeInteger(source.failedAttempts),
+    branch: {
+      id: requiredUUID(branch.id), displayName: requiredText(branch.displayName, 160),
+      address: addressLabel(branch.address),
+    },
+  };
+}
+
+function requiredReturnVerificationStatus(value: unknown) {
+  if (!["INACTIVE", "ACTIVE", "CONSUMED", "BLOCKED"].includes(String(value))) invalid();
+  return value as V1ReturnStop["verificationStatus"];
 }
 
 function v1Offer(value: unknown): V1RiderOffer {

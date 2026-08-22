@@ -3,12 +3,21 @@ import { Camera, Clock3, PackageCheck, RefreshCw, Route, ShieldCheck, WalletCard
 import { getEvidenceUrl } from "./admin";
 import {
   authorizeV1ExceptionalDeliveryHandoff,
+  assignV1ReturnRider,
+  createV1ExactSkuRecoveryOffer,
+  decideV1CustomerIssue,
+  failV1ExactSkuRecovery,
+  finalizeV1SettlementCalculation,
+  formatV1Price,
   getV1AdminExecutionOrders,
   getV1AdminExecutionTrace,
+  manageV1DeliveryRecovery,
+  settleV1Entry,
   type DastakV1Auth,
   type V1AdminExecutionOrder,
   type V1AdminExecutionTrace,
 } from "./dastakV1";
+import { processV1Refund } from "./payments";
 
 export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   const [orders, setOrders] = useState<V1AdminExecutionOrder[]>([]);
@@ -158,6 +167,7 @@ function Trace({ trace, auth, onChanged }: {
         <ExceptionalHandoffAction trace={trace} auth={auth} onChanged={onChanged} />
       </>}
     </TraceSection>
+    <FailureAndFinanceTrace trace={trace} auth={auth} onChanged={onChanged} />
     <TraceSection title="Reconciliation">
       <p>{trace.reconciliationCases.length === 0 ? "No reconciliation cases." : `${trace.reconciliationCases.length} case(s) require operator review.`}</p>
     </TraceSection>
@@ -220,6 +230,204 @@ function ExceptionalHandoffAction({ trace, auth, onChanged }: {
   </div>;
 }
 
+function FailureAndFinanceTrace({ trace, auth, onChanged }: {
+  trace: V1AdminExecutionTrace;
+  auth: DastakV1Auth;
+  onChanged: () => void;
+}) {
+  const state = trace.failureAndFinance;
+  if (!state) return <TraceSection title="Failure, returns and finance"><p>No Step 5 trace.</p></TraceSection>;
+  const permissions = state.permissions;
+  return <TraceSection title="Failure, returns and finance">
+    <p>{state.recoveryCases.length} recovery case(s) · {state.customerIssues.length} customer issue(s) · {state.returns.length} return(s) · {state.refunds.length} refund(s) · {state.settlements.length} settlement entry/entries</p>
+    {state.recoveryCases.map((recovery, index) => <article key={text(recovery, "id") ?? index}>
+      <strong>{text(recovery, "type")?.replaceAll("_", " ")} recovery · {text(recovery, "status")?.replaceAll("_", " ")}</strong>
+      <span>{text(recovery, "reason") ?? "—"} · {array(recovery, "opportunities").length} exact-item offer(s)</span>
+      {boolean(permissions, "canManageRecovery") ? <RecoveryAction recovery={recovery} auth={auth} onChanged={onChanged} /> : null}
+    </article>)}
+    {state.customerIssues.map((issue, index) => <article key={text(issue, "id") ?? index}>
+      <strong>{text(issue, "category")?.replaceAll("_", " ")} · {text(issue, "status")?.replaceAll("_", " ")}</strong>
+      <span>{text(issue, "description") ?? "—"} · {formatOptional(text(issue, "reportedAt"))}{array(issue, "evidence").map((entry, evidenceIndex) => {
+        const evidence = asRecord(entry);
+        return <EvidenceButton key={text(evidence, "id") ?? evidenceIndex} auth={auth} objectPath={text(evidence, "objectPath")} />;
+      })}</span>
+      {boolean(permissions, "canApproveReturns") || boolean(permissions, "canApproveRefunds") ? <IssueAction issue={issue} auth={auth} onChanged={onChanged} /> : null}
+    </article>)}
+    {state.returns.map((customerReturn, index) => {
+      const mission = object(customerReturn, "mission");
+      return <article key={text(customerReturn, "id") ?? index}>
+        <strong>Return · {text(customerReturn, "status")?.replaceAll("_", " ")}</strong>
+        <span>{array(customerReturn, "packages").length} package(s) · mission {text(mission, "status")?.replaceAll("_", " ") ?? "not started"} · custody {array(customerReturn, "packages").map((item) => text(asRecord(item), "custodyOwnerType") ?? "—").join(", ") || "—"}</span>
+        {boolean(permissions, "canApproveReturns") && text(mission, "status") === "RIDER_SEARCH" ? <ReturnRiderAction mission={mission!} auth={auth} onChanged={onChanged} /> : null}
+      </article>;
+    })}
+    {state.refunds.map((refund, index) => <article key={text(refund, "id") ?? index}>
+      <strong>Refund · {text(refund, "status")?.replaceAll("_", " ")}</strong>
+      <span>{formatV1Price(number(refund, "amountPaise") ?? 0)} · original payment method · {text(refund, "faultSource") ?? "UNKNOWN"}</span>
+      {boolean(permissions, "canProcessRefunds") && ["APPROVED", "FAILED"].includes(text(refund, "status") ?? "") ? <RefundAction orderId={trace.order.id} refund={refund} auth={auth} onChanged={onChanged} /> : null}
+    </article>)}
+    {state.settlements.map((settlement, index) => <article key={text(settlement, "id") ?? index}>
+      <strong>{text(settlement, "subjectType")?.replaceAll("_", " ")} · {text(settlement, "status")}</strong>
+      <span>{text(settlement, "entryType")?.replaceAll("_", " ")} · {formatV1Price(number(settlement, "amountPaise") ?? 0)} · calculation {text(settlement, "calculationStatus")?.replaceAll("_", " ")}</span>
+      {boolean(permissions, "canManageSettlements") ? <SettlementAction settlement={settlement} auth={auth} onChanged={onChanged} /> : null}
+    </article>)}
+  </TraceSection>;
+}
+
+function RecoveryAction({ recovery, auth, onChanged }: {
+  recovery: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+}) {
+  const [branchId, setBranchId] = useState("");
+  const [reason, setReason] = useState("");
+  const [faultSource, setFaultSource] = useState("RIDER");
+  const [refundAmount, setRefundAmount] = useState("");
+  const [addressLine, setAddressLine] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const id = text(recovery, "id");
+  const version = number(recovery, "version");
+  const type = text(recovery, "type");
+  const status = text(recovery, "status");
+  const correctedAddressValid = !addressLine.trim() && !latitude.trim() && !longitude.trim() ||
+    Boolean(addressLine.trim()) && Boolean(latitude.trim()) && Boolean(longitude.trim()) &&
+    Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude)) &&
+    Number(latitude) >= -90 && Number(latitude) <= 90 && Number(longitude) >= -180 && Number(longitude) <= 180;
+  const refundValid = !refundAmount.trim() ||
+    faultSource !== "CUSTOMER" && Number.isInteger(Number(refundAmount)) && Number(refundAmount) > 0;
+  const run = async (action: "offer" | "fail" | "resume" | "return") => {
+    if (!id || !version || busy) return;
+    setBusy(true); setError(undefined);
+    try {
+      if (action === "offer") await createV1ExactSkuRecoveryOffer({
+        ...auth, recoveryCaseId: id, branchId, expectedVersion: version,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      else if (action === "fail") await failV1ExactSkuRecovery({
+        ...auth, recoveryCaseId: id, reason, expectedVersion: version,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      else await manageV1DeliveryRecovery({
+        ...auth, recoveryCaseId: id,
+        action: action === "resume" ? "RESUME_DELIVERY" : "RETURN_TO_ORIGIN",
+        faultSource,
+        refundAmountPaise: action === "return" && refundAmount.trim()
+          ? Number(refundAmount)
+          : undefined,
+        correctedAddress: action === "resume" && addressLine.trim()
+          ? { line1: addressLine.trim(), latitude: Number(latitude), longitude: Number(longitude) }
+          : undefined,
+        reason, expectedVersion: version, idempotencyKey: crypto.randomUUID(),
+      });
+      onChanged();
+    } catch (actionError) { setError(message(actionError)); }
+    finally { setBusy(false); }
+  };
+  if (!["OPEN", "SEARCHING_EXACT_SKU", "ACTION_REQUIRED"].includes(status ?? "")) return null;
+  return <div className="v1-exceptional-handoff">
+    {type === "EXACT_SKU" ? <><label>Candidate branch UUID<input value={branchId} onChange={(event) => setBranchId(event.target.value)} placeholder="Branch UUID" /></label><button className="secondary-button" type="button" disabled={busy || !uuid(branchId)} onClick={() => void run("offer")}>Offer exact SKU to branch</button></> : null}
+    {type === "DELIVERY" ? <>
+      <label>Fault source<select value={faultSource} onChange={(event) => setFaultSource(event.target.value)}><option>RIDER</option><option>MERCHANT</option><option>DASTAK</option><option>CUSTOMER</option></select></label>
+      <label>Corrected address line (optional, resume only)<input value={addressLine} maxLength={300} onChange={(event) => setAddressLine(event.target.value)} /></label>
+      <label>Corrected latitude<input inputMode="decimal" value={latitude} onChange={(event) => setLatitude(event.target.value)} /></label>
+      <label>Corrected longitude<input inputMode="decimal" value={longitude} onChange={(event) => setLongitude(event.target.value)} /></label>
+      <label>Return refund in paise (optional)<input type="number" min={1} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} /></label>
+    </> : null}
+    <label>Operations reason<textarea value={reason} minLength={3} maxLength={500} onChange={(event) => setReason(event.target.value)} /></label>
+    {type === "EXACT_SKU" ? <button className="danger-button" type="button" disabled={busy || reason.trim().length < 3} onClick={() => void run("fail")}>Close recovery as failed</button> : <>
+      <button className="primary-button" type="button" disabled={busy || reason.trim().length < 10 || !correctedAddressValid} onClick={() => void run("resume")}>Resume assigned delivery</button>
+      <button className="danger-button" type="button" disabled={busy || reason.trim().length < 10 || !refundValid} onClick={() => void run("return")}>Start return to origin</button>
+    </>}
+    {error ? <p className="order-error" role="alert">{error}</p> : null}
+  </div>;
+}
+
+function IssueAction({ issue, auth, onChanged }: {
+  issue: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+}) {
+  const [decision, setDecision] = useState<"REJECT" | "RESOLVE_NO_REFUND" | "REFUND_WITHOUT_RETURN" | "PHYSICAL_RETURN">("RESOLVE_NO_REFUND");
+  const [faultSource, setFaultSource] = useState("UNKNOWN");
+  const [amount, setAmount] = useState("");
+  const [packages, setPackages] = useState("1");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  if (!["OPEN", "UNDER_REVIEW"].includes(text(issue, "status") ?? "")) return null;
+  const requiresRefund = decision === "REFUND_WITHOUT_RETURN" || decision === "PHYSICAL_RETURN";
+  const submit = async () => {
+    const id = text(issue, "id"); const version = number(issue, "version");
+    if (!id || !version || busy) return;
+    setBusy(true); setError(undefined);
+    try {
+      await decideV1CustomerIssue({
+        ...auth, issueId: id, decision,
+        refundAmountPaise: requiresRefund ? Number(amount) : undefined,
+        faultSource: requiresRefund ? faultSource : undefined,
+        returnPackageCount: decision === "PHYSICAL_RETURN" ? Number(packages) : undefined,
+        reason, expectedVersion: version, idempotencyKey: crypto.randomUUID(),
+      });
+      onChanged();
+    } catch (actionError) { setError(message(actionError)); }
+    finally { setBusy(false); }
+  };
+  return <div className="v1-exceptional-handoff">
+    <label>Decision<select value={decision} onChange={(event) => setDecision(event.target.value as typeof decision)}><option value="RESOLVE_NO_REFUND">Resolve without refund</option><option value="REFUND_WITHOUT_RETURN">Refund without physical return</option><option value="PHYSICAL_RETURN">Require physical return</option><option value="REJECT">Reject</option></select></label>
+    {requiresRefund ? <><label>Refund amount (paise)<input type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} /></label><label>Fault source<select value={faultSource} onChange={(event) => setFaultSource(event.target.value)}><option>UNKNOWN</option><option>MERCHANT</option><option>RIDER</option><option>DASTAK</option><option>CUSTOMER</option><option>NONE</option></select></label></> : null}
+    {decision === "PHYSICAL_RETURN" ? <label>Return package count<input type="number" min={1} value={packages} onChange={(event) => setPackages(event.target.value)} /></label> : null}
+    <label>Recorded reason<textarea minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+    <button className="primary-button" type="button" disabled={busy || reason.trim().length < 3 || (requiresRefund && Number(amount) < 1) || (decision === "PHYSICAL_RETURN" && Number(packages) < 1)} onClick={() => void submit()}>{busy ? "Recording…" : "Record decision"}</button>
+    {error ? <p className="order-error" role="alert">{error}</p> : null}
+  </div>;
+}
+
+function ReturnRiderAction({ mission, auth, onChanged }: {
+  mission: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+}) {
+  const [riderId, setRiderId] = useState(""); const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const assign = async () => {
+    const missionId = text(mission, "id"); const version = number(mission, "version");
+    if (!missionId || !version || !uuid(riderId)) return;
+    setBusy(true); setError(undefined);
+    try { await assignV1ReturnRider({ ...auth, returnMissionId: missionId, riderId, expectedVersion: version, idempotencyKey: crypto.randomUUID() }); onChanged(); }
+    catch (actionError) { setError(message(actionError)); } finally { setBusy(false); }
+  };
+  return <div className="v1-exceptional-handoff"><label>Eligible rider UUID<input value={riderId} onChange={(event) => setRiderId(event.target.value)} /></label><button className="primary-button" type="button" disabled={busy || !uuid(riderId)} onClick={() => void assign()}>Assign return rider</button>{error ? <p className="order-error" role="alert">{error}</p> : null}</div>;
+}
+
+function RefundAction({ orderId, refund, auth, onChanged }: {
+  orderId: string; refund: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false); const [error, setError] = useState<string>();
+  const process = async () => {
+    const refundId = text(refund, "id"); if (!refundId) return;
+    setBusy(true); setError(undefined);
+    try { await processV1Refund({ ...auth, orderId, refundId, idempotencyKey: crypto.randomUUID() }); onChanged(); }
+    catch (actionError) { setError(message(actionError)); } finally { setBusy(false); }
+  };
+  return <div className="v1-exceptional-handoff"><button className="primary-button" type="button" disabled={busy} onClick={() => void process()}>{busy ? "Submitting…" : "Process original-method refund"}</button>{error ? <p className="order-error" role="alert">{error}</p> : null}</div>;
+}
+
+function SettlementAction({ settlement, auth, onChanged }: {
+  settlement: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+}) {
+  const [reference, setReference] = useState(""); const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const status = text(settlement, "status"); const id = text(settlement, "id");
+  const version = number(settlement, "version");
+  const run = async () => {
+    if (!id || !version) return; setBusy(true); setError(undefined);
+    try {
+      if (status === "PENDING") await finalizeV1SettlementCalculation({ ...auth, settlementEntryId: id, expectedVersion: version, idempotencyKey: crypto.randomUUID() });
+      else if (status === "ELIGIBLE") await settleV1Entry({ ...auth, settlementEntryId: id, settlementReference: reference, expectedVersion: version, idempotencyKey: crypto.randomUUID() });
+      onChanged();
+    } catch (actionError) { setError(message(actionError)); } finally { setBusy(false); }
+  };
+  if (status === "SETTLED") return null;
+  return <div className="v1-exceptional-handoff">{status === "ELIGIBLE" ? <label>Settlement reference<input value={reference} maxLength={200} onChange={(event) => setReference(event.target.value)} /></label> : null}<button className="primary-button" type="button" disabled={busy || (status === "ELIGIBLE" && !reference.trim())} onClick={() => void run()}>{status === "PENDING" ? "Finalize calculation" : "Mark settled"}</button>{error ? <p className="order-error" role="alert">{error}</p> : null}</div>;
+}
+
 function EvidenceButton({ auth, objectPath }: { auth: DastakV1Auth; objectPath?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -269,6 +477,11 @@ function object(value: Record<string, unknown> | undefined, key: string) {
     ? result as Record<string, unknown>
     : undefined;
 }
+function asRecord(value: unknown) {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
 function boolean(value: Record<string, unknown> | undefined, key: string) {
   const result = value?.[key];
   return typeof result === "boolean" ? result : undefined;
@@ -284,4 +497,7 @@ function formatDuration(seconds: number) {
 }
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The V1 execution trace is unavailable.";
+}
+function uuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

@@ -233,6 +233,63 @@ Deno.test("V1 final-delivery actions bind the rider, evidence path, and six-digi
   }
 });
 
+Deno.test("V1 reverse-custody actions bind the rider, immutable evidence path, stops and codes", async () => {
+  const recorded: Record<string, unknown>[] = [];
+  const evidenceId = "66666666-6666-4666-8666-666666666666";
+  const objectPath = `return-pickup/${accountId}/${evidenceId}.jpg`;
+  const deps = dependencies({
+    advanceV1ReturnMission: (input) => {
+      recorded.push(input);
+      return Promise.resolve({
+        responseBody: { returnMission: { id: missionId, status: "RETURNING_TO_MERCHANTS" } },
+        responseStatus: 200,
+      });
+    },
+  });
+  const cases = [
+    ["v1ReturnArriveAtCustomer", { returnMissionId: missionId }],
+    ["v1AddReturnEvidence", { returnMissionId: missionId, objectPath }],
+    ["v1VerifyReturnPickup", { returnMissionId: missionId, verificationCode: "123456" }],
+    ["v1ArriveAtReturnStop", { returnMissionId: missionId, returnStopId: stopId }],
+    ["v1VerifyReturnReceipt", {
+      returnMissionId: missionId,
+      returnStopId: stopId,
+      verificationCode: "654321",
+    }],
+  ] as const;
+  for (const [operation, payload] of cases) {
+    const response = await handleCourierDispatch(
+      request({ body: { operation, ...payload } }),
+      deps,
+    );
+    assertEquals(response.status, 200);
+  }
+  assertEquals(recorded.map((input) => input.action), [
+    "ARRIVE_CUSTOMER",
+    "ADD_RETURN_EVIDENCE",
+    "VERIFY_RETURN_PICKUP",
+    "ARRIVE_RETURN_STOP",
+    "VERIFY_RETURN_RECEIPT",
+  ]);
+  assertEquals(recorded.every((input) => input.accountId === accountId), true);
+  assertEquals(recorded[1].objectPath, objectPath);
+  assertEquals(recorded[2].verificationCode, "123456");
+  assertEquals(recorded[4].verificationCode, "654321");
+  assertEquals(recorded[4].returnStopId, stopId);
+
+  const wrongOwner = await handleCourierDispatch(
+    request({
+      body: {
+        operation: "v1AddReturnEvidence",
+        returnMissionId: missionId,
+        objectPath: `return-pickup/${assignmentId}/${evidenceId}.jpg`,
+      },
+    }),
+    deps,
+  );
+  await assertError(wrongOwner, 400, "validation_failed");
+});
+
 Deno.test("accept forwards only the authenticated partner and assignment", async () => {
   let recorded: Record<string, unknown> | undefined;
   const response = await handleCourierDispatch(
@@ -421,6 +478,8 @@ function dependencies(
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     advanceV1FinalDelivery: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
+    advanceV1ReturnMission: () =>
+      Promise.resolve({ responseBody: { returnStatus: "CUSTOMER_PICKUP" }, responseStatus: 200 }),
     ...overrides,
   };
 }

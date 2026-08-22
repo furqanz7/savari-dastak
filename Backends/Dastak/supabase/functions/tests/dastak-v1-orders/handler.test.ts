@@ -398,6 +398,178 @@ Deno.test("V1 merchant preparation rejects invalid package, evidence, and proble
   assertEquals(calls, 0);
 });
 
+Deno.test("V1 launch-failure commands preserve exact identity, evidence and optimistic versions", async () => {
+  const recorded: Record<string, unknown> = {};
+  const evidencePath = `customer-issue/${actor.accountId}/${skuId}.jpg`;
+  const deps = dependencies({
+    reportExactSkuFailure: (input) => {
+      recorded.recovery = input;
+      return Promise.resolve({ status: "SEARCHING_EXACT_SKU" });
+    },
+    reportCustomerIssue: (input) => {
+      recorded.issue = input;
+      return Promise.resolve({ status: "OPEN" });
+    },
+    decideCustomerIssue: (input) => {
+      recorded.decision = input;
+      return Promise.resolve({ returnStatus: "RIDER_SEARCH" });
+    },
+    manageDeliveryRecovery: (input) => {
+      recorded.deliveryRecovery = input;
+      return Promise.resolve({ recoveryStatus: "RESOLVED" });
+    },
+  });
+
+  const recovery = await handleV1Orders(
+    request({
+      operation: "reportExactSkuFailure",
+      fulfilmentId: orderId,
+      orderLineId: skuId,
+      reason: "  Exact item failed physical confirmation.  ",
+      expectedVersion: 7,
+    }, "recovery-once"),
+    deps,
+  );
+  const issue = await handleV1Orders(
+    request({
+      operation: "reportCustomerIssue",
+      orderId,
+      orderLineId: skuId,
+      category: "DAMAGED",
+      description: "  Seal was damaged at handoff.  ",
+      objectPath: evidencePath,
+      contentType: "image/jpeg",
+    }, "issue-once"),
+    deps,
+  );
+  const decision = await handleV1Orders(
+    request({
+      operation: "decideCustomerIssue",
+      issueId: orderId,
+      decision: "PHYSICAL_RETURN",
+      refundAmountPaise: 900,
+      faultSource: "MERCHANT",
+      returnPackageCount: 1,
+      reason: "  Physical return approved after evidence review.  ",
+      expectedVersion: 2,
+    }, "decision-once"),
+    deps,
+  );
+  const deliveryRecovery = await handleV1Orders(
+    request({
+      operation: "manageDeliveryRecovery",
+      recoveryCaseId: orderId,
+      action: "RESUME_DELIVERY",
+      faultSource: "CUSTOMER",
+      refundAmountPaise: null,
+      correctedAddress: { line1: "10 Corrected Road" },
+      reason: "  Customer confirmed a minor address correction.  ",
+      expectedVersion: 3,
+    }, "delivery-recovery-once"),
+    deps,
+  );
+
+  assertEquals([recovery.status, issue.status, decision.status, deliveryRecovery.status], [
+    200,
+    201,
+    200,
+    200,
+  ]);
+  assertEquals(recorded.recovery, {
+    accessToken: actor.accessToken,
+    fulfilmentId: orderId,
+    orderLineId: skuId,
+    reason: "Exact item failed physical confirmation.",
+    expectedVersion: 7,
+    idempotencyKey: "recovery-once",
+  });
+  assertEquals(recorded.issue, {
+    accessToken: actor.accessToken,
+    orderId,
+    orderLineId: skuId,
+    category: "DAMAGED",
+    description: "Seal was damaged at handoff.",
+    objectPath: evidencePath,
+    contentType: "image/jpeg",
+    idempotencyKey: "issue-once",
+  });
+  assertEquals(recorded.decision, {
+    accessToken: actor.accessToken,
+    issueId: orderId,
+    decision: "PHYSICAL_RETURN",
+    refundAmountPaise: 900,
+    faultSource: "MERCHANT",
+    returnPackageCount: 1,
+    reason: "Physical return approved after evidence review.",
+    expectedVersion: 2,
+    idempotencyKey: "decision-once",
+  });
+  assertEquals(recorded.deliveryRecovery, {
+    accessToken: actor.accessToken,
+    recoveryCaseId: orderId,
+    action: "RESUME_DELIVERY",
+    faultSource: "CUSTOMER",
+    refundAmountPaise: null,
+    correctedAddress: { line1: "10 Corrected Road" },
+    reason: "Customer confirmed a minor address correction.",
+    expectedVersion: 3,
+    idempotencyKey: "delivery-recovery-once",
+  });
+});
+
+Deno.test("V1 refund and settlement controls reject malformed financial input before RPC", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    decideCustomerIssue: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    settleEntry: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    manageDeliveryRecovery: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
+  const badRefund = await handleV1Orders(
+    request({
+      operation: "decideCustomerIssue",
+      issueId: orderId,
+      decision: "PHYSICAL_RETURN",
+      refundAmountPaise: -1,
+      faultSource: "MERCHANT",
+      returnPackageCount: 0,
+      reason: "Invalid financial decision",
+      expectedVersion: 1,
+    }, "bad-refund"),
+    deps,
+  );
+  const badSettlement = await handleV1Orders(
+    request({
+      operation: "settleEntry",
+      settlementEntryId: orderId,
+      settlementReference: "",
+      expectedVersion: 1,
+    }, "bad-settlement"),
+    deps,
+  );
+  const badRecovery = await handleV1Orders(
+    request({
+      operation: "manageDeliveryRecovery",
+      recoveryCaseId: orderId,
+      action: "RESUME_DELIVERY",
+      faultSource: "CUSTOMER",
+      reason: "too short",
+      expectedVersion: 1,
+    }, "bad-recovery"),
+    deps,
+  );
+  assertEquals([badRefund.status, badSettlement.status, badRecovery.status], [400, 400, 400]);
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 orders maps stale state without leaking database details", async () => {
   const response = await handleV1Orders(
     request({ operation: "get", orderId }),
@@ -462,6 +634,19 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
       (() => Promise.resolve({})),
     authorizeExceptionalDeliveryHandoff: overrides.authorizeExceptionalDeliveryHandoff ??
       (() => Promise.resolve({})),
+    reportExactSkuFailure: overrides.reportExactSkuFailure ?? (() => Promise.resolve({})),
+    createExactSkuRecoveryOffer: overrides.createExactSkuRecoveryOffer ??
+      (() => Promise.resolve({})),
+    respondExactSkuRecoveryOffer: overrides.respondExactSkuRecoveryOffer ??
+      (() => Promise.resolve({})),
+    failExactSkuRecovery: overrides.failExactSkuRecovery ?? (() => Promise.resolve({})),
+    reportCustomerIssue: overrides.reportCustomerIssue ?? (() => Promise.resolve({})),
+    decideCustomerIssue: overrides.decideCustomerIssue ?? (() => Promise.resolve({})),
+    assignReturnRider: overrides.assignReturnRider ?? (() => Promise.resolve({})),
+    manageDeliveryRecovery: overrides.manageDeliveryRecovery ?? (() => Promise.resolve({})),
+    finalizeSettlementCalculation: overrides.finalizeSettlementCalculation ??
+      (() => Promise.resolve({})),
+    settleEntry: overrides.settleEntry ?? (() => Promise.resolve({})),
   };
 }
 

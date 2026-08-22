@@ -60,6 +60,24 @@ export type V1FinalDeliveryMutationInput = {
   requestDigest: string;
 };
 
+export type V1ReturnMissionAction =
+  | "ARRIVE_CUSTOMER"
+  | "ADD_RETURN_EVIDENCE"
+  | "VERIFY_RETURN_PICKUP"
+  | "ARRIVE_RETURN_STOP"
+  | "VERIFY_RETURN_RECEIPT";
+
+export type V1ReturnMissionMutationInput = {
+  accountId: string;
+  returnMissionId: string;
+  action: V1ReturnMissionAction;
+  returnStopId: string | null;
+  objectPath: string | null;
+  verificationCode: string | null;
+  idempotencyKey: string;
+  requestDigest: string;
+};
+
 export type CourierJobAction =
   | "start_to_store"
   | "arrive_at_store"
@@ -87,6 +105,7 @@ export type CourierDispatchDependencies = {
   declineV1Offer: (input: V1RiderOfferDeclineInput) => Promise<RpcResult>;
   advanceV1Mission: (input: V1DeliveryMissionMutationInput) => Promise<RpcResult>;
   advanceV1FinalDelivery: (input: V1FinalDeliveryMutationInput) => Promise<RpcResult>;
+  advanceV1ReturnMission: (input: V1ReturnMissionMutationInput) => Promise<RpcResult>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -202,6 +221,46 @@ export async function handleCourierDispatch(
           "VERIFY_DELIVERY",
           dependencies.advanceV1FinalDelivery,
         );
+      case "v1ReturnArriveAtCustomer":
+        return await v1ReturnMissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "ARRIVE_CUSTOMER",
+          dependencies.advanceV1ReturnMission,
+        );
+      case "v1AddReturnEvidence":
+        return await v1ReturnMissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "ADD_RETURN_EVIDENCE",
+          dependencies.advanceV1ReturnMission,
+        );
+      case "v1VerifyReturnPickup":
+        return await v1ReturnMissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "VERIFY_RETURN_PICKUP",
+          dependencies.advanceV1ReturnMission,
+        );
+      case "v1ArriveAtReturnStop":
+        return await v1ReturnMissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "ARRIVE_RETURN_STOP",
+          dependencies.advanceV1ReturnMission,
+        );
+      case "v1VerifyReturnReceipt":
+        return await v1ReturnMissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "VERIFY_RETURN_RECEIPT",
+          dependencies.advanceV1ReturnMission,
+        );
       case "acceptOffer":
         return await assignmentMutation(
           request,
@@ -287,6 +346,43 @@ async function v1FinalDeliveryMutation(
   ) return validationError();
 
   const normalized = { missionId, action, objectPath, verificationCode };
+  const result = await dependency({
+    accountId,
+    ...normalized,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
+}
+
+async function v1ReturnMissionMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  action: V1ReturnMissionAction,
+  dependency: (input: V1ReturnMissionMutationInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const returnMissionId = validUUID(body.returnMissionId);
+  const needsStop = action === "ARRIVE_RETURN_STOP" || action === "VERIFY_RETURN_RECEIPT";
+  const returnStopId = needsStop ? validUUID(body.returnStopId) ?? null : null;
+  const objectPath = action === "ADD_RETURN_EVIDENCE"
+    ? validReturnEvidencePath(body.objectPath, accountId)
+    : null;
+  const needsCode = action === "VERIFY_RETURN_PICKUP" || action === "VERIFY_RETURN_RECEIPT";
+  const verificationCode = needsCode ? validV1VerificationCode(body.verificationCode) : null;
+  if (
+    !idempotencyKey || !returnMissionId || (needsStop && !returnStopId) ||
+    (action === "ADD_RETURN_EVIDENCE" && !objectPath) ||
+    (needsCode && !verificationCode)
+  ) return validationError();
+  const normalized = {
+    returnMissionId,
+    action,
+    returnStopId,
+    objectPath,
+    verificationCode,
+  };
   const result = await dependency({
     accountId,
     ...normalized,
@@ -440,6 +536,16 @@ function validRiderDeliveryEvidencePath(value: unknown, accountId: string) {
   const escapedAccountId = accountId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
     `^rider-delivery/${escapedAccountId}/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(?:jpg|jpeg|png|heic)$`,
+    "i",
+  );
+  return pattern.test(value) ? value.toLowerCase() : null;
+}
+
+function validReturnEvidencePath(value: unknown, accountId: string) {
+  if (typeof value !== "string") return null;
+  const escapedAccountId = accountId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `^return-pickup/${escapedAccountId}/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(?:jpg|jpeg|png|heic)$`,
     "i",
   );
   return pattern.test(value) ? value.toLowerCase() : null;

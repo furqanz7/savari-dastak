@@ -6,15 +6,18 @@ import {
 import {
   addV1FulfilmentReadyEvidence,
   declareV1FulfilmentPackages,
-  getV1MerchantFulfilments,
+  getV1MerchantOperations,
   getV1MerchantOpportunities,
   markV1FulfilmentReady,
   reportV1FulfilmentProblem,
+  reportV1ExactSkuFailure,
+  respondV1ExactSkuRecoveryOffer,
   respondToV1MerchantOpportunity,
   uploadV1MerchantReadyEvidence,
   type DastakV1Auth,
   type V1MerchantFulfilment,
   type V1MerchantOpportunity,
+  type V1RecoveryOpportunity,
 } from "./dastakV1";
 
 type Props = {
@@ -26,6 +29,9 @@ type Props = {
 export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   const [opportunities, setOpportunities] = useState<V1MerchantOpportunity[]>([]);
   const [fulfilments, setFulfilments] = useState<V1MerchantFulfilment[]>([]);
+  const [recoveryOpportunities, setRecoveryOpportunities] = useState<V1RecoveryOpportunity[]>([]);
+  const [returnReceipts, setReturnReceipts] = useState<Record<string, unknown>[]>([]);
+  const [settlements, setSettlements] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string>();
@@ -37,6 +43,8 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   const [evidenceFiles, setEvidenceFiles] = useState<Record<string, File | undefined>>({});
   const [problemId, setProblemId] = useState<string>();
   const [problemReason, setProblemReason] = useState("");
+  const [recoveryLineId, setRecoveryLineId] = useState<string>();
+  const [recoveryPrepMinutes, setRecoveryPrepMinutes] = useState<Record<string, number>>({});
   const [now, setNow] = useState(() => Date.now());
   const keys = useRef(new Map<string, string>());
   const uploadedEvidence = useRef(new Map<string, string>());
@@ -44,12 +52,15 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   const refresh = useCallback(async (showProgress = false) => {
     if (showProgress) setRefreshing(true);
     try {
-      const [opportunityResult, fulfilmentResult] = await Promise.all([
+      const [opportunityResult, operations] = await Promise.all([
         getV1MerchantOpportunities({ ...auth, limit: 50 }),
-        getV1MerchantFulfilments({ ...auth, limit: 50 }),
+        getV1MerchantOperations({ ...auth, limit: 50 }),
       ]);
       setOpportunities(opportunityResult);
-      setFulfilments(fulfilmentResult);
+      setFulfilments(operations.fulfilments);
+      setRecoveryOpportunities(operations.recoveryOpportunities);
+      setReturnReceipts(operations.returnReceipts);
+      setSettlements(operations.settlements);
       setPrepMinutes((current) => {
         const next = { ...current };
         opportunityResult.forEach((opportunity) => {
@@ -59,7 +70,16 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
       });
       setPackageCounts((current) => {
         const next = { ...current };
-        fulfilmentResult.forEach((fulfilment) => { next[fulfilment.id] ??= fulfilment.packageCount ?? 1; });
+        operations.fulfilments.forEach((fulfilment) => {
+          next[fulfilment.id] ??= fulfilment.packageCount ?? 1;
+        });
+        return next;
+      });
+      setRecoveryPrepMinutes((current) => {
+        const next = { ...current };
+        operations.recoveryOpportunities.forEach((opportunity) => {
+          next[opportunity.id] ??= opportunity.promisedPrepMinutes ?? 10;
+        });
         return next;
       });
       setError(undefined);
@@ -198,19 +218,54 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
     setBusyId(fulfilment.id);
     setError(undefined);
     try {
-      const updated = await reportV1FulfilmentProblem({
-        ...auth,
-        fulfilmentId: fulfilment.id,
-        reason,
-        expectedVersion: fulfilment.version,
+      if (fulfilment.canReportExactSkuFailure) {
+        const orderLineId = recoveryLineId ?? fulfilment.lines[0]?.orderLineId;
+        if (!orderLineId) throw new Error("Choose the exact unavailable item.");
+        await reportV1ExactSkuFailure({
+          ...auth, fulfilmentId: fulfilment.id, orderLineId, reason,
+          expectedVersion: fulfilment.version, idempotencyKey: keyFor(identity),
+        });
+      } else {
+        const updated = await reportV1FulfilmentProblem({
+          ...auth, fulfilmentId: fulfilment.id, reason,
+          expectedVersion: fulfilment.version, idempotencyKey: keyFor(identity),
+        });
+        setFulfilments((values) =>
+          values.map((item) => item.id === updated.id ? updated : item));
+      }
+      keys.current.delete(identity);
+      setProblemId(undefined);
+      setProblemReason("");
+      setRecoveryLineId(undefined);
+      await refresh();
+    } catch (problemError) {
+      setError(message(problemError));
+      await refresh();
+    } finally {
+      setBusyId(undefined);
+    }
+  };
+
+  const respondRecovery = async (
+    opportunity: V1RecoveryOpportunity,
+    response: "ACCEPT" | "UNAVAILABLE",
+  ) => {
+    if (busyId || (response === "ACCEPT" && !confirmed.has(opportunity.id))) return;
+    setBusyId(opportunity.id);
+    setError(undefined);
+    const identity = `recovery:${response}:${opportunity.id}:${opportunity.version}`;
+    try {
+      await respondV1ExactSkuRecoveryOffer({
+        ...auth, recoveryOpportunityId: opportunity.id, response,
+        promisedPrepMinutes: response === "ACCEPT"
+          ? recoveryPrepMinutes[opportunity.id] ?? 10 : undefined,
+        expectedVersion: opportunity.version,
         idempotencyKey: keyFor(identity),
       });
       keys.current.delete(identity);
-      setFulfilments((values) => values.map((item) => item.id === updated.id ? updated : item));
-      setProblemId(undefined);
-      setProblemReason("");
-    } catch (problemError) {
-      setError(message(problemError));
+      await refresh();
+    } catch (responseError) {
+      setError(message(responseError));
       await refresh();
     } finally {
       setBusyId(undefined);
@@ -250,6 +305,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
           irreversibleConfirmed={readyConfirmed.has(fulfilment.id)}
           reportingProblem={problemId === fulfilment.id}
           problemReason={problemId === fulfilment.id ? problemReason : ""}
+          recoveryLineId={problemId === fulfilment.id ? recoveryLineId : undefined}
           onPackageCount={(value) => setPackageCounts((current) => ({ ...current, [fulfilment.id]: value }))}
           onEvidenceFile={(file) => {
             uploadedEvidence.current.delete(fulfilment.id);
@@ -258,11 +314,37 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
           onIrreversibleConfirm={(checked) => setReadyConfirmed((current) => checked ? withValue(current, fulfilment.id) : without(current, fulfilment.id))}
           onAddPhoto={() => void addPhoto(fulfilment)}
           onMarkReady={() => void markReady(fulfilment)}
-          onStartProblem={() => { setProblemId(fulfilment.id); setProblemReason(""); }}
-          onCancelProblem={() => { setProblemId(undefined); setProblemReason(""); }}
+          onStartProblem={() => {
+            setProblemId(fulfilment.id);
+            setProblemReason("");
+            setRecoveryLineId(fulfilment.lines[0]?.orderLineId);
+          }}
+          onCancelProblem={() => {
+            setProblemId(undefined);
+            setProblemReason("");
+            setRecoveryLineId(undefined);
+          }}
           onProblemReason={setProblemReason}
+          onRecoveryLine={setRecoveryLineId}
           onReportProblem={() => void reportProblem(fulfilment)}
         />)}
+      </div> : null}
+      {recoveryOpportunities.some((item) => item.status === "OFFERED") ? <div className="v1-opportunity-list">
+        {recoveryOpportunities.filter((item) => item.status === "OFFERED").map((opportunity) => {
+          const seconds = Math.max(0, Math.ceil((Date.parse(opportunity.expiresAt) - now) / 1_000));
+          const busy = busyId === opportunity.id;
+          return <article className="v1-opportunity-card running-late" key={opportunity.id}>
+            <header>
+              <span className="v1-opportunity-icon"><AlertTriangle size={20} /></span>
+              <span><strong>Exact-item recovery</strong><small>{opportunity.branch.displayName}</small></span>
+              <b><Clock3 size={14} /> {formatDuration(seconds)}</b>
+            </header>
+            <ul><li><span><strong>{opportunity.requestedQuantity}× {opportunity.sku.name}</strong><small>{[opportunity.sku.variantName, opportunity.sku.packSize].filter(Boolean).join(" · ")}</small></span></li></ul>
+            <label className="v1-physical-check"><input type="checkbox" checked={confirmed.has(opportunity.id)} onChange={(event) => setConfirmed((current) => event.target.checked ? withValue(current, opportunity.id) : without(current, opportunity.id))} /><span>I physically hold this exact SKU and full quantity. No substitution.</span></label>
+            <label className="v1-prep-choice"><span>Preparation promise</span><input type="number" min={1} max={180} value={recoveryPrepMinutes[opportunity.id] ?? 10} onChange={(event) => setRecoveryPrepMinutes((current) => ({ ...current, [opportunity.id]: Number(event.target.value) }))} /></label>
+            <div className="v1-opportunity-actions"><button className="secondary-button" type="button" disabled={busy} onClick={() => void respondRecovery(opportunity, "UNAVAILABLE")}><X size={17} /> Unavailable</button><button className="primary-button" type="button" disabled={busy || !confirmed.has(opportunity.id) || seconds === 0} onClick={() => void respondRecovery(opportunity, "ACCEPT")}><Check size={17} /> Accept exact item</button></div>
+          </article>;
+        })}
       </div> : null}
       {visibleOpportunities.length === 0 ? <p className="v1-merchant-empty">No item requests waiting right now.</p> : <div className="v1-opportunity-list">
         {visibleOpportunities.map((opportunity) => {
@@ -284,6 +366,18 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
           </article>;
         })}
       </div>}
+      {returnReceipts.length > 0 ? <div className="v1-preparation-list">
+        {returnReceipts.map((receipt, index) => <article className="v1-preparation-card" key={recordText(receipt, "returnStopId") ?? index}>
+          <header><span className="v1-opportunity-icon"><PackageCheck size={20} /></span><span><strong>Return receipt</strong><small>{recordText(recordObject(receipt, "branch"), "displayName") ?? "Merchant branch"}</small></span><b>{(recordText(receipt, "status") ?? "PENDING").replaceAll("_", " ")}</b></header>
+          <p>{recordNumber(receipt, "packageCount") ?? 0} package(s) must transfer together from the assigned rider.</p>
+          {recordText(receipt, "receiptCode") ? <div className="v1-merchant-pickup-code"><small>Give this in-app code only after every returned package is present</small><strong>{recordText(receipt, "receiptCode")}</strong></div> : <p className="v1-reservation-state">Receipt verification {recordText(receipt, "verificationStatus")?.toLowerCase() ?? "pending"}.</p>}
+        </article>)}
+      </div> : null}
+      {settlements.length > 0 ? <div className="v1-preparation-times" aria-label="Settlement status">
+        <span><small>Settlement entries</small><strong>{settlements.length}</strong></span>
+        <span><small>Eligible</small><strong>{settlements.filter((item) => recordText(item, "status") === "ELIGIBLE").length}</strong></span>
+        <span><small>Settled</small><strong>{settlements.filter((item) => recordText(item, "status") === "SETTLED").length}</strong></span>
+      </div> : null}
     </>}
   </section>;
 }
@@ -297,6 +391,7 @@ type FulfilmentCardProps = {
   irreversibleConfirmed: boolean;
   reportingProblem: boolean;
   problemReason: string;
+  recoveryLineId?: string;
   onPackageCount: (value: number) => void;
   onEvidenceFile: (file?: File) => void;
   onIrreversibleConfirm: (checked: boolean) => void;
@@ -305,6 +400,7 @@ type FulfilmentCardProps = {
   onStartProblem: () => void;
   onCancelProblem: () => void;
   onProblemReason: (reason: string) => void;
+  onRecoveryLine: (lineId: string) => void;
   onReportProblem: () => void;
 };
 
@@ -347,7 +443,9 @@ function FulfilmentCard(props: FulfilmentCardProps) {
       <button className="primary-button v1-mark-ready" type="button" disabled={props.busy || !readyActionEnabled} onClick={props.onMarkReady}><PackageCheck size={18} /> {props.busy ? "Finalising Ready…" : "Mark Ready"}</button>
     </div> : <p className="v1-ready-complete"><PackageCheck size={18} /> {fulfilment.packageCount} package(s) {fulfilment.status === "PICKED_UP" ? "picked up together" : "Ready"}. Original evidence and Ready time are locked.</p>}
     {fulfilment.evidence.length > 0 ? <p className="v1-evidence-count"><Camera size={15} /> {fulfilment.evidence.length} immutable evidence photo(s)</p> : null}
-    {fulfilment.status !== "PICKED_UP" ? (props.reportingProblem ? <div className="v1-problem-form"><label><span>Problem details</span><textarea value={props.problemReason} maxLength={500} rows={3} autoFocus onChange={(event) => props.onProblemReason(event.target.value)} /></label><div><button className="secondary-button" type="button" disabled={props.busy} onClick={props.onCancelProblem}>Back</button><button className="primary-button" type="button" disabled={props.busy || props.problemReason.trim().length < 3} onClick={props.onReportProblem}>{props.busy ? "Reporting…" : "Report problem"}</button></div></div> : <button className="v1-report-problem" type="button" disabled={props.busy} onClick={props.onStartProblem}><AlertTriangle size={16} /> Report problem</button>) : null}
+    {fulfilment.status !== "PICKED_UP" ? (props.reportingProblem ? <div className="v1-problem-form">
+      {fulfilment.canReportExactSkuFailure ? <label><span>Exact unavailable item</span><select value={props.recoveryLineId ?? ""} onChange={(event) => props.onRecoveryLine(event.target.value)}>{fulfilment.lines.map((line) => <option key={line.orderLineId} value={line.orderLineId}>{line.quantity}× {line.name} · {line.packSize}</option>)}</select><small>Dastak will recover only this exact SKU and full quantity.</small></label> : null}
+      <label><span>Problem details</span><textarea value={props.problemReason} maxLength={500} rows={3} autoFocus onChange={(event) => props.onProblemReason(event.target.value)} /></label><div><button className="secondary-button" type="button" disabled={props.busy} onClick={props.onCancelProblem}>Back</button><button className="primary-button" type="button" disabled={props.busy || props.problemReason.trim().length < 3} onClick={props.onReportProblem}>{props.busy ? "Reporting…" : fulfilment.canReportExactSkuFailure ? "Start exact-item recovery" : "Report problem"}</button></div></div> : <button className="v1-report-problem" type="button" disabled={props.busy} onClick={props.onStartProblem}><AlertTriangle size={16} /> Report problem</button>) : null}
     {fulfilment.problemReports.length > 0 ? <small className="v1-problem-history">{fulfilment.problemReports.length} problem report(s) preserved for operator review.</small> : null}
   </article>;
 }
@@ -400,4 +498,19 @@ function formatOptionalTime(value?: string) {
 }
 function message(error: unknown) {
   return error instanceof Error ? error.message : "V1 fulfilments are unavailable right now.";
+}
+
+function recordText(value: Record<string, unknown> | undefined, key: string) {
+  const result = value?.[key];
+  return typeof result === "string" ? result : undefined;
+}
+function recordNumber(value: Record<string, unknown>, key: string) {
+  const result = value[key];
+  return typeof result === "number" ? result : undefined;
+}
+function recordObject(value: Record<string, unknown>, key: string) {
+  const result = value[key];
+  return result !== null && typeof result === "object" && !Array.isArray(result)
+    ? result as Record<string, unknown>
+    : undefined;
 }

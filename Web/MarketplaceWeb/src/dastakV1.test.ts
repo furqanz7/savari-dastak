@@ -9,10 +9,13 @@ import {
   getV1MerchantFulfilments,
   getV1MerchantOpportunities,
   markV1FulfilmentReady,
+  manageV1DeliveryRecovery,
   merchantReadyEvidenceObjectPath,
   parseV1Catalogue,
   parseV1MerchantFulfilment,
   parseV1Order,
+  reportV1CustomerIssue,
+  respondV1ExactSkuRecoveryOffer,
   respondToV1MerchantOpportunity,
   submitV1Order,
   updateV1AdminSku,
@@ -288,6 +291,92 @@ describe("Dastak V1 web contract", () => {
       waitingSeconds: 30,
     });
     expect(result.delivery?.pickupCode).toBeUndefined();
+  });
+
+  it("parses private customer recovery truth and reports an evidence-linked issue", async () => {
+    const fixture = orderFixture();
+    Object.assign(fixture, {
+      support: {
+        canReportIssue: true,
+        recovery: [{
+          id: categoryId, type: "EXACT_SKU", status: "RECOVERED", orderLineId: lineId,
+          openedAt: "2026-08-22T00:10:00Z", resolvedAt: "2026-08-22T00:11:00Z",
+          customerMessage: "We secured the exact item.",
+        }],
+        issues: [{
+          id: subcategoryId, orderLineId: lineId, category: "DAMAGED", status: "OPEN",
+          description: "Seal damaged", reportedAt: "2026-08-22T00:20:00Z",
+          resolution: null, resolvedAt: null, version: 1,
+          evidence: [{
+            id: packageId, objectPath: `customer-issue/${categoryId}/${packageId}.jpg`,
+            contentType: "image/jpeg", capturedAt: "2026-08-22T00:20:00Z",
+          }],
+        }],
+        returns: [],
+        refunds: [{
+          id: fulfilmentId, orderLineId: lineId, status: "PROCESSING",
+          destination: "ORIGINAL_PAYMENT_METHOD", amountPaise: 900, currency: "INR",
+          reason: "Approved issue", createdAt: "2026-08-22T00:21:00Z", completedAt: null,
+        }],
+      },
+    });
+    const parsed = parseV1Order(fixture);
+    expect(parsed.support?.recovery[0].customerMessage).toBe("We secured the exact item.");
+    expect(parsed.support?.refunds[0]).toMatchObject({
+      destination: "ORIGINAL_PAYMENT_METHOD", amountPaise: 900,
+    });
+    expect(JSON.stringify(parsed.support)).not.toMatch(/Secret|merchantId|branchId/);
+
+    let requestBody: Record<string, unknown> | undefined;
+    await reportV1CustomerIssue({
+      ...auth, orderId, orderLineId: lineId, category: "DAMAGED",
+      description: "Seal damaged",
+      objectPath: `customer-issue/${categoryId}/${packageId}.jpg`,
+      contentType: "image/jpeg", idempotencyKey: "issue-once",
+    }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({ issueId: subcategoryId });
+    });
+    expect(requestBody).toEqual({
+      operation: "reportCustomerIssue", orderId, orderLineId: lineId,
+      category: "DAMAGED", description: "Seal damaged",
+      objectPath: `customer-issue/${categoryId}/${packageId}.jpg`, contentType: "image/jpeg",
+    });
+  });
+
+  it("accepts an exact recovery offer without a client price or quantity override", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    await respondV1ExactSkuRecoveryOffer({
+      ...auth, recoveryOpportunityId: orderId, response: "ACCEPT",
+      promisedPrepMinutes: 10, expectedVersion: 1, idempotencyKey: "recovery-accept",
+    }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({ status: "RECOVERED" });
+    });
+    expect(requestBody).toEqual({
+      operation: "respondExactSkuRecoveryOffer", recoveryOpportunityId: orderId,
+      response: "ACCEPT", promisedPrepMinutes: 10, expectedVersion: 1,
+    });
+    expect(JSON.stringify(requestBody)).not.toMatch(/price|quantity|substitut/i);
+  });
+
+  it("resumes delivery recovery with an audited minor address correction", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    await manageV1DeliveryRecovery({
+      ...auth, recoveryCaseId: orderId, action: "RESUME_DELIVERY",
+      faultSource: "CUSTOMER", reason: "Customer confirmed the corrected address.",
+      correctedAddress: { line1: "3A Recovery Road", latitude: 12.68, longitude: 78.62 },
+      expectedVersion: 2, idempotencyKey: "resume-delivery",
+    }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({ recoveryStatus: "RESOLVED", missionStatus: "OUT_FOR_DELIVERY" });
+    });
+    expect(requestBody).toEqual({
+      operation: "manageDeliveryRecovery", recoveryCaseId: orderId,
+      action: "RESUME_DELIVERY", faultSource: "CUSTOMER", refundAmountPaise: null,
+      correctedAddress: { line1: "3A Recovery Road", latitude: 12.68, longitude: 78.62 },
+      reason: "Customer confirmed the corrected address.", expectedVersion: 2,
+    });
   });
 });
 

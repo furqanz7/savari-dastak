@@ -2,11 +2,21 @@ import Foundation
 import MarketplaceDesignSystem
 import MarketplaceFoundation
 import MarketplaceInfrastructure
+import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct DastakV1MatchingView: View {
     @ObservedObject var model: DastakCustomerModel
     @Environment(\.dismiss) private var dismiss
+    @State private var isReportingIssue = false
+    @State private var issueCategory = DastakV1CustomerIssueCategory.wrongSKU
+    @State private var issueLineID: UUID?
+    @State private var issueDescription = ""
+    @State private var issuePhotoItem: PhotosPickerItem?
+    @State private var issueEvidenceData: Data?
+    @State private var issueEvidenceContentType: String?
+    @State private var issueEvidenceError: String?
 
     var body: some View {
         NavigationStack {
@@ -20,6 +30,9 @@ struct DastakV1MatchingView: View {
                                 deliveryCard(delivery)
                             }
                             orderSummary(order)
+                            if let support = order.support {
+                                supportCard(support, order: order)
+                            }
                             if order.status == .awaitingPayment,
                                let payment = order.payment {
                                 paymentCard(order: order, payment: payment)
@@ -233,6 +246,209 @@ struct DastakV1MatchingView: View {
         .marketplaceFlatSurface()
     }
 
+    @ViewBuilder
+    private func supportCard(
+        _ support: DastakV1OrderSupport,
+        order: DastakV1OrderSnapshot
+    ) -> some View {
+        if !support.recovery.isEmpty || !support.issues.isEmpty ||
+            !support.returns.isEmpty || !support.refunds.isEmpty ||
+            support.canReportIssue {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                Label("Help and recovery", systemImage: "lifepreserver.fill")
+                    .font(.headline)
+
+                ForEach(support.recovery) { recovery in
+                    Label(recovery.customerMessage, systemImage: "arrow.triangle.2.circlepath")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(support.issues) { issue in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(issueCategoryTitle(issue.category)) · \(displayState(issue.status))")
+                            .font(.subheadline.weight(.semibold))
+                        Text(issue.resolution ?? "Operations is reviewing your report.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                ForEach(support.returns) { customerReturn in
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                        Text("Return · \(displayState(customerReturn.status))")
+                            .font(.subheadline.weight(.semibold))
+                        Text("\(customerReturn.packageCount) package(s) · secure reverse custody")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        if let code = customerReturn.mission?.pickupCode {
+                            VStack(spacing: 4) {
+                                Text("RETURN PICKUP CODE")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                Text(code)
+                                    .font(.title2.bold().monospacedDigit())
+                                    .tracking(4)
+                                Text("Share only after the assigned rider photographs and accounts for every return package.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(MarketplaceSpacing.compact)
+                            .background(MarketplaceColors.dastakAccentSoft.color)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                    }
+                }
+
+                ForEach(support.refunds) { refund in
+                    Label(
+                        "Refund \(displayState(refund.status).lowercased()) · \(DastakFormatting.money(refund.amount)) to original payment method",
+                        systemImage: "arrow.uturn.backward.circle.fill"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+
+                if isReportingIssue {
+                    issueForm(order: order)
+                } else if support.canReportIssue {
+                    Button {
+                        resetIssueForm()
+                        isReportingIssue = true
+                    } label: {
+                        Label("Get help with this order", systemImage: "exclamationmark.bubble.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                }
+            }
+            .padding(MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
+        }
+    }
+
+    private func issueForm(order: DastakV1OrderSnapshot) -> some View {
+        let hasEvidence = issueEvidenceData != nil
+        return VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Picker("What went wrong?", selection: $issueCategory) {
+                ForEach(DastakV1CustomerIssueCategory.allCases, id: \.self) { category in
+                    Text(issueCategoryTitle(category)).tag(category)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Product", selection: $issueLineID) {
+                Text("Whole order").tag(Optional<UUID>.none)
+                ForEach(order.lines) { line in
+                    Text("\(line.quantity)× \(line.name)").tag(Optional(line.id))
+                }
+            }
+            .pickerStyle(.menu)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Details").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                TextEditor(text: $issueDescription)
+                    .frame(minHeight: 88)
+                    .padding(6)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityLabel("Issue details")
+            }
+
+            PhotosPicker(selection: $issuePhotoItem, matching: .images) {
+                Label(
+                    hasEvidence ? "Evidence photo added" : "Add evidence photo",
+                    systemImage: hasEvidence ? "checkmark.circle.fill" : "camera.fill"
+                )
+            }
+            .onChange(of: issuePhotoItem) { _, item in
+                Task { await loadIssueEvidence(item) }
+            }
+
+            Text(
+                evidenceRequired
+                    ? "A clear photo is required for item or package problems. JPG, PNG, or HEIC; up to 10 MB."
+                    : "A photo is optional for this issue. JPG, PNG, or HEIC; up to 10 MB."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if let issueEvidenceError {
+                Text(issueEvidenceError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Button("Back") { resetIssueForm() }
+                    .buttonStyle(.bordered)
+                Button {
+                    Task {
+                        if await model.reportV1Issue(
+                            category: issueCategory,
+                            orderLineID: issueLineID,
+                            description: issueDescription,
+                            evidenceData: issueEvidenceData,
+                            evidenceContentType: issueEvidenceContentType
+                        ) {
+                            resetIssueForm()
+                        }
+                    }
+                } label: {
+                    if model.isReportingV1Issue { ProgressView() }
+                    else { Text("Send to support") }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(MarketplaceColors.dastakAccent.color)
+                .disabled(
+                    model.isReportingV1Issue ||
+                    issueDescription.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 ||
+                    (evidenceRequired && issueEvidenceData == nil)
+                )
+            }
+        }
+    }
+
+    private var evidenceRequired: Bool {
+        ![.deliveryProblem, .other].contains(issueCategory)
+    }
+
+    private func loadIssueEvidence(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  (1...(10 * 1_024 * 1_024)).contains(data.count),
+                  let type = item.supportedContentTypes.first(where: {
+                      $0.conforms(to: .jpeg) || $0.conforms(to: .png) || $0.conforms(to: .heic)
+                  })
+            else { throw DastakIssuePhotoError.invalid }
+            let contentType: String
+            if type.conforms(to: .png) { contentType = "image/png" }
+            else if type.conforms(to: .heic) { contentType = "image/heic" }
+            else { contentType = "image/jpeg" }
+            issueEvidenceData = data
+            issueEvidenceContentType = contentType
+            issueEvidenceError = nil
+        } catch {
+            issuePhotoItem = nil
+            issueEvidenceData = nil
+            issueEvidenceContentType = nil
+            issueEvidenceError = "Choose a JPG, PNG, or HEIC photo up to 10 MB."
+        }
+    }
+
+    private func resetIssueForm() {
+        isReportingIssue = false
+        issueDescription = ""
+        issuePhotoItem = nil
+        issueEvidenceData = nil
+        issueEvidenceContentType = nil
+        issueEvidenceError = nil
+    }
+
     private var cancelButton: some View {
         Button(role: .destructive) {
             Task { await model.cancelActiveV1Order() }
@@ -319,4 +535,27 @@ struct DastakV1MatchingView: View {
         case .created, .matching: "magnifyingglass"
         }
     }
+
+    private func issueCategoryTitle(_ category: DastakV1CustomerIssueCategory) -> String {
+        switch category {
+        case .wrongSKU: "Wrong product"
+        case .wrongQuantity: "Wrong quantity"
+        case .damaged: "Damaged"
+        case .defective: "Defective"
+        case .expired: "Expired"
+        case .tamperedOrBrokenSeal: "Seal or tampering"
+        case .incorrectPackage: "Incorrect package"
+        case .suspectedMerchantMisfulfilment: "Merchant fulfilment concern"
+        case .deliveryProblem: "Delivery problem"
+        case .other: "Other"
+        }
+    }
+
+    private func displayState(_ value: String) -> String {
+        value.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+private enum DastakIssuePhotoError: Error {
+    case invalid
 }

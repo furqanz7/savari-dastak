@@ -8,6 +8,7 @@ import {
   handleCourierDispatch,
   type V1DeliveryMissionMutationInput,
   type V1FinalDeliveryMutationInput,
+  type V1ReturnMissionMutationInput,
   type V1RiderOfferDeclineInput,
   type V1RiderOfferMutationInput,
 } from "./handler.ts";
@@ -31,6 +32,7 @@ Deno.serve((request) =>
     declineV1Offer,
     advanceV1Mission,
     advanceV1FinalDelivery,
+    advanceV1ReturnMission,
   })
 );
 
@@ -94,6 +96,28 @@ async function advanceV1FinalDelivery(input: V1FinalDeliveryMutationInput) {
   });
   if (error) throw error;
   return rpcResponse(data, "dastak_v1_advance_final_delivery");
+}
+
+async function advanceV1ReturnMission(input: V1ReturnMissionMutationInput) {
+  const { data, error } = await serviceClient.rpc("dastak_v1_advance_return_mission", {
+    p_account_id: input.accountId,
+    p_return_mission_id: input.returnMissionId,
+    p_action: input.action,
+    p_return_stop_id: input.returnStopId,
+    p_object_path: input.objectPath,
+    p_verification_code: input.verificationCode,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  if (error) throw error;
+  const value = Array.isArray(data) ? data[0] : data;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("dastak_v1_advance_return_mission returned an invalid response");
+  }
+  const response = value as Record<string, unknown>;
+  return {
+    responseBody: response,
+    responseStatus: response.error ? 409 : 200,
+  };
 }
 
 async function getPartnerSnapshot(accountId: string) {

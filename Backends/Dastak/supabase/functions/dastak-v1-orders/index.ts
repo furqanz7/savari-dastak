@@ -109,5 +109,87 @@ Deno.serve((request) =>
           p_idempotency_key: input.idempotencyKey,
         },
       ),
+    reportExactSkuFailure: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_report_exact_sku_failure", {
+        p_fulfilment_id: input.fulfilmentId,
+        p_order_line_id: input.orderLineId,
+        p_reason: input.reason,
+        p_expected_fulfilment_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    createExactSkuRecoveryOffer: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_create_exact_sku_recovery_offer", {
+        p_recovery_case_id: input.recoveryCaseId,
+        p_branch_id: input.branchId,
+        p_expected_case_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    respondExactSkuRecoveryOffer: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_respond_exact_sku_recovery_offer", {
+        p_recovery_opportunity_id: input.recoveryOpportunityId,
+        p_response: input.response,
+        p_promised_prep_minutes: input.promisedPrepMinutes,
+        p_expected_opportunity_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    failExactSkuRecovery: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_fail_exact_sku_recovery", {
+        p_recovery_case_id: input.recoveryCaseId,
+        p_reason: input.reason,
+        p_expected_case_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    reportCustomerIssue: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_report_customer_issue", {
+        p_order_id: input.orderId,
+        p_order_line_id: input.orderLineId,
+        p_category: input.category,
+        p_description: input.description,
+        p_object_path: input.objectPath,
+        p_content_type: input.contentType,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    decideCustomerIssue: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_decide_customer_issue", {
+        p_issue_id: input.issueId,
+        p_decision: input.decision,
+        p_refund_amount_paise: input.refundAmountPaise,
+        p_fault_source: input.faultSource,
+        p_return_package_count: input.returnPackageCount,
+        p_reason: input.reason,
+        p_expected_issue_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    assignReturnRider: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_assign_return_rider", {
+        p_return_mission_id: input.returnMissionId,
+        p_rider_id: input.riderId,
+        p_expected_mission_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    manageDeliveryRecovery: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_manage_delivery_recovery", {
+        p_recovery_case_id: input.recoveryCaseId,
+        p_action: input.action,
+        p_fault_source: input.faultSource,
+        p_refund_amount_paise: input.refundAmountPaise,
+        p_corrected_address: input.correctedAddress,
+        p_reason: input.reason,
+        p_expected_case_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    finalizeSettlementCalculation: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_finalize_settlement_calculation", {
+        p_settlement_entry_id: input.settlementEntryId,
+        p_expected_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    settleEntry: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_settle_entry", {
+        p_settlement_entry_id: input.settlementEntryId,
+        p_settlement_reference: input.settlementReference,
+        p_expected_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
   })
 );

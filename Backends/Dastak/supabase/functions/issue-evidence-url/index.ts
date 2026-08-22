@@ -20,7 +20,10 @@ Deno.serve((request) =>
 );
 
 async function isActiveOwner(accountId: string) {
-  const { data, error } = await serviceClient.rpc("is_active_owner", { p_account_id: accountId });
+  const { data, error } = await serviceClient.rpc(
+    "dastak_v1_can_inspect_evidence",
+    { p_account_id: accountId },
+  );
   if (error) throw error;
   return data === true;
 }

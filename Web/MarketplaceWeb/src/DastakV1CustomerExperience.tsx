@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowRight, Check, ChevronRight, CircleAlert, MapPin, Minus, PackageCheck,
   Plus, Search, ShieldCheck, ShoppingBag, Sparkles, X,
@@ -11,7 +12,8 @@ import {
 } from "./customerAddresses";
 import type { CustomerSection } from "./customerNavigation";
 import {
-  cancelV1Order, formatV1Price, getV1Catalogue, getV1Order, getV1Orders, submitV1Order,
+  cancelV1Order, formatV1Price, getV1Catalogue, getV1Order, getV1Orders,
+  reportV1CustomerIssue, submitV1Order, uploadV1CustomerIssueEvidence,
   type DastakV1Auth, type V1CatalogueCategory, type V1CatalogueSku, type V1Order,
 } from "./dastakV1";
 import {
@@ -22,6 +24,7 @@ import {
 
 type Props = DastakV1Auth & {
   accountId: string;
+  client: SupabaseClient;
   displayName?: string;
   phoneNumber?: string;
   orderRefreshToken: number;
@@ -206,7 +209,7 @@ export function DastakV1CustomerExperience(props: Props) {
   };
 
   const cancelOrder = async () => {
-    if (!selectedOrder || busy) return;
+    if (!selectedOrder || busy) return false;
     setBusy(true);
     setError(undefined);
     try {
@@ -273,6 +276,39 @@ export function DastakV1CustomerExperience(props: Props) {
       }
     } catch (paymentError) {
       setError(message(paymentError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reportIssue = async (input: {
+    category: string;
+    description: string;
+    orderLineId?: string;
+    evidenceFile?: File;
+  }): Promise<boolean> => {
+    if (!selectedOrder || busy) return false;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const objectPath = input.evidenceFile
+        ? await uploadV1CustomerIssueEvidence(props.client, props.accountId, input.evidenceFile)
+        : undefined;
+      await reportV1CustomerIssue({
+        ...auth,
+        orderId: selectedOrder.id,
+        orderLineId: input.orderLineId,
+        category: input.category,
+        description: input.description,
+        objectPath,
+        contentType: input.evidenceFile?.type,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      await refreshSelectedOrder(selectedOrder.id);
+      return true;
+    } catch (issueError) {
+      setError(message(issueError));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -350,6 +386,7 @@ export function DastakV1CustomerExperience(props: Props) {
       order={selectedOrder} busy={busy} error={error} paymentMessage={paymentMessage}
       onDismiss={() => { setSelectedOrder(undefined); setPaymentMessage(undefined); }}
       onCancel={cancelOrder} onPay={payOrder}
+      onReportIssue={reportIssue}
     />}
     {showingAddressBook && <CustomerAddressBookSheet
       addresses={addresses} selectedAddressId={defaultAddress?.addressId} busy={busy} error={error} context="checkout"
@@ -431,7 +468,9 @@ function OrdersSection({ orders, onOpen }: { orders: V1Order[]; onOpen: (order: 
   </section>;
 }
 
-function MatchingSheet({ order, busy, error, paymentMessage, onDismiss, onCancel, onPay }: {
+function MatchingSheet({
+  order, busy, error, paymentMessage, onDismiss, onCancel, onPay, onReportIssue,
+}: {
   order: V1Order;
   busy: boolean;
   error?: string;
@@ -439,12 +478,20 @@ function MatchingSheet({ order, busy, error, paymentMessage, onDismiss, onCancel
   onDismiss: () => void;
   onCancel: () => void;
   onPay: () => void;
+  onReportIssue: (input: {
+    category: string; description: string; orderLineId?: string; evidenceFile?: File;
+  }) => Promise<boolean>;
 }) {
   const matching = matchingStatuses.has(order.status);
   const preparing = order.status === "PAID" || order.status === "PREPARING" ||
     order.status === "PICKUP_IN_PROGRESS";
   const fulfilmentActive = preparing || order.status === "OUT_FOR_DELIVERY";
   const [now, setNow] = useState(() => Date.now());
+  const [reportingIssue, setReportingIssue] = useState(false);
+  const [issueCategory, setIssueCategory] = useState("WRONG_SKU");
+  const [issueLineId, setIssueLineId] = useState("");
+  const [issueDescription, setIssueDescription] = useState("");
+  const [issueEvidence, setIssueEvidence] = useState<File>();
   useEffect(() => {
     if (order.status !== "AWAITING_PAYMENT") return;
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -468,6 +515,35 @@ function MatchingSheet({ order, busy, error, paymentMessage, onDismiss, onCancel
       <p>Share this in-app code only when every package is with you. A trusted recipient may use it without a Dastak account.</p>
     </div> : null}
     {order.status === "OUT_FOR_DELIVERY" && order.delivery?.verificationStatus === "BLOCKED" ? <p className="v1-payment-retry" role="status">Delivery verification needs Operations support. Your rider must keep every package secure.</p> : null}
+    {order.support?.recovery.map((recovery) => <p className="v1-payment-retry" role="status" key={recovery.id}>{recovery.customerMessage}</p>)}
+    {order.support?.issues.length ? <div className="v1-matching-lines" aria-label="Reported issues">
+      {order.support.issues.map((issue) => <div key={issue.id}><span>{issue.category.replaceAll("_", " ")} · {issue.status.replaceAll("_", " ")}</span><strong>{issue.resolution ?? "Operations reviewing"}</strong></div>)}
+    </div> : null}
+    {order.support?.returns.map((customerReturn) => <div className="v1-delivery-code" role="status" key={customerReturn.id}>
+      <span><small>RETURN {customerReturn.status.replaceAll("_", " ")}</small><strong>{customerReturn.mission?.pickupCode ?? `${customerReturn.packageCount} pkg`}</strong></span>
+      <p>{customerReturn.mission?.pickupCode ? "Share this in-app code only after the assigned rider photographs and accounts for every return package." : "Operations will arrange secure reverse custody when required."}</p>
+    </div>)}
+    {order.support?.refunds.map((refund) => <p className="v1-payment-message" role="status" key={refund.id}>Refund {refund.status.replaceAll("_", " ").toLowerCase()} · {formatV1Price(refund.amountPaise)} to original payment method</p>)}
+    {reportingIssue ? <form className="v1-problem-form" onSubmit={(event) => {
+      event.preventDefault();
+      void onReportIssue({
+        category: issueCategory,
+        description: issueDescription,
+        orderLineId: issueLineId || undefined,
+        evidenceFile: issueEvidence,
+      }).then((success) => {
+        if (!success) return;
+        setReportingIssue(false);
+        setIssueDescription("");
+        setIssueEvidence(undefined);
+      });
+    }}>
+      <label><span>What went wrong?</span><select value={issueCategory} onChange={(event) => setIssueCategory(event.target.value)}><option value="WRONG_SKU">Wrong product</option><option value="WRONG_QUANTITY">Wrong quantity</option><option value="DAMAGED">Damaged</option><option value="DEFECTIVE">Defective</option><option value="EXPIRED">Expired</option><option value="TAMPERED_OR_BROKEN_SEAL">Seal or tampering</option><option value="INCORRECT_PACKAGE">Incorrect package</option><option value="DELIVERY_PROBLEM">Delivery problem</option><option value="OTHER">Other</option></select></label>
+      <label><span>Product (optional)</span><select value={issueLineId} onChange={(event) => setIssueLineId(event.target.value)}><option value="">Whole order</option>{order.lines.map((line) => <option key={line.id} value={line.id}>{line.quantity}× {line.name}</option>)}</select></label>
+      <label><span>Details</span><textarea rows={3} minLength={3} maxLength={1000} required value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} /></label>
+      <label className="v1-photo-field"><span>Photo (optional)</span><input type="file" accept="image/jpeg,image/png,image/heic" capture="environment" onChange={(event) => setIssueEvidence(event.target.files?.[0])} /><small>{issueEvidence?.name ?? "JPG, PNG or HEIC up to 10 MB"}</small></label>
+      <div><button className="secondary-button" type="button" disabled={busy} onClick={() => setReportingIssue(false)}>Back</button><button className="primary-button" type="submit" disabled={busy || issueDescription.trim().length < 3}>{busy ? "Sending…" : "Send to support"}</button></div>
+    </form> : order.support?.canReportIssue ? <button className="secondary-button v1-secondary-action" type="button" disabled={busy} onClick={() => setReportingIssue(true)}><CircleAlert size={17} /> Get help with this order</button> : null}
     {paymentMessage ? <p className="v1-payment-message" role="status">{paymentMessage}</p> : null}
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {paymentReady ? <button className="primary-button v1-pay" type="button" disabled={busy} onClick={onPay}>{busy ? "Opening secure payment…" : `Pay ${formatV1Price(order.payment?.amountPaise ?? order.price.totalPaise)}`}<ArrowRight size={18} /></button> : null}

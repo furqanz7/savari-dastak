@@ -90,7 +90,7 @@ Deno.test("parcel checkout selects the parcel payment contract", async () => {
   assertEquals(recorded?.orderId, orderId);
 });
 
-Deno.test("V1 checkout is explicit and cannot fall back to payment-first commerce", async () => {
+Deno.test("V1 checkout and approved original-method refund are explicit", async () => {
   let recorded: PaymentActionInput | undefined;
   const response = await handleDastakPayments(
     request(
@@ -110,15 +110,28 @@ Deno.test("V1 checkout is explicit and cannot fall back to payment-first commerc
   assertEquals(recorded?.entityType, "dastak_v1_order");
   assertEquals(recorded?.orderId, orderId);
 
+  let recordedRefund: PaymentActionInput | undefined;
   const refund = await handleDastakPayments(
     request(
-      { operation: "processRefund", entityType: "dastak_v1_order", orderId },
+      {
+        operation: "processRefund",
+        entityType: "dastak_v1_order",
+        orderId,
+        refundId: otherAccountId,
+      },
       "Bearer session",
       "v1-refund",
     ),
-    dependencies(),
+    dependencies({
+      processRefund: (input) => {
+        recordedRefund = input;
+        return Promise.resolve({ responseBody: { refundState: "pending" }, responseStatus: 200 });
+      },
+    }),
   );
-  assertEquals(refund.status, 400);
+  assertEquals(refund.status, 200);
+  assertEquals(recordedRefund?.refundId, otherAccountId);
+  assertEquals(recordedRefund?.entityType, "dastak_v1_order");
 });
 
 Deno.test("V1 checkout failure is recorded against the authenticated reservation", async () => {

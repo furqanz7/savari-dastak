@@ -5,6 +5,7 @@ import {
   acceptV1DeliveryOffer,
   acceptDeliveryOffer,
   advanceV1DeliveryMission,
+  advanceV1ReturnMission,
   advanceDeliveryJob,
   declineV1DeliveryOffer,
   declineDeliveryOffer,
@@ -14,6 +15,7 @@ import {
   publishDeliveryPartnerLocation,
   setDeliveryPartnerAvailability,
   uploadV1DeliveryEvidence,
+  uploadV1ReturnEvidence,
   DeliveryRequestError,
   type DeliveryAssignment,
   type DeliveryDispatchSnapshot,
@@ -24,6 +26,8 @@ import {
   type V1DeliveryMissionOperation,
   type V1PickupStop,
   type V1RiderOffer,
+  type V1ReturnMission,
+  type V1ReturnMissionOperation,
 } from "./delivery";
 import { formatPrice } from "./catalogue";
 import { formatDeliveryDistance, orderStatusLabel } from "./orders";
@@ -60,6 +64,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     offer: null,
     currentMission: null,
     completedMission: null,
+    returnMission: null,
   });
   const [parcelDispatch, setParcelDispatch] = useState<ParcelPartnerSnapshot>({ offer: null, currentJob: null });
   const [earnings, setEarnings] = useState<EarningsSnapshot>();
@@ -300,8 +305,61 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     }
   };
 
+  const runV1ReturnAction = async (
+    mission: V1ReturnMission,
+    operation: V1ReturnMissionOperation,
+    options: { returnStopId?: string; verificationCode?: string; objectPath?: string } = {},
+  ) => {
+    const requestIdentity = `v1-return:${operation}:${mission.id}:${options.returnStopId ?? ""}:${options.verificationCode ?? ""}`;
+    const idempotencyKey = actionKeys.current.get(requestIdentity) ?? crypto.randomUUID();
+    actionKeys.current.set(requestIdentity, idempotencyKey);
+    setBusy(requestIdentity);
+    setError(undefined);
+    try {
+      const snapshot = await advanceV1ReturnMission({
+        ...auth, returnMissionId: mission.id, operation, ...options, idempotencyKey,
+      });
+      actionKeys.current.delete(requestIdentity);
+      setV1Dispatch(snapshot);
+      if (operation === "v1VerifyReturnPickup") {
+        setNotice("Return pickup verified. Every return package is now in your custody.");
+      }
+      if (operation === "v1VerifyReturnReceipt") {
+        setNotice("Merchant receipt verified. Reverse custody was recorded exactly once.");
+      }
+    } catch (actionError) {
+      setError(message(actionError));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const captureV1ReturnEvidence = async (mission: V1ReturnMission, file: File) => {
+    const requestIdentity = `v1-return:evidence:${mission.id}:${file.name}:${file.size}`;
+    const idempotencyKey = actionKeys.current.get(requestIdentity) ?? crypto.randomUUID();
+    actionKeys.current.set(requestIdentity, idempotencyKey);
+    setBusy(requestIdentity);
+    setError(undefined);
+    try {
+      const objectPath = await uploadV1ReturnEvidence(client, accountId, file);
+      const snapshot = await advanceV1ReturnMission({
+        ...auth, returnMissionId: mission.id, operation: "v1AddReturnEvidence",
+        objectPath, idempotencyKey,
+      });
+      actionKeys.current.delete(requestIdentity);
+      setV1Dispatch(snapshot);
+      setNotice("Immutable return-package photo captured.");
+    } catch (actionError) {
+      setError(message(actionError));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
   const online = partner?.availability?.status === "online";
-  const hasJob = Boolean(v1Dispatch.currentMission || dispatch.currentJob || parcelDispatch.currentJob);
+  const hasJob = Boolean(
+    v1Dispatch.currentMission || v1Dispatch.returnMission || dispatch.currentJob || parcelDispatch.currentJob,
+  );
 
   useEffect(() => {
     if (!online || !navigator.geolocation) return;
@@ -387,7 +445,18 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
           </section>
           {earnings && <section className="merchant-summary" aria-label="Earnings summary"><div><small>Completed</small><strong>{formatPrice(earnings.completedPaise)}</strong></div><div><small>This week</small><strong>{formatPrice(earnings.thisWeekPaise)}</strong></div><div><small>In progress</small><strong>{formatPrice(earnings.pendingPaise)}</strong></div></section>}
 
-          {v1Dispatch.currentMission && (
+          {v1Dispatch.returnMission && (
+            <CurrentV1ReturnMission
+              mission={v1Dispatch.returnMission}
+              busy={Boolean(busy)}
+              onAction={(operation, options) =>
+                void runV1ReturnAction(v1Dispatch.returnMission!, operation, options)}
+              onCaptureEvidence={(file) =>
+                void captureV1ReturnEvidence(v1Dispatch.returnMission!, file)}
+            />
+          )}
+
+          {v1Dispatch.currentMission && !v1Dispatch.returnMission && (
             <CurrentV1Mission
               mission={v1Dispatch.currentMission}
               busy={Boolean(busy)}
@@ -398,7 +467,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             />
           )}
 
-          {v1Dispatch.offer && !v1Dispatch.currentMission && (
+          {v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && (
             <V1DeliveryOffer
               offer={v1Dispatch.offer}
               busy={Boolean(busy)}
@@ -407,7 +476,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             />
           )}
 
-          {v1Dispatch.completedMission && !v1Dispatch.currentMission && (
+          {v1Dispatch.completedMission && !v1Dispatch.currentMission && !v1Dispatch.returnMission && (
             <section className="delivery-notice v1-delivered-card" role="status">
               <Check size={20} />
               <div>
@@ -417,7 +486,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             </section>
           )}
 
-          {!v1Dispatch.currentMission && dispatch.currentJob && (
+          {!v1Dispatch.currentMission && !v1Dispatch.returnMission && dispatch.currentJob && (
             <CurrentDelivery
               assignment={dispatch.currentJob}
               busy={Boolean(busy)}
@@ -427,7 +496,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             />
           )}
 
-          {!v1Dispatch.currentMission && parcelDispatch.currentJob && (
+          {!v1Dispatch.currentMission && !v1Dispatch.returnMission && parcelDispatch.currentJob && (
             <CurrentParcel
               assignment={parcelDispatch.currentJob}
               busy={Boolean(busy)}
@@ -437,7 +506,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             />
           )}
 
-          {!v1Dispatch.offer && !v1Dispatch.currentMission && dispatch.offer && (
+          {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && dispatch.offer && (
             <DeliveryOffer
               offer={dispatch.offer}
               busy={Boolean(busy)}
@@ -446,7 +515,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             />
           )}
 
-          {!v1Dispatch.offer && !v1Dispatch.currentMission && parcelDispatch.offer && (
+          {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && parcelDispatch.offer && (
             <ParcelOffer
               offer={parcelDispatch.offer}
               busy={Boolean(busy)}
@@ -455,7 +524,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             />
           )}
 
-          {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.completedMission && !dispatch.offer && !dispatch.currentJob && !parcelDispatch.offer && !parcelDispatch.currentJob && (
+          {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && !v1Dispatch.completedMission && !dispatch.offer && !dispatch.currentJob && !parcelDispatch.offer && !parcelDispatch.currentJob && (
             <section className="delivery-empty">
               <Bike size={25} />
               <div><h2>{online ? "Waiting for assignments" : "Offline"}</h2><p>{online ? "No ready orders nearby." : "Go online when available."}</p></div>
@@ -502,6 +571,54 @@ function V1DeliveryOffer({ offer, busy, onAccept, onDecline }: {
       </div>
     </section>
   );
+}
+
+function CurrentV1ReturnMission({
+  mission,
+  busy,
+  onAction,
+  onCaptureEvidence,
+}: {
+  mission: V1ReturnMission;
+  busy: boolean;
+  onAction: (
+    operation: V1ReturnMissionOperation,
+    options?: { returnStopId?: string; verificationCode?: string; objectPath?: string },
+  ) => void;
+  onCaptureEvidence: (file: File) => void;
+}) {
+  const [pickupCode, setPickupCode] = useState("");
+  const [receiptCodes, setReceiptCodes] = useState<Record<string, string>>({});
+  const [packagesAccounted, setPackagesAccounted] = useState(false);
+  useEffect(() => {
+    setPickupCode("");
+    setReceiptCodes({});
+    setPackagesAccounted(false);
+  }, [mission.id, mission.status]);
+  return <section className="current-delivery v1-delivery-card" aria-label="Active Dastak return mission">
+    <header><span className="section-icon"><PackageCheck size={22} /></span><div><p className="eyebrow">Secure return mission</p><h2>{mission.status === "ASSIGNED" ? "Collect from customer" : mission.status === "AT_CUSTOMER" ? "Verify reverse pickup" : "Return to merchants"}</h2><small>{mission.packageCount} package(s) · no partial custody transfer</small></div></header>
+    {mission.status !== "RETURNING_TO_MERCHANTS" ? <>
+      <div className="delivery-stop"><span><MapPin size={19} /></span><div><small>Customer destination</small><strong>{mission.customerDestination.address}</strong>{mission.customerDestination.recipientName ? <p>Recipient: {mission.customerDestination.recipientName}</p> : null}</div></div>
+      {mission.customerDestination.location ? <MapLink location={mission.customerDestination.location} label="Open return pickup route" /> : null}
+      {mission.canArriveCustomer ? <button className="primary-button delivery-next-action" type="button" disabled={busy} onClick={() => onAction("v1ReturnArriveAtCustomer")}><MapPin size={18} /> I’ve arrived</button> : null}
+      {mission.canCaptureEvidence ? <label className="v1-delivery-photo"><Camera size={20} /><span><strong>{mission.evidence.length ? "Add another return photo" : "Capture return packages"}</strong><small>Immutable evidence is required before custody transfer</small></span><input type="file" accept="image/jpeg,image/png,image/heic" capture="environment" disabled={busy} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) onCaptureEvidence(file); event.currentTarget.value = ""; }} /></label> : null}
+      {mission.evidence.length ? <p className="delivery-notice" role="status"><Check size={18} /> {mission.evidence.length} immutable return photo(s) secured.</p> : null}
+      {mission.canVerifyPickup ? <div className="v1-pickup-verification">
+        <label className="v1-physical-check"><input type="checkbox" checked={packagesAccounted} onChange={(event) => setPackagesAccounted(event.target.checked)} /><span>I accounted for all {mission.packageCount} return package(s).</span></label>
+        <label className="handoff-input">Customer return code<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={pickupCode} onChange={(event) => setPickupCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" /></label>
+        <button className="primary-button delivery-next-action" type="button" disabled={busy || !mission.evidence.length || !packagesAccounted || pickupCode.length !== 6 || mission.pickupVerification.status === "BLOCKED"} onClick={() => onAction("v1VerifyReturnPickup", { verificationCode: pickupCode })}><PackageCheck size={18} /> Verify complete return pickup</button>
+      </div> : null}
+      {mission.pickupVerification.status === "BLOCKED" ? <p className="order-error" role="alert">Return pickup verification is blocked. Keep custody unchanged and contact Operations.</p> : null}
+    </> : <div className="v1-mission-stops">{mission.stops.map((stop) => {
+      const code = receiptCodes[stop.id] ?? "";
+      return <article className={`v1-pickup-stop ${stop.status === "COMPLETED" ? "completed" : ""}`} key={stop.id}>
+        <header><span>{stop.sequence}</span><div><strong>{stop.branch.displayName}</strong><small>{stop.branch.address}</small></div><em>{stop.status.replaceAll("_", " ")}</em></header>
+        {stop.status === "PENDING" ? <button className="secondary-button" type="button" disabled={busy} onClick={() => onAction("v1ArriveAtReturnStop", { returnStopId: stop.id })}><MapPin size={17} /> I’ve arrived</button> : null}
+        {stop.status === "ARRIVED" ? <div className="v1-pickup-verification"><p>Transfer all {stop.packageCount} package(s) together.</p><label className="handoff-input">Merchant return receipt code<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setReceiptCodes((current) => ({ ...current, [stop.id]: event.target.value.replace(/\D/g, "").slice(0, 6) }))} placeholder="000000" /></label><button className="primary-button delivery-next-action" type="button" disabled={busy || code.length !== 6 || stop.verificationStatus === "BLOCKED"} onClick={() => onAction("v1VerifyReturnReceipt", { returnStopId: stop.id, verificationCode: code })}><PackageCheck size={18} /> Verify merchant receipt</button></div> : null}
+        {stop.verificationStatus === "BLOCKED" ? <p className="order-error" role="alert">Receipt verification blocked. Keep the packages secure and contact Operations.</p> : null}
+      </article>;
+    })}</div>}
+  </section>;
 }
 
 function CurrentV1Mission({

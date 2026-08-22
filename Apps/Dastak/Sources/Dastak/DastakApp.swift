@@ -272,6 +272,28 @@ private struct DastakCustomerPartnerRoot: View {
                 orderEvents: services.orderEvents,
                 checkoutCustomerProvider: services.checkoutCustomer,
                 accountIDProvider: services.accountID,
+                issueEvidenceUploader: { data, contentType in
+                    let fileExtension: String
+                    switch contentType {
+                    case "image/jpeg": fileExtension = "jpg"
+                    case "image/png": fileExtension = "png"
+                    case "image/heic": fileExtension = "heic"
+                    default: throw MarketplaceAuthenticatedServicesError.invalidObjectPath
+                    }
+                    let accountID = try await services.accountID()
+                    let path = [
+                        "customer-issue",
+                        accountID.uuidString.lowercased(),
+                        "\(UUID().uuidString.lowercased()).\(fileExtension)"
+                    ].joined(separator: "/")
+                    try await services.uploadObject(
+                        bucket: "dastak-evidence",
+                        path: path,
+                        data: data,
+                        contentType: contentType
+                    )
+                    return path
+                },
                 deliveryPartnerAccess: model.rootState.deliveryPartnerAccess,
                 isDeliveryPartnerAccessLoading: !model.hasLoadedPartnerAccess || model.isRefreshing,
                 becomeDeliveryPartner: {

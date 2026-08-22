@@ -17,7 +17,12 @@ type Dependencies = {
 type EvidenceRequest = { bucket: string; objectPath: string; operation: "download" };
 
 const bucket = "dastak-evidence";
-const selfOwnedRoots = new Set(["dastak-partner", "rider-delivery"]);
+const selfOwnedRoots = new Set([
+  "dastak-partner",
+  "rider-delivery",
+  "customer-issue",
+  "return-pickup",
+]);
 const ownerOnlyRoots = new Set([
   "merchant",
   "merchant-ready",

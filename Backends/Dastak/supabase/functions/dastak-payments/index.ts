@@ -124,15 +124,24 @@ async function createCheckout(input: PaymentActionInput) {
 }
 
 async function processRefund(input: PaymentActionInput) {
-  const prepared = await rpc(
-    input.entityType === "parcel"
-      ? "prepare_parcel_razorpay_refund"
-      : "prepare_merchant_order_razorpay_refund",
-    {
-      p_account_id: input.accountId,
-      [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
-    },
-  );
+  const prepared = input.entityType === "dastak_v1_order"
+    ? {
+      responseBody: await rpcJson("dastak_v1_prepare_razorpay_refund", {
+        p_account_id: input.accountId,
+        p_refund_id: input.refundId,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+      responseStatus: 200,
+    }
+    : await rpc(
+      input.entityType === "parcel"
+        ? "prepare_parcel_razorpay_refund"
+        : "prepare_merchant_order_razorpay_refund",
+      {
+        p_account_id: input.accountId,
+        [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
+      },
+    );
   if (prepared.responseStatus !== 200) return prepared;
 
   try {
@@ -155,6 +164,17 @@ async function processRefund(input: PaymentActionInput) {
       });
     if (providerRefund.amount !== details.amountPaise) return providerConflict();
 
+    if (input.entityType === "dastak_v1_order") {
+      return {
+        responseBody: await rpcJson("dastak_v1_attach_razorpay_refund", {
+          p_account_id: input.accountId,
+          p_refund_id: input.refundId,
+          p_provider_refund_reference: providerRefund.id,
+          p_amount_paise: details.amountPaise,
+        }),
+        responseStatus: 200,
+      };
+    }
     return await rpc(
       input.entityType === "parcel"
         ? "attach_parcel_razorpay_refund"

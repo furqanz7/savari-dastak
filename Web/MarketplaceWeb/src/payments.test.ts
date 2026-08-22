@@ -3,6 +3,7 @@ import {
   createCheckoutSession,
   createV1CheckoutSession,
   processOrderRefund,
+  processV1Refund,
   reportV1CheckoutFailure,
 } from "./payments";
 
@@ -98,5 +99,21 @@ describe("Dastak payments", () => {
       paymentAttemptId,
       failureCode: "CHECKOUT_DISMISSED",
     });
+  });
+
+  it("processes only an approved V1 refund identity with no client-authored amount", async () => {
+    const refundId = "8a000000-0000-4000-8000-000000000082";
+    let requestBody: unknown;
+    const result = await processV1Refund({
+      ...auth, orderId, refundId, idempotencyKey: "v1-refund",
+    }, (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return Promise.resolve(Response.json({ refundId, refundState: "pending" }));
+    });
+    expect(requestBody).toEqual({
+      operation: "processRefund", entityType: "dastak_v1_order", orderId, refundId,
+    });
+    expect(JSON.stringify(requestBody)).not.toMatch(/amount|destination/);
+    expect(result).toEqual({ refundId, refundState: "pending" });
   });
 });

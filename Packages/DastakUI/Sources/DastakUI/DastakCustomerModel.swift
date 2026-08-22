@@ -71,6 +71,7 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var isLoadingOrders = false
     @Published private(set) var isLoadingParcels = false
     @Published private(set) var isCheckingOut = false
+    @Published private(set) var isReportingV1Issue = false
     @Published var selectedLocation: DastakDeliveryLocation?
     @Published private(set) var savedAddresses: [DastakDeliveryLocation] = []
     @Published private(set) var deliveryAddress: DastakDeliveryLocation?
@@ -103,9 +104,15 @@ final class DastakCustomerModel: ObservableObject {
     private let deviceTokenClient: SupabaseDastakDeviceTokenClient?
     private let checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)?
     private let accountIDProvider: (@Sendable () async throws -> UUID)?
+    private let issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)?
     private var preferenceScope = "default"
     private var orderPlacementAttempt = DastakOrderPlacementAttempt()
     private var v1SubmissionAttempt: (fingerprint: String, key: IdempotencyKey)?
+    private var v1IssueAttempt: (
+        fingerprint: String,
+        key: IdempotencyKey,
+        evidencePath: String?
+    )?
     private var parcelPlacementAttempt = DastakOrderPlacementAttempt()
     private var ordersRefreshQueued = false
     private var parcelsRefreshQueued = false
@@ -120,7 +127,8 @@ final class DastakCustomerModel: ObservableObject {
         accountProfileClient: any AccountProfileClient,
         deviceTokenClient: SupabaseDastakDeviceTokenClient? = nil,
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
-        accountIDProvider: (@Sendable () async throws -> UUID)? = nil
+        accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
+        issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil
     ) {
         self.catalogueClient = catalogueClient
         self.v1Client = v1Client
@@ -132,12 +140,14 @@ final class DastakCustomerModel: ObservableObject {
         self.deviceTokenClient = deviceTokenClient
         self.checkoutCustomerProvider = checkoutCustomerProvider
         self.accountIDProvider = accountIDProvider
+        self.issueEvidenceUploader = issueEvidenceUploader
     }
 
     convenience init(
         functions: any FunctionClient,
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
-        accountIDProvider: (@Sendable () async throws -> UUID)? = nil
+        accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
+        issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil
     ) {
         self.init(
             catalogueClient: SupabaseCatalogueClient(functions: functions),
@@ -149,7 +159,8 @@ final class DastakCustomerModel: ObservableObject {
             accountProfileClient: SupabaseAccountProfileClient(functions: functions),
             deviceTokenClient: SupabaseDastakDeviceTokenClient(functions: functions),
             checkoutCustomerProvider: checkoutCustomerProvider,
-            accountIDProvider: accountIDProvider
+            accountIDProvider: accountIDProvider,
+            issueEvidenceUploader: issueEvidenceUploader
         )
     }
 
@@ -512,6 +523,91 @@ final class DastakCustomerModel: ObservableObject {
                 for: error,
                 fallback: "This order could not be cancelled. Refresh and try again."
             )
+        }
+    }
+
+    func reportV1Issue(
+        category: DastakV1CustomerIssueCategory,
+        orderLineID: UUID?,
+        description: String,
+        evidenceData: Data?,
+        evidenceContentType: String?
+    ) async -> Bool {
+        guard let activeV1Order, !isReportingV1Issue else { return false }
+        let normalized = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (3...1_000).contains(normalized.count) else {
+            v1OrderErrorMessage = "Add a few details so Operations can investigate."
+            return false
+        }
+        let evidenceRequired = ![.deliveryProblem, .other].contains(category)
+        guard (evidenceData == nil) == (evidenceContentType == nil),
+              !evidenceRequired || evidenceData != nil
+        else {
+            v1OrderErrorMessage = "Add a clear photo of the affected item or package."
+            return false
+        }
+        if let evidenceData, let evidenceContentType {
+            guard (1...(10 * 1_024 * 1_024)).contains(evidenceData.count),
+                  ["image/jpeg", "image/png", "image/heic"].contains(evidenceContentType),
+                  issueEvidenceUploader != nil
+            else {
+                v1OrderErrorMessage = "Choose a JPG, PNG, or HEIC photo up to 10 MB."
+                return false
+            }
+        }
+        isReportingV1Issue = true
+        defer { isReportingV1Issue = false }
+        do {
+            let fingerprint = [
+                activeV1Order.id.uuidString,
+                orderLineID?.uuidString ?? "ORDER",
+                category.rawValue,
+                normalized,
+                evidenceData.map { "\($0.count):\($0.hashValue)" } ?? "NO_EVIDENCE",
+                evidenceContentType ?? "NO_CONTENT_TYPE"
+            ].joined(separator: ":")
+            var attempt: (
+                fingerprint: String,
+                key: IdempotencyKey,
+                evidencePath: String?
+            )
+            if let existing = v1IssueAttempt, existing.fingerprint == fingerprint {
+                attempt = existing
+            } else {
+                attempt = (
+                    fingerprint: fingerprint,
+                    key: makeKey(),
+                    evidencePath: nil
+                )
+            }
+            if let evidenceData,
+               let evidenceContentType,
+               attempt.evidencePath == nil,
+               let issueEvidenceUploader {
+                attempt.evidencePath = try await issueEvidenceUploader(
+                    evidenceData,
+                    evidenceContentType
+                )
+            }
+            v1IssueAttempt = attempt
+            _ = try await v1Client.reportIssue(
+                orderID: activeV1Order.id,
+                orderLineID: orderLineID,
+                category: category,
+                description: normalized,
+                objectPath: attempt.evidencePath,
+                contentType: evidenceContentType,
+                idempotencyKey: attempt.key
+            )
+            v1IssueAttempt = nil
+            await refreshActiveV1Order()
+            return true
+        } catch {
+            v1OrderErrorMessage = message(
+                for: error,
+                fallback: "Your issue could not be sent. Try again without changing the details."
+            )
+            return false
         }
     }
 

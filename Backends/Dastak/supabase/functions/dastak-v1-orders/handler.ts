@@ -90,6 +90,88 @@ export type V1OrderDependencies = {
     expectedMissionVersion: number;
     idempotencyKey: string;
   }) => Promise<unknown>;
+  reportExactSkuFailure: (input: {
+    accessToken: string;
+    fulfilmentId: string;
+    orderLineId: string;
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  createExactSkuRecoveryOffer: (input: {
+    accessToken: string;
+    recoveryCaseId: string;
+    branchId: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  respondExactSkuRecoveryOffer: (input: {
+    accessToken: string;
+    recoveryOpportunityId: string;
+    response: "ACCEPT" | "UNAVAILABLE";
+    promisedPrepMinutes: number | null;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  failExactSkuRecovery: (input: {
+    accessToken: string;
+    recoveryCaseId: string;
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  reportCustomerIssue: (input: {
+    accessToken: string;
+    orderId: string;
+    orderLineId: string | null;
+    category: string;
+    description: string;
+    objectPath: string | null;
+    contentType: string | null;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  decideCustomerIssue: (input: {
+    accessToken: string;
+    issueId: string;
+    decision: string;
+    refundAmountPaise: number | null;
+    faultSource: string | null;
+    returnPackageCount: number | null;
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  assignReturnRider: (input: {
+    accessToken: string;
+    returnMissionId: string;
+    riderId: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  manageDeliveryRecovery: (input: {
+    accessToken: string;
+    recoveryCaseId: string;
+    action: string;
+    faultSource: string;
+    refundAmountPaise: number | null;
+    correctedAddress: Record<string, unknown> | null;
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  finalizeSettlementCalculation: (input: {
+    accessToken: string;
+    settlementEntryId: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  settleEntry: (input: {
+    accessToken: string;
+    settlementEntryId: string;
+    settlementReference: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -361,6 +443,253 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           }),
         );
       }
+      case "reportExactSkuFailure": {
+        const fulfilmentId = requiredUUID(body.fulfilmentId);
+        const orderLineId = requiredUUID(body.orderLineId);
+        const reason = requiredText(body.reason, 500);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !fulfilmentId || !orderLineId || !reason || reason.length < 3 ||
+          !expectedVersion || !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.reportExactSkuFailure({
+            accessToken: actor.accessToken,
+            fulfilmentId,
+            orderLineId,
+            reason,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "createExactSkuRecoveryOffer": {
+        const recoveryCaseId = requiredUUID(body.recoveryCaseId);
+        const branchId = requiredUUID(body.branchId);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (!recoveryCaseId || !branchId || !expectedVersion || !idempotencyKey) {
+          return validationError();
+        }
+        return json(
+          await dependencies.createExactSkuRecoveryOffer({
+            accessToken: actor.accessToken,
+            recoveryCaseId,
+            branchId,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "respondExactSkuRecoveryOffer": {
+        const recoveryOpportunityId = requiredUUID(body.recoveryOpportunityId);
+        const response = body.response === "ACCEPT" || body.response === "UNAVAILABLE"
+          ? body.response
+          : undefined;
+        const promisedPrepMinutes = response === "ACCEPT"
+          ? integer(body.promisedPrepMinutes, 1, 24 * 60) ?? null
+          : null;
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !recoveryOpportunityId || !response ||
+          (response === "ACCEPT" && !promisedPrepMinutes) ||
+          !expectedVersion || !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.respondExactSkuRecoveryOffer({
+            accessToken: actor.accessToken,
+            recoveryOpportunityId,
+            response,
+            promisedPrepMinutes,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "failExactSkuRecovery": {
+        const recoveryCaseId = requiredUUID(body.recoveryCaseId);
+        const reason = requiredText(body.reason, 500);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !recoveryCaseId || !reason || reason.length < 3 ||
+          !expectedVersion || !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.failExactSkuRecovery({
+            accessToken: actor.accessToken,
+            recoveryCaseId,
+            reason,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "reportCustomerIssue": {
+        const orderId = requiredUUID(body.orderId);
+        const orderLineId = body.orderLineId === null || body.orderLineId === undefined
+          ? null
+          : requiredUUID(body.orderLineId) ?? null;
+        const category = issueCategory(body.category);
+        const description = requiredText(body.description, 1000);
+        const objectPath = body.objectPath === null || body.objectPath === undefined
+          ? null
+          : requiredText(body.objectPath, 500) ?? null;
+        const contentType = body.contentType === null || body.contentType === undefined
+          ? null
+          : issueContentType(body.contentType) ?? null;
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !orderId || !category || !description || description.length < 3 ||
+          !idempotencyKey ||
+          ((body.orderLineId !== null && body.orderLineId !== undefined) && !orderLineId) ||
+          ((body.objectPath === null || body.objectPath === undefined) !==
+            (body.contentType === null || body.contentType === undefined)) ||
+          (body.objectPath !== null && body.objectPath !== undefined &&
+            (!objectPath || !contentType))
+        ) return validationError();
+        return json(
+          await dependencies.reportCustomerIssue({
+            accessToken: actor.accessToken,
+            orderId,
+            orderLineId,
+            category,
+            description,
+            objectPath,
+            contentType,
+            idempotencyKey,
+          }),
+          201,
+        );
+      }
+      case "decideCustomerIssue": {
+        const issueId = requiredUUID(body.issueId);
+        const decision = issueDecision(body.decision);
+        const refundAmountPaise = nullableMoney(body.refundAmountPaise);
+        const faultSource = nullableFaultSource(body.faultSource);
+        const returnPackageCount = body.returnPackageCount === null ||
+            body.returnPackageCount === undefined
+          ? null
+          : integer(body.returnPackageCount, 1, 1000) ?? null;
+        const reason = requiredText(body.reason, 500);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !issueId || !decision || !reason || reason.length < 3 ||
+          !expectedVersion || !idempotencyKey ||
+          (body.refundAmountPaise !== null && body.refundAmountPaise !== undefined &&
+            refundAmountPaise === undefined) ||
+          (body.faultSource !== null && body.faultSource !== undefined &&
+            faultSource === undefined) ||
+          (body.returnPackageCount !== null && body.returnPackageCount !== undefined &&
+            !returnPackageCount)
+        ) return validationError();
+        return json(
+          await dependencies.decideCustomerIssue({
+            accessToken: actor.accessToken,
+            issueId,
+            decision,
+            refundAmountPaise: refundAmountPaise ?? null,
+            faultSource: faultSource ?? null,
+            returnPackageCount,
+            reason,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "assignReturnRider": {
+        const returnMissionId = requiredUUID(body.returnMissionId);
+        const riderId = requiredUUID(body.riderId);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (!returnMissionId || !riderId || !expectedVersion || !idempotencyKey) {
+          return validationError();
+        }
+        return json(
+          await dependencies.assignReturnRider({
+            accessToken: actor.accessToken,
+            returnMissionId,
+            riderId,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "manageDeliveryRecovery": {
+        const recoveryCaseId = requiredUUID(body.recoveryCaseId);
+        const action = deliveryRecoveryAction(body.action);
+        const faultSource = recoveryFaultSource(body.faultSource);
+        const refundAmountPaise = nullableMoney(body.refundAmountPaise);
+        const correctedAddress = body.correctedAddress === null ||
+            body.correctedAddress === undefined
+          ? null
+          : record(body.correctedAddress) ?? null;
+        const reason = requiredText(body.reason, 500);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !recoveryCaseId || !action || !faultSource || !reason || reason.length < 10 ||
+          !expectedVersion || !idempotencyKey ||
+          (body.refundAmountPaise !== null && body.refundAmountPaise !== undefined &&
+            refundAmountPaise === undefined) ||
+          (body.correctedAddress !== null && body.correctedAddress !== undefined &&
+            !correctedAddress) ||
+          (action === "RETURN_TO_ORIGIN" && correctedAddress !== null) ||
+          (action === "RESUME_DELIVERY" && refundAmountPaise !== null) ||
+          (faultSource === "CUSTOMER" && refundAmountPaise !== null)
+        ) return validationError();
+        return json(
+          await dependencies.manageDeliveryRecovery({
+            accessToken: actor.accessToken,
+            recoveryCaseId,
+            action,
+            faultSource,
+            refundAmountPaise: refundAmountPaise ?? null,
+            correctedAddress,
+            reason,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "finalizeSettlementCalculation": {
+        const settlementEntryId = requiredUUID(body.settlementEntryId);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (!settlementEntryId || !expectedVersion || !idempotencyKey) {
+          return validationError();
+        }
+        return json(
+          await dependencies.finalizeSettlementCalculation({
+            accessToken: actor.accessToken,
+            settlementEntryId,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "settleEntry": {
+        const settlementEntryId = requiredUUID(body.settlementEntryId);
+        const settlementReference = requiredText(body.settlementReference, 200);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !settlementEntryId || !settlementReference || !expectedVersion ||
+          !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.settleEntry({
+            accessToken: actor.accessToken,
+            settlementEntryId,
+            settlementReference,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
       default:
         return validationError();
     }
@@ -395,6 +724,77 @@ function validTimestamp(value: unknown) {
 
 function merchantRequestScope(value: unknown) {
   return value === "FULL_BASKET" || value === "REQUESTED_SUBSET" ? value : undefined;
+}
+
+function issueCategory(value: unknown) {
+  return typeof value === "string" && [
+      "WRONG_SKU",
+      "WRONG_QUANTITY",
+      "DAMAGED",
+      "DEFECTIVE",
+      "EXPIRED",
+      "TAMPERED_OR_BROKEN_SEAL",
+      "INCORRECT_PACKAGE",
+      "SUSPECTED_MERCHANT_MISFULFILMENT",
+      "DELIVERY_PROBLEM",
+      "OTHER",
+    ].includes(value)
+    ? value
+    : undefined;
+}
+
+function issueContentType(value: unknown) {
+  return value === "image/jpeg" || value === "image/png" || value === "image/heic"
+    ? value
+    : undefined;
+}
+
+function issueDecision(value: unknown) {
+  return typeof value === "string" && [
+      "REJECT",
+      "RESOLVE_NO_REFUND",
+      "REFUND_WITHOUT_RETURN",
+      "PHYSICAL_RETURN",
+    ].includes(value)
+    ? value
+    : undefined;
+}
+
+function nullableFaultSource(value: unknown) {
+  if (value === null || value === undefined) return null;
+  return typeof value === "string" && [
+      "MERCHANT",
+      "RIDER",
+      "DASTAK",
+      "CUSTOMER",
+      "NONE",
+      "UNKNOWN",
+    ].includes(value)
+    ? value
+    : undefined;
+}
+
+function recoveryFaultSource(value: unknown) {
+  return typeof value === "string" && [
+      "MERCHANT",
+      "RIDER",
+      "DASTAK",
+      "CUSTOMER",
+    ].includes(value)
+    ? value
+    : undefined;
+}
+
+function deliveryRecoveryAction(value: unknown) {
+  return value === "RESUME_DELIVERY" || value === "RETURN_TO_ORIGIN" ? value : undefined;
+}
+
+function nullableMoney(value: unknown) {
+  if (value === null || value === undefined) return null;
+  return typeof value === "number" && Number.isSafeInteger(value) &&
+      value > 0 && value <= 100_000_000
+    ? value
+    : undefined;
 }
 
 function integer(value: unknown, minimum: number, maximum: number) {

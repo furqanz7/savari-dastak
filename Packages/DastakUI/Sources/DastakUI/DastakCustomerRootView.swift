@@ -46,6 +46,7 @@ public struct DastakCustomerRootView: View {
         orderEvents: any OrderEventClient = NoopOrderEventClient(),
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
+        issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil,
         deliveryPartnerAccess: DeliveryPartnerAccess = .unavailable,
         isDeliveryPartnerAccessLoading: Bool = false,
         becomeDeliveryPartner: @escaping () -> Void = {}
@@ -54,7 +55,8 @@ public struct DastakCustomerRootView: View {
             wrappedValue: DastakCustomerModel(
                 functions: functions,
                 checkoutCustomerProvider: checkoutCustomerProvider,
-                accountIDProvider: accountIDProvider
+                accountIDProvider: accountIDProvider,
+                issueEvidenceUploader: issueEvidenceUploader
             )
         )
         isPreview = false

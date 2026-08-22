@@ -129,6 +129,22 @@ Deno.test("evidence URL signs self-owned rider delivery evidence and lets Operat
   assertEquals(operationsResponse.status, 200);
 });
 
+Deno.test("evidence URL supports account-scoped customer issues and return pickup evidence", async () => {
+  for (const root of ["customer-issue", "return-pickup"]) {
+    const response = await handleIssueEvidenceUrl(
+      request({
+        body: {
+          bucket: "dastak-evidence",
+          objectPath: `${root}/${accountId}/44444444-4444-4444-8444-444444444444.jpg`,
+          operation: "download",
+        },
+      }),
+      dependencies({ isActiveOwner: () => Promise.reject(new Error("must not be called")) }),
+    );
+    assertEquals(response.status, 200);
+  }
+});
+
 Deno.test("evidence URL denies another user's evidence object", async () => {
   let signingCalls = 0;
   const response = await handleIssueEvidenceUrl(
