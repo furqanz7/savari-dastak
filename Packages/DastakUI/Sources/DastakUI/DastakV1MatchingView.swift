@@ -80,7 +80,7 @@ struct DastakV1MatchingView: View {
             }
 
             Label(
-                order.status == .paid
+                [.paid, .preparing].contains(order.status)
                     ? "Payment confirmed exactly once"
                     : "No charge until the complete basket is secured",
                 systemImage: "checkmark.shield.fill"
@@ -205,7 +205,7 @@ struct DastakV1MatchingView: View {
     }
 
     private func shouldPoll(_ status: DastakV1OrderStatus) -> Bool {
-        [.created, .matching, .fullySecured, .awaitingPayment].contains(status)
+        [.created, .matching, .fullySecured, .awaitingPayment, .paid, .preparing].contains(status)
     }
 
     private func isMatching(_ status: DastakV1OrderStatus) -> Bool {
@@ -220,8 +220,7 @@ struct DastakV1MatchingView: View {
         switch status {
         case .created, .matching: "Finding every item"
         case .fullySecured, .awaitingPayment: "Your basket is secured"
-        case .paid: "Payment confirmed"
-        case .preparing: "Preparing your order"
+        case .paid, .preparing: "Preparing your order"
         case .pickupInProgress: "Pickup in progress"
         case .outForDelivery: "On the way"
         case .delivered: "Delivered"
@@ -238,8 +237,7 @@ struct DastakV1MatchingView: View {
             "Dastak is matching the exact products in your basket. Retail merchant identities stay private."
         case .fullySecured, .awaitingPayment:
             "Every item has been reserved. Secure payment will be requested before preparation begins."
-        case .paid: "Your payment is confirmed. Preparation will begin next."
-        case .preparing: "Your secured items are being prepared."
+        case .paid, .preparing: "Payment is confirmed and your secured items are being prepared."
         case .pickupInProgress: "Your rider is collecting the declared packages."
         case .outForDelivery: "Your verified packages are heading to you."
         case .delivered: "Your delivery has been completed."
@@ -263,8 +261,8 @@ struct DastakV1MatchingView: View {
 
     private func statusSymbol(_ status: DastakV1OrderStatus) -> String {
         switch status {
-        case .fullySecured, .awaitingPayment, .paid, .delivered: "checkmark.shield.fill"
-        case .preparing: "shippingbox.fill"
+        case .fullySecured, .awaitingPayment, .delivered: "checkmark.shield.fill"
+        case .paid, .preparing: "shippingbox.fill"
         case .pickupInProgress, .outForDelivery: "scooter"
         case .cancelledPrepayment, .paymentExpired: "xmark.circle.fill"
         case .unavailable, .fulfilmentFailure: "exclamationmark.triangle.fill"

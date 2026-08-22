@@ -78,6 +78,10 @@
 .v1-trace-section p { margin: 0; color: var(--text-secondary); font-size: 13px; }
 .v1-trace-section article { display: flex; justify-content: space-between; gap: 15px; padding: 7px 0; font-size: 12px; }
 .v1-trace-section article span { color: var(--text-secondary); text-align: right; }
+.v1-trace-section article strong { display: inline-flex; align-items: center; gap: 5px; }
+.v1-trace-section article.running-late strong { color: #b43b27; }
+.v1-evidence-link { padding: 0; border: 0; color: var(--dastak-accent); background: transparent; font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+.v1-evidence-link + small { display: block; max-width: 260px; margin-top: 3px; color: #b43b27; }
 
 @media (max-width: 820px) {
   .v1-execution-layout { grid-template-columns: 1fr; }

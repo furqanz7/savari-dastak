@@ -20,11 +20,44 @@
 .v1-opportunity-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
 .v1-opportunity-actions button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin: 0; }
 .v1-reservation-state { margin: 12px 0 0; padding: 12px; border-radius: 11px; color: var(--text-secondary); background: var(--surface-muted); font-size: 13px; line-height: 1.45; }
+.v1-preparation-list { display: grid; gap: 14px; margin-top: 18px; }
+.v1-preparation-card { padding: 17px; border: 1px solid color-mix(in srgb, var(--dastak-accent) 42%, var(--divider)); border-radius: 15px; background: var(--surface); box-shadow: 0 10px 28px rgb(20 41 31 / 7%); }
+.v1-preparation-card.running-late { border-color: color-mix(in srgb, #c94c32 58%, var(--divider)); }
+.v1-preparation-card > header { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; }
+.v1-preparation-card > header > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
+.v1-preparation-card > header small { color: var(--text-secondary); }
+.v1-preparation-card > header b { color: var(--dastak-accent); font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; }
+.v1-preparation-card.running-late > header b, .v1-preparation-card.running-late .v1-opportunity-icon { color: #b43b27; }
+.v1-preparation-card ul { display: grid; gap: 8px; margin: 15px 0; padding: 14px 0; border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); list-style: none; }
+.v1-preparation-card li span { display: grid; gap: 3px; }
+.v1-preparation-card li small { color: var(--text-secondary); }
+.v1-preparation-times { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.v1-preparation-times > span { min-width: 0; display: grid; gap: 3px; padding: 10px; border-radius: 10px; background: var(--surface-muted); }
+.v1-preparation-times small { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; }
+.v1-preparation-times strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.v1-ready-workflow { display: grid; gap: 12px; padding: 14px; border-radius: 12px; background: var(--surface-muted); }
+.v1-ready-workflow > label:not(.v1-physical-check), .v1-problem-form label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.v1-ready-workflow input[type="number"], .v1-ready-workflow input[type="file"], .v1-problem-form textarea { width: 100%; min-height: 43px; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--divider); border-radius: 10px; color: var(--text-primary); background: var(--surface); font: inherit; }
+.v1-ready-workflow input[type="number"] { max-width: 130px; }
+.v1-photo-field small, .v1-ready-workflow > label > small { color: var(--text-secondary); font-weight: 400; }
+.v1-add-photo, .v1-mark-ready { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin: 0; }
+.v1-add-photo { justify-self: start; }
+.v1-mark-ready { width: 100%; }
+.v1-ready-complete { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; padding: 12px; border-radius: 11px; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-size: 13px; font-weight: 700; }
+.v1-evidence-count { display: flex; align-items: center; gap: 6px; margin: 11px 0 0; color: var(--text-secondary); font-size: 12px; }
+.v1-report-problem { display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 0; padding: 0; border: 0; color: #a33a29; background: transparent; font: inherit; font-size: 12px; font-weight: 700; }
+.v1-problem-form { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--divider); border-radius: 11px; }
+.v1-problem-form textarea { min-height: 84px; resize: vertical; }
+.v1-problem-form > div { display: flex; justify-content: flex-end; gap: 8px; }
+.v1-problem-form button { min-height: 42px; margin: 0; }
+.v1-problem-history { display: block; margin-top: 8px; color: var(--text-secondary); }
 
 @media (max-width: 620px) {
   .v1-merchant-panel { padding: 15px; }
-  .v1-opportunity-card > header { grid-template-columns: 42px minmax(0, 1fr); }
-  .v1-opportunity-card > header b { grid-column: 2; }
+  .v1-opportunity-card > header, .v1-preparation-card > header { grid-template-columns: 42px minmax(0, 1fr); }
+  .v1-opportunity-card > header b, .v1-preparation-card > header b { grid-column: 2; text-align: left; }
   .v1-opportunity-actions { display: grid; grid-template-columns: 1fr; }
   .v1-opportunity-actions button { width: 100%; }
+  .v1-preparation-times { grid-template-columns: 1fr; }
+  .v1-problem-form > div { display: grid; grid-template-columns: 1fr 1fr; }
 }

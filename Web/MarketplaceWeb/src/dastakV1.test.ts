@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   DastakV1RequestError,
+  addV1FulfilmentReadyEvidence,
+  declareV1FulfilmentPackages,
   getV1AdminExecutionTrace,
   getV1Catalogue,
+  getV1MerchantFulfilments,
   getV1MerchantOpportunities,
+  markV1FulfilmentReady,
+  merchantReadyEvidenceObjectPath,
   parseV1Catalogue,
   parseV1Order,
   respondToV1MerchantOpportunity,
@@ -21,6 +26,8 @@ const subcategoryId = "22222222-2222-4222-8222-222222222222";
 const skuId = "33333333-3333-4333-8333-333333333333";
 const orderId = "44444444-4444-4444-8444-444444444444";
 const lineId = "55555555-5555-4555-8555-555555555555";
+const fulfilmentId = "66666666-6666-4666-8666-666666666666";
+const packageId = "99999999-9999-4999-8999-999999999999";
 
 describe("Dastak V1 web contract", () => {
   it("requests a canonical customer projection without merchant discovery fields", async () => {
@@ -149,11 +156,51 @@ describe("Dastak V1 web contract", () => {
         },
         matchingAttempts: [], provisionalHolds: [], plans: [], capacity: [],
         payment: { status: "RESERVED" }, reconciliationCases: [],
+        preparation: {
+          riderMatchEligibility: { eligible: false }, fulfilments: [], packages: [],
+          evidence: [], problems: [], history: [],
+        },
       });
     });
 
     expect(requestBody).toEqual({ operation: "adminExecutionTrace", orderId });
     expect(result.payment?.status).toBe("RESERVED");
+    expect(result.preparation?.fulfilments).toEqual([]);
+  });
+
+  it("uses optimistic, idempotent preparation commands and immutable evidence paths", async () => {
+    const listed = await getV1MerchantFulfilments(auth, async () => Response.json({
+      fulfilments: [fulfilmentFixture()],
+    }));
+    expect(listed[0]).toMatchObject({ status: "PREPARING", promisedPrepMinutes: 10 });
+    expect(merchantReadyEvidenceObjectPath(categoryId, "image/jpeg", subcategoryId))
+      .toBe(`merchant-ready/${categoryId}/${subcategoryId}.jpg`);
+
+    const calls: Array<{ body: Record<string, unknown>; key: string | null }> = [];
+    const command = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+        key: new Headers(init?.headers).get("x-idempotency-key"),
+      });
+      return Response.json({ ...fulfilmentFixture(), version: calls.length + 1 });
+    };
+    await declareV1FulfilmentPackages({
+      ...auth, fulfilmentId, packageCount: 2, expectedVersion: 1, idempotencyKey: "packages-once",
+    }, command);
+    await addV1FulfilmentReadyEvidence({
+      ...auth, fulfilmentId, packageId,
+      objectPath: `merchant-ready/${categoryId}/${subcategoryId}.jpg`,
+      expectedVersion: 2, idempotencyKey: "evidence-once",
+    }, command);
+    await markV1FulfilmentReady({
+      ...auth, fulfilmentId, expectedVersion: 3, idempotencyKey: "ready-once",
+    }, command);
+
+    expect(calls.map((call) => call.body.operation)).toEqual([
+      "declareFulfilmentPackages", "addFulfilmentReadyEvidence", "markFulfilmentReady",
+    ]);
+    expect(calls.map((call) => call.key)).toEqual(["packages-once", "evidence-once", "ready-once"]);
+    expect(calls[1].body).toMatchObject({ fulfilmentId, packageId, expectedVersion: 2 });
   });
 });
 
@@ -211,5 +258,38 @@ function opportunityFixture() {
       orderLineId: lineId, skuId, name: "Rice", variant: null,
       packSize: "1 kg", quantity: 2,
     }],
+  };
+}
+
+function fulfilmentFixture() {
+  return {
+    id: fulfilmentId,
+    orderId,
+    displayOrderNumber: "DV1-0001",
+    orderStatus: "PREPARING",
+    status: "PREPARING",
+    version: 1,
+    branch: { id: "88888888-8888-4888-8888-888888888888", displayName: "Convenience Store" },
+    promisedPrepMinutes: 10,
+    prepStartedAt: "2026-08-22T00:02:00Z",
+    estimatedReadyAt: "2026-08-22T00:12:00Z",
+    actualReadyAt: null,
+    secondsRemaining: 600,
+    runningLate: false,
+    lateSeconds: 0,
+    packageCount: null,
+    packages: [],
+    evidence: [],
+    problemReports: [],
+    capacity: { status: "HELD", heldAt: "2026-08-22T00:01:00Z", releasedAt: null, releaseReason: null },
+    riderMatchEligibility: {
+      eligible: false, evaluatedAt: "2026-08-22T00:02:00Z", thresholdSeconds: 300,
+      requiredFulfilmentCount: 1, satisfiedFulfilmentCount: 0, nextEligibleAt: "2026-08-22T00:07:00Z",
+    },
+    canDeclarePackages: true,
+    canAddEvidence: true,
+    canMarkReady: false,
+    readyIsIrreversible: true,
+    lines: [{ orderLineId: lineId, skuId, name: "Rice", variant: null, packSize: "1 kg", quantity: 2 }],
   };
 }

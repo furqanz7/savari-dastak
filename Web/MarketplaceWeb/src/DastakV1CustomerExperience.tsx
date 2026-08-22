@@ -32,7 +32,7 @@ type Props = DastakV1Auth & {
 
 type Cart = Record<string, number>;
 const matchingStatuses = new Set(["CREATED", "MATCHING"]);
-const liveStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT"]);
+const liveStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT", "PAID", "PREPARING"]);
 const cancellableStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT"]);
 
 export function DastakV1CustomerExperience(props: Props) {
@@ -265,7 +265,7 @@ export function DastakV1CustomerExperience(props: Props) {
       setPaymentMessage("Payment received. Confirming it securely with Dastak…");
       for (let attempt = 0; attempt < 8; attempt += 1) {
         const order = await refreshSelectedOrder(selectedOrder.id);
-        if (order.status === "PAID" || order.status === "PAYMENT_EXPIRED") break;
+        if (order.status === "PAID" || order.status === "PREPARING" || order.status === "PAYMENT_EXPIRED") break;
         await new Promise((resolve) => window.setTimeout(resolve, 1_500));
       }
     } catch (paymentError) {
@@ -438,6 +438,7 @@ function MatchingSheet({ order, busy, error, paymentMessage, onDismiss, onCancel
   onPay: () => void;
 }) {
   const matching = matchingStatuses.has(order.status);
+  const preparing = order.status === "PAID" || order.status === "PREPARING";
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (order.status !== "AWAITING_PAYMENT") return;
@@ -450,7 +451,7 @@ function MatchingSheet({ order, busy, error, paymentMessage, onDismiss, onCancel
   const paymentReady = order.status === "AWAITING_PAYMENT" && order.payment?.canAttempt && paymentSeconds > 0;
   return <div className="v1-overlay" role="presentation"><section className="v1-sheet v1-matching-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-order-status-title">
     <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">Order status</h2></div><button type="button" onClick={onDismiss} aria-label="Close order status"><X size={19} /></button></header>
-    <div className="v1-status-hero"><span className={matching ? "matching" : ""}>{matching ? <i /> : <Check size={34} />}</span><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p>{order.status === "PAID" ? <small><ShieldCheck size={16} /> Payment confirmed exactly once</small> : <small><ShieldCheck size={16} /> No charge until the complete basket is secured</small>}</div>
+    <div className="v1-status-hero"><span className={matching ? "matching" : ""}>{matching ? <i /> : preparing ? <PackageCheck size={34} /> : <Check size={34} />}</span><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p>{preparing ? <small><ShieldCheck size={16} /> Payment confirmed exactly once</small> : <small><ShieldCheck size={16} /> No charge until the complete basket is secured</small>}</div>
     <div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><span>{line.quantity}× {line.name}</span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}<div className="total"><span>Current total</span><strong>{formatV1Price(order.price.totalPaise)}</strong></div></div>
     {order.status === "AWAITING_PAYMENT" && order.payment ? <div className="v1-payment-window">
       <span><strong>Reserved for payment</strong><small>{paymentSeconds > 0 ? `${formatDuration(paymentSeconds)} remaining` : "Reservation ending"}</small></span>
@@ -472,8 +473,7 @@ function statusTitle(status: V1Order["status"]) {
   switch (status) {
     case "CREATED": case "MATCHING": return "Finding every item";
     case "FULLY_SECURED": case "AWAITING_PAYMENT": return "Your basket is secured";
-    case "PAID": return "Payment confirmed";
-    case "PREPARING": return "Preparing your order";
+    case "PAID": case "PREPARING": return "Preparing your order";
     case "PICKUP_IN_PROGRESS": return "Pickup in progress";
     case "OUT_FOR_DELIVERY": return "On the way";
     case "DELIVERED": return "Delivered";
@@ -487,7 +487,7 @@ function statusTitle(status: V1Order["status"]) {
 function statusMessage(status: V1Order["status"]) {
   if (matchingStatuses.has(status)) return "Dastak is matching your exact products. Retail merchant identities stay private.";
   if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") return "Every item has been reserved. Secure payment is requested before preparation.";
-  if (status === "PAID") return "Your payment is confirmed. Preparation will begin next.";
+  if (status === "PAID" || status === "PREPARING") return "Payment is confirmed and your secured items are being prepared.";
   if (status === "UNAVAILABLE") return "Dastak could not secure the complete basket. You were not charged.";
   if (status === "CANCELLED_PREPAYMENT") return "This order was cancelled before payment.";
   if (status === "PAYMENT_EXPIRED") return "The reservation expired without payment.";

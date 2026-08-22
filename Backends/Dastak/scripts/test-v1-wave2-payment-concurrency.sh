@@ -474,7 +474,7 @@ set -e
 assert_cancelled_released "$cancel_transition_order"
 
 # Retry remains in the same reservation; concurrent duplicate callbacks commit
-# one provider event and one paid transition.
+# one provider event, one paid transition, and one preparation start.
 paid_order="$(secure_wave1_order "step2-paid-$run_token")"
 read -r failed_attempt paid_amount <<<"$(prepare_payment "$paid_order" "step2-failed-attempt-$run_token" "order_step2failed$run_token")"
 "${psql_base[@]}" -At -v customer_id="$customer_id" -v attempt_id="$failed_attempt" <<'SQL' >/dev/null
@@ -491,14 +491,16 @@ duplicate_b_pid=$!
 wait "$duplicate_a_pid"; wait "$duplicate_b_pid"
 paid_truth="$("${psql_base[@]}" -At -F ' ' -v order_id="$paid_order" <<'SQL'
 select
-  (select count(*) from dastak_v1.orders where id = :'order_id'::uuid and status = 'PAID'),
+  (select count(*) from dastak_v1.orders where id = :'order_id'::uuid and status = 'PREPARING'),
   (select count(*) from dastak_v1.payments where order_id = :'order_id'::uuid and status = 'SUCCEEDED'),
   (select count(*) from dastak_v1.payment_attempts where order_id = :'order_id'::uuid),
   (select count(*) from dastak_v1.payment_provider_events where order_id = :'order_id'::uuid),
-  (select count(*) from dastak_v1.order_state_journal where order_id = :'order_id'::uuid and to_status = 'PAID');
+  (select count(*) from dastak_v1.order_state_journal where order_id = :'order_id'::uuid and to_status = 'PAID'),
+  (select count(*) from dastak_v1.order_state_journal where order_id = :'order_id'::uuid and to_status = 'PREPARING'),
+  (select count(*) from dastak_v1.domain_events_outbox where aggregate_type = 'ORDER' and aggregate_id = :'order_id'::uuid and event_type = 'PREPARATION_STARTED');
 SQL
 )"
-[[ "$paid_truth" == "1 1 2 1 1" ]] || { printf 'Payment retry/idempotency invariant failed: %s\n' "$paid_truth" >&2; exit 1; }
+[[ "$paid_truth" == "1 1 2 1 1 1 1" ]] || { printf 'Payment retry/idempotency invariant failed: %s\n' "$paid_truth" >&2; exit 1; }
 
 # Two expiry workers and a late provider capture race. Resources and capacity
 # release once; the late success is reconciled and cannot resurrect the order.

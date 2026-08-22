@@ -505,8 +505,8 @@ select is(
     select status::text from dastak_v1.orders
     where id = (select (body ->> 'id')::uuid from tap_step2_order)
   ),
-  'PAID',
-  'successful payment makes the order Paid exactly once'
+  'PREPARING',
+  'successful payment records Paid and atomically starts preparation'
 );
 select is(
   (

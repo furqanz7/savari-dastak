@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type DastakV1Auth = {
   supabaseUrl: string;
   publishableKey: string;
@@ -132,6 +134,61 @@ export type V1MerchantOpportunity = {
   }>;
 };
 
+export type V1MerchantFulfilment = {
+  id: string;
+  orderId: string;
+  displayOrderNumber: string;
+  orderStatus: string;
+  status: "RESERVED_PREPAYMENT" | "PREPARING" | "READY";
+  version: number;
+  branch: { id: string; displayName: string };
+  promisedPrepMinutes: number;
+  prepStartedAt?: string;
+  estimatedReadyAt?: string;
+  actualReadyAt?: string;
+  secondsRemaining: number;
+  runningLate: boolean;
+  lateSeconds: number;
+  packageCount?: number;
+  packages: Array<{
+    id: string;
+    packageNumber: number;
+    status: string;
+    custodyOwnerType: string;
+    declaredAt: string;
+    readyAt?: string;
+    version: number;
+  }>;
+  evidence: Array<{
+    id: string;
+    packageId?: string;
+    type: string;
+    objectPath: string;
+    contentType: string;
+    capturedAt: string;
+  }>;
+  problemReports: Array<{
+    id: string;
+    statusAtReport: string;
+    reason: string;
+    reportedAt: string;
+  }>;
+  capacity?: { status: string; heldAt: string; releasedAt?: string; releaseReason?: string };
+  riderMatchEligibility: {
+    eligible: boolean;
+    evaluatedAt: string;
+    thresholdSeconds: number;
+    requiredFulfilmentCount: number;
+    satisfiedFulfilmentCount: number;
+    nextEligibleAt?: string;
+  };
+  canDeclarePackages: boolean;
+  canAddEvidence: boolean;
+  canMarkReady: boolean;
+  readyIsIrreversible: boolean;
+  lines: V1MerchantOpportunity["lines"];
+};
+
 export type V1AdminExecutionOrder = {
   id: string;
   displayOrderNumber: string;
@@ -152,6 +209,14 @@ export type V1AdminExecutionTrace = {
   capacity: Record<string, unknown>[];
   payment?: Record<string, unknown>;
   reconciliationCases: Record<string, unknown>[];
+  preparation?: {
+    riderMatchEligibility: Record<string, unknown>;
+    fulfilments: Record<string, unknown>[];
+    packages: Record<string, unknown>[];
+    evidence: Record<string, unknown>[];
+    problems: Record<string, unknown>[];
+    history: Record<string, unknown>[];
+  };
 };
 
 export type V1OrderSubmission = {
@@ -314,6 +379,132 @@ export async function respondToV1MerchantOpportunity(
   }, input.idempotencyKey, fetcher));
 }
 
+export async function getV1MerchantFulfilments(
+  input: DastakV1Auth & { limit?: number; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+) {
+  const source = record(await invoke(input, "dastak-v1-orders", {
+    operation: "merchantFulfilments",
+    limit: input.limit ?? 50,
+  }, undefined, fetcher));
+  if (!source || !Array.isArray(source.fulfilments)) invalid("merchant fulfilment collection");
+  return source.fulfilments.map(parseMerchantFulfilment);
+}
+
+export async function declareV1FulfilmentPackages(
+  input: DastakV1Auth & {
+    fulfilmentId: string;
+    packageCount: number;
+    expectedVersion: number;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return parseMerchantFulfilment(await invoke(input, "dastak-v1-orders", {
+    operation: "declareFulfilmentPackages",
+    fulfilmentId: requiredUuid(input.fulfilmentId),
+    packageCount: requiredInteger(input.packageCount, 1),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function addV1FulfilmentReadyEvidence(
+  input: DastakV1Auth & {
+    fulfilmentId: string;
+    packageId?: string;
+    objectPath: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return parseMerchantFulfilment(await invoke(input, "dastak-v1-orders", {
+    operation: "addFulfilmentReadyEvidence",
+    fulfilmentId: requiredUuid(input.fulfilmentId),
+    packageId: input.packageId ? requiredUuid(input.packageId) : null,
+    objectPath: requiredText(input.objectPath, 500),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function markV1FulfilmentReady(
+  input: DastakV1Auth & {
+    fulfilmentId: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return parseMerchantFulfilment(await invoke(input, "dastak-v1-orders", {
+    operation: "markFulfilmentReady",
+    fulfilmentId: requiredUuid(input.fulfilmentId),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function reportV1FulfilmentProblem(
+  input: DastakV1Auth & {
+    fulfilmentId: string;
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return parseMerchantFulfilment(await invoke(input, "dastak-v1-orders", {
+    operation: "reportFulfilmentProblem",
+    fulfilmentId: requiredUuid(input.fulfilmentId),
+    reason: requiredText(input.reason, 500),
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+const merchantReadyEvidenceExtensions = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/heic", "heic"],
+]);
+const maximumMerchantReadyEvidenceBytes = 10 * 1024 * 1024;
+
+export function merchantReadyEvidenceObjectPath(
+  accountId: string,
+  contentType: string,
+  uniqueId: string,
+) {
+  const extension = merchantReadyEvidenceExtensions.get(contentType);
+  if (!extension) invalidInput("Choose a JPG, PNG or HEIC photo.");
+  return `merchant-ready/${requiredUuid(accountId)}/${requiredUuid(uniqueId)}.${extension}`;
+}
+
+export async function uploadV1MerchantReadyEvidence(
+  client: SupabaseClient,
+  accountId: string,
+  file: File,
+) {
+  if (
+    !merchantReadyEvidenceExtensions.has(file.type) || file.size < 1 ||
+    file.size > maximumMerchantReadyEvidenceBytes
+  ) invalidInput("Choose a JPG, PNG or HEIC photo up to 10 MB.");
+  const objectPath = merchantReadyEvidenceObjectPath(accountId, file.type, crypto.randomUUID());
+  const { error } = await client.storage.from("dastak-evidence").upload(objectPath, file, {
+    cacheControl: "3600",
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) {
+    throw new DastakV1RequestError(
+      "evidence_upload_failed",
+      "The Ready photo could not be uploaded. Try again.",
+      0,
+    );
+  }
+  return objectPath;
+}
+
 export async function getV1AdminExecutionOrders(
   input: DastakV1Auth & { limit?: number; signal?: AbortSignal },
   fetcher: Fetcher = fetch,
@@ -338,10 +529,20 @@ export async function getV1AdminExecutionTrace(
   const payment = source.payment === null || source.payment === undefined
     ? undefined
     : record(source.payment);
+  const preparation = source.preparation === null || source.preparation === undefined
+    ? undefined
+    : record(source.preparation);
   if (
     !Array.isArray(source.matchingAttempts) || !Array.isArray(source.provisionalHolds) ||
     !Array.isArray(source.plans) || !Array.isArray(source.capacity) ||
-    !Array.isArray(source.reconciliationCases) || (source.payment !== null && source.payment !== undefined && !payment)
+    !Array.isArray(source.reconciliationCases) ||
+    (source.payment !== null && source.payment !== undefined && !payment) ||
+    (source.preparation !== null && source.preparation !== undefined && !preparation) ||
+    (preparation && (
+      !record(preparation.riderMatchEligibility) || !Array.isArray(preparation.fulfilments) ||
+      !Array.isArray(preparation.packages) || !Array.isArray(preparation.evidence) ||
+      !Array.isArray(preparation.problems) || !Array.isArray(preparation.history)
+    ))
   ) invalid("execution trace");
   return {
     order: parseAdminExecutionOrder(source.order),
@@ -351,6 +552,14 @@ export async function getV1AdminExecutionTrace(
     capacity: source.capacity.map(requiredRecord),
     payment,
     reconciliationCases: source.reconciliationCases.map(requiredRecord),
+    preparation: preparation ? {
+      riderMatchEligibility: requiredRecord(preparation.riderMatchEligibility),
+      fulfilments: (preparation.fulfilments as unknown[]).map(requiredRecord),
+      packages: (preparation.packages as unknown[]).map(requiredRecord),
+      evidence: (preparation.evidence as unknown[]).map(requiredRecord),
+      problems: (preparation.problems as unknown[]).map(requiredRecord),
+      history: (preparation.history as unknown[]).map(requiredRecord),
+    } : undefined,
   };
 }
 
@@ -469,6 +678,112 @@ function parseMerchantOpportunity(value: unknown): V1MerchantOpportunity {
     physicalConfirmationRequired: requiredBoolean(source.physicalConfirmationRequired),
     capacityConsumed: requiredBoolean(source.capacityConsumed),
     orderPaymentState: optionalText(source.orderPaymentState, 60),
+    lines: source.lines.map((item) => {
+      const line = requiredRecord(item);
+      return {
+        orderLineId: requiredUuid(line.orderLineId),
+        skuId: requiredUuid(line.skuId),
+        name: requiredText(line.name, 200),
+        variant: optionalText(line.variant, 160),
+        packSize: optionalText(line.packSize, 80),
+        quantity: requiredInteger(line.quantity, 1),
+      };
+    }),
+  };
+}
+
+export function parseV1MerchantFulfilment(value: unknown): V1MerchantFulfilment {
+  return parseMerchantFulfilment(value);
+}
+
+function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
+  const source = record(value);
+  const branch = record(source?.branch);
+  const capacity = source?.capacity === null || source?.capacity === undefined
+    ? undefined
+    : record(source.capacity);
+  const rider = record(source?.riderMatchEligibility);
+  if (
+    !source || !branch || !rider || !Array.isArray(source.packages) ||
+    !Array.isArray(source.evidence) || !Array.isArray(source.problemReports) ||
+    !Array.isArray(source.lines) ||
+    (source.capacity !== null && source.capacity !== undefined && !capacity)
+  ) invalid("merchant fulfilment");
+  const status = requiredText(source.status, 40);
+  if (!["RESERVED_PREPAYMENT", "PREPARING", "READY"].includes(status)) {
+    invalid("merchant fulfilment status");
+  }
+  return {
+    id: requiredUuid(source.id),
+    orderId: requiredUuid(source.orderId),
+    displayOrderNumber: requiredText(source.displayOrderNumber, 80),
+    orderStatus: requiredText(source.orderStatus, 60),
+    status: status as V1MerchantFulfilment["status"],
+    version: requiredInteger(source.version, 1),
+    branch: {
+      id: requiredUuid(branch.id),
+      displayName: requiredText(branch.displayName, 100),
+    },
+    promisedPrepMinutes: requiredInteger(source.promisedPrepMinutes, 1),
+    prepStartedAt: optionalTimestamp(source.prepStartedAt),
+    estimatedReadyAt: optionalTimestamp(source.estimatedReadyAt),
+    actualReadyAt: optionalTimestamp(source.actualReadyAt),
+    secondsRemaining: requiredInteger(source.secondsRemaining, 0),
+    runningLate: requiredBoolean(source.runningLate),
+    lateSeconds: requiredInteger(source.lateSeconds, 0),
+    packageCount: optionalInteger(source.packageCount, 1),
+    packages: source.packages.map((item) => {
+      const packageRecord = requiredRecord(item);
+      return {
+        id: requiredUuid(packageRecord.id),
+        packageNumber: requiredInteger(packageRecord.packageNumber, 1),
+        status: requiredText(packageRecord.status, 40),
+        custodyOwnerType: requiredText(packageRecord.custodyOwnerType, 60),
+        declaredAt: requiredTimestamp(packageRecord.declaredAt),
+        readyAt: optionalTimestamp(packageRecord.readyAt),
+        version: requiredInteger(packageRecord.version, 1),
+      };
+    }),
+    evidence: source.evidence.map((item) => {
+      const evidence = requiredRecord(item);
+      return {
+        id: requiredUuid(evidence.id),
+        packageId: evidence.packageId === null || evidence.packageId === undefined
+          ? undefined
+          : requiredUuid(evidence.packageId),
+        type: requiredText(evidence.type, 60),
+        objectPath: requiredText(evidence.objectPath, 500),
+        contentType: requiredText(evidence.contentType, 100),
+        capturedAt: requiredTimestamp(evidence.capturedAt),
+      };
+    }),
+    problemReports: source.problemReports.map((item) => {
+      const problem = requiredRecord(item);
+      return {
+        id: requiredUuid(problem.id),
+        statusAtReport: requiredText(problem.statusAtReport, 60),
+        reason: requiredText(problem.reason, 500),
+        reportedAt: requiredTimestamp(problem.reportedAt),
+      };
+    }),
+    capacity: capacity ? {
+      status: requiredText(capacity.status, 40),
+      heldAt: requiredTimestamp(capacity.heldAt),
+      releasedAt: optionalTimestamp(capacity.releasedAt),
+      releaseReason: optionalText(capacity.releaseReason, 160),
+    } : undefined,
+    riderMatchEligibility: {
+      eligible: requiredBoolean(rider.eligible),
+      evaluatedAt: requiredTimestamp(rider.evaluatedAt),
+      thresholdSeconds: requiredInteger(rider.thresholdSeconds, 0),
+      requiredFulfilmentCount: requiredInteger(rider.requiredFulfilmentCount, 0),
+      satisfiedFulfilmentCount: requiredInteger(rider.satisfiedFulfilmentCount, 0),
+      nextEligibleAt: optionalTimestamp(rider.nextEligibleAt),
+    },
+    canDeclarePackages: requiredBoolean(source.canDeclarePackages),
+    canAddEvidence: requiredBoolean(source.canAddEvidence),
+    canMarkReady: requiredBoolean(source.canMarkReady),
+    readyIsIrreversible: requiredBoolean(source.readyIsIrreversible),
     lines: source.lines.map((item) => {
       const line = requiredRecord(item);
       return {
@@ -671,6 +986,9 @@ function requiredTimestamp(value: unknown) {
 }
 function optionalTimestamp(value: unknown) { return value === null || value === undefined ? undefined : requiredTimestamp(value); }
 function currency(value: unknown): "INR" { return value === "INR" ? "INR" : invalid("currency"); }
+function invalidInput(message: string): never {
+  throw new DastakV1RequestError("validation_failed", message, 400);
+}
 function invalid(subject: string): never {
   throw new DastakV1RequestError("invalid_response", `Dastak received an invalid ${subject}.`, 502);
 }

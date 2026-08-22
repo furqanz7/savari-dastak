@@ -227,6 +227,21 @@ Deno.test("evidence URL permits an active owner to download foundation-only obje
   assertEquals(response.status, 200);
 });
 
+Deno.test("evidence URL permits an active owner to inspect immutable merchant Ready evidence", async () => {
+  const response = await handleIssueEvidenceUrl(
+    request({
+      body: {
+        bucket: "dastak-evidence",
+        objectPath:
+          "merchant-ready/44444444-4444-4444-8444-444444444444/55555555-5555-4555-8555-555555555555.jpg",
+        operation: "download",
+      },
+    }),
+    dependencies({ isActiveOwner: () => Promise.resolve(true) }),
+  );
+  assertEquals(response.status, 200);
+});
+
 Deno.test("evidence URL maps storage failures without exposing implementation details", async () => {
   const response = await handleIssueEvidenceUrl(
     request({ body: { bucket: "dastak-evidence", objectPath: selfPath, operation: "download" } }),

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Clock3, RefreshCw, Route, ShieldCheck, WalletCards } from "lucide-react";
+import { Camera, Clock3, PackageCheck, RefreshCw, Route, ShieldCheck, WalletCards } from "lucide-react";
+import { getEvidenceUrl } from "./admin";
 import {
   getV1AdminExecutionOrders,
   getV1AdminExecutionTrace,
@@ -59,19 +60,21 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   };
 
   return <section className="v1-execution-panel" role="tabpanel" aria-label="Dastak V1 execution trace">
-    <header><div><p className="eyebrow">LAUNCH SPINE</p><h2>V1 execution trace</h2><span>Matching, holds, final plan, capacity and payment evidence.</span></div><button className="icon-button" type="button" disabled={busy} onClick={() => void refresh(true)} aria-label="Refresh V1 trace"><RefreshCw size={18} /></button></header>
+    <header><div><p className="eyebrow">LAUNCH SPINE</p><h2>V1 execution trace</h2><span>Matching, payment, preparation clocks, capacity, packages and immutable evidence.</span></div><button className="icon-button" type="button" disabled={busy} onClick={() => void refresh(true)} aria-label="Refresh V1 trace"><RefreshCw size={18} /></button></header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {loading ? <div className="catalogue-loading" role="status"><span /> Loading V1 trace</div> : orders.length === 0 ? <p className="admin-empty">No V1 orders have been submitted.</p> : <div className="v1-execution-layout">
       <nav aria-label="V1 orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>
-      <div className="v1-trace-detail">{trace ? <Trace trace={trace} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
+      <div className="v1-trace-detail">{trace ? <Trace trace={trace} auth={auth} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
     </div>}
   </section>;
 }
 
-function Trace({ trace }: { trace: V1AdminExecutionTrace }) {
+function Trace({ trace, auth }: { trace: V1AdminExecutionTrace; auth: DastakV1Auth }) {
   const paymentStatus = text(trace.payment, "status") ?? "NOT OPEN";
   const paymentAttempts = array(trace.payment, "attempts").length;
   const providerEvents = array(trace.payment, "providerEvents").length;
+  const preparation = trace.preparation;
+  const readyCount = preparation?.fulfilments.filter((item) => text(item, "status") === "READY").length ?? 0;
   return <>
     <header className="v1-trace-order"><span><strong>{trace.order.displayOrderNumber}</strong><small>Version {trace.order.version}</small></span><b>{trace.order.status.replaceAll("_", " ")}</b></header>
     <div className="v1-trace-summary">
@@ -95,10 +98,56 @@ function Trace({ trace }: { trace: V1AdminExecutionTrace }) {
     <TraceSection title="Payment reservation">
       <p>{paymentStatus} · {paymentAttempts} attempts · {providerEvents} provider events{trace.payment ? ` · expires ${formatOptional(text(trace.payment, "expiresAt"))}` : ""}</p>
     </TraceSection>
+    <TraceSection title="Preparation clocks">
+      {!preparation || preparation.fulfilments.length === 0 ? <p>Payment-confirmed preparation has not started.</p> : preparation.fulfilments.map((fulfilment, index) => {
+        const capacity = object(fulfilment, "capacity");
+        const runningLate = boolean(fulfilment, "runningLate") === true;
+        return <article key={text(fulfilment, "id") ?? index} className={runningLate ? "running-late" : ""}>
+          <strong>{text(fulfilment, "branchName") ?? "Branch"} · {text(fulfilment, "status") ?? "UNKNOWN"}</strong>
+          <span>{number(fulfilment, "promisedPrepMinutes") ?? 0} min · start {formatOptional(text(fulfilment, "prepStartedAt"))} · ETA {formatOptional(text(fulfilment, "estimatedReadyAt"))} · actual {formatOptional(text(fulfilment, "actualReadyAt"))}{runningLate ? ` · late ${formatDuration(number(fulfilment, "lateSeconds") ?? 0)}` : ""}<br />Capacity {text(capacity, "status") ?? "—"}{text(capacity, "releasedAt") ? ` · released ${formatOptional(text(capacity, "releasedAt"))}` : ""}</span>
+        </article>;
+      })}
+    </TraceSection>
+    <TraceSection title="Packages and Ready evidence">
+      {!preparation ? <p>No package declarations.</p> : <>
+        <p>{preparation.packages.length} package(s) · {preparation.evidence.length} immutable evidence record(s) · {readyCount}/{preparation.fulfilments.length} fulfilments Ready</p>
+        {preparation.packages.map((item, index) => <article key={text(item, "id") ?? index}><strong>Package {number(item, "packageNumber") ?? "—"} · {text(item, "status") ?? "UNKNOWN"}</strong><span>Custody {text(item, "custodyOwnerType") ?? "—"} · Ready {formatOptional(text(item, "readyAt"))}</span></article>)}
+        {preparation.evidence.map((item, index) => <article key={text(item, "id") ?? index}><strong><Camera size={14} /> Merchant Ready photo</strong><span>{formatOptional(text(item, "capturedAt"))} <EvidenceButton auth={auth} objectPath={text(item, "objectPath")} /></span></article>)}
+      </>}
+    </TraceSection>
+    <TraceSection title="Preparation exceptions and history">
+      {!preparation ? <p>No preparation history.</p> : <>
+        <p>{preparation.problems.length === 0 ? "No preparation problems reported." : `${preparation.problems.length} problem report(s).`}</p>
+        {preparation.problems.map((item, index) => <article key={text(item, "id") ?? index}><strong>{text(item, "statusAtReport") ?? "UNKNOWN"}</strong><span>{text(item, "reason") ?? "—"} · {formatOptional(text(item, "reportedAt"))}</span></article>)}
+        {preparation.history.map((item, index) => <article key={`${text(item, "eventType") ?? "event"}-${index}`}><strong><PackageCheck size={14} /> {text(item, "eventType")?.replaceAll("_", " ") ?? "EVENT"}</strong><span>{formatOptional(text(item, "occurredAt"))}</span></article>)}
+      </>}
+    </TraceSection>
+    <TraceSection title="Rider-match threshold foundation">
+      <p>{boolean(preparation?.riderMatchEligibility, "eligible") ? "Eligible" : "Not eligible"} · {number(preparation?.riderMatchEligibility, "satisfiedFulfilmentCount") ?? 0}/{number(preparation?.riderMatchEligibility, "requiredFulfilmentCount") ?? 0} fulfilments satisfy Ready or ≤5 minutes. Rider search is not active in this slice.</p>
+    </TraceSection>
     <TraceSection title="Reconciliation">
       <p>{trace.reconciliationCases.length === 0 ? "No reconciliation cases." : `${trace.reconciliationCases.length} case(s) require operator review.`}</p>
     </TraceSection>
   </>;
+}
+
+function EvidenceButton({ auth, objectPath }: { auth: DastakV1Auth; objectPath?: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  if (!objectPath) return null;
+  const open = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      window.location.assign(await getEvidenceUrl({ ...auth, objectPath }));
+    } catch (openError) {
+      setError(message(openError));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <>{" · "}<button className="v1-evidence-link" type="button" disabled={busy} onClick={() => void open()}>{busy ? "Opening…" : "View"}</button>{error ? <small role="alert">{error}</small> : null}</>;
 }
 
 function TraceMetric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
@@ -125,11 +174,24 @@ function array(value: Record<string, unknown> | undefined, key: string) {
   const result = value?.[key];
   return Array.isArray(result) ? result : [];
 }
+function object(value: Record<string, unknown> | undefined, key: string) {
+  const result = value?.[key];
+  return result !== null && typeof result === "object" && !Array.isArray(result)
+    ? result as Record<string, unknown>
+    : undefined;
+}
+function boolean(value: Record<string, unknown> | undefined, key: string) {
+  const result = value?.[key];
+  return typeof result === "boolean" ? result : undefined;
+}
 function formatOptional(value?: string) {
   return value ? formatTime(value) : "—";
 }
 function formatTime(value: string) {
   return new Intl.DateTimeFormat("en-IN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+function formatDuration(seconds: number) {
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The V1 execution trace is unavailable.";

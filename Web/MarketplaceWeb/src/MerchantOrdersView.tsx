@@ -216,7 +216,7 @@ export function MerchantOrdersView({
         <div className="catalogue-loading" role="status"><span /> Loading orders</div>
       ) : (
         <>
-          <MerchantV1Opportunities auth={auth} />
+          <MerchantV1Opportunities auth={auth} client={client} accountId={accountId} />
           <div className="merchant-summary" aria-label="Order summary">
             <MerchantSummary label="Needs action" value={awaitingDecision} />
             <MerchantSummary label="Preparing" value={preparing} />

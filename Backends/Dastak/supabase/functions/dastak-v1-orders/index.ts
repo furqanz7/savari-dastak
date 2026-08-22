@@ -57,6 +57,38 @@ Deno.serve((request) =>
           p_expected_version: input.expectedVersion,
         },
       ),
+    listMerchantFulfilments: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_merchant_fulfilments", {
+        p_limit: input.limit,
+      }),
+    declareFulfilmentPackages: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_declare_fulfilment_packages", {
+        p_fulfilment_id: input.fulfilmentId,
+        p_idempotency_key: input.idempotencyKey,
+        p_expected_version: input.expectedVersion,
+        p_package_count: input.packageCount,
+      }),
+    addFulfilmentReadyEvidence: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_add_fulfilment_ready_evidence", {
+        p_fulfilment_id: input.fulfilmentId,
+        p_package_id: input.packageId,
+        p_object_path: input.objectPath,
+        p_idempotency_key: input.idempotencyKey,
+        p_expected_version: input.expectedVersion,
+      }),
+    markFulfilmentReady: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_mark_fulfilment_ready", {
+        p_fulfilment_id: input.fulfilmentId,
+        p_idempotency_key: input.idempotencyKey,
+        p_expected_version: input.expectedVersion,
+      }),
+    reportFulfilmentProblem: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_report_fulfilment_problem", {
+        p_fulfilment_id: input.fulfilmentId,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+        p_expected_version: input.expectedVersion,
+      }),
     listAdminExecutionOrders: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_execution_orders", {
         p_limit: input.limit,

@@ -208,6 +208,154 @@ Deno.test("V1 execution trace is a permission-checked authenticated RPC surface"
   assertEquals(traceInput, { accessToken: actor.accessToken, orderId });
 });
 
+Deno.test("V1 merchant preparation commands preserve package, evidence, version, and idempotency", async () => {
+  const recorded: Record<string, unknown> = {};
+  const deps = dependencies({
+    listMerchantFulfilments: (input) => {
+      recorded.list = input;
+      return Promise.resolve({ fulfilments: [] });
+    },
+    declareFulfilmentPackages: (input) => {
+      recorded.packages = input;
+      return Promise.resolve({ id: orderId, version: 4 });
+    },
+    addFulfilmentReadyEvidence: (input) => {
+      recorded.evidence = input;
+      return Promise.resolve({ id: orderId, version: 5 });
+    },
+    markFulfilmentReady: (input) => {
+      recorded.ready = input;
+      return Promise.resolve({ id: orderId, status: "READY", version: 6 });
+    },
+    reportFulfilmentProblem: (input) => {
+      recorded.problem = input;
+      return Promise.resolve({ id: orderId, status: "READY", version: 7 });
+    },
+  });
+  const list = await handleV1Orders(request({ operation: "merchantFulfilments", limit: 30 }), deps);
+  const packages = await handleV1Orders(
+    request({
+      operation: "declareFulfilmentPackages",
+      fulfilmentId: orderId,
+      packageCount: 3,
+      expectedVersion: 3,
+    }, "packages-1"),
+    deps,
+  );
+  const evidence = await handleV1Orders(
+    request({
+      operation: "addFulfilmentReadyEvidence",
+      fulfilmentId: orderId,
+      packageId: null,
+      objectPath: `merchant-ready/${actor.accountId}/${skuId}.jpg`,
+      expectedVersion: 4,
+    }, "evidence-1"),
+    deps,
+  );
+  const ready = await handleV1Orders(
+    request({
+      operation: "markFulfilmentReady",
+      fulfilmentId: orderId,
+      expectedVersion: 5,
+    }, "ready-1"),
+    deps,
+  );
+  const problem = await handleV1Orders(
+    request({
+      operation: "reportFulfilmentProblem",
+      fulfilmentId: orderId,
+      reason: "Package label needs operator review",
+      expectedVersion: 6,
+    }, "problem-1"),
+    deps,
+  );
+
+  assertEquals([list.status, packages.status, evidence.status, ready.status, problem.status], [
+    200,
+    200,
+    200,
+    200,
+    200,
+  ]);
+  assertEquals(recorded.list, { accessToken: actor.accessToken, limit: 30 });
+  assertEquals(recorded.packages, {
+    accessToken: actor.accessToken,
+    fulfilmentId: orderId,
+    packageCount: 3,
+    expectedVersion: 3,
+    idempotencyKey: "packages-1",
+  });
+  assertEquals(recorded.evidence, {
+    accessToken: actor.accessToken,
+    fulfilmentId: orderId,
+    packageId: null,
+    objectPath: `merchant-ready/${actor.accountId}/${skuId}.jpg`,
+    expectedVersion: 4,
+    idempotencyKey: "evidence-1",
+  });
+  assertEquals(recorded.ready, {
+    accessToken: actor.accessToken,
+    fulfilmentId: orderId,
+    expectedVersion: 5,
+    idempotencyKey: "ready-1",
+  });
+  assertEquals(recorded.problem, {
+    accessToken: actor.accessToken,
+    fulfilmentId: orderId,
+    reason: "Package label needs operator review",
+    expectedVersion: 6,
+    idempotencyKey: "problem-1",
+  });
+});
+
+Deno.test("V1 merchant preparation rejects invalid package, evidence, and problem payloads", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    declareFulfilmentPackages: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    addFulfilmentReadyEvidence: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    reportFulfilmentProblem: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
+  const packages = await handleV1Orders(
+    request({
+      operation: "declareFulfilmentPackages",
+      fulfilmentId: orderId,
+      packageCount: 0,
+      expectedVersion: 1,
+    }, "bad-packages"),
+    deps,
+  );
+  const evidence = await handleV1Orders(
+    request({
+      operation: "addFulfilmentReadyEvidence",
+      fulfilmentId: orderId,
+      packageId: "invalid",
+      objectPath: "x",
+      expectedVersion: 1,
+    }, "bad-evidence"),
+    deps,
+  );
+  const problem = await handleV1Orders(
+    request({
+      operation: "reportFulfilmentProblem",
+      fulfilmentId: orderId,
+      reason: "x",
+      expectedVersion: 1,
+    }, "bad-problem"),
+    deps,
+  );
+  assertEquals([packages.status, evidence.status, problem.status], [400, 400, 400]);
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 orders maps stale state without leaking database details", async () => {
   const response = await handleV1Orders(
     request({ operation: "get", orderId }),
@@ -255,6 +403,16 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
     acceptMerchantOpportunity: overrides.acceptMerchantOpportunity ??
       (() => Promise.resolve({})),
     declineMerchantOpportunity: overrides.declineMerchantOpportunity ??
+      (() => Promise.resolve({})),
+    listMerchantFulfilments: overrides.listMerchantFulfilments ??
+      (() => Promise.resolve({ fulfilments: [] })),
+    declareFulfilmentPackages: overrides.declareFulfilmentPackages ??
+      (() => Promise.resolve({})),
+    addFulfilmentReadyEvidence: overrides.addFulfilmentReadyEvidence ??
+      (() => Promise.resolve({})),
+    markFulfilmentReady: overrides.markFulfilmentReady ??
+      (() => Promise.resolve({})),
+    reportFulfilmentProblem: overrides.reportFulfilmentProblem ??
       (() => Promise.resolve({})),
     listAdminExecutionOrders: overrides.listAdminExecutionOrders ??
       (() => Promise.resolve({ orders: [] })),

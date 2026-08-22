@@ -42,6 +42,38 @@ export type V1OrderDependencies = {
     expectedVersion: number;
     idempotencyKey: string;
   }) => Promise<unknown>;
+  listMerchantFulfilments: (input: {
+    accessToken: string;
+    limit: number;
+  }) => Promise<unknown>;
+  declareFulfilmentPackages: (input: {
+    accessToken: string;
+    fulfilmentId: string;
+    packageCount: number;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  addFulfilmentReadyEvidence: (input: {
+    accessToken: string;
+    fulfilmentId: string;
+    packageId: string | null;
+    objectPath: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  markFulfilmentReady: (input: {
+    accessToken: string;
+    fulfilmentId: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  reportFulfilmentProblem: (input: {
+    accessToken: string;
+    fulfilmentId: string;
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
   listAdminExecutionOrders: (input: {
     accessToken: string;
     limit: number;
@@ -184,6 +216,93 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           }),
         );
       }
+      case "merchantFulfilments": {
+        const limit = integer(body.limit, 1, 100) ?? 50;
+        if (
+          body.limit !== null && body.limit !== undefined &&
+          integer(body.limit, 1, 100) === undefined
+        ) return validationError();
+        return json(
+          await dependencies.listMerchantFulfilments({
+            accessToken: actor.accessToken,
+            limit,
+          }),
+        );
+      }
+      case "declareFulfilmentPackages": {
+        const fulfilmentId = requiredUUID(body.fulfilmentId);
+        const packageCount = integer(body.packageCount, 1, 1000);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (!fulfilmentId || !packageCount || !expectedVersion || !idempotencyKey) {
+          return validationError();
+        }
+        return json(
+          await dependencies.declareFulfilmentPackages({
+            accessToken: actor.accessToken,
+            fulfilmentId,
+            packageCount,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "addFulfilmentReadyEvidence": {
+        const fulfilmentId = requiredUUID(body.fulfilmentId);
+        const parsedPackageId = body.packageId === null || body.packageId === undefined
+          ? null
+          : requiredUUID(body.packageId);
+        const objectPath = requiredText(body.objectPath, 500);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !fulfilmentId || !objectPath || !expectedVersion || !idempotencyKey ||
+          (body.packageId !== null && body.packageId !== undefined && !parsedPackageId)
+        ) return validationError();
+        const packageId = parsedPackageId ?? null;
+        return json(
+          await dependencies.addFulfilmentReadyEvidence({
+            accessToken: actor.accessToken,
+            fulfilmentId,
+            packageId,
+            objectPath,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "markFulfilmentReady": {
+        const fulfilmentId = requiredUUID(body.fulfilmentId);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (!fulfilmentId || !expectedVersion || !idempotencyKey) return validationError();
+        return json(
+          await dependencies.markFulfilmentReady({
+            accessToken: actor.accessToken,
+            fulfilmentId,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "reportFulfilmentProblem": {
+        const fulfilmentId = requiredUUID(body.fulfilmentId);
+        const reason = requiredText(body.reason, 500);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !fulfilmentId || !reason || reason.length < 3 || !expectedVersion || !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.reportFulfilmentProblem({
+            accessToken: actor.accessToken,
+            fulfilmentId,
+            reason,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
       case "adminExecutionOrders": {
         const limit = integer(body.limit, 1, 100) ?? 50;
         if (
@@ -229,6 +348,12 @@ async function parseBody(request: Request): Promise<Record<string, unknown> | un
 
 function requiredUUID(value: unknown) {
   return typeof value === "string" && uuidPattern.test(value) ? value : undefined;
+}
+
+function requiredText(value: unknown, maximum: number) {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized.length >= 1 && normalized.length <= maximum ? normalized : undefined;
 }
 
 function validTimestamp(value: unknown) {

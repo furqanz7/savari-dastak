@@ -87,6 +87,13 @@ describe("Dastak Admin client", () => {
     expect(requestBody).toEqual({ operation: "download", bucket: "dastak-evidence", objectPath });
   });
 
+  it("allows owner inspection of immutable Merchant Ready photos", async () => {
+    const objectPath = `merchant-ready/${accountId}/11111111-1111-4111-8111-111111111112.jpg`;
+    await expect(getEvidenceUrl({ ...auth, objectPath }, response({
+      signedUrl: "https://files.example.test/ready-photo", expiresIn: 300,
+    }))).resolves.toBe("https://files.example.test/ready-photo");
+  });
+
   it("loads the bounded owner order feed", async () => {
     let requestBody: unknown;
     const order = {
