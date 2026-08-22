@@ -116,6 +116,30 @@ final class DastakV1CustomerClientTests: XCTestCase {
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("merchant"))
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("wave"))
     }
+
+    func testOrderDecodesParentDeliveryCodeWithoutMerchantIdentityOrRecipientAccount() throws {
+        var source = try XCTUnwrap(JSONSerialization.jsonObject(with: orderJSON) as? [String: Any])
+        source["status"] = "OUT_FOR_DELIVERY"
+        source["customerState"] = "ON_THE_WAY"
+        source["delivery"] = [
+            "state": "ON_THE_WAY",
+            "verificationStatus": "ACTIVE",
+            "deliveryCode": "654321",
+            "riderArrivedAt": NSNull(),
+            "deliveredAt": NSNull(),
+            "recipientAccountRequired": false,
+        ]
+
+        let data = try JSONSerialization.data(withJSONObject: source)
+        let order = try JSONDecoder().decode(DastakV1OrderSnapshot.self, from: data)
+
+        XCTAssertEqual(order.status, .outForDelivery)
+        XCTAssertEqual(order.delivery?.deliveryCode, "654321")
+        XCTAssertEqual(order.delivery?.verificationStatus, .active)
+        XCTAssertEqual(order.delivery?.recipientAccountRequired, false)
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("merchant"))
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("branch"))
+    }
 }
 
 private actor RecordingV1FunctionClient: FunctionClient {

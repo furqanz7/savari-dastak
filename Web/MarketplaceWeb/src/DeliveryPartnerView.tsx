@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Bike, Check, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, X } from "lucide-react";
+import { Bike, Camera, Check, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, X } from "lucide-react";
 import {
   acceptV1DeliveryOffer,
   acceptDeliveryOffer,
@@ -13,6 +13,7 @@ import {
   getV1DeliveryDispatch,
   publishDeliveryPartnerLocation,
   setDeliveryPartnerAvailability,
+  uploadV1DeliveryEvidence,
   DeliveryRequestError,
   type DeliveryAssignment,
   type DeliveryDispatchSnapshot,
@@ -55,7 +56,11 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [partner, setPartner] = useState<DeliveryPartnerSnapshot>();
   const [dispatch, setDispatch] = useState<DeliveryDispatchSnapshot>({ offer: null, currentJob: null });
-  const [v1Dispatch, setV1Dispatch] = useState<V1DeliveryDispatchSnapshot>({ offer: null, currentMission: null });
+  const [v1Dispatch, setV1Dispatch] = useState<V1DeliveryDispatchSnapshot>({
+    offer: null,
+    currentMission: null,
+    completedMission: null,
+  });
   const [parcelDispatch, setParcelDispatch] = useState<ParcelPartnerSnapshot>({ offer: null, currentJob: null });
   const [earnings, setEarnings] = useState<EarningsSnapshot>();
   const [loading, setLoading] = useState(true);
@@ -237,6 +242,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       stopId?: string;
       accountedPackageCount?: number;
       verificationCode?: string;
+      objectPath?: string;
       reason?: string;
     } = {},
   ) => {
@@ -259,6 +265,34 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       if (operation === "v1VerifyPickup") {
         setNotice("Pickup verified. Every declared package is now in your custody.");
       }
+      if (operation === "v1VerifyDelivery") {
+        setNotice("Delivery verified. Every package is now in the customer’s custody.");
+      }
+    } catch (actionError) {
+      setError(message(actionError));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const captureV1DeliveryEvidence = async (mission: V1DeliveryMission, file: File) => {
+    const requestIdentity = `v1:evidence:${mission.id}:${file.name}:${file.size}`;
+    const idempotencyKey = actionKeys.current.get(requestIdentity) ?? crypto.randomUUID();
+    actionKeys.current.set(requestIdentity, idempotencyKey);
+    setBusy(requestIdentity);
+    setError(undefined);
+    try {
+      const objectPath = await uploadV1DeliveryEvidence(client, accountId, file);
+      const snapshot = await advanceV1DeliveryMission({
+        ...auth,
+        missionId: mission.id,
+        operation: "v1AddDeliveryEvidence",
+        objectPath,
+        idempotencyKey,
+      });
+      actionKeys.current.delete(requestIdentity);
+      setV1Dispatch(snapshot);
+      setNotice("Package photo captured. Ask the recipient for their in-app delivery code.");
     } catch (actionError) {
       setError(message(actionError));
     } finally {
@@ -359,6 +393,8 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
               busy={Boolean(busy)}
               onAction={(operation, options) =>
                 void runV1MissionAction(v1Dispatch.currentMission!, operation, options)}
+              onCaptureEvidence={(file) =>
+                void captureV1DeliveryEvidence(v1Dispatch.currentMission!, file)}
             />
           )}
 
@@ -369,6 +405,16 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
               onAccept={() => void runV1OfferAction(v1Dispatch.offer!, "accept")}
               onDecline={() => void runV1OfferAction(v1Dispatch.offer!, "decline")}
             />
+          )}
+
+          {v1Dispatch.completedMission && !v1Dispatch.currentMission && (
+            <section className="delivery-notice v1-delivered-card" role="status">
+              <Check size={20} />
+              <div>
+                <strong>Delivered</strong>
+                <span>{v1Dispatch.completedMission.packageCount} {v1Dispatch.completedMission.packageCount === 1 ? "package" : "packages"} handed over securely.</span>
+              </div>
+            </section>
           )}
 
           {!v1Dispatch.currentMission && dispatch.currentJob && (
@@ -409,7 +455,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             />
           )}
 
-          {!v1Dispatch.offer && !v1Dispatch.currentMission && !dispatch.offer && !dispatch.currentJob && !parcelDispatch.offer && !parcelDispatch.currentJob && (
+          {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.completedMission && !dispatch.offer && !dispatch.currentJob && !parcelDispatch.offer && !parcelDispatch.currentJob && (
             <section className="delivery-empty">
               <Bike size={25} />
               <div><h2>{online ? "Waiting for assignments" : "Offline"}</h2><p>{online ? "No ready orders nearby." : "Go online when available."}</p></div>
@@ -462,6 +508,7 @@ function CurrentV1Mission({
   mission,
   busy,
   onAction,
+  onCaptureEvidence,
 }: {
   mission: V1DeliveryMission;
   busy: boolean;
@@ -471,11 +518,18 @@ function CurrentV1Mission({
       stopId?: string;
       accountedPackageCount?: number;
       verificationCode?: string;
+      objectPath?: string;
       reason?: string;
     },
   ) => void;
+  onCaptureEvidence: (file: File) => void;
 }) {
   const completed = mission.pickupStops.filter((stop) => stop.status === "COMPLETED").length;
+  const [deliveryCode, setDeliveryCode] = useState("");
+  const finalStage = ["ALL_PACKAGES_PICKED_UP", "OUT_FOR_DELIVERY", "ARRIVED"].includes(
+    mission.status,
+  );
+  useEffect(() => setDeliveryCode(""), [mission.id, mission.status]);
   return (
     <section className="current-delivery v1-delivery-card" aria-label="Active Dastak order mission">
       <header>
@@ -493,22 +547,100 @@ function CurrentV1Mission({
         </button>
       )}
 
-      <div className="v1-mission-stops">
-        {mission.pickupStops.map((stop) => (
-          <V1PickupStopCard
-            key={stop.id}
-            stop={stop}
-            missionStarted={mission.status !== "ASSIGNED"}
-            busy={busy}
-            onArrive={() => onAction("v1ArriveAtPickup", { stopId: stop.id })}
-            onVerify={(packageCount, code) => onAction("v1VerifyPickup", {
-              stopId: stop.id,
-              accountedPackageCount: packageCount,
-              verificationCode: code,
-            })}
-          />
-        ))}
-      </div>
+      {!finalStage && (
+        <div className="v1-mission-stops">
+          {mission.pickupStops.map((stop) => (
+            <V1PickupStopCard
+              key={stop.id}
+              stop={stop}
+              missionStarted={mission.status !== "ASSIGNED"}
+              busy={busy}
+              onArrive={() => onAction("v1ArriveAtPickup", { stopId: stop.id })}
+              onVerify={(packageCount, code) => onAction("v1VerifyPickup", {
+                stopId: stop.id,
+                accountedPackageCount: packageCount,
+                verificationCode: code,
+              })}
+            />
+          ))}
+        </div>
+      )}
+
+      {finalStage && mission.customerDestination && (
+        <div className="v1-final-delivery">
+          <div className="delivery-stop">
+            <span><MapPin size={19} /></span>
+            <div>
+              <small>Customer destination</small>
+              <strong>{mission.customerDestination.address}</strong>
+              {mission.customerDestination.recipientName && (
+                <p>Recipient: {mission.customerDestination.recipientName}</p>
+              )}
+            </div>
+          </div>
+          {mission.customerDestination.location && (
+            <MapLink location={mission.customerDestination.location} label="Open customer route" />
+          )}
+          {mission.canStartFinalDelivery && (
+            <button className="primary-button delivery-next-action" type="button" disabled={busy} onClick={() => onAction("v1StartFinalDelivery") }>
+              <Navigation size={18} /> Start final delivery
+            </button>
+          )}
+          {mission.canArriveCustomer && (
+            <button className="primary-button delivery-next-action" type="button" disabled={busy} onClick={() => onAction("v1ArriveAtCustomer") }>
+              <MapPin size={18} /> I’ve arrived
+            </button>
+          )}
+          {mission.canCaptureDeliveryEvidence && !mission.finalVerification?.evidencePresent && (
+            <label className="v1-delivery-photo">
+              <Camera size={20} />
+              <span><strong>Capture package photo</strong><small>Required before customer handoff</small></span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/heic"
+                capture="environment"
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) onCaptureEvidence(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+          )}
+          {mission.finalVerification?.evidencePresent && (
+            <p className="delivery-notice" role="status"><Check size={18} /> Package photo secured.</p>
+          )}
+          {mission.canVerifyDelivery && (
+            <div className="v1-pickup-verification">
+              <label className="handoff-input">
+                Customer delivery code
+                <input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={deliveryCode}
+                  onChange={(event) =>
+                    setDeliveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                />
+              </label>
+              <p className="delivery-return-note">The buyer may share this in-app code with another recipient.</p>
+              <button
+                className="primary-button delivery-next-action"
+                type="button"
+                disabled={busy || deliveryCode.length !== 6}
+                onClick={() => onAction("v1VerifyDelivery", { verificationCode: deliveryCode })}
+              >
+                <PackageCheck size={18} /> Verify handoff
+              </button>
+            </div>
+          )}
+          {mission.finalVerification?.status === "BLOCKED" && (
+            <p className="order-error" role="alert">Normal code attempts are blocked. Keep the packages secure and report the problem to Operations.</p>
+          )}
+        </div>
+      )}
 
       {mission.canCancelBeforePickup && (
         <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onAction("v1CancelBeforePickup", { reason: "Rider cannot continue before pickup" })}>
@@ -521,7 +653,7 @@ function CurrentV1Mission({
         </button>
       )}
       {mission.status === "ALL_PACKAGES_PICKED_UP" && (
-        <p className="delivery-notice" role="status"><Check size={18} /> All packages collected. Final delivery unlocks in the next launch slice.</p>
+        <p className="delivery-notice" role="status"><Check size={18} /> All packages collected. Customer destination is unlocked.</p>
       )}
       {mission.status === "DELIVERY_RECOVERY" && (
         <p className="order-error" role="alert">Operations is handling this custody issue. Keep every package secure.</p>
@@ -833,6 +965,8 @@ function missionLabel(status: V1DeliveryMission["status"]) {
     case "EN_ROUTE_TO_PICKUPS": return "Heading to pickups";
     case "PICKUP_IN_PROGRESS": return "Collecting packages";
     case "ALL_PACKAGES_PICKED_UP": return "All packages collected";
+    case "OUT_FOR_DELIVERY": return "Out for delivery";
+    case "ARRIVED": return "At customer destination";
     case "DELIVERY_RECOVERY": return "Delivery recovery";
   }
 }

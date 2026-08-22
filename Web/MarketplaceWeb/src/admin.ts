@@ -446,7 +446,7 @@ function count(value: unknown) {
 }
 function validEvidencePath(value: string) {
   const parts = value.split("/");
-  return parts.length === 3 && ["merchant", "merchant-ready", "dastak-partner"].includes(parts[0]) &&
+  return parts.length === 3 && ["merchant", "merchant-ready", "dastak-partner", "rider-delivery"].includes(parts[0]) &&
     uuidPattern.test(parts[1]) && parts[2].length > 0;
 }
 function requiredUUID(value: unknown) {

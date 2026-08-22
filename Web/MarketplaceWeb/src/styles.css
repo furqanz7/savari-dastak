@@ -551,6 +551,16 @@ button:disabled { cursor: wait; opacity: .55; }
 .v1-pickup-verification fieldset label { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 11px; border: 1px solid var(--divider); border-radius: 7px; background: var(--surface); font-weight: 700; }
 .v1-pickup-verification .handoff-input { margin-top: 0; }
 .v1-secondary-action { width: 100%; margin-top: 13px; }
+.v1-final-delivery { display: grid; gap: 13px; }
+.v1-final-delivery .delivery-stop { border-bottom: 1px solid var(--divider); }
+.v1-delivery-photo { position: relative; min-height: 66px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 12px 14px; border: 1px dashed var(--route); border-radius: 9px; color: var(--route); background: color-mix(in srgb, var(--route) 7%, var(--surface)); cursor: pointer; }
+.v1-delivery-photo > span { display: grid; gap: 3px; color: var(--text-primary); }
+.v1-delivery-photo small { color: var(--text-secondary); }
+.v1-delivery-photo input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.v1-delivery-photo:focus-within { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
+.v1-delivered-card { margin-top: 22px; }
+.v1-delivered-card > div { display: grid; gap: 3px; }
+.v1-delivered-card span { color: var(--text-secondary); font-size: 13px; }
 
 .admin-shell { width: 100%; }
 .admin-heading {

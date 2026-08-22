@@ -17,7 +17,7 @@ type Dependencies = {
 type EvidenceRequest = { bucket: string; objectPath: string; operation: "download" };
 
 const bucket = "dastak-evidence";
-const selfOwnedRoot = "dastak-partner";
+const selfOwnedRoots = new Set(["dastak-partner", "rider-delivery"]);
 const ownerOnlyRoots = new Set([
   "merchant",
   "merchant-ready",
@@ -48,7 +48,7 @@ export async function handleIssueEvidenceUrl(request: Request, dependencies: Dep
   const path = parsePath(body.objectPath);
   if (!path) return validationError();
 
-  const isSelfOwned = path.root === selfOwnedRoot && path.ownerId === actor.accountId;
+  const isSelfOwned = selfOwnedRoots.has(path.root) && path.ownerId === actor.accountId;
   if (!isSelfOwned) {
     try {
       if (!await dependencies.isActiveOwner(actor.accountId)) return accessDenied();
@@ -95,7 +95,7 @@ function parsePath(objectPath: string): { root: string; ownerId: string } | unde
   const segments = objectPath.split("/");
   if (segments.length !== 3 || segments.some((segment) => !segment)) return undefined;
   const [root, ownerId] = segments;
-  if ((!ownerOnlyRoots.has(root) && root !== selfOwnedRoot) || !uuidPattern.test(ownerId)) {
+  if ((!ownerOnlyRoots.has(root) && !selfOwnedRoots.has(root)) || !uuidPattern.test(ownerId)) {
     return undefined;
   }
   return { root, ownerId };

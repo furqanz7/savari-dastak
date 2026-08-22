@@ -7,6 +7,7 @@ import {
   type CourierJobMutationInput,
   handleCourierDispatch,
   type V1DeliveryMissionMutationInput,
+  type V1FinalDeliveryMutationInput,
   type V1RiderOfferDeclineInput,
   type V1RiderOfferMutationInput,
 } from "./handler.ts";
@@ -29,6 +30,7 @@ Deno.serve((request) =>
     acceptV1Offer,
     declineV1Offer,
     advanceV1Mission,
+    advanceV1FinalDelivery,
   })
 );
 
@@ -78,6 +80,20 @@ async function advanceV1Mission(input: V1DeliveryMissionMutationInput) {
   });
   if (error) throw error;
   return rpcResponse(data, "dastak_v1_advance_delivery_mission");
+}
+
+async function advanceV1FinalDelivery(input: V1FinalDeliveryMutationInput) {
+  const { data, error } = await serviceClient.rpc("dastak_v1_advance_final_delivery", {
+    p_account_id: input.accountId,
+    p_mission_id: input.missionId,
+    p_action: input.action,
+    p_object_path: input.objectPath,
+    p_verification_code: input.verificationCode,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "dastak_v1_advance_final_delivery");
 }
 
 async function getPartnerSnapshot(accountId: string) {

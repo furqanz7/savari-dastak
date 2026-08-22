@@ -34,7 +34,7 @@ type Cart = Record<string, number>;
 const matchingStatuses = new Set(["CREATED", "MATCHING"]);
 const liveStatuses = new Set([
   "CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT", "PAID", "PREPARING",
-  "PICKUP_IN_PROGRESS",
+  "PICKUP_IN_PROGRESS", "OUT_FOR_DELIVERY",
 ]);
 const cancellableStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT"]);
 
@@ -443,6 +443,7 @@ function MatchingSheet({ order, busy, error, paymentMessage, onDismiss, onCancel
   const matching = matchingStatuses.has(order.status);
   const preparing = order.status === "PAID" || order.status === "PREPARING" ||
     order.status === "PICKUP_IN_PROGRESS";
+  const fulfilmentActive = preparing || order.status === "OUT_FOR_DELIVERY";
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (order.status !== "AWAITING_PAYMENT") return;
@@ -455,13 +456,18 @@ function MatchingSheet({ order, busy, error, paymentMessage, onDismiss, onCancel
   const paymentReady = order.status === "AWAITING_PAYMENT" && order.payment?.canAttempt && paymentSeconds > 0;
   return <div className="v1-overlay" role="presentation"><section className="v1-sheet v1-matching-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-order-status-title">
     <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">Order status</h2></div><button type="button" onClick={onDismiss} aria-label="Close order status"><X size={19} /></button></header>
-    <div className="v1-status-hero"><span className={matching ? "matching" : ""}>{matching ? <i /> : preparing ? <PackageCheck size={34} /> : <Check size={34} />}</span><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p>{preparing ? <small><ShieldCheck size={16} /> Payment confirmed exactly once</small> : <small><ShieldCheck size={16} /> No charge until the complete basket is secured</small>}</div>
+    <div className="v1-status-hero"><span className={matching ? "matching" : ""}>{matching ? <i /> : fulfilmentActive ? <PackageCheck size={34} /> : <Check size={34} />}</span><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p>{fulfilmentActive || order.status === "DELIVERED" ? <small><ShieldCheck size={16} /> Secure package custody is tracked by Dastak</small> : <small><ShieldCheck size={16} /> No charge until the complete basket is secured</small>}</div>
     <div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><span>{line.quantity}× {line.name}</span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}<div className="total"><span>Current total</span><strong>{formatV1Price(order.price.totalPaise)}</strong></div></div>
     {order.status === "AWAITING_PAYMENT" && order.payment ? <div className="v1-payment-window">
       <span><strong>Reserved for payment</strong><small>{paymentSeconds > 0 ? `${formatDuration(paymentSeconds)} remaining` : "Reservation ending"}</small></span>
       <strong>{formatV1Price(order.payment.amountPaise)}</strong>
     </div> : null}
     {order.payment?.latestAttempt?.status === "FAILED" ? <p className="v1-payment-retry" role="status">Your previous attempt failed. No rematching occurred.</p> : null}
+    {order.status === "OUT_FOR_DELIVERY" && order.delivery?.deliveryCode ? <div className="v1-delivery-code" role="status">
+      <span><small>DELIVERY CODE</small><strong>{order.delivery.deliveryCode}</strong></span>
+      <p>Share this in-app code only when every package is with you. A trusted recipient may use it without a Dastak account.</p>
+    </div> : null}
+    {order.status === "OUT_FOR_DELIVERY" && order.delivery?.verificationStatus === "BLOCKED" ? <p className="v1-payment-retry" role="status">Delivery verification needs Operations support. Your rider must keep every package secure.</p> : null}
     {paymentMessage ? <p className="v1-payment-message" role="status">{paymentMessage}</p> : null}
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {paymentReady ? <button className="primary-button v1-pay" type="button" disabled={busy} onClick={onPay}>{busy ? "Opening secure payment…" : `Pay ${formatV1Price(order.payment?.amountPaise ?? order.price.totalPaise)}`}<ArrowRight size={18} /></button> : null}
@@ -493,6 +499,8 @@ function statusMessage(status: V1Order["status"]) {
   if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") return "Every item has been reserved. Secure payment is requested before preparation.";
   if (status === "PAID" || status === "PREPARING") return "Payment is confirmed and your secured items are being prepared.";
   if (status === "PICKUP_IN_PROGRESS") return "Your delivery partner is collecting the complete order for you.";
+  if (status === "OUT_FOR_DELIVERY") return "Every package has been collected and your delivery partner is heading to you.";
+  if (status === "DELIVERED") return "Every package was securely handed over. Your order is complete.";
   if (status === "UNAVAILABLE") return "Dastak could not secure the complete basket. You were not charged.";
   if (status === "CANCELLED_PREPAYMENT") return "This order was cancelled before payment.";
   if (status === "PAYMENT_EXPIRED") return "The reservation expired without payment.";

@@ -344,4 +344,101 @@ describe("delivery partner client", () => {
     }, fetcher)).rejects.toThrow("every package");
     expect(fetcher).not.toHaveBeenCalled();
   });
+
+  it("parses final-delivery truth and sends evidence and customer verification commands", async () => {
+    const evidenceId = "88888888-8888-4888-8888-888888888888";
+    const objectPath = `rider-delivery/${accountId}/${evidenceId}.jpg`;
+    const mission = {
+      id: orderId,
+      displayOrderNumber: "DV1-1002",
+      status: "ARRIVED",
+      version: 8,
+      transportType: "MOTORBIKE",
+      pickupCount: 1,
+      assignedAt: "2026-08-22T10:00:00Z",
+      firstPackagePickedUpAt: "2026-08-22T10:10:00Z",
+      allPackagesPickedUpAt: "2026-08-22T10:12:00Z",
+      canCancelBeforePickup: false,
+      mustUseDeliveryRecovery: true,
+      orderLoad: {
+        totalWeightGrams: 500,
+        totalVolumeCubicMillimetres: 1_000_000,
+        longestSideMillimetres: 100,
+        containsBulky: false,
+        eligibleTransportTypes: ["MOTORBIKE"],
+      },
+      pickupStops: [{
+        id: storeId,
+        sequence: 1,
+        status: "COMPLETED",
+        ready: true,
+        runningLate: false,
+        estimatedReadyAt: "2026-08-22T10:05:00Z",
+        actualReadyAt: "2026-08-22T10:04:00Z",
+        packageCount: 1,
+        arrivedAt: "2026-08-22T10:08:00Z",
+        waitingSeconds: 120,
+        branch: {
+          id: storeId,
+          displayName: "Operational Pickup",
+          address: { line1: "1 Pickup Road" },
+          location,
+        },
+      }],
+      customerDestination: {
+        address: { line1: "10 Customer Road", latitude: 12.69, longitude: 78.63 },
+        recipient: { name: "Trusted Recipient", phoneNumber: "+919900000000" },
+      },
+      outForDeliveryAt: "2026-08-22T10:13:00Z",
+      arrivedCustomerAt: "2026-08-22T10:20:00Z",
+      deliveredAt: null,
+      finalVerification: {
+        status: "ACTIVE",
+        failedAttempts: 0,
+        activatedAt: "2026-08-22T10:13:00Z",
+        blockedAt: null,
+        evidenceRequired: true,
+        evidencePresent: true,
+      },
+      deliveryEvidence: [{
+        id: evidenceId,
+        objectPath,
+        contentType: "image/jpeg",
+        capturedAt: "2026-08-22T10:21:00Z",
+        packageCount: 1,
+      }],
+      canStartFinalDelivery: false,
+      canArriveCustomer: false,
+      canCaptureDeliveryEvidence: true,
+      canVerifyDelivery: true,
+    };
+    const parsed = await getV1DeliveryDispatch(auth, () =>
+      Promise.resolve(Response.json({ offer: null, currentMission: mission })));
+    expect(parsed.currentMission?.customerDestination?.address).toBe("10 Customer Road");
+    expect(parsed.currentMission?.finalVerification?.evidencePresent).toBe(true);
+
+    const requests: Record<string, unknown>[] = [];
+    const fetcher = (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return Promise.resolve(Response.json({ offer: null, currentMission: mission }));
+    };
+    await advanceV1DeliveryMission({
+      ...auth,
+      missionId: orderId,
+      operation: "v1AddDeliveryEvidence",
+      objectPath,
+      idempotencyKey: "delivery-photo",
+    }, fetcher);
+    await advanceV1DeliveryMission({
+      ...auth,
+      missionId: orderId,
+      operation: "v1VerifyDelivery",
+      verificationCode: "654321",
+      idempotencyKey: "delivery-code",
+    }, fetcher);
+    expect(requests).toEqual([
+      { operation: "v1AddDeliveryEvidence", missionId: orderId, objectPath },
+      { operation: "v1VerifyDelivery", missionId: orderId, verificationCode: "654321" },
+    ]);
+  });
 });

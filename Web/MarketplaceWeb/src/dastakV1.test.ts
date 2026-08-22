@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DastakV1RequestError,
   addV1FulfilmentReadyEvidence,
+  authorizeV1ExceptionalDeliveryHandoff,
   declareV1FulfilmentPackages,
   getV1AdminExecutionTrace,
   getV1Catalogue,
@@ -116,6 +117,25 @@ describe("Dastak V1 web contract", () => {
     expect(JSON.stringify(order)).not.toMatch(/merchant|wave|provisional/i);
   });
 
+  it("decodes only the parent delivery code and keeps retail merchant identity private", () => {
+    const fixture = orderFixture();
+    fixture.status = "OUT_FOR_DELIVERY";
+    Object.assign(fixture, {
+      customerState: "ON_THE_WAY",
+      delivery: {
+        state: "ON_THE_WAY",
+        verificationStatus: "ACTIVE",
+        deliveryCode: "654321",
+        riderArrivedAt: null,
+        deliveredAt: null,
+        recipientAccountRequired: false,
+      },
+    });
+    const order = parseV1Order(fixture);
+    expect(order.delivery).toMatchObject({ deliveryCode: "654321", recipientAccountRequired: false });
+    expect(JSON.stringify(order)).not.toMatch(/merchant|branch|store/i);
+  });
+
   it("preserves exact Wave 2 subset identity in merchant responses", async () => {
     const opportunity = opportunityFixture();
     const listed = await getV1MerchantOpportunities(auth, async () => Response.json({ opportunities: [opportunity] }));
@@ -164,6 +184,8 @@ describe("Dastak V1 web contract", () => {
         delivery: {
           mission: { id: fulfilmentId, status: "ASSIGNED", pickupCount: 1 },
           offers: [], pickupStops: [], verification: [], custody: [], problems: [],
+          deliveryEvidence: [], exceptionalHandoffs: [],
+          canAuthorizeExceptionalHandoff: true,
         },
       });
     });
@@ -172,6 +194,29 @@ describe("Dastak V1 web contract", () => {
     expect(result.payment?.status).toBe("RESERVED");
     expect(result.preparation?.fulfilments).toEqual([]);
     expect(result.delivery?.mission?.status).toBe("ASSIGNED");
+  });
+
+  it("sends a separate evidence-backed Operations override command", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    await authorizeV1ExceptionalDeliveryHandoff({
+      ...auth,
+      missionId: fulfilmentId,
+      deliveryEvidenceId: packageId,
+      reason: "Operations reviewed rider evidence at the customer address.",
+      expectedMissionVersion: 9,
+      idempotencyKey: "override-once",
+    }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(new Headers(init?.headers).get("x-idempotency-key")).toBe("override-once");
+      return Response.json({ verificationStatus: "OVERRIDDEN" });
+    });
+    expect(requestBody).toEqual({
+      operation: "authorizeExceptionalDeliveryHandoff",
+      missionId: fulfilmentId,
+      deliveryEvidenceId: packageId,
+      reason: "Operations reviewed rider evidence at the customer address.",
+      expectedMissionVersion: 9,
+    });
   });
 
   it("uses optimistic, idempotent preparation commands and immutable evidence paths", async () => {

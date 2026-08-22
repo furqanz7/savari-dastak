@@ -87,6 +87,14 @@ export type V1Order = {
       succeededAt?: string;
     };
   };
+  delivery?: {
+    state: "ON_THE_WAY" | "DELIVERED";
+    verificationStatus: "ACTIVE" | "BLOCKED" | "CONSUMED" | "OVERRIDDEN";
+    deliveryCode?: string;
+    riderArrivedAt?: string;
+    deliveredAt?: string;
+    recipientAccountRequired: false;
+  };
   price: {
     snapshotKind: string;
     subtotalPaise: number;
@@ -213,6 +221,7 @@ export type V1AdminExecutionOrder = {
   paymentExpiresAt?: string;
   paidAt?: string;
   updatedAt: string;
+  deliveredAt?: string;
 };
 
 export type V1AdminExecutionTrace = {
@@ -238,6 +247,9 @@ export type V1AdminExecutionTrace = {
     verification: Record<string, unknown>[];
     custody: Record<string, unknown>[];
     problems: Record<string, unknown>[];
+    deliveryEvidence: Record<string, unknown>[];
+    exceptionalHandoffs: Record<string, unknown>[];
+    canAuthorizeExceptionalHandoff: boolean;
   };
 };
 
@@ -573,7 +585,9 @@ export async function getV1AdminExecutionTrace(
       (delivery.mission !== null && delivery.mission !== undefined && !record(delivery.mission)) ||
       !Array.isArray(delivery.offers) || !Array.isArray(delivery.pickupStops) ||
       !Array.isArray(delivery.verification) || !Array.isArray(delivery.custody) ||
-      !Array.isArray(delivery.problems)
+      !Array.isArray(delivery.problems) || !Array.isArray(delivery.deliveryEvidence) ||
+      !Array.isArray(delivery.exceptionalHandoffs) ||
+      typeof delivery.canAuthorizeExceptionalHandoff !== "boolean"
     ))
   ) invalid("execution trace");
   return {
@@ -601,8 +615,35 @@ export async function getV1AdminExecutionTrace(
       verification: (delivery.verification as unknown[]).map(requiredRecord),
       custody: (delivery.custody as unknown[]).map(requiredRecord),
       problems: (delivery.problems as unknown[]).map(requiredRecord),
+      deliveryEvidence: (delivery.deliveryEvidence as unknown[]).map(requiredRecord),
+      exceptionalHandoffs: (delivery.exceptionalHandoffs as unknown[]).map(requiredRecord),
+      canAuthorizeExceptionalHandoff: requiredBoolean(
+        delivery.canAuthorizeExceptionalHandoff,
+      ),
     } : undefined,
   };
+}
+
+export async function authorizeV1ExceptionalDeliveryHandoff(
+  input: DastakV1Auth & {
+    missionId: string;
+    deliveryEvidenceId: string;
+    reason: string;
+    expectedMissionVersion: number;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  const reason = requiredText(input.reason.trim().replace(/\s+/g, " "), 500);
+  if (reason.length < 10) invalidInput("Add a clear Operations reason.");
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "authorizeExceptionalDeliveryHandoff",
+    missionId: requiredUuid(input.missionId),
+    deliveryEvidenceId: requiredUuid(input.deliveryEvidenceId),
+    reason,
+    expectedMissionVersion: requiredInteger(input.expectedMissionVersion, 1),
+  }, input.idempotencyKey, fetcher));
 }
 
 export function parseV1Catalogue(value: unknown): V1CatalogueSnapshot {
@@ -628,6 +669,12 @@ export function parseV1Order(value: unknown): V1Order {
   if (!orderStatuses.has(status)) invalid("order status");
   const progress = source.fulfilmentProgress === null || source.fulfilmentProgress === undefined
     ? undefined : record(source.fulfilmentProgress);
+  const delivery = source.delivery === null || source.delivery === undefined
+    ? undefined
+    : record(source.delivery);
+  if (source.delivery !== null && source.delivery !== undefined && !delivery) {
+    invalid("delivery state");
+  }
   return {
     id: requiredUuid(source.id),
     displayOrderNumber: requiredText(source.displayOrderNumber, 80),
@@ -641,6 +688,7 @@ export function parseV1Order(value: unknown): V1Order {
     payment: source.payment === null || source.payment === undefined
       ? undefined
       : parseOrderPayment(source.payment),
+    delivery: delivery ? parseOrderDelivery(delivery) : undefined,
     price: {
       snapshotKind: requiredText(price.snapshotKind, 40),
       subtotalPaise: requiredInteger(price.subtotalPaise, 0),
@@ -659,6 +707,26 @@ export function parseV1Order(value: unknown): V1Order {
     deliveredAt: optionalTimestamp(source.deliveredAt),
     createdAt: requiredTimestamp(source.createdAt),
     updatedAt: requiredTimestamp(source.updatedAt),
+  };
+}
+
+function parseOrderDelivery(source: Record<string, unknown>): NonNullable<V1Order["delivery"]> {
+  const state = requiredText(source.state, 40);
+  const verificationStatus = requiredText(source.verificationStatus, 40);
+  if (
+    !["ON_THE_WAY", "DELIVERED"].includes(state) ||
+    !["ACTIVE", "BLOCKED", "CONSUMED", "OVERRIDDEN"].includes(verificationStatus) ||
+    source.recipientAccountRequired !== false
+  ) invalid("delivery state");
+  const deliveryCode = optionalText(source.deliveryCode, 6);
+  if (deliveryCode !== undefined && !/^\d{6}$/.test(deliveryCode)) invalid("delivery code");
+  return {
+    state: state as NonNullable<V1Order["delivery"]>["state"],
+    verificationStatus: verificationStatus as NonNullable<V1Order["delivery"]>["verificationStatus"],
+    deliveryCode,
+    riderArrivedAt: optionalTimestamp(source.riderArrivedAt),
+    deliveredAt: optionalTimestamp(source.deliveredAt),
+    recipientAccountRequired: false,
   };
 }
 
@@ -885,6 +953,7 @@ function parseAdminExecutionOrder(value: unknown): V1AdminExecutionOrder {
     paymentExpiresAt: optionalTimestamp(source.paymentExpiresAt),
     paidAt: optionalTimestamp(source.paidAt),
     updatedAt: requiredTimestamp(source.updatedAt),
+    deliveredAt: optionalTimestamp(source.deliveredAt),
   };
 }
 

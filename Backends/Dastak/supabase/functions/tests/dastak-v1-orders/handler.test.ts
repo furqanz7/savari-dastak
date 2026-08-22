@@ -208,6 +208,48 @@ Deno.test("V1 execution trace is a permission-checked authenticated RPC surface"
   assertEquals(traceInput, { accessToken: actor.accessToken, orderId });
 });
 
+Deno.test("V1 exceptional handoff preserves evidence, reason, version and authenticated boundary", async () => {
+  const evidenceId = "44444444-4444-4444-8444-444444444444";
+  let recorded: unknown;
+  const response = await handleV1Orders(
+    request({
+      operation: "authorizeExceptionalDeliveryHandoff",
+      missionId: orderId,
+      deliveryEvidenceId: evidenceId,
+      reason: "  Operations reviewed immutable rider evidence.  ",
+      expectedMissionVersion: 9,
+      actorId: skuId,
+    }, "override-1"),
+    dependencies({
+      authorizeExceptionalDeliveryHandoff: (input) => {
+        recorded = input;
+        return Promise.resolve({ verificationStatus: "OVERRIDDEN" });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    missionId: orderId,
+    deliveryEvidenceId: evidenceId,
+    reason: "Operations reviewed immutable rider evidence.",
+    expectedMissionVersion: 9,
+    idempotencyKey: "override-1",
+  });
+
+  const invalid = await handleV1Orders(
+    request({
+      operation: "authorizeExceptionalDeliveryHandoff",
+      missionId: orderId,
+      deliveryEvidenceId: evidenceId,
+      reason: "too short",
+      expectedMissionVersion: 9,
+    }, "override-invalid"),
+    dependencies(),
+  );
+  assertEquals(invalid.status, 400);
+});
+
 Deno.test("V1 merchant preparation commands preserve package, evidence, version, and idempotency", async () => {
   const recorded: Record<string, unknown> = {};
   const deps = dependencies({
@@ -417,6 +459,8 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
     listAdminExecutionOrders: overrides.listAdminExecutionOrders ??
       (() => Promise.resolve({ orders: [] })),
     getAdminExecutionTrace: overrides.getAdminExecutionTrace ??
+      (() => Promise.resolve({})),
+    authorizeExceptionalDeliveryHandoff: overrides.authorizeExceptionalDeliveryHandoff ??
       (() => Promise.resolve({})),
   };
 }

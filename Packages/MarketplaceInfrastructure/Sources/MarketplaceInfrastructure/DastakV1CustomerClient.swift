@@ -232,6 +232,22 @@ public struct DastakV1PaymentReservation: Codable, Equatable, Sendable {
     public var amount: Money { Money(paise: amountPaise) }
 }
 
+public enum DastakV1DeliveryVerificationStatus: String, Codable, Equatable, Sendable {
+    case active = "ACTIVE"
+    case blocked = "BLOCKED"
+    case consumed = "CONSUMED"
+    case overridden = "OVERRIDDEN"
+}
+
+public struct DastakV1DeliveryProgress: Codable, Equatable, Sendable {
+    public let state: String
+    public let verificationStatus: DastakV1DeliveryVerificationStatus
+    public let deliveryCode: String?
+    public let riderArrivedAt: String?
+    public let deliveredAt: String?
+    public let recipientAccountRequired: Bool
+}
+
 public struct DastakV1OrderPrice: Codable, Equatable, Sendable {
     public let snapshotKind: String
     public let subtotalPaise: Int
@@ -280,6 +296,7 @@ public struct DastakV1OrderSnapshot: Codable, Equatable, Identifiable, Sendable 
     public let customerState: String?
     public let fulfilmentProgress: DastakV1FulfilmentProgress?
     public let payment: DastakV1PaymentReservation?
+    public let delivery: DastakV1DeliveryProgress?
     public let price: DastakV1OrderPrice
     public let lines: [DastakV1OrderLine]
     public let submittedAt: String?

@@ -109,6 +109,8 @@ export type V1DeliveryMission = {
     | "EN_ROUTE_TO_PICKUPS"
     | "PICKUP_IN_PROGRESS"
     | "ALL_PACKAGES_PICKED_UP"
+    | "OUT_FOR_DELIVERY"
+    | "ARRIVED"
     | "DELIVERY_RECOVERY";
   version: number;
   transportType: V1TransportType;
@@ -120,10 +122,47 @@ export type V1DeliveryMission = {
   mustUseDeliveryRecovery: boolean;
   orderLoad: V1OrderLoad;
   pickupStops: V1PickupStop[];
+  customerDestination: {
+    address: string;
+    location: OrderLocation | null;
+    recipientName: string | null;
+    recipientPhoneNumber: string | null;
+  } | null;
+  outForDeliveryAt: string | null;
+  arrivedCustomerAt: string | null;
+  deliveredAt: string | null;
+  finalVerification: {
+    status: "INACTIVE" | "ACTIVE" | "CONSUMED" | "BLOCKED" | "OVERRIDDEN";
+    failedAttempts: number;
+    activatedAt: string | null;
+    blockedAt: string | null;
+    evidenceRequired: true;
+    evidencePresent: boolean;
+  } | null;
+  deliveryEvidence: Array<{
+    id: string;
+    objectPath: string;
+    contentType: "image/jpeg" | "image/png" | "image/heic";
+    capturedAt: string;
+    packageCount: number;
+  }>;
+  canStartFinalDelivery: boolean;
+  canArriveCustomer: boolean;
+  canCaptureDeliveryEvidence: boolean;
+  canVerifyDelivery: boolean;
+};
+export type V1CompletedMission = {
+  id: string;
+  orderId: string;
+  status: "DELIVERED";
+  verificationStatus: "CONSUMED" | "OVERRIDDEN";
+  packageCount: number;
+  deliveredAt: string;
 };
 export type V1DeliveryDispatchSnapshot = {
   offer: V1RiderOffer | null;
   currentMission: V1DeliveryMission | null;
+  completedMission: V1CompletedMission | null;
 };
 
 type AuthenticatedInput = { supabaseUrl: string; publishableKey: string; accessToken: string };
@@ -141,6 +180,11 @@ const evidenceExtensions = new Map([
   ["application/pdf", "pdf"],
   ["image/jpeg", "jpg"],
   ["image/png", "png"],
+]);
+const deliveryEvidenceExtensions = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/heic", "heic"],
 ]);
 const maximumEvidenceBytes = 10 * 1024 * 1024;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -222,6 +266,31 @@ export async function uploadPartnerEvidence(
     kind === "vehicle" ? "The vehicle document could not be uploaded." : "The identity document could not be uploaded.",
     0,
   );
+  return objectPath;
+}
+
+export async function uploadV1DeliveryEvidence(
+  client: SupabaseClient,
+  accountId: string,
+  file: File,
+) {
+  const extension = deliveryEvidenceExtensions.get(file.type);
+  if (!uuidPattern.test(accountId) || !extension || file.size < 1 || file.size > maximumEvidenceBytes) {
+    throw validationError("Capture a JPG, PNG or HEIC package photo up to 10 MB.");
+  }
+  const objectPath = `rider-delivery/${accountId.toLowerCase()}/${crypto.randomUUID()}.${extension}`;
+  const { error } = await client.storage.from("dastak-evidence").upload(objectPath, file, {
+    cacheControl: "3600",
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) {
+    throw new DeliveryRequestError(
+      "evidence_upload_failed",
+      "The package photo could not be uploaded.",
+      0,
+    );
+  }
   return objectPath;
 }
 
@@ -343,7 +412,11 @@ export type V1DeliveryMissionOperation =
   | "v1ArriveAtPickup"
   | "v1VerifyPickup"
   | "v1CancelBeforePickup"
-  | "v1ReportDeliveryProblem";
+  | "v1ReportDeliveryProblem"
+  | "v1StartFinalDelivery"
+  | "v1ArriveAtCustomer"
+  | "v1AddDeliveryEvidence"
+  | "v1VerifyDelivery";
 
 export async function advanceV1DeliveryMission(
   input: AuthenticatedInput & {
@@ -352,6 +425,7 @@ export async function advanceV1DeliveryMission(
     stopId?: string;
     accountedPackageCount?: number;
     verificationCode?: string;
+    objectPath?: string;
     reason?: string;
     idempotencyKey: string;
   },
@@ -364,6 +438,13 @@ export async function advanceV1DeliveryMission(
   )) {
     throw validationError("Account for every package and enter the six-digit pickup code.");
   }
+  if (
+    input.operation === "v1AddDeliveryEvidence" &&
+    !input.objectPath?.startsWith("rider-delivery/")
+  ) throw validationError("Capture the package photo before continuing.");
+  if (input.operation === "v1VerifyDelivery" && !/^\d{6}$/.test(input.verificationCode ?? "")) {
+    throw validationError("Enter the six-digit customer delivery code.");
+  }
   return v1DispatchMutation(input, {
     operation: input.operation,
     missionId: input.missionId,
@@ -372,6 +453,7 @@ export async function advanceV1DeliveryMission(
       ? { accountedPackageCount: input.accountedPackageCount }
       : {}),
     ...(input.verificationCode ? { verificationCode: input.verificationCode } : {}),
+    ...(input.objectPath ? { objectPath: input.objectPath } : {}),
     ...(input.reason ? { reason: input.reason.trim() } : {}),
   }, fetcher);
 }
@@ -529,6 +611,9 @@ function parseV1Dispatch(value: unknown): V1DeliveryDispatchSnapshot {
   return {
     offer: source.offer === null ? null : v1Offer(source.offer),
     currentMission: source.currentMission === null ? null : v1Mission(source.currentMission),
+    completedMission: source.completedMission === null || source.completedMission === undefined
+      ? null
+      : v1CompletedMission(source.completedMission),
   };
 }
 
@@ -560,6 +645,8 @@ function v1Mission(value: unknown): V1DeliveryMission {
     "EN_ROUTE_TO_PICKUPS",
     "PICKUP_IN_PROGRESS",
     "ALL_PACKAGES_PICKED_UP",
+    "OUT_FOR_DELIVERY",
+    "ARRIVED",
     "DELIVERY_RECOVERY",
   ] as const;
   if (!source || !statuses.includes(status as typeof statuses[number]) ||
@@ -579,6 +666,75 @@ function v1Mission(value: unknown): V1DeliveryMission {
     mustUseDeliveryRecovery: source.mustUseDeliveryRecovery,
     orderLoad: v1OrderLoad(source.orderLoad),
     pickupStops: source.pickupStops.map((stop) => v1PickupStop(stop, true)),
+    customerDestination: source.customerDestination === null
+      ? null
+      : v1CustomerDestination(source.customerDestination),
+    outForDeliveryAt: nullableTimestamp(source.outForDeliveryAt),
+    arrivedCustomerAt: nullableTimestamp(source.arrivedCustomerAt),
+    deliveredAt: nullableTimestamp(source.deliveredAt),
+    finalVerification: source.finalVerification === null
+      ? null
+      : v1FinalVerification(source.finalVerification),
+    deliveryEvidence: requiredArray(source.deliveryEvidence).map(v1DeliveryEvidence),
+    canStartFinalDelivery: requiredBoolean(source.canStartFinalDelivery),
+    canArriveCustomer: requiredBoolean(source.canArriveCustomer),
+    canCaptureDeliveryEvidence: requiredBoolean(source.canCaptureDeliveryEvidence),
+    canVerifyDelivery: requiredBoolean(source.canVerifyDelivery),
+  };
+}
+
+function v1CompletedMission(value: unknown): V1CompletedMission {
+  const source = record(value);
+  if (!source || source.status !== "DELIVERED" ||
+    !["CONSUMED", "OVERRIDDEN"].includes(String(source.verificationStatus))) invalid();
+  return {
+    id: requiredUUID(source.id),
+    orderId: requiredUUID(source.orderId),
+    status: "DELIVERED",
+    verificationStatus: source.verificationStatus as V1CompletedMission["verificationStatus"],
+    packageCount: positiveInteger(source.packageCount),
+    deliveredAt: timestamp(source.deliveredAt),
+  };
+}
+
+function v1CustomerDestination(value: unknown): NonNullable<V1DeliveryMission["customerDestination"]> {
+  const source = record(value);
+  const address = record(source?.address);
+  const recipient = source?.recipient === null ? undefined : record(source?.recipient);
+  if (!source || !address || (source.recipient !== null && !recipient)) invalid();
+  const hasLocation = typeof address.latitude === "number" && typeof address.longitude === "number";
+  return {
+    address: addressLabel(address),
+    location: hasLocation ? location(address) : null,
+    recipientName: nullableText(recipient?.name, 160),
+    recipientPhoneNumber: nullableText(recipient?.phoneNumber, 40),
+  };
+}
+
+function v1FinalVerification(value: unknown): NonNullable<V1DeliveryMission["finalVerification"]> {
+  const source = record(value);
+  const status = source?.status;
+  if (!source || !["INACTIVE", "ACTIVE", "CONSUMED", "BLOCKED", "OVERRIDDEN"].includes(String(status)) ||
+    source.evidenceRequired !== true || typeof source.evidencePresent !== "boolean") invalid();
+  return {
+    status: status as NonNullable<V1DeliveryMission["finalVerification"]>["status"],
+    failedAttempts: nonNegativeInteger(source.failedAttempts),
+    activatedAt: nullableTimestamp(source.activatedAt),
+    blockedAt: nullableTimestamp(source.blockedAt),
+    evidenceRequired: true,
+    evidencePresent: source.evidencePresent,
+  };
+}
+
+function v1DeliveryEvidence(value: unknown): V1DeliveryMission["deliveryEvidence"][number] {
+  const source = record(value);
+  if (!source || !["image/jpeg", "image/png", "image/heic"].includes(String(source.contentType))) invalid();
+  return {
+    id: requiredUUID(source.id),
+    objectPath: requiredText(source.objectPath, 500),
+    contentType: source.contentType as V1DeliveryMission["deliveryEvidence"][number]["contentType"],
+    capturedAt: timestamp(source.capturedAt),
+    packageCount: positiveInteger(source.packageCount),
   };
 }
 
@@ -650,6 +806,16 @@ function nonNegativeInteger(value: unknown) {
 
 function nonNegativeNumber(value: unknown) {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) invalid();
+  return value;
+}
+
+function requiredBoolean(value: unknown) {
+  if (typeof value !== "boolean") invalid();
+  return value;
+}
+
+function requiredArray(value: unknown) {
+  if (!Array.isArray(value)) invalid();
   return value;
 }
 

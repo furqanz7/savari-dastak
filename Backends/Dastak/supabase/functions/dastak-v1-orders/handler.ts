@@ -82,6 +82,14 @@ export type V1OrderDependencies = {
     accessToken: string;
     orderId: string;
   }) => Promise<unknown>;
+  authorizeExceptionalDeliveryHandoff: (input: {
+    accessToken: string;
+    missionId: string;
+    deliveryEvidenceId: string;
+    reason: string;
+    expectedMissionVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -325,6 +333,31 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           await dependencies.getAdminExecutionTrace({
             accessToken: actor.accessToken,
             orderId,
+          }),
+        );
+      }
+      case "authorizeExceptionalDeliveryHandoff": {
+        const missionId = requiredUUID(body.missionId);
+        const deliveryEvidenceId = requiredUUID(body.deliveryEvidenceId);
+        const reason = requiredText(body.reason, 500);
+        const expectedMissionVersion = integer(
+          body.expectedMissionVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !missionId || !deliveryEvidenceId || !reason || reason.length < 10 ||
+          !expectedMissionVersion || !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.authorizeExceptionalDeliveryHandoff({
+            accessToken: actor.accessToken,
+            missionId,
+            deliveryEvidenceId,
+            reason,
+            expectedMissionVersion,
+            idempotencyKey,
           }),
         );
       }

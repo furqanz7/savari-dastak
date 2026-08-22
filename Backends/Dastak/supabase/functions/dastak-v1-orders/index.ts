@@ -97,5 +97,17 @@ Deno.serve((request) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_execution_trace", {
         p_order_id: input.orderId,
       }),
+    authorizeExceptionalDeliveryHandoff: (input) =>
+      callAuthenticatedRPC(
+        input.accessToken,
+        "dastak_v1_authorize_exceptional_delivery_handoff",
+        {
+          p_mission_id: input.missionId,
+          p_delivery_evidence_id: input.deliveryEvidenceId,
+          p_reason: input.reason,
+          p_expected_mission_version: input.expectedMissionVersion,
+          p_idempotency_key: input.idempotencyKey,
+        },
+      ),
   })
 );

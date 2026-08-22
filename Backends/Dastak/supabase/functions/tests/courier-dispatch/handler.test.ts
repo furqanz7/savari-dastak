@@ -175,6 +175,64 @@ Deno.test("V1 pickup actions use server-owned actions and six-digit codes", asyn
   }
 });
 
+Deno.test("V1 final-delivery actions bind the rider, evidence path, and six-digit code", async () => {
+  const recorded: Record<string, unknown>[] = [];
+  const evidenceId = "66666666-6666-4666-8666-666666666666";
+  const objectPath = `rider-delivery/${accountId}/${evidenceId}.jpg`;
+  const deps = dependencies({
+    advanceV1FinalDelivery: (input) => {
+      recorded.push(input);
+      return Promise.resolve({ responseBody: { currentMission: null }, responseStatus: 200 });
+    },
+  });
+  const cases = [
+    ["v1StartFinalDelivery", { missionId }],
+    ["v1ArriveAtCustomer", { missionId }],
+    ["v1AddDeliveryEvidence", { missionId, objectPath }],
+    ["v1VerifyDelivery", { missionId, verificationCode: "654321" }],
+  ] as const;
+  const actions = [
+    "START_FINAL_DELIVERY",
+    "ARRIVE_CUSTOMER",
+    "ADD_DELIVERY_EVIDENCE",
+    "VERIFY_DELIVERY",
+  ];
+
+  for (const [operation, payload] of cases) {
+    const response = await handleCourierDispatch(
+      request({ body: { operation, accountId: assignmentId, action: "DELIVERED", ...payload } }),
+      deps,
+    );
+    assertEquals(response.status, 200);
+  }
+  assertEquals(recorded.map((input) => input.action), actions);
+  assertEquals(recorded.every((input) => input.accountId === accountId), true);
+  assertEquals(recorded[2].objectPath, objectPath);
+  assertEquals(recorded[3].verificationCode, "654321");
+  assertEquals(recorded.every((input) => !("riderId" in input)), true);
+
+  for (
+    const invalidPath of [
+      `rider-delivery/${assignmentId}/${evidenceId}.jpg`,
+      `rider-delivery/${accountId}/nested/${evidenceId}.jpg`,
+      `rider-delivery/${accountId}/not-a-uuid.jpg`,
+    ]
+  ) {
+    const response = await handleCourierDispatch(
+      request({ body: { operation: "v1AddDeliveryEvidence", missionId, objectPath: invalidPath } }),
+      deps,
+    );
+    await assertError(response, 400, "validation_failed");
+  }
+  for (const verificationCode of [undefined, "12345", "12345a", "1234567"]) {
+    const response = await handleCourierDispatch(
+      request({ body: { operation: "v1VerifyDelivery", missionId, verificationCode } }),
+      deps,
+    );
+    await assertError(response, 400, "validation_failed");
+  }
+});
+
 Deno.test("accept forwards only the authenticated partner and assignment", async () => {
   let recorded: Record<string, unknown> | undefined;
   const response = await handleCourierDispatch(
@@ -360,6 +418,8 @@ function dependencies(
     declineV1Offer: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     advanceV1Mission: () =>
+      Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
+    advanceV1FinalDelivery: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     ...overrides,
   };

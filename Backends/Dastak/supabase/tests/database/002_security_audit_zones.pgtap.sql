@@ -112,6 +112,8 @@ select policies_are('storage', 'objects', array[
   'dastak_merchant_evidence_select_own',
   'dastak_v1_merchant_ready_evidence_insert_own',
   'dastak_v1_merchant_ready_evidence_select_own',
+  'dastak_v1_rider_delivery_evidence_insert_own',
+  'dastak_v1_rider_delivery_evidence_select_own',
   'dastak_pharmacy_evidence_insert_own',
   'dastak_pharmacy_evidence_select_own',
   'dastak_prescription_evidence_insert_own',

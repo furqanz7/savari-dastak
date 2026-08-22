@@ -15,6 +15,10 @@ struct DastakV1MatchingView: View {
                     ScrollView {
                         VStack(spacing: MarketplaceSpacing.large) {
                             statusCard(order)
+                            if order.status == .outForDelivery,
+                               let delivery = order.delivery {
+                                deliveryCard(delivery)
+                            }
                             orderSummary(order)
                             if order.status == .awaitingPayment,
                                let payment = order.payment {
@@ -80,8 +84,9 @@ struct DastakV1MatchingView: View {
             }
 
             Label(
-                [.paid, .preparing, .pickupInProgress].contains(order.status)
-                    ? "Payment confirmed exactly once"
+                [.paid, .preparing, .pickupInProgress, .outForDelivery, .delivered]
+                    .contains(order.status)
+                    ? "Secure package custody is tracked by Dastak"
                     : "No charge until the complete basket is secured",
                 systemImage: "checkmark.shield.fill"
             )
@@ -91,6 +96,50 @@ struct DastakV1MatchingView: View {
         .frame(maxWidth: .infinity)
         .padding(MarketplaceSpacing.large)
         .marketplaceFlatSurface()
+    }
+
+    @ViewBuilder
+    private func deliveryCard(_ delivery: DastakV1DeliveryProgress) -> some View {
+        if let code = delivery.deliveryCode,
+           delivery.verificationStatus == .active,
+           code.range(of: #"^[0-9]{6}$"#, options: .regularExpression) != nil {
+            VStack(spacing: MarketplaceSpacing.medium) {
+                VStack(spacing: 5) {
+                    Text("DELIVERY CODE")
+                        .font(.caption2.weight(.bold))
+                        .tracking(1.2)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text(code)
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .tracking(5)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                }
+                Text("Share this in-app code only when every package is with you. A trusted recipient may use it without a Dastak account.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Label("No SMS code is used", systemImage: "iphone.gen2")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(MarketplaceSpacing.large)
+            .background(MarketplaceColors.dastakAccentSoft.color)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Delivery code (code). Share only after receiving every package.")
+        } else if delivery.verificationStatus == .blocked {
+            Label(
+                "Delivery verification needs Operations support. Your rider must keep every package secure.",
+                systemImage: "exclamationmark.shield.fill"
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(MarketplaceSpacing.medium)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .marketplaceFlatSurface()
+        }
     }
 
     private func paymentCard(
@@ -205,7 +254,8 @@ struct DastakV1MatchingView: View {
     }
 
     private func shouldPoll(_ status: DastakV1OrderStatus) -> Bool {
-        [.created, .matching, .fullySecured, .awaitingPayment, .paid, .preparing, .pickupInProgress].contains(status)
+        [.created, .matching, .fullySecured, .awaitingPayment, .paid, .preparing,
+         .pickupInProgress, .outForDelivery].contains(status)
     }
 
     private func isMatching(_ status: DastakV1OrderStatus) -> Bool {
@@ -239,8 +289,8 @@ struct DastakV1MatchingView: View {
             "Every item has been reserved. Secure payment will be requested before preparation begins."
         case .paid, .preparing: "Payment is confirmed and your secured items are being prepared."
         case .pickupInProgress: "Your delivery partner is collecting your complete order."
-        case .outForDelivery: "Your verified packages are heading to you."
-        case .delivered: "Your delivery has been completed."
+        case .outForDelivery: "Every package has been collected and your delivery partner is heading to you."
+        case .delivered: "Every package was securely handed over. Your order is complete."
         case .unavailable: "Dastak could not secure the complete basket. You were not charged."
         case .paymentExpired: "The reservation expired without payment."
         case .cancelledPrepayment: "This order was cancelled before payment."

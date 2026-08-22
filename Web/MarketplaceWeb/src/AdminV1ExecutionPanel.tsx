@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Camera, Clock3, PackageCheck, RefreshCw, Route, ShieldCheck, WalletCards } from "lucide-react";
 import { getEvidenceUrl } from "./admin";
 import {
+  authorizeV1ExceptionalDeliveryHandoff,
   getV1AdminExecutionOrders,
   getV1AdminExecutionTrace,
   type DastakV1Auth,
@@ -60,16 +61,20 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   };
 
   return <section className="v1-execution-panel" role="tabpanel" aria-label="Dastak V1 execution trace">
-    <header><div><p className="eyebrow">LAUNCH SPINE</p><h2>V1 execution trace</h2><span>Matching, payment, preparation, rider assignment, pickup verification and package custody.</span></div><button className="icon-button" type="button" disabled={busy} onClick={() => void refresh(true)} aria-label="Refresh V1 trace"><RefreshCw size={18} /></button></header>
+    <header><div><p className="eyebrow">LAUNCH SPINE</p><h2>V1 execution trace</h2><span>Matching through verified final delivery and package custody.</span></div><button className="icon-button" type="button" disabled={busy} onClick={() => void refresh(true)} aria-label="Refresh V1 trace"><RefreshCw size={18} /></button></header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {loading ? <div className="catalogue-loading" role="status"><span /> Loading V1 trace</div> : orders.length === 0 ? <p className="admin-empty">No V1 orders have been submitted.</p> : <div className="v1-execution-layout">
       <nav aria-label="V1 orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>
-      <div className="v1-trace-detail">{trace ? <Trace trace={trace} auth={auth} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
+      <div className="v1-trace-detail">{trace ? <Trace trace={trace} auth={auth} onChanged={() => void loadTrace(trace.order.id)} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
     </div>}
   </section>;
 }
 
-function Trace({ trace, auth }: { trace: V1AdminExecutionTrace; auth: DastakV1Auth }) {
+function Trace({ trace, auth, onChanged }: {
+  trace: V1AdminExecutionTrace;
+  auth: DastakV1Auth;
+  onChanged: () => void;
+}) {
   const paymentStatus = text(trace.payment, "status") ?? "NOT OPEN";
   const paymentAttempts = array(trace.payment, "attempts").length;
   const providerEvents = array(trace.payment, "providerEvents").length;
@@ -129,7 +134,7 @@ function Trace({ trace, auth }: { trace: V1AdminExecutionTrace; auth: DastakV1Au
     </TraceSection>
     <TraceSection title="Rider mission and offer pool">
       {!delivery?.mission ? <p>No rider mission yet.</p> : <>
-        <article><strong>{text(delivery.mission, "status")?.replaceAll("_", " ") ?? "MISSION"} · {text(delivery.mission, "riderName") ?? "No rider assigned"}</strong><span>{text(delivery.mission, "transportType") ?? "Transport pending"} · {number(delivery.mission, "pickupCount") ?? 0} pickup(s) · pool round {number(delivery.mission, "poolRound") ?? 0}</span></article>
+        <article><strong>{text(delivery.mission, "status")?.replaceAll("_", " ") ?? "MISSION"} · {text(delivery.mission, "riderName") ?? "No rider assigned"}</strong><span>{text(delivery.mission, "transportType") ?? "Transport pending"} · {number(delivery.mission, "pickupCount") ?? 0} pickup(s) · pool round {number(delivery.mission, "poolRound") ?? 0}<br />Out for delivery {formatOptional(text(delivery.mission, "outForDeliveryAt"))} · rider arrived {formatOptional(text(delivery.mission, "arrivedCustomerAt"))} · delivered {formatOptional(text(delivery.mission, "deliveredAt"))}</span></article>
         <p>{delivery.offers.length} rider offer(s) · {countStatus(delivery.offers, "ACCEPTED")} accepted · {countStatus(delivery.offers, "CLOSED")} competing closed</p>
         {delivery.offers.map((offer, index) => <article key={text(offer, "id") ?? index}><strong>{text(offer, "riderName") ?? "Rider"} · {text(offer, "status") ?? "UNKNOWN"}</strong><span>{text(offer, "transportType") ?? "—"} · {number(offer, "distanceMeters") ?? 0}m · round {number(offer, "poolRound") ?? 0}</span></article>)}
       </>}
@@ -137,18 +142,82 @@ function Trace({ trace, auth }: { trace: V1AdminExecutionTrace; auth: DastakV1Au
     <TraceSection title="Pickup stops and waiting">
       {!delivery || delivery.pickupStops.length === 0 ? <p>No pickup stops.</p> : delivery.pickupStops.map((stop, index) => <article key={text(stop, "id") ?? index}><strong>Stop {number(stop, "sequence") ?? "—"} · {text(stop, "branchName") ?? "Branch"} · {text(stop, "status") ?? "UNKNOWN"}</strong><span>{number(stop, "packageCount") ?? 0} package(s) · arrival {formatOptional(text(stop, "arrivedAt"))} · waiting {formatDuration(number(stop, "waitingSeconds") ?? 0)}</span></article>)}
     </TraceSection>
-    <TraceSection title="Pickup verification and custody">
+    <TraceSection title="Verification and package custody">
       {!delivery ? <p>No pickup verification.</p> : <>
         <p>{delivery.verification.length} verification record(s) · {countStatus(delivery.verification, "CONSUMED")} consumed · {delivery.custody.length} package custody transfer(s)</p>
-        {delivery.verification.map((verification, index) => <article key={text(verification, "id") ?? index}><strong>{text(verification, "type")?.replaceAll("_", " ") ?? "HANDOFF"} · {text(verification, "status") ?? "UNKNOWN"}</strong><span>{number(verification, "failedAttempts") ?? 0} failed attempt(s) · consumed {formatOptional(text(verification, "consumedAt"))}</span></article>)}
+        {delivery.verification.map((verification, index) => <article key={text(verification, "id") ?? index}><strong>{text(verification, "type")?.replaceAll("_", " ") ?? "HANDOFF"} · {text(verification, "status") ?? "UNKNOWN"}</strong><span>{number(verification, "failedAttempts") ?? 0} failed attempt(s) · blocked {formatOptional(text(verification, "blockedAt"))} · consumed {formatOptional(text(verification, "consumedAt"))}{text(verification, "overrideReason") ? ` · override: ${text(verification, "overrideReason")}` : ""}</span></article>)}
         {delivery.custody.map((custody, index) => <article key={text(custody, "id") ?? index}><strong>Package custody · {text(custody, "fromOwnerType") ?? "—"} → {text(custody, "toOwnerType") ?? "—"}</strong><span>{formatOptional(text(custody, "transferredAt"))}</span></article>)}
         {delivery.problems.map((problem, index) => <article className="running-late" key={text(problem, "id") ?? index}><strong>Delivery problem · {text(problem, "missionStatusAtReport") ?? "UNKNOWN"}</strong><span>{text(problem, "reason") ?? "—"} · custody started {boolean(problem, "custodyStarted") ? "yes" : "no"}</span></article>)}
+      </>}
+    </TraceSection>
+    <TraceSection title="Final-delivery evidence and completion">
+      {!delivery ? <p>Final delivery has not started.</p> : <>
+        <p>{delivery.deliveryEvidence.length} immutable rider photo(s) · Delivered {formatOptional(trace.order.deliveredAt)}</p>
+        {delivery.deliveryEvidence.map((evidence, index) => <article key={text(evidence, "id") ?? index}><strong><Camera size={14} /> Rider package photo · {array(evidence, "packageIds").length} package(s)</strong><span>{formatOptional(text(evidence, "capturedAt"))}<EvidenceButton auth={auth} objectPath={text(evidence, "objectPath")} /></span></article>)}
+        {delivery.exceptionalHandoffs.map((handoff, index) => <article className="running-late" key={text(handoff, "id") ?? index}><strong>Exceptional handoff · OVERRIDDEN</strong><span>{text(handoff, "authorizerName") ?? "Operations"} · {text(handoff, "reason") ?? "—"} · {formatOptional(text(handoff, "authorizedAt"))}<br />Normal code verification: no</span></article>)}
+        <ExceptionalHandoffAction trace={trace} auth={auth} onChanged={onChanged} />
       </>}
     </TraceSection>
     <TraceSection title="Reconciliation">
       <p>{trace.reconciliationCases.length === 0 ? "No reconciliation cases." : `${trace.reconciliationCases.length} case(s) require operator review.`}</p>
     </TraceSection>
   </>;
+}
+
+function ExceptionalHandoffAction({ trace, auth, onChanged }: {
+  trace: V1AdminExecutionTrace;
+  auth: DastakV1Auth;
+  onChanged: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const delivery = trace.delivery;
+  const missionId = text(delivery?.mission, "id");
+  const missionVersion = number(delivery?.mission, "version");
+  const evidenceId = text(delivery?.deliveryEvidence[0], "id");
+  const available = delivery?.canAuthorizeExceptionalHandoff === true &&
+    Boolean(missionId && missionVersion && evidenceId) &&
+    ["ARRIVED", "DELIVERY_RECOVERY"].includes(text(delivery?.mission, "status") ?? "") &&
+    delivery.exceptionalHandoffs.length === 0;
+  if (!available) return null;
+
+  const authorize = async () => {
+    if (busy || reason.trim().replace(/\s+/g, " ").length < 10 || !missionId ||
+      !missionVersion || !evidenceId) return;
+    if (!window.confirm(
+      "Authorize an exceptional handoff? This will deliver every package as OVERRIDDEN without normal code verification.",
+    )) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await authorizeV1ExceptionalDeliveryHandoff({
+        ...auth,
+        missionId,
+        deliveryEvidenceId: evidenceId,
+        reason,
+        expectedMissionVersion: missionVersion,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      onChanged();
+    } catch (actionError) {
+      setError(message(actionError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <div className="v1-exceptional-handoff">
+    <label>
+      Operations exception reason
+      <textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Record why normal in-app verification cannot be completed." />
+    </label>
+    <button className="danger-button" type="button" disabled={busy || reason.trim().length < 10} onClick={() => void authorize()}>
+      {busy ? "Authorizing…" : "Authorize exceptional handoff"}
+    </button>
+    <small>This records OVERRIDDEN, never normal verification success.</small>
+    {error ? <p className="order-error" role="alert">{error}</p> : null}
+  </div>;
 }
 
 function EvidenceButton({ auth, objectPath }: { auth: DastakV1Auth; objectPath?: string }) {

@@ -44,6 +44,22 @@ export type V1DeliveryMissionMutationInput = {
   requestDigest: string;
 };
 
+export type V1FinalDeliveryAction =
+  | "START_FINAL_DELIVERY"
+  | "ARRIVE_CUSTOMER"
+  | "ADD_DELIVERY_EVIDENCE"
+  | "VERIFY_DELIVERY";
+
+export type V1FinalDeliveryMutationInput = {
+  accountId: string;
+  missionId: string;
+  action: V1FinalDeliveryAction;
+  objectPath: string | null;
+  verificationCode: string | null;
+  idempotencyKey: string;
+  requestDigest: string;
+};
+
 export type CourierJobAction =
   | "start_to_store"
   | "arrive_at_store"
@@ -70,6 +86,7 @@ export type CourierDispatchDependencies = {
   acceptV1Offer: (input: V1RiderOfferMutationInput) => Promise<RpcResult>;
   declineV1Offer: (input: V1RiderOfferDeclineInput) => Promise<RpcResult>;
   advanceV1Mission: (input: V1DeliveryMissionMutationInput) => Promise<RpcResult>;
+  advanceV1FinalDelivery: (input: V1FinalDeliveryMutationInput) => Promise<RpcResult>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -153,6 +170,38 @@ export async function handleCourierDispatch(
           "REPORT_DELIVERY_PROBLEM",
           dependencies.advanceV1Mission,
         );
+      case "v1StartFinalDelivery":
+        return await v1FinalDeliveryMutation(
+          request,
+          body,
+          actor.accountId,
+          "START_FINAL_DELIVERY",
+          dependencies.advanceV1FinalDelivery,
+        );
+      case "v1ArriveAtCustomer":
+        return await v1FinalDeliveryMutation(
+          request,
+          body,
+          actor.accountId,
+          "ARRIVE_CUSTOMER",
+          dependencies.advanceV1FinalDelivery,
+        );
+      case "v1AddDeliveryEvidence":
+        return await v1FinalDeliveryMutation(
+          request,
+          body,
+          actor.accountId,
+          "ADD_DELIVERY_EVIDENCE",
+          dependencies.advanceV1FinalDelivery,
+        );
+      case "v1VerifyDelivery":
+        return await v1FinalDeliveryMutation(
+          request,
+          body,
+          actor.accountId,
+          "VERIFY_DELIVERY",
+          dependencies.advanceV1FinalDelivery,
+        );
       case "acceptOffer":
         return await assignmentMutation(
           request,
@@ -214,6 +263,37 @@ export async function handleCourierDispatch(
   } catch {
     return internalError();
   }
+}
+
+async function v1FinalDeliveryMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  action: V1FinalDeliveryAction,
+  dependency: (input: V1FinalDeliveryMutationInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const missionId = validUUID(body.missionId);
+  const objectPath = action === "ADD_DELIVERY_EVIDENCE"
+    ? validRiderDeliveryEvidencePath(body.objectPath, accountId)
+    : null;
+  const verificationCode = action === "VERIFY_DELIVERY"
+    ? validV1VerificationCode(body.verificationCode)
+    : null;
+  if (
+    !idempotencyKey || !missionId ||
+    (action === "ADD_DELIVERY_EVIDENCE" && !objectPath) ||
+    (action === "VERIFY_DELIVERY" && !verificationCode)
+  ) return validationError();
+
+  const normalized = { missionId, action, objectPath, verificationCode };
+  const result = await dependency({
+    accountId,
+    ...normalized,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
 }
 
 async function v1OfferMutation(
@@ -353,6 +433,16 @@ function validVerificationCode(value: unknown) {
 
 function validV1VerificationCode(value: unknown) {
   return typeof value === "string" && /^[0-9]{6}$/.test(value) ? value : null;
+}
+
+function validRiderDeliveryEvidencePath(value: unknown, accountId: string) {
+  if (typeof value !== "string") return null;
+  const escapedAccountId = accountId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `^rider-delivery/${escapedAccountId}/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(?:jpg|jpeg|png|heic)$`,
+    "i",
+  );
+  return pattern.test(value) ? value.toLowerCase() : null;
 }
 
 function validPositiveInteger(value: unknown) {

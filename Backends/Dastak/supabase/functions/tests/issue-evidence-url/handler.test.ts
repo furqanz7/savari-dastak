@@ -105,6 +105,30 @@ Deno.test("evidence URL signs a self-owned Dastak partner object for exactly 300
   assertEquals(signed, { bucket: "dastak-evidence", objectPath: selfPath, expiresIn: 300 });
 });
 
+Deno.test("evidence URL signs self-owned rider delivery evidence and lets Operations inspect it", async () => {
+  const evidenceId = "44444444-4444-4444-8444-444444444444";
+  const riderPath = `rider-delivery/${accountId}/${evidenceId}.jpg`;
+  const selfResponse = await handleIssueEvidenceUrl(
+    request({
+      body: { bucket: "dastak-evidence", objectPath: riderPath, operation: "download" },
+    }),
+    dependencies({ isActiveOwner: () => Promise.reject(new Error("must not be called")) }),
+  );
+  assertEquals(selfResponse.status, 200);
+
+  const operationsResponse = await handleIssueEvidenceUrl(
+    request({
+      body: {
+        bucket: "dastak-evidence",
+        objectPath: `rider-delivery/${otherAccountId}/${evidenceId}.jpg`,
+        operation: "download",
+      },
+    }),
+    dependencies({ isActiveOwner: () => Promise.resolve(true) }),
+  );
+  assertEquals(operationsResponse.status, 200);
+});
+
 Deno.test("evidence URL denies another user's evidence object", async () => {
   let signingCalls = 0;
   const response = await handleIssueEvidenceUrl(
