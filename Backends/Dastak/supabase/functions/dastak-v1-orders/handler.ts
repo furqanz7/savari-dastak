@@ -23,6 +23,33 @@ export type V1OrderDependencies = {
     idempotencyKey: string;
     expectedVersion: number;
   }) => Promise<unknown>;
+  listMerchantOpportunities: (input: {
+    accessToken: string;
+    limit: number;
+  }) => Promise<unknown>;
+  acceptMerchantOpportunity: (input: {
+    accessToken: string;
+    opportunityId: string;
+    requestScope: "FULL_BASKET" | "REQUESTED_SUBSET";
+    expectedVersion: number;
+    promisedPrepMinutes: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  declineMerchantOpportunity: (input: {
+    accessToken: string;
+    opportunityId: string;
+    requestScope: "FULL_BASKET" | "REQUESTED_SUBSET";
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  listAdminExecutionOrders: (input: {
+    accessToken: string;
+    limit: number;
+  }) => Promise<unknown>;
+  getAdminExecutionTrace: (input: {
+    accessToken: string;
+    orderId: string;
+  }) => Promise<unknown>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -101,6 +128,87 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           }),
         );
       }
+      case "merchantOpportunities": {
+        const limit = integer(body.limit, 1, 100) ?? 50;
+        if (
+          body.limit !== null && body.limit !== undefined &&
+          integer(body.limit, 1, 100) === undefined
+        ) {
+          return validationError();
+        }
+        return json(
+          await dependencies.listMerchantOpportunities({
+            accessToken: actor.accessToken,
+            limit,
+          }),
+        );
+      }
+      case "acceptMerchantOpportunity": {
+        const opportunityId = requiredUUID(body.opportunityId);
+        const requestScope = merchantRequestScope(body.requestScope);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const promisedPrepMinutes = integer(body.promisedPrepMinutes, 1, 24 * 60);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !opportunityId || !requestScope || !expectedVersion || !promisedPrepMinutes ||
+          !idempotencyKey
+        ) {
+          return validationError();
+        }
+        return json(
+          await dependencies.acceptMerchantOpportunity({
+            accessToken: actor.accessToken,
+            opportunityId,
+            requestScope,
+            expectedVersion,
+            promisedPrepMinutes,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "declineMerchantOpportunity": {
+        const opportunityId = requiredUUID(body.opportunityId);
+        const requestScope = merchantRequestScope(body.requestScope);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (!opportunityId || !requestScope || !expectedVersion || !idempotencyKey) {
+          return validationError();
+        }
+        return json(
+          await dependencies.declineMerchantOpportunity({
+            accessToken: actor.accessToken,
+            opportunityId,
+            requestScope,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "adminExecutionOrders": {
+        const limit = integer(body.limit, 1, 100) ?? 50;
+        if (
+          body.limit !== null && body.limit !== undefined &&
+          integer(body.limit, 1, 100) === undefined
+        ) {
+          return validationError();
+        }
+        return json(
+          await dependencies.listAdminExecutionOrders({
+            accessToken: actor.accessToken,
+            limit,
+          }),
+        );
+      }
+      case "adminExecutionTrace": {
+        const orderId = requiredUUID(body.orderId);
+        if (!orderId) return validationError();
+        return json(
+          await dependencies.getAdminExecutionTrace({
+            accessToken: actor.accessToken,
+            orderId,
+          }),
+        );
+      }
       default:
         return validationError();
     }
@@ -125,6 +233,10 @@ function requiredUUID(value: unknown) {
 
 function validTimestamp(value: unknown) {
   return typeof value === "string" && value.length <= 40 && Number.isFinite(Date.parse(value));
+}
+
+function merchantRequestScope(value: unknown) {
+  return value === "FULL_BASKET" || value === "REQUESTED_SUBSET" ? value : undefined;
 }
 
 function integer(value: unknown, minimum: number, maximum: number) {

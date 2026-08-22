@@ -5,6 +5,7 @@ import "./styles.css";
 import "./design/customer.css";
 import "./design/v1-customer.css";
 import "./design/v1-admin.css";
+import "./design/v1-merchant.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

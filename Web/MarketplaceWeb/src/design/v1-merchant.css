@@ -1,0 +1,30 @@
+.v1-merchant-panel { margin-bottom: 28px; padding: 20px; border: 1px solid color-mix(in srgb, var(--dastak-accent) 34%, var(--divider)); border-radius: 18px; background: linear-gradient(145deg, var(--surface), var(--dastak-accent-soft)); }
+.v1-merchant-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.v1-merchant-panel h2 { margin: 5px 0; font-size: 24px; }
+.v1-merchant-panel header span, .v1-merchant-empty { color: var(--text-secondary); font-size: 13px; }
+.v1-merchant-empty { margin: 18px 0 0; }
+.v1-opportunity-list { display: grid; gap: 12px; margin-top: 18px; }
+.v1-opportunity-card { padding: 16px; border: 1px solid var(--divider); border-radius: 14px; background: var(--surface); }
+.v1-opportunity-card > header { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; }
+.v1-opportunity-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; color: var(--dastak-accent); background: var(--dastak-accent-soft); }
+.v1-opportunity-card > header > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
+.v1-opportunity-card > header small { color: var(--text-secondary); }
+.v1-opportunity-card > header b { display: inline-flex; align-items: center; gap: 5px; color: var(--dastak-accent); font-size: 12px; font-variant-numeric: tabular-nums; text-transform: capitalize; }
+.v1-opportunity-card ul { display: grid; gap: 8px; margin: 15px 0; padding: 14px 0; border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); list-style: none; }
+.v1-opportunity-card li span { display: grid; gap: 3px; }
+.v1-opportunity-card li small { color: var(--text-secondary); }
+.v1-physical-check { display: flex; align-items: start; gap: 9px; color: var(--text-primary); font-size: 13px; line-height: 1.4; }
+.v1-physical-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--dastak-accent); }
+.v1-prep-choice { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 13px; color: var(--text-secondary); font-size: 13px; }
+.v1-prep-choice select { min-height: 42px; padding: 0 34px 0 12px; border: 1px solid var(--divider); border-radius: 10px; color: var(--text-primary); background: var(--surface-raised); }
+.v1-opportunity-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
+.v1-opportunity-actions button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin: 0; }
+.v1-reservation-state { margin: 12px 0 0; padding: 12px; border-radius: 11px; color: var(--text-secondary); background: var(--surface-muted); font-size: 13px; line-height: 1.45; }
+
+@media (max-width: 620px) {
+  .v1-merchant-panel { padding: 15px; }
+  .v1-opportunity-card > header { grid-template-columns: 42px minmax(0, 1fr); }
+  .v1-opportunity-card > header b { grid-column: 2; }
+  .v1-opportunity-actions { display: grid; grid-template-columns: 1fr; }
+  .v1-opportunity-actions button { width: 100%; }
+}

@@ -6,15 +6,21 @@ type RpcResult = { responseBody: unknown; responseStatus: number };
 export type PaymentActionInput = {
   accountId: string;
   orderId: string;
-  entityType: "merchant_order" | "parcel";
+  entityType: "merchant_order" | "parcel" | "dastak_v1_order";
   idempotencyKey: string;
   requestDigest: string;
+};
+
+export type PaymentFailureInput = PaymentActionInput & {
+  attemptId: string;
+  failureCode: string;
 };
 
 export type DastakPaymentDependencies = {
   authenticateBearer: AuthenticateBearer;
   createCheckout: (input: PaymentActionInput) => Promise<RpcResult>;
   processRefund: (input: PaymentActionInput) => Promise<RpcResult>;
+  reportPaymentFailure: (input: PaymentFailureInput) => Promise<RpcResult>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -39,6 +45,8 @@ export async function handleDastakPayments(
   const body = await parseBody(request);
   const entityType = body?.entityType === "parcel"
     ? "parcel"
+    : body?.entityType === "dastak_v1_order"
+    ? "dastak_v1_order"
     : body?.entityType === undefined || body?.entityType === "merchant_order"
     ? "merchant_order"
     : undefined;
@@ -46,7 +54,15 @@ export async function handleDastakPayments(
   const idempotencyKey = requiredIdempotencyKey(request);
   if (!body || !entityType || !orderId || !idempotencyKey) return validationError();
 
-  const normalized = { operation: body.operation, entityType, orderId };
+  const attemptId = validUUID(body.paymentAttemptId);
+  const failureCode = validFailureCode(body.failureCode);
+  const normalized = {
+    operation: body.operation,
+    entityType,
+    orderId,
+    ...(attemptId ? { attemptId } : {}),
+    ...(failureCode ? { failureCode } : {}),
+  };
   const input: PaymentActionInput = {
     accountId: actor.accountId,
     orderId,
@@ -60,8 +76,19 @@ export async function handleDastakPayments(
       const result = await dependencies.createCheckout(input);
       return json(result.responseBody, result.responseStatus);
     }
-    if (body.operation === "processRefund") {
+    if (body.operation === "processRefund" && entityType !== "dastak_v1_order") {
       const result = await dependencies.processRefund(input);
+      return json(result.responseBody, result.responseStatus);
+    }
+    if (
+      body.operation === "reportPaymentFailure" && entityType === "dastak_v1_order" &&
+      attemptId && failureCode
+    ) {
+      const result = await dependencies.reportPaymentFailure({
+        ...input,
+        attemptId,
+        failureCode,
+      });
       return json(result.responseBody, result.responseStatus);
     }
     return validationError();
@@ -88,6 +115,10 @@ async function parseBody(request: Request): Promise<Record<string, unknown> | un
 
 function validUUID(value: unknown) {
   return typeof value === "string" && uuidPattern.test(value) ? value.toLowerCase() : undefined;
+}
+
+function validFailureCode(value: unknown) {
+  return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,79}$/.test(value) ? value : undefined;
 }
 
 function requiredIdempotencyKey(request: Request) {

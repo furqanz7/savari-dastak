@@ -33,6 +33,8 @@ async function recordEvent(event: RazorpayWebhookEvent) {
     p_occurred_at: event.occurredAt,
     p_request_digest: event.requestDigest,
   };
+  const v1 = await rpc("dastak_v1_record_razorpay_event", parameters);
+  if (v1.responseStatus !== 404) return v1;
   const merchant = await rpc("record_razorpay_merchant_order_event", parameters);
   if (merchant.responseStatus !== 404) return merchant;
   return await rpc("record_razorpay_parcel_event", parameters);

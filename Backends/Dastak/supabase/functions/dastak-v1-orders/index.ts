@@ -28,5 +28,42 @@ Deno.serve((request) =>
         p_idempotency_key: input.idempotencyKey,
         p_expected_version: input.expectedVersion,
       }),
+    listMerchantOpportunities: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_list_merchant_opportunities", {
+        p_limit: input.limit,
+      }),
+    acceptMerchantOpportunity: (input) =>
+      callAuthenticatedRPC(
+        input.accessToken,
+        input.requestScope === "FULL_BASKET"
+          ? "dastak_v1_accept_wave1_opportunity"
+          : "dastak_v1_accept_wave2_opportunity",
+        {
+          p_opportunity_id: input.opportunityId,
+          p_idempotency_key: input.idempotencyKey,
+          p_expected_version: input.expectedVersion,
+          p_promised_prep_minutes: input.promisedPrepMinutes,
+        },
+      ),
+    declineMerchantOpportunity: (input) =>
+      callAuthenticatedRPC(
+        input.accessToken,
+        input.requestScope === "FULL_BASKET"
+          ? "dastak_v1_decline_opportunity"
+          : "dastak_v1_decline_wave2_opportunity",
+        {
+          p_opportunity_id: input.opportunityId,
+          p_idempotency_key: input.idempotencyKey,
+          p_expected_version: input.expectedVersion,
+        },
+      ),
+    listAdminExecutionOrders: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_execution_orders", {
+        p_limit: input.limit,
+      }),
+    getAdminExecutionTrace: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_execution_trace", {
+        p_order_id: input.orderId,
+      }),
   })
 );

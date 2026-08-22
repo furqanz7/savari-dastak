@@ -359,6 +359,47 @@ set setting_value = '[10,15,20]'::jsonb,
     version = version + 1
 where id = '97000000-0000-4000-8000-000000000041';
 
+insert into dastak_v1.platform_settings (
+  id, setting_key, scope_type, setting_value, updated_by, update_reason
+) values
+(
+  '97000000-0000-4000-8000-000000000042',
+  'matching.wave2_timeout_seconds', 'GLOBAL', '120',
+  '97000000-0000-4000-8000-000000000002', 'Wave 2 test timeout.'
+),
+(
+  '97000000-0000-4000-8000-000000000043',
+  'matching.wave2_hold_seconds', 'GLOBAL', '180',
+  '97000000-0000-4000-8000-000000000002', 'Wave 2 test physical hold.'
+),
+(
+  '97000000-0000-4000-8000-000000000044',
+  'payment.reservation_seconds', 'GLOBAL', '300',
+  '97000000-0000-4000-8000-000000000002', 'Payment reservation test window.'
+),
+(
+  '97000000-0000-4000-8000-000000000045',
+  'matching.wave2_max_pickup_route_meters', 'GLOBAL', '50000',
+  '97000000-0000-4000-8000-000000000002', 'Wave 2 route test limit.'
+),
+(
+  '97000000-0000-4000-8000-000000000046',
+  'matching.operational_reliability_bps', 'GLOBAL', '9000',
+  '97000000-0000-4000-8000-000000000002', 'Wave 2 reliability test score.'
+),
+(
+  '97000000-0000-4000-8000-000000000047',
+  'delivery.transport_load_profiles', 'GLOBAL',
+  '[{"transportType":"MOTORBIKE","maxWeightGrams":50000,"maxVolumeCubicMillimetres":500000000,"maxLongestSideMillimetres":1500,"allowsBulky":true,"temperatureClasses":["AMBIENT","CHILLED","FROZEN"]}]',
+  '97000000-0000-4000-8000-000000000002', 'Wave 2 transport test profile.'
+),
+(
+  '97000000-0000-4000-8000-000000000048',
+  'delivery.default_sku_logistics', 'GLOBAL',
+  '{"weightGrams":500,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}',
+  '97000000-0000-4000-8000-000000000002', 'Wave 2 explicit test logistics fallback.'
+);
+
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
@@ -631,29 +672,29 @@ select is(
     from dastak_v1.orders
     where id = (select (body ->> 'id')::uuid from tap_wave1_order)
   ),
-  'MATCHING',
-  'a Wave 1 winner alone leaves the parent order matching'
+  'AWAITING_PAYMENT',
+  'a complete Wave 1 reservation passes the authoritative coordinator'
 );
 select is(
   (
     select count(*)
     from dastak_v1.orders
     where id = (select (body ->> 'id')::uuid from tap_wave1_order)
-      and fully_secured_at is null
-      and payment_expires_at is null
+      and fully_secured_at is not null
+      and payment_expires_at is not null
       and paid_at is null
-      and version = 2
+      and version = 4
   ),
   1::bigint,
-  'a Wave 1 winner creates no payment eligibility or parent transition'
+  'a Wave 1 winner becomes payment eligible only through full coordination'
 );
 select is(
   dastak_v1_api.order_json(
     (select (body ->> 'id')::uuid from tap_wave1_order),
     '97000000-0000-4000-8000-000000000001'
   ) -> 'fulfilmentProgress' ->> 'state',
-  'FINDING_ITEMS',
-  'customer remains at FINDING_ITEMS while the parent order is MATCHING'
+  'ORDER_SECURED',
+  'customer leaves FINDING_ITEMS only after complete coordination'
 );
 select is(
   (
@@ -780,7 +821,7 @@ select is(
   public.dastak_v1_cancel_prepayment_order(
     (select (body ->> 'id')::uuid from tap_wave1_order),
     'wave1-winner-cancel',
-    2
+    4
   ) ->> 'status',
   'CANCELLED_PREPAYMENT',
   'customer can cancel after an unpaid Wave 1 winner'

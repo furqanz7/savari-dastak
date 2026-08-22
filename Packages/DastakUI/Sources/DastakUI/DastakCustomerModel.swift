@@ -666,6 +666,19 @@ final class DastakCustomerModel: ObservableObject {
     func waitForPaymentConfirmation(session: DastakCheckoutSession) async -> Bool {
         for attempt in 0..<6 {
             switch session.entityType {
+            case .dastakV1Order:
+                do {
+                    let order = try await v1Client.order(
+                        id: session.orderID,
+                        idempotencyKey: makeKey()
+                    )
+                    activeV1Order = order
+                    v1Orders = [order] + v1Orders.filter { $0.id != order.id }
+                    if order.status == .paid { return true }
+                    if order.status == .paymentExpired { return false }
+                } catch {
+                    // Continue the bounded confirmation poll.
+                }
             case .merchantOrder:
                 await refreshOrders()
                 if let order = orders.first(where: { $0.orderID == session.orderID }), order.paymentState == .paid {
@@ -730,6 +743,47 @@ final class DastakCustomerModel: ObservableObject {
             ordersActionMessage = nil
         } catch {
             ordersActionMessage = message(for: error, fallback: "Payment could not be started.")
+        }
+    }
+
+    func retryPayment(for order: DastakV1OrderSnapshot) async -> Bool {
+        guard order.status == .awaitingPayment,
+              order.payment?.canAttempt == true,
+              !isCheckingOut else { return false }
+        isCheckingOut = true
+        defer { isCheckingOut = false }
+        do {
+            checkoutSession = try await checkoutClient.createV1OrderCheckout(
+                orderID: order.id,
+                idempotencyKey: makeKey()
+            )
+            v1OrderErrorMessage = nil
+            return true
+        } catch {
+            v1OrderErrorMessage = message(
+                for: error,
+                fallback: "Secure payment could not be started. Your reservation is unchanged."
+            )
+            return false
+        }
+    }
+
+    func reportV1CheckoutFailure(
+        session: DastakCheckoutSession,
+        failureCode: DastakV1CheckoutFailureCode
+    ) async {
+        guard session.entityType == .dastakV1Order,
+              let attemptID = session.attemptID else { return }
+        _ = try? await checkoutClient.reportV1CheckoutFailure(
+            orderID: session.orderID,
+            attemptID: attemptID,
+            failureCode: failureCode,
+            idempotencyKey: makeKey()
+        )
+        if activeV1Order?.id == session.orderID {
+            await refreshActiveV1Order()
+        } else {
+            await refreshV1Orders()
         }
     }
 

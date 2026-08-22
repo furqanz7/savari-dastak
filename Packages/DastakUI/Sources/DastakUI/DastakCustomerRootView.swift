@@ -257,21 +257,50 @@ public struct DastakCustomerRootView: View {
                             let confirmed = await model.waitForPaymentConfirmation(session: session)
                             isConfirmingPayment = false
                             if !confirmed {
-                                model.errorMessage = "Payment was received. We are confirming it securely and will update your order shortly."
+                                if session.entityType == .dastakV1Order {
+                                    model.v1OrderErrorMessage = "Payment was received. Dastak is still confirming it securely."
+                                } else {
+                                    model.errorMessage = "Payment was received. We are confirming it securely and will update your order shortly."
+                                }
                             }
+                            if session.entityType == .dastakV1Order { showingV1Order = true }
                         }
                     case let .failed(message):
                         model.clearCheckoutSession()
                         showingCheckout = false
                         selectedTab = .orders
-                        model.ordersActionMessage = message.isEmpty
-                            ? "Payment failed. You can try again from Orders."
-                            : message
+                        if session.entityType == .dastakV1Order {
+                            Task {
+                                await model.reportV1CheckoutFailure(
+                                    session: session,
+                                    failureCode: .checkoutFailed
+                                )
+                                model.v1OrderErrorMessage = message.isEmpty
+                                    ? "Payment failed. Your secured basket is still reserved—try again before the timer ends."
+                                    : message
+                                showingV1Order = true
+                            }
+                        } else {
+                            model.ordersActionMessage = message.isEmpty
+                                ? "Payment failed. You can try again from Orders."
+                                : message
+                        }
                     case .dismissed:
                         model.clearCheckoutSession()
                         showingCheckout = false
                         selectedTab = .orders
-                        model.ordersActionMessage = "Payment was not completed. Your order is saved and you can retry here."
+                        if session.entityType == .dastakV1Order {
+                            Task {
+                                await model.reportV1CheckoutFailure(
+                                    session: session,
+                                    failureCode: .checkoutDismissed
+                                )
+                                model.v1OrderErrorMessage = "Payment was not completed. Your reservation is unchanged and you can retry."
+                                showingV1Order = true
+                            }
+                        } else {
+                            model.ordersActionMessage = "Payment was not completed. Your order is saved and you can retry here."
+                        }
                     }
                 }
             }

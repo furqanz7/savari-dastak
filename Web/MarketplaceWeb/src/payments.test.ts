@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createCheckoutSession, processOrderRefund } from "./payments";
+import {
+  createCheckoutSession,
+  createV1CheckoutSession,
+  processOrderRefund,
+  reportV1CheckoutFailure,
+} from "./payments";
 
 const auth = {
   supabaseUrl: "https://example.supabase.co",
@@ -50,5 +55,48 @@ describe("Dastak payments", () => {
 
     expect(requestBody).toEqual({ operation: "processRefund", orderId });
     expect(result).toEqual({ orderId, refundState: "pending" });
+  });
+
+  it("starts V1 checkout only after reservation and preserves its attempt", async () => {
+    let requestBody: unknown;
+    const attemptId = "8a000000-0000-4000-8000-000000000081";
+    const result = await createV1CheckoutSession(
+      { ...auth, orderId, idempotencyKey: "v1-checkout" },
+      (_input, init) => {
+        requestBody = JSON.parse(String(init?.body));
+        return Promise.resolve(new Response(JSON.stringify({ ...checkout, attemptId }), { status: 200 }));
+      },
+    );
+    expect(requestBody).toEqual({
+      operation: "createCheckout",
+      entityType: "dastak_v1_order",
+      orderId,
+    });
+    expect(result).toMatchObject({ entityType: "dastak_v1_order", attemptId });
+  });
+
+  it("reports a dismissed V1 attempt without releasing its reservation", async () => {
+    let requestBody: unknown;
+    const paymentAttemptId = "8a000000-0000-4000-8000-000000000081";
+    await reportV1CheckoutFailure(
+      {
+        ...auth,
+        orderId,
+        paymentAttemptId,
+        failureCode: "CHECKOUT_DISMISSED",
+        idempotencyKey: "v1-failed",
+      },
+      (_input, init) => {
+        requestBody = JSON.parse(String(init?.body));
+        return Promise.resolve(new Response(JSON.stringify({ status: "FAILED" }), { status: 200 }));
+      },
+    );
+    expect(requestBody).toEqual({
+      operation: "reportPaymentFailure",
+      entityType: "dastak_v1_order",
+      orderId,
+      paymentAttemptId,
+      failureCode: "CHECKOUT_DISMISSED",
+    });
   });
 });

@@ -27,6 +27,7 @@ import {
 import { processOrderRefund } from "./payments";
 import { getEarnings, type EarningsSnapshot } from "./earnings";
 import { RefreshQueue, useOrderRealtime } from "./orderRealtime";
+import { MerchantV1Opportunities } from "./MerchantV1Opportunities";
 
 type Props = {
   accessToken: string;
@@ -215,6 +216,7 @@ export function MerchantOrdersView({
         <div className="catalogue-loading" role="status"><span /> Loading orders</div>
       ) : (
         <>
+          <MerchantV1Opportunities auth={auth} />
           <div className="merchant-summary" aria-label="Order summary">
             <MerchantSummary label="Needs action" value={awaitingDecision} />
             <MerchantSummary label="Preparing" value={preparing} />

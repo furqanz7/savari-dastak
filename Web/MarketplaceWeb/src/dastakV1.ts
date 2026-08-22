@@ -65,7 +65,26 @@ export type V1Order = {
   orderType: string;
   status: V1OrderStatus;
   version: number;
-  fulfilmentProgress?: { state: string };
+  customerState?: string;
+  fulfilmentProgress?: { state: string; title?: string };
+  payment?: {
+    status: string;
+    amountPaise: number;
+    currencyCode: "INR";
+    reservedAt: string;
+    expiresAt: string;
+    secondsRemaining: number;
+    canAttempt: boolean;
+    canRetry: boolean;
+    latestAttempt?: {
+      id: string;
+      status: string;
+      failureCode?: string;
+      createdAt: string;
+      failedAt?: string;
+      succeededAt?: string;
+    };
+  };
   price: {
     snapshotKind: string;
     subtotalPaise: number;
@@ -84,6 +103,55 @@ export type V1Order = {
   deliveredAt?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type V1MerchantOpportunity = {
+  id: string;
+  displayOrderNumber: string;
+  requestScope: "FULL_BASKET" | "REQUESTED_SUBSET";
+  status: string;
+  reservationState: string;
+  version: number;
+  branch: { id: string; displayName: string };
+  startedAt: string;
+  expiresAt: string;
+  secondsRemaining: number;
+  provisionalHoldExpiresAt?: string;
+  promisedPrepMinutes?: number;
+  prepTimeOptionsMinutes: number[];
+  physicalConfirmationRequired: boolean;
+  capacityConsumed: boolean;
+  orderPaymentState?: string;
+  lines: Array<{
+    orderLineId: string;
+    skuId: string;
+    name: string;
+    variant?: string;
+    packSize?: string;
+    quantity: number;
+  }>;
+};
+
+export type V1AdminExecutionOrder = {
+  id: string;
+  displayOrderNumber: string;
+  status: string;
+  version: number;
+  submittedAt?: string;
+  fullySecuredAt?: string;
+  paymentExpiresAt?: string;
+  paidAt?: string;
+  updatedAt: string;
+};
+
+export type V1AdminExecutionTrace = {
+  order: V1AdminExecutionOrder;
+  matchingAttempts: Record<string, unknown>[];
+  provisionalHolds: Record<string, unknown>[];
+  plans: Record<string, unknown>[];
+  capacity: Record<string, unknown>[];
+  payment?: Record<string, unknown>;
+  reconciliationCases: Record<string, unknown>[];
 };
 
 export type V1OrderSubmission = {
@@ -212,6 +280,80 @@ export async function updateV1AdminSku(
   return source;
 }
 
+export async function getV1MerchantOpportunities(
+  input: DastakV1Auth & { limit?: number; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+) {
+  const source = record(await invoke(input, "dastak-v1-orders", {
+    operation: "merchantOpportunities",
+    limit: input.limit ?? 50,
+  }, undefined, fetcher));
+  if (!source || !Array.isArray(source.opportunities)) invalid("merchant opportunity collection");
+  return source.opportunities.map(parseMerchantOpportunity);
+}
+
+export async function respondToV1MerchantOpportunity(
+  input: DastakV1Auth & {
+    opportunityId: string;
+    requestScope: V1MerchantOpportunity["requestScope"];
+    expectedVersion: number;
+    action: "accept" | "unavailable";
+    promisedPrepMinutes?: number;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  const accepting = input.action === "accept";
+  return parseMerchantOpportunity(await invoke(input, "dastak-v1-orders", {
+    operation: accepting ? "acceptMerchantOpportunity" : "declineMerchantOpportunity",
+    opportunityId: requiredUuid(input.opportunityId),
+    requestScope: input.requestScope,
+    expectedVersion: input.expectedVersion,
+    ...(accepting ? { promisedPrepMinutes: input.promisedPrepMinutes } : {}),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function getV1AdminExecutionOrders(
+  input: DastakV1Auth & { limit?: number; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+) {
+  const source = record(await invoke(input, "dastak-v1-orders", {
+    operation: "adminExecutionOrders",
+    limit: input.limit ?? 50,
+  }, undefined, fetcher));
+  if (!source || !Array.isArray(source.orders)) invalid("execution order collection");
+  return source.orders.map(parseAdminExecutionOrder);
+}
+
+export async function getV1AdminExecutionTrace(
+  input: DastakV1Auth & { orderId: string; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminExecutionTrace> {
+  const source = record(await invoke(input, "dastak-v1-orders", {
+    operation: "adminExecutionTrace",
+    orderId: requiredUuid(input.orderId),
+  }, undefined, fetcher));
+  if (!source) invalid("execution trace");
+  const payment = source.payment === null || source.payment === undefined
+    ? undefined
+    : record(source.payment);
+  if (
+    !Array.isArray(source.matchingAttempts) || !Array.isArray(source.provisionalHolds) ||
+    !Array.isArray(source.plans) || !Array.isArray(source.capacity) ||
+    !Array.isArray(source.reconciliationCases) || (source.payment !== null && source.payment !== undefined && !payment)
+  ) invalid("execution trace");
+  return {
+    order: parseAdminExecutionOrder(source.order),
+    matchingAttempts: source.matchingAttempts.map(requiredRecord),
+    provisionalHolds: source.provisionalHolds.map(requiredRecord),
+    plans: source.plans.map(requiredRecord),
+    capacity: source.capacity.map(requiredRecord),
+    payment,
+    reconciliationCases: source.reconciliationCases.map(requiredRecord),
+  };
+}
+
 export function parseV1Catalogue(value: unknown): V1CatalogueSnapshot {
   const source = record(value);
   if (!source || !Array.isArray(source.categories) || !Array.isArray(source.subcategories) || !Array.isArray(source.skus)) {
@@ -241,7 +383,13 @@ export function parseV1Order(value: unknown): V1Order {
     orderType: requiredText(source.orderType, 40),
     status,
     version: requiredInteger(source.version, 1),
-    fulfilmentProgress: progress ? { state: requiredText(progress.state, 80) } : undefined,
+    customerState: optionalText(source.customerState, 80),
+    fulfilmentProgress: progress
+      ? { state: requiredText(progress.state, 80), title: optionalText(progress.title, 160) }
+      : undefined,
+    payment: source.payment === null || source.payment === undefined
+      ? undefined
+      : parseOrderPayment(source.payment),
     price: {
       snapshotKind: requiredText(price.snapshotKind, 40),
       subtotalPaise: requiredInteger(price.subtotalPaise, 0),
@@ -259,6 +407,93 @@ export function parseV1Order(value: unknown): V1Order {
     paidAt: optionalTimestamp(source.paidAt),
     deliveredAt: optionalTimestamp(source.deliveredAt),
     createdAt: requiredTimestamp(source.createdAt),
+    updatedAt: requiredTimestamp(source.updatedAt),
+  };
+}
+
+function parseOrderPayment(value: unknown): NonNullable<V1Order["payment"]> {
+  const source = record(value);
+  if (!source) invalid("payment reservation");
+  const latest = source.latestAttempt === null || source.latestAttempt === undefined
+    ? undefined
+    : record(source.latestAttempt);
+  if (source.latestAttempt !== null && source.latestAttempt !== undefined && !latest) {
+    invalid("payment attempt");
+  }
+  return {
+    status: requiredText(source.status, 40),
+    amountPaise: requiredInteger(source.amountPaise, 1),
+    currencyCode: currency(source.currencyCode),
+    reservedAt: requiredTimestamp(source.reservedAt),
+    expiresAt: requiredTimestamp(source.expiresAt),
+    secondsRemaining: requiredInteger(source.secondsRemaining, 0),
+    canAttempt: requiredBoolean(source.canAttempt),
+    canRetry: requiredBoolean(source.canRetry),
+    latestAttempt: latest
+      ? {
+        id: requiredUuid(latest.id),
+        status: requiredText(latest.status, 40),
+        failureCode: optionalText(latest.failureCode, 80),
+        createdAt: requiredTimestamp(latest.createdAt),
+        failedAt: optionalTimestamp(latest.failedAt),
+        succeededAt: optionalTimestamp(latest.succeededAt),
+      }
+      : undefined,
+  };
+}
+
+function parseMerchantOpportunity(value: unknown): V1MerchantOpportunity {
+  const source = record(value);
+  const branch = record(source?.branch);
+  if (!source || !branch || !Array.isArray(source.lines) || !Array.isArray(source.prepTimeOptionsMinutes)) {
+    invalid("merchant opportunity");
+  }
+  const requestScope = requiredText(source.requestScope, 40);
+  if (requestScope !== "FULL_BASKET" && requestScope !== "REQUESTED_SUBSET") {
+    invalid("merchant opportunity scope");
+  }
+  return {
+    id: requiredUuid(source.id),
+    displayOrderNumber: requiredText(source.displayOrderNumber, 80),
+    requestScope,
+    status: requiredText(source.status, 40),
+    reservationState: requiredText(source.reservationState, 80),
+    version: requiredInteger(source.version, 1),
+    branch: { id: requiredUuid(branch.id), displayName: requiredText(branch.displayName, 100) },
+    startedAt: requiredTimestamp(source.startedAt),
+    expiresAt: requiredTimestamp(source.expiresAt),
+    secondsRemaining: requiredInteger(source.secondsRemaining, 0),
+    provisionalHoldExpiresAt: optionalTimestamp(source.provisionalHoldExpiresAt),
+    promisedPrepMinutes: optionalInteger(source.promisedPrepMinutes, 1),
+    prepTimeOptionsMinutes: source.prepTimeOptionsMinutes.map((item) => requiredInteger(item, 1)),
+    physicalConfirmationRequired: requiredBoolean(source.physicalConfirmationRequired),
+    capacityConsumed: requiredBoolean(source.capacityConsumed),
+    orderPaymentState: optionalText(source.orderPaymentState, 60),
+    lines: source.lines.map((item) => {
+      const line = requiredRecord(item);
+      return {
+        orderLineId: requiredUuid(line.orderLineId),
+        skuId: requiredUuid(line.skuId),
+        name: requiredText(line.name, 200),
+        variant: optionalText(line.variant, 160),
+        packSize: optionalText(line.packSize, 80),
+        quantity: requiredInteger(line.quantity, 1),
+      };
+    }),
+  };
+}
+
+function parseAdminExecutionOrder(value: unknown): V1AdminExecutionOrder {
+  const source = requiredRecord(value);
+  return {
+    id: requiredUuid(source.id),
+    displayOrderNumber: requiredText(source.displayOrderNumber, 80),
+    status: requiredText(source.status, 60),
+    version: requiredInteger(source.version, 1),
+    submittedAt: optionalTimestamp(source.submittedAt),
+    fullySecuredAt: optionalTimestamp(source.fullySecuredAt),
+    paymentExpiresAt: optionalTimestamp(source.paymentExpiresAt),
+    paidAt: optionalTimestamp(source.paidAt),
     updatedAt: requiredTimestamp(source.updatedAt),
   };
 }
@@ -415,6 +650,7 @@ function parseBranch(value: unknown) {
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
+function requiredRecord(value: unknown) { return record(value) ?? invalid("object"); }
 function requiredText(value: unknown, maximum: number) { return optionalText(value, maximum) ?? invalid("text"); }
 function optionalText(value: unknown, maximum: number) {
   return value === null || value === undefined ? undefined
@@ -422,6 +658,9 @@ function optionalText(value: unknown, maximum: number) {
 }
 function requiredInteger(value: unknown, minimum: number) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum ? value : invalid("number");
+}
+function optionalInteger(value: unknown, minimum: number) {
+  return value === null || value === undefined ? undefined : requiredInteger(value, minimum);
 }
 function requiredBoolean(value: unknown) { return typeof value === "boolean" ? value : invalid("boolean"); }
 function requiredUuid(value: unknown) {

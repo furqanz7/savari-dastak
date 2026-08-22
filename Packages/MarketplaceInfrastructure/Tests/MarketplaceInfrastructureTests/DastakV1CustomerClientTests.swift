@@ -83,6 +83,39 @@ final class DastakV1CustomerClientTests: XCTestCase {
         XCTAssertEqual(request?["expectedVersion"] as? Int, 2)
         XCTAssertEqual(request?["orderId"] as? String, orderID.uuidString)
     }
+
+    func testOrderDecodesPaymentReservationWithoutMerchantOrWaveDetails() throws {
+        var source = try XCTUnwrap(JSONSerialization.jsonObject(with: orderJSON) as? [String: Any])
+        source["status"] = "AWAITING_PAYMENT"
+        source["customerState"] = "PAYMENT_READY"
+        source["payment"] = [
+            "status": "RESERVED",
+            "amountPaise": 13_800,
+            "currencyCode": "INR",
+            "reservedAt": "2026-08-22T10:01:00Z",
+            "expiresAt": "2026-08-22T10:06:00Z",
+            "secondsRemaining": 299,
+            "canAttempt": true,
+            "canRetry": true,
+            "latestAttempt": [
+                "id": "77777777-7777-4777-8777-777777777777",
+                "status": "FAILED",
+                "failureCode": "CHECKOUT_FAILED",
+                "createdAt": "2026-08-22T10:02:00Z",
+                "failedAt": "2026-08-22T10:02:30Z",
+            ],
+        ]
+
+        let data = try JSONSerialization.data(withJSONObject: source)
+        let order = try JSONDecoder().decode(DastakV1OrderSnapshot.self, from: data)
+
+        XCTAssertEqual(order.status, .awaitingPayment)
+        XCTAssertEqual(order.customerState, "PAYMENT_READY")
+        XCTAssertEqual(order.payment?.amount, Money(paise: 13_800))
+        XCTAssertEqual(order.payment?.latestAttempt?.status, "FAILED")
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("merchant"))
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("wave"))
+    }
 }
 
 private actor RecordingV1FunctionClient: FunctionClient {

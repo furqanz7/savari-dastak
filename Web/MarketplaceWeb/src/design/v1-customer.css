@@ -101,6 +101,12 @@
 .v1-matching-lines > div { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; font-size: 13px; }
 .v1-matching-lines strong { font-variant-numeric: tabular-nums; }
 .v1-matching-lines .total { margin-top: 7px; padding-top: 13px; border-top: 1px solid var(--divider); font-size: 15px; font-weight: 800; }
+.v1-payment-window { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; padding: 14px; border: 1px solid color-mix(in srgb, var(--dastak-accent) 38%, var(--divider)); border-radius: 13px; background: var(--dastak-accent-soft); }
+.v1-payment-window > span { display: grid; gap: 3px; }
+.v1-payment-window small { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.v1-payment-window > strong { color: var(--dastak-accent); font-variant-numeric: tabular-nums; }
+.v1-payment-retry, .v1-payment-message { margin: 12px 0 0; padding: 11px 13px; border-radius: 11px; color: var(--text-secondary); background: var(--surface-muted); font-size: 13px; line-height: 1.45; }
+.v1-pay { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; }
 .v1-cancel { width: 100%; min-height: 48px; margin-top: 14px; border: 1px solid color-mix(in srgb, var(--destructive) 40%, var(--divider)); border-radius: 12px; color: var(--destructive); background: transparent; font-weight: 750; }
 @keyframes v1-spin { to { transform: rotate(360deg); } }
 

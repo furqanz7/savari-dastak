@@ -1,3 +1,4 @@
+import Foundation
 import MarketplaceDesignSystem
 import MarketplaceFoundation
 import MarketplaceInfrastructure
@@ -15,10 +16,18 @@ struct DastakV1MatchingView: View {
                         VStack(spacing: MarketplaceSpacing.large) {
                             statusCard(order)
                             orderSummary(order)
+                            if order.status == .awaitingPayment,
+                               let payment = order.payment {
+                                paymentCard(order: order, payment: payment)
+                            }
                             if let message = model.v1OrderErrorMessage {
                                 DastakActionNotice(message: message) {
                                     model.v1OrderErrorMessage = nil
                                 }
+                            }
+                            if order.status == .awaitingPayment,
+                               order.payment?.canAttempt == true {
+                                payButton(order)
                             }
                             if canCancel(order) { cancelButton }
                         }
@@ -70,13 +79,77 @@ struct DastakV1MatchingView: View {
                     .multilineTextAlignment(.center)
             }
 
-            Label("No charge until the complete basket is secured", systemImage: "checkmark.shield.fill")
+            Label(
+                order.status == .paid
+                    ? "Payment confirmed exactly once"
+                    : "No charge until the complete basket is secured",
+                systemImage: "checkmark.shield.fill"
+            )
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
         }
         .frame(maxWidth: .infinity)
         .padding(MarketplaceSpacing.large)
         .marketplaceFlatSurface()
+    }
+
+    private func paymentCard(
+        order: DastakV1OrderSnapshot,
+        payment: DastakV1PaymentReservation
+    ) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("RESERVED FOR PAYMENT")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        Text(paymentTimeRemaining(payment, at: context.date))
+                            .font(.subheadline.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(DastakFormatting.money(payment.amount))
+                        .font(.headline.monospacedDigit())
+                }
+            }
+
+            if payment.latestAttempt?.status == "FAILED" {
+                Label(
+                    "Your previous attempt failed. The same secured basket remains reserved.",
+                    systemImage: "arrow.clockwise.circle.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .background(MarketplaceColors.dastakAccentSoft.color)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func payButton(_ order: DastakV1OrderSnapshot) -> some View {
+        Button {
+            Task {
+                if await model.retryPayment(for: order) {
+                    dismiss()
+                }
+            }
+        } label: {
+            HStack {
+                if model.isCheckingOut { ProgressView().tint(.white) }
+                Text(model.isCheckingOut
+                     ? "Opening secure payment…"
+                     : "Pay \(DastakFormatting.money(order.payment?.amount ?? order.price.total))")
+                Image(systemName: "arrow.right")
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(MarketplaceColors.dastakAccent.color)
+        .controlSize(.large)
+        .disabled(model.isCheckingOut)
     }
 
     private func orderSummary(_ order: DastakV1OrderSnapshot) -> some View {
@@ -124,11 +197,15 @@ struct DastakV1MatchingView: View {
 
     private func pollWhileActive() async {
         while !Task.isCancelled {
-            guard let order = model.activeV1Order, isMatching(order.status) else { return }
+            guard let order = model.activeV1Order, shouldPoll(order.status) else { return }
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
             await model.refreshActiveV1Order()
         }
+    }
+
+    private func shouldPoll(_ status: DastakV1OrderStatus) -> Bool {
+        [.created, .matching, .fullySecured, .awaitingPayment].contains(status)
     }
 
     private func isMatching(_ status: DastakV1OrderStatus) -> Bool {
@@ -143,7 +220,8 @@ struct DastakV1MatchingView: View {
         switch status {
         case .created, .matching: "Finding every item"
         case .fullySecured, .awaitingPayment: "Your basket is secured"
-        case .paid, .preparing: "Preparing your order"
+        case .paid: "Payment confirmed"
+        case .preparing: "Preparing your order"
         case .pickupInProgress: "Pickup in progress"
         case .outForDelivery: "On the way"
         case .delivered: "Delivered"
@@ -160,7 +238,8 @@ struct DastakV1MatchingView: View {
             "Dastak is matching the exact products in your basket. Retail merchant identities stay private."
         case .fullySecured, .awaitingPayment:
             "Every item has been reserved. Secure payment will be requested before preparation begins."
-        case .paid, .preparing: "Your secured items are being prepared."
+        case .paid: "Your payment is confirmed. Preparation will begin next."
+        case .preparing: "Your secured items are being prepared."
         case .pickupInProgress: "Your rider is collecting the declared packages."
         case .outForDelivery: "Your verified packages are heading to you."
         case .delivered: "Your delivery has been completed."
@@ -171,10 +250,21 @@ struct DastakV1MatchingView: View {
         }
     }
 
+    private func paymentTimeRemaining(
+        _ payment: DastakV1PaymentReservation,
+        at date: Date
+    ) -> String {
+        guard let expiry = ISO8601DateFormatter().date(from: payment.expiresAt) else {
+            return "Reservation active"
+        }
+        let remaining = max(0, Int(expiry.timeIntervalSince(date).rounded(.up)))
+        return String(format: "%d:%02d remaining", remaining / 60, remaining % 60)
+    }
+
     private func statusSymbol(_ status: DastakV1OrderStatus) -> String {
         switch status {
-        case .fullySecured, .awaitingPayment, .delivered: "checkmark.shield.fill"
-        case .paid, .preparing: "shippingbox.fill"
+        case .fullySecured, .awaitingPayment, .paid, .delivered: "checkmark.shield.fill"
+        case .preparing: "shippingbox.fill"
         case .pickupInProgress, .outForDelivery: "scooter"
         case .cancelledPrepayment, .paymentExpired: "xmark.circle.fill"
         case .unavailable, .fulfilmentFailure: "exclamationmark.triangle.fill"

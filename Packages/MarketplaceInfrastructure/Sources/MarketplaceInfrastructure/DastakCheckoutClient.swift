@@ -4,11 +4,13 @@ import MarketplaceFoundation
 public enum DastakCheckoutEntityType: String, Codable, Equatable, Sendable {
     case merchantOrder = "merchant_order"
     case parcel
+    case dastakV1Order = "dastak_v1_order"
 }
 
 public struct DastakCheckoutSession: Codable, Equatable, Sendable {
     public let orderID: UUID
     public let entityType: DastakCheckoutEntityType
+    public let attemptID: UUID?
     public let providerOrderID: String
     public let keyID: String
     public let amountPaise: Int
@@ -18,6 +20,7 @@ public struct DastakCheckoutSession: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case orderID = "orderId"
         case entityType
+        case attemptID = "attemptId"
         case providerOrderID = "providerOrderId"
         case keyID = "keyId"
         case amountPaise
@@ -31,11 +34,27 @@ public struct DastakCheckoutSession: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         orderID = try container.decode(UUID.self, forKey: .orderID)
         entityType = try container.decodeIfPresent(DastakCheckoutEntityType.self, forKey: .entityType) ?? .merchantOrder
+        attemptID = try container.decodeIfPresent(UUID.self, forKey: .attemptID)
         providerOrderID = try container.decode(String.self, forKey: .providerOrderID)
         keyID = try container.decode(String.self, forKey: .keyID)
         amountPaise = try container.decode(Int.self, forKey: .amountPaise)
         currency = try container.decode(String.self, forKey: .currency)
         receipt = try container.decode(String.self, forKey: .receipt)
+    }
+}
+
+public enum DastakV1CheckoutFailureCode: String, Codable, Equatable, Sendable {
+    case checkoutFailed = "CHECKOUT_FAILED"
+    case checkoutDismissed = "CHECKOUT_DISMISSED"
+}
+
+public struct DastakV1PaymentAttemptResult: Codable, Equatable, Sendable {
+    public let attemptID: UUID
+    public let status: String
+
+    private enum CodingKeys: String, CodingKey {
+        case attemptID = "attemptId"
+        case status
     }
 }
 
@@ -65,6 +84,18 @@ public protocol DastakCheckoutClient: Sendable {
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakCheckoutSession
 
+    func createV1OrderCheckout(
+        orderID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakCheckoutSession
+
+    func reportV1CheckoutFailure(
+        orderID: UUID,
+        attemptID: UUID,
+        failureCode: DastakV1CheckoutFailureCode,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1PaymentAttemptResult
+
     func processMerchantOrderRefund(
         orderID: UUID,
         idempotencyKey: IdempotencyKey
@@ -82,6 +113,8 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
         let entityType: DastakCheckoutEntityType?
         let orderId: UUID?
         let parcelId: UUID?
+        let paymentAttemptId: UUID?
+        let failureCode: DastakV1CheckoutFailureCode?
     }
 
     private let functions: any FunctionClient
@@ -99,7 +132,9 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 operation: "createCheckout",
                 entityType: nil,
                 orderId: orderID,
-                parcelId: nil
+                parcelId: nil,
+                paymentAttemptId: nil,
+                failureCode: nil
             ),
             key: idempotencyKey
         )
@@ -114,7 +149,45 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 operation: "createCheckout",
                 entityType: .parcel,
                 orderId: nil,
-                parcelId: parcelID
+                parcelId: parcelID,
+                paymentAttemptId: nil,
+                failureCode: nil
+            ),
+            key: idempotencyKey
+        )
+    }
+
+    public func createV1OrderCheckout(
+        orderID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakCheckoutSession {
+        try await invoke(
+            Request(
+                operation: "createCheckout",
+                entityType: .dastakV1Order,
+                orderId: orderID,
+                parcelId: nil,
+                paymentAttemptId: nil,
+                failureCode: nil
+            ),
+            key: idempotencyKey
+        )
+    }
+
+    public func reportV1CheckoutFailure(
+        orderID: UUID,
+        attemptID: UUID,
+        failureCode: DastakV1CheckoutFailureCode,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1PaymentAttemptResult {
+        try await invoke(
+            Request(
+                operation: "reportPaymentFailure",
+                entityType: .dastakV1Order,
+                orderId: orderID,
+                parcelId: nil,
+                paymentAttemptId: attemptID,
+                failureCode: failureCode
             ),
             key: idempotencyKey
         )
@@ -129,7 +202,9 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 operation: "processRefund",
                 entityType: nil,
                 orderId: orderID,
-                parcelId: nil
+                parcelId: nil,
+                paymentAttemptId: nil,
+                failureCode: nil
             ),
             key: idempotencyKey
         )
@@ -144,7 +219,9 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 operation: "processRefund",
                 entityType: .parcel,
                 orderId: nil,
-                parcelId: parcelID
+                parcelId: parcelID,
+                paymentAttemptId: nil,
+                failureCode: nil
             ),
             key: idempotencyKey
         )

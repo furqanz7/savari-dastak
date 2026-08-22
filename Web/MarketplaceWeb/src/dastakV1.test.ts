@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  DastakV1RequestError, getV1Catalogue, parseV1Catalogue, submitV1Order, updateV1AdminSku,
+  DastakV1RequestError,
+  getV1AdminExecutionTrace,
+  getV1Catalogue,
+  getV1MerchantOpportunities,
+  parseV1Catalogue,
+  parseV1Order,
+  respondToV1MerchantOpportunity,
+  submitV1Order,
+  updateV1AdminSku,
 } from "./dastakV1";
 
 const auth = {
@@ -75,6 +83,78 @@ describe("Dastak V1 web contract", () => {
       patch: { sellingPricePaise: 9400, status: "ACTIVE" },
     });
   });
+
+  it("decodes the secured payment window without exposing matching internals", () => {
+    const fixture = orderFixture();
+    fixture.status = "AWAITING_PAYMENT";
+    Object.assign(fixture, {
+      customerState: "PAYMENT_READY",
+      payment: {
+        status: "RESERVED", amountPaise: 19000, currencyCode: "INR",
+        reservedAt: "2026-08-22T00:01:00Z", expiresAt: "2026-08-22T00:06:00Z",
+        secondsRemaining: 299, canAttempt: true, canRetry: true,
+        latestAttempt: {
+          id: "66666666-6666-4666-8666-666666666666", status: "FAILED",
+          failureCode: "CHECKOUT_FAILED", createdAt: "2026-08-22T00:02:00Z",
+          failedAt: "2026-08-22T00:02:30Z",
+        },
+      },
+    });
+
+    const order = parseV1Order(fixture);
+
+    expect(order.payment).toMatchObject({ amountPaise: 19000, canRetry: true });
+    expect(order.payment?.latestAttempt?.status).toBe("FAILED");
+    expect(JSON.stringify(order)).not.toMatch(/merchant|wave|provisional/i);
+  });
+
+  it("preserves exact Wave 2 subset identity in merchant responses", async () => {
+    const opportunity = opportunityFixture();
+    const listed = await getV1MerchantOpportunities(auth, async () => Response.json({ opportunities: [opportunity] }));
+    let requestBody: Record<string, unknown> | undefined;
+    const accepted = await respondToV1MerchantOpportunity({
+      ...auth,
+      opportunityId: listed[0].id,
+      requestScope: listed[0].requestScope,
+      expectedVersion: listed[0].version,
+      action: "accept",
+      promisedPrepMinutes: 15,
+      idempotencyKey: "accept-exact-subset",
+    }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(new Headers(init?.headers).get("x-idempotency-key")).toBe("accept-exact-subset");
+      return Response.json({ ...opportunity, status: "ACCEPTED", reservationState: "PROVISIONAL_HELD", version: 2 });
+    });
+
+    expect(requestBody).toMatchObject({
+      operation: "acceptMerchantOpportunity",
+      opportunityId: opportunity.id,
+      requestScope: "REQUESTED_SUBSET",
+      promisedPrepMinutes: 15,
+    });
+    expect(accepted.lines).toMatchObject([{
+      orderLineId: lineId, skuId, quantity: 2,
+    }]);
+  });
+
+  it("requests the permission-checked execution trace by order identity", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const result = await getV1AdminExecutionTrace({ ...auth, orderId }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        order: {
+          id: orderId, displayOrderNumber: "DV1-0001", status: "AWAITING_PAYMENT", version: 4,
+          submittedAt: "2026-08-22T00:00:00Z", fullySecuredAt: "2026-08-22T00:01:00Z",
+          paymentExpiresAt: "2026-08-22T00:06:00Z", paidAt: null, updatedAt: "2026-08-22T00:01:00Z",
+        },
+        matchingAttempts: [], provisionalHolds: [], plans: [], capacity: [],
+        payment: { status: "RESERVED" }, reconciliationCases: [],
+      });
+    });
+
+    expect(requestBody).toEqual({ operation: "adminExecutionTrace", orderId });
+    expect(result.payment?.status).toBe("RESERVED");
+  });
 });
 
 function catalogueFixture() {
@@ -106,5 +186,30 @@ function orderFixture() {
     }],
     submittedAt: "2026-08-22T00:00:00Z", fullySecuredAt: null, paymentExpiresAt: null,
     paidAt: null, deliveredAt: null, createdAt: "2026-08-22T00:00:00Z", updatedAt: "2026-08-22T00:00:00Z",
+  };
+}
+
+function opportunityFixture() {
+  return {
+    id: "77777777-7777-4777-8777-777777777777",
+    displayOrderNumber: "DV1-0001",
+    requestScope: "REQUESTED_SUBSET",
+    status: "OPEN",
+    reservationState: "NONE",
+    version: 1,
+    branch: { id: "88888888-8888-4888-8888-888888888888", displayName: "Convenience Store" },
+    startedAt: "2026-08-22T00:00:00Z",
+    expiresAt: "2026-08-22T00:02:00Z",
+    secondsRemaining: 120,
+    provisionalHoldExpiresAt: null,
+    promisedPrepMinutes: null,
+    prepTimeOptionsMinutes: [10, 15, 20],
+    physicalConfirmationRequired: true,
+    capacityConsumed: false,
+    orderPaymentState: null,
+    lines: [{
+      orderLineId: lineId, skuId, name: "Rice", variant: null,
+      packSize: "1 kg", quantity: 2,
+    }],
   };
 }

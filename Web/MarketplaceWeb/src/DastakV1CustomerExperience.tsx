@@ -14,6 +14,11 @@ import {
   cancelV1Order, formatV1Price, getV1Catalogue, getV1Order, getV1Orders, submitV1Order,
   type DastakV1Auth, type V1CatalogueCategory, type V1CatalogueSku, type V1Order,
 } from "./dastakV1";
+import {
+  createV1CheckoutSession,
+  openRazorpayCheckout,
+  reportV1CheckoutFailure,
+} from "./payments";
 
 type Props = DastakV1Auth & {
   accountId: string;
@@ -27,6 +32,7 @@ type Props = DastakV1Auth & {
 
 type Cart = Record<string, number>;
 const matchingStatuses = new Set(["CREATED", "MATCHING"]);
+const liveStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT"]);
 const cancellableStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT"]);
 
 export function DastakV1CustomerExperience(props: Props) {
@@ -46,6 +52,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [paymentMessage, setPaymentMessage] = useState<string>();
   const [showingCart, setShowingCart] = useState(false);
   const [showingAddressBook, setShowingAddressBook] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CustomerDeliveryAddress | null>();
@@ -110,7 +117,7 @@ export function DastakV1CustomerExperience(props: Props) {
   }, [auth, query]);
 
   useEffect(() => {
-    if (!selectedOrderId || !selectedOrderStatus || !matchingStatuses.has(selectedOrderStatus)) return;
+    if (!selectedOrderId || !selectedOrderStatus || !liveStatuses.has(selectedOrderStatus)) return;
     const controller = new AbortController();
     const poll = window.setInterval(() => {
       void getV1Order({ ...auth, orderId: selectedOrderId, signal: controller.signal })
@@ -212,6 +219,62 @@ export function DastakV1CustomerExperience(props: Props) {
     }
   };
 
+  const refreshSelectedOrder = useCallback(async (orderId: string) => {
+    const order = await getV1Order({ ...auth, orderId });
+    setSelectedOrder(order);
+    setOrders((current) => [order, ...current.filter((item) => item.id !== order.id)]);
+    return order;
+  }, [auth]);
+
+  const payOrder = async () => {
+    if (!selectedOrder || selectedOrder.status !== "AWAITING_PAYMENT" || !selectedOrder.payment?.canAttempt || busy) {
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    setPaymentMessage(undefined);
+    try {
+      const session = await createV1CheckoutSession({
+        ...auth,
+        orderId: selectedOrder.id,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      const result = await openRazorpayCheckout(session, {
+        name: props.displayName,
+        phoneNumber: props.phoneNumber,
+      });
+      if (result !== "success") {
+        if (session.attemptId) {
+          await reportV1CheckoutFailure({
+            ...auth,
+            orderId: selectedOrder.id,
+            paymentAttemptId: session.attemptId,
+            failureCode: result === "failed" ? "CHECKOUT_FAILED" : "CHECKOUT_DISMISSED",
+            idempotencyKey: crypto.randomUUID(),
+          }).catch(() => undefined);
+        }
+        await refreshSelectedOrder(selectedOrder.id).catch(() => undefined);
+        setPaymentMessage(
+          result === "failed"
+            ? "Payment failed. Your secured basket is still reserved—try again before the timer ends."
+            : "Payment was not completed. Your reservation is unchanged and you can retry.",
+        );
+        return;
+      }
+
+      setPaymentMessage("Payment received. Confirming it securely with Dastak…");
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const order = await refreshSelectedOrder(selectedOrder.id);
+        if (order.status === "PAID" || order.status === "PAYMENT_EXPIRED") break;
+        await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+      }
+    } catch (paymentError) {
+      setError(message(paymentError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveAddress = async (draft: CustomerAddressDraft) => {
     setBusy(true);
     setError(undefined);
@@ -280,7 +343,11 @@ export function DastakV1CustomerExperience(props: Props) {
       onDismiss={() => setShowingCart(false)} onAdd={add} onDecrement={decrement}
       onAddress={() => addresses.length ? setShowingAddressBook(true) : setEditingAddress(null)} onSubmit={submit}
     />}
-    {selectedOrder && <MatchingSheet order={selectedOrder} busy={busy} error={error} onDismiss={() => setSelectedOrder(undefined)} onCancel={cancelOrder} />}
+    {selectedOrder && <MatchingSheet
+      order={selectedOrder} busy={busy} error={error} paymentMessage={paymentMessage}
+      onDismiss={() => { setSelectedOrder(undefined); setPaymentMessage(undefined); }}
+      onCancel={cancelOrder} onPay={payOrder}
+    />}
     {showingAddressBook && <CustomerAddressBookSheet
       addresses={addresses} selectedAddressId={defaultAddress?.addressId} busy={busy} error={error} context="checkout"
       onDismiss={() => setShowingAddressBook(false)} onAdd={() => { setShowingAddressBook(false); setEditingAddress(null); }}
@@ -361,13 +428,38 @@ function OrdersSection({ orders, onOpen }: { orders: V1Order[]; onOpen: (order: 
   </section>;
 }
 
-function MatchingSheet({ order, busy, error, onDismiss, onCancel }: { order: V1Order; busy: boolean; error?: string; onDismiss: () => void; onCancel: () => void }) {
+function MatchingSheet({ order, busy, error, paymentMessage, onDismiss, onCancel, onPay }: {
+  order: V1Order;
+  busy: boolean;
+  error?: string;
+  paymentMessage?: string;
+  onDismiss: () => void;
+  onCancel: () => void;
+  onPay: () => void;
+}) {
   const matching = matchingStatuses.has(order.status);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (order.status !== "AWAITING_PAYMENT") return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [order.status]);
+  const paymentSeconds = order.payment
+    ? Math.max(0, Math.ceil((Date.parse(order.payment.expiresAt) - now) / 1_000))
+    : 0;
+  const paymentReady = order.status === "AWAITING_PAYMENT" && order.payment?.canAttempt && paymentSeconds > 0;
   return <div className="v1-overlay" role="presentation"><section className="v1-sheet v1-matching-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-order-status-title">
     <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">Order status</h2></div><button type="button" onClick={onDismiss} aria-label="Close order status"><X size={19} /></button></header>
-    <div className="v1-status-hero"><span className={matching ? "matching" : ""}>{matching ? <i /> : <Check size={34} />}</span><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p><small><ShieldCheck size={16} /> No charge until the complete basket is secured</small></div>
+    <div className="v1-status-hero"><span className={matching ? "matching" : ""}>{matching ? <i /> : <Check size={34} />}</span><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p>{order.status === "PAID" ? <small><ShieldCheck size={16} /> Payment confirmed exactly once</small> : <small><ShieldCheck size={16} /> No charge until the complete basket is secured</small>}</div>
     <div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><span>{line.quantity}× {line.name}</span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}<div className="total"><span>Current total</span><strong>{formatV1Price(order.price.totalPaise)}</strong></div></div>
+    {order.status === "AWAITING_PAYMENT" && order.payment ? <div className="v1-payment-window">
+      <span><strong>Reserved for payment</strong><small>{paymentSeconds > 0 ? `${formatDuration(paymentSeconds)} remaining` : "Reservation ending"}</small></span>
+      <strong>{formatV1Price(order.payment.amountPaise)}</strong>
+    </div> : null}
+    {order.payment?.latestAttempt?.status === "FAILED" ? <p className="v1-payment-retry" role="status">Your previous attempt failed. No rematching occurred.</p> : null}
+    {paymentMessage ? <p className="v1-payment-message" role="status">{paymentMessage}</p> : null}
     {error ? <p className="order-error" role="alert">{error}</p> : null}
+    {paymentReady ? <button className="primary-button v1-pay" type="button" disabled={busy} onClick={onPay}>{busy ? "Opening secure payment…" : `Pay ${formatV1Price(order.payment?.amountPaise ?? order.price.totalPaise)}`}<ArrowRight size={18} /></button> : null}
     {cancellableStatuses.has(order.status) ? <button className="v1-cancel" type="button" disabled={busy} onClick={onCancel}>{busy ? "Cancelling…" : "Cancel before payment"}</button> : null}
   </section></div>;
 }
@@ -380,7 +472,8 @@ function statusTitle(status: V1Order["status"]) {
   switch (status) {
     case "CREATED": case "MATCHING": return "Finding every item";
     case "FULLY_SECURED": case "AWAITING_PAYMENT": return "Your basket is secured";
-    case "PAID": case "PREPARING": return "Preparing your order";
+    case "PAID": return "Payment confirmed";
+    case "PREPARING": return "Preparing your order";
     case "PICKUP_IN_PROGRESS": return "Pickup in progress";
     case "OUT_FOR_DELIVERY": return "On the way";
     case "DELIVERED": return "Delivered";
@@ -394,10 +487,16 @@ function statusTitle(status: V1Order["status"]) {
 function statusMessage(status: V1Order["status"]) {
   if (matchingStatuses.has(status)) return "Dastak is matching your exact products. Retail merchant identities stay private.";
   if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") return "Every item has been reserved. Secure payment is requested before preparation.";
+  if (status === "PAID") return "Your payment is confirmed. Preparation will begin next.";
   if (status === "UNAVAILABLE") return "Dastak could not secure the complete basket. You were not charged.";
   if (status === "CANCELLED_PREPAYMENT") return "This order was cancelled before payment.";
   if (status === "PAYMENT_EXPIRED") return "The reservation expired without payment.";
   return "The latest verified order state is shown below.";
+}
+
+function formatDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function loadCart(accountId: string): Cart {

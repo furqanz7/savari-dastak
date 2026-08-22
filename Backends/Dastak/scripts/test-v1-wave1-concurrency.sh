@@ -260,6 +260,27 @@ where not exists (
     and scope_type = 'GLOBAL'
     and scope_id is null
 );
+
+insert into dastak_v1.platform_settings (
+  id, setting_key, scope_type, setting_value, updated_by, update_reason
+)
+select setting.id, setting.key, 'GLOBAL', setting.value,
+  '99100000-0000-4000-8000-000000000002', 'Wave One coordinator runtime.'
+from (values
+  ('99100000-0000-4000-8000-000000000042'::uuid, 'matching.wave2_timeout_seconds', '120'::jsonb),
+  ('99100000-0000-4000-8000-000000000043'::uuid, 'matching.wave2_hold_seconds', '180'::jsonb),
+  ('99100000-0000-4000-8000-000000000044'::uuid, 'payment.reservation_seconds', '300'::jsonb),
+  ('99100000-0000-4000-8000-000000000045'::uuid, 'matching.wave2_max_pickup_route_meters', '50000'::jsonb),
+  ('99100000-0000-4000-8000-000000000046'::uuid, 'matching.operational_reliability_bps', '9000'::jsonb),
+  ('99100000-0000-4000-8000-000000000047'::uuid, 'delivery.transport_load_profiles', '[{"transportType":"MOTORBIKE","maxWeightGrams":50000,"maxVolumeCubicMillimetres":500000000,"maxLongestSideMillimetres":1500,"allowsBulky":true,"temperatureClasses":["AMBIENT","CHILLED","FROZEN"]}]'::jsonb),
+  ('99100000-0000-4000-8000-000000000048'::uuid, 'delivery.default_sku_logistics', '{"weightGrams":500,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}'::jsonb)
+) setting(id, key, value)
+where not exists (
+  select 1 from dastak_v1.platform_settings existing
+  where existing.setting_key = setting.key
+    and existing.scope_type = 'GLOBAL'
+    and existing.scope_id is null
+);
 SQL
 
 submit_order() {
@@ -342,7 +363,14 @@ SQL
 cancel_order() {
   local order_id="$1"
   local key="$2"
-  "${psql_base[@]}" -At -v order_id="$order_id" -v key="$key" <<'SQL'
+  local attempt expected_version
+  for attempt in 1 2 3; do
+    expected_version="$("${psql_base[@]}" -At -v order_id="$order_id" <<'SQL'
+select version from dastak_v1.orders where id = :'order_id'::uuid;
+SQL
+)"
+    if "${psql_base[@]}" -At -v order_id="$order_id" -v key="$key-$attempt" \
+      -v expected_version="$expected_version" <<'SQL'
 begin;
 set local role authenticated;
 select set_config(
@@ -353,10 +381,15 @@ select set_config(
 select public.dastak_v1_cancel_prepayment_order(
   :'order_id'::uuid,
   :'key',
-  2
+  :'expected_version'::bigint
 );
 commit;
 SQL
+    then
+      return 0
+    fi
+  done
+  return 1
 }
 
 assert_cancelled_and_released() {
@@ -445,9 +478,9 @@ select
     where fulfilment.order_id = :'order_id'::uuid and slot.status = 'HELD'),
   (select count(*) from dastak_v1.orders
     where id = :'order_id'::uuid
-      and status = 'MATCHING'
-      and fully_secured_at is null
-      and payment_expires_at is null);
+      and status = 'AWAITING_PAYMENT'
+      and fully_secured_at is not null
+      and payment_expires_at is not null);
 SQL
 )"
 if [[ "$winner_truth" != "1 1 1 1 1" ]]; then

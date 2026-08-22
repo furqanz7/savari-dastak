@@ -15,23 +15,53 @@ Deno.serve((request) =>
     authenticateBearer: verifyBearerUser,
     createCheckout,
     processRefund,
+    reportPaymentFailure,
   })
 );
 
-async function createCheckout(input: PaymentActionInput) {
-  const prepared = await rpc(
-    input.entityType === "parcel"
-      ? "prepare_parcel_razorpay_checkout"
-      : "prepare_merchant_order_razorpay_checkout",
-    {
+async function reportPaymentFailure(
+  input: PaymentActionInput & {
+    attemptId: string;
+    failureCode: string;
+  },
+) {
+  return {
+    responseBody: await rpcJson("dastak_v1_mark_payment_attempt_failed", {
       p_account_id: input.accountId,
-      [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
-    },
-  );
+      p_attempt_id: input.attemptId,
+      p_failure_code: input.failureCode,
+    }),
+    responseStatus: 200,
+  };
+}
+
+async function createCheckout(input: PaymentActionInput) {
+  const prepared = input.entityType === "dastak_v1_order"
+    ? {
+      responseBody: await rpcJson("dastak_v1_prepare_razorpay_checkout", {
+        p_account_id: input.accountId,
+        p_order_id: input.orderId,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+      responseStatus: 200,
+    }
+    : await rpc(
+      input.entityType === "parcel"
+        ? "prepare_parcel_razorpay_checkout"
+        : "prepare_merchant_order_razorpay_checkout",
+      {
+        p_account_id: input.accountId,
+        [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
+      },
+    );
   if (prepared.responseStatus !== 200) return prepared;
 
+  let details: ReturnType<typeof checkoutDetails> | undefined;
   try {
-    const details = checkoutDetails(prepared.responseBody);
+    details = checkoutDetails(prepared.responseBody);
+    if (input.entityType === "dastak_v1_order" && !details.attemptId) {
+      throw new Error("Dastak V1 checkout is missing its payment attempt");
+    }
     const client = razorpayClient();
     const providerOrder = details.providerOrderId
       ? await client.fetchOrder(details.providerOrderId)
@@ -47,18 +77,29 @@ async function createCheckout(input: PaymentActionInput) {
       (details.providerOrderId !== undefined && providerOrder.id !== details.providerOrderId)
     ) return providerConflict();
 
-    const attached = await rpc(
-      input.entityType === "parcel"
-        ? "attach_parcel_razorpay_order"
-        : "attach_merchant_order_razorpay_order",
-      {
-        p_account_id: input.accountId,
-        [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
-        p_provider_order_reference: providerOrder.id,
-        p_amount_paise: details.amountPaise,
-        p_currency: details.currency,
-      },
-    );
+    const attached = input.entityType === "dastak_v1_order"
+      ? {
+        responseBody: await rpcJson("dastak_v1_attach_razorpay_order", {
+          p_account_id: input.accountId,
+          p_attempt_id: details.attemptId,
+          p_provider_order_reference: providerOrder.id,
+          p_amount_paise: details.amountPaise,
+          p_currency: details.currency,
+        }),
+        responseStatus: 200,
+      }
+      : await rpc(
+        input.entityType === "parcel"
+          ? "attach_parcel_razorpay_order"
+          : "attach_merchant_order_razorpay_order",
+        {
+          p_account_id: input.accountId,
+          [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
+          p_provider_order_reference: providerOrder.id,
+          p_amount_paise: details.amountPaise,
+          p_currency: details.currency,
+        },
+      );
     if (attached.responseStatus !== 200) return attached;
     return {
       responseBody: {
@@ -71,6 +112,13 @@ async function createCheckout(input: PaymentActionInput) {
       responseStatus: 200,
     };
   } catch (error) {
+    if (input.entityType === "dastak_v1_order" && details?.attemptId) {
+      await rpcJson("dastak_v1_mark_payment_attempt_failed", {
+        p_account_id: input.accountId,
+        p_attempt_id: details.attemptId,
+        p_failure_code: "PROVIDER_CHECKOUT_UNAVAILABLE",
+      }).catch(() => undefined);
+    }
     return providerError(error);
   }
 }
@@ -133,6 +181,16 @@ async function rpc(functionName: string, parameters: Record<string, unknown>) {
   return { responseBody: row.response_body, responseStatus: row.response_status };
 }
 
+async function rpcJson(functionName: string, parameters: Record<string, unknown>) {
+  const { data, error } = await serviceClient.rpc(functionName, parameters);
+  if (error) throw error;
+  const value = Array.isArray(data) ? data[0] : data;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${functionName} returned an invalid response`);
+  }
+  return value as Record<string, unknown>;
+}
+
 function checkoutDetails(value: unknown) {
   const source = record(value);
   const entityId = text(source?.entityId ?? source?.orderId, 36);
@@ -141,6 +199,7 @@ function checkoutDetails(value: unknown) {
   const providerOrderId = source?.providerOrderId === null
     ? undefined
     : text(source?.providerOrderId, 200);
+  const attemptId = source?.attemptId === undefined ? undefined : text(source.attemptId, 36);
   if (!entityId || !receipt || !amountPaise || source?.currency !== "INR") {
     throw new Error("Invalid checkout details");
   }
@@ -150,6 +209,7 @@ function checkoutDetails(value: unknown) {
     amountPaise,
     receipt,
     providerOrderId,
+    attemptId,
     currency: "INR" as const,
   };
 }

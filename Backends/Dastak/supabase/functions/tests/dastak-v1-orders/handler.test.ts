@@ -133,6 +133,81 @@ Deno.test("V1 get and cancel accept only validated order identity", async () => 
   });
 });
 
+Deno.test("V1 merchant opportunities preserve scope, quantity, and optimistic state", async () => {
+  let acceptInput: unknown;
+  let declineInput: unknown;
+  const deps = dependencies({
+    acceptMerchantOpportunity: (input) => {
+      acceptInput = input;
+      return Promise.resolve({ id: orderId, status: "PROVISIONALLY_ACCEPTED" });
+    },
+    declineMerchantOpportunity: (input) => {
+      declineInput = input;
+      return Promise.resolve({ id: orderId, status: "DECLINED" });
+    },
+  });
+  const accepted = await handleV1Orders(
+    request({
+      operation: "acceptMerchantOpportunity",
+      opportunityId: orderId,
+      requestScope: "REQUESTED_SUBSET",
+      expectedVersion: 1,
+      promisedPrepMinutes: 15,
+    }, "merchant-accept"),
+    deps,
+  );
+  const declined = await handleV1Orders(
+    request({
+      operation: "declineMerchantOpportunity",
+      opportunityId: orderId,
+      requestScope: "FULL_BASKET",
+      expectedVersion: 2,
+    }, "merchant-decline"),
+    deps,
+  );
+  assertEquals(accepted.status, 200);
+  assertEquals(declined.status, 200);
+  assertEquals(acceptInput, {
+    accessToken: actor.accessToken,
+    opportunityId: orderId,
+    requestScope: "REQUESTED_SUBSET",
+    expectedVersion: 1,
+    promisedPrepMinutes: 15,
+    idempotencyKey: "merchant-accept",
+  });
+  assertEquals(declineInput, {
+    accessToken: actor.accessToken,
+    opportunityId: orderId,
+    requestScope: "FULL_BASKET",
+    expectedVersion: 2,
+    idempotencyKey: "merchant-decline",
+  });
+});
+
+Deno.test("V1 execution trace is a permission-checked authenticated RPC surface", async () => {
+  let listInput: unknown;
+  let traceInput: unknown;
+  const deps = dependencies({
+    listAdminExecutionOrders: (input) => {
+      listInput = input;
+      return Promise.resolve({ orders: [] });
+    },
+    getAdminExecutionTrace: (input) => {
+      traceInput = input;
+      return Promise.resolve({ order: { id: orderId } });
+    },
+  });
+  const list = await handleV1Orders(
+    request({ operation: "adminExecutionOrders", limit: 25 }),
+    deps,
+  );
+  const trace = await handleV1Orders(request({ operation: "adminExecutionTrace", orderId }), deps);
+  assertEquals(list.status, 200);
+  assertEquals(trace.status, 200);
+  assertEquals(listInput, { accessToken: actor.accessToken, limit: 25 });
+  assertEquals(traceInput, { accessToken: actor.accessToken, orderId });
+});
+
 Deno.test("V1 orders maps stale state without leaking database details", async () => {
   const response = await handleV1Orders(
     request({ operation: "get", orderId }),
@@ -175,6 +250,16 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
     listOrders: overrides.listOrders ?? (() => Promise.resolve({ orders: [], nextCursor: null })),
     getOrder: overrides.getOrder ?? (() => Promise.resolve(orderSnapshot)),
     cancelOrder: overrides.cancelOrder ?? (() => Promise.resolve(orderSnapshot)),
+    listMerchantOpportunities: overrides.listMerchantOpportunities ??
+      (() => Promise.resolve({ opportunities: [] })),
+    acceptMerchantOpportunity: overrides.acceptMerchantOpportunity ??
+      (() => Promise.resolve({})),
+    declineMerchantOpportunity: overrides.declineMerchantOpportunity ??
+      (() => Promise.resolve({})),
+    listAdminExecutionOrders: overrides.listAdminExecutionOrders ??
+      (() => Promise.resolve({ orders: [] })),
+    getAdminExecutionTrace: overrides.getAdminExecutionTrace ??
+      (() => Promise.resolve({})),
   };
 }
 

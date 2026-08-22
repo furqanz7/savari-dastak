@@ -8,7 +8,8 @@ type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respons
 
 export type CheckoutSession = {
   orderId: string;
-  entityType: "merchant_order" | "parcel";
+  entityType: "merchant_order" | "parcel" | "dastak_v1_order";
+  attemptId?: string;
   providerOrderId: string;
   keyId: string;
   amountPaise: number;
@@ -45,6 +46,35 @@ export async function createParcelCheckoutSession(
     entityType: "parcel",
     parcelId: input.parcelId,
   }, input.idempotencyKey, fetcher), "parcel");
+}
+
+export async function createV1CheckoutSession(
+  input: AuthenticatedInput & { orderId: string; idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  return parseCheckout(await call(input, {
+    operation: "createCheckout",
+    entityType: "dastak_v1_order",
+    orderId: input.orderId,
+  }, input.idempotencyKey, fetcher), "dastak_v1_order");
+}
+
+export async function reportV1CheckoutFailure(
+  input: AuthenticatedInput & {
+    orderId: string;
+    paymentAttemptId: string;
+    failureCode: "CHECKOUT_FAILED" | "CHECKOUT_DISMISSED";
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return await call(input, {
+    operation: "reportPaymentFailure",
+    entityType: "dastak_v1_order",
+    orderId: input.orderId,
+    paymentAttemptId: input.paymentAttemptId,
+    failureCode: input.failureCode,
+  }, input.idempotencyKey, fetcher);
 }
 
 export async function processOrderRefund(
@@ -95,7 +125,11 @@ export async function openRazorpayCheckout(
       amount: session.amountPaise,
       currency: session.currency,
       name: "Dastak",
-      description: session.entityType === "parcel" ? "Parcel delivery" : "Merchant order",
+      description: session.entityType === "parcel"
+        ? "Parcel delivery"
+        : session.entityType === "dastak_v1_order"
+        ? "Secured Dastak basket"
+        : "Merchant order",
       order_id: session.providerOrderId,
       prefill: {
         name: customer.name,
@@ -243,9 +277,14 @@ function parseCheckout(value: unknown, entityType: CheckoutSession["entityType"]
     typeof amountPaise !== "number" || !Number.isSafeInteger(amountPaise) ||
     amountPaise <= 0 || amountPaise > 100_000_000 || source?.currency !== "INR"
   ) invalid();
+  const attemptId = source?.attemptId === null || source?.attemptId === undefined
+    ? undefined
+    : requiredUUID(source.attemptId);
+  if (entityType === "dastak_v1_order" && !attemptId) invalid();
   return {
     orderId: requiredUUID(source?.orderId),
     entityType,
+    attemptId,
     providerOrderId,
     keyId,
     amountPaise,

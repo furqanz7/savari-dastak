@@ -3,6 +3,7 @@ import {
   type DastakPaymentDependencies,
   handleDastakPayments,
   type PaymentActionInput,
+  type PaymentFailureInput,
 } from "../../dastak-payments/handler.ts";
 
 Deno.test("Dastak payments serve browser preflight without authentication", async () => {
@@ -89,6 +90,66 @@ Deno.test("parcel checkout selects the parcel payment contract", async () => {
   assertEquals(recorded?.orderId, orderId);
 });
 
+Deno.test("V1 checkout is explicit and cannot fall back to payment-first commerce", async () => {
+  let recorded: PaymentActionInput | undefined;
+  const response = await handleDastakPayments(
+    request(
+      { operation: "createCheckout", entityType: "dastak_v1_order", orderId },
+      "Bearer session",
+      "v1-checkout",
+    ),
+    dependencies({
+      createCheckout: (input) => {
+        recorded = input;
+        return Promise.resolve({ responseBody: checkout, responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.entityType, "dastak_v1_order");
+  assertEquals(recorded?.orderId, orderId);
+
+  const refund = await handleDastakPayments(
+    request(
+      { operation: "processRefund", entityType: "dastak_v1_order", orderId },
+      "Bearer session",
+      "v1-refund",
+    ),
+    dependencies(),
+  );
+  assertEquals(refund.status, 400);
+});
+
+Deno.test("V1 checkout failure is recorded against the authenticated reservation", async () => {
+  let recorded: PaymentFailureInput | undefined;
+  const response = await handleDastakPayments(
+    request(
+      {
+        operation: "reportPaymentFailure",
+        entityType: "dastak_v1_order",
+        orderId,
+        paymentAttemptId: otherAccountId,
+        failureCode: "CHECKOUT_DISMISSED",
+      },
+      "Bearer session",
+      "v1-failure",
+    ),
+    dependencies({
+      reportPaymentFailure: (input) => {
+        recorded = input;
+        return Promise.resolve({ responseBody: { status: "FAILED" }, responseStatus: 200 });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.orderId, orderId);
+  assertEquals(recorded?.attemptId, otherAccountId);
+  assertEquals(recorded?.failureCode, "CHECKOUT_DISMISSED");
+});
+
 Deno.test("payment actions reject missing auth and malformed input", async () => {
   const unauthenticated = await handleDastakPayments(
     request({ operation: "createCheckout", orderId }, undefined, "attempt"),
@@ -125,6 +186,8 @@ function dependencies(
       (() => Promise.resolve({ responseBody: checkout, responseStatus: 200 })),
     processRefund: overrides.processRefund ??
       (() => Promise.resolve({ responseBody: { orderId }, responseStatus: 202 })),
+    reportPaymentFailure: overrides.reportPaymentFailure ??
+      (() => Promise.resolve({ responseBody: { status: "FAILED" }, responseStatus: 200 })),
   };
 }
 
