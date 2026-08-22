@@ -765,13 +765,8 @@ insert into dastak_v1.setting_definitions (
   ),
   (
     'settlement.merchant_commission_bps', 'INTEGER',
-    'Commission used to calculate merchant settlement earnings.', null,
-    '{"minimum":0,"maximum":10000}'::jsonb, true, true
-  ),
-  (
-    'settlement.rider_flat_payout_paise', 'INTEGER',
-    'Configured launch rider payout per completed customer mission.', null,
-    '{"minimum":0}'::jsonb, true, true
+    'Launch merchant commission is locked at zero basis points.', null,
+    '{"minimum":0,"maximum":0}'::jsonb, true, true
   );
 
 insert into dastak_v1.permission_definitions (

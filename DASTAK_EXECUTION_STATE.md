@@ -1,7 +1,7 @@
 - Authoritative spec path: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`
 - Authoritative branch: `codex/dastak-v1-launch`
-- Last checkpoint: Step 6 — launch hardening at branch HEAD
-- Completed V1 capabilities: launch order lifecycle through settlement/recovery, explicit RBAC, durable outbox notifications, invariant monitoring, minimum system health, customer deep links, Web release gates, and iOS release metadata/privacy manifest
+- Last checkpoint: production RC rider-distance payout hotfix at branch HEAD
+- Completed V1 capabilities: launch order lifecycle through settlement/recovery, immutable distance-band rider payout, explicit RBAC, durable outbox notifications, invariant monitoring, minimum system health, customer deep links, Web release gates, and iOS release metadata/privacy manifest
 - Current launch target: Customer iOS + Customer Web with founder-operated Merchant Web, Delivery Web and Admin Web
 - Deferred surfaces: Android, Merchant iOS, Delivery iOS, Admin iOS
 - Next implementation batch: signed launch-candidate archive plus staging/production configuration rehearsal after explicit authorization

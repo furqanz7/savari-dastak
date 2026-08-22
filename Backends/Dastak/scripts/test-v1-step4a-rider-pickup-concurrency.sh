@@ -204,6 +204,7 @@ configure_setting 'delivery.rider_initial_pool_size' '2' '99400000-0000-4000-800
 configure_setting 'delivery.rider_offer_timeout_seconds' '30' '99400000-0000-4000-8000-000000000207'
 configure_setting 'delivery.rider_pool_expansion' '{"initialRadiusMeters":1000,"radiusStepMeters":5000,"additionalRidersPerRound":2,"maximumRounds":4}' '99400000-0000-4000-8000-000000000208'
 configure_setting 'delivery.verification_invalid_attempt_limit' '3' '99400000-0000-4000-8000-000000000209'
+configure_setting 'settlement.rider_distance_payout' '{"base_distance_meters":1000,"base_payout_paise":1500,"increment_distance_meters":1000,"increment_payout_paise":500,"rounding":"STARTED_DISTANCE_BAND"}' '99400000-0000-4000-8000-000000000210'
 
 mission_a="$("${psql_base[@]}" -Atc "select dastak_v1_api.ensure_delivery_mission('$order_a'::uuid)" | tail -n 1)"
 mission_b="$("${psql_base[@]}" -Atc "select dastak_v1_api.ensure_delivery_mission('$order_b'::uuid)" | tail -n 1)"

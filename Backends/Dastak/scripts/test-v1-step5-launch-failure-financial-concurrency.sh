@@ -187,8 +187,8 @@ from (values
 ('99600000-0000-4000-8000-000000000308'::uuid,'retail.prep_time_options_minutes','[10,15,20]'::jsonb),
 ('99600000-0000-4000-8000-000000000309'::uuid,'returns.reporting_window_seconds','86400'::jsonb),
 ('99600000-0000-4000-8000-000000000310'::uuid,'refunds.approval_limit_paise','100000'::jsonb),
-('99600000-0000-4000-8000-000000000311'::uuid,'settlement.merchant_commission_bps','1000'::jsonb),
-('99600000-0000-4000-8000-000000000312'::uuid,'settlement.rider_flat_payout_paise','5000'::jsonb),
+('99600000-0000-4000-8000-000000000311'::uuid,'settlement.merchant_commission_bps','0'::jsonb),
+('99600000-0000-4000-8000-000000000312'::uuid,'settlement.rider_distance_payout','{"base_distance_meters":1000,"base_payout_paise":1500,"increment_distance_meters":1000,"increment_payout_paise":500,"rounding":"STARTED_DISTANCE_BAND"}'::jsonb),
 ('99600000-0000-4000-8000-000000000313'::uuid,'delivery.verification_invalid_attempt_limit','3'::jsonb)
 ) setting(id,key,value)
 where not exists (select 1 from dastak_v1.platform_settings existing where existing.setting_key=setting.key and existing.scope_type='GLOBAL' and existing.scope_id is null);
@@ -284,7 +284,7 @@ insert into dastak_v1.settlement_entries (
   '99600000-0000-4000-8000-000000000170','996-step5-delivered-earning','MERCHANT_ORGANIZATION',
   '99600000-0000-4000-8000-000000000020','99600000-0000-4000-8000-000000000101',
   '99600000-0000-4000-8000-000000000141','99600000-0000-4000-8000-000000000111','EARNING',
-  'PENDING','CALCULATED',900,810,'{"formula":"STEP5_RUNTIME_FIXTURE"}'
+  'PENDING','CALCULATED',900,900,'{"formula":"STEP5_RUNTIME_FIXTURE"}'
 ) on conflict (id) do nothing;
 insert into dastak_v1.settlement_entries (
   id,entry_key,subject_type,subject_id,order_id,delivery_mission_id,entry_type,
@@ -361,11 +361,38 @@ delivery_resume="$("${psql_base[@]}" -Atc "select dastak_v1_api.manage_delivery_
   printf 'delivery recovery address exception was not audited\n' >&2; exit 1;
 }
 
+# The mission quote is immutable and later payout-policy changes cannot rewrite it.
+set +e
+"${psql_base[@]}" -c "update dastak_v1.delivery_missions set rider_payout_quote_paise=rider_payout_quote_paise+1,version=version+1 where id='99600000-0000-4000-8000-000000000202'::uuid" >"$work_dir/rewrite-payout.out" 2>&1
+rewrite_payout_rc=$?
+set -e
+[[ $rewrite_payout_rc -ne 0 ]] || { printf 'mission payout snapshot was mutable\n' >&2; exit 1; }
+grep -q 'delivery mission payout quote cannot change' "$work_dir/rewrite-payout.out"
+
+"${psql_base[@]}" -c "
+update dastak_v1.platform_settings
+set setting_value='{\"base_distance_meters\":1000,\"base_payout_paise\":9900,\"increment_distance_meters\":1000,\"increment_payout_paise\":100,\"rounding\":\"STARTED_DISTANCE_BAND\"}'::jsonb,
+  updated_by='$owner_id'::uuid, update_reason='Prove mission quote survives later payout configuration.',
+  version=version+1
+where setting_key='settlement.rider_distance_payout'
+  and scope_type='GLOBAL' and scope_id is null" >/dev/null
+
 calculation_result="$("${psql_base[@]}" -Atc "select dastak_v1_api.finalize_settlement_calculation('$owner_id'::uuid,'99600000-0000-4000-8000-000000000171'::uuid,1,'calculate-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor")"
 calculation_replay="$("${psql_base[@]}" -Atc "select dastak_v1_api.finalize_settlement_calculation('$owner_id'::uuid,'99600000-0000-4000-8000-000000000171'::uuid,1,'calculate-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor")"
 [[ "$calculation_result" == "$calculation_replay" ]] || { printf 'settlement calculation retry was not idempotent\n' >&2; exit 1; }
-calculation_truth="$("${psql_base[@]}" -At -F '|' -c "select status,calculation_status,amount_paise,version from dastak_v1.settlement_entries where id='99600000-0000-4000-8000-000000000171'::uuid")"
-[[ "$calculation_truth" == "PENDING|CALCULATED|5000|2" ]] || { printf 'configured settlement calculation failed: %s\n' "$calculation_truth" >&2; exit 1; }
+calculation_truth="$("${psql_base[@]}" -At -F '|' -c "
+select entry.status,entry.calculation_status,
+  entry.amount_paise=mission.rider_payout_quote_paise,
+  entry.amount_paise<>dastak_v1_api.calculate_rider_distance_payout(
+    mission.delivery_distance_meters,
+    dastak_v1_api.effective_setting_json('settlement.rider_distance_payout')
+  ),entry.version,
+  entry.calculation_snapshot->>'rounding',
+  (entry.calculation_snapshot->>'deliveryDistanceMeters')::bigint=mission.delivery_distance_meters
+from dastak_v1.settlement_entries entry
+join dastak_v1.delivery_missions mission on mission.id=entry.delivery_mission_id
+where entry.id='99600000-0000-4000-8000-000000000171'::uuid")"
+[[ "$calculation_truth" == "PENDING|CALCULATED|t|t|2|STARTED_DISTANCE_BAND|t" ]] || { printf 'snapshotted distance settlement calculation failed: %s\n' "$calculation_truth" >&2; exit 1; }
 
 # Customer issue -> physical return -> reverse custody -> original-method refund.
 issue_json="$("${psql_base[@]}" -Atc "select dastak_v1_api.report_customer_issue(

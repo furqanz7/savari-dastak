@@ -99,10 +99,12 @@ insert into dastak_v1.merchant_organizations (
   'Hidden Step 4B Retail','RETAIL','ACTIVE','99500000-0000-4000-8000-000000000001'
 ) on conflict (id) do nothing;
 insert into dastak_v1.merchant_branches (
-  id, organization_id, display_name, address_snapshot, capacity_limit, status, created_by
+  id, organization_id, display_name, address_snapshot, location,
+  capacity_limit, status, created_by
 ) values (
   '99500000-0000-4000-8000-000000000011','99500000-0000-4000-8000-000000000010',
-  'Hidden Final Delivery Branch','{"line1":"Secret Pickup Street"}',5,'ACTIVE',
+  'Hidden Final Delivery Branch','{"line1":"Secret Pickup Street"}',
+  extensions.st_setsrid(extensions.st_makepoint(80.60,15.70),4326),5,'ACTIVE',
   '99500000-0000-4000-8000-000000000001'
 ) on conflict (id) do nothing;
 insert into dastak_v1.categories (id,name,slug,status,created_by) values
@@ -193,6 +195,15 @@ insert into dastak_v1.packages (
 ('99500000-0000-4000-8000-000000000153','99500000-0000-4000-8000-000000000102','99500000-0000-4000-8000-000000000142',1,'PICKED_UP','RIDER','99500000-0000-4000-8000-000000000007','99500000-0000-4000-8000-000000000006',now()-interval '15 minutes',now()-interval '12 minutes',now()-interval '5 minutes'),
 ('99500000-0000-4000-8000-000000000154','99500000-0000-4000-8000-000000000102','99500000-0000-4000-8000-000000000142',2,'PICKED_UP','RIDER','99500000-0000-4000-8000-000000000007','99500000-0000-4000-8000-000000000006',now()-interval '15 minutes',now()-interval '12 minutes',now()-interval '5 minutes')
 on conflict (id) do nothing;
+
+insert into dastak_v1.platform_settings (
+  id, setting_key, scope_type, setting_value, updated_by, update_reason
+) values (
+  '99500000-0000-4000-8000-000000000301',
+  'settlement.rider_distance_payout','GLOBAL',
+  '{"base_distance_meters":1000,"base_payout_paise":1500,"increment_distance_meters":1000,"increment_payout_paise":500,"rounding":"STARTED_DISTANCE_BAND"}',
+  '99500000-0000-4000-8000-000000000001','Step 4B rider payout fixture.'
+) on conflict do nothing;
 
 insert into dastak_v1.delivery_missions (
   id, order_id, status, assigned_rider_id, assigned_transport_type,

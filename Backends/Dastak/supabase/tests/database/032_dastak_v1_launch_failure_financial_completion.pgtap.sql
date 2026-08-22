@@ -117,7 +117,7 @@ select is(
     where setting_key in (
       'recovery.radius_meters', 'recovery.offer_timeout_seconds',
       'returns.reporting_window_seconds', 'refunds.approval_limit_paise',
-      'settlement.merchant_commission_bps', 'settlement.rider_flat_payout_paise',
+      'settlement.merchant_commission_bps', 'settlement.rider_distance_payout',
       'returns.pickup_photo_required'
     )
   ),

@@ -3096,26 +3096,11 @@ set search_path = ''
 as $$
 declare
   v_mission dastak_v1.delivery_missions%rowtype;
-  v_setting jsonb;
-  v_payout integer;
-  v_calculation dastak_v1.settlement_calculation_status;
 begin
   if old.status <> 'DELIVERED' and new.status = 'DELIVERED' then
     select mission.* into v_mission from dastak_v1.delivery_missions mission
     where mission.order_id = new.id and mission.status = 'DELIVERED'
     order by mission.delivered_at desc limit 1;
-    v_setting := dastak_v1_api.effective_setting_json(
-      'settlement.rider_flat_payout_paise'
-    );
-    begin
-      v_payout := case when pg_catalog.jsonb_typeof(v_setting) = 'number'
-        then (v_setting #>> '{}')::integer else null end;
-    exception when invalid_text_representation or numeric_value_out_of_range then
-      v_payout := null;
-    end;
-    v_calculation := case when v_payout is not null and v_payout >= 0
-      then 'CALCULATED'::dastak_v1.settlement_calculation_status
-      else 'SYSTEM_CONFIGURATION_REQUIRED'::dastak_v1.settlement_calculation_status end;
     if v_mission.id is not null and v_mission.assigned_rider_id is not null then
       insert into dastak_v1.settlement_entries (
         entry_key, subject_type, subject_id, order_id, delivery_mission_id,
@@ -3124,11 +3109,13 @@ begin
       ) values (
         new.id::text || ':RIDER:' || v_mission.id::text,
         'RIDER', v_mission.assigned_rider_id, new.id, v_mission.id,
-        'EARNING', 'PENDING', v_calculation, v_payout, v_payout,
-        pg_catalog.jsonb_build_object(
-          'payoutFormula', 'CONFIGURED_LAUNCH_FLAT_PAYOUT',
-          'configuredAmountPaise', v_payout,
-          'configurationRequired', v_calculation = 'SYSTEM_CONFIGURATION_REQUIRED'
+        'EARNING', 'PENDING', 'CALCULATED',
+        v_mission.rider_payout_quote_paise,
+        v_mission.rider_payout_quote_paise,
+        v_mission.rider_payout_quote_snapshot || pg_catalog.jsonb_build_object(
+          'missionId', v_mission.id,
+          'missionQuotePreserved', true,
+          'configurationRequired', false
         )
       ) on conflict (entry_key) do nothing;
     end if;
@@ -3184,6 +3171,7 @@ declare
   v_entry dastak_v1.settlement_entries%rowtype;
   v_rate integer;
   v_amount bigint;
+  v_mission_payout_snapshot jsonb;
   v_response jsonb;
 begin
   perform dastak_v1_api.assert_authenticated_actor(p_actor_id);
@@ -3216,8 +3204,17 @@ begin
   end if;
   if v_entry.calculation_status = 'SYSTEM_CONFIGURATION_REQUIRED' then
     if v_entry.subject_type = 'RIDER' then
-      v_rate := dastak_v1_api.required_setting_integer('settlement.rider_flat_payout_paise');
-      v_amount := v_rate;
+      select mission.rider_payout_quote_paise,
+        mission.rider_payout_quote_snapshot
+      into v_amount, v_mission_payout_snapshot
+      from dastak_v1.delivery_missions mission
+      where mission.id = v_entry.delivery_mission_id
+        and mission.order_id = v_entry.order_id;
+      if v_amount is null or v_mission_payout_snapshot is null then
+        raise exception using
+          errcode = '55000',
+          message = 'SETTLEMENT_MISSION_PAYOUT_SNAPSHOT_REQUIRED';
+      end if;
     elsif v_entry.entry_type = 'EARNING' then
       v_rate := dastak_v1_api.required_setting_integer(
         'settlement.merchant_commission_bps'
@@ -3243,10 +3240,20 @@ begin
     );
     update dastak_v1.settlement_entries entry
     set calculation_status = 'CALCULATED', amount_paise = v_amount,
-        calculation_snapshot = entry.calculation_snapshot || pg_catalog.jsonb_build_object(
-          'calculatedBy', p_actor_id, 'calculatedAt', pg_catalog.clock_timestamp(),
-          'configuredRate', v_rate, 'configurationRequired', false
-        ), version = entry.version + 1
+        calculation_snapshot = entry.calculation_snapshot
+          || case when entry.subject_type = 'RIDER'
+            then v_mission_payout_snapshot || pg_catalog.jsonb_build_object(
+              'missionId', entry.delivery_mission_id,
+              'missionQuotePreserved', true
+            )
+            else pg_catalog.jsonb_build_object('configuredRate', v_rate)
+          end
+          || pg_catalog.jsonb_build_object(
+            'calculatedBy', p_actor_id,
+            'calculatedAt', pg_catalog.clock_timestamp(),
+            'configurationRequired', false
+          ),
+        version = entry.version + 1
     where entry.id = v_entry.id returning * into v_entry;
   end if;
   if exists (
