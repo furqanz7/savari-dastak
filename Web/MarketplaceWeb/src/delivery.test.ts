@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  acceptV1DeliveryOffer,
   acceptDeliveryOffer,
+  advanceV1DeliveryMission,
   advanceDeliveryJob,
   declineDeliveryOffer,
   deliveryPartnerVerificationState,
   getDeliveryDispatch,
   getDeliveryPartnerSnapshot,
+  getV1DeliveryDispatch,
   isAcceptedPartnerEvidence,
   isValidVehicleRegistration,
   normalizeVehicleRegistration,
@@ -65,6 +68,8 @@ describe("delivery partner client", () => {
     expect(requiresVehicleVerification("walking")).toBe(false);
     expect(requiresVehicleVerification("bicycle")).toBe(false);
     expect(requiresVehicleVerification("bike")).toBe(true);
+    expect(requiresVehicleVerification("motorbike")).toBe(true);
+    expect(requiresVehicleVerification("scooter")).toBe(true);
     expect(normalizeVehicleRegistration(" tn 23  ab 1234 ")).toBe("TN 23 AB 1234");
     expect(isValidVehicleRegistration("TN 23 AB 1234")).toBe(true);
     expect(isValidVehicleRegistration("TN@23")).toBe(false);
@@ -114,13 +119,13 @@ describe("delivery partner client", () => {
       return Promise.resolve(new Response(JSON.stringify({
         applicationId,
         status: "pending",
-        deliveryMethod: "bike",
+        deliveryMethod: "motorbike",
       }), { status: 200 }));
     });
 
     expect(body).toEqual({
       operation: "submit",
-      deliveryMethod: "bike",
+      deliveryMethod: "motorbike",
       identityEvidenceObjectPath: `dastak-partner/${accountId}/identity-${applicationId}.pdf`,
       vehicleRegistrationNumber: "TN 23 AB 1234",
       vehicleMakeModel: "Bajaj Pulsar 150",
@@ -232,6 +237,111 @@ describe("delivery partner client", () => {
       verificationCode: "12",
       idempotencyKey: "delivery-key",
     }, fetcher)).rejects.toThrow("four-digit handoff code");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("parses a multi-stop V1 mission offer and never needs customer identity", async () => {
+    const pickupStop = {
+      id: storeId,
+      sequence: 1,
+      ready: true,
+      estimatedReadyAt: "2026-08-22T10:05:00Z",
+      branch: {
+        displayName: "Dastak Convenience Store",
+        address: { line1: "1 Pickup Road", city: "Chennai" },
+        location,
+      },
+    };
+    const orderLoad = {
+      totalWeightGrams: 1800,
+      totalVolumeCubicMillimetres: 12_000_000,
+      longestSideMillimetres: 300,
+      containsBulky: false,
+      eligibleTransportTypes: ["MOTORBIKE", "AUTO", "CAR"],
+    };
+    const snapshot = await getV1DeliveryDispatch(auth, () => Promise.resolve(new Response(
+      JSON.stringify({
+        offer: {
+          id: assignmentId,
+          missionId: orderId,
+          displayOrderNumber: "DV1-1001",
+          status: "OFFERED",
+          poolRound: 1,
+          transportType: "MOTORBIKE",
+          distanceMeters: 850.5,
+          offeredAt: "2026-08-22T10:00:00Z",
+          respondBy: "2026-08-22T10:00:30Z",
+          secondsRemaining: 24,
+          pickupCount: 1,
+          orderLoad,
+          pickupStops: [pickupStop],
+        },
+        currentMission: null,
+      }),
+      { status: 200 },
+    )));
+
+    expect(snapshot.offer?.pickupStops[0].branch.address).toBe("1 Pickup Road, Chennai");
+    expect(snapshot.offer?.transportType).toBe("MOTORBIKE");
+    expect(JSON.stringify(snapshot)).not.toContain("customerAccountId");
+  });
+
+  it("sends V1 offer acceptance and all-package pickup verification", async () => {
+    const requests: Array<{ body: unknown; key: string | null }> = [];
+    const fetcher = (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({
+        body: JSON.parse(String(init?.body)),
+        key: new Headers(init?.headers).get("X-Idempotency-Key"),
+      });
+      return Promise.resolve(new Response(JSON.stringify({ offer: null, currentMission: null }), {
+        status: 200,
+      }));
+    };
+
+    await acceptV1DeliveryOffer({
+      ...auth,
+      offerId: assignmentId,
+      idempotencyKey: "v1-accept-key",
+    }, fetcher);
+    await advanceV1DeliveryMission({
+      ...auth,
+      missionId: orderId,
+      operation: "v1VerifyPickup",
+      stopId: storeId,
+      accountedPackageCount: 2,
+      verificationCode: "123456",
+      idempotencyKey: "v1-pickup-key",
+    }, fetcher);
+
+    expect(requests).toEqual([
+      {
+        body: { operation: "v1AcceptOffer", offerId: assignmentId },
+        key: "v1-accept-key",
+      },
+      {
+        body: {
+          operation: "v1VerifyPickup",
+          missionId: orderId,
+          stopId: storeId,
+          accountedPackageCount: 2,
+          verificationCode: "123456",
+        },
+        key: "v1-pickup-key",
+      },
+    ]);
+  });
+
+  it("rejects partial or malformed V1 pickup proof before the network", async () => {
+    const fetcher = vi.fn();
+    await expect(advanceV1DeliveryMission({
+      ...auth,
+      missionId: orderId,
+      operation: "v1VerifyPickup",
+      stopId: storeId,
+      accountedPackageCount: 0,
+      verificationCode: "1234",
+      idempotencyKey: "v1-pickup-key",
+    }, fetcher)).rejects.toThrow("every package");
     expect(fetcher).not.toHaveBeenCalled();
   });
 });

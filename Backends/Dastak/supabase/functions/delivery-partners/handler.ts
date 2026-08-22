@@ -1,7 +1,14 @@
 import { corsPreflight, json } from "../_shared/http.ts";
 import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
-export type DeliveryMethod = "walking" | "bicycle" | "bike" | "auto" | "car";
+export type DeliveryMethod =
+  | "walking"
+  | "bicycle"
+  | "bike"
+  | "motorbike"
+  | "scooter"
+  | "auto"
+  | "car";
 export type DeliveryPartnerApplicationStatus = "pending" | "approved" | "rejected";
 
 export type DeliveryPartnerApplication = {
@@ -72,10 +79,18 @@ const deliveryMethods = new Set<DeliveryMethod>([
   "walking",
   "bicycle",
   "bike",
+  "motorbike",
+  "scooter",
   "auto",
   "car",
 ]);
-const motorVehicleMethods = new Set<DeliveryMethod>(["bike", "auto", "car"]);
+const motorVehicleMethods = new Set<DeliveryMethod>([
+  "bike",
+  "motorbike",
+  "scooter",
+  "auto",
+  "car",
+]);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function handleDeliveryPartners(

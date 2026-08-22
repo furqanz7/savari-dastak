@@ -35,6 +35,13 @@
 .v1-preparation-times > span { min-width: 0; display: grid; gap: 3px; padding: 10px; border-radius: 10px; background: var(--surface-muted); }
 .v1-preparation-times small { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; }
 .v1-preparation-times strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.v1-merchant-pickup-state { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; padding: 12px; border: 1px solid color-mix(in srgb, var(--route) 28%, var(--divider)); border-radius: 11px; background: color-mix(in srgb, var(--route) 6%, var(--surface)); }
+.v1-merchant-pickup-state > span { min-width: 0; display: grid; gap: 3px; }
+.v1-merchant-pickup-state small { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; }
+.v1-merchant-pickup-state strong { overflow-wrap: anywhere; font-size: 12px; }
+.v1-merchant-pickup-code { grid-column: 1 / -1; display: grid; justify-items: center; gap: 7px; padding: 13px; border-radius: 9px; background: var(--surface); text-align: center; }
+.v1-merchant-pickup-code strong { color: var(--route); font-size: 30px; letter-spacing: .16em; font-variant-numeric: tabular-nums; }
+.v1-merchant-pickup-state > p { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin: 0; color: var(--success); font-size: 12px; font-weight: 750; }
 .v1-ready-workflow { display: grid; gap: 12px; padding: 14px; border-radius: 12px; background: var(--surface-muted); }
 .v1-ready-workflow > label:not(.v1-physical-check), .v1-problem-form label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
 .v1-ready-workflow input[type="number"], .v1-ready-workflow input[type="file"], .v1-problem-form textarea { width: 100%; min-height: 43px; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--divider); border-radius: 10px; color: var(--text-primary); background: var(--surface); font: inherit; }
@@ -59,5 +66,6 @@
   .v1-opportunity-actions { display: grid; grid-template-columns: 1fr; }
   .v1-opportunity-actions button { width: 100%; }
   .v1-preparation-times { grid-template-columns: 1fr; }
+  .v1-merchant-pickup-state { grid-template-columns: 1fr; }
   .v1-problem-form > div { display: grid; grid-template-columns: 1fr 1fr; }
 }

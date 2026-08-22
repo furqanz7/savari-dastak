@@ -226,7 +226,9 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
     [opportunities],
   );
   const activeFulfilments = useMemo(
-    () => fulfilments.filter((fulfilment) => fulfilment.status === "PREPARING" || fulfilment.status === "READY"),
+    () => fulfilments.filter((fulfilment) =>
+      fulfilment.status === "PREPARING" || fulfilment.status === "READY" ||
+      fulfilment.status === "PICKED_UP"),
     [fulfilments],
   );
 
@@ -322,7 +324,7 @@ function FulfilmentCard(props: FulfilmentCardProps) {
     <header>
       <span className="v1-opportunity-icon">{runningLate ? <AlertTriangle size={20} /> : <Timer size={20} />}</span>
       <span><strong>{fulfilment.displayOrderNumber}</strong><small>{fulfilment.branch.displayName} · {fulfilment.promisedPrepMinutes}-minute promise</small></span>
-      <b>{fulfilment.status === "READY" ? "READY FOR PICKUP" : runningLate ? `RUNNING LATE · +${formatDuration(Math.abs(remaining))}` : formatDuration(Math.max(0, remaining))}</b>
+      <b>{fulfilment.status === "PICKED_UP" ? "PICKED UP" : fulfilment.status === "READY" ? "READY FOR PICKUP" : runningLate ? `RUNNING LATE · +${formatDuration(Math.abs(remaining))}` : formatDuration(Math.max(0, remaining))}</b>
     </header>
     <LineList lines={fulfilment.lines} />
     <div className="v1-preparation-times">
@@ -330,17 +332,30 @@ function FulfilmentCard(props: FulfilmentCardProps) {
       <span><small>Promised Ready</small><strong>{formatOptionalTime(fulfilment.estimatedReadyAt)}</strong></span>
       <span><small>Actual Ready</small><strong>{formatOptionalTime(fulfilment.actualReadyAt)}</strong></span>
     </div>
+    {fulfilment.delivery ? <div className="v1-merchant-pickup-state">
+      <span><small>Delivery partner</small><strong>{fulfilment.delivery.riderAssigned ? fulfilment.delivery.rider?.displayName ?? "Assigned" : "Finding rider"}</strong></span>
+      <span><small>Pickup status</small><strong>{merchantPickupLabel(fulfilment.delivery.stopStatus, fulfilment.delivery.riderArrivedAt)}</strong></span>
+      <span><small>Waiting</small><strong>{fulfilment.delivery.riderArrivedAt ? formatDuration(fulfilment.delivery.waitingSeconds) : "—"}</strong></span>
+      {fulfilment.delivery.pickupCode ? <div className="v1-merchant-pickup-code"><small>Give this in-app code to the assigned rider after every package is present</small><strong>{fulfilment.delivery.pickupCode}</strong></div> : null}
+      {fulfilment.delivery.verificationStatus === "CONSUMED" ? <p><Check size={17} /> Pickup verified. Package custody transferred to the rider.</p> : null}
+    </div> : null}
     {preparing ? <div className="v1-ready-workflow">
       <label><span>Physical package count</span><input type="number" inputMode="numeric" min={1} max={1000} value={fulfilment.packageCount ?? props.packageCount} disabled={fulfilment.packageCount !== undefined || props.busy} onChange={(event) => props.onPackageCount(Number(event.target.value))} />{fulfilment.packageCount ? <small>Declared and locked for pickup</small> : <small>All packages will transfer together in the next delivery step.</small>}</label>
       <label className="v1-photo-field"><span>Prepared items / package photo</span><input type="file" accept="image/jpeg,image/png,image/heic" capture="environment" disabled={props.busy} onChange={(event) => props.onEvidenceFile(event.target.files?.[0])} /><small>{props.evidenceFile?.name ?? (hasRequiredEvidence ? `${fulfilment.evidence.length} immutable photo(s) recorded` : "Required before Ready · JPG, PNG or HEIC up to 10 MB")}</small></label>
       {hasRequiredEvidence && props.evidenceFile ? <button className="secondary-button v1-add-photo" type="button" disabled={props.busy} onClick={props.onAddPhoto}><Camera size={17} /> {props.busy ? "Recording…" : "Add another photo"}</button> : null}
       <label className="v1-physical-check"><input type="checkbox" checked={props.irreversibleConfirmed} disabled={props.busy} onChange={(event) => props.onIrreversibleConfirm(event.target.checked)} /><span>I confirm every declared package is complete. Ready is irreversible.</span></label>
       <button className="primary-button v1-mark-ready" type="button" disabled={props.busy || !readyActionEnabled} onClick={props.onMarkReady}><PackageCheck size={18} /> {props.busy ? "Finalising Ready…" : "Mark Ready"}</button>
-    </div> : <p className="v1-ready-complete"><PackageCheck size={18} /> {fulfilment.packageCount} package(s) Ready. Original evidence and Ready time are locked.</p>}
+    </div> : <p className="v1-ready-complete"><PackageCheck size={18} /> {fulfilment.packageCount} package(s) {fulfilment.status === "PICKED_UP" ? "picked up together" : "Ready"}. Original evidence and Ready time are locked.</p>}
     {fulfilment.evidence.length > 0 ? <p className="v1-evidence-count"><Camera size={15} /> {fulfilment.evidence.length} immutable evidence photo(s)</p> : null}
-    {props.reportingProblem ? <div className="v1-problem-form"><label><span>Problem details</span><textarea value={props.problemReason} maxLength={500} rows={3} autoFocus onChange={(event) => props.onProblemReason(event.target.value)} /></label><div><button className="secondary-button" type="button" disabled={props.busy} onClick={props.onCancelProblem}>Back</button><button className="primary-button" type="button" disabled={props.busy || props.problemReason.trim().length < 3} onClick={props.onReportProblem}>{props.busy ? "Reporting…" : "Report problem"}</button></div></div> : <button className="v1-report-problem" type="button" disabled={props.busy} onClick={props.onStartProblem}><AlertTriangle size={16} /> Report problem</button>}
+    {fulfilment.status !== "PICKED_UP" ? (props.reportingProblem ? <div className="v1-problem-form"><label><span>Problem details</span><textarea value={props.problemReason} maxLength={500} rows={3} autoFocus onChange={(event) => props.onProblemReason(event.target.value)} /></label><div><button className="secondary-button" type="button" disabled={props.busy} onClick={props.onCancelProblem}>Back</button><button className="primary-button" type="button" disabled={props.busy || props.problemReason.trim().length < 3} onClick={props.onReportProblem}>{props.busy ? "Reporting…" : "Report problem"}</button></div></div> : <button className="v1-report-problem" type="button" disabled={props.busy} onClick={props.onStartProblem}><AlertTriangle size={16} /> Report problem</button>) : null}
     {fulfilment.problemReports.length > 0 ? <small className="v1-problem-history">{fulfilment.problemReports.length} problem report(s) preserved for operator review.</small> : null}
   </article>;
+}
+
+function merchantPickupLabel(status: "PENDING" | "ARRIVED" | "COMPLETED", arrivedAt?: string) {
+  if (status === "COMPLETED") return "Picked Up";
+  if (status === "ARRIVED" || arrivedAt) return "Rider arrived";
+  return "Rider assigned";
 }
 
 function LineList({ lines }: { lines: V1MerchantOpportunity["lines"] }) {

@@ -6,6 +6,9 @@ import {
   type CourierDispatchMutationInput,
   type CourierJobMutationInput,
   handleCourierDispatch,
+  type V1DeliveryMissionMutationInput,
+  type V1RiderOfferDeclineInput,
+  type V1RiderOfferMutationInput,
 } from "./handler.ts";
 
 const serviceClient = createClient(
@@ -22,8 +25,60 @@ Deno.serve((request) =>
     acceptOffer,
     declineOffer,
     advanceJob,
+    getV1PartnerSnapshot,
+    acceptV1Offer,
+    declineV1Offer,
+    advanceV1Mission,
   })
 );
+
+async function getV1PartnerSnapshot(accountId: string) {
+  const { data, error } = await serviceClient.rpc(
+    "dastak_v1_delivery_partner_snapshot",
+    { p_account_id: accountId },
+  );
+  if (error) throw error;
+  return rpcResponse(data, "dastak_v1_delivery_partner_snapshot");
+}
+
+async function acceptV1Offer(input: V1RiderOfferMutationInput) {
+  const { data, error } = await serviceClient.rpc("dastak_v1_accept_delivery_offer", {
+    p_account_id: input.accountId,
+    p_offer_id: input.offerId,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "dastak_v1_accept_delivery_offer");
+}
+
+async function declineV1Offer(input: V1RiderOfferDeclineInput) {
+  const { data, error } = await serviceClient.rpc("dastak_v1_decline_delivery_offer", {
+    p_account_id: input.accountId,
+    p_offer_id: input.offerId,
+    p_reason: input.reason,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "dastak_v1_decline_delivery_offer");
+}
+
+async function advanceV1Mission(input: V1DeliveryMissionMutationInput) {
+  const { data, error } = await serviceClient.rpc("dastak_v1_advance_delivery_mission", {
+    p_account_id: input.accountId,
+    p_mission_id: input.missionId,
+    p_action: input.action,
+    p_stop_id: input.stopId,
+    p_accounted_package_count: input.accountedPackageCount,
+    p_verification_code: input.verificationCode,
+    p_reason: input.reason,
+    p_idempotency_key: input.idempotencyKey,
+    p_request_digest: input.requestDigest,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "dastak_v1_advance_delivery_mission");
+}
 
 async function getPartnerSnapshot(accountId: string) {
   const { data, error } = await serviceClient.rpc(

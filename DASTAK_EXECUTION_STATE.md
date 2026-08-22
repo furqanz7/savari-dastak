@@ -1,8 +1,8 @@
 - Authoritative spec path: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`
 - Authoritative branch: `codex/dastak-v1-launch`
-- Last checkpoint: Step 3 — Paid preparation, irreversible Ready, packages and evidence at branch HEAD
-- Completed V1 capabilities: kernel, canonical catalogue, secure submit, Wave 1/2, Fully Secured, reserved payment/reconciliation, preparation clocks, packages/evidence and irreversible Ready with iOS/Web customer and minimum Merchant/Admin operations
+- Last checkpoint: Step 4A — rider matching, assignment, pickup verification and atomic package custody at branch HEAD
+- Completed V1 capabilities: kernel, catalogue/submit, Wave 1/2, Fully Secured/payment, preparation/Ready, rider matching/assignment and verified all-package pickup custody with launch customer/operator surfaces
 - Current launch target: Customer iOS + Customer Web with founder-operated Merchant Web, Delivery Web and Admin Web
 - Deferred surfaces: Android, Merchant iOS, Delivery iOS, Admin iOS
-- Next implementation batch: early rider matching → assignment → pickup verification → complete package custody
+- Next implementation batch: final delivery → rider evidence → recipient verification → Customer custody → Delivered
 - Deployment status: local-only; not merged or deployed

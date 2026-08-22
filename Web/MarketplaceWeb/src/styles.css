@@ -530,6 +530,27 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 .delivery-empty > svg { color: var(--accent); }
 .delivery-empty p { margin: 5px 0 0; color: var(--text-secondary); }
+.v1-delivery-card { border-top: 4px solid var(--route); }
+.v1-delivery-card > header small { display: block; margin-top: 5px; color: var(--text-secondary); }
+.v1-pickup-list { display: grid; gap: 0; margin: 18px 0 0; padding: 0; border-top: 1px solid var(--divider); list-style: none; }
+.v1-pickup-list li { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 13px 0; border-bottom: 1px solid var(--divider); }
+.v1-pickup-list li > span, .v1-pickup-stop > header > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: var(--route); background: color-mix(in srgb, var(--route) 10%, var(--surface)); font-weight: 800; }
+.v1-pickup-list li > div { display: grid; gap: 3px; min-width: 0; }
+.v1-pickup-list small { color: var(--text-secondary); overflow-wrap: anywhere; }
+.v1-pickup-list em, .v1-pickup-stop em { color: var(--text-secondary); font-size: 12px; font-style: normal; font-weight: 750; }
+.v1-mission-stops { display: grid; gap: 13px; }
+.v1-pickup-stop { display: grid; gap: 13px; padding: 16px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-muted); }
+.v1-pickup-stop.completed { opacity: .72; }
+.v1-pickup-stop > header { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 11px; }
+.v1-pickup-stop > header > div { min-width: 0; display: grid; gap: 3px; }
+.v1-pickup-stop > header small { color: var(--text-secondary); overflow-wrap: anywhere; }
+.v1-pickup-stop .secondary-button { min-height: 42px; width: 100%; }
+.v1-pickup-verification { display: grid; gap: 13px; padding-top: 13px; border-top: 1px solid var(--divider); }
+.v1-pickup-verification fieldset { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 9px; margin: 0; padding: 0; border: 0; }
+.v1-pickup-verification legend { grid-column: 1 / -1; margin-bottom: 8px; font-size: 13px; font-weight: 800; }
+.v1-pickup-verification fieldset label { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 11px; border: 1px solid var(--divider); border-radius: 7px; background: var(--surface); font-weight: 700; }
+.v1-pickup-verification .handoff-input { margin-top: 0; }
+.v1-secondary-action { width: 100%; margin-top: 13px; }
 
 .admin-shell { width: 100%; }
 .admin-heading {

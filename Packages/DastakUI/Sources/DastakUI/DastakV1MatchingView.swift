@@ -80,7 +80,7 @@ struct DastakV1MatchingView: View {
             }
 
             Label(
-                [.paid, .preparing].contains(order.status)
+                [.paid, .preparing, .pickupInProgress].contains(order.status)
                     ? "Payment confirmed exactly once"
                     : "No charge until the complete basket is secured",
                 systemImage: "checkmark.shield.fill"
@@ -205,7 +205,7 @@ struct DastakV1MatchingView: View {
     }
 
     private func shouldPoll(_ status: DastakV1OrderStatus) -> Bool {
-        [.created, .matching, .fullySecured, .awaitingPayment, .paid, .preparing].contains(status)
+        [.created, .matching, .fullySecured, .awaitingPayment, .paid, .preparing, .pickupInProgress].contains(status)
     }
 
     private func isMatching(_ status: DastakV1OrderStatus) -> Bool {
@@ -221,7 +221,7 @@ struct DastakV1MatchingView: View {
         case .created, .matching: "Finding every item"
         case .fullySecured, .awaitingPayment: "Your basket is secured"
         case .paid, .preparing: "Preparing your order"
-        case .pickupInProgress: "Pickup in progress"
+        case .pickupInProgress: "Picking up your order"
         case .outForDelivery: "On the way"
         case .delivered: "Delivered"
         case .unavailable: "Basket unavailable"
@@ -238,7 +238,7 @@ struct DastakV1MatchingView: View {
         case .fullySecured, .awaitingPayment:
             "Every item has been reserved. Secure payment will be requested before preparation begins."
         case .paid, .preparing: "Payment is confirmed and your secured items are being prepared."
-        case .pickupInProgress: "Your rider is collecting the declared packages."
+        case .pickupInProgress: "Your delivery partner is collecting your complete order."
         case .outForDelivery: "Your verified packages are heading to you."
         case .delivered: "Your delivery has been completed."
         case .unavailable: "Dastak could not secure the complete basket. You were not charged."

@@ -10,6 +10,7 @@ import {
   markV1FulfilmentReady,
   merchantReadyEvidenceObjectPath,
   parseV1Catalogue,
+  parseV1MerchantFulfilment,
   parseV1Order,
   respondToV1MerchantOpportunity,
   submitV1Order,
@@ -160,12 +161,17 @@ describe("Dastak V1 web contract", () => {
           riderMatchEligibility: { eligible: false }, fulfilments: [], packages: [],
           evidence: [], problems: [], history: [],
         },
+        delivery: {
+          mission: { id: fulfilmentId, status: "ASSIGNED", pickupCount: 1 },
+          offers: [], pickupStops: [], verification: [], custody: [], problems: [],
+        },
       });
     });
 
     expect(requestBody).toEqual({ operation: "adminExecutionTrace", orderId });
     expect(result.payment?.status).toBe("RESERVED");
     expect(result.preparation?.fulfilments).toEqual([]);
+    expect(result.delivery?.mission?.status).toBe("ASSIGNED");
   });
 
   it("uses optimistic, idempotent preparation commands and immutable evidence paths", async () => {
@@ -201,6 +207,42 @@ describe("Dastak V1 web contract", () => {
     ]);
     expect(calls.map((call) => call.key)).toEqual(["packages-once", "evidence-once", "ready-once"]);
     expect(calls[1].body).toMatchObject({ fulfilmentId, packageId, expectedVersion: 2 });
+  });
+
+  it("parses merchant pickup code and completed package custody state", () => {
+    const result = parseV1MerchantFulfilment({
+      ...fulfilmentFixture(),
+      orderStatus: "PICKUP_IN_PROGRESS",
+      status: "PICKED_UP",
+      actualReadyAt: "2026-08-22T00:10:00Z",
+      packageCount: 1,
+      packages: [{
+        id: packageId, packageNumber: 1, status: "PICKED_UP", custodyOwnerType: "RIDER",
+        declaredAt: "2026-08-22T00:09:00Z", readyAt: "2026-08-22T00:10:00Z", version: 3,
+      }],
+      delivery: {
+        missionId: categoryId,
+        missionStatus: "PICKUP_IN_PROGRESS",
+        riderAssigned: true,
+        rider: { id: subcategoryId, displayName: "Founder Rider" },
+        transportType: "MOTORBIKE",
+        stopId: skuId,
+        stopStatus: "COMPLETED",
+        riderArrivedAt: "2026-08-22T00:11:00Z",
+        waitingSeconds: 30,
+        verificationStatus: "CONSUMED",
+        pickupCode: null,
+        pickedUpAt: "2026-08-22T00:12:00Z",
+      },
+    });
+
+    expect(result.status).toBe("PICKED_UP");
+    expect(result.delivery).toMatchObject({
+      stopStatus: "COMPLETED",
+      verificationStatus: "CONSUMED",
+      waitingSeconds: 30,
+    });
+    expect(result.delivery?.pickupCode).toBeUndefined();
   });
 });
 

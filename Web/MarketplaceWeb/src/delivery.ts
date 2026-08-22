@@ -1,7 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MerchantOrderStatus, OrderLocation } from "./orders";
 
-export type DeliveryMethod = "walking" | "bicycle" | "bike" | "auto" | "car";
+export type DeliveryMethod =
+  | "walking"
+  | "bicycle"
+  | "bike"
+  | "motorbike"
+  | "scooter"
+  | "auto"
+  | "car";
 export type PartnerAvailability = {
   status: "online" | "offline";
   location: OrderLocation | null;
@@ -47,6 +54,77 @@ export type DeliveryDispatchSnapshot = {
   offer: DeliveryAssignment | null;
   currentJob: DeliveryAssignment | null;
 };
+export type V1TransportType =
+  | "WALKING"
+  | "BICYCLE"
+  | "MOTORBIKE"
+  | "SCOOTER"
+  | "AUTO"
+  | "CAR";
+export type V1OrderLoad = {
+  totalWeightGrams: number;
+  totalVolumeCubicMillimetres: number;
+  longestSideMillimetres: number;
+  containsBulky: boolean;
+  eligibleTransportTypes: V1TransportType[];
+};
+export type V1PickupStop = {
+  id: string;
+  sequence: number;
+  status?: "PENDING" | "ARRIVED" | "COMPLETED";
+  ready: boolean;
+  runningLate: boolean;
+  estimatedReadyAt: string;
+  actualReadyAt: string | null;
+  packageCount: number | null;
+  arrivedAt: string | null;
+  waitingSeconds: number;
+  branch: {
+    id: string | null;
+    displayName: string;
+    address: string;
+    location: OrderLocation | null;
+  };
+};
+export type V1RiderOffer = {
+  id: string;
+  missionId: string;
+  displayOrderNumber: string;
+  status: "OFFERED";
+  poolRound: number;
+  transportType: V1TransportType;
+  distanceMeters: number;
+  offeredAt: string;
+  respondBy: string;
+  secondsRemaining: number;
+  pickupCount: number;
+  orderLoad: V1OrderLoad;
+  pickupStops: V1PickupStop[];
+};
+export type V1DeliveryMission = {
+  id: string;
+  displayOrderNumber: string;
+  status:
+    | "ASSIGNED"
+    | "EN_ROUTE_TO_PICKUPS"
+    | "PICKUP_IN_PROGRESS"
+    | "ALL_PACKAGES_PICKED_UP"
+    | "DELIVERY_RECOVERY";
+  version: number;
+  transportType: V1TransportType;
+  pickupCount: number;
+  assignedAt: string;
+  firstPackagePickedUpAt: string | null;
+  allPackagesPickedUpAt: string | null;
+  canCancelBeforePickup: boolean;
+  mustUseDeliveryRecovery: boolean;
+  orderLoad: V1OrderLoad;
+  pickupStops: V1PickupStop[];
+};
+export type V1DeliveryDispatchSnapshot = {
+  offer: V1RiderOffer | null;
+  currentMission: V1DeliveryMission | null;
+};
 
 type AuthenticatedInput = { supabaseUrl: string; publishableKey: string; accessToken: string };
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -66,8 +144,15 @@ const evidenceExtensions = new Map([
 ]);
 const maximumEvidenceBytes = 10 * 1024 * 1024;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const deliveryMethods = new Set<DeliveryMethod>(["walking", "bicycle", "bike", "auto", "car"]);
-const motorVehicleMethods = new Set<DeliveryMethod>(["bike", "auto", "car"]);
+const deliveryMethods = new Set<DeliveryMethod>([
+  "walking", "bicycle", "bike", "motorbike", "scooter", "auto", "car",
+]);
+const motorVehicleMethods = new Set<DeliveryMethod>([
+  "bike", "motorbike", "scooter", "auto", "car",
+]);
+const v1TransportTypes = new Set<V1TransportType>([
+  "WALKING", "BICYCLE", "MOTORBIKE", "SCOOTER", "AUTO", "CAR",
+]);
 const orderStatuses = new Set<MerchantOrderStatus>([
   "payment_pending", "paid", "merchant_accepted", "ready", "assigned", "en_route_to_pickup",
   "at_store", "picked_up", "in_transit", "delivered", "cancelled", "returning_to_merchant",
@@ -152,7 +237,8 @@ export async function submitDeliveryPartnerApplication(
   fetcher: Fetcher = fetch,
 ) {
   if (!deliveryMethods.has(input.deliveryMethod) || !input.identityEvidenceObjectPath) throw validationError();
-  const vehicleRequired = requiresVehicleVerification(input.deliveryMethod);
+  const deliveryMethod = input.deliveryMethod === "bike" ? "motorbike" : input.deliveryMethod;
+  const vehicleRequired = requiresVehicleVerification(deliveryMethod);
   const registration = input.vehicleRegistrationNumber
     ? normalizeVehicleRegistration(input.vehicleRegistrationNumber)
     : null;
@@ -168,7 +254,7 @@ export async function submitDeliveryPartnerApplication(
   if (!vehicleRequired && (registration || makeModel || vehicleEvidence)) throw validationError();
   const payload = record(await call("delivery-partners", input, {
     operation: "submit",
-    deliveryMethod: input.deliveryMethod,
+    deliveryMethod,
     identityEvidenceObjectPath: input.identityEvidenceObjectPath,
     vehicleRegistrationNumber: vehicleRequired ? registration : null,
     vehicleMakeModel: vehicleRequired ? makeModel : null,
@@ -216,6 +302,78 @@ export async function publishDeliveryPartnerLocation(
 
 export async function getDeliveryDispatch(input: AuthenticatedInput, fetcher: Fetcher = fetch) {
   return parseDispatch(await call("courier-dispatch", input, { operation: "partnerSnapshot" }, undefined, fetcher));
+}
+
+export async function getV1DeliveryDispatch(
+  input: AuthenticatedInput,
+  fetcher: Fetcher = fetch,
+) {
+  return parseV1Dispatch(await call(
+    "courier-dispatch",
+    input,
+    { operation: "v1PartnerSnapshot" },
+    undefined,
+    fetcher,
+  ));
+}
+
+export async function acceptV1DeliveryOffer(
+  input: AuthenticatedInput & { offerId: string; idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  return v1DispatchMutation(input, {
+    operation: "v1AcceptOffer",
+    offerId: input.offerId,
+  }, fetcher);
+}
+
+export async function declineV1DeliveryOffer(
+  input: AuthenticatedInput & { offerId: string; reason?: string; idempotencyKey: string },
+  fetcher: Fetcher = fetch,
+) {
+  return v1DispatchMutation(input, {
+    operation: "v1DeclineOffer",
+    offerId: input.offerId,
+    reason: input.reason?.trim() || null,
+  }, fetcher);
+}
+
+export type V1DeliveryMissionOperation =
+  | "v1StartPickups"
+  | "v1ArriveAtPickup"
+  | "v1VerifyPickup"
+  | "v1CancelBeforePickup"
+  | "v1ReportDeliveryProblem";
+
+export async function advanceV1DeliveryMission(
+  input: AuthenticatedInput & {
+    missionId: string;
+    operation: V1DeliveryMissionOperation;
+    stopId?: string;
+    accountedPackageCount?: number;
+    verificationCode?: string;
+    reason?: string;
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  if (input.operation === "v1VerifyPickup" && (
+    !/^\d{6}$/.test(input.verificationCode ?? "") ||
+    !Number.isSafeInteger(input.accountedPackageCount) ||
+    (input.accountedPackageCount ?? 0) < 1
+  )) {
+    throw validationError("Account for every package and enter the six-digit pickup code.");
+  }
+  return v1DispatchMutation(input, {
+    operation: input.operation,
+    missionId: input.missionId,
+    ...(input.stopId ? { stopId: input.stopId } : {}),
+    ...(input.accountedPackageCount !== undefined
+      ? { accountedPackageCount: input.accountedPackageCount }
+      : {}),
+    ...(input.verificationCode ? { verificationCode: input.verificationCode } : {}),
+    ...(input.reason ? { reason: input.reason.trim() } : {}),
+  }, fetcher);
 }
 
 export async function acceptDeliveryOffer(
@@ -269,6 +427,20 @@ async function dispatchMutation(
   fetcher: Fetcher,
 ) {
   return parseDispatch(await call("courier-dispatch", input, body, input.idempotencyKey, fetcher));
+}
+
+async function v1DispatchMutation(
+  input: AuthenticatedInput & { idempotencyKey: string },
+  body: unknown,
+  fetcher: Fetcher,
+) {
+  return parseV1Dispatch(await call(
+    "courier-dispatch",
+    input,
+    body,
+    input.idempotencyKey,
+    fetcher,
+  ));
 }
 
 async function call(
@@ -349,6 +521,140 @@ function parseDispatch(value: unknown): DeliveryDispatchSnapshot {
     offer: source.offer === null ? null : assignment(source.offer),
     currentJob: source.currentJob === null ? null : assignment(source.currentJob),
   };
+}
+
+function parseV1Dispatch(value: unknown): V1DeliveryDispatchSnapshot {
+  const source = record(value);
+  if (!source || !("offer" in source) || !("currentMission" in source)) invalid();
+  return {
+    offer: source.offer === null ? null : v1Offer(source.offer),
+    currentMission: source.currentMission === null ? null : v1Mission(source.currentMission),
+  };
+}
+
+function v1Offer(value: unknown): V1RiderOffer {
+  const source = record(value);
+  if (!source || source.status !== "OFFERED" || !Array.isArray(source.pickupStops)) invalid();
+  return {
+    id: requiredUUID(source.id),
+    missionId: requiredUUID(source.missionId),
+    displayOrderNumber: requiredText(source.displayOrderNumber, 40),
+    status: "OFFERED",
+    poolRound: positiveInteger(source.poolRound),
+    transportType: requiredV1Transport(source.transportType),
+    distanceMeters: nonNegativeNumber(source.distanceMeters),
+    offeredAt: timestamp(source.offeredAt),
+    respondBy: timestamp(source.respondBy),
+    secondsRemaining: nonNegativeInteger(source.secondsRemaining),
+    pickupCount: positiveInteger(source.pickupCount),
+    orderLoad: v1OrderLoad(source.orderLoad),
+    pickupStops: source.pickupStops.map((stop) => v1PickupStop(stop, false)),
+  };
+}
+
+function v1Mission(value: unknown): V1DeliveryMission {
+  const source = record(value);
+  const status = source?.status;
+  const statuses = [
+    "ASSIGNED",
+    "EN_ROUTE_TO_PICKUPS",
+    "PICKUP_IN_PROGRESS",
+    "ALL_PACKAGES_PICKED_UP",
+    "DELIVERY_RECOVERY",
+  ] as const;
+  if (!source || !statuses.includes(status as typeof statuses[number]) ||
+    !Array.isArray(source.pickupStops) || typeof source.canCancelBeforePickup !== "boolean" ||
+    typeof source.mustUseDeliveryRecovery !== "boolean") invalid();
+  return {
+    id: requiredUUID(source.id),
+    displayOrderNumber: requiredText(source.displayOrderNumber, 40),
+    status: status as V1DeliveryMission["status"],
+    version: positiveInteger(source.version),
+    transportType: requiredV1Transport(source.transportType),
+    pickupCount: positiveInteger(source.pickupCount),
+    assignedAt: timestamp(source.assignedAt),
+    firstPackagePickedUpAt: nullableTimestamp(source.firstPackagePickedUpAt),
+    allPackagesPickedUpAt: nullableTimestamp(source.allPackagesPickedUpAt),
+    canCancelBeforePickup: source.canCancelBeforePickup,
+    mustUseDeliveryRecovery: source.mustUseDeliveryRecovery,
+    orderLoad: v1OrderLoad(source.orderLoad),
+    pickupStops: source.pickupStops.map((stop) => v1PickupStop(stop, true)),
+  };
+}
+
+function v1PickupStop(value: unknown, includeState: boolean): V1PickupStop {
+  const source = record(value);
+  const branch = record(source?.branch);
+  const status = source?.status;
+  if (!source || !branch || typeof source.ready !== "boolean" ||
+    (includeState && !["PENDING", "ARRIVED", "COMPLETED"].includes(String(status)))) invalid();
+  return {
+    id: requiredUUID(source.id),
+    sequence: positiveInteger(source.sequence),
+    ...(includeState ? { status: status as V1PickupStop["status"] } : {}),
+    ready: source.ready,
+    runningLate: includeState && source.runningLate === true,
+    estimatedReadyAt: timestamp(source.estimatedReadyAt),
+    actualReadyAt: includeState ? nullableTimestamp(source.actualReadyAt) : null,
+    packageCount: includeState && source.packageCount !== null
+      ? positiveInteger(source.packageCount)
+      : null,
+    arrivedAt: includeState ? nullableTimestamp(source.arrivedAt) : null,
+    waitingSeconds: includeState ? nonNegativeInteger(source.waitingSeconds) : 0,
+    branch: {
+      id: includeState ? requiredUUID(branch.id) : null,
+      displayName: requiredText(branch.displayName, 160),
+      address: addressLabel(branch.address),
+      location: branch.location === null ? null : location(branch.location),
+    },
+  };
+}
+
+function v1OrderLoad(value: unknown): V1OrderLoad {
+  const source = record(value);
+  if (!source || typeof source.containsBulky !== "boolean" ||
+    !Array.isArray(source.eligibleTransportTypes)) invalid();
+  return {
+    totalWeightGrams: nonNegativeInteger(source.totalWeightGrams),
+    totalVolumeCubicMillimetres: nonNegativeInteger(source.totalVolumeCubicMillimetres),
+    longestSideMillimetres: nonNegativeInteger(source.longestSideMillimetres),
+    containsBulky: source.containsBulky,
+    eligibleTransportTypes: source.eligibleTransportTypes.map(requiredV1Transport),
+  };
+}
+
+function addressLabel(value: unknown) {
+  const source = record(value);
+  if (!source) invalid();
+  const parts = [source.line1, source.line2, source.landmark, source.city, source.postalCode]
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .map((part) => part.trim());
+  if (parts.length === 0) invalid();
+  return parts.join(", ");
+}
+
+function requiredV1Transport(value: unknown) {
+  if (!v1TransportTypes.has(value as V1TransportType)) invalid();
+  return value as V1TransportType;
+}
+
+function positiveInteger(value: unknown) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) invalid();
+  return value;
+}
+
+function nonNegativeInteger(value: unknown) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) invalid();
+  return value;
+}
+
+function nonNegativeNumber(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) invalid();
+  return value;
+}
+
+function nullableTimestamp(value: unknown) {
+  return value === null ? null : timestamp(value);
 }
 
 function assignment(value: unknown): DeliveryAssignment {

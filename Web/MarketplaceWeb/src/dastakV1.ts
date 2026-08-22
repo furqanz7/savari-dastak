@@ -139,7 +139,7 @@ export type V1MerchantFulfilment = {
   orderId: string;
   displayOrderNumber: string;
   orderStatus: string;
-  status: "RESERVED_PREPAYMENT" | "PREPARING" | "READY";
+  status: "RESERVED_PREPAYMENT" | "PREPARING" | "READY" | "PICKED_UP";
   version: number;
   branch: { id: string; displayName: string };
   promisedPrepMinutes: number;
@@ -182,6 +182,20 @@ export type V1MerchantFulfilment = {
     satisfiedFulfilmentCount: number;
     nextEligibleAt?: string;
   };
+  delivery?: {
+    missionId: string;
+    missionStatus: string;
+    riderAssigned: boolean;
+    rider?: { id: string; displayName: string };
+    transportType?: string;
+    stopId: string;
+    stopStatus: "PENDING" | "ARRIVED" | "COMPLETED";
+    riderArrivedAt?: string;
+    waitingSeconds: number;
+    verificationStatus: "INACTIVE" | "ACTIVE" | "CONSUMED" | "BLOCKED" | "OVERRIDDEN";
+    pickupCode?: string;
+    pickedUpAt?: string;
+  };
   canDeclarePackages: boolean;
   canAddEvidence: boolean;
   canMarkReady: boolean;
@@ -216,6 +230,14 @@ export type V1AdminExecutionTrace = {
     evidence: Record<string, unknown>[];
     problems: Record<string, unknown>[];
     history: Record<string, unknown>[];
+  };
+  delivery?: {
+    mission?: Record<string, unknown>;
+    offers: Record<string, unknown>[];
+    pickupStops: Record<string, unknown>[];
+    verification: Record<string, unknown>[];
+    custody: Record<string, unknown>[];
+    problems: Record<string, unknown>[];
   };
 };
 
@@ -532,16 +554,26 @@ export async function getV1AdminExecutionTrace(
   const preparation = source.preparation === null || source.preparation === undefined
     ? undefined
     : record(source.preparation);
+  const delivery = source.delivery === null || source.delivery === undefined
+    ? undefined
+    : record(source.delivery);
   if (
     !Array.isArray(source.matchingAttempts) || !Array.isArray(source.provisionalHolds) ||
     !Array.isArray(source.plans) || !Array.isArray(source.capacity) ||
     !Array.isArray(source.reconciliationCases) ||
     (source.payment !== null && source.payment !== undefined && !payment) ||
     (source.preparation !== null && source.preparation !== undefined && !preparation) ||
+    (source.delivery !== null && source.delivery !== undefined && !delivery) ||
     (preparation && (
       !record(preparation.riderMatchEligibility) || !Array.isArray(preparation.fulfilments) ||
       !Array.isArray(preparation.packages) || !Array.isArray(preparation.evidence) ||
       !Array.isArray(preparation.problems) || !Array.isArray(preparation.history)
+    )) ||
+    (delivery && (
+      (delivery.mission !== null && delivery.mission !== undefined && !record(delivery.mission)) ||
+      !Array.isArray(delivery.offers) || !Array.isArray(delivery.pickupStops) ||
+      !Array.isArray(delivery.verification) || !Array.isArray(delivery.custody) ||
+      !Array.isArray(delivery.problems)
     ))
   ) invalid("execution trace");
   return {
@@ -559,6 +591,16 @@ export async function getV1AdminExecutionTrace(
       evidence: (preparation.evidence as unknown[]).map(requiredRecord),
       problems: (preparation.problems as unknown[]).map(requiredRecord),
       history: (preparation.history as unknown[]).map(requiredRecord),
+    } : undefined,
+    delivery: delivery ? {
+      mission: delivery.mission === null || delivery.mission === undefined
+        ? undefined
+        : requiredRecord(delivery.mission),
+      offers: (delivery.offers as unknown[]).map(requiredRecord),
+      pickupStops: (delivery.pickupStops as unknown[]).map(requiredRecord),
+      verification: (delivery.verification as unknown[]).map(requiredRecord),
+      custody: (delivery.custody as unknown[]).map(requiredRecord),
+      problems: (delivery.problems as unknown[]).map(requiredRecord),
     } : undefined,
   };
 }
@@ -703,14 +745,18 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
     ? undefined
     : record(source.capacity);
   const rider = record(source?.riderMatchEligibility);
+  const delivery = source?.delivery === null || source?.delivery === undefined
+    ? undefined
+    : record(source.delivery);
   if (
     !source || !branch || !rider || !Array.isArray(source.packages) ||
     !Array.isArray(source.evidence) || !Array.isArray(source.problemReports) ||
     !Array.isArray(source.lines) ||
-    (source.capacity !== null && source.capacity !== undefined && !capacity)
+    (source.capacity !== null && source.capacity !== undefined && !capacity) ||
+    (source.delivery !== null && source.delivery !== undefined && !delivery)
   ) invalid("merchant fulfilment");
   const status = requiredText(source.status, 40);
-  if (!["RESERVED_PREPAYMENT", "PREPARING", "READY"].includes(status)) {
+  if (!["RESERVED_PREPAYMENT", "PREPARING", "READY", "PICKED_UP"].includes(status)) {
     invalid("merchant fulfilment status");
   }
   return {
@@ -780,6 +826,7 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
       satisfiedFulfilmentCount: requiredInteger(rider.satisfiedFulfilmentCount, 0),
       nextEligibleAt: optionalTimestamp(rider.nextEligibleAt),
     },
+    delivery: delivery ? parseMerchantDelivery(delivery) : undefined,
     canDeclarePackages: requiredBoolean(source.canDeclarePackages),
     canAddEvidence: requiredBoolean(source.canAddEvidence),
     canMarkReady: requiredBoolean(source.canMarkReady),
@@ -795,6 +842,34 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
         quantity: requiredInteger(line.quantity, 1),
       };
     }),
+  };
+}
+
+function parseMerchantDelivery(source: Record<string, unknown>): NonNullable<V1MerchantFulfilment["delivery"]> {
+  const rider = source.rider === null || source.rider === undefined ? undefined : record(source.rider);
+  const stopStatus = requiredText(source.stopStatus, 40);
+  const verificationStatus = requiredText(source.verificationStatus, 40);
+  if (!["PENDING", "ARRIVED", "COMPLETED"].includes(stopStatus) ||
+    !["INACTIVE", "ACTIVE", "CONSUMED", "BLOCKED", "OVERRIDDEN"].includes(verificationStatus) ||
+    (source.rider !== null && source.rider !== undefined && !rider)) {
+    invalid("merchant delivery state");
+  }
+  return {
+    missionId: requiredUuid(source.missionId),
+    missionStatus: requiredText(source.missionStatus, 60),
+    riderAssigned: requiredBoolean(source.riderAssigned),
+    rider: rider ? {
+      id: requiredUuid(rider.id),
+      displayName: requiredText(rider.displayName, 160),
+    } : undefined,
+    transportType: optionalText(source.transportType, 40),
+    stopId: requiredUuid(source.stopId),
+    stopStatus: stopStatus as NonNullable<V1MerchantFulfilment["delivery"]>["stopStatus"],
+    riderArrivedAt: optionalTimestamp(source.riderArrivedAt),
+    waitingSeconds: requiredInteger(source.waitingSeconds, 0),
+    verificationStatus: verificationStatus as NonNullable<V1MerchantFulfilment["delivery"]>["verificationStatus"],
+    pickupCode: optionalText(source.pickupCode, 6),
+    pickedUpAt: optionalTimestamp(source.pickedUpAt),
   };
 }
 

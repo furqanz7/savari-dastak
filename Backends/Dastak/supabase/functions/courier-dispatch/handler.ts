@@ -14,6 +14,36 @@ export type CourierDispatchDeclineInput = CourierDispatchMutationInput & {
   reason: string | null;
 };
 
+export type V1RiderOfferMutationInput = {
+  accountId: string;
+  offerId: string;
+  idempotencyKey: string;
+  requestDigest: string;
+};
+
+export type V1RiderOfferDeclineInput = V1RiderOfferMutationInput & {
+  reason: string | null;
+};
+
+export type V1DeliveryMissionAction =
+  | "START_PICKUPS"
+  | "ARRIVE_PICKUP"
+  | "VERIFY_PICKUP"
+  | "CANCEL_BEFORE_PICKUP"
+  | "REPORT_DELIVERY_PROBLEM";
+
+export type V1DeliveryMissionMutationInput = {
+  accountId: string;
+  missionId: string;
+  action: V1DeliveryMissionAction;
+  stopId: string | null;
+  accountedPackageCount: number | null;
+  verificationCode: string | null;
+  reason: string | null;
+  idempotencyKey: string;
+  requestDigest: string;
+};
+
 export type CourierJobAction =
   | "start_to_store"
   | "arrive_at_store"
@@ -36,6 +66,10 @@ export type CourierDispatchDependencies = {
   acceptOffer: (input: CourierDispatchMutationInput) => Promise<RpcResult>;
   declineOffer: (input: CourierDispatchDeclineInput) => Promise<RpcResult>;
   advanceJob: (input: CourierJobMutationInput) => Promise<RpcResult>;
+  getV1PartnerSnapshot: (accountId: string) => Promise<RpcResult>;
+  acceptV1Offer: (input: V1RiderOfferMutationInput) => Promise<RpcResult>;
+  declineV1Offer: (input: V1RiderOfferDeclineInput) => Promise<RpcResult>;
+  advanceV1Mission: (input: V1DeliveryMissionMutationInput) => Promise<RpcResult>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -66,6 +100,59 @@ export async function handleCourierDispatch(
         const result = await dependencies.getPartnerSnapshot(actor.accountId);
         return json(result.responseBody, result.responseStatus);
       }
+      case "v1PartnerSnapshot": {
+        const result = await dependencies.getV1PartnerSnapshot(actor.accountId);
+        return json(result.responseBody, result.responseStatus);
+      }
+      case "v1AcceptOffer":
+        return await v1OfferMutation(
+          request,
+          body,
+          actor.accountId,
+          dependencies.acceptV1Offer,
+        );
+      case "v1DeclineOffer":
+        return await v1DeclineMutation(request, body, actor.accountId, dependencies);
+      case "v1StartPickups":
+        return await v1MissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "START_PICKUPS",
+          dependencies.advanceV1Mission,
+        );
+      case "v1ArriveAtPickup":
+        return await v1MissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "ARRIVE_PICKUP",
+          dependencies.advanceV1Mission,
+        );
+      case "v1VerifyPickup":
+        return await v1MissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "VERIFY_PICKUP",
+          dependencies.advanceV1Mission,
+        );
+      case "v1CancelBeforePickup":
+        return await v1MissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "CANCEL_BEFORE_PICKUP",
+          dependencies.advanceV1Mission,
+        );
+      case "v1ReportDeliveryProblem":
+        return await v1MissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "REPORT_DELIVERY_PROBLEM",
+          dependencies.advanceV1Mission,
+        );
       case "acceptOffer":
         return await assignmentMutation(
           request,
@@ -129,6 +216,93 @@ export async function handleCourierDispatch(
   }
 }
 
+async function v1OfferMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependency: (input: V1RiderOfferMutationInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const offerId = validUUID(body.offerId);
+  if (!idempotencyKey || !offerId) return validationError();
+
+  const normalized = { offerId };
+  const result = await dependency({
+    accountId,
+    offerId,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
+}
+
+async function v1DeclineMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependencies: CourierDispatchDependencies,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const offerId = validUUID(body.offerId);
+  const reason = normalizeOptionalText(body.reason, 300);
+  if (!idempotencyKey || !offerId || reason === undefined) return validationError();
+
+  const normalized = { offerId, reason };
+  const result = await dependencies.declineV1Offer({
+    accountId,
+    offerId,
+    reason,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
+}
+
+async function v1MissionMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  action: V1DeliveryMissionAction,
+  dependency: (input: V1DeliveryMissionMutationInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const missionId = validUUID(body.missionId);
+  const needsStop = action === "ARRIVE_PICKUP" || action === "VERIFY_PICKUP";
+  const stopId = needsStop ? validUUID(body.stopId) : null;
+  const accountedPackageCount = action === "VERIFY_PICKUP"
+    ? validPositiveInteger(body.accountedPackageCount)
+    : null;
+  const verificationCode = action === "VERIFY_PICKUP"
+    ? validV1VerificationCode(body.verificationCode)
+    : null;
+  const needsReason = action === "CANCEL_BEFORE_PICKUP" ||
+    action === "REPORT_DELIVERY_PROBLEM";
+  const reason = needsReason ? normalizeRequiredText(body.reason, 500) : null;
+  if (
+    !idempotencyKey || !missionId || (needsStop && !stopId) ||
+    (action === "VERIFY_PICKUP" && (!accountedPackageCount || !verificationCode)) ||
+    (needsReason && !reason)
+  ) {
+    return validationError();
+  }
+
+  const normalized = {
+    missionId,
+    action,
+    stopId: stopId ?? null,
+    accountedPackageCount: accountedPackageCount ?? null,
+    verificationCode,
+    reason: reason ?? null,
+  };
+  const result = await dependency({
+    accountId,
+    ...normalized,
+    idempotencyKey,
+    requestDigest: await canonicalDigest(normalized),
+  });
+  return json(result.responseBody, result.responseStatus);
+}
+
 async function jobMutation(
   request: Request,
   body: Record<string, unknown>,
@@ -175,6 +349,14 @@ async function jobMutation(
 
 function validVerificationCode(value: unknown) {
   return typeof value === "string" && /^[0-9]{4}$/.test(value) ? value : null;
+}
+
+function validV1VerificationCode(value: unknown) {
+  return typeof value === "string" && /^[0-9]{6}$/.test(value) ? value : null;
+}
+
+function validPositiveInteger(value: unknown) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
 async function assignmentMutation(
@@ -235,6 +417,11 @@ function normalizeOptionalText(value: unknown, maximumLength: number) {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length >= 1 && normalized.length <= maximumLength ? normalized : undefined;
+}
+
+function normalizeRequiredText(value: unknown, maximumLength: number) {
+  const normalized = normalizeOptionalText(value, maximumLength);
+  return typeof normalized === "string" ? normalized : undefined;
 }
 
 function validUUID(value: unknown) {

@@ -38,7 +38,7 @@ async function isActiveOwner(accountId: string) {
 }
 
 async function submitApplication(input: SubmitDeliveryPartnerApplicationInput) {
-  const { data, error } = await serviceClient.rpc("submit_delivery_partner_application_v2", {
+  const { data, error } = await serviceClient.rpc("submit_delivery_partner_application_v3", {
     p_account_id: input.accountId,
     p_delivery_method: input.deliveryMethod,
     p_identity_evidence_object_path: input.identityEvidenceObjectPath,
@@ -49,7 +49,7 @@ async function submitApplication(input: SubmitDeliveryPartnerApplicationInput) {
     p_request_digest: input.requestDigest,
   });
   if (error) throw error;
-  return rpcResponse(data, "submit_delivery_partner_application_v2");
+  return rpcResponse(data, "submit_delivery_partner_application_v3");
 }
 
 async function getSelfSnapshot(accountId: string) {
@@ -145,7 +145,7 @@ async function publishLocation(input: PublishDeliveryPartnerLocationInput) {
 
 function isDeliveryMethod(value: unknown): value is DeliveryPartnerApplication["deliveryMethod"] {
   return value === "walking" || value === "bicycle" || value === "bike" ||
-    value === "auto" || value === "car";
+    value === "motorbike" || value === "scooter" || value === "auto" || value === "car";
 }
 
 function rpcResponse(data: unknown, functionName: string) {

@@ -6,6 +6,9 @@ import {
 
 const accountId = "11111111-1111-4111-8111-111111111111";
 const assignmentId = "22222222-2222-4222-8222-222222222222";
+const offerId = "33333333-3333-4333-8333-333333333333";
+const missionId = "44444444-4444-4444-8444-444444444444";
+const stopId = "55555555-5555-4555-8555-555555555555";
 
 Deno.test("courier dispatch serves browser preflight without authentication", async () => {
   const response = await handleCourierDispatch(
@@ -52,6 +55,124 @@ Deno.test("partner snapshot uses only the authenticated account", async () => {
 
   assertEquals(response.status, 200);
   assertEquals(recordedAccountId, accountId);
+});
+
+Deno.test("V1 partner snapshot and offer actions bind the authenticated rider", async () => {
+  let snapshotAccount: string | undefined;
+  let accepted: Record<string, unknown> | undefined;
+  let declined: Record<string, unknown> | undefined;
+  const deps = dependencies({
+    getV1PartnerSnapshot: (inputAccountId) => {
+      snapshotAccount = inputAccountId;
+      return Promise.resolve({
+        responseBody: { offer: null, currentMission: null },
+        responseStatus: 200,
+      });
+    },
+    acceptV1Offer: (input) => {
+      accepted = input;
+      return Promise.resolve({ responseBody: { offer: null }, responseStatus: 200 });
+    },
+    declineV1Offer: (input) => {
+      declined = input;
+      return Promise.resolve({ responseBody: { offer: null }, responseStatus: 200 });
+    },
+  });
+
+  assertEquals(
+    (await handleCourierDispatch(
+      request({
+        body: { operation: "v1PartnerSnapshot", accountId: assignmentId },
+      }),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleCourierDispatch(
+      request({
+        body: { operation: "v1AcceptOffer", offerId, riderId: assignmentId },
+      }),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleCourierDispatch(
+      request({
+        body: { operation: "v1DeclineOffer", offerId, reason: "  Too far  " },
+      }),
+      deps,
+    )).status,
+    200,
+  );
+
+  assertEquals(snapshotAccount, accountId);
+  assertEquals(accepted?.accountId, accountId);
+  assertEquals(accepted?.offerId, offerId);
+  assertEquals("riderId" in (accepted ?? {}), false);
+  assertEquals(declined?.accountId, accountId);
+  assertEquals(declined?.reason, "Too far");
+});
+
+Deno.test("V1 pickup actions use server-owned actions and six-digit codes", async () => {
+  const recorded: Record<string, unknown>[] = [];
+  const deps = dependencies({
+    advanceV1Mission: (input) => {
+      recorded.push(input);
+      return Promise.resolve({ responseBody: { currentMission: null }, responseStatus: 200 });
+    },
+  });
+  const cases = [
+    ["v1StartPickups", { missionId }],
+    ["v1ArriveAtPickup", { missionId, stopId }],
+    ["v1VerifyPickup", {
+      missionId,
+      stopId,
+      accountedPackageCount: 2,
+      verificationCode: "123456",
+    }],
+    ["v1CancelBeforePickup", { missionId, reason: "Cannot continue" }],
+    ["v1ReportDeliveryProblem", { missionId, reason: "Custody problem" }],
+  ] as const;
+  const actions = [
+    "START_PICKUPS",
+    "ARRIVE_PICKUP",
+    "VERIFY_PICKUP",
+    "CANCEL_BEFORE_PICKUP",
+    "REPORT_DELIVERY_PROBLEM",
+  ];
+
+  for (const [operation, payload] of cases) {
+    const response = await handleCourierDispatch(
+      request({
+        body: { operation, action: "DELIVERED", riderId: assignmentId, ...payload },
+      }),
+      deps,
+    );
+    assertEquals(response.status, 200);
+  }
+  assertEquals(recorded.map((input) => input.action), actions);
+  assertEquals(recorded[2].verificationCode, "123456");
+  assertEquals(recorded[2].accountedPackageCount, 2);
+  assertEquals(recorded.every((input) => input.accountId === accountId), true);
+  assertEquals(recorded.every((input) => !("riderId" in input)), true);
+
+  for (const code of [undefined, "1234", "12345a", "1234567"]) {
+    const response = await handleCourierDispatch(
+      request({
+        body: {
+          operation: "v1VerifyPickup",
+          missionId,
+          stopId,
+          accountedPackageCount: 2,
+          verificationCode: code,
+        },
+      }),
+      deps,
+    );
+    await assertError(response, 400, "validation_failed");
+  }
 });
 
 Deno.test("accept forwards only the authenticated partner and assignment", async () => {
@@ -232,6 +353,14 @@ function dependencies(
       Promise.resolve({ responseBody: snapshot({ currentJob: offer() }), responseStatus: 200 }),
     declineOffer: () => Promise.resolve({ responseBody: snapshot(), responseStatus: 200 }),
     advanceJob: () => Promise.resolve({ responseBody: snapshot(), responseStatus: 200 }),
+    getV1PartnerSnapshot: () =>
+      Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
+    acceptV1Offer: () =>
+      Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
+    declineV1Offer: () =>
+      Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
+    advanceV1Mission: () =>
+      Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     ...overrides,
   };
 }

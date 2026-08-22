@@ -32,7 +32,10 @@ type Props = DastakV1Auth & {
 
 type Cart = Record<string, number>;
 const matchingStatuses = new Set(["CREATED", "MATCHING"]);
-const liveStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT", "PAID", "PREPARING"]);
+const liveStatuses = new Set([
+  "CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT", "PAID", "PREPARING",
+  "PICKUP_IN_PROGRESS",
+]);
 const cancellableStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT"]);
 
 export function DastakV1CustomerExperience(props: Props) {
@@ -438,7 +441,8 @@ function MatchingSheet({ order, busy, error, paymentMessage, onDismiss, onCancel
   onPay: () => void;
 }) {
   const matching = matchingStatuses.has(order.status);
-  const preparing = order.status === "PAID" || order.status === "PREPARING";
+  const preparing = order.status === "PAID" || order.status === "PREPARING" ||
+    order.status === "PICKUP_IN_PROGRESS";
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (order.status !== "AWAITING_PAYMENT") return;
@@ -474,7 +478,7 @@ function statusTitle(status: V1Order["status"]) {
     case "CREATED": case "MATCHING": return "Finding every item";
     case "FULLY_SECURED": case "AWAITING_PAYMENT": return "Your basket is secured";
     case "PAID": case "PREPARING": return "Preparing your order";
-    case "PICKUP_IN_PROGRESS": return "Pickup in progress";
+    case "PICKUP_IN_PROGRESS": return "Picking up your order";
     case "OUT_FOR_DELIVERY": return "On the way";
     case "DELIVERED": return "Delivered";
     case "UNAVAILABLE": return "Basket unavailable";
@@ -488,6 +492,7 @@ function statusMessage(status: V1Order["status"]) {
   if (matchingStatuses.has(status)) return "Dastak is matching your exact products. Retail merchant identities stay private.";
   if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") return "Every item has been reserved. Secure payment is requested before preparation.";
   if (status === "PAID" || status === "PREPARING") return "Payment is confirmed and your secured items are being prepared.";
+  if (status === "PICKUP_IN_PROGRESS") return "Your delivery partner is collecting the complete order for you.";
   if (status === "UNAVAILABLE") return "Dastak could not secure the complete basket. You were not charged.";
   if (status === "CANCELLED_PREPAYMENT") return "This order was cancelled before payment.";
   if (status === "PAYMENT_EXPIRED") return "The reservation expired without payment.";

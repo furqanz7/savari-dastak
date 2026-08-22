@@ -43,7 +43,8 @@ const methods: Array<{
 }> = [
   { value: "walking", label: "Walk", detail: "Identity only", icon: Footprints },
   { value: "bicycle", label: "Bicycle", detail: "Identity only", icon: Bike },
-  { value: "bike", label: "Bike", detail: "Vehicle check", icon: Gauge },
+  { value: "motorbike", label: "Motorbike", detail: "Vehicle check", icon: Gauge },
+  { value: "scooter", label: "Scooter", detail: "Vehicle check", icon: Bike },
   { value: "auto", label: "Auto", detail: "Vehicle check", icon: Truck },
   { value: "car", label: "Car", detail: "Vehicle check", icon: Car },
 ];
@@ -56,7 +57,7 @@ export function DeliveryPartnerApplicationForm({
   onSubmitted,
   onSessionExpired,
 }: Props) {
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("bike");
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("motorbike");
   const [identityFile, setIdentityFile] = useState<File>();
   const [vehicleFile, setVehicleFile] = useState<File>();
   const [uploadedIdentity, setUploadedIdentity] = useState<UploadedEvidence>();
@@ -85,7 +86,9 @@ export function DeliveryPartnerApplicationForm({
       accessToken: session.access_token,
     }).then((snapshot) => {
       if (!active || snapshot.onboardingState !== "rejected") return;
-      if (snapshot.deliveryMethod) setDeliveryMethod(snapshot.deliveryMethod);
+      if (snapshot.deliveryMethod) {
+        setDeliveryMethod(snapshot.deliveryMethod === "bike" ? "motorbike" : snapshot.deliveryMethod);
+      }
       setRegistration(snapshot.vehicleRegistrationNumber ?? "");
       setMakeModel(snapshot.vehicleMakeModel ?? "");
       setReviewReason(snapshot.reviewReason ?? undefined);
@@ -205,7 +208,7 @@ export function DeliveryPartnerApplicationForm({
       {needsVehicle && <ApplicationSection
         number="3"
         title="Verify your vehicle"
-        detail="Bike, Auto, and Car partners must verify the vehicle used for deliveries."
+        detail="Motorbike, Scooter, Auto, and Car partners must verify the vehicle used for deliveries."
       >
         <div className="vehicle-details-grid">
           <label>

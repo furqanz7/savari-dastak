@@ -207,7 +207,7 @@ private struct DastakV1OrderHistoryRow: View {
         case .created, .matching: "Finding every item"
         case .fullySecured, .awaitingPayment: "Basket secured"
         case .paid, .preparing: "Preparing"
-        case .pickupInProgress: "Pickup in progress"
+        case .pickupInProgress: "Picking up your order"
         case .outForDelivery: "On the way"
         case .delivered: "Delivered"
         case .unavailable: "Basket unavailable"

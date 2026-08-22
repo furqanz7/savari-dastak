@@ -60,7 +60,7 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   };
 
   return <section className="v1-execution-panel" role="tabpanel" aria-label="Dastak V1 execution trace">
-    <header><div><p className="eyebrow">LAUNCH SPINE</p><h2>V1 execution trace</h2><span>Matching, payment, preparation clocks, capacity, packages and immutable evidence.</span></div><button className="icon-button" type="button" disabled={busy} onClick={() => void refresh(true)} aria-label="Refresh V1 trace"><RefreshCw size={18} /></button></header>
+    <header><div><p className="eyebrow">LAUNCH SPINE</p><h2>V1 execution trace</h2><span>Matching, payment, preparation, rider assignment, pickup verification and package custody.</span></div><button className="icon-button" type="button" disabled={busy} onClick={() => void refresh(true)} aria-label="Refresh V1 trace"><RefreshCw size={18} /></button></header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {loading ? <div className="catalogue-loading" role="status"><span /> Loading V1 trace</div> : orders.length === 0 ? <p className="admin-empty">No V1 orders have been submitted.</p> : <div className="v1-execution-layout">
       <nav aria-label="V1 orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>
@@ -74,7 +74,9 @@ function Trace({ trace, auth }: { trace: V1AdminExecutionTrace; auth: DastakV1Au
   const paymentAttempts = array(trace.payment, "attempts").length;
   const providerEvents = array(trace.payment, "providerEvents").length;
   const preparation = trace.preparation;
-  const readyCount = preparation?.fulfilments.filter((item) => text(item, "status") === "READY").length ?? 0;
+  const delivery = trace.delivery;
+  const readyCount = preparation?.fulfilments.filter((item) =>
+    text(item, "status") === "READY" || text(item, "status") === "PICKED_UP").length ?? 0;
   return <>
     <header className="v1-trace-order"><span><strong>{trace.order.displayOrderNumber}</strong><small>Version {trace.order.version}</small></span><b>{trace.order.status.replaceAll("_", " ")}</b></header>
     <div className="v1-trace-summary">
@@ -123,7 +125,25 @@ function Trace({ trace, auth }: { trace: V1AdminExecutionTrace; auth: DastakV1Au
       </>}
     </TraceSection>
     <TraceSection title="Rider-match threshold foundation">
-      <p>{boolean(preparation?.riderMatchEligibility, "eligible") ? "Eligible" : "Not eligible"} · {number(preparation?.riderMatchEligibility, "satisfiedFulfilmentCount") ?? 0}/{number(preparation?.riderMatchEligibility, "requiredFulfilmentCount") ?? 0} fulfilments satisfy Ready or ≤5 minutes. Rider search is not active in this slice.</p>
+      <p>{boolean(preparation?.riderMatchEligibility, "eligible") ? "Eligible" : "Not eligible"} · {number(preparation?.riderMatchEligibility, "satisfiedFulfilmentCount") ?? 0}/{number(preparation?.riderMatchEligibility, "requiredFulfilmentCount") ?? 0} fulfilments satisfy Ready or ≤5 minutes.</p>
+    </TraceSection>
+    <TraceSection title="Rider mission and offer pool">
+      {!delivery?.mission ? <p>No rider mission yet.</p> : <>
+        <article><strong>{text(delivery.mission, "status")?.replaceAll("_", " ") ?? "MISSION"} · {text(delivery.mission, "riderName") ?? "No rider assigned"}</strong><span>{text(delivery.mission, "transportType") ?? "Transport pending"} · {number(delivery.mission, "pickupCount") ?? 0} pickup(s) · pool round {number(delivery.mission, "poolRound") ?? 0}</span></article>
+        <p>{delivery.offers.length} rider offer(s) · {countStatus(delivery.offers, "ACCEPTED")} accepted · {countStatus(delivery.offers, "CLOSED")} competing closed</p>
+        {delivery.offers.map((offer, index) => <article key={text(offer, "id") ?? index}><strong>{text(offer, "riderName") ?? "Rider"} · {text(offer, "status") ?? "UNKNOWN"}</strong><span>{text(offer, "transportType") ?? "—"} · {number(offer, "distanceMeters") ?? 0}m · round {number(offer, "poolRound") ?? 0}</span></article>)}
+      </>}
+    </TraceSection>
+    <TraceSection title="Pickup stops and waiting">
+      {!delivery || delivery.pickupStops.length === 0 ? <p>No pickup stops.</p> : delivery.pickupStops.map((stop, index) => <article key={text(stop, "id") ?? index}><strong>Stop {number(stop, "sequence") ?? "—"} · {text(stop, "branchName") ?? "Branch"} · {text(stop, "status") ?? "UNKNOWN"}</strong><span>{number(stop, "packageCount") ?? 0} package(s) · arrival {formatOptional(text(stop, "arrivedAt"))} · waiting {formatDuration(number(stop, "waitingSeconds") ?? 0)}</span></article>)}
+    </TraceSection>
+    <TraceSection title="Pickup verification and custody">
+      {!delivery ? <p>No pickup verification.</p> : <>
+        <p>{delivery.verification.length} verification record(s) · {countStatus(delivery.verification, "CONSUMED")} consumed · {delivery.custody.length} package custody transfer(s)</p>
+        {delivery.verification.map((verification, index) => <article key={text(verification, "id") ?? index}><strong>{text(verification, "type")?.replaceAll("_", " ") ?? "HANDOFF"} · {text(verification, "status") ?? "UNKNOWN"}</strong><span>{number(verification, "failedAttempts") ?? 0} failed attempt(s) · consumed {formatOptional(text(verification, "consumedAt"))}</span></article>)}
+        {delivery.custody.map((custody, index) => <article key={text(custody, "id") ?? index}><strong>Package custody · {text(custody, "fromOwnerType") ?? "—"} → {text(custody, "toOwnerType") ?? "—"}</strong><span>{formatOptional(text(custody, "transferredAt"))}</span></article>)}
+        {delivery.problems.map((problem, index) => <article className="running-late" key={text(problem, "id") ?? index}><strong>Delivery problem · {text(problem, "missionStatusAtReport") ?? "UNKNOWN"}</strong><span>{text(problem, "reason") ?? "—"} · custody started {boolean(problem, "custodyStarted") ? "yes" : "no"}</span></article>)}
+      </>}
     </TraceSection>
     <TraceSection title="Reconciliation">
       <p>{trace.reconciliationCases.length === 0 ? "No reconciliation cases." : `${trace.reconciliationCases.length} case(s) require operator review.`}</p>
