@@ -8,7 +8,9 @@ import {
   getV1AdminSystemHealth,
   getV1AdminOperationalSafety,
   getV1Catalogue,
+  getV1Restaurants,
   getV1MerchantCanonicalCatalogue,
+  getV1MerchantRestaurantMenu,
   getV1MerchantFulfilments,
   getV1MerchantOpportunities,
   markV1FulfilmentReady,
@@ -20,12 +22,14 @@ import {
   parseV1Order,
   reportV1CustomerIssue,
   respondV1ExactSkuRecoveryOffer,
+  respondV1RestaurantRequest,
   respondToV1MerchantOpportunity,
   submitV1Order,
   setV1OperationalPause,
   updateV1AdminSku,
   updateV1MerchantBranchState,
   updateV1MerchantSkuSelection,
+  upsertV1RestaurantMenuEntity,
 } from "./dastakV1";
 
 const auth = {
@@ -79,6 +83,77 @@ describe("Dastak V1 web contract", () => {
     expect(result.status).toBe("MATCHING");
     expect(JSON.stringify(requestBody)).not.toMatch(/merchant|store|sellingPrice|listPrice|totalPaise/);
     expect(requestBody).toMatchObject({ operation: "submit", expectedVersion: 0 });
+  });
+
+  it("discovers a visible restaurant and submits one mixed parent basket without client prices", async () => {
+    const branchId = "88888888-8888-4888-8888-888888888888";
+    const menuItemId = "99999999-9999-4999-8999-999999999999";
+    const optionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    let discoveryBody: Record<string, unknown> | undefined;
+    const restaurants = await getV1Restaurants(auth, async (_url, init) => {
+      discoveryBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({ restaurants: [restaurantFixture(branchId, menuItemId, optionId)] });
+    });
+    expect(discoveryBody).toEqual({ operation: "customerRestaurants", query: null, limit: 50 });
+    expect(restaurants[0].restaurant.name).toBe("Dastak Cafe");
+
+    let submitBody: Record<string, unknown> | undefined;
+    const mixedOrder = orderFixture();
+    mixedOrder.orderType = "MIXED";
+    await submitV1Order({
+      ...auth, idempotencyKey: "mixed-once",
+      order: {
+        deliveryAddress: { line1: "12 Market Road", countryCode: "IN", latitude: 12.68, longitude: 78.62 },
+        recipient: { name: "A Customer", phoneNumber: "+919876543210" },
+        restaurantBranchId: branchId,
+        lines: [
+          { lineType: "RETAIL_SKU", skuId, quantity: 1 },
+          { lineType: "FOOD_MENU_ITEM", menuItemId, optionIds: [optionId], quantity: 2 },
+        ],
+      },
+    }, async (_url, init) => {
+      submitBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json(mixedOrder, { status: 201 });
+    });
+    expect(submitBody).toMatchObject({ operation: "submit", order: { restaurantBranchId: branchId } });
+    expect(JSON.stringify(submitBody)).not.toMatch(/pricePaise|merchantId|storeId/);
+  });
+
+  it("uses stale-safe restaurant menu and direct confirmation commands", async () => {
+    const branchId = "88888888-8888-4888-8888-888888888888";
+    const menuItemId = "99999999-9999-4999-8999-999999999999";
+    const optionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const requestId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const fixture = restaurantFixture(branchId, menuItemId, optionId);
+    const menu = await getV1MerchantRestaurantMenu(auth, async () => Response.json(fixture));
+    expect(menu.restaurant.softActiveOrderThreshold).toBe(5);
+
+    const calls: Record<string, unknown>[] = [];
+    await upsertV1RestaurantMenuEntity({
+      ...auth, branchId, entityType: "ITEM", entityId: menuItemId, expectedVersion: 1,
+      payload: { categoryId, name: "Filter Coffee", basePricePaise: 5000, status: "ACTIVE" },
+      idempotencyKey: "menu-update",
+    }, async (_url, init) => {
+      calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return Response.json({ entityId: menuItemId, entityType: "ITEM", menu: fixture });
+    });
+    await respondV1RestaurantRequest({
+      ...auth, requestId, response: "CONFIRM", promisedPrepMinutes: 15,
+      expectedVersion: 1, idempotencyKey: "food-confirm",
+    }, async (_url, init) => {
+      calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return Response.json({
+        id: requestId, orderId, displayOrderNumber: "DV1-0001", status: "CONFIRMED",
+        version: 2, offeredAt: "2026-08-24T00:00:00Z", respondedAt: "2026-08-24T00:01:00Z",
+        promisedPrepMinutes: 15, responseReason: null, softActiveOrderThreshold: 5,
+        activeOrderCount: 6, softThresholdWarning: true, softThresholdIsBlocking: false,
+        branch: { id: branchId, displayName: "Dastak Cafe", isOpen: true, acceptingOrders: true, operationalVersion: 1 },
+        lines: [{ orderLineId: lineId, menuItemId, name: "Filter Coffee", variant: null, quantity: 1, unitPricePaise: 5000, selection: {} }],
+        fulfilmentId,
+      });
+    });
+    expect(calls[0]).toMatchObject({ operation: "upsertRestaurantMenuEntity", expectedVersion: 1 });
+    expect(calls[1]).toEqual({ operation: "respondRestaurantRequest", requestId, response: "CONFIRM", promisedPrepMinutes: 15, reason: null, expectedVersion: 1 });
   });
 
   it("rejects a customer SKU whose selling price exceeds MRP", () => {
@@ -230,7 +305,8 @@ describe("Dastak V1 web contract", () => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return Response.json({
         order: {
-          id: orderId, displayOrderNumber: "DV1-0001", status: "AWAITING_PAYMENT", version: 4,
+          id: orderId, displayOrderNumber: "DV1-0001", orderType: "RETAIL_ONLY",
+          status: "AWAITING_PAYMENT", version: 4,
           submittedAt: "2026-08-22T00:00:00Z", fullySecuredAt: "2026-08-22T00:01:00Z",
           paymentExpiresAt: "2026-08-22T00:06:00Z", paidAt: null, updatedAt: "2026-08-22T00:01:00Z",
         },
@@ -447,6 +523,27 @@ describe("Dastak V1 web contract", () => {
     expect(result.delivery?.pickupCode).toBeUndefined();
   });
 
+  it("parses a Restaurant/Cafe fulfilment without requiring a retail SKU", () => {
+    const result = parseV1MerchantFulfilment({
+      ...fulfilmentFixture(),
+      fulfilmentType: "FOOD",
+      capacity: null,
+      lines: [{
+        orderLineId: lineId,
+        menuItemId: skuId,
+        name: "Masala dosa",
+        variant: "Mild",
+        packSize: null,
+        quantity: 2,
+        selection: { options: [{ name: "Mild" }] },
+      }],
+    });
+
+    expect(result.fulfilmentType).toBe("FOOD");
+    expect(result.capacity).toBeUndefined();
+    expect(result.lines[0]).toMatchObject({ menuItemId: skuId, skuId: undefined, quantity: 2 });
+  });
+
   it("parses private customer recovery truth and reports an evidence-linked issue", async () => {
     const fixture = orderFixture();
     Object.assign(fixture, {
@@ -546,6 +643,32 @@ function catalogueFixture() {
       logisticsAttributes: { weightGrams: 1000 },
     }],
     nextCursor: null,
+  };
+}
+
+function restaurantFixture(branchId: string, menuItemId: string, optionId: string) {
+  return {
+    restaurant: {
+      organizationId: categoryId, branchId, name: "Dastak Cafe", branchName: "Main Road",
+      imageKey: null, description: "Fresh food", serviceZoneId: subcategoryId,
+      acceptingOrders: true, isOpen: true, operationalVersion: 1,
+      branchStatus: "ACTIVE", merchantType: "RESTAURANT_CAFE",
+      softActiveOrderThreshold: 5, activeOrderCount: 6,
+    },
+    categories: [{
+      id: categoryId, name: "Drinks", description: null, sortOrder: 1, status: "ACTIVE", version: 1,
+      items: [{
+        id: menuItemId, name: "Filter Coffee", description: null, imageKey: null,
+        basePricePaise: 4500, currencyCode: "INR", taxRateBps: 0,
+        logisticsAttributes: {}, status: "ACTIVE", version: 1,
+        optionGroups: [{
+          id: subcategoryId, name: "Size", selectionType: "SINGLE",
+          minimumSelections: 1, maximumSelections: 1, sortOrder: 1,
+          status: "ACTIVE", version: 1,
+          options: [{ id: optionId, name: "Large", priceDeltaPaise: 500, sortOrder: 1, status: "ACTIVE", version: 1 }],
+        }],
+      }],
+    }],
   };
 }
 

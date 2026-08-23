@@ -83,6 +83,36 @@ export type V1CatalogueSnapshot = {
   nextCursor?: { name: string; skuId: string };
 };
 
+export type V1RestaurantMenuOption = {
+  id: string; name: string; priceDeltaPaise: number; sortOrder: number;
+  status: string; version: number;
+};
+export type V1RestaurantMenuOptionGroup = {
+  id: string; name: string; selectionType: "SINGLE" | "MULTIPLE";
+  minimumSelections: number; maximumSelections: number; sortOrder: number;
+  status: string; version: number; options: V1RestaurantMenuOption[];
+};
+export type V1RestaurantMenuItem = {
+  id: string; name: string; description?: string; imageKey?: string;
+  basePricePaise: number; currencyCode: "INR"; taxRateBps: number;
+  logisticsAttributes: Record<string, unknown>; status: string; version: number;
+  optionGroups: V1RestaurantMenuOptionGroup[];
+};
+export type V1RestaurantMenuCategory = {
+  id: string; name: string; description?: string; sortOrder: number;
+  status: string; version: number; items: V1RestaurantMenuItem[];
+};
+export type V1RestaurantMenu = {
+  restaurant: {
+    organizationId: string; branchId: string; name: string; branchName: string;
+    imageKey?: string; description?: string; serviceZoneId?: string;
+    acceptingOrders: boolean; isOpen: boolean; branchStatus: string; merchantType: string;
+    operationalVersion: number;
+    softActiveOrderThreshold: number; activeOrderCount: number;
+  };
+  categories: V1RestaurantMenuCategory[];
+};
+
 export type V1OrderStatus =
   | "CREATED" | "MATCHING" | "FULLY_SECURED" | "AWAITING_PAYMENT"
   | "PAID" | "PREPARING" | "PICKUP_IN_PROGRESS" | "OUT_FOR_DELIVERY"
@@ -93,6 +123,7 @@ export type V1OrderLine = {
   id: string;
   lineType: string;
   skuId?: string;
+  menuItemId?: string;
   name: string;
   variant?: string;
   packSize?: string;
@@ -100,6 +131,7 @@ export type V1OrderLine = {
   unitPricePaise: number;
   lineTotalPaise: number;
   status: string;
+  foodSelection?: Record<string, unknown>;
 };
 
 export type V1Order = {
@@ -174,6 +206,10 @@ export type V1Order = {
     currencyCode: "INR";
   };
   lines: V1OrderLine[];
+  restaurant?: {
+    organizationId: string; branchId: string; name: string;
+    branchName: string; imageKey?: string;
+  };
   submittedAt?: string;
   fullySecuredAt?: string;
   paymentExpiresAt?: string;
@@ -202,11 +238,13 @@ export type V1MerchantOpportunity = {
   orderPaymentState?: string;
   lines: Array<{
     orderLineId: string;
-    skuId: string;
+    skuId?: string;
+    menuItemId?: string;
     name: string;
     variant?: string;
     packSize?: string;
     quantity: number;
+    selection?: Record<string, unknown>;
   }>;
 };
 
@@ -341,6 +379,7 @@ export type V1MerchantOperations = {
 export type V1AdminExecutionOrder = {
   id: string;
   displayOrderNumber: string;
+  orderType: string;
   status: string;
   version: number;
   submittedAt?: string;
@@ -385,6 +424,12 @@ export type V1AdminExecutionTrace = {
     refunds: Record<string, unknown>[];
     settlements: Record<string, unknown>[];
     permissions: Record<string, unknown>;
+  };
+  restaurant?: {
+    request?: Record<string, unknown>;
+    commitment?: Record<string, unknown>;
+    foodLines: Record<string, unknown>[];
+    preparedFoodPhysicallyReturnable: false;
   };
 };
 
@@ -434,7 +479,29 @@ export type V1OrderSubmission = {
     instructions?: string;
   };
   recipient: { name: string; phoneNumber: string };
-  lines: Array<{ lineType: "RETAIL_SKU"; skuId: string; quantity: number }>;
+  restaurantBranchId?: string;
+  lines: Array<
+    | { lineType: "RETAIL_SKU"; skuId: string; quantity: number }
+    | { lineType: "FOOD_MENU_ITEM"; menuItemId: string; optionIds: string[]; quantity: number }
+  >;
+};
+
+export type V1RestaurantRequest = {
+  id: string; orderId: string; displayOrderNumber: string;
+  status: "OFFERED" | "CONFIRMED" | "DECLINED" | "RELEASED";
+  version: number; offeredAt: string; respondedAt?: string;
+  promisedPrepMinutes?: number; responseReason?: string;
+  softActiveOrderThreshold: number; activeOrderCount: number;
+  softThresholdWarning: boolean; softThresholdIsBlocking: false;
+  branch: {
+    id: string; displayName: string; isOpen: boolean; acceptingOrders: boolean;
+    operationalVersion: number;
+  };
+  lines: Array<{
+    orderLineId: string; menuItemId: string; name: string; variant?: string;
+    quantity: number; unitPricePaise: number; selection: Record<string, unknown>;
+  }>;
+  fulfilmentId?: string;
 };
 
 export type V1AdminSku = V1CatalogueSku & {
@@ -481,6 +548,18 @@ export async function getV1Catalogue(
     limit: input.limit ?? 250,
     cursor: null,
   }, undefined, fetcher));
+}
+
+export async function getV1Restaurants(
+  input: DastakV1Auth & { query?: string; limit?: number; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1RestaurantMenu[]> {
+  const source = requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "customerRestaurants",
+    query: input.query?.trim() || null,
+    limit: input.limit ?? 50,
+  }, undefined, fetcher));
+  return requiredArray(source.restaurants).map(parseRestaurantMenu);
 }
 
 export async function getV1Orders(input: DastakV1Auth & { limit?: number; signal?: AbortSignal }, fetcher: Fetcher = fetch) {
@@ -556,6 +635,43 @@ export async function getV1MerchantCanonicalCatalogue(
   }, undefined, fetcher));
 }
 
+export async function getV1MerchantRestaurantMenu(
+  input: DastakV1Auth & { branchId?: string; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1RestaurantMenu> {
+  return parseRestaurantMenu(await invoke(input, "dastak-v1-catalogue", {
+    operation: "merchantRestaurantMenu",
+    branchId: input.branchId ?? null,
+  }, undefined, fetcher));
+}
+
+export async function upsertV1RestaurantMenuEntity(
+  input: DastakV1Auth & {
+    branchId: string;
+    entityType: "CATEGORY" | "ITEM" | "OPTION_GROUP" | "OPTION";
+    entityId?: string;
+    expectedVersion: number;
+    payload: Record<string, unknown>;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  const source = requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "upsertRestaurantMenuEntity",
+    branchId: requiredUuid(input.branchId),
+    entityType: input.entityType,
+    entityId: input.entityId ? requiredUuid(input.entityId) : null,
+    expectedVersion: requiredInteger(input.expectedVersion, 0),
+    payload: input.payload,
+  }, input.idempotencyKey, fetcher));
+  return {
+    entityId: requiredUuid(source.entityId),
+    entityType: requiredText(source.entityType, 40),
+    menu: parseRestaurantMenu(source.menu),
+  };
+}
+
 export async function updateV1MerchantSkuSelection(
   input: DastakV1Auth & {
     branchId: string; skuId: string; selected: boolean; expectedVersion: number;
@@ -598,6 +714,35 @@ export async function getV1MerchantOpportunities(
   }, undefined, fetcher));
   if (!source || !Array.isArray(source.opportunities)) invalid("merchant opportunity collection");
   return source.opportunities.map(parseMerchantOpportunity);
+}
+
+export async function getV1RestaurantRequests(
+  input: DastakV1Auth & { limit?: number; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1RestaurantRequest[]> {
+  const source = requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "restaurantRequests",
+    limit: input.limit ?? 50,
+  }, undefined, fetcher));
+  return requiredArray(source.requests).map(parseRestaurantRequest);
+}
+
+export async function respondV1RestaurantRequest(
+  input: DastakV1Auth & {
+    requestId: string; response: "CONFIRM" | "DECLINE";
+    promisedPrepMinutes?: number; reason?: string; expectedVersion: number;
+    idempotencyKey: string; signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+): Promise<V1RestaurantRequest> {
+  return parseRestaurantRequest(await invoke(input, "dastak-v1-orders", {
+    operation: "respondRestaurantRequest",
+    requestId: requiredUuid(input.requestId), response: input.response,
+    promisedPrepMinutes: input.response === "CONFIRM"
+      ? requiredInteger(input.promisedPrepMinutes, 1) : null,
+    reason: input.response === "DECLINE" ? requiredText(input.reason?.trim(), 500) : null,
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
 }
 
 export async function respondToV1MerchantOpportunity(
@@ -910,6 +1055,9 @@ export async function getV1AdminExecutionTrace(
       source.failureAndFinance === undefined
     ? undefined
     : record(source.failureAndFinance);
+  const restaurant = source.restaurant === null || source.restaurant === undefined
+    ? undefined
+    : record(source.restaurant);
   if (
     !Array.isArray(source.matchingAttempts) || !Array.isArray(source.provisionalHolds) ||
     !Array.isArray(source.plans) || !Array.isArray(source.capacity) ||
@@ -917,6 +1065,7 @@ export async function getV1AdminExecutionTrace(
     (source.payment !== null && source.payment !== undefined && !payment) ||
     (source.preparation !== null && source.preparation !== undefined && !preparation) ||
     (source.delivery !== null && source.delivery !== undefined && !delivery) ||
+    (source.restaurant !== null && source.restaurant !== undefined && !restaurant) ||
     (source.failureAndFinance !== null && source.failureAndFinance !== undefined &&
       !failureAndFinance) ||
     (preparation && (
@@ -938,6 +1087,11 @@ export async function getV1AdminExecutionTrace(
       !Array.isArray(failureAndFinance.refunds) ||
       !Array.isArray(failureAndFinance.settlements) ||
       !record(failureAndFinance.permissions)
+    )) || (restaurant && (
+      (restaurant.request !== null && restaurant.request !== undefined && !record(restaurant.request)) ||
+      (restaurant.commitment !== null && restaurant.commitment !== undefined && !record(restaurant.commitment)) ||
+      !Array.isArray(restaurant.foodLines) ||
+      restaurant.preparedFoodPhysicallyReturnable !== false
     ))
   ) invalid("execution trace");
   return {
@@ -978,6 +1132,14 @@ export async function getV1AdminExecutionTrace(
       refunds: (failureAndFinance.refunds as unknown[]).map(requiredRecord),
       settlements: (failureAndFinance.settlements as unknown[]).map(requiredRecord),
       permissions: requiredRecord(failureAndFinance.permissions),
+    } : undefined,
+    restaurant: restaurant ? {
+      request: restaurant.request === null || restaurant.request === undefined
+        ? undefined : requiredRecord(restaurant.request),
+      commitment: restaurant.commitment === null || restaurant.commitment === undefined
+        ? undefined : requiredRecord(restaurant.commitment),
+      foodLines: (restaurant.foodLines as unknown[]).map(requiredRecord),
+      preparedFoodPhysicallyReturnable: false,
     } : undefined,
   };
 }
@@ -1211,6 +1373,114 @@ export function parseV1Catalogue(value: unknown): V1CatalogueSnapshot {
   };
 }
 
+function parseRestaurantMenu(value: unknown): V1RestaurantMenu {
+  const source = requiredRecord(value);
+  const restaurant = requiredRecord(source.restaurant);
+  return {
+    restaurant: {
+      organizationId: requiredUuid(restaurant.organizationId),
+      branchId: requiredUuid(restaurant.branchId),
+      name: requiredText(restaurant.name, 160),
+      branchName: requiredText(restaurant.branchName, 160),
+      imageKey: optionalText(restaurant.imageKey, 500),
+      description: optionalText(restaurant.description, 500),
+      serviceZoneId: restaurant.serviceZoneId === null || restaurant.serviceZoneId === undefined
+        ? undefined : requiredUuid(restaurant.serviceZoneId),
+      acceptingOrders: requiredBoolean(restaurant.acceptingOrders),
+      isOpen: requiredBoolean(restaurant.isOpen),
+      operationalVersion: requiredInteger(restaurant.operationalVersion, 0),
+      branchStatus: requiredText(restaurant.branchStatus, 40),
+      merchantType: requiredText(restaurant.merchantType, 40),
+      softActiveOrderThreshold: requiredInteger(restaurant.softActiveOrderThreshold, 1),
+      activeOrderCount: requiredInteger(restaurant.activeOrderCount, 0),
+    },
+    categories: requiredArray(source.categories).map((categoryValue) => {
+      const category = requiredRecord(categoryValue);
+      return {
+        id: requiredUuid(category.id), name: requiredText(category.name, 100),
+        description: optionalText(category.description, 500),
+        sortOrder: requiredInteger(category.sortOrder, 0),
+        status: requiredText(category.status, 20), version: requiredInteger(category.version, 1),
+        items: requiredArray(category.items).map((itemValue) => {
+          const item = requiredRecord(itemValue);
+          return {
+            id: requiredUuid(item.id), name: requiredText(item.name, 160),
+            description: optionalText(item.description, 1000),
+            imageKey: optionalText(item.imageKey, 500),
+            basePricePaise: requiredInteger(item.basePricePaise, 1),
+            currencyCode: currency(item.currencyCode),
+            taxRateBps: requiredInteger(item.taxRateBps, 0),
+            logisticsAttributes: requiredRecord(item.logisticsAttributes),
+            status: requiredText(item.status, 20), version: requiredInteger(item.version, 1),
+            optionGroups: requiredArray(item.optionGroups).map((groupValue) => {
+              const group = requiredRecord(groupValue);
+              const selectionType = requiredText(group.selectionType, 20);
+              if (!['SINGLE', 'MULTIPLE'].includes(selectionType)) invalid('option group');
+              return {
+                id: requiredUuid(group.id), name: requiredText(group.name, 100),
+                selectionType: selectionType as 'SINGLE' | 'MULTIPLE',
+                minimumSelections: requiredInteger(group.minimumSelections, 0),
+                maximumSelections: requiredInteger(group.maximumSelections, 1),
+                sortOrder: requiredInteger(group.sortOrder, 0),
+                status: requiredText(group.status, 20), version: requiredInteger(group.version, 1),
+                options: requiredArray(group.options).map((optionValue) => {
+                  const option = requiredRecord(optionValue);
+                  return {
+                    id: requiredUuid(option.id), name: requiredText(option.name, 100),
+                    priceDeltaPaise: requiredInteger(option.priceDeltaPaise, 0),
+                    sortOrder: requiredInteger(option.sortOrder, 0),
+                    status: requiredText(option.status, 20), version: requiredInteger(option.version, 1),
+                  };
+                }),
+              };
+            }),
+          };
+        }),
+      };
+    }),
+  };
+}
+
+function parseRestaurantRequest(value: unknown): V1RestaurantRequest {
+  const source = requiredRecord(value);
+  const branch = requiredRecord(source.branch);
+  const status = requiredText(source.status, 30);
+  if (!['OFFERED', 'CONFIRMED', 'DECLINED', 'RELEASED'].includes(status)) {
+    invalid('restaurant request');
+  }
+  return {
+    id: requiredUuid(source.id), orderId: requiredUuid(source.orderId),
+    displayOrderNumber: requiredText(source.displayOrderNumber, 80),
+    status: status as V1RestaurantRequest['status'],
+    version: requiredInteger(source.version, 1), offeredAt: requiredTimestamp(source.offeredAt),
+    respondedAt: optionalTimestamp(source.respondedAt),
+    promisedPrepMinutes: optionalInteger(source.promisedPrepMinutes, 1),
+    responseReason: optionalText(source.responseReason, 500),
+    softActiveOrderThreshold: requiredInteger(source.softActiveOrderThreshold, 1),
+    activeOrderCount: requiredInteger(source.activeOrderCount, 0),
+    softThresholdWarning: requiredBoolean(source.softThresholdWarning),
+    softThresholdIsBlocking: source.softThresholdIsBlocking === false
+      ? false : invalid('soft threshold semantics'),
+    branch: {
+      id: requiredUuid(branch.id), displayName: requiredText(branch.displayName, 160),
+      isOpen: requiredBoolean(branch.isOpen), acceptingOrders: requiredBoolean(branch.acceptingOrders),
+      operationalVersion: requiredInteger(branch.operationalVersion, 1),
+    },
+    lines: requiredArray(source.lines).map((lineValue) => {
+      const line = requiredRecord(lineValue);
+      return {
+        orderLineId: requiredUuid(line.orderLineId), menuItemId: requiredUuid(line.menuItemId),
+        name: requiredText(line.name, 200), variant: optionalText(line.variant, 160),
+        quantity: requiredInteger(line.quantity, 1),
+        unitPricePaise: requiredInteger(line.unitPricePaise, 0),
+        selection: requiredRecord(line.selection),
+      };
+    }),
+    fulfilmentId: source.fulfilmentId === null || source.fulfilmentId === undefined
+      ? undefined : requiredUuid(source.fulfilmentId),
+  };
+}
+
 export function parseV1Order(value: unknown): V1Order {
   const source = record(value);
   const price = record(source?.price);
@@ -1225,11 +1495,16 @@ export function parseV1Order(value: unknown): V1Order {
   const support = source.support === null || source.support === undefined
     ? undefined
     : record(source.support);
+  const restaurant = source.restaurant === null || source.restaurant === undefined
+    ? undefined : record(source.restaurant);
   if (source.delivery !== null && source.delivery !== undefined && !delivery) {
     invalid("delivery state");
   }
   if (source.support !== null && source.support !== undefined && !support) {
     invalid("support state");
+  }
+  if (source.restaurant !== null && source.restaurant !== undefined && !restaurant) {
+    invalid("restaurant identity");
   }
   return {
     id: requiredUuid(source.id),
@@ -1246,6 +1521,13 @@ export function parseV1Order(value: unknown): V1Order {
       : parseOrderPayment(source.payment),
     delivery: delivery ? parseOrderDelivery(delivery) : undefined,
     support: support ? parseOrderSupport(support) : undefined,
+    restaurant: restaurant ? {
+      organizationId: requiredUuid(restaurant.organizationId),
+      branchId: requiredUuid(restaurant.branchId),
+      name: requiredText(restaurant.name, 160),
+      branchName: requiredText(restaurant.branchName, 160),
+      imageKey: optionalText(restaurant.imageKey, 500),
+    } : undefined,
     price: {
       snapshotKind: requiredText(price.snapshotKind, 40),
       subtotalPaise: requiredInteger(price.subtotalPaise, 0),
@@ -1421,13 +1703,21 @@ function parseMerchantOpportunity(value: unknown): V1MerchantOpportunity {
     orderPaymentState: optionalText(source.orderPaymentState, 60),
     lines: source.lines.map((item) => {
       const line = requiredRecord(item);
+      const skuId = line.skuId === null || line.skuId === undefined
+        ? undefined : requiredUuid(line.skuId);
+      const menuItemId = line.menuItemId === null || line.menuItemId === undefined
+        ? undefined : requiredUuid(line.menuItemId);
+      if ((skuId ? 1 : 0) + (menuItemId ? 1 : 0) !== 1) invalid("merchant fulfilment line");
       return {
         orderLineId: requiredUuid(line.orderLineId),
-        skuId: requiredUuid(line.skuId),
+        skuId,
+        menuItemId,
         name: requiredText(line.name, 200),
         variant: optionalText(line.variant, 160),
         packSize: optionalText(line.packSize, 80),
         quantity: requiredInteger(line.quantity, 1),
+        selection: line.selection === null || line.selection === undefined
+          ? undefined : requiredRecord(line.selection),
       };
     }),
   };
@@ -1620,13 +1910,21 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
       }),
     lines: source.lines.map((item) => {
       const line = requiredRecord(item);
+      const skuId = line.skuId === null || line.skuId === undefined
+        ? undefined : requiredUuid(line.skuId);
+      const menuItemId = line.menuItemId === null || line.menuItemId === undefined
+        ? undefined : requiredUuid(line.menuItemId);
+      if ((skuId ? 1 : 0) + (menuItemId ? 1 : 0) !== 1) invalid("merchant fulfilment line");
       return {
         orderLineId: requiredUuid(line.orderLineId),
-        skuId: requiredUuid(line.skuId),
+        skuId,
+        menuItemId,
         name: requiredText(line.name, 200),
         variant: optionalText(line.variant, 160),
         packSize: optionalText(line.packSize, 80),
         quantity: requiredInteger(line.quantity, 1),
+        selection: line.selection === null || line.selection === undefined
+          ? undefined : requiredRecord(line.selection),
       };
     }),
   };
@@ -1686,6 +1984,7 @@ function parseAdminExecutionOrder(value: unknown): V1AdminExecutionOrder {
   return {
     id: requiredUuid(source.id),
     displayOrderNumber: requiredText(source.displayOrderNumber, 80),
+    orderType: requiredText(source.orderType, 40),
     status: requiredText(source.status, 60),
     version: requiredInteger(source.version, 1),
     submittedAt: optionalTimestamp(source.submittedAt),
@@ -1844,9 +2143,13 @@ function parseOrderLine(value: unknown): V1OrderLine {
   return {
     id: requiredUuid(source.id), lineType: requiredText(source.lineType, 40),
     skuId: source.skuId === null || source.skuId === undefined ? undefined : requiredUuid(source.skuId),
+    menuItemId: source.menuItemId === null || source.menuItemId === undefined
+      ? undefined : requiredUuid(source.menuItemId),
     name: requiredText(source.name, 200), variant: optionalText(source.variant, 160), packSize: optionalText(source.packSize, 80),
     quantity: requiredInteger(source.quantity, 1), unitPricePaise: requiredInteger(source.unitPricePaise, 0),
     lineTotalPaise: requiredInteger(source.lineTotalPaise, 0), status: requiredText(source.status, 60),
+    foodSelection: source.foodSelection === null || source.foodSelection === undefined
+      ? undefined : requiredRecord(source.foodSelection),
   };
 }
 

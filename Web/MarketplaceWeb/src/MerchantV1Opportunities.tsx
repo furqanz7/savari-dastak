@@ -8,16 +8,19 @@ import {
   declareV1FulfilmentPackages,
   getV1MerchantOperations,
   getV1MerchantOpportunities,
+  getV1RestaurantRequests,
   markV1FulfilmentReady,
   reportV1FulfilmentProblem,
   reportV1ExactSkuFailure,
   respondV1ExactSkuRecoveryOffer,
+  respondV1RestaurantRequest,
   respondToV1MerchantOpportunity,
   uploadV1MerchantReadyEvidence,
   type DastakV1Auth,
   type V1MerchantFulfilment,
   type V1MerchantOpportunity,
   type V1RecoveryOpportunity,
+  type V1RestaurantRequest,
 } from "./dastakV1";
 
 type Props = {
@@ -28,6 +31,7 @@ type Props = {
 
 export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   const [opportunities, setOpportunities] = useState<V1MerchantOpportunity[]>([]);
+  const [restaurantRequests, setRestaurantRequests] = useState<V1RestaurantRequest[]>([]);
   const [fulfilments, setFulfilments] = useState<V1MerchantFulfilment[]>([]);
   const [recoveryOpportunities, setRecoveryOpportunities] = useState<V1RecoveryOpportunity[]>([]);
   const [returnReceipts, setReturnReceipts] = useState<Record<string, unknown>[]>([]);
@@ -39,6 +43,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   const [confirmed, setConfirmed] = useState<Set<string>>(() => new Set());
   const [readyConfirmed, setReadyConfirmed] = useState<Set<string>>(() => new Set());
   const [prepMinutes, setPrepMinutes] = useState<Record<string, number>>({});
+  const [restaurantPrepMinutes, setRestaurantPrepMinutes] = useState<Record<string, number>>({});
   const [packageCounts, setPackageCounts] = useState<Record<string, number>>({});
   const [evidenceFiles, setEvidenceFiles] = useState<Record<string, File | undefined>>({});
   const [problemId, setProblemId] = useState<string>();
@@ -52,11 +57,13 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   const refresh = useCallback(async (showProgress = false) => {
     if (showProgress) setRefreshing(true);
     try {
-      const [opportunityResult, operations] = await Promise.all([
+      const [opportunityResult, restaurantResult, operations] = await Promise.all([
         getV1MerchantOpportunities({ ...auth, limit: 50 }),
+        getV1RestaurantRequests({ ...auth, limit: 50 }),
         getV1MerchantOperations({ ...auth, limit: 50 }),
       ]);
       setOpportunities(opportunityResult);
+      setRestaurantRequests(restaurantResult);
       setFulfilments(operations.fulfilments);
       setRecoveryOpportunities(operations.recoveryOpportunities);
       setReturnReceipts(operations.returnReceipts);
@@ -65,6 +72,13 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
         const next = { ...current };
         opportunityResult.forEach((opportunity) => {
           next[opportunity.id] ??= opportunity.promisedPrepMinutes ?? opportunity.prepTimeOptionsMinutes[0] ?? 10;
+        });
+        return next;
+      });
+      setRestaurantPrepMinutes((current) => {
+        const next = { ...current };
+        restaurantResult.forEach((request) => {
+          next[request.id] ??= request.promisedPrepMinutes ?? 15;
         });
         return next;
       });
@@ -120,6 +134,31 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
         expectedVersion: opportunity.version,
         action,
         promisedPrepMinutes: action === "accept" ? prepMinutes[opportunity.id] : undefined,
+        idempotencyKey: keyFor(identity),
+      });
+      keys.current.delete(identity);
+      await refresh();
+    } catch (responseError) {
+      setError(message(responseError));
+      await refresh();
+    } finally {
+      setBusyId(undefined);
+    }
+  };
+
+  const respondRestaurant = async (request: V1RestaurantRequest, response: "CONFIRM" | "DECLINE") => {
+    if (busyId) return;
+    const identity = `restaurant:${response}:${request.id}:${request.version}`;
+    setBusyId(request.id);
+    setError(undefined);
+    try {
+      await respondV1RestaurantRequest({
+        ...auth,
+        requestId: request.id,
+        response,
+        promisedPrepMinutes: response === "CONFIRM" ? restaurantPrepMinutes[request.id] ?? 15 : undefined,
+        reason: response === "DECLINE" ? "Restaurant cannot fulfil this exact request" : undefined,
+        expectedVersion: request.version,
         idempotencyKey: keyFor(identity),
       });
       keys.current.delete(identity);
@@ -294,6 +333,16 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
     </header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {loading ? <div className="catalogue-loading" role="status"><span /> Loading V1 fulfilments</div> : <>
+      {restaurantRequests.some((request) => request.status === "OFFERED") ? <div className="v1-opportunity-list">
+        {restaurantRequests.filter((request) => request.status === "OFFERED").map((request) => <article className="v1-opportunity-card" key={request.id}>
+          <header><span className="v1-opportunity-icon"><PackageCheck size={20} /></span><span><strong>{request.displayOrderNumber}</strong><small>Exact Restaurant/Cafe request · {request.branch.displayName}</small></span><b>CONFIRM FOOD</b></header>
+          <ul>{request.lines.map((line) => <li key={line.orderLineId}><span><strong>{line.quantity}× {line.name}</strong><small>{selectionSummary(line.selection)}</small></span><b>{formatPaise(line.unitPricePaise * line.quantity)}</b></li>)}</ul>
+          {request.softThresholdWarning ? <p className="v1-reservation-state">{request.activeOrderCount} active orders exceeds the default soft threshold of {request.softActiveOrderThreshold}. You may still accept if the kitchen can handle it.</p> : null}
+          <label className="v1-prep-choice"><span>Preparation promise</span><input type="number" min={1} max={240} value={restaurantPrepMinutes[request.id] ?? 15} onChange={(event) => setRestaurantPrepMinutes((current) => ({ ...current, [request.id]: Number(event.target.value) }))} /></label>
+          <p className="v1-reservation-state">Confirmation binds these exact menu selections before payment. Preparation starts only after payment.</p>
+          <div className="v1-opportunity-actions"><button className="secondary-button" type="button" disabled={busyId === request.id} onClick={() => void respondRestaurant(request, "DECLINE")}><X size={17} /> Decline</button><button className="primary-button" type="button" disabled={busyId === request.id || (restaurantPrepMinutes[request.id] ?? 15) < 1} onClick={() => void respondRestaurant(request, "CONFIRM")}><Check size={17} /> {busyId === request.id ? "Confirming…" : "Confirm exact food"}</button></div>
+        </article>)}
+      </div> : null}
       {activeFulfilments.length > 0 ? <div className="v1-preparation-list">
         {activeFulfilments.map((fulfilment) => <FulfilmentCard
           key={fulfilment.id}
@@ -457,7 +506,7 @@ function merchantPickupLabel(status: "PENDING" | "ARRIVED" | "COMPLETED", arrive
 }
 
 function LineList({ lines }: { lines: V1MerchantOpportunity["lines"] }) {
-  return <ul>{lines.map((line) => <li key={line.orderLineId}><span><strong>{line.quantity}× {line.name}</strong><small>{[line.variant, line.packSize].filter(Boolean).join(" · ")}</small></span></li>)}</ul>;
+  return <ul>{lines.map((line) => <li key={line.orderLineId}><span><strong>{line.quantity}× {line.name}</strong><small>{line.selection ? selectionSummary(line.selection) : [line.variant, line.packSize].filter(Boolean).join(" · ")}</small></span></li>)}</ul>;
 }
 
 function reservationLabel(opportunity: V1MerchantOpportunity) {
@@ -513,4 +562,23 @@ function recordObject(value: Record<string, unknown>, key: string) {
   return result !== null && typeof result === "object" && !Array.isArray(result)
     ? result as Record<string, unknown>
     : undefined;
+}
+
+function selectionSummary(selection: Record<string, unknown>) {
+  const groups = selection.groups;
+  if (!Array.isArray(groups)) return "Exact menu selection";
+  const names = groups.flatMap((group) => {
+    if (!group || typeof group !== "object" || Array.isArray(group)) return [];
+    const options = (group as Record<string, unknown>).options;
+    return Array.isArray(options) ? options.flatMap((option) => {
+      if (!option || typeof option !== "object" || Array.isArray(option)) return [];
+      const name = (option as Record<string, unknown>).name;
+      return typeof name === "string" ? [name] : [];
+    }) : [];
+  });
+  return names.join(" · ") || "Exact menu selection";
+}
+
+function formatPaise(value: number) {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(value / 100);
 }

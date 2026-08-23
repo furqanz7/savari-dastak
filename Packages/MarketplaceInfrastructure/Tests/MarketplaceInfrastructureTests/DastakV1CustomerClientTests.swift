@@ -69,6 +69,48 @@ final class DastakV1CustomerClientTests: XCTestCase {
         XCTAssertFalse(source.contains("merchantId"))
     }
 
+    func testRestaurantDiscoveryAndMixedSubmitCarryExactIdentityWithoutClientPrice() async throws {
+        let functions = RecordingV1FunctionClient()
+        let client = SupabaseDastakV1CustomerClient(functions: functions)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "restaurant-read"))
+        let restaurants = try await client.restaurants(
+            query: nil,
+            limit: 50,
+            idempotencyKey: key
+        )
+        let restaurant = try XCTUnwrap(restaurants.first)
+        let item = try XCTUnwrap(restaurant.categories.first?.items.first)
+        let option = try XCTUnwrap(item.optionGroups.first?.options.first)
+        XCTAssertEqual(restaurant.restaurant.name, "Dastak Cafe")
+
+        _ = try await client.submit(
+            DastakV1OrderSubmission(
+                deliveryAddress: DastakV1DeliveryAddressInput(
+                    label: "Home", line1: "1 Launch Road", line2: nil,
+                    landmark: nil, city: "Vaniyambadi", state: "Tamil Nadu",
+                    postalCode: "635751", latitude: 12.6819, longitude: 78.6201,
+                    instructions: nil
+                ),
+                recipient: DastakV1RecipientInput(
+                    name: "Launch Customer", phoneNumber: "+919700000002"
+                ),
+                restaurantBranchID: restaurant.restaurant.branchID,
+                lines: [
+                    DastakV1OrderLineInput(skuID: skuID, quantity: 1),
+                    DastakV1OrderLineInput(menuItemID: item.id, optionIDs: [option.id], quantity: 2),
+                ]
+            ),
+            idempotencyKey: try XCTUnwrap(IdempotencyKey(rawValue: "mixed-submit"))
+        )
+        let recorded = await functions.lastCall()
+        let call = try XCTUnwrap(recorded)
+        let source = String(decoding: call.body, as: UTF8.self)
+        XCTAssertTrue(source.contains(#""restaurantBranchId""#))
+        XCTAssertTrue(source.contains(#""lineType":"FOOD_MENU_ITEM""#))
+        XCTAssertTrue(source.contains(#""optionIds""#))
+        XCTAssertFalse(source.contains("pricePaise"))
+    }
+
     func testCancelCarriesServerVersionAndStableIdentity() async throws {
         let functions = RecordingV1FunctionClient()
         let client = SupabaseDastakV1CustomerClient(functions: functions)
@@ -248,6 +290,7 @@ private actor RecordingV1FunctionClient: FunctionClient {
         let response: Data
         switch operation {
         case "customerCatalogue": response = catalogueJSON
+        case "customerRestaurants": response = restaurantJSON
         case "reportCustomerIssue": response = issueResultJSON
         default: response = orderJSON
         }
@@ -278,6 +321,37 @@ private let catalogueJSON = """
     "logisticsAttributes":{"weightGrams":1030,"temperatureClass":"CHILLED","fragile":false,"bulky":false}
   }],
   "nextCursor":null
+}
+""".data(using: .utf8)!
+
+private let restaurantJSON = """
+{
+  "restaurants":[{
+    "restaurant":{
+      "organizationId":"77777777-7777-4777-8777-777777777777",
+      "branchId":"88888888-8888-4888-8888-888888888888",
+      "name":"Dastak Cafe","branchName":"Main Road","imageKey":null,
+      "description":"Fresh food","serviceZoneId":null,
+      "acceptingOrders":true,"isOpen":true,"operationalVersion":1,
+      "branchStatus":"ACTIVE","merchantType":"RESTAURANT_CAFE",
+      "softActiveOrderThreshold":5,"activeOrderCount":6
+    },
+    "categories":[{
+      "id":"11111111-1111-4111-8111-111111111111","name":"Drinks","description":null,
+      "sortOrder":1,"status":"ACTIVE","version":1,
+      "items":[{
+        "id":"99999999-9999-4999-8999-999999999999","name":"Filter Coffee",
+        "description":null,"imageKey":null,"basePricePaise":4500,"currencyCode":"INR",
+        "taxRateBps":0,"logisticsAttributes":{},"status":"ACTIVE","version":1,
+        "optionGroups":[{
+          "id":"22222222-2222-4222-8222-222222222222","name":"Size","selectionType":"SINGLE",
+          "minimumSelections":1,"maximumSelections":1,"sortOrder":1,
+          "status":"ACTIVE","version":1,
+          "options":[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Large","priceDeltaPaise":500,"sortOrder":1,"status":"ACTIVE","version":1}]
+        }]
+      }]
+    }]
+  }]
 }
 """.data(using: .utf8)!
 

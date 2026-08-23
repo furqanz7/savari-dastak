@@ -96,10 +96,32 @@
 .merchant-v1-price { text-align: right; white-space: nowrap; }
 .merchant-v1-price small { text-decoration: line-through; }
 .merchant-v1-truncated { color: var(--text-secondary); font-size: 12px; }
+.merchant-v1-menu-create { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-top: 18px; }
+.merchant-v1-menu-create form, .merchant-v1-option-create, .merchant-v1-option-group > form { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
+.merchant-v1-menu-create form:nth-child(2) { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+.merchant-v1-menu-create form:nth-child(2) strong { grid-column: 1 / -1; }
+.merchant-v1-menu-control input, .merchant-v1-menu-control select { min-width: 0; min-height: 42px; padding: 0 10px; border: 1px solid var(--divider); border-radius: 7px; color: var(--text-primary); background: var(--surface); }
+.merchant-v1-menu-list { display: grid; gap: 16px; margin-top: 18px; }
+.merchant-v1-menu-list > section { overflow: hidden; border: 1px solid var(--divider); border-radius: 9px; background: var(--surface-raised); }
+.merchant-v1-menu-list > section > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border-bottom: 1px solid var(--divider); }
+.merchant-v1-menu-list header small { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 11px; }
+.merchant-v1-menu-item { display: grid; gap: 12px; padding: 14px; }
+.merchant-v1-menu-item + .merchant-v1-menu-item { border-top: 1px solid var(--divider); }
+.merchant-v1-menu-item-fields { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 2fr) 110px auto; gap: 8px; align-items: end; }
+.merchant-v1-menu-item-fields label { display: grid; gap: 4px; color: var(--text-secondary); font-size: 11px; }
+.merchant-v1-menu-item-fields > div { display: flex; gap: 6px; }
+.merchant-v1-option-group { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-muted); }
+.merchant-v1-option-group > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.merchant-v1-option-row { display: grid; grid-template-columns: minmax(120px, 1fr) 100px auto auto auto; gap: 7px; align-items: center; }
+.merchant-v1-option-row > span { color: var(--text-secondary); font-size: 12px; }
+.merchant-v1-option-create, .merchant-v1-option-group > form { grid-template-columns: minmax(130px, 1fr) auto auto auto; align-items: center; padding: 10px; }
+.merchant-v1-option-create > strong { grid-column: 1 / -1; }
 
 @media (max-width: 760px) {
   .merchant-v1-operation-grid { grid-template-columns: 1fr; }
   .merchant-v1-sku-list > article { grid-template-columns: 28px minmax(0, 1fr) auto; }
   .merchant-v1-price { grid-column: 2; text-align: left; }
   .merchant-v1-sku-list > article > button { grid-column: 3; grid-row: 1 / span 2; }
+  .merchant-v1-menu-create { grid-template-columns: 1fr; }
+  .merchant-v1-menu-create form:nth-child(2), .merchant-v1-menu-item-fields, .merchant-v1-option-row, .merchant-v1-option-create, .merchant-v1-option-group > form { grid-template-columns: 1fr; }
 }

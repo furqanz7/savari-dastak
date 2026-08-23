@@ -32,6 +32,19 @@ Deno.serve((request) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_list_merchant_opportunities", {
         p_limit: input.limit,
       }),
+    listRestaurantRequests: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_restaurant_requests", {
+        p_limit: input.limit,
+      }),
+    respondRestaurantRequest: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_respond_restaurant_request", {
+        p_request_id: input.requestId,
+        p_response: input.response,
+        p_promised_prep_minutes: input.promisedPrepMinutes,
+        p_reason: input.reason,
+        p_expected_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     acceptMerchantOpportunity: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

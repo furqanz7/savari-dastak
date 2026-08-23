@@ -14,11 +14,11 @@ struct DastakCartView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if model.cart.entries.isEmpty {
+                if model.cart.isEmpty {
                     DastakEmptyState(
                         symbol: "bag",
                         title: "Your basket is empty",
-                        message: "Add products from the Dastak catalogue to continue."
+                        message: "Add food or products to continue."
                     )
                 } else {
                     ScrollView {
@@ -46,7 +46,7 @@ struct DastakCartView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                 }
-                if !model.cart.entries.isEmpty {
+                if !model.cart.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Clear", role: .destructive) { model.clearCart() }
                     }
@@ -84,6 +84,31 @@ struct DastakCartView: View {
 
     private var items: some View {
         VStack(spacing: 0) {
+            if let restaurantName = model.cart.foodEntries.first?.restaurantName {
+                cartGroupTitle(restaurantName)
+            }
+            ForEach(model.cart.foodEntries) { entry in
+                HStack(spacing: MarketplaceSpacing.compact) {
+                    DastakProductArtwork(symbol: "fork.knife").frame(width: 68)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.item.name).font(.headline).lineLimit(2)
+                        Text(entry.optionNames.isEmpty ? "Restaurant item" : entry.optionNames.joined(separator: " · "))
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        Text(DastakFormatting.money(entry.subtotal)).font(.subheadline.monospacedDigit())
+                    }
+                    Spacer(minLength: 4)
+                    DastakQuantityControl(
+                        quantity: entry.quantity,
+                        decrement: { model.decrementFoodCartItem(entry.id) },
+                        increment: { model.incrementFoodCartItem(entry.id) }
+                    )
+                }
+                .padding(MarketplaceSpacing.compact)
+                Divider().padding(.leading, 92)
+            }
+            if !model.cart.entries.isEmpty, !model.cart.foodEntries.isEmpty {
+                cartGroupTitle("Retail essentials")
+            }
             ForEach(model.cart.entries) { entry in
                 HStack(spacing: MarketplaceSpacing.compact) {
                     DastakProductArtwork(symbol: "basket")
@@ -120,15 +145,24 @@ struct DastakCartView: View {
 
     private var totals: some View {
         VStack(spacing: MarketplaceSpacing.compact) {
-            totalRow("Catalogue subtotal", value: model.cart.subtotal, emphasized: true)
+            totalRow("Basket subtotal", value: model.cart.subtotal, emphasized: true)
             Divider()
-            Text("Delivery, platform fees and final total are shown only after every item is secured.")
+            Text("Delivery, platform fees and final total are shown only after the complete Food + Retail basket is secured.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
+    }
+
+    private func cartGroupTitle(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, MarketplaceSpacing.compact)
+            .padding(.top, MarketplaceSpacing.compact)
     }
 
     private var deliveryAddress: some View {

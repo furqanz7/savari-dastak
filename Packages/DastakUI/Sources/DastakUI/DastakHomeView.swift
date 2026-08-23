@@ -1,4 +1,5 @@
 import MarketplaceDesignSystem
+import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
 
@@ -8,6 +9,7 @@ struct DastakHomeView: View {
     let openSearch: () -> Void
     let openCart: () -> Void
     let sendParcel: () -> Void
+    @State private var selectedRestaurant: DastakV1RestaurantMenu?
 
     var body: some View {
         ScrollView {
@@ -15,6 +17,7 @@ struct DastakHomeView: View {
                 header
                 promise
                 searchButton
+                restaurantRail
                 categoryRail
                 catalogueContent
                 parcelBand
@@ -25,6 +28,73 @@ struct DastakHomeView: View {
         .scrollIndicators(.hidden)
         .dastakNavigationBarHidden()
         .refreshable { await model.refreshV1Catalogue() }
+        .sheet(item: $selectedRestaurant) { restaurant in
+            DastakRestaurantMenuView(restaurant: restaurant) { item, optionIDs in
+                model.addFoodToCart(
+                    restaurant: restaurant,
+                    item: item,
+                    optionIDs: optionIDs
+                )
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    @ViewBuilder
+    private var restaurantRail: some View {
+        if !model.v1Restaurants.isEmpty {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("RESTAURANTS & CAFES")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        Text("Food, in the same Dastak")
+                            .font(MarketplaceTypography.sectionTitle)
+                    }
+                    Spacer()
+                    Text("Choose one")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                ScrollView(.horizontal) {
+                    HStack(spacing: MarketplaceSpacing.compact) {
+                        ForEach(model.v1Restaurants) { restaurant in
+                            Button { selectedRestaurant = restaurant } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Image(systemName: "fork.knife")
+                                        .font(.title2)
+                                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                        .frame(maxWidth: .infinity, minHeight: 72)
+                                        .background(
+                                            MarketplaceColors.dastakAccentSoft.color,
+                                            in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                        )
+                                    Text(restaurant.restaurant.name)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    Text(restaurant.restaurant.branchName)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                    Text("\(restaurant.categories.flatMap(\.items).count) items")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                }
+                                .padding(MarketplaceSpacing.small)
+                                .frame(width: 190, alignment: .leading)
+                                .marketplaceFlatSurface()
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Open menu")
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
     }
 
     private var header: some View {
@@ -253,6 +323,137 @@ struct DastakHomeView: View {
         if slug.contains("food") || slug.contains("grocery") { return "basket" }
         if slug.contains("home") { return "house" }
         return "square.grid.2x2"
+    }
+}
+
+private struct DastakRestaurantMenuView: View {
+    let restaurant: DastakV1RestaurantMenu
+    let add: (DastakV1RestaurantMenuItem, [UUID]) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Exact restaurant confirmation")
+                                .font(.subheadline.weight(.semibold))
+                            Text("Dastak never silently reroutes your food. Payment starts only after the whole basket is secured.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "checkmark.shield.fill")
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    }
+                    .padding(MarketplaceSpacing.compact)
+                    .marketplaceFlatSurface()
+
+                    ForEach(restaurant.categories) { category in
+                        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                            Text(category.name).font(MarketplaceTypography.sectionTitle)
+                            if let description = category.description {
+                                Text(description).font(.footnote).foregroundStyle(.secondary)
+                            }
+                            ForEach(category.items) { item in
+                                DastakRestaurantItemCard(item: item, add: add)
+                            }
+                        }
+                    }
+                }
+                .padding(MarketplaceSpacing.medium)
+            }
+            .navigationTitle(restaurant.restaurant.name)
+            .dastakInlineNavigationTitle()
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+        }
+    }
+}
+
+private struct DastakRestaurantItemCard: View {
+    let item: DastakV1RestaurantMenuItem
+    let add: (DastakV1RestaurantMenuItem, [UUID]) -> Void
+    @State private var selections: [UUID: Set<UUID>]
+
+    init(
+        item: DastakV1RestaurantMenuItem,
+        add: @escaping (DastakV1RestaurantMenuItem, [UUID]) -> Void
+    ) {
+        self.item = item
+        self.add = add
+        _selections = State(initialValue: Dictionary(uniqueKeysWithValues: item.optionGroups.map {
+            ($0.id, Set($0.options.prefix($0.minimumSelections).map(\.id)))
+        }))
+    }
+
+    private var selectedIDs: [UUID] {
+        item.optionGroups.flatMap { Array(selections[$0.id] ?? []).sorted { $0.uuidString < $1.uuidString } }
+    }
+
+    private var valid: Bool {
+        item.optionGroups.allSatisfy {
+            let count = selections[$0.id]?.count ?? 0
+            return count >= $0.minimumSelections && count <= $0.maximumSelections
+        }
+    }
+
+    private var total: Money {
+        let options = item.optionGroups.flatMap(\.options).filter { selectedIDs.contains($0.id) }
+        return Money(paise: item.basePricePaise + options.reduce(0) { $0 + $1.priceDeltaPaise })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text(item.name).font(.headline)
+            if let description = item.description {
+                Text(description).font(.footnote).foregroundStyle(.secondary)
+            }
+            Text(DastakFormatting.money(item.basePrice))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            ForEach(item.optionGroups) { group in
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                    HStack {
+                        Text(group.name).font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text(group.minimumSelections > 0 ? "Required" : "Optional")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(group.options) { option in
+                        Button { toggle(option.id, in: group) } label: {
+                            HStack {
+                                Image(systemName: (selections[group.id] ?? []).contains(option.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                Text(option.name).foregroundStyle(.primary)
+                                Spacer()
+                                Text(option.priceDeltaPaise == 0 ? "Included" : "+\(DastakFormatting.money(Money(paise: option.priceDeltaPaise)))")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(MarketplaceSpacing.small)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            Button { add(item, selectedIDs) } label: {
+                HStack { Text("Add to basket"); Spacer(); Text(DastakFormatting.money(total)) }
+            }
+            .buttonStyle(MarketplacePrimaryButtonStyle())
+            .disabled(!valid)
+        }
+        .padding(MarketplaceSpacing.compact)
+        .marketplaceFlatSurface()
+    }
+
+    private func toggle(_ optionID: UUID, in group: DastakV1RestaurantMenuOptionGroup) {
+        var selected = selections[group.id] ?? []
+        if selected.contains(optionID) { selected.remove(optionID) }
+        else if group.selectionType == "SINGLE" { selected = [optionID] }
+        else if selected.count < group.maximumSelections { selected.insert(optionID) }
+        selections[group.id] = selected
     }
 }
 

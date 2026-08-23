@@ -111,6 +111,14 @@ function Trace({ trace, auth, onChanged }: {
     <TraceSection title="Capacity at inspection">
       {trace.capacity.length === 0 ? <p>No candidate branches.</p> : trace.capacity.map((entry, index) => <article key={text(entry, "branchId") ?? index}><strong>{text(entry, "branchName") ?? "Branch"}</strong><span>{number(entry, "activeSlots") ?? 0} / {number(entry, "capacityLimit") ?? 0} active slots</span></article>)}
     </TraceSection>
+    {trace.restaurant ? <TraceSection title="Restaurant / Cafe commitment">
+      {!trace.restaurant.request ? <p>No Restaurant/Cafe request.</p> : <>
+        <article><strong>{text(trace.restaurant.request, "restaurantName") ?? text(trace.restaurant.request, "branchName") ?? "Selected restaurant"} · {text(trace.restaurant.request, "status") ?? "UNKNOWN"}</strong><span>Exact request {formatOptional(text(trace.restaurant.request, "offeredAt"))} · response {formatOptional(text(trace.restaurant.request, "respondedAt"))} · prep promise {number(trace.restaurant.request, "promisedPrepMinutes") ?? "—"} min</span></article>
+        <p>{trace.restaurant.foodLines.length} exact food line(s) · no silent rerouting · prepared food physically returnable: no</p>
+        {trace.restaurant.foodLines.map((line, index) => <article key={text(line, "id") ?? index}><strong>{number(line, "quantity") ?? 0}× {text(line, "name") ?? "Food item"}</strong><span>{formatV1Price(number(line, "unitPricePaise") ?? 0)} each · immutable selection snapshot</span></article>)}
+        {trace.restaurant.commitment ? <article><strong>Operational commitment · {text(trace.restaurant.commitment, "status") ?? "UNKNOWN"}</strong><span>Active orders at confirmation {number(trace.restaurant.commitment, "activeOrderCountAtAcceptance") ?? 0} · soft threshold {number(trace.restaurant.commitment, "softThreshold") ?? 5} · released {formatOptional(text(trace.restaurant.commitment, "releasedAt"))}</span></article> : null}
+      </>}
+    </TraceSection> : null}
     <TraceSection title="Payment reservation">
       <p>{paymentStatus} · {paymentAttempts} attempts · {providerEvents} provider events{trace.payment ? ` · expires ${formatOptional(text(trace.payment, "expiresAt"))}` : ""}</p>
     </TraceSection>
@@ -243,7 +251,7 @@ function FailureAndFinanceTrace({ trace, auth, onChanged }: {
     {state.recoveryCases.map((recovery, index) => <article key={text(recovery, "id") ?? index}>
       <strong>{text(recovery, "type")?.replaceAll("_", " ")} recovery · {text(recovery, "status")?.replaceAll("_", " ")}</strong>
       <span>{text(recovery, "reason") ?? "—"} · {array(recovery, "opportunities").length} exact-item offer(s)</span>
-      {boolean(permissions, "canManageRecovery") ? <RecoveryAction recovery={recovery} auth={auth} onChanged={onChanged} /> : null}
+      {boolean(permissions, "canManageRecovery") ? <RecoveryAction recovery={recovery} auth={auth} onChanged={onChanged} preparedFoodPresent={trace.order.orderType !== "RETAIL_ONLY"} /> : null}
     </article>)}
     {state.customerIssues.map((issue, index) => <article key={text(issue, "id") ?? index}>
       <strong>{text(issue, "category")?.replaceAll("_", " ")} · {text(issue, "status")?.replaceAll("_", " ")}</strong>
@@ -274,8 +282,9 @@ function FailureAndFinanceTrace({ trace, auth, onChanged }: {
   </TraceSection>;
 }
 
-function RecoveryAction({ recovery, auth, onChanged }: {
+function RecoveryAction({ recovery, auth, onChanged, preparedFoodPresent }: {
   recovery: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+  preparedFoodPresent: boolean;
 }) {
   const [branchId, setBranchId] = useState("");
   const [reason, setReason] = useState("");
@@ -337,7 +346,9 @@ function RecoveryAction({ recovery, auth, onChanged }: {
     <label>Operations reason<textarea value={reason} minLength={3} maxLength={500} onChange={(event) => setReason(event.target.value)} /></label>
     {type === "EXACT_SKU" ? <button className="danger-button" type="button" disabled={busy || reason.trim().length < 3} onClick={() => void run("fail")}>Close recovery as failed</button> : <>
       <button className="primary-button" type="button" disabled={busy || reason.trim().length < 10 || !correctedAddressValid} onClick={() => void run("resume")}>Resume assigned delivery</button>
-      <button className="danger-button" type="button" disabled={busy || reason.trim().length < 10 || !refundValid} onClick={() => void run("return")}>Start return to origin</button>
+      {preparedFoodPresent
+        ? <small>Prepared food cannot enter return-to-origin custody. Resume delivery or use the investigation/refund resolution path.</small>
+        : <button className="danger-button" type="button" disabled={busy || reason.trim().length < 10 || !refundValid} onClick={() => void run("return")}>Start return to origin</button>}
     </>}
     {error ? <p className="order-error" role="alert">{error}</p> : null}
   </div>;
@@ -354,6 +365,8 @@ function IssueAction({ issue, auth, onChanged }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   if (!["OPEN", "UNDER_REVIEW"].includes(text(issue, "status") ?? "")) return null;
+  const physicalReturnAllowed = boolean(issue, "physicalReturnAllowed") === true;
+  const preparedFood = boolean(issue, "preparedFood") === true;
   const requiresRefund = decision === "REFUND_WITHOUT_RETURN" || decision === "PHYSICAL_RETURN";
   const submit = async () => {
     const id = text(issue, "id"); const version = number(issue, "version");
@@ -372,7 +385,8 @@ function IssueAction({ issue, auth, onChanged }: {
     finally { setBusy(false); }
   };
   return <div className="v1-exceptional-handoff">
-    <label>Decision<select value={decision} onChange={(event) => setDecision(event.target.value as typeof decision)}><option value="RESOLVE_NO_REFUND">Resolve without refund</option><option value="REFUND_WITHOUT_RETURN">Refund without physical return</option><option value="PHYSICAL_RETURN">Require physical return</option><option value="REJECT">Reject</option></select></label>
+    <label>Decision<select value={decision} onChange={(event) => setDecision(event.target.value as typeof decision)}><option value="RESOLVE_NO_REFUND">Resolve without refund</option><option value="REFUND_WITHOUT_RETURN">Refund without physical return</option>{physicalReturnAllowed ? <option value="PHYSICAL_RETURN">Require physical return</option> : null}<option value="REJECT">Reject</option></select></label>
+    {preparedFood ? <small>Prepared-food issues use investigation/refund resolution; physical return is forbidden.</small> : null}
     {requiresRefund ? <><label>Refund amount (paise)<input type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} /></label><label>Fault source<select value={faultSource} onChange={(event) => setFaultSource(event.target.value)}><option>UNKNOWN</option><option>MERCHANT</option><option>RIDER</option><option>DASTAK</option><option>CUSTOMER</option><option>NONE</option></select></label></> : null}
     {decision === "PHYSICAL_RETURN" ? <label>Return package count<input type="number" min={1} value={packages} onChange={(event) => setPackages(event.target.value)} /></label> : null}
     <label>Recorded reason<textarea minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label>

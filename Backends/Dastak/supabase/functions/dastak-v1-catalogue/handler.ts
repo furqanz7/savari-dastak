@@ -13,11 +13,20 @@ export type V1CatalogueDependencies = {
     afterName: string | null;
     afterSkuId: string | null;
   }) => Promise<unknown>;
+  customerRestaurants: (input: {
+    accessToken: string;
+    query: string | null;
+    limit: number;
+  }) => Promise<unknown>;
   adminSnapshot: (input: { accessToken: string; skuLimit: number }) => Promise<unknown>;
   merchantSnapshot: (input: {
     accessToken: string;
     branchId: string | null;
     limit: number;
+  }) => Promise<unknown>;
+  merchantRestaurantMenu: (input: {
+    accessToken: string;
+    branchId: string | null;
   }) => Promise<unknown>;
   importCatalogue: (input: {
     accessToken: string;
@@ -45,6 +54,15 @@ export type V1CatalogueDependencies = {
     isOpen: boolean;
     acceptingOrders: boolean;
     expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  upsertRestaurantMenuEntity: (input: {
+    accessToken: string;
+    branchId: string;
+    entityType: "CATEGORY" | "ITEM" | "OPTION_GROUP" | "OPTION";
+    entityId: string | null;
+    expectedVersion: number;
+    payload: Record<string, unknown>;
     idempotencyKey: string;
   }) => Promise<unknown>;
 };
@@ -75,6 +93,23 @@ export async function handleV1Catalogue(
     switch (body.operation) {
       case "customerCatalogue":
         return await customerCatalogue(body, actor, dependencies);
+      case "customerRestaurants": {
+        const query = optionalText(body.query, 80);
+        const parsedLimit = optionalInteger(body.limit, 1, 100);
+        if (
+          query === undefined ||
+          (body.limit !== null && body.limit !== undefined && parsedLimit === undefined)
+        ) {
+          return validationError();
+        }
+        return json(
+          await dependencies.customerRestaurants({
+            accessToken: actor.accessToken,
+            query,
+            limit: parsedLimit ?? 50,
+          }),
+        );
+      }
       case "adminSnapshot": {
         const parsedLimit = optionalInteger(body.skuLimit, 1, 1000);
         if (body.skuLimit !== null && body.skuLimit !== undefined && parsedLimit === undefined) {
@@ -104,6 +139,16 @@ export async function handleV1Catalogue(
           }),
         );
       }
+      case "merchantRestaurantMenu": {
+        const branchId = optionalUUID(body.branchId);
+        if (branchId === undefined) return validationError();
+        return json(
+          await dependencies.merchantRestaurantMenu({
+            accessToken: actor.accessToken,
+            branchId,
+          }),
+        );
+      }
       case "importCatalogue": {
         const idempotencyKey = requiredIdempotencyKey(request);
         const catalogue = record(body.catalogue);
@@ -121,12 +166,46 @@ export async function handleV1Catalogue(
         return await updateMerchantSelection(request, body, actor, dependencies);
       case "updateBranchOperationalState":
         return await updateBranchOperationalState(request, body, actor, dependencies);
+      case "upsertRestaurantMenuEntity":
+        return await upsertRestaurantMenuEntity(request, body, actor, dependencies);
       default:
         return validationError();
     }
   } catch (error) {
     return requestFailure(error);
   }
+}
+
+async function upsertRestaurantMenuEntity(
+  request: Request,
+  body: Record<string, unknown>,
+  actor: V1Actor,
+  dependencies: V1CatalogueDependencies,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const branchId = requiredUUID(body.branchId);
+  const entityId = optionalUUID(body.entityId);
+  const expectedVersion = optionalInteger(body.expectedVersion, 0, Number.MAX_SAFE_INTEGER);
+  const payload = record(body.payload);
+  const entityType = body.entityType;
+  if (
+    !idempotencyKey || !branchId || entityId === undefined ||
+    expectedVersion === undefined || !payload ||
+    !["CATEGORY", "ITEM", "OPTION_GROUP", "OPTION"].includes(String(entityType))
+  ) {
+    return validationError();
+  }
+  return json(
+    await dependencies.upsertRestaurantMenuEntity({
+      accessToken: actor.accessToken,
+      branchId,
+      entityType: entityType as "CATEGORY" | "ITEM" | "OPTION_GROUP" | "OPTION",
+      entityId,
+      expectedVersion,
+      payload,
+      idempotencyKey,
+    }),
+  );
 }
 
 async function updateMerchantSelection(

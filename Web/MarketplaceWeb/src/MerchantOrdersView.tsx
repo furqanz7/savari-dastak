@@ -26,7 +26,7 @@ import { processOrderRefund } from "./payments";
 import { getEarnings, type EarningsSnapshot } from "./earnings";
 import { RefreshQueue, useOrderRealtime } from "./orderRealtime";
 import { MerchantV1Opportunities } from "./MerchantV1Opportunities";
-import { MerchantV1CatalogueControl } from "./MerchantV1CatalogueControl";
+import { MerchantV1CommerceControl } from "./MerchantV1CommerceControl";
 
 type Props = {
   accessToken: string;
@@ -175,7 +175,7 @@ export function MerchantOrdersView({
         <MerchantTab selected={section === "account"} onSelect={() => setSection("account")} icon={<UserRound size={18} />} label="Account" />
       </nav>
       {section === "catalogue" ? (
-        <MerchantV1CatalogueControl auth={auth} />
+        <MerchantV1CommerceControl auth={auth} />
       ) : section === "account" ? (
         <RoleAccountView
           accessToken={accessToken}

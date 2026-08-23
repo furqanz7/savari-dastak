@@ -82,6 +82,73 @@ Deno.test("V1 customer catalogue rejects incomplete cursors and invalid limits",
   assertEquals(calls, 0);
 });
 
+Deno.test("V1 Restaurant discovery and merchant menu commands preserve authenticated scope", async () => {
+  let discovery: unknown;
+  let menuUpdate: unknown;
+  const restaurants = await handleV1Catalogue(
+    request({ operation: "customerRestaurants", query: "  Cafe  ", limit: 20 }),
+    dependencies({
+      customerRestaurants: (input) => {
+        discovery = input;
+        return Promise.resolve({ restaurants: [] });
+      },
+    }),
+  );
+  const updated = await handleV1Catalogue(
+    request({
+      operation: "upsertRestaurantMenuEntity",
+      branchId: categoryId,
+      entityType: "ITEM",
+      entityId: skuId,
+      expectedVersion: 3,
+      payload: { categoryId: subcategoryId, name: "Masala Dosa", basePricePaise: 8000 },
+    }, "restaurant-menu-1"),
+    dependencies({
+      upsertRestaurantMenuEntity: (input) => {
+        menuUpdate = input;
+        return Promise.resolve({ entityId: skuId });
+      },
+    }),
+  );
+  assertEquals(restaurants.status, 200);
+  assertEquals(discovery, {
+    accessToken: actor.accessToken,
+    query: "Cafe",
+    limit: 20,
+  });
+  assertEquals(updated.status, 200);
+  assertEquals(menuUpdate, {
+    accessToken: actor.accessToken,
+    branchId: categoryId,
+    entityType: "ITEM",
+    entityId: skuId,
+    expectedVersion: 3,
+    payload: { categoryId: subcategoryId, name: "Masala Dosa", basePricePaise: 8000 },
+    idempotencyKey: "restaurant-menu-1",
+  });
+});
+
+Deno.test("V1 Restaurant menu mutation rejects unsupported entities without calling RPC", async () => {
+  let calls = 0;
+  const response = await handleV1Catalogue(
+    request({
+      operation: "upsertRestaurantMenuEntity",
+      branchId: categoryId,
+      entityType: "STORE_PRODUCT",
+      expectedVersion: 0,
+      payload: { name: "Legacy" },
+    }, "restaurant-menu-invalid"),
+    dependencies({
+      upsertRestaurantMenuEntity: () => {
+        calls += 1;
+        return Promise.resolve({});
+      },
+    }),
+  );
+  assertEquals(response.status, 400);
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 catalogue import requires idempotency and forwards opaque catalogue data", async () => {
   let recorded: unknown;
   const catalogue = { categories: [{ slug: "groceries" }], skus: [] };
@@ -238,12 +305,17 @@ function dependencies(
   return {
     authenticateBearer: overrides.authenticateBearer ?? (() => Promise.resolve(actor)),
     customerCatalogue: overrides.customerCatalogue ?? (() => Promise.resolve(snapshot)),
+    customerRestaurants: overrides.customerRestaurants ??
+      (() => Promise.resolve({ restaurants: [] })),
     adminSnapshot: overrides.adminSnapshot ?? (() => Promise.resolve(snapshot)),
     merchantSnapshot: overrides.merchantSnapshot ?? (() => Promise.resolve(snapshot)),
+    merchantRestaurantMenu: overrides.merchantRestaurantMenu ?? (() => Promise.resolve({})),
     importCatalogue: overrides.importCatalogue ?? (() => Promise.resolve({})),
     updateSku: overrides.updateSku ?? (() => Promise.resolve({})),
     updateMerchantSelection: overrides.updateMerchantSelection ?? (() => Promise.resolve({})),
     updateBranchOperationalState: overrides.updateBranchOperationalState ??
+      (() => Promise.resolve({})),
+    upsertRestaurantMenuEntity: overrides.upsertRestaurantMenuEntity ??
       (() => Promise.resolve({})),
   };
 }

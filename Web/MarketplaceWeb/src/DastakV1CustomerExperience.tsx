@@ -13,8 +13,9 @@ import {
 import type { CustomerSection } from "./customerNavigation";
 import {
   cancelV1Order, formatV1Price, getV1Catalogue, getV1Order, getV1Orders,
-  reportV1CustomerIssue, submitV1Order, uploadV1CustomerIssueEvidence,
+  getV1Restaurants, reportV1CustomerIssue, submitV1Order, uploadV1CustomerIssueEvidence,
   type DastakV1Auth, type V1CatalogueCategory, type V1CatalogueSku, type V1Order,
+  type V1RestaurantMenu, type V1RestaurantMenuItem,
 } from "./dastakV1";
 import {
   createV1CheckoutSession,
@@ -34,6 +35,16 @@ type Props = DastakV1Auth & {
 };
 
 type Cart = Record<string, number>;
+type FoodCartLine = {
+  key: string;
+  branchId: string;
+  restaurantName: string;
+  item: V1RestaurantMenuItem;
+  optionIds: string[];
+  optionNames: string[];
+  unitPricePaise: number;
+  quantity: number;
+};
 const matchingStatuses = new Set(["CREATED", "MATCHING"]);
 const liveStatuses = new Set([
   "CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT", "PAID", "PREPARING",
@@ -48,12 +59,15 @@ export function DastakV1CustomerExperience(props: Props) {
     supabaseUrl: props.supabaseUrl,
   }), [props.accessToken, props.publishableKey, props.supabaseUrl]);
   const [catalogue, setCatalogue] = useState<Awaited<ReturnType<typeof getV1Catalogue>>>();
+  const [restaurants, setRestaurants] = useState<V1RestaurantMenu[]>([]);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<V1RestaurantMenu>();
   const [searchResults, setSearchResults] = useState<V1CatalogueSku[]>([]);
   const [orders, setOrders] = useState<V1Order[]>([]);
   const [addresses, setAddresses] = useState<CustomerDeliveryAddress[]>([]);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>();
   const [cart, setCart] = useState<Cart>(() => loadCart(props.accountId));
+  const [foodCart, setFoodCart] = useState<FoodCartLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -69,12 +83,14 @@ export function DastakV1CustomerExperience(props: Props) {
 
   const refresh = useCallback(async () => {
     try {
-      const [nextCatalogue, nextOrders, nextAddresses] = await Promise.all([
+      const [nextCatalogue, nextRestaurants, nextOrders, nextAddresses] = await Promise.all([
         getV1Catalogue({ ...auth, limit: 250 }),
+        getV1Restaurants({ ...auth, limit: 50 }),
         getV1Orders({ ...auth, limit: 50 }),
         getCustomerAddresses(auth),
       ]);
       setCatalogue(nextCatalogue);
+      setRestaurants(nextRestaurants);
       setOrders(nextOrders.orders);
       setAddresses(nextAddresses.addresses);
       setError(undefined);
@@ -146,8 +162,10 @@ export function DastakV1CustomerExperience(props: Props) {
     const sku = skuById.get(skuId);
     return sku && quantity > 0 ? [{ sku, quantity }] : [];
   }), [cart, skuById]);
-  const cartCount = cartLines.reduce((total, line) => total + line.quantity, 0);
-  const cartSubtotal = cartLines.reduce((total, line) => total + line.sku.sellingPricePaise * line.quantity, 0);
+  const cartCount = cartLines.reduce((total, line) => total + line.quantity, 0) +
+    foodCart.reduce((total, line) => total + line.quantity, 0);
+  const cartSubtotal = cartLines.reduce((total, line) => total + line.sku.sellingPricePaise * line.quantity, 0) +
+    foodCart.reduce((total, line) => total + line.unitPricePaise * line.quantity, 0);
   const defaultAddress = addresses.find((address) => address.isDefault) ?? addresses[0];
 
   const add = (sku: V1CatalogueSku) => setCart((current) => ({
@@ -161,16 +179,64 @@ export function DastakV1CustomerExperience(props: Props) {
     return next;
   });
 
+  const addFood = (
+    restaurant: V1RestaurantMenu,
+    item: V1RestaurantMenuItem,
+    optionIds: string[],
+  ) => {
+    const existingBranch = foodCart[0]?.branchId;
+    if (existingBranch && existingBranch !== restaurant.restaurant.branchId) {
+      setError("A basket can contain food from one Restaurant/Cafe. Remove it before choosing another.");
+      return;
+    }
+    const options = item.optionGroups.flatMap((group) => group.options)
+      .filter((option) => optionIds.includes(option.id));
+    const normalizedIds = options.map((option) => option.id).sort();
+    const key = `${item.id}:${normalizedIds.join(",")}`;
+    const unitPricePaise = item.basePricePaise +
+      options.reduce((total, option) => total + option.priceDeltaPaise, 0);
+    setFoodCart((current) => {
+      const found = current.find((line) => line.key === key);
+      if (found) {
+        return current.map((line) => line.key === key
+          ? { ...line, quantity: Math.min(line.quantity + 1, 99) }
+          : line);
+      }
+      return [...current, {
+        key,
+        branchId: restaurant.restaurant.branchId,
+        restaurantName: restaurant.restaurant.name,
+        item,
+        optionIds: normalizedIds,
+        optionNames: options.map((option) => option.name),
+        unitPricePaise,
+        quantity: 1,
+      }];
+    });
+    setError(undefined);
+  };
+  const decrementFood = (key: string) => setFoodCart((current) => current.flatMap((line) =>
+    line.key !== key
+      ? [line]
+      : line.quantity > 1
+        ? [{ ...line, quantity: line.quantity - 1 }]
+        : []
+  ));
+  const incrementFood = (key: string) => setFoodCart((current) => current.map((line) =>
+    line.key === key ? { ...line, quantity: Math.min(line.quantity + 1, 99) } : line
+  ));
+
   const submit = async () => {
     if (!defaultAddress) { setShowingAddressBook(true); return; }
     if (!props.displayName?.trim() || !props.phoneNumber?.trim()) {
       setError("Complete your name and phone number in Account before placing an order.");
       return;
     }
-    if (cartLines.length === 0 || busy) return;
+    if ((cartLines.length === 0 && foodCart.length === 0) || busy) return;
     const fingerprint = JSON.stringify({
       addressId: defaultAddress.addressId,
       lines: cartLines.map(({ sku, quantity }) => [sku.id, quantity]).sort(),
+      food: foodCart.map(({ item, optionIds, quantity }) => [item.id, optionIds, quantity]).sort(),
       phone: props.phoneNumber,
     });
     const idempotencyKey = submissionKeys.current.get(fingerprint) ?? crypto.randomUUID();
@@ -193,12 +259,21 @@ export function DastakV1CustomerExperience(props: Props) {
             instructions: defaultAddress.deliveryNotes,
           },
           recipient: { name: props.displayName.trim(), phoneNumber: props.phoneNumber.trim() },
-          lines: cartLines.map(({ sku, quantity }) => ({ lineType: "RETAIL_SKU", skuId: sku.id, quantity })),
+          restaurantBranchId: foodCart[0]?.branchId,
+          lines: [
+            ...cartLines.map(({ sku, quantity }) => ({
+              lineType: "RETAIL_SKU" as const, skuId: sku.id, quantity,
+            })),
+            ...foodCart.map(({ item, optionIds, quantity }) => ({
+              lineType: "FOOD_MENU_ITEM" as const, menuItemId: item.id, optionIds, quantity,
+            })),
+          ],
         },
       });
       submissionKeys.current.delete(fingerprint);
       setOrders((current) => [order, ...current.filter((item) => item.id !== order.id)]);
       setCart({});
+      setFoodCart([]);
       setShowingCart(false);
       setSelectedOrder(order);
     } catch (submitError) {
@@ -360,6 +435,7 @@ export function DastakV1CustomerExperience(props: Props) {
     <CustomerHeader address={defaultAddress} count={cartCount} onCart={() => setShowingCart(true)} />
     {error && <div className="v1-alert" role="alert"><CircleAlert size={18} /><span>{error}</span><button type="button" onClick={() => setError(undefined)} aria-label="Dismiss error"><X size={16} /></button></div>}
     {props.section === "home" ? <HomeSection
+      restaurants={restaurants}
       categories={catalogue?.categories ?? []}
       skus={catalogue?.skus ?? []}
       selectedCategory={selectedCategory}
@@ -368,6 +444,7 @@ export function DastakV1CustomerExperience(props: Props) {
       onOrders={() => props.onNavigate("orders")}
       onParcel={props.onOpenParcel}
       onAdd={add}
+      onRestaurant={setSelectedRestaurant}
     /> : props.section === "search" ? <SearchSection
       query={query} onQuery={setQuery} searching={searching}
       skus={query.trim() ? searchResults : catalogue?.skus ?? []} onAdd={add}
@@ -378,9 +455,15 @@ export function DastakV1CustomerExperience(props: Props) {
       <strong>{formatV1Price(cartSubtotal)}</strong><span>Review <ArrowRight size={17} /></span>
     </button>}
     {showingCart && <CartSheet
-      lines={cartLines} subtotal={cartSubtotal} address={defaultAddress} busy={busy}
+      lines={cartLines} foodLines={foodCart} subtotal={cartSubtotal} address={defaultAddress} busy={busy}
       onDismiss={() => setShowingCart(false)} onAdd={add} onDecrement={decrement}
+      onAddFood={incrementFood} onDecrementFood={decrementFood}
       onAddress={() => addresses.length ? setShowingAddressBook(true) : setEditingAddress(null)} onSubmit={submit}
+    />}
+    {selectedRestaurant && <RestaurantMenuSheet
+      menu={selectedRestaurant}
+      onDismiss={() => setSelectedRestaurant(undefined)}
+      onAdd={(item, optionIds) => addFood(selectedRestaurant, item, optionIds)}
     />}
     {selectedOrder && <MatchingSheet
       order={selectedOrder} busy={busy} error={error} paymentMessage={paymentMessage}
@@ -408,14 +491,23 @@ function CustomerHeader({ address, count, onCart }: { address?: CustomerDelivery
   </header>;
 }
 
-function HomeSection({ categories, skus, selectedCategory, onCategory, onSearch, onOrders, onParcel, onAdd }: {
+function HomeSection({ restaurants, categories, skus, selectedCategory, onCategory, onSearch, onOrders, onParcel, onAdd, onRestaurant }: {
+  restaurants: V1RestaurantMenu[];
   categories: V1CatalogueCategory[]; skus: V1CatalogueSku[]; selectedCategory?: string;
-  onCategory: (id?: string) => void; onSearch: () => void; onOrders: () => void; onParcel: () => void; onAdd: (sku: V1CatalogueSku) => void;
+  onCategory: (id?: string) => void; onSearch: () => void; onOrders: () => void; onParcel: () => void;
+  onAdd: (sku: V1CatalogueSku) => void; onRestaurant: (restaurant: V1RestaurantMenu) => void;
 }) {
   const visible = selectedCategory ? skus.filter((sku) => sku.categoryId === selectedCategory) : skus;
   return <>
     <section className="v1-hero"><p>YOUR EVERYDAY, DELIVERED</p><h1>One basket.<br />Dastak finds every item.</h1><span><ShieldCheck size={18} /> You pay only after your full basket is secured</span></section>
     <button className="v1-search-launch" type="button" onClick={onSearch}><Search size={19} /><span>Search products and essentials</span><ChevronRight size={18} /></button>
+    {restaurants.length ? <section className="v1-section"><header><div><p>RESTAURANTS &amp; CAFES</p><h2>Food, in the same Dastak</h2></div><span>Choose one</span></header>
+      <div className="v1-restaurant-rail">{restaurants.map((restaurant) => <button type="button" key={restaurant.restaurant.branchId} onClick={() => onRestaurant(restaurant)}>
+        <span className="v1-restaurant-art"><ShoppingBag size={28} /></span>
+        <span><strong>{restaurant.restaurant.name}</strong><small>{restaurant.restaurant.branchName}</small><b>{restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items</b></span>
+        <ChevronRight size={18} />
+      </button>)}</div>
+    </section> : null}
     <section className="v1-section"><header><div><p>CANONICAL CATALOGUE</p><h2>Browse categories</h2></div></header>
       <div className="v1-category-rail">
         <button className={!selectedCategory ? "selected" : ""} type="button" onClick={() => onCategory(undefined)}><Sparkles size={22} /><span>All</span></button>
@@ -448,18 +540,63 @@ function ProductGrid({ skus, onAdd }: { skus: V1CatalogueSku[]; onAdd: (sku: V1C
   </article>)}</div>;
 }
 
-function CartSheet({ lines, subtotal, address, busy, onDismiss, onAdd, onDecrement, onAddress, onSubmit }: {
+function CartSheet({ lines, foodLines, subtotal, address, busy, onDismiss, onAdd, onDecrement, onAddFood, onDecrementFood, onAddress, onSubmit }: {
   lines: Array<{ sku: V1CatalogueSku; quantity: number }>; subtotal: number; address?: CustomerDeliveryAddress; busy: boolean;
-  onDismiss: () => void; onAdd: (sku: V1CatalogueSku) => void; onDecrement: (id: string) => void; onAddress: () => void; onSubmit: () => void;
+  foodLines: FoodCartLine[]; onDismiss: () => void; onAdd: (sku: V1CatalogueSku) => void;
+  onDecrement: (id: string) => void; onAddFood: (key: string) => void; onDecrementFood: (key: string) => void;
+  onAddress: () => void; onSubmit: () => void;
 }) {
   return <div className="v1-overlay" role="presentation"><section className="v1-sheet v1-cart-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-cart-title">
     <header><div><p>DASTAK V1</p><h2 id="v1-cart-title">Your basket</h2></div><button type="button" onClick={onDismiss} aria-label="Close basket"><X size={19} /></button></header>
     <div className="v1-security-note"><ShieldCheck size={20} /><span><strong>Matched before payment</strong><small>Dastak secures the complete basket first. Submission does not charge you.</small></span></div>
-    <div className="v1-cart-lines">{lines.map(({ sku, quantity }) => <article key={sku.id}><div><strong>{sku.name}</strong><small>{sku.packSize}</small><b>{formatV1Price(sku.sellingPricePaise * quantity)}</b></div><div className="v1-quantity"><button type="button" onClick={() => onDecrement(sku.id)} aria-label={`Remove one ${sku.name}`}><Minus size={16} /></button><span>{quantity}</span><button type="button" onClick={() => onAdd(sku)} disabled={quantity >= 99} aria-label={`Add one ${sku.name}`}><Plus size={16} /></button></div></article>)}</div>
-    <div className="v1-cart-total"><span>Catalogue subtotal</span><strong>{formatV1Price(subtotal)}</strong><small>Delivery, platform fees and final total appear after all items are secured.</small></div>
+    <div className="v1-cart-lines">
+      {foodLines.length ? <p className="v1-cart-group">{foodLines[0].restaurantName}</p> : null}
+      {foodLines.map((line) => <article key={line.key}><div><strong>{line.item.name}</strong><small>{line.optionNames.join(" · ") || "Restaurant item"}</small><b>{formatV1Price(line.unitPricePaise * line.quantity)}</b></div><div className="v1-quantity"><button type="button" onClick={() => onDecrementFood(line.key)} aria-label={`Remove one ${line.item.name}`}><Minus size={16} /></button><span>{line.quantity}</span><button type="button" onClick={() => onAddFood(line.key)} disabled={line.quantity >= 99} aria-label={`Add one ${line.item.name}`}><Plus size={16} /></button></div></article>)}
+      {lines.length && foodLines.length ? <p className="v1-cart-group">Retail essentials</p> : null}
+      {lines.map(({ sku, quantity }) => <article key={sku.id}><div><strong>{sku.name}</strong><small>{sku.packSize}</small><b>{formatV1Price(sku.sellingPricePaise * quantity)}</b></div><div className="v1-quantity"><button type="button" onClick={() => onDecrement(sku.id)} aria-label={`Remove one ${sku.name}`}><Minus size={16} /></button><span>{quantity}</span><button type="button" onClick={() => onAdd(sku)} disabled={quantity >= 99} aria-label={`Add one ${sku.name}`}><Plus size={16} /></button></div></article>)}
+    </div>
+    <div className="v1-cart-total"><span>Basket subtotal</span><strong>{formatV1Price(subtotal)}</strong><small>Delivery, platform fees and final total appear after the complete Food + Retail basket is secured.</small></div>
     <button className="v1-address-button" type="button" onClick={onAddress}><MapPin size={19} /><span><strong>{address ? `Deliver to ${address.label}` : "Add delivery address"}</strong><small>{address?.displayAddress ?? "Add a precise pin and doorstep details."}</small></span><ChevronRight size={18} /></button>
-    <button className="primary-button v1-submit" type="button" disabled={busy || !lines.length} onClick={onSubmit}>{busy ? "Placing order…" : address ? "Place order" : "Add address to continue"}<ArrowRight size={18} /></button>
+    <button className="primary-button v1-submit" type="button" disabled={busy || (!lines.length && !foodLines.length)} onClick={onSubmit}>{busy ? "Placing order…" : address ? "Place order" : "Add address to continue"}<ArrowRight size={18} /></button>
   </section></div>;
+}
+
+function RestaurantMenuSheet({ menu, onDismiss, onAdd }: {
+  menu: V1RestaurantMenu; onDismiss: () => void;
+  onAdd: (item: V1RestaurantMenuItem, optionIds: string[]) => void;
+}) {
+  return <div className="v1-overlay" role="presentation"><section className="v1-sheet v1-menu-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-menu-title">
+    <header><div><p>RESTAURANT / CAFE</p><h2 id="v1-menu-title">{menu.restaurant.name}</h2><small>{menu.restaurant.branchName}</small></div><button type="button" onClick={onDismiss} aria-label="Close restaurant menu"><X size={19} /></button></header>
+    <div className="v1-security-note"><ShieldCheck size={20} /><span><strong>This restaurant confirms your exact food request</strong><small>Dastak never silently reroutes food to another restaurant. Payment starts only after the whole basket is secured.</small></span></div>
+    {menu.categories.map((category) => <section className="v1-menu-category" key={category.id}><h3>{category.name}</h3>{category.description ? <p>{category.description}</p> : null}<div>{category.items.map((item) => <RestaurantItemCard key={item.id} item={item} onAdd={onAdd} />)}</div></section>)}
+  </section></div>;
+}
+
+function RestaurantItemCard({ item, onAdd }: {
+  item: V1RestaurantMenuItem; onAdd: (item: V1RestaurantMenuItem, optionIds: string[]) => void;
+}) {
+  const [selection, setSelection] = useState<Record<string, string[]>>(() => Object.fromEntries(
+    item.optionGroups.map((group) => [group.id, group.options.slice(0, group.minimumSelections).map((option) => option.id)]),
+  ));
+  const valid = item.optionGroups.every((group) => {
+    const count = selection[group.id]?.length ?? 0;
+    return count >= group.minimumSelections && count <= group.maximumSelections;
+  });
+  const optionIds = item.optionGroups.flatMap((group) => selection[group.id] ?? []);
+  const total = item.basePricePaise + item.optionGroups.flatMap((group) => group.options)
+    .filter((option) => optionIds.includes(option.id))
+    .reduce((sum, option) => sum + option.priceDeltaPaise, 0);
+  const toggle = (groupId: string, optionId: string, single: boolean, maximum: number) => setSelection((current) => {
+    const selected = current[groupId] ?? [];
+    if (single) return { ...current, [groupId]: selected.includes(optionId) ? [] : [optionId] };
+    if (selected.includes(optionId)) return { ...current, [groupId]: selected.filter((id) => id !== optionId) };
+    if (selected.length >= maximum) return current;
+    return { ...current, [groupId]: [...selected, optionId] };
+  });
+  return <article className="v1-menu-item"><div className="v1-menu-item-copy"><strong>{item.name}</strong>{item.description ? <p>{item.description}</p> : null}<b>{formatV1Price(item.basePricePaise)}</b></div>
+    {item.optionGroups.map((group) => <fieldset key={group.id}><legend>{group.name} <small>{group.minimumSelections ? "Required" : "Optional"} · up to {group.maximumSelections}</small></legend>{group.options.map((option) => <label key={option.id}><input type={group.selectionType === "SINGLE" ? "radio" : "checkbox"} name={`${item.id}-${group.id}`} checked={(selection[group.id] ?? []).includes(option.id)} onChange={() => toggle(group.id, option.id, group.selectionType === "SINGLE", group.maximumSelections)} /><span>{option.name}</span><b>{option.priceDeltaPaise ? `+${formatV1Price(option.priceDeltaPaise)}` : "Included"}</b></label>)}</fieldset>)}
+    <button className="primary-button" type="button" disabled={!valid} onClick={() => onAdd(item, optionIds)}>Add · {formatV1Price(total)}</button>
+  </article>;
 }
 
 function OrdersSection({ orders, onOpen }: { orders: V1Order[]; onOpen: (order: V1Order) => void }) {

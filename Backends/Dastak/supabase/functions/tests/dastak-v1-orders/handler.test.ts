@@ -62,6 +62,56 @@ Deno.test("V1 submit requires expected version zero and idempotency", async () =
   assertEquals(calls, 0);
 });
 
+Deno.test("V1 Restaurant confirmation forwards exact soft-capacity decision data", async () => {
+  let recorded: unknown;
+  const response = await handleV1Orders(
+    request({
+      operation: "respondRestaurantRequest",
+      requestId: orderId,
+      response: "CONFIRM",
+      promisedPrepMinutes: 25,
+      expectedVersion: 2,
+    }, "restaurant-confirm-1"),
+    dependencies({
+      respondRestaurantRequest: (input) => {
+        recorded = input;
+        return Promise.resolve({ id: orderId, status: "CONFIRMED" });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    requestId: orderId,
+    response: "CONFIRM",
+    promisedPrepMinutes: 25,
+    reason: null,
+    expectedVersion: 2,
+    idempotencyKey: "restaurant-confirm-1",
+  });
+});
+
+Deno.test("V1 Restaurant decline requires an audited reason", async () => {
+  let calls = 0;
+  const response = await handleV1Orders(
+    request({
+      operation: "respondRestaurantRequest",
+      requestId: orderId,
+      response: "DECLINE",
+      reason: "x",
+      expectedVersion: 1,
+    }, "restaurant-decline-1"),
+    dependencies({
+      respondRestaurantRequest: () => {
+        calls += 1;
+        return Promise.resolve({});
+      },
+    }),
+  );
+  assertEquals(response.status, 400);
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 customer order list forwards a complete keyset cursor", async () => {
   let recorded: unknown;
   const response = await handleV1Orders(
@@ -736,6 +786,10 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
     cancelOrder: overrides.cancelOrder ?? (() => Promise.resolve(orderSnapshot)),
     listMerchantOpportunities: overrides.listMerchantOpportunities ??
       (() => Promise.resolve({ opportunities: [] })),
+    listRestaurantRequests: overrides.listRestaurantRequests ??
+      (() => Promise.resolve({ requests: [] })),
+    respondRestaurantRequest: overrides.respondRestaurantRequest ??
+      (() => Promise.resolve({})),
     acceptMerchantOpportunity: overrides.acceptMerchantOpportunity ??
       (() => Promise.resolve({})),
     declineMerchantOpportunity: overrides.declineMerchantOpportunity ??

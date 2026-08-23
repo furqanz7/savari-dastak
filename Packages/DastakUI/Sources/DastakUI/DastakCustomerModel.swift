@@ -48,6 +48,7 @@ enum DastakCustomerRefreshFailure: Equatable {
 final class DastakCustomerModel: ObservableObject {
     @Published private(set) var catalogue: CatalogueSnapshot?
     @Published private(set) var v1Catalogue: DastakV1CatalogueSnapshot?
+    @Published private(set) var v1Restaurants: [DastakV1RestaurantMenu] = []
     @Published private(set) var v1SearchResults: [DastakV1CatalogueSKU] = []
     @Published private(set) var v1Orders: [DastakV1OrderSnapshot] = []
     @Published private(set) var activeV1Order: DastakV1OrderSnapshot?
@@ -390,7 +391,7 @@ final class DastakCustomerModel: ObservableObject {
         isLoadingV1Catalogue = true
         defer { isLoadingV1Catalogue = false }
         do {
-            v1Catalogue = try await v1Client.catalogue(
+            async let catalogue = v1Client.catalogue(
                 query: nil,
                 categoryID: nil,
                 subcategoryID: nil,
@@ -398,6 +399,13 @@ final class DastakCustomerModel: ObservableObject {
                 cursor: nil,
                 idempotencyKey: makeKey()
             )
+            async let restaurants = v1Client.restaurants(
+                query: nil,
+                limit: 50,
+                idempotencyKey: makeKey()
+            )
+            v1Catalogue = try await catalogue
+            v1Restaurants = try await restaurants
             v1CatalogueRefreshFailure = nil
         } catch {
             v1CatalogueRefreshFailure = refreshFailure(for: error)
@@ -498,7 +506,7 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func submitV1Order() async -> Bool {
-        guard !cart.entries.isEmpty, !isSubmittingV1Order else { return false }
+        guard !cart.isEmpty, !isSubmittingV1Order else { return false }
         guard hasCompleteDeliveryAddress, let deliveryAddress else {
             v1OrderErrorMessage = "Add a complete delivery address before placing your order."
             return false
@@ -508,9 +516,11 @@ final class DastakCustomerModel: ObservableObject {
             return false
         }
 
-        let fingerprint = cart.entries
-            .sorted { $0.id.uuidString < $1.id.uuidString }
-            .map { "\($0.id.uuidString):\($0.quantity)" }
+        let fingerprint = cart.orderLines
+            .map {
+                "\($0.lineType):\($0.skuID?.uuidString ?? $0.menuItemID?.uuidString ?? "-"):\(($0.optionIDs ?? []).map(\.uuidString).sorted().joined(separator: ",")):\($0.quantity)"
+            }
+            .sorted()
             .joined(separator: "|")
             + "|\(deliveryAddress.id)|\(customer.phoneNumber)"
         let key: IdempotencyKey
@@ -547,6 +557,7 @@ final class DastakCustomerModel: ObservableObject {
                         name: customer.displayName,
                         phoneNumber: customer.phoneNumber
                     ),
+                    restaurantBranchID: cart.restaurantBranchID,
                     lines: cart.orderLines
                 ),
                 idempotencyKey: key
@@ -680,10 +691,41 @@ final class DastakCustomerModel: ObservableObject {
         }
     }
 
+    func addFoodToCart(
+        restaurant: DastakV1RestaurantMenu,
+        item: DastakV1RestaurantMenuItem,
+        optionIDs: [UUID]
+    ) {
+        switch cart.addFood(restaurant: restaurant.restaurant, item: item, optionIDs: optionIDs) {
+        case .added:
+            cartErrorMessage = nil
+            v1SubmissionAttempt = nil
+        case .quantityLimit:
+            cartErrorMessage = "You can add up to \(DastakCart.maximumQuantity) of one item."
+        case .differentRestaurant:
+            cartErrorMessage = "A basket can contain food from one Restaurant/Cafe. Remove it before choosing another."
+        }
+    }
+
     func decrementCartItem(_ productID: UUID) {
         cart.decrement(productID)
         v1SubmissionAttempt = nil
         cartErrorMessage = nil
+    }
+
+    func decrementFoodCartItem(_ entryID: String) {
+        cart.decrementFood(entryID)
+        v1SubmissionAttempt = nil
+        cartErrorMessage = nil
+    }
+
+    func incrementFoodCartItem(_ entryID: String) {
+        if cart.incrementFood(entryID) == .quantityLimit {
+            cartErrorMessage = "You can add up to \(DastakCart.maximumQuantity) of one item."
+        } else {
+            v1SubmissionAttempt = nil
+            cartErrorMessage = nil
+        }
     }
 
     func refreshOrders() async {

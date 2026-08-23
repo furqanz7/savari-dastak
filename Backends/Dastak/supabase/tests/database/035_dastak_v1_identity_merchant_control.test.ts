@@ -61,8 +61,8 @@ Deno.test("customer deletion keeps business history and revokes account access",
   );
 });
 
-Deno.test("V1 Merchant Web exposes only canonical retail control", () => {
-  assertMatch(merchantLaunchSurface, /MerchantV1CatalogueControl/);
+Deno.test("V1 Merchant Web routes launch commerce through V1 controls", () => {
+  assertMatch(merchantLaunchSurface, /MerchantV1CommerceControl/);
   assertNotMatch(merchantLaunchSurface, /MerchantCatalogueView/);
   assertNotMatch(merchantLaunchSurface, /value="store"/);
   assertMatch(migration, /merchant_canonical_catalogue_snapshot/i);

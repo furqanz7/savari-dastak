@@ -27,6 +27,19 @@ export type V1OrderDependencies = {
     accessToken: string;
     limit: number;
   }) => Promise<unknown>;
+  listRestaurantRequests: (input: {
+    accessToken: string;
+    limit: number;
+  }) => Promise<unknown>;
+  respondRestaurantRequest: (input: {
+    accessToken: string;
+    requestId: string;
+    response: "CONFIRM" | "DECLINE";
+    promisedPrepMinutes: number | null;
+    reason: string | null;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
   acceptMerchantOpportunity: (input: {
     accessToken: string;
     opportunityId: string;
@@ -281,6 +294,53 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           await dependencies.listMerchantOpportunities({
             accessToken: actor.accessToken,
             limit,
+          }),
+        );
+      }
+      case "restaurantRequests": {
+        const limit = integer(body.limit, 1, 100) ?? 50;
+        if (
+          body.limit !== null && body.limit !== undefined &&
+          integer(body.limit, 1, 100) === undefined
+        ) return validationError();
+        return json(
+          await dependencies.listRestaurantRequests({
+            accessToken: actor.accessToken,
+            limit,
+          }),
+        );
+      }
+      case "respondRestaurantRequest": {
+        const requestId = requiredUUID(body.requestId);
+        const response = body.response === "CONFIRM" || body.response === "DECLINE"
+          ? body.response
+          : undefined;
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const promisedPrepMinutes = body.promisedPrepMinutes === null ||
+            body.promisedPrepMinutes === undefined
+          ? null
+          : integer(body.promisedPrepMinutes, 1, 240) ?? undefined;
+        const reason = body.reason === null || body.reason === undefined
+          ? null
+          : requiredText(body.reason, 500);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !requestId || !response || !expectedVersion || !idempotencyKey ||
+          (response === "CONFIRM" && typeof promisedPrepMinutes !== "number") ||
+          (response === "DECLINE" && (!reason || reason.length < 3)) ||
+          promisedPrepMinutes === undefined
+        ) {
+          return validationError();
+        }
+        return json(
+          await dependencies.respondRestaurantRequest({
+            accessToken: actor.accessToken,
+            requestId,
+            response,
+            promisedPrepMinutes: response === "CONFIRM" ? promisedPrepMinutes : null,
+            reason: response === "DECLINE" ? reason ?? null : null,
+            expectedVersion,
+            idempotencyKey,
           }),
         );
       }

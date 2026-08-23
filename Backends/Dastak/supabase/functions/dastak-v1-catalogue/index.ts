@@ -15,6 +15,11 @@ Deno.serve((request) =>
         p_after_name: input.afterName,
         p_after_sku_id: input.afterSkuId,
       }),
+    customerRestaurants: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_restaurants", {
+        p_query: input.query,
+        p_limit: input.limit,
+      }),
     adminSnapshot: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_catalogue_snapshot", {
         p_sku_limit: input.skuLimit,
@@ -23,6 +28,10 @@ Deno.serve((request) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_merchant_canonical_catalogue_snapshot", {
         p_branch_id: input.branchId,
         p_limit: input.limit,
+      }),
+    merchantRestaurantMenu: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_merchant_restaurant_menu", {
+        p_branch_id: input.branchId,
       }),
     importCatalogue: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_import_catalogue", {
@@ -51,6 +60,15 @@ Deno.serve((request) =>
         p_expected_version: input.expectedVersion,
         p_is_open: input.isOpen,
         p_accepting_orders: input.acceptingOrders,
+      }),
+    upsertRestaurantMenuEntity: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_upsert_restaurant_menu_entity", {
+        p_branch_id: input.branchId,
+        p_entity_type: input.entityType,
+        p_entity_id: input.entityId,
+        p_expected_version: input.expectedVersion,
+        p_payload: input.payload,
+        p_idempotency_key: input.idempotencyKey,
       }),
   })
 );

@@ -105,6 +105,97 @@ public struct DastakV1CatalogueSnapshot: Codable, Equatable, Sendable {
     public let nextCursor: DastakV1CatalogueCursor?
 }
 
+public struct DastakV1RestaurantMenuOption: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let priceDeltaPaise: Int
+    public let sortOrder: Int
+    public let status: String
+    public let version: Int
+}
+
+public struct DastakV1RestaurantMenuOptionGroup: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let selectionType: String
+    public let minimumSelections: Int
+    public let maximumSelections: Int
+    public let sortOrder: Int
+    public let status: String
+    public let version: Int
+    public let options: [DastakV1RestaurantMenuOption]
+}
+
+public struct DastakV1RestaurantMenuItem: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let description: String?
+    public let imageKey: String?
+    public let basePricePaise: Int
+    public let currencyCode: String
+    public let taxRateBps: Int
+    public let logisticsAttributes: DastakV1SKULogistics
+    public let status: String
+    public let version: Int
+    public let optionGroups: [DastakV1RestaurantMenuOptionGroup]
+
+    public var basePrice: Money { Money(paise: basePricePaise) }
+}
+
+public struct DastakV1RestaurantMenuCategory: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let description: String?
+    public let sortOrder: Int
+    public let status: String
+    public let version: Int
+    public let items: [DastakV1RestaurantMenuItem]
+}
+
+public struct DastakV1RestaurantIdentity: Codable, Equatable, Sendable {
+    public let organizationID: UUID
+    public let branchID: UUID
+    public let name: String
+    public let branchName: String
+    public let imageKey: String?
+    public let description: String?
+    public let serviceZoneID: UUID?
+    public let acceptingOrders: Bool
+    public let isOpen: Bool
+    public let branchStatus: String
+    public let merchantType: String
+    public let softActiveOrderThreshold: Int
+    public let activeOrderCount: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case name, branchName, imageKey, description, acceptingOrders, isOpen
+        case branchStatus, merchantType, softActiveOrderThreshold, activeOrderCount
+        case organizationID = "organizationId"
+        case branchID = "branchId"
+        case serviceZoneID = "serviceZoneId"
+    }
+}
+
+public struct DastakV1RestaurantMenu: Codable, Equatable, Identifiable, Sendable {
+    public let restaurant: DastakV1RestaurantIdentity
+    public let categories: [DastakV1RestaurantMenuCategory]
+    public var id: UUID { restaurant.branchID }
+}
+
+public struct DastakV1OrderRestaurant: Codable, Equatable, Sendable {
+    public let organizationID: UUID
+    public let branchID: UUID
+    public let name: String
+    public let branchName: String
+    public let imageKey: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case name, branchName, imageKey
+        case organizationID = "organizationId"
+        case branchID = "branchId"
+    }
+}
+
 public struct DastakV1DeliveryAddressInput: Codable, Equatable, Sendable {
     public let label: String?
     public let line1: String
@@ -156,18 +247,33 @@ public struct DastakV1RecipientInput: Codable, Equatable, Sendable {
 }
 
 public struct DastakV1OrderLineInput: Codable, Equatable, Sendable {
-    public let lineType = "RETAIL_SKU"
-    public let skuID: UUID
+    public let lineType: String
+    public let skuID: UUID?
+    public let menuItemID: UUID?
+    public let optionIDs: [UUID]?
     public let quantity: Int
 
     public init(skuID: UUID, quantity: Int) {
+        lineType = "RETAIL_SKU"
         self.skuID = skuID
+        menuItemID = nil
+        optionIDs = nil
+        self.quantity = quantity
+    }
+
+    public init(menuItemID: UUID, optionIDs: [UUID], quantity: Int) {
+        lineType = "FOOD_MENU_ITEM"
+        skuID = nil
+        self.menuItemID = menuItemID
+        self.optionIDs = optionIDs
         self.quantity = quantity
     }
 
     private enum CodingKeys: String, CodingKey {
         case lineType
         case skuID = "skuId"
+        case menuItemID = "menuItemId"
+        case optionIDs = "optionIds"
         case quantity
     }
 }
@@ -175,16 +281,24 @@ public struct DastakV1OrderLineInput: Codable, Equatable, Sendable {
 public struct DastakV1OrderSubmission: Codable, Equatable, Sendable {
     public let deliveryAddress: DastakV1DeliveryAddressInput
     public let recipient: DastakV1RecipientInput
+    public let restaurantBranchID: UUID?
     public let lines: [DastakV1OrderLineInput]
 
     public init(
         deliveryAddress: DastakV1DeliveryAddressInput,
         recipient: DastakV1RecipientInput,
+        restaurantBranchID: UUID? = nil,
         lines: [DastakV1OrderLineInput]
     ) {
         self.deliveryAddress = deliveryAddress
         self.recipient = recipient
+        self.restaurantBranchID = restaurantBranchID
         self.lines = lines
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case deliveryAddress, recipient, lines
+        case restaurantBranchID = "restaurantBranchId"
     }
 }
 
@@ -386,6 +500,7 @@ public struct DastakV1OrderLine: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let lineType: String
     public let skuID: UUID?
+    public let menuItemID: UUID?
     public let name: String
     public let variant: String?
     public let packSize: String?
@@ -398,6 +513,7 @@ public struct DastakV1OrderLine: Codable, Equatable, Identifiable, Sendable {
         case id
         case lineType
         case skuID = "skuId"
+        case menuItemID = "menuItemId"
         case name
         case variant
         case packSize
@@ -421,6 +537,7 @@ public struct DastakV1OrderSnapshot: Codable, Equatable, Identifiable, Sendable 
     public let support: DastakV1OrderSupport?
     public let price: DastakV1OrderPrice
     public let lines: [DastakV1OrderLine]
+    public let restaurant: DastakV1OrderRestaurant?
     public let submittedAt: String?
     public let fullySecuredAt: String?
     public let paymentExpiresAt: String?
@@ -459,6 +576,12 @@ public protocol DastakV1CustomerClient: Sendable {
         cursor: DastakV1CatalogueCursor?,
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakV1CatalogueSnapshot
+
+    func restaurants(
+        query: String?,
+        limit: Int,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> [DastakV1RestaurantMenu]
 
     func submit(
         _ order: DastakV1OrderSubmission,
@@ -501,6 +624,16 @@ public struct SupabaseDastakV1CustomerClient: DastakV1CustomerClient {
         let subcategoryId: UUID?
         let limit: Int
         let cursor: DastakV1CatalogueCursor?
+    }
+
+    private struct RestaurantRequest: Encodable, Sendable {
+        let operation = "customerRestaurants"
+        let query: String?
+        let limit: Int
+    }
+
+    private struct RestaurantResponse: Decodable, Sendable {
+        let restaurants: [DastakV1RestaurantMenu]
     }
 
     private struct OrderRequest: Encodable, Sendable {
@@ -548,6 +681,20 @@ public struct SupabaseDastakV1CustomerClient: DastakV1CustomerClient {
             ),
             idempotencyKey: idempotencyKey
         )
+    }
+
+    public func restaurants(
+        query: String? = nil,
+        limit: Int = 50,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> [DastakV1RestaurantMenu] {
+        precondition((1...100).contains(limit))
+        let response: RestaurantResponse = try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: RestaurantRequest(query: query, limit: limit),
+            idempotencyKey: idempotencyKey
+        )
+        return response.restaurants
     }
 
     public func submit(
