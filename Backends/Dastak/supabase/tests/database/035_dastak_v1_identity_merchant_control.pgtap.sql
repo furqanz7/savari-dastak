@@ -221,13 +221,22 @@ insert into dastak_v1.skus (
   'a5800000-0000-4000-8000-000000000001', 'a5700000-0000-4000-8000-000000000001',
   'Canonical Milk', 'control-canonical-milk', '1 litre', 7000, 6500, 'ACTIVE',
   'a5000000-0000-4000-8000-000000000003'
+), (
+  'a5800000-0000-4000-8000-000000000002', 'a5700000-0000-4000-8000-000000000001',
+  'Canonical Bread', 'control-canonical-bread', '400 g', 5000, 4500, 'ACTIVE',
+  'a5000000-0000-4000-8000-000000000003'
 );
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'a5000000-0000-4000-8000-000000000003', true);
 select is(
-  public.dastak_v1_merchant_canonical_catalogue_snapshot('a5400000-0000-4000-8000-000000000001', 100) #>> '{skus,0,name}',
-  'Canonical Milk',
+  pg_catalog.jsonb_path_exists(
+    public.dastak_v1_merchant_canonical_catalogue_snapshot(
+      'a5400000-0000-4000-8000-000000000001', 100
+    ),
+    '$.skus[*] ? (@.name == "Canonical Milk")'
+  ),
+  true,
   'merchant sees Dastak-owned SKU/category context and pricing'
 );
 select is(
@@ -237,6 +246,14 @@ select is(
   ) ->> 'version',
   '1',
   'merchant can select a canonical SKU with expected version zero'
+);
+select is(
+  public.dastak_v1_update_merchant_sku_selection(
+    'a5400000-0000-4000-8000-000000000001',
+    'a5800000-0000-4000-8000-000000000002', true, 0, 'select-control-bread-1'
+  ) ->> 'version',
+  '1',
+  'independent SKUs may each begin their outbox stream at version one'
 );
 select throws_ok(
   $$select public.dastak_v1_update_merchant_sku_selection('a5400000-0000-4000-8000-000000000001','a5800000-0000-4000-8000-000000000001',false,0,'select-control-stale')$$,
@@ -266,6 +283,20 @@ select throws_ok(
 );
 reset role;
 
+select is(
+  (
+    select count(*)
+    from dastak_v1.domain_events_outbox event
+    where event.event_type = 'MERCHANT_CANONICAL_SKU_SELECTION_CHANGED'
+      and event.aggregate_type = 'MERCHANT_SKU_SELECTION'
+      and event.aggregate_id in (
+        'a5800000-0000-4000-8000-000000000001',
+        'a5800000-0000-4000-8000-000000000002'
+      )
+  ),
+  2::bigint,
+  'each branch/SKU selection has an independent outbox aggregate'
+);
 select ok(
   exists (
     select 1 from dastak_v1.audit_events event
