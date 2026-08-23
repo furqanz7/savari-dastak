@@ -22,9 +22,10 @@ export type RoyaltyWithdrawal = {
   id: string;
   amountPaise: number;
   currency: "INR";
-  status: "REQUESTED" | "PROCESSING" | "PAID" | "FAILED_RETRYABLE";
-  destination?: { type: string; provider: string; displayLabel: string };
-  providerPayoutReference?: string;
+  status: "REQUESTED" | "PROCESSING" | "PAID" | "FAILED_RETRYABLE" | "FAILED" | "REVERSED";
+  destination?: { type: "BANK_ACCOUNT" | "UPI" | string; displayLabel: string };
+  providerStatus?: string;
+  reconciliationState?: "PENDING" | "IN_SYNC" | "RETRYABLE" | "REVIEW_REQUIRED";
   requestedAt: string;
   processingAt?: string;
   paidAt?: string;
@@ -45,7 +46,6 @@ export type RoyaltySubject = {
   payoutDestination?: {
     id: string;
     type: string;
-    provider: string;
     displayLabel: string;
     status: "ACTIVE";
     version: number;
@@ -176,6 +176,121 @@ export async function requestRoyaltyWithdrawal(
   };
 }
 
+export async function registerRoyaltyPayoutDestination(
+  input: Auth & {
+    subjectType: RoyaltySubject["subjectType"];
+    subjectId: string;
+    holderName: string;
+    destination:
+      | { type: "BANK_ACCOUNT"; accountNumber: string; confirmAccountNumber: string; ifsc: string }
+      | { type: "UPI"; vpa: string };
+  },
+  fetcher: typeof fetch = fetch,
+) {
+  return await callEarnings(
+    input,
+    {
+      operation: "registerRoyaltyPayoutDestination",
+      subjectType: input.subjectType,
+      subjectId: input.subjectId,
+      holderName: input.holderName,
+      destinationType: input.destination.type,
+      ...(input.destination.type === "BANK_ACCOUNT"
+        ? {
+          accountNumber: input.destination.accountNumber,
+          confirmAccountNumber: input.destination.confirmAccountNumber,
+          ifsc: input.destination.ifsc,
+        }
+        : { vpa: input.destination.vpa }),
+    },
+    crypto.randomUUID(),
+    fetcher,
+  );
+}
+
+export async function retryRoyaltyWithdrawal(
+  input: Auth & { withdrawalId: string; expectedVersion: number },
+  fetcher: typeof fetch = fetch,
+) {
+  const payload = await callEarnings(
+    input,
+    {
+      operation: "retryRoyaltyWithdrawal",
+      withdrawalId: input.withdrawalId,
+      expectedVersion: input.expectedVersion,
+    },
+    crypto.randomUUID(),
+    fetcher,
+  );
+  if (typeof payload.withdrawalId !== "string") {
+    throw new Error("The withdrawal response was invalid.");
+  }
+  return payload;
+}
+
+export type AdminRoyaltyPayout = {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  amountPaise: number;
+  effectiveStatus: string;
+  destinationSnapshot: { type: string; displayLabel: string };
+  provider?: string;
+  providerPayoutReference?: string;
+  providerStatus?: string;
+  reconciliationState?: string;
+  utr?: string;
+  requestedAt: string;
+  attempts: Array<Record<string, unknown>>;
+  providerRequests: Array<Record<string, unknown>>;
+  webhookHistory: Array<Record<string, unknown>>;
+};
+
+export async function getAdminRoyaltyPayouts(
+  input: Auth & { limit?: number },
+  fetcher: typeof fetch = fetch,
+): Promise<AdminRoyaltyPayout[]> {
+  const payload = await callEarnings(
+    input,
+    { operation: "adminRoyaltyPayouts", limit: input.limit ?? 100 },
+    crypto.randomUUID(),
+    fetcher,
+  );
+  if (!Array.isArray(payload.withdrawals)) throw new Error("Payouts are unavailable.");
+  return payload.withdrawals.map((value) => {
+    const payout = record(value);
+    const destination = record(payout.destinationSnapshot);
+    if (
+      typeof payout.id !== "string" || typeof payout.subjectType !== "string" ||
+      typeof payout.subjectId !== "string" || !validMoney(payout.amountPaise) ||
+      typeof payout.effectiveStatus !== "string" || typeof payout.requestedAt !== "string" ||
+      typeof destination.type !== "string" || typeof destination.displayLabel !== "string" ||
+      !Array.isArray(payout.attempts) || !Array.isArray(payout.providerRequests) ||
+      !Array.isArray(payout.webhookHistory)
+    ) throw new Error("Payouts are unavailable.");
+    return {
+      id: payout.id,
+      subjectType: payout.subjectType,
+      subjectId: payout.subjectId,
+      amountPaise: payout.amountPaise,
+      effectiveStatus: payout.effectiveStatus,
+      destinationSnapshot: {
+        type: destination.type,
+        displayLabel: destination.displayLabel,
+      },
+      provider: optionalString(payout.provider),
+      providerPayoutReference: optionalString(payout.providerPayoutReference),
+      providerStatus: optionalString(payout.providerStatus),
+      reconciliationState: optionalString(payout.reconciliationState),
+      utr: optionalString(payout.utr),
+      requestedAt: payout.requestedAt,
+      attempts: payout.attempts.map(record),
+      providerRequests: payout.providerRequests.map(record),
+      webhookHistory: payout.webhookHistory.map(record),
+    };
+  });
+}
+
 async function callEarnings(
   input: Auth,
   body: Record<string, unknown>,
@@ -228,7 +343,6 @@ function parseRoyaltySubject(value: unknown): RoyaltySubject {
   if (
     payout && (
       typeof payout.id !== "string" || typeof payout.type !== "string" ||
-      typeof payout.provider !== "string" ||
       typeof payout.displayLabel !== "string" ||
       payout.status !== "ACTIVE" || !validVersion(payout.version)
     )
@@ -285,7 +399,6 @@ function parseWithdrawal(value: unknown): RoyaltyWithdrawal {
   if (
     destination && (
       typeof destination.type !== "string" ||
-      typeof destination.provider !== "string" ||
       typeof destination.displayLabel !== "string"
     )
   ) throw new Error("Royalty is unavailable.");
@@ -295,7 +408,10 @@ function parseWithdrawal(value: unknown): RoyaltyWithdrawal {
     currency: "INR",
     status: withdrawal.status,
     destination: destination as RoyaltyWithdrawal["destination"],
-    providerPayoutReference: optionalString(withdrawal.providerPayoutReference),
+    providerStatus: optionalString(withdrawal.providerStatus),
+    reconciliationState: isReconciliationState(withdrawal.reconciliationState)
+      ? withdrawal.reconciliationState
+      : undefined,
     requestedAt: withdrawal.requestedAt,
     processingAt: optionalString(withdrawal.processingAt),
     paidAt: optionalString(withdrawal.paidAt),
@@ -328,5 +444,12 @@ function isWithdrawalStatus(
   value: unknown,
 ): value is RoyaltyWithdrawal["status"] {
   return value === "REQUESTED" || value === "PROCESSING" || value === "PAID" ||
-    value === "FAILED_RETRYABLE";
+    value === "FAILED_RETRYABLE" || value === "FAILED" || value === "REVERSED";
+}
+
+function isReconciliationState(
+  value: unknown,
+): value is NonNullable<RoyaltyWithdrawal["reconciliationState"]> {
+  return value === "PENDING" || value === "IN_SYNC" || value === "RETRYABLE" ||
+    value === "REVIEW_REQUIRED";
 }

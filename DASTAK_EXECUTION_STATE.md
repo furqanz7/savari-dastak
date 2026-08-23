@@ -1,8 +1,8 @@
 - Authoritative spec paths: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`, then newer overrides in `docs/DASTAK_V1_LOCKED_ADDENDA.md`
 - Authoritative branch: `codex/dastak-v1-launch`
-- Last checkpoint: Royalty and 2% platform-fee financial replacement at branch HEAD
-- Completed V1 capabilities: full Retail, Restaurant/Cafe and mixed-order lifecycle through recovery; OAuth identity; canonical Merchant controls; transport/custody safety; append-only Royalty/platform-fee accounting; provider-independent withdrawals; RBAC; durable notifications; invariant monitoring; and launch Web/iOS gates
+- Last checkpoint: RazorpayX Royalty payout adapter integration at branch HEAD
+- Completed V1 capabilities: full Retail, Restaurant/Cafe and mixed-order lifecycle through recovery; OAuth identity; canonical Merchant controls; transport/custody safety; append-only Royalty/platform-fee accounting; RazorpayX-backed bank/UPI withdrawals; RBAC; durable notifications; invariant monitoring; and launch Web/iOS gates
 - Current launch target: Customer iOS + Customer Web with founder-operated Merchant Web, Delivery Web and Admin Web
 - Deferred surfaces: Android, Merchant iOS, Delivery iOS, Admin iOS
-- Next implementation batch: external payout-rail integration only after provider authorization; production activation also requires explicit operational configuration and credentials
+- Next implementation batch: production activation only after RazorpayX credentials, source account, signed webhook, and fixed-egress IP allowlisting are explicitly authorized
 - Deployment status: local-only; not pushed, merged or deployed

@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Store,
   UserRound,
+  WalletCards,
   X,
 } from "lucide-react";
 import { RoleAccountView } from "./RoleAccountView";
@@ -42,6 +43,7 @@ import { processOrderRefund } from "./payments";
 import { AdminV1ExecutionPanel } from "./AdminV1ExecutionPanel";
 import { AdminSystemHealthPanel } from "./AdminSystemHealthPanel";
 import { AdminOperationalSafetyPanel } from "./AdminOperationalSafetyPanel";
+import { AdminRoyaltyPayoutPanel } from "./AdminRoyaltyPayoutPanel";
 
 type Props = {
   accessToken: string;
@@ -59,7 +61,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
   const [partners, setPartners] = useState<PartnerAdminApplication[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [operations, setOperations] = useState<OwnerOperationsSnapshot>();
-  const [tab, setTab] = useState<"approvals" | "exceptions" | "orders" | "execution" | "safety" | "health" | "catalogue" | "account">("approvals");
+  const [tab, setTab] = useState<"approvals" | "exceptions" | "orders" | "execution" | "payouts" | "safety" | "health" | "catalogue" | "account">("approvals");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
@@ -257,13 +259,14 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
         <button type="button" role="tab" aria-selected={tab === "exceptions"} className={tab === "exceptions" ? "selected" : ""} onClick={() => setTab("exceptions")}>Exceptions {operations?.summary.totalExceptions ? `(${operations.summary.totalExceptions})` : ""}</button>
         <button type="button" role="tab" aria-selected={tab === "orders"} className={tab === "orders" ? "selected" : ""} onClick={() => setTab("orders")}>Orders</button>
         <button type="button" role="tab" aria-selected={tab === "execution"} className={tab === "execution" ? "selected" : ""} onClick={() => setTab("execution")}><ShieldCheck size={17} /> V1 trace</button>
+        <button type="button" role="tab" aria-selected={tab === "payouts"} className={tab === "payouts" ? "selected" : ""} onClick={() => setTab("payouts")}><WalletCards size={17} /> Royalty payouts</button>
         <button type="button" role="tab" aria-selected={tab === "safety"} className={tab === "safety" ? "selected" : ""} onClick={() => setTab("safety")}><CircleAlert size={17} /> Safety</button>
         <button type="button" role="tab" aria-selected={tab === "health"} className={tab === "health" ? "selected" : ""} onClick={() => setTab("health")}><Activity size={17} /> Health</button>
         <button type="button" role="tab" aria-selected={tab === "catalogue"} className={tab === "catalogue" ? "selected" : ""} onClick={() => setTab("catalogue")}><Database size={17} /> Catalogue</button>
         <button type="button" role="tab" aria-selected={tab === "account"} className={tab === "account" ? "selected" : ""} onClick={() => setTab("account")}><UserRound size={17} /> Account</button>
       </div>
 
-      {tab === "catalogue" ? <AdminCataloguePanel auth={auth} /> : tab === "execution" ? <AdminV1ExecutionPanel auth={auth} /> : tab === "safety" ? <AdminOperationalSafetyPanel auth={auth} /> : tab === "health" ? <AdminSystemHealthPanel auth={auth} /> : tab === "account" ? <RoleAccountView
+      {tab === "catalogue" ? <AdminCataloguePanel auth={auth} /> : tab === "execution" ? <AdminV1ExecutionPanel auth={auth} /> : tab === "payouts" ? <AdminRoyaltyPayoutPanel auth={auth} /> : tab === "safety" ? <AdminOperationalSafetyPanel auth={auth} /> : tab === "health" ? <AdminSystemHealthPanel auth={auth} /> : tab === "account" ? <RoleAccountView
         accessToken={accessToken}
         displayName={displayName}
         email={email}

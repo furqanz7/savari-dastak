@@ -47,9 +47,18 @@ Configured secret names:
 - `RAZORPAY_KEY_ID`
 - `RAZORPAY_KEY_SECRET`
 - `RAZORPAY_WEBHOOK_SECRET`
+- `RAZORPAYX_MODE`
+- `RAZORPAYX_KEY_ID`
+- `RAZORPAYX_KEY_SECRET`
+- `RAZORPAYX_ACCOUNT_NUMBER`
+- `RAZORPAYX_WEBHOOK_SECRET`
+- `RAZORPAYX_DESTINATION_FINGERPRINT_SECRET`
+- `RAZORPAYX_LIVE_EGRESS_ALLOWLIST_CONFIRMED`
 - Supabase-managed URL, key, database, and JWKS variables
 
 Razorpay test/live mode is determined by the configured key pair. This inventory verifies presence, not the mode or values. No payment credential is changed in Phase 0-B.
+
+RazorpayX Royalty payouts use a separate test/live mode flag and credentials. Live mode is structurally blocked unless fixed outbound egress has been allowlisted with RazorpayX and `RAZORPAYX_LIVE_EGRESS_ALLOWLIST_CONFIRMED=true`; setting that flag without the external allowlist is not an activation procedure. RazorpayX webhook signing uses its dedicated secret.
 
 ## Vercel
 

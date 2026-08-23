@@ -83,6 +83,7 @@ jobs:
       - run: scripts/test-v1-step4b-final-delivery-concurrency.sh
       - run: scripts/test-v1-step5-launch-failure-financial-concurrency.sh
       - run: scripts/test-v1-royalty-financial-concurrency.sh
+      - run: scripts/test-v1-razorpayx-payout-concurrency.sh
       - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-env supabase/functions/tests/
       - run: deno test --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen --allow-read supabase/tests/database/
       - run: find supabase/functions -name '*.ts' -print0 | xargs -0 deno check --config supabase/functions/deno.json --lock supabase/functions/deno.lock --frozen

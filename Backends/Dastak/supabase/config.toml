@@ -524,6 +524,13 @@ verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/razorpay-webhook/index.ts"
 
+[functions.razorpayx-payout-webhook]
+enabled = true
+# RazorpayX authenticates this endpoint with an HMAC over the raw request body.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/razorpayx-payout-webhook/index.ts"
+
 [functions.earnings]
 enabled = true
 verify_jwt = true

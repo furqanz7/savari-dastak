@@ -50,3 +50,13 @@ This section is newer than, and overrides, conflicting settlement eligibility or
 - Approved Merchant/Rider liability creates an append-only negative Royalty adjustment without altering the original earning, historical withdrawal, or independent customer refund. Later earnings offset a negative balance before any amount becomes withdrawable.
 - Merchant and Delivery Partner may request any positive available Royalty at any time. Request/processing/paid/failed-retryable states, transactional reservation, immutable payout-destination snapshots, and idempotent results are mandatory. `Paid` requires external payout confirmation.
 - No payout provider is authorized by this addendum. The provider-independent domain is required in code; an authorized external payout rail and credentials remain a production integration decision.
+
+## Newest payout-rail authority: RazorpayX
+
+This section is newer than, and overrides, only the preceding statement that no payout provider was authorized.
+
+- RazorpayX is the external payout rail for Merchant and Delivery Partner Royalty withdrawals. Dastak's append-only ledger remains the sole balance authority.
+- Supported destinations are Indian bank accounts and UPI VPAs, represented by Dastak-owned records with masked client projections and immutable per-withdrawal snapshots.
+- Contact, Fund Account, and Payout operations remain behind a server-only adapter. A Dastak withdrawal UUID is the mandatory RazorpayX payout idempotency key, so one withdrawal can never create two external payouts.
+- Provider success, failure, and reversal are verified, deduplicated, preserved, and reconciled without rewriting the original earning or withdrawal history. `Paid` requires authoritative provider confirmation.
+- Integration is test-mode first. Live mode requires explicit credentials, source account, webhook secret/configuration, and confirmed fixed-egress IP allowlisting; no live payout is authorized by this addendum.

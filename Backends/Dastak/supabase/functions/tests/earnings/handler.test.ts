@@ -27,6 +27,16 @@ const dependencies = (
     },
     response_status: 200,
   }],
+  registerPayoutDestination: async () => ({
+    destinationId: subjectId,
+    type: "BANK_ACCOUNT",
+    displayLabel: "Bank account •••• 1234",
+  }),
+  executeWithdrawal: async (_actorId, withdrawalId) => ({
+    withdrawalId,
+    status: "PROCESSING",
+    providerStatus: "PENDING",
+  }),
   ...overrides,
 });
 
@@ -91,8 +101,9 @@ Deno.test("merchant Royalty snapshot uses authenticated account ownership", asyn
   }]);
 });
 
-Deno.test("withdrawal forwards subject, amount, and idempotency key", async () => {
+Deno.test("withdrawal reserves in Dastak then executes the same withdrawal externally", async () => {
   let call: [string, Record<string, unknown>] | undefined;
+  let execution: [string, string, number] | undefined;
   const response = await handleEarnings(
     request(
       {
@@ -107,7 +118,16 @@ Deno.test("withdrawal forwards subject, amount, and idempotency key", async () =
     dependencies({
       callRPC: async (rpc, args) => {
         call = [rpc, args];
-        return { withdrawalId: subjectId, status: "REQUESTED", amountPaise: 1500 };
+        return {
+          withdrawalId: subjectId,
+          status: "REQUESTED",
+          amountPaise: 1500,
+          version: 1,
+        };
+      },
+      executeWithdrawal: async (actor, withdrawalId, version) => {
+        execution = [actor, withdrawalId, version];
+        return { withdrawalId, status: "PROCESSING", providerStatus: "queued" };
       },
     }),
   );
@@ -118,6 +138,178 @@ Deno.test("withdrawal forwards subject, amount, and idempotency key", async () =
     p_subject_id: subjectId,
     p_amount_paise: 1500,
     p_idempotency_key: "withdraw-1",
+  }]);
+  assertEquals(execution, [accountId, subjectId, 1]);
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), {
+    withdrawalId: subjectId,
+    status: "PROCESSING",
+    amountPaise: 1500,
+    version: 1,
+    providerStatus: "queued",
+  });
+});
+
+Deno.test("withdrawal keeps the reservation and exposes retryable reconciliation on provider outage", async () => {
+  const response = await handleEarnings(
+    request(
+      {
+        operation: "requestRoyaltyWithdrawal",
+        subjectType: "RIDER",
+        subjectId,
+        amountPaise: 1500,
+      },
+      "Bearer valid",
+      "withdraw-provider-outage",
+    ),
+    dependencies({
+      callRPC: async () => ({
+        withdrawalId: subjectId,
+        status: "REQUESTED",
+        amountPaise: 1500,
+        version: 1,
+      }),
+      executeWithdrawal: async () => Promise.reject(new Error("provider unavailable")),
+    }),
+  );
+  assertEquals(response.status, 202);
+  assertEquals(await response.json(), {
+    withdrawalId: subjectId,
+    status: "REQUESTED",
+    amountPaise: 1500,
+    version: 1,
+    providerProcessingDeferred: true,
+    reconciliationState: "RETRYABLE",
+  });
+});
+
+Deno.test("bank payout registration confirms the account and forwards only authenticated subject input", async () => {
+  let registration: unknown;
+  const response = await handleEarnings(
+    request({
+      operation: "registerRoyaltyPayoutDestination",
+      subjectType: "MERCHANT_ORGANIZATION",
+      subjectId,
+      destinationType: "BANK_ACCOUNT",
+      holderName: "Dastak Store",
+      accountNumber: "123456789012",
+      confirmAccountNumber: "123456789012",
+      ifsc: "HDFC0001234",
+    }),
+    dependencies({
+      registerPayoutDestination: async (actor, input) => {
+        registration = { actor, input };
+        return { destinationId: subjectId, displayLabel: "Bank account •••• 9012" };
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(registration, {
+    actor: accountId,
+    input: {
+      subjectType: "MERCHANT_ORGANIZATION",
+      subjectId,
+      destination: {
+        type: "BANK_ACCOUNT",
+        holderName: "Dastak Store",
+        accountNumber: "123456789012",
+        ifsc: "HDFC0001234",
+      },
+    },
+  });
+});
+
+Deno.test("UPI payout registration validates and normalizes the VPA", async () => {
+  let registration: unknown;
+  const response = await handleEarnings(
+    request({
+      operation: "registerRoyaltyPayoutDestination",
+      subjectType: "RIDER",
+      subjectId,
+      destinationType: "UPI",
+      holderName: "Dastak Rider",
+      vpa: "Rider.Name@OKAXIS",
+    }),
+    dependencies({
+      registerPayoutDestination: async (actor, input) => {
+        registration = { actor, input };
+        return { destinationId: subjectId, displayLabel: "UPI • ri***@okaxis" };
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(registration, {
+    actor: accountId,
+    input: {
+      subjectType: "RIDER",
+      subjectId,
+      destination: {
+        type: "UPI",
+        holderName: "Dastak Rider",
+        vpa: "rider.name@okaxis",
+      },
+    },
+  });
+});
+
+Deno.test("payout destination registration rejects mismatched bank confirmation", async () => {
+  let called = false;
+  const response = await handleEarnings(
+    request({
+      operation: "registerRoyaltyPayoutDestination",
+      subjectType: "RIDER",
+      subjectId,
+      destinationType: "BANK_ACCOUNT",
+      holderName: "Dastak Rider",
+      accountNumber: "123456789012",
+      confirmAccountNumber: "123456789013",
+      ifsc: "HDFC0001234",
+    }),
+    dependencies({
+      registerPayoutDestination: async () => {
+        called = true;
+        return undefined;
+      },
+    }),
+  );
+  assertEquals(response.status, 400);
+  assertEquals(called, false);
+});
+
+Deno.test("retry executes an authenticated existing Dastak withdrawal", async () => {
+  let execution: unknown;
+  const response = await handleEarnings(
+    request({
+      operation: "retryRoyaltyWithdrawal",
+      withdrawalId: subjectId,
+      expectedVersion: 4,
+    }),
+    dependencies({
+      executeWithdrawal: async (actor, withdrawalId, version) => {
+        execution = { actor, withdrawalId, version };
+        return { withdrawalId, status: "PROCESSING", providerStatus: "pending" };
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(execution, { actor: accountId, withdrawalId: subjectId, version: 4 });
+});
+
+Deno.test("Admin payout trace remains platform-RBAC mediated by the database", async () => {
+  let call: unknown;
+  const response = await handleEarnings(
+    request({ operation: "adminRoyaltyPayouts", limit: 25 }),
+    dependencies({
+      callRPC: async (rpc, args) => {
+        call = [rpc, args];
+        return [{ response_body: { withdrawals: [] }, response_status: 200 }];
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(call, ["dastak_v1_razorpayx_admin_snapshot", {
+    p_account_id: accountId,
+    p_limit: 25,
   }]);
 });
 

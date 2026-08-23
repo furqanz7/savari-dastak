@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getRoyalty, requestRoyaltyWithdrawal } from "./earnings";
+import {
+  getAdminRoyaltyPayouts,
+  getRoyalty,
+  registerRoyaltyPayoutDestination,
+  requestRoyaltyWithdrawal,
+  retryRoyaltyWithdrawal,
+} from "./earnings";
 
 const auth = {
   supabaseUrl: "https://example.supabase.co",
@@ -30,9 +36,8 @@ describe("Royalty", () => {
           canWithdraw: true,
           payoutDestination: {
             id: "95000000-0000-4000-8000-000000000002",
-            type: "PROVIDER_DESTINATION",
-            provider: "TEST",
-            displayLabel: "Bank • 1234",
+            type: "BANK_ACCOUNT",
+            displayLabel: "Bank account •••• 1234",
             status: "ACTIVE",
             version: 1,
           },
@@ -110,5 +115,110 @@ describe("Royalty", () => {
         amountPaise: 1500,
         status: "COMPLETED",
       })))).rejects.toThrow("invalid");
+  });
+
+  it("submits confirmed bank details only through the authenticated earnings function", async () => {
+    let body: unknown;
+    await registerRoyaltyPayoutDestination({
+      ...auth,
+      subjectType: "MERCHANT_ORGANIZATION",
+      subjectId,
+      holderName: "Dastak Store",
+      destination: {
+        type: "BANK_ACCOUNT",
+        accountNumber: "123456789012",
+        confirmAccountNumber: "123456789012",
+        ifsc: "HDFC0001234",
+      },
+    }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(Response.json({
+        destinationId: "95000000-0000-4000-8000-000000000010",
+        type: "BANK_ACCOUNT",
+        displayLabel: "Bank account •••• 9012",
+      }));
+    });
+    expect(body).toEqual({
+      operation: "registerRoyaltyPayoutDestination",
+      subjectType: "MERCHANT_ORGANIZATION",
+      subjectId,
+      holderName: "Dastak Store",
+      destinationType: "BANK_ACCOUNT",
+      accountNumber: "123456789012",
+      confirmAccountNumber: "123456789012",
+      ifsc: "HDFC0001234",
+    });
+  });
+
+  it("supports UPI destination registration without Razorpay terminology", async () => {
+    let body: Record<string, unknown> | undefined;
+    await registerRoyaltyPayoutDestination({
+      ...auth,
+      subjectType: "RIDER",
+      subjectId,
+      holderName: "Dastak Rider",
+      destination: { type: "UPI", vpa: "rider@okaxis" },
+    }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(Response.json({
+        destinationId: "95000000-0000-4000-8000-000000000011",
+        type: "UPI",
+        displayLabel: "UPI • ri***@okaxis",
+      }));
+    });
+    expect(body).toMatchObject({
+      operation: "registerRoyaltyPayoutDestination",
+      destinationType: "UPI",
+      vpa: "rider@okaxis",
+    });
+    expect(JSON.stringify(body)).not.toContain("Razorpay");
+  });
+
+  it("retries an existing reserved withdrawal using its version", async () => {
+    let body: unknown;
+    const result = await retryRoyaltyWithdrawal({
+      ...auth,
+      withdrawalId: "95000000-0000-4000-8000-000000000012",
+      expectedVersion: 3,
+    }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(Response.json({
+        withdrawalId: "95000000-0000-4000-8000-000000000012",
+        status: "PROCESSING",
+      }));
+    });
+    expect(body).toEqual({
+      operation: "retryRoyaltyWithdrawal",
+      withdrawalId: "95000000-0000-4000-8000-000000000012",
+      expectedVersion: 3,
+    });
+    expect(result.status).toBe("PROCESSING");
+  });
+
+  it("parses the Admin provider reconciliation trace separately from user Royalty", async () => {
+    const payouts = await getAdminRoyaltyPayouts({ ...auth, limit: 25 }, () =>
+      Promise.resolve(Response.json({
+        withdrawals: [{
+          id: "95000000-0000-4000-8000-000000000013",
+          subjectType: "RIDER",
+          subjectId,
+          amountPaise: 1500,
+          effectiveStatus: "PROCESSING",
+          destinationSnapshot: {
+            type: "UPI",
+            displayLabel: "UPI • ri***@okaxis",
+          },
+          provider: "RAZORPAYX",
+          providerPayoutReference: "pout_00000000000001",
+          providerStatus: "PENDING",
+          reconciliationState: "PENDING",
+          requestedAt: "2026-08-23T00:00:00Z",
+          attempts: [],
+          providerRequests: [],
+          webhookHistory: [],
+        }],
+      })));
+    expect(payouts[0].providerPayoutReference).toBe("pout_00000000000001");
+    expect(payouts[0].destinationSnapshot.displayLabel).toBe("UPI • ri***@okaxis");
   });
 });
