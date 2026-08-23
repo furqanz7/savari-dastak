@@ -218,7 +218,9 @@ insert into dastak_v1.platform_settings (
  '98000000-0000-4000-8000-000000000002', 'Step Two transport.'),
 ('98000000-0000-4000-8000-000000000058', 'delivery.default_sku_logistics', 'GLOBAL',
  '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}',
- '98000000-0000-4000-8000-000000000002', 'Step Two fallback logistics.');
+ '98000000-0000-4000-8000-000000000002', 'Step Two fallback logistics.'),
+('98000000-0000-4000-8000-000000000059', 'merchant.reachability_stale_seconds', 'GLOBAL',
+ '300', '98000000-0000-4000-8000-000000000002', 'Step Two merchant heartbeat threshold.');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '98000000-0000-4000-8000-000000000001', true);

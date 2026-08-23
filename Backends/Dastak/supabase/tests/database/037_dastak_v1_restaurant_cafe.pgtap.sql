@@ -175,7 +175,9 @@ insert into dastak_v1.platform_settings (
  '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}',
  '99700000-0000-4000-8000-000000000002','Restaurant V1 tests.'),
 ('99700000-0000-4000-8000-000000000069','settlement.merchant_commission_bps','GLOBAL','0',
- '99700000-0000-4000-8000-000000000002','Restaurant V1 tests.')
+ '99700000-0000-4000-8000-000000000002','Restaurant V1 tests.'),
+('99700000-0000-4000-8000-00000000006a','merchant.reachability_stale_seconds','GLOBAL','300',
+ '99700000-0000-4000-8000-000000000002','Restaurant local merchant heartbeat threshold.')
 on conflict do nothing;
 
 select set_config('request.jwt.claim.sub','99700000-0000-4000-8000-000000000001',true);

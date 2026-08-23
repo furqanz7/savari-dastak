@@ -256,6 +256,23 @@ select ok(
   'a newly observed valid token explicitly reactivates with a version increment'
 );
 
+insert into dastak_v1.platform_settings (
+  id, setting_key, scope_type, setting_value, updated_by, update_reason
+) values
+  (
+    '94000000-0000-4000-8000-000000000040',
+    'observability.outbox_stale_seconds', 'GLOBAL', '300',
+    '94000000-0000-4000-8000-000000000001',
+    'Launch-hardening local outbox threshold.'
+  ),
+  (
+    '94000000-0000-4000-8000-000000000041',
+    'observability.alert_thresholds', 'GLOBAL',
+    '{"outboxPendingCount":100,"notificationPendingCount":100,"paymentReconciliationOpenCount":0,"riderEscalationOpenCount":0,"merchantUnreachableBranchCount":0,"customerUnreachableDueCount":0}',
+    '94000000-0000-4000-8000-000000000001',
+    'Launch-hardening local operational alert thresholds.'
+  );
+
 create temp table tap_monitor_run on commit drop as
 select public.dastak_v1_run_invariant_monitors('tap-worker-a') as body;
 select is(

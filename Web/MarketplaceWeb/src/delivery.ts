@@ -500,6 +500,7 @@ export type V1DeliveryMissionOperation =
   | "v1VerifyPickup"
   | "v1CancelBeforePickup"
   | "v1ReportDeliveryProblem"
+  | "v1ReportCustomerUnreachable"
   | "v1StartFinalDelivery"
   | "v1ArriveAtCustomer"
   | "v1AddDeliveryEvidence"

@@ -51,6 +51,9 @@ export function AdminSystemHealthPanel({ auth }: { auth: DastakV1Auth }) {
         <Metric icon={<AlertTriangle size={18} />} label="Outbox dead letter" value={String(health.outbox.deadLetter)} attention={health.outbox.deadLetter > 0} />
         <Metric icon={<BellRing size={18} />} label="Notifications" value={`${health.notifications.pending} pending`} detail={`${health.notifications.inFlight} in flight · ${health.notifications.deadLetter} dead`} attention={health.notifications.deadLetter > 0} />
         <Metric icon={<Clock3 size={18} />} label="Payment reconciliation" value={String(health.paymentReconciliationOpen)} attention={health.paymentReconciliationOpen > 0} />
+        <Metric icon={<AlertTriangle size={18} />} label="Rider escalations" value={String(health.operationalAlerts.counts.riderEscalationOpenCount)} detail={`Alert above ${health.operationalAlerts.thresholds.riderEscalationOpenCount}`} attention={health.operationalAlerts.counts.riderEscalationOpenCount > health.operationalAlerts.thresholds.riderEscalationOpenCount} />
+        <Metric icon={<AlertTriangle size={18} />} label="Unreachable merchants" value={String(health.operationalAlerts.counts.merchantUnreachableBranchCount)} detail={`Alert above ${health.operationalAlerts.thresholds.merchantUnreachableBranchCount}`} attention={health.operationalAlerts.counts.merchantUnreachableBranchCount > health.operationalAlerts.thresholds.merchantUnreachableBranchCount} />
+        <Metric icon={<Clock3 size={18} />} label="Customer contact due" value={String(health.operationalAlerts.counts.customerUnreachableDueCount)} detail={`Alert above ${health.operationalAlerts.thresholds.customerUnreachableDueCount}`} attention={health.operationalAlerts.counts.customerUnreachableDueCount > health.operationalAlerts.thresholds.customerUnreachableDueCount} />
       </div>
       <section className="v1-health-monitor">
         <h3>Invariant monitor</h3>

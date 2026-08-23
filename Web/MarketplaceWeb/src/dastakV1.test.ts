@@ -363,6 +363,19 @@ describe("Dastak V1 web contract", () => {
         },
         notifications: { pending: 2, inFlight: 1, deadLetter: 0 },
         paymentReconciliationOpen: 1,
+        operationalAlerts: {
+          breached: true,
+          counts: {
+            outboxPendingCount: 3, notificationPendingCount: 2,
+            paymentReconciliationOpenCount: 1, riderEscalationOpenCount: 1,
+            merchantUnreachableBranchCount: 0, customerUnreachableDueCount: 0,
+          },
+          thresholds: {
+            outboxPendingCount: 10, notificationPendingCount: 10,
+            paymentReconciliationOpenCount: 0, riderEscalationOpenCount: 0,
+            merchantUnreachableBranchCount: 0, customerUnreachableDueCount: 0,
+          },
+        },
         observedAt: "2026-08-23T00:01:02Z",
       });
     });

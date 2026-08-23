@@ -461,7 +461,21 @@ export type V1SystemHealth = {
   };
   notifications: { pending: number; inFlight: number; deadLetter: number };
   paymentReconciliationOpen: number;
+  operationalAlerts: {
+    breached: boolean;
+    counts: V1OperationalAlertValues;
+    thresholds: V1OperationalAlertValues;
+  };
   observedAt: string;
+};
+
+export type V1OperationalAlertValues = {
+  outboxPendingCount: number;
+  notificationPendingCount: number;
+  paymentReconciliationOpenCount: number;
+  riderEscalationOpenCount: number;
+  merchantUnreachableBranchCount: number;
+  customerUnreachableDueCount: number;
 };
 
 export type V1OrderSubmission = {
@@ -2000,6 +2014,7 @@ export function parseV1SystemHealth(value: unknown): V1SystemHealth {
   const source = requiredRecord(value);
   const outbox = requiredRecord(source.outbox);
   const notifications = requiredRecord(source.notifications);
+  const operationalAlerts = requiredRecord(source.operationalAlerts);
   const monitor = source.lastMonitorRun === null || source.lastMonitorRun === undefined
     ? undefined
     : requiredRecord(source.lastMonitorRun);
@@ -2038,7 +2053,24 @@ export function parseV1SystemHealth(value: unknown): V1SystemHealth {
       deadLetter: requiredInteger(notifications.deadLetter, 0),
     },
     paymentReconciliationOpen: requiredInteger(source.paymentReconciliationOpen, 0),
+    operationalAlerts: {
+      breached: requiredBoolean(operationalAlerts.breached),
+      counts: parseOperationalAlertValues(operationalAlerts.counts),
+      thresholds: parseOperationalAlertValues(operationalAlerts.thresholds),
+    },
     observedAt: requiredTimestamp(source.observedAt),
+  };
+}
+
+function parseOperationalAlertValues(value: unknown): V1OperationalAlertValues {
+  const source = requiredRecord(value);
+  return {
+    outboxPendingCount: requiredInteger(source.outboxPendingCount, 0),
+    notificationPendingCount: requiredInteger(source.notificationPendingCount, 0),
+    paymentReconciliationOpenCount: requiredInteger(source.paymentReconciliationOpenCount, 0),
+    riderEscalationOpenCount: requiredInteger(source.riderEscalationOpenCount, 0),
+    merchantUnreachableBranchCount: requiredInteger(source.merchantUnreachableBranchCount, 0),
+    customerUnreachableDueCount: requiredInteger(source.customerUnreachableDueCount, 0),
   };
 }
 

@@ -36,7 +36,8 @@ export type V1DeliveryMissionAction =
   | "ARRIVE_PICKUP"
   | "VERIFY_PICKUP"
   | "CANCEL_BEFORE_PICKUP"
-  | "REPORT_DELIVERY_PROBLEM";
+  | "REPORT_DELIVERY_PROBLEM"
+  | "REPORT_CUSTOMER_UNREACHABLE";
 
 export type V1DeliveryMissionMutationInput = {
   accountId: string;
@@ -206,6 +207,14 @@ export async function handleCourierDispatch(
           body,
           actor.accountId,
           "REPORT_DELIVERY_PROBLEM",
+          dependencies.advanceV1Mission,
+        );
+      case "v1ReportCustomerUnreachable":
+        return await v1MissionMutation(
+          request,
+          body,
+          actor.accountId,
+          "REPORT_CUSTOMER_UNREACHABLE",
           dependencies.advanceV1Mission,
         );
       case "v1StartFinalDelivery":
@@ -471,7 +480,8 @@ async function v1MissionMutation(
     ? validV1VerificationCode(body.verificationCode)
     : null;
   const needsReason = action === "CANCEL_BEFORE_PICKUP" ||
-    action === "REPORT_DELIVERY_PROBLEM";
+    action === "REPORT_DELIVERY_PROBLEM" ||
+    action === "REPORT_CUSTOMER_UNREACHABLE";
   const reason = needsReason ? normalizeRequiredText(body.reason, 500) : null;
   if (
     !idempotencyKey || !missionId || (needsStop && !stopId) ||

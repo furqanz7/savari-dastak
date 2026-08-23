@@ -107,6 +107,27 @@ insert into dastak_v1.merchant_branches (
   extensions.st_setsrid(extensions.st_makepoint(80.60,15.70),4326),5,'ACTIVE',
   '99500000-0000-4000-8000-000000000001'
 ) on conflict (id) do nothing;
+insert into dastak_v1.platform_settings (
+  id,setting_key,scope_type,setting_value,updated_by,update_reason
+)
+select
+  '99500000-0000-4000-8000-000000000302','merchant.reachability_stale_seconds',
+  'GLOBAL','300'::jsonb,'99500000-0000-4000-8000-000000000001',
+  'Step 4B merchant reachability fixture.'
+where not exists (
+  select 1 from dastak_v1.platform_settings
+  where setting_key='merchant.reachability_stale_seconds'
+    and scope_type='GLOBAL' and scope_id is null
+);
+insert into dastak_v1.branch_operational_states (
+  branch_id,is_open,accepting_orders,updated_by
+) values (
+  '99500000-0000-4000-8000-000000000011',true,true,
+  '99500000-0000-4000-8000-000000000006'
+)
+on conflict (branch_id) do update
+set is_open=true,accepting_orders=true,updated_by=excluded.updated_by,
+    version=dastak_v1.branch_operational_states.version+1;
 insert into dastak_v1.categories (id,name,slug,status,created_by) values
 ('99500000-0000-4000-8000-000000000012','Step 4B Category','step-4b-category','ACTIVE','99500000-0000-4000-8000-000000000001')
 on conflict (id) do nothing;

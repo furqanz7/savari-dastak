@@ -311,6 +311,14 @@ insert into dastak_v1.platform_settings (
   '[]'::jsonb,
   '97000000-0000-4000-8000-000000000002',
   'Wave One invalid preparation options test.'
+),
+(
+  '97000000-0000-4000-8000-000000000049',
+  'merchant.reachability_stale_seconds',
+  'GLOBAL',
+  '300'::jsonb,
+  '97000000-0000-4000-8000-000000000002',
+  'Wave One local merchant heartbeat threshold.'
 );
 
 set local role authenticated;

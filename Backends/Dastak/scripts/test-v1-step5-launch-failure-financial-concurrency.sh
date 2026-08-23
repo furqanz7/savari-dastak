@@ -189,7 +189,10 @@ from (values
 ('99600000-0000-4000-8000-000000000310'::uuid,'refunds.approval_limit_paise','100000'::jsonb),
 ('99600000-0000-4000-8000-000000000311'::uuid,'settlement.merchant_commission_bps','0'::jsonb),
 ('99600000-0000-4000-8000-000000000312'::uuid,'settlement.rider_distance_payout','{"base_distance_meters":1000,"base_payout_paise":1500,"increment_distance_meters":1000,"increment_payout_paise":500,"rounding":"STARTED_DISTANCE_BAND"}'::jsonb),
-('99600000-0000-4000-8000-000000000313'::uuid,'delivery.verification_invalid_attempt_limit','3'::jsonb)
+('99600000-0000-4000-8000-000000000313'::uuid,'delivery.verification_invalid_attempt_limit','3'::jsonb),
+('99600000-0000-4000-8000-000000000314'::uuid,'settlement.payout_cadence','{"mode":"MANUAL_TEST"}'::jsonb),
+('99600000-0000-4000-8000-000000000315'::uuid,'delivery.customer_unreachable_policy','{"waitSeconds":120,"minimumContactAttempts":2,"contactChannels":["IN_APP_CALL","PHONE_CALL"]}'::jsonb),
+('99600000-0000-4000-8000-000000000316'::uuid,'merchant.reachability_stale_seconds','300'::jsonb)
 ) setting(id,key,value)
 where not exists (select 1 from dastak_v1.platform_settings existing where existing.setting_key=setting.key and existing.scope_type='GLOBAL' and existing.scope_id is null);
 
@@ -266,16 +269,9 @@ insert into dastak_v1.delivery_missions (
   id,order_id,status,assigned_rider_id,assigned_transport_type,transport_snapshot,pickup_count,
   search_started_at,assigned_at,first_package_picked_up_at,all_packages_picked_up_at,out_for_delivery_at,version
 ) values (
-  '99600000-0000-4000-8000-000000000202','99600000-0000-4000-8000-000000000102','DELIVERY_RECOVERY',
+  '99600000-0000-4000-8000-000000000202','99600000-0000-4000-8000-000000000102','OUT_FOR_DELIVERY',
   '99600000-0000-4000-8000-000000000008','MOTORBIKE','{"feasible":true,"eligibleTransportTypes":["MOTORBIKE"]}',1,
   now()-interval '40 minutes',now()-interval '35 minutes',now()-interval '30 minutes',now()-interval '29 minutes',now()-interval '20 minutes',7
-) on conflict (id) do nothing;
-insert into dastak_v1.recovery_cases (
-  id,case_type,order_id,delivery_mission_id,status,fault_source,reason,opened_by,opened_at
-) values (
-  '99600000-0000-4000-8000-000000000203','DELIVERY','99600000-0000-4000-8000-000000000102',
-  '99600000-0000-4000-8000-000000000202','ACTION_REQUIRED','UNKNOWN','Address access issue requires Operations.',
-  '99600000-0000-4000-8000-000000000008',now()-interval '5 minutes'
 ) on conflict (id) do nothing;
 insert into dastak_v1.settlement_entries (
   id,entry_key,subject_type,subject_id,order_id,fulfilment_id,order_line_id,entry_type,
@@ -349,15 +345,47 @@ select
   (select count(*) from dastak_v1.refunds where recovery_case_id='$second_recovery_case'::uuid and status='APPROVED' and amount_paise=900 and destination='ORIGINAL_PAYMENT_METHOD')")"
 [[ "$failed_recovery_truth" == "RECOVERY_FAILED|DASTAK_FULFILMENT_FAILURE|REFUNDED|1|1" ]] || { printf 'failed exact-SKU recovery/refund invariants failed: %s\n' "$failed_recovery_truth" >&2; exit 1; }
 
+# Customer-unreachable policy is consumed and snapshotted into the normal,
+# Operations-only Delivery Recovery workflow.
+customer_unreachable_status="$("${psql_base[@]}" -Atc "select response_status
+from public.dastak_v1_advance_delivery_mission(
+  '$recovery_rider_id'::uuid,'$delivery_recovery_mission'::uuid,
+  'REPORT_CUSTOMER_UNREACHABLE',null,null,null,
+  'Customer could not be reached at the destination.',
+  'customer-unreachable-$run_token','customer-unreachable'
+)")"
+[[ "$customer_unreachable_status" == "200" ]] || {
+  printf 'customer-unreachable action failed: %s\n' "$customer_unreachable_status" >&2; exit 1;
+}
+delivery_recovery_case="$("${psql_base[@]}" -Atc "select id from dastak_v1.recovery_cases where delivery_mission_id='$delivery_recovery_mission'::uuid")"
+[[ -n "$delivery_recovery_case" ]] || { printf 'customer-unreachable recovery case missing\n' >&2; exit 1; }
+customer_unreachable_truth="$("${psql_base[@]}" -At -F '|' -c "
+select mission.status,problem.problem_code,
+  problem.operational_policy_snapshot->>'waitSeconds',
+  problem.operational_policy_snapshot->>'minimumContactAttempts',
+  extract(epoch from problem.next_action_at-problem.reported_at)::integer,
+  recovery.delivery_problem_code,
+  recovery.operational_policy_snapshot=problem.operational_policy_snapshot,
+  recovery.next_action_at=problem.next_action_at,
+  (select count(*) from dastak_v1.domain_events_outbox event
+    where event.aggregate_id=recovery.id and event.event_type='DELIVERY_RECOVERY_STARTED')
+from dastak_v1.delivery_missions mission
+join dastak_v1.delivery_problem_reports problem on problem.mission_id=mission.id
+join dastak_v1.recovery_cases recovery on recovery.delivery_mission_id=mission.id
+where mission.id='$delivery_recovery_mission'::uuid")"
+[[ "$customer_unreachable_truth" == "DELIVERY_RECOVERY|CUSTOMER_UNREACHABLE|120|2|120|CUSTOMER_UNREACHABLE|t|t|1" ]] || {
+  printf 'customer-unreachable policy snapshot failed: %s\n' "$customer_unreachable_truth" >&2; exit 1;
+}
+
 # Delivery Recovery remains an Operations-only, audited state distinct from normal delivery.
 delivery_resume="$("${psql_base[@]}" -Atc "select dastak_v1_api.manage_delivery_recovery(
-  '$owner_id'::uuid,'99600000-0000-4000-8000-000000000203'::uuid,'RESUME_DELIVERY','CUSTOMER',null,
+  '$owner_id'::uuid,'$delivery_recovery_case'::uuid,'RESUME_DELIVERY','CUSTOMER',null,
   '{\"line1\":\"3A Corrected Recovery Road\",\"latitude\":15.68,\"longitude\":80.62}'::jsonb,
   'Customer confirmed a minor address correction.',1,'resume-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor")"
 [[ "$delivery_resume" == *'"recoveryStatus": "RESOLVED"'* && "$delivery_resume" == *'"missionStatus": "OUT_FOR_DELIVERY"'* ]] || {
   printf 'delivery recovery did not resume safely: %s\n' "$delivery_resume" >&2; exit 1;
 }
-[[ "$("${psql_base[@]}" -Atc "select count(*) from dastak_v1.delivery_address_exceptions where recovery_case_id='99600000-0000-4000-8000-000000000203'::uuid")" == "1" ]] || {
+[[ "$("${psql_base[@]}" -Atc "select count(*) from dastak_v1.delivery_address_exceptions where recovery_case_id='$delivery_recovery_case'::uuid")" == "1" ]] || {
   printf 'delivery recovery address exception was not audited\n' >&2; exit 1;
 }
 
@@ -449,6 +477,118 @@ select
 [[ "$reverse_truth" == "COMPLETED|COMPLETED|1|2|1" ]] || { printf 'reverse custody/refund invariants failed: %s\n' "$reverse_truth" >&2; exit 1; }
 refund_id="$("${psql_base[@]}" -Atc "select id from dastak_v1.refunds where return_id='$return_id'::uuid")"
 
+# Concurrent invalid reverse-custody attempts reach the configured threshold
+# exactly once for both handoff directions without moving custody.
+"${psql_base[@]}" <<SQL
+insert into dastak_v1.customer_issues (
+  id,order_id,customer_id,order_line_id,category,status,description
+) values
+('99600000-0000-4000-8000-000000000400','$delivered_order','$customer_id','$delivered_line','DELIVERY_PROBLEM','UNDER_REVIEW','Concurrent customer return-pickup threshold fixture.'),
+('99600000-0000-4000-8000-000000000401','$delivered_order','$customer_id','$delivered_line','DELIVERY_PROBLEM','UNDER_REVIEW','Concurrent merchant return-receipt threshold fixture.');
+
+insert into dastak_v1.returns (
+  id,order_id,source,customer_issue_id,status,physical_return_required,
+  approved_refund_amount_paise,refund_fault_source,reason,requested_by,
+  decided_by,decided_at
+) values
+('99600000-0000-4000-8000-000000000410','$delivered_order','CUSTOMER_ISSUE','99600000-0000-4000-8000-000000000400','CUSTOMER_PICKUP',true,900,'MERCHANT','Threshold fixture for customer-to-return-rider verification.','$customer_id','$owner_id',now()),
+('99600000-0000-4000-8000-000000000411','$delivered_order','CUSTOMER_ISSUE','99600000-0000-4000-8000-000000000401','IN_RIDER_CUSTODY',true,900,'MERCHANT','Threshold fixture for return-rider-to-merchant verification.','$customer_id','$owner_id',now());
+
+insert into dastak_v1.return_lines (return_id,order_line_id,quantity,reason) values
+('99600000-0000-4000-8000-000000000410','$delivered_line',1,'Customer handoff threshold fixture.'),
+('99600000-0000-4000-8000-000000000411','$delivered_line',1,'Merchant handoff threshold fixture.');
+
+insert into dastak_v1.return_packages (
+  id,return_id,order_id,package_number,destination_branch_id,status,
+  current_custody_owner_type,current_custody_owner_id,created_by,picked_up_at
+) values
+('99600000-0000-4000-8000-000000000420','99600000-0000-4000-8000-000000000410','$delivered_order',1,'$source_branch','CUSTOMER_READY','CUSTOMER','$customer_id','$owner_id',null),
+('99600000-0000-4000-8000-000000000421','99600000-0000-4000-8000-000000000411','$delivered_order',1,'$source_branch','RETURN_RIDER_CUSTODY','RETURN_RIDER','$recovery_rider_id','$owner_id',now());
+
+insert into dastak_v1.return_missions (
+  id,return_id,order_id,status,assigned_rider_id,assigned_transport_type,
+  assigned_at,arrived_customer_at,pickup_completed_at
+) values
+('99600000-0000-4000-8000-000000000430','99600000-0000-4000-8000-000000000410','$delivered_order','AT_CUSTOMER','$rider_id','MOTORBIKE',now(),now(),null),
+('99600000-0000-4000-8000-000000000431','99600000-0000-4000-8000-000000000411','$delivered_order','RETURNING_TO_MERCHANTS','$recovery_rider_id','MOTORBIKE',now(),now(),now());
+
+insert into dastak_v1.return_stops (
+  id,return_mission_id,return_id,branch_id,stop_sequence,status,package_count,
+  arrived_at
+) values
+('99600000-0000-4000-8000-000000000440','99600000-0000-4000-8000-000000000430','99600000-0000-4000-8000-000000000410','$source_branch',1,'PENDING',1,null),
+('99600000-0000-4000-8000-000000000441','99600000-0000-4000-8000-000000000431','99600000-0000-4000-8000-000000000411','$source_branch',1,'ARRIVED',1,now());
+
+insert into dastak_v1.return_verifications (
+  id,return_id,return_mission_id,return_stop_id,handoff_type,status,
+  code_digest,activated_at,consumed_at,consumed_by
+) values
+('99600000-0000-4000-8000-000000000450','99600000-0000-4000-8000-000000000410','99600000-0000-4000-8000-000000000430',null,'CUSTOMER_TO_RETURN_RIDER','ACTIVE',private.dastak_v1_handoff_digest('111111'),now(),null,null),
+('99600000-0000-4000-8000-000000000451','99600000-0000-4000-8000-000000000410','99600000-0000-4000-8000-000000000430','99600000-0000-4000-8000-000000000440','RETURN_RIDER_TO_MERCHANT','INACTIVE',private.dastak_v1_handoff_digest('222222'),null,null,null),
+('99600000-0000-4000-8000-000000000452','99600000-0000-4000-8000-000000000411','99600000-0000-4000-8000-000000000431',null,'CUSTOMER_TO_RETURN_RIDER','CONSUMED',private.dastak_v1_handoff_digest('333333'),now(),now(),'$recovery_rider_id'),
+('99600000-0000-4000-8000-000000000453','99600000-0000-4000-8000-000000000411','99600000-0000-4000-8000-000000000431','99600000-0000-4000-8000-000000000441','RETURN_RIDER_TO_MERCHANT','ACTIVE',private.dastak_v1_handoff_digest('444444'),now(),null,null);
+
+insert into dastak_v1.return_evidence (
+  id,return_id,return_mission_id,evidence_type,object_path,content_type,
+  content_length_bytes,captured_by
+) values (
+  '99600000-0000-4000-8000-000000000460',
+  '99600000-0000-4000-8000-000000000410',
+  '99600000-0000-4000-8000-000000000430','RETURN_PICKUP_PHOTO',
+  'return-pickup/$rider_id/threshold-$run_token.jpg','image/jpeg',2048,'$rider_id'
+);
+insert into dastak_v1.return_evidence_packages (
+  evidence_id,return_package_id,return_id
+) values (
+  '99600000-0000-4000-8000-000000000460',
+  '99600000-0000-4000-8000-000000000420',
+  '99600000-0000-4000-8000-000000000410'
+);
+SQL
+
+for attempt in 1 2 3; do
+  "${psql_base[@]}" -Atc "select dastak_v1_api.advance_return_mission(
+    '$rider_id'::uuid,'99600000-0000-4000-8000-000000000430'::uuid,
+    'VERIFY_RETURN_PICKUP',null,null,'000000','pickup-threshold-$run_token-$attempt'
+  )->'error'->>'code'" >"$work_dir/pickup-threshold-$attempt.out" &
+  pickup_threshold_pids[$attempt]=$!
+done
+for attempt in 1 2 3; do wait "${pickup_threshold_pids[$attempt]}"; done
+
+pickup_threshold_truth="$("${psql_base[@]}" -At -F '|' -c "
+select verification.failed_attempts,verification.status,verification.blocked_at is not null,
+  (select count(*) from dastak_v1.audit_events event
+    where event.resource_id=verification.id and event.action='RETURN_PICKUP_CODE_REJECTED'),
+  (select status from dastak_v1.return_packages where id='99600000-0000-4000-8000-000000000420'),
+  (select count(*) from dastak_v1.return_custody_events where return_id='99600000-0000-4000-8000-000000000410')
+from dastak_v1.return_verifications verification
+where verification.id='99600000-0000-4000-8000-000000000450'")"
+[[ "$pickup_threshold_truth" == "3|BLOCKED|t|3|CUSTOMER_READY|0" ]] || {
+  printf 'concurrent customer-to-return-rider threshold failed: %s\n' "$pickup_threshold_truth" >&2; exit 1;
+}
+
+for attempt in 1 2 3; do
+  "${psql_base[@]}" -Atc "select dastak_v1_api.advance_return_mission(
+    '$recovery_rider_id'::uuid,'99600000-0000-4000-8000-000000000431'::uuid,
+    'VERIFY_RETURN_RECEIPT','99600000-0000-4000-8000-000000000441'::uuid,
+    null,'000000','receipt-threshold-$run_token-$attempt'
+  )->'error'->>'code'" >"$work_dir/receipt-threshold-$attempt.out" &
+  receipt_threshold_pids[$attempt]=$!
+done
+for attempt in 1 2 3; do wait "${receipt_threshold_pids[$attempt]}"; done
+
+receipt_threshold_truth="$("${psql_base[@]}" -At -F '|' -c "
+select verification.failed_attempts,verification.status,verification.blocked_at is not null,
+  (select count(*) from dastak_v1.audit_events event
+    where event.resource_id=verification.id and event.action='RETURN_RECEIPT_CODE_REJECTED'),
+  (select status from dastak_v1.return_packages where id='99600000-0000-4000-8000-000000000421'),
+  (select count(*) from dastak_v1.return_custody_events where return_id='99600000-0000-4000-8000-000000000411')
+from dastak_v1.return_verifications verification
+where verification.id='99600000-0000-4000-8000-000000000453'")"
+[[ "$receipt_threshold_truth" == "3|BLOCKED|t|3|RETURN_RIDER_CUSTODY|0" ]] || {
+  printf 'concurrent return-rider-to-merchant threshold failed: %s\n' "$receipt_threshold_truth" >&2; exit 1;
+}
+
 set +e
 "${psql_base[@]}" -Atc "select dastak_v1_api.settle_entry('$customer_id'::uuid,'99600000-0000-4000-8000-000000000170'::uuid,'unauthorized',1,'bad-settle-$run_token') from (select set_config('request.jwt.claim.sub','$customer_id',false)) actor" >"$work_dir/bad-settle.out" 2>"$work_dir/bad-settle.err"
 bad_settle_rc=$?
@@ -480,8 +620,16 @@ adjustment_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.sett
 settlement_result="$("${psql_base[@]}" -Atc "select dastak_v1_api.settle_entry('$owner_id'::uuid,'$adjustment_id'::uuid,'bank-step5-$run_token',$adjustment_version,'settle-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor")"
 settlement_replay="$("${psql_base[@]}" -Atc "select dastak_v1_api.settle_entry('$owner_id'::uuid,'$adjustment_id'::uuid,'bank-step5-$run_token',$adjustment_version,'settle-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor")"
 [[ "$settlement_result" == "$settlement_replay" ]] || { printf 'settlement retry was not idempotent\n' >&2; exit 1; }
-settlement_truth="$("${psql_base[@]}" -At -F '|' -c "select status,(select count(*) from dastak_v1.settlement_entry_history h where h.settlement_entry_id=e.id) from dastak_v1.settlement_entries e where e.id='$adjustment_id'::uuid")"
-[[ "$settlement_truth" == "SETTLED|3" ]] || { printf 'append-only settlement history failed: %s\n' "$settlement_truth" >&2; exit 1; }
+settlement_truth="$("${psql_base[@]}" -At -F '|' -c "select status,
+  (select count(*) from dastak_v1.settlement_entry_history h where h.settlement_entry_id=e.id),
+  payout_cadence_snapshot->>'mode'
+from dastak_v1.settlement_entries e where e.id='$adjustment_id'::uuid")"
+[[ "$settlement_truth" == "SETTLED|3|MANUAL_TEST" ]] || { printf 'append-only settlement history/payout cadence snapshot failed: %s\n' "$settlement_truth" >&2; exit 1; }
+set +e
+"${psql_base[@]}" -c "update dastak_v1.settlement_entries set payout_cadence_snapshot='{}'::jsonb where id='$adjustment_id'::uuid" >"$work_dir/rewrite-cadence.out" 2>&1
+rewrite_cadence_rc=$?
+set -e
+[[ $rewrite_cadence_rc -ne 0 ]] || { printf 'settlement payout cadence snapshot was mutable\n' >&2; exit 1; }
 
 customer_projection="$("${psql_base[@]}" -Atc "select dastak_v1_api.order_json('$delivered_order'::uuid,'$customer_id'::uuid)::text")"
 [[ "$customer_projection" == *'"support"'* && "$customer_projection" == *'"refunds"'* ]] || { printf 'customer support/refund projection missing\n' >&2; exit 1; }

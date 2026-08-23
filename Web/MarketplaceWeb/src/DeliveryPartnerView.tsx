@@ -797,9 +797,14 @@ function CurrentV1Mission({
         </button>
       )}
       {mission.mustUseDeliveryRecovery && (
-        <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onAction("v1ReportDeliveryProblem", { reason: "Rider reported a problem after custody began" })}>
-          Report delivery problem
-        </button>
+        <div className="delivery-recovery-actions">
+          <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onAction("v1ReportCustomerUnreachable", { reason: "Customer or recipient could not be reached at the delivery address" })}>
+            Customer unreachable
+          </button>
+          <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onAction("v1ReportDeliveryProblem", { reason: "Rider reported a problem after custody began" })}>
+            Report another delivery problem
+          </button>
+        </div>
       )}
       {mission.status === "ALL_PACKAGES_PICKED_UP" && (
         <p className="delivery-notice" role="status"><Check size={18} /> All packages collected. Customer destination is unlocked.</p>

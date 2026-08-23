@@ -250,7 +250,7 @@ function FailureAndFinanceTrace({ trace, auth, onChanged }: {
     <p>{state.recoveryCases.length} recovery case(s) · {state.customerIssues.length} customer issue(s) · {state.returns.length} return(s) · {state.refunds.length} refund(s) · {state.settlements.length} settlement entry/entries</p>
     {state.recoveryCases.map((recovery, index) => <article key={text(recovery, "id") ?? index}>
       <strong>{text(recovery, "type")?.replaceAll("_", " ")} recovery · {text(recovery, "status")?.replaceAll("_", " ")}</strong>
-      <span>{text(recovery, "reason") ?? "—"} · {array(recovery, "opportunities").length} exact-item offer(s)</span>
+      <span>{text(recovery, "reason") ?? "—"} · {array(recovery, "opportunities").length} exact-item offer(s){text(recovery, "problemCode") === "CUSTOMER_UNREACHABLE" ? ` · customer contact due ${formatOptional(text(recovery, "nextActionAt"))}` : ""}</span>
       {boolean(permissions, "canManageRecovery") ? <RecoveryAction recovery={recovery} auth={auth} onChanged={onChanged} preparedFoodPresent={trace.order.orderType !== "RETAIL_ONLY"} /> : null}
     </article>)}
     {state.customerIssues.map((issue, index) => <article key={text(issue, "id") ?? index}>
@@ -276,7 +276,7 @@ function FailureAndFinanceTrace({ trace, auth, onChanged }: {
     </article>)}
     {state.settlements.map((settlement, index) => <article key={text(settlement, "id") ?? index}>
       <strong>{text(settlement, "subjectType")?.replaceAll("_", " ")} · {text(settlement, "status")}</strong>
-      <span>{text(settlement, "entryType")?.replaceAll("_", " ")} · {formatV1Price(number(settlement, "amountPaise") ?? 0)} · calculation {text(settlement, "calculationStatus")?.replaceAll("_", " ")}</span>
+      <span>{text(settlement, "entryType")?.replaceAll("_", " ")} · {formatV1Price(number(settlement, "amountPaise") ?? 0)} · calculation {text(settlement, "calculationStatus")?.replaceAll("_", " ")}{text(object(settlement, "payoutCadenceSnapshot"), "mode") ? ` · payout ${text(object(settlement, "payoutCadenceSnapshot"), "mode")}` : ""}</span>
       {boolean(permissions, "canManageSettlements") ? <SettlementAction settlement={settlement} auth={auth} onChanged={onChanged} /> : null}
     </article>)}
   </TraceSection>;

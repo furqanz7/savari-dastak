@@ -181,6 +181,7 @@ Deno.test("V1 pickup actions use server-owned actions and six-digit codes", asyn
     }],
     ["v1CancelBeforePickup", { missionId, reason: "Cannot continue" }],
     ["v1ReportDeliveryProblem", { missionId, reason: "Custody problem" }],
+    ["v1ReportCustomerUnreachable", { missionId, reason: "Recipient unreachable" }],
   ] as const;
   const actions = [
     "START_PICKUPS",
@@ -188,6 +189,7 @@ Deno.test("V1 pickup actions use server-owned actions and six-digit codes", asyn
     "VERIFY_PICKUP",
     "CANCEL_BEFORE_PICKUP",
     "REPORT_DELIVERY_PROBLEM",
+    "REPORT_CUSTOMER_UNREACHABLE",
   ];
 
   for (const [operation, payload] of cases) {
