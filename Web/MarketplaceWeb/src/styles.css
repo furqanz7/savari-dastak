@@ -665,6 +665,40 @@ button:disabled { cursor: wait; opacity: .55; }
 .workspace-tabs button:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: -3px; }
 .merchant-workspace .primary-button { background: var(--primary-action); color: var(--primary-action-foreground); }
 .merchant-workspace .secondary-button, .merchant-workspace .icon-button { border-color: var(--divider); color: var(--text-primary); background: var(--surface); }
+
+.royalty-shell { display: grid; gap: 22px; padding: 26px 0 48px; }
+.royalty-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.royalty-heading h1 { margin: 2px 0 5px; font-size: clamp(30px, 5vw, 42px); }
+.royalty-heading p:last-child { margin: 0; color: var(--text-secondary); }
+.royalty-summary, .royalty-balance-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--divider); border-radius: 18px; background: var(--surface); overflow: hidden; }
+.royalty-summary > div, .royalty-balance-row > div { display: grid; gap: 5px; padding: 18px 20px; }
+.royalty-summary > div + div, .royalty-balance-row > div + div { border-left: 1px solid var(--divider); }
+.royalty-summary small, .royalty-balance-row small { color: var(--text-secondary); font-size: 12px; }
+.royalty-summary strong, .royalty-balance-row strong { font-size: 21px; font-variant-numeric: tabular-nums; }
+.royalty-summary .warning strong, .royalty-balance-row .warning strong { color: var(--danger); }
+.royalty-subjects { display: grid; gap: 18px; }
+.royalty-card { display: grid; gap: 18px; padding: 22px; border: 1px solid var(--divider); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow-sm); }
+.royalty-card > header { display: flex; align-items: center; gap: 12px; }
+.royalty-card > header > div { display: grid; gap: 3px; }
+.royalty-card > header small { color: var(--text-secondary); }
+.royalty-icon { width: 42px; height: 42px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 13px; color: var(--accent); background: var(--accent-soft); }
+.royalty-withdraw-form { display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: end; gap: 12px; }
+.royalty-withdraw-form label { display: grid; gap: 7px; color: var(--text-secondary); font-size: 13px; font-weight: 700; }
+.royalty-amount-input { min-height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid var(--divider); border-radius: 12px; background: var(--surface); color: var(--text-primary); }
+.royalty-amount-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.royalty-amount-input input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; }
+.royalty-help { margin: -9px 0 0; color: var(--text-secondary); font-size: 12px; }
+.royalty-notice { margin: 0; padding: 11px 13px; border-radius: 11px; color: var(--success); background: color-mix(in srgb, var(--success) 10%, var(--surface)); font-size: 13px; }
+.royalty-history { display: grid; gap: 10px; }
+.royalty-history h2 { margin: 0; font-size: 16px; }
+.royalty-history > p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.royalty-history ul { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--divider); }
+.royalty-history li { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--divider); }
+.royalty-history li > div { display: grid; gap: 3px; min-width: 0; }
+.royalty-history li small { display: block; color: var(--text-secondary); font-size: 11px; overflow-wrap: anywhere; }
+.royalty-history li > strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.royalty-history .positive { color: var(--success); }
+.royalty-history .negative { color: var(--danger); }
 .catalogue-editor-section { padding: 26px 0; border-bottom: 1px solid var(--divider); }
 .catalogue-editor-section > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .catalogue-editor-section > header > span { width: 40px; height: 40px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 7px; color: var(--accent); background: var(--accent-soft); }
@@ -1373,6 +1407,14 @@ button:disabled { cursor: wait; opacity: .55; }
   .merchant-summary > div { padding: 15px 0; }
   .merchant-summary > div + div { padding-left: 12px; }
   .merchant-summary strong { font-size: 20px; }
+  .royalty-shell { padding-top: 18px; }
+  .royalty-heading h1 { font-size: 32px; }
+  .royalty-summary, .royalty-balance-row { grid-template-columns: 1fr; }
+  .royalty-summary > div + div, .royalty-balance-row > div + div { border-top: 1px solid var(--divider); border-left: 0; }
+  .royalty-card { padding: 18px 15px; border-radius: 18px; }
+  .royalty-withdraw-form { grid-template-columns: 1fr; }
+  .royalty-withdraw-form .primary-button { width: 100%; }
+  .royalty-history li { gap: 10px; }
   .editor-grid { grid-template-columns: 1fr; }
   .editor-actions.spread { align-items: stretch; flex-direction: column; }
   .editor-actions.spread > button { width: 100%; }

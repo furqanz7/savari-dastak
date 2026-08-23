@@ -174,7 +174,8 @@ from (values
   ('99200000-0000-4000-8000-000000000055'::uuid, 'matching.wave2_max_pickup_route_meters', '50000'::jsonb),
   ('99200000-0000-4000-8000-000000000056'::uuid, 'matching.operational_reliability_bps', '9000'::jsonb),
   ('99200000-0000-4000-8000-000000000057'::uuid, 'delivery.transport_load_profiles', '[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]'::jsonb),
-  ('99200000-0000-4000-8000-000000000058'::uuid, 'delivery.default_sku_logistics', '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}'::jsonb)
+  ('99200000-0000-4000-8000-000000000058'::uuid, 'delivery.default_sku_logistics', '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}'::jsonb),
+  ('99200000-0000-4000-8000-000000000059'::uuid, 'merchant.reachability_stale_seconds', '300'::jsonb)
 ) setting(id, key, value)
 where not exists (
   select 1 from dastak_v1.platform_settings existing
@@ -497,10 +498,18 @@ select
   (select count(*) from dastak_v1.payment_provider_events where order_id = :'order_id'::uuid),
   (select count(*) from dastak_v1.order_state_journal where order_id = :'order_id'::uuid and to_status = 'PAID'),
   (select count(*) from dastak_v1.order_state_journal where order_id = :'order_id'::uuid and to_status = 'PREPARING'),
-  (select count(*) from dastak_v1.domain_events_outbox where aggregate_type = 'ORDER' and aggregate_id = :'order_id'::uuid and event_type = 'PREPARATION_STARTED');
+  (select count(*) from dastak_v1.domain_events_outbox where aggregate_type = 'ORDER' and aggregate_id = :'order_id'::uuid and event_type = 'PREPARATION_STARTED'),
+  (select count(*) from dastak_v1.financial_journal_transactions transaction
+    join dastak_v1.payments payment on payment.id=transaction.payment_id
+    where transaction.order_id=:'order_id'::uuid
+      and transaction.transaction_type='PLATFORM_FEE_RECOGNITION'
+      and transaction.amount_paise=dastak_v1_api.calculate_platform_fee(payment.amount_paise)),
+  (select count(*) from dastak_v1.financial_journal_transactions transaction
+    where transaction.order_id=:'order_id'::uuid
+      and transaction.transaction_type='MERCHANT_ROYALTY_EARNING');
 SQL
 )"
-[[ "$paid_truth" == "1 1 2 1 1 1 1" ]] || { printf 'Payment retry/idempotency invariant failed: %s\n' "$paid_truth" >&2; exit 1; }
+[[ "$paid_truth" == "1 1 2 1 1 1 1 1 0" ]] || { printf 'Payment/fee/preparation idempotency invariant failed: %s\n' "$paid_truth" >&2; exit 1; }
 
 # Two expiry workers and a late provider capture race. Resources and capacity
 # release once; the late success is reconciled and cannot resurrect the order.

@@ -12,7 +12,6 @@ import {
   getV1AdminExecutionOrders,
   getV1AdminExecutionTrace,
   manageV1DeliveryRecovery,
-  settleV1Entry,
   type DastakV1Auth,
   type V1AdminExecutionOrder,
   type V1AdminExecutionTrace,
@@ -247,7 +246,7 @@ function FailureAndFinanceTrace({ trace, auth, onChanged }: {
   if (!state) return <TraceSection title="Failure, returns and finance"><p>No Step 5 trace.</p></TraceSection>;
   const permissions = state.permissions;
   return <TraceSection title="Failure, returns and finance">
-    <p>{state.recoveryCases.length} recovery case(s) · {state.customerIssues.length} customer issue(s) · {state.returns.length} return(s) · {state.refunds.length} refund(s) · {state.settlements.length} settlement entry/entries</p>
+    <p>{state.recoveryCases.length} recovery case(s) · {state.customerIssues.length} customer issue(s) · {state.returns.length} return(s) · {state.refunds.length} refund(s) · {state.royaltyLedger.length} Royalty entry/entries</p>
     {state.recoveryCases.map((recovery, index) => <article key={text(recovery, "id") ?? index}>
       <strong>{text(recovery, "type")?.replaceAll("_", " ")} recovery · {text(recovery, "status")?.replaceAll("_", " ")}</strong>
       <span>{text(recovery, "reason") ?? "—"} · {array(recovery, "opportunities").length} exact-item offer(s){text(recovery, "problemCode") === "CUSTOMER_UNREACHABLE" ? ` · customer contact due ${formatOptional(text(recovery, "nextActionAt"))}` : ""}</span>
@@ -274,10 +273,26 @@ function FailureAndFinanceTrace({ trace, auth, onChanged }: {
       <span>{formatV1Price(number(refund, "amountPaise") ?? 0)} · original payment method · {text(refund, "faultSource") ?? "UNKNOWN"}</span>
       {boolean(permissions, "canProcessRefunds") && ["APPROVED", "FAILED"].includes(text(refund, "status") ?? "") ? <RefundAction orderId={trace.order.id} refund={refund} auth={auth} onChanged={onChanged} /> : null}
     </article>)}
+    {state.platformFees.map((fee, index) => <article key={text(fee, "id") ?? index}>
+      <strong>Platform fee · {text(fee, "type")?.replaceAll("_", " ")}</strong>
+      <span>{formatV1Price(number(fee, "amountPaise") ?? 0)} · immutable paid-total allocation · {formatOptional(text(fee, "createdAt"))}</span>
+    </article>)}
+    {state.royaltyBalances.map((balance, index) => <article key={`${text(balance, "subjectType")}:${text(balance, "subjectId")}:${index}`}>
+      <strong>Royalty · {text(balance, "subjectType")?.replaceAll("_", " ")} · {shortId(text(balance, "subjectId"))}</strong>
+      <span>Available {formatV1Price(number(balance, "availablePaise") ?? 0)} · negative {formatV1Price(number(balance, "negativeBalancePaise") ?? 0)} · derived balance {formatV1Price(number(balance, "balancePaise") ?? 0)}</span>
+    </article>)}
+    {state.royaltyLedger.map((entry, index) => <article key={text(entry, "id") ?? index}>
+      <strong>{text(entry, "type")?.replaceAll("_", " ")} · {text(entry, "subjectType")?.replaceAll("_", " ")}</strong>
+      <span>{formatV1Price(number(entry, "amountPaise") ?? 0)} · {text(entry, "reason") ?? "Audited financial event"} · {formatOptional(text(entry, "createdAt"))}</span>
+    </article>)}
+    {state.withdrawals.map((withdrawal, index) => <article key={text(withdrawal, "id") ?? index}>
+      <strong>Withdrawal · {text(withdrawal, "status")?.replaceAll("_", " ")}</strong>
+      <span>{formatV1Price(number(withdrawal, "amountPaise") ?? 0)} · {text(object(withdrawal, "destination"), "displayLabel") ?? "snapshotted payout destination"} · provider reference {text(withdrawal, "providerPayoutReference") ?? "not confirmed"}</span>
+    </article>)}
     {state.settlements.map((settlement, index) => <article key={text(settlement, "id") ?? index}>
       <strong>{text(settlement, "subjectType")?.replaceAll("_", " ")} · {text(settlement, "status")}</strong>
       <span>{text(settlement, "entryType")?.replaceAll("_", " ")} · {formatV1Price(number(settlement, "amountPaise") ?? 0)} · calculation {text(settlement, "calculationStatus")?.replaceAll("_", " ")}{text(object(settlement, "payoutCadenceSnapshot"), "mode") ? ` · payout ${text(object(settlement, "payoutCadenceSnapshot"), "mode")}` : ""}</span>
-      {boolean(permissions, "canManageSettlements") ? <SettlementAction settlement={settlement} auth={auth} onChanged={onChanged} /> : null}
+      {boolean(permissions, "canManageSettlements") && text(settlement, "status") === "PENDING" ? <SettlementAction settlement={settlement} auth={auth} onChanged={onChanged} /> : null}
     </article>)}
   </TraceSection>;
 }
@@ -426,20 +441,18 @@ function RefundAction({ orderId, refund, auth, onChanged }: {
 function SettlementAction({ settlement, auth, onChanged }: {
   settlement: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
 }) {
-  const [reference, setReference] = useState(""); const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const status = text(settlement, "status"); const id = text(settlement, "id");
+  const id = text(settlement, "id");
   const version = number(settlement, "version");
   const run = async () => {
     if (!id || !version) return; setBusy(true); setError(undefined);
     try {
-      if (status === "PENDING") await finalizeV1SettlementCalculation({ ...auth, settlementEntryId: id, expectedVersion: version, idempotencyKey: crypto.randomUUID() });
-      else if (status === "ELIGIBLE") await settleV1Entry({ ...auth, settlementEntryId: id, settlementReference: reference, expectedVersion: version, idempotencyKey: crypto.randomUUID() });
+      await finalizeV1SettlementCalculation({ ...auth, settlementEntryId: id, expectedVersion: version, idempotencyKey: crypto.randomUUID() });
       onChanged();
     } catch (actionError) { setError(message(actionError)); } finally { setBusy(false); }
   };
-  if (status === "SETTLED") return null;
-  return <div className="v1-exceptional-handoff">{status === "ELIGIBLE" ? <label>Settlement reference<input value={reference} maxLength={200} onChange={(event) => setReference(event.target.value)} /></label> : null}<button className="primary-button" type="button" disabled={busy || (status === "ELIGIBLE" && !reference.trim())} onClick={() => void run()}>{status === "PENDING" ? "Finalize calculation" : "Mark settled"}</button>{error ? <p className="order-error" role="alert">{error}</p> : null}</div>;
+  return <div className="v1-exceptional-handoff"><button className="primary-button" type="button" disabled={busy} onClick={() => void run()}>Finalize calculation</button>{error ? <p className="order-error" role="alert">{error}</p> : null}</div>;
 }
 
 function EvidenceButton({ auth, objectPath }: { auth: DastakV1Auth; objectPath?: string }) {
@@ -508,6 +521,9 @@ function formatTime(value: string) {
 }
 function formatDuration(seconds: number) {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+function shortId(value?: string) {
+  return value ? value.slice(0, 8).toUpperCase() : "—";
 }
 function message(error: unknown) {
   return error instanceof Error ? error.message : "The V1 execution trace is unavailable.";

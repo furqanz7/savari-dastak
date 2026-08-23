@@ -211,7 +211,10 @@ on conflict (order_id) do nothing;
 insert into dastak_v1.order_price_snapshots (order_id,snapshot_kind,subtotal_paise,total_paise) values
 ('99600000-0000-4000-8000-000000000100','FINAL',900,900),
 ('99600000-0000-4000-8000-000000000101','FINAL',900,900),
-('99600000-0000-4000-8000-000000000102','FINAL',900,900)
+('99600000-0000-4000-8000-000000000102','FINAL',900,900),
+('99600000-0000-4000-8000-000000000100','PAID',900,900),
+('99600000-0000-4000-8000-000000000101','PAID',900,900),
+('99600000-0000-4000-8000-000000000102','PAID',900,900)
 on conflict (order_id,snapshot_kind) do nothing;
 insert into dastak_v1.order_lines (
   id,order_id,line_type,sku_id,product_name_snapshot,pack_size_snapshot,quantity,unit_price_paise,status
@@ -227,6 +230,20 @@ insert into dastak_v1.payments (
 ('99600000-0000-4000-8000-000000000121','99600000-0000-4000-8000-000000000101','99600000-0000-4000-8000-000000000002','SUCCEEDED',900,'INR',now()-interval '115 minutes',now()-interval '110 minutes',now()-interval '110 minutes','pay_step5return'),
 ('99600000-0000-4000-8000-000000000122','99600000-0000-4000-8000-000000000102','99600000-0000-4000-8000-000000000002','SUCCEEDED',900,'INR',now()-interval '115 minutes',now()-interval '110 minutes',now()-interval '110 minutes','pay_step5deliveryrecovery')
 on conflict (id) do nothing;
+select dastak_v1_api.post_balanced_financial_transaction(
+  fixture.order_id::text || ':PLATFORM_FEE',
+  'PLATFORM_FEE_RECOGNITION', dastak_v1_api.calculate_platform_fee(900),
+  'PAYMENT_CLEARING_ALLOCATION',null,null,
+  'PLATFORM_FEE_REVENUE',null,null,
+  fixture.order_id,null,null,fixture.payment_id,null,null,null,null,
+  'Step 5 historical paid-order fixture platform fee.',
+  jsonb_build_object('paidTotalPaise',900,'platformFeeBps',200,'fixture',true)
+)
+from (values
+  ('99600000-0000-4000-8000-000000000100'::uuid,'99600000-0000-4000-8000-000000000120'::uuid),
+  ('99600000-0000-4000-8000-000000000101'::uuid,'99600000-0000-4000-8000-000000000121'::uuid),
+  ('99600000-0000-4000-8000-000000000102'::uuid,'99600000-0000-4000-8000-000000000122'::uuid)
+) fixture(order_id,payment_id);
 insert into dastak_v1.matching_attempts (id,order_id,wave,status,started_at,expires_at,closed_at) values
 ('99600000-0000-4000-8000-000000000130','99600000-0000-4000-8000-000000000100','WAVE_1','EXPIRED',now()-interval '30 minutes',now()-interval '27 minutes',now()-interval '27 minutes'),
 ('99600000-0000-4000-8000-000000000131','99600000-0000-4000-8000-000000000101','WAVE_1','EXPIRED',now()-interval '2 hours',now()-interval '117 minutes',now()-interval '117 minutes'),
@@ -276,11 +293,20 @@ insert into dastak_v1.delivery_missions (
 insert into dastak_v1.settlement_entries (
   id,entry_key,subject_type,subject_id,order_id,fulfilment_id,order_line_id,entry_type,
   status,calculation_status,gross_amount_paise,amount_paise,calculation_snapshot
-) values (
+) values
+(
   '99600000-0000-4000-8000-000000000170','996-step5-delivered-earning','MERCHANT_ORGANIZATION',
   '99600000-0000-4000-8000-000000000020','99600000-0000-4000-8000-000000000101',
   '99600000-0000-4000-8000-000000000141','99600000-0000-4000-8000-000000000111','EARNING',
-  'PENDING','CALCULATED',900,900,'{"formula":"STEP5_RUNTIME_FIXTURE"}'
+  'PENDING','CALCULATED',900,900,
+  '{"formula":"STEP5_RUNTIME_FIXTURE","commissionBps":0}'
+),
+(
+  '99600000-0000-4000-8000-000000000172','996-step5-delivery-recovery-earning','MERCHANT_ORGANIZATION',
+  '99600000-0000-4000-8000-000000000020','99600000-0000-4000-8000-000000000102',
+  '99600000-0000-4000-8000-000000000142','99600000-0000-4000-8000-000000000112','EARNING',
+  'PENDING','CALCULATED',900,900,
+  '{"formula":"STEP5_RUNTIME_FIXTURE","commissionBps":0}'
 ) on conflict (id) do nothing;
 insert into dastak_v1.settlement_entries (
   id,entry_key,subject_type,subject_id,order_id,delivery_mission_id,entry_type,
@@ -342,8 +368,15 @@ select
   (select status from dastak_v1.orders where id='$recovery_order'::uuid),
   (select status from dastak_v1.order_lines where id='$recovery_line'::uuid),
   (select count(*) from dastak_v1.recovery_opportunities where recovery_case_id='$second_recovery_case'::uuid and status='CLOSED'),
-  (select count(*) from dastak_v1.refunds where recovery_case_id='$second_recovery_case'::uuid and status='APPROVED' and amount_paise=900 and destination='ORIGINAL_PAYMENT_METHOD')")"
-[[ "$failed_recovery_truth" == "RECOVERY_FAILED|DASTAK_FULFILMENT_FAILURE|REFUNDED|1|1" ]] || { printf 'failed exact-SKU recovery/refund invariants failed: %s\n' "$failed_recovery_truth" >&2; exit 1; }
+  (select count(*) from dastak_v1.refunds where recovery_case_id='$second_recovery_case'::uuid and status='APPROVED' and amount_paise=900 and destination='ORIGINAL_PAYMENT_METHOD'),
+  (select count(*)
+    from dastak_v1.settlement_entries adjustment
+    join dastak_v1.refunds refund on refund.id=adjustment.refund_id
+    where refund.recovery_case_id='$second_recovery_case'::uuid
+      and adjustment.entry_type='REFUND_ADJUSTMENT'
+      and adjustment.fulfilment_id='$replacement_fulfilment'::uuid
+      and adjustment.calculation_snapshot->>'responsibleFulfilmentId'='$replacement_fulfilment')")"
+[[ "$failed_recovery_truth" == "RECOVERY_FAILED|DASTAK_FULFILMENT_FAILURE|REFUNDED|1|1|1" ]] || { printf 'failed exact-SKU recovery/refund invariants failed: %s\n' "$failed_recovery_truth" >&2; exit 1; }
 
 # Customer-unreachable policy is consumed and snapshotted into the normal,
 # Operations-only Delivery Recovery workflow.
@@ -375,6 +408,47 @@ join dastak_v1.recovery_cases recovery on recovery.delivery_mission_id=mission.i
 where mission.id='$delivery_recovery_mission'::uuid")"
 [[ "$customer_unreachable_truth" == "DELIVERY_RECOVERY|CUSTOMER_UNREACHABLE|120|2|120|CUSTOMER_UNREACHABLE|t|t|1" ]] || {
   printf 'customer-unreachable policy snapshot failed: %s\n' "$customer_unreachable_truth" >&2; exit 1;
+}
+
+# Approved fault liability uses the exact recovery mission or the only safe
+# picked-up Merchant fulfilment. The customer refund row is independent of
+# later Royalty recovery and ambiguous parties are never guessed.
+rider_liability_truth="$("${psql_base[@]}" -At -F '|' <<SQL
+begin;
+select dastak_v1_api.create_approved_refund(
+  '$owner_id'::uuid,'$delivery_recovery_order'::uuid,null,
+  '$delivery_recovery_case'::uuid,null,null,100,'RIDER',
+  'Approved Rider-caused delivery recovery test refund.','AUTHORIZED_OPERATIONS'
+) as refund_id \gset
+select
+  (select status from dastak_v1.refunds where id=:'refund_id'::uuid),
+  (select delivery_mission_id from dastak_v1.settlement_entries where refund_id=:'refund_id'::uuid),
+  (select subject_id from dastak_v1.settlement_entries where refund_id=:'refund_id'::uuid),
+  (select count(*) from dastak_v1.financial_journal_transactions where refund_id=:'refund_id'::uuid and transaction_type='ROYALTY_FAULT_ADJUSTMENT');
+rollback;
+SQL
+)"
+[[ "$rider_liability_truth" == "APPROVED|$delivery_recovery_mission|$recovery_rider_id|1" ]] || {
+  printf 'Rider refund liability attribution failed: %s\n' "$rider_liability_truth" >&2; exit 1;
+}
+
+merchant_liability_truth="$("${psql_base[@]}" -At -F '|' <<SQL
+begin;
+select dastak_v1_api.create_approved_refund(
+  '$owner_id'::uuid,'$delivery_recovery_order'::uuid,null,
+  '$delivery_recovery_case'::uuid,null,null,100,'MERCHANT',
+  'Approved Merchant-caused delivery recovery test refund.','AUTHORIZED_OPERATIONS'
+) as refund_id \gset
+select
+  (select status from dastak_v1.refunds where id=:'refund_id'::uuid),
+  (select fulfilment_id from dastak_v1.settlement_entries where refund_id=:'refund_id'::uuid),
+  (select subject_id from dastak_v1.settlement_entries where refund_id=:'refund_id'::uuid),
+  (select count(*) from dastak_v1.financial_journal_transactions where refund_id=:'refund_id'::uuid and transaction_type='ROYALTY_FAULT_ADJUSTMENT');
+rollback;
+SQL
+)"
+[[ "$merchant_liability_truth" == "APPROVED|$delivery_recovery_fulfilment|$source_org|1" ]] || {
+  printf 'Merchant refund liability attribution failed: %s\n' "$merchant_liability_truth" >&2; exit 1;
 }
 
 # Delivery Recovery remains an Operations-only, audited state distinct from normal delivery.
@@ -612,19 +686,24 @@ select
   (select status from dastak_v1.refunds where id='$refund_id'::uuid),
   (select count(*) from dastak_v1.refund_provider_events where provider_event_id='$refund_event'),
   (select count(*) from dastak_v1.domain_events_outbox where event_key like '$refund_id:REFUND_COMPLETED:%'),
-  (select count(*) from dastak_v1.settlement_entries where refund_id='$refund_id'::uuid and entry_type='REFUND_ADJUSTMENT' and status='ELIGIBLE')")"
-[[ "$refund_truth" == "COMPLETED|1|1|1" ]] || { printf 'refund idempotency/settlement eligibility failed: %s\n' "$refund_truth" >&2; exit 1; }
+  (select count(*) from dastak_v1.settlement_entries where refund_id='$refund_id'::uuid and entry_type='REFUND_ADJUSTMENT' and status='ELIGIBLE'),
+  (select count(*) from dastak_v1.settlement_entries where id='99600000-0000-4000-8000-000000000170'::uuid and status='PENDING'),
+  (select count(*) from dastak_v1.financial_journal_transactions where settlement_entry_id='99600000-0000-4000-8000-000000000170'::uuid and transaction_type='MERCHANT_ROYALTY_EARNING')")"
+[[ "$refund_truth" == "COMPLETED|1|1|1|1|0" ]] || { printf 'refund idempotency or custody-gated Royalty eligibility failed: %s\n' "$refund_truth" >&2; exit 1; }
 
 adjustment_id="$("${psql_base[@]}" -Atc "select id from dastak_v1.settlement_entries where refund_id='$refund_id'::uuid")"
 adjustment_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.settlement_entries where id='$adjustment_id'::uuid")"
-settlement_result="$("${psql_base[@]}" -Atc "select dastak_v1_api.settle_entry('$owner_id'::uuid,'$adjustment_id'::uuid,'bank-step5-$run_token',$adjustment_version,'settle-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor")"
-settlement_replay="$("${psql_base[@]}" -Atc "select dastak_v1_api.settle_entry('$owner_id'::uuid,'$adjustment_id'::uuid,'bank-step5-$run_token',$adjustment_version,'settle-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor")"
-[[ "$settlement_result" == "$settlement_replay" ]] || { printf 'settlement retry was not idempotent\n' >&2; exit 1; }
+set +e
+"${psql_base[@]}" -Atc "select dastak_v1_api.settle_entry('$owner_id'::uuid,'$adjustment_id'::uuid,'bank-step5-$run_token',$adjustment_version,'settle-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor" >"$work_dir/legacy-settle.out" 2>"$work_dir/legacy-settle.err"
+legacy_settle_rc=$?
+set -e
+[[ $legacy_settle_rc -ne 0 ]] || { printf 'legacy manual settlement bypass remained active\n' >&2; exit 1; }
+rg -q 'ROYALTY_WITHDRAWAL_REQUIRED' "$work_dir/legacy-settle.err" || { printf 'legacy settlement did not direct Operations to Royalty withdrawals\n' >&2; exit 1; }
 settlement_truth="$("${psql_base[@]}" -At -F '|' -c "select status,
-  (select count(*) from dastak_v1.settlement_entry_history h where h.settlement_entry_id=e.id),
-  payout_cadence_snapshot->>'mode'
+  (select count(*) from dastak_v1.financial_journal_transactions transaction where transaction.settlement_entry_id=e.id and transaction.transaction_type='ROYALTY_FAULT_ADJUSTMENT'),
+  payout_cadence_snapshot is null
 from dastak_v1.settlement_entries e where e.id='$adjustment_id'::uuid")"
-[[ "$settlement_truth" == "SETTLED|3|MANUAL_TEST" ]] || { printf 'append-only settlement history/payout cadence snapshot failed: %s\n' "$settlement_truth" >&2; exit 1; }
+[[ "$settlement_truth" == "ELIGIBLE|1|t" ]] || { printf 'append-only Royalty adjustment posting failed: %s\n' "$settlement_truth" >&2; exit 1; }
 set +e
 "${psql_base[@]}" -c "update dastak_v1.settlement_entries set payout_cadence_snapshot='{}'::jsonb where id='$adjustment_id'::uuid" >"$work_dir/rewrite-cadence.out" 2>&1
 rewrite_cadence_rc=$?
@@ -637,4 +716,4 @@ customer_projection="$("${psql_base[@]}" -Atc "select dastak_v1_api.order_json('
   printf 'customer support projection leaked retail merchant identity\n' >&2; exit 1;
 }
 
-printf 'Step 5 exact-SKU recovery, delivery recovery, reverse custody, refund race, settlement and privacy gates passed.\n'
+printf 'Step 5 exact-SKU recovery, delivery recovery, reverse custody, refund race, Royalty and privacy gates passed.\n'

@@ -8,6 +8,7 @@ import {
   ReceiptText,
   RefreshCw,
   UserRound,
+  WalletCards,
   X,
 } from "lucide-react";
 import { RoleAccountView } from "./RoleAccountView";
@@ -23,10 +24,10 @@ import {
   type MerchantOrderSnapshot,
 } from "./orders";
 import { processOrderRefund } from "./payments";
-import { getEarnings, type EarningsSnapshot } from "./earnings";
 import { RefreshQueue, useOrderRealtime } from "./orderRealtime";
 import { MerchantV1Opportunities } from "./MerchantV1Opportunities";
 import { MerchantV1CommerceControl } from "./MerchantV1CommerceControl";
+import { RoyaltyPanel } from "./RoyaltyPanel";
 
 type Props = {
   accessToken: string;
@@ -41,7 +42,7 @@ type Props = {
 };
 
 type MerchantAction = "accept" | "ready" | "reject" | "confirmReturn" | "refund";
-type MerchantSection = "orders" | "catalogue" | "account";
+type MerchantSection = "orders" | "catalogue" | "royalty" | "account";
 
 export function MerchantOrdersView({
   accessToken,
@@ -56,7 +57,6 @@ export function MerchantOrdersView({
 }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [orders, setOrders] = useState<MerchantOrderSnapshot[]>([]);
-  const [earnings, setEarnings] = useState<EarningsSnapshot>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyOrderId, setBusyOrderId] = useState<string>();
@@ -71,12 +71,8 @@ export function MerchantOrdersView({
     await refreshQueue.current.request(showProgress, async (progress) => {
       if (progress) setRefreshing(true);
       try {
-        const [snapshot, earningsSnapshot] = await Promise.all([
-          getMerchantOrders(auth),
-          getEarnings(auth, "merchantSnapshot").catch(() => undefined),
-        ]);
+        const snapshot = await getMerchantOrders(auth);
         setOrders(snapshot.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)));
-        setEarnings(earningsSnapshot);
         setError(undefined);
       } catch (refreshError) {
         setError(orderMessage(refreshError));
@@ -172,10 +168,13 @@ export function MerchantOrdersView({
       <nav className="workspace-tabs merchant-tabs" aria-label="Merchant workspace" role="tablist">
         <MerchantTab selected={section === "orders"} onSelect={() => setSection("orders")} icon={<ClipboardList size={18} />} label="Orders" />
         <MerchantTab selected={section === "catalogue"} onSelect={() => setSection("catalogue")} icon={<BookOpen size={18} />} label="Catalogue" />
+        <MerchantTab selected={section === "royalty"} onSelect={() => setSection("royalty")} icon={<WalletCards size={18} />} label="Royalty" />
         <MerchantTab selected={section === "account"} onSelect={() => setSection("account")} icon={<UserRound size={18} />} label="Account" />
       </nav>
       {section === "catalogue" ? (
         <MerchantV1CommerceControl auth={auth} />
+      ) : section === "royalty" ? (
+        <RoyaltyPanel auth={auth} kind="MERCHANT" />
       ) : section === "account" ? (
         <RoleAccountView
           accessToken={accessToken}
@@ -212,7 +211,6 @@ export function MerchantOrdersView({
             <MerchantSummary label="Preparing" value={preparing} />
             <MerchantSummary label="Ready" value={readyForPickup} />
           </div>
-          {earnings && <EarningsSummary earnings={earnings} />}
           <MerchantOrderSection
             title="Active orders"
             orders={activeOrders}
@@ -278,14 +276,6 @@ function MerchantSummary({ label, value }: { label: string; value: number | stri
       <strong>{value}</strong>
     </div>
   );
-}
-
-function EarningsSummary({ earnings }: { earnings: EarningsSnapshot }) {
-  return <div className="merchant-summary" aria-label="Earnings summary">
-    <MerchantSummary label="Completed" value={formatPrice(earnings.completedPaise)} />
-    <MerchantSummary label="This week" value={formatPrice(earnings.thisWeekPaise)} />
-    <MerchantSummary label="In progress" value={formatPrice(earnings.pendingPaise)} />
-  </div>;
 }
 
 function MerchantOrderSection({

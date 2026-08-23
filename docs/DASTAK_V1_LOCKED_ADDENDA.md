@@ -38,3 +38,15 @@ This file records newer locked product decisions. It overrides conflicting wordi
 | Car | 150 kg | 500 L | 20 | 120 cm |
 
 Unknown-SKU fallback per unit: 1,000 g, 4 L, 30 cm longest side.
+
+## Newer financial authority: platform fee and Royalty
+
+This section is newer than, and overrides, conflicting settlement eligibility or payout wording in the master handoff and earlier addenda.
+
+- Dastak platform-fee revenue is 2% of the immutable final successfully paid total, calculated server-side in integer paise with deterministic half-up rounding. It does not change checkout pricing and is not merchant commission; merchant commission remains 0 bps. Refund corrections are append-only compensating entries.
+- `Royalty` is the Merchant/Delivery Partner-facing name for balances derived from the append-only financial ledger. There is no mutable wallet-balance authority.
+- A Merchant Royalty earning is credited exactly once after complete verified Merchant → assigned Rider custody for that fulfilment. This applies equally to Retail and Restaurant/Cafe and does not wait for final delivery.
+- A Delivery Partner Royalty earning is credited exactly once after evidence-backed, normally verified final delivery and complete Customer custody. Pickup alone does not qualify.
+- Approved Merchant/Rider liability creates an append-only negative Royalty adjustment without altering the original earning, historical withdrawal, or independent customer refund. Later earnings offset a negative balance before any amount becomes withdrawable.
+- Merchant and Delivery Partner may request any positive available Royalty at any time. Request/processing/paid/failed-retryable states, transactional reservation, immutable payout-destination snapshots, and idempotent results are mandatory. `Paid` requires external payout confirmation.
+- No payout provider is authorized by this addendum. The provider-independent domain is required in code; an authorized external payout rail and credentials remain a production integration decision.

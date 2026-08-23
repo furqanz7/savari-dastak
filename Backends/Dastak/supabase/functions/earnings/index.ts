@@ -12,8 +12,8 @@ const serviceClient = createClient(
 Deno.serve((request) =>
   handleEarnings(request, {
     authenticateBearer: verifyBearerUser,
-    fetchSnapshot: async (rpc, accountId) => {
-      const { data, error } = await serviceClient.rpc(rpc, { p_account_id: accountId });
+    callRPC: async (rpc, args) => {
+      const { data, error } = await serviceClient.rpc(rpc, args);
       if (error) throw error;
       return data;
     },

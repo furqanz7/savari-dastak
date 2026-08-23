@@ -423,6 +423,10 @@ export type V1AdminExecutionTrace = {
     returns: Record<string, unknown>[];
     refunds: Record<string, unknown>[];
     settlements: Record<string, unknown>[];
+    platformFees: Record<string, unknown>[];
+    royaltyLedger: Record<string, unknown>[];
+    royaltyBalances: Record<string, unknown>[];
+    withdrawals: Record<string, unknown>[];
     permissions: Record<string, unknown>;
   };
   restaurant?: {
@@ -1100,6 +1104,10 @@ export async function getV1AdminExecutionTrace(
       !Array.isArray(failureAndFinance.returns) ||
       !Array.isArray(failureAndFinance.refunds) ||
       !Array.isArray(failureAndFinance.settlements) ||
+      !Array.isArray(failureAndFinance.platformFees) ||
+      !Array.isArray(failureAndFinance.royaltyLedger) ||
+      !Array.isArray(failureAndFinance.royaltyBalances) ||
+      !Array.isArray(failureAndFinance.withdrawals) ||
       !record(failureAndFinance.permissions)
     )) || (restaurant && (
       (restaurant.request !== null && restaurant.request !== undefined && !record(restaurant.request)) ||
@@ -1145,6 +1153,10 @@ export async function getV1AdminExecutionTrace(
       returns: (failureAndFinance.returns as unknown[]).map(requiredRecord),
       refunds: (failureAndFinance.refunds as unknown[]).map(requiredRecord),
       settlements: (failureAndFinance.settlements as unknown[]).map(requiredRecord),
+      platformFees: (failureAndFinance.platformFees as unknown[]).map(requiredRecord),
+      royaltyLedger: (failureAndFinance.royaltyLedger as unknown[]).map(requiredRecord),
+      royaltyBalances: (failureAndFinance.royaltyBalances as unknown[]).map(requiredRecord),
+      withdrawals: (failureAndFinance.withdrawals as unknown[]).map(requiredRecord),
       permissions: requiredRecord(failureAndFinance.permissions),
     } : undefined,
     restaurant: restaurant ? {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Bike, Camera, Check, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, X } from "lucide-react";
+import { Bike, Camera, Check, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, WalletCards, X } from "lucide-react";
 import {
   acceptV1DeliveryOffer,
   acceptDeliveryOffer,
@@ -39,8 +39,8 @@ import {
   type ParcelAssignment,
   type ParcelPartnerSnapshot,
 } from "./parcels";
-import { getEarnings, type EarningsSnapshot } from "./earnings";
 import { RoleAccountView } from "./RoleAccountView";
+import { RoyaltyPanel } from "./RoyaltyPanel";
 import { RefreshQueue, useOrderRealtime } from "./orderRealtime";
 
 type Props = {
@@ -68,13 +68,12 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     returnMission: null,
   });
   const [parcelDispatch, setParcelDispatch] = useState<ParcelPartnerSnapshot>({ offer: null, currentJob: null });
-  const [earnings, setEarnings] = useState<EarningsSnapshot>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [verificationCode, setVerificationCode] = useState("");
-  const [section, setSection] = useState<"deliveries" | "account">("deliveries");
+  const [section, setSection] = useState<"deliveries" | "royalty" | "account">("deliveries");
   const refreshQueue = useRef(new RefreshQueue());
   const actionKeys = useRef(new Map<string, string>());
 
@@ -82,18 +81,16 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     await refreshQueue.current.request(showProgress, async (progress) => {
       if (progress) setBusy("refresh");
       try {
-        const [partnerSnapshot, v1DispatchSnapshot, dispatchSnapshot, parcelSnapshot, earningsSnapshot] = await Promise.all([
+        const [partnerSnapshot, v1DispatchSnapshot, dispatchSnapshot, parcelSnapshot] = await Promise.all([
           getDeliveryPartnerSnapshot(auth),
           getV1DeliveryDispatch(auth),
           getDeliveryDispatch(auth),
           getParcelPartnerSnapshot(auth),
-          getEarnings(auth, "deliveryPartnerSnapshot").catch(() => undefined),
         ]);
         setPartner(partnerSnapshot);
         setV1Dispatch(v1DispatchSnapshot);
         setDispatch(dispatchSnapshot);
         setParcelDispatch(parcelSnapshot);
-        setEarnings(earningsSnapshot);
         setError(undefined);
       } catch (refreshError) {
         setError(message(refreshError));
@@ -414,9 +411,10 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     <div className="delivery-shell">
       <nav className="workspace-tabs" role="tablist" aria-label="Delivery Partner workspace">
         <button type="button" role="tab" aria-selected={section === "deliveries"} className={section === "deliveries" ? "selected" : ""} onClick={() => setSection("deliveries")}><Bike size={18} /> Deliveries</button>
+        <button type="button" role="tab" aria-selected={section === "royalty"} className={section === "royalty" ? "selected" : ""} onClick={() => setSection("royalty")}><WalletCards size={18} /> Royalty</button>
         <button type="button" role="tab" aria-selected={section === "account"} className={section === "account" ? "selected" : ""} onClick={() => setSection("account")}><UserRound size={18} /> Account</button>
       </nav>
-      {section === "account" ? <RoleAccountView
+      {section === "royalty" ? <RoyaltyPanel auth={auth} kind="RIDER" /> : section === "account" ? <RoleAccountView
         accessToken={accessToken}
         displayName={displayName}
         email={email}
@@ -463,8 +461,6 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
               <span aria-hidden="true" />
             </label>
           </section>
-          {earnings && <section className="merchant-summary" aria-label="Earnings summary"><div><small>Completed</small><strong>{formatPrice(earnings.completedPaise)}</strong></div><div><small>This week</small><strong>{formatPrice(earnings.thisWeekPaise)}</strong></div><div><small>In progress</small><strong>{formatPrice(earnings.pendingPaise)}</strong></div></section>}
-
           {v1Dispatch.returnMission && (
             <CurrentV1ReturnMission
               mission={v1Dispatch.returnMission}

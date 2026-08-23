@@ -1,0 +1,114 @@
+import { describe, expect, it } from "vitest";
+import { getRoyalty, requestRoyaltyWithdrawal } from "./earnings";
+
+const auth = {
+  supabaseUrl: "https://example.supabase.co",
+  publishableKey: "publishable-key",
+  accessToken: "access-token",
+};
+const subjectId = "95000000-0000-4000-8000-000000000001";
+
+describe("Royalty", () => {
+  it("parses positive and negative append-only ledger entries", async () => {
+    let body: unknown;
+    const snapshot = await getRoyalty(auth, "deliveryRoyaltySnapshot", (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(Response.json({
+        currency: "INR",
+        availablePaise: 4000,
+        balancePaise: 4000,
+        negativeBalancePaise: 0,
+        lifetimeEarnedPaise: 9000,
+        subjects: [{
+          subjectType: "RIDER",
+          subjectId,
+          currency: "INR",
+          availablePaise: 4000,
+          balancePaise: 4000,
+          negativeBalancePaise: 0,
+          lifetimeEarnedPaise: 9000,
+          canWithdraw: true,
+          payoutDestination: {
+            id: "95000000-0000-4000-8000-000000000002",
+            type: "PROVIDER_DESTINATION",
+            provider: "TEST",
+            displayLabel: "Bank • 1234",
+            status: "ACTIVE",
+            version: 1,
+          },
+          entries: [{
+            id: "95000000-0000-4000-8000-000000000003",
+            type: "RIDER_ROYALTY_EARNING",
+            amountPaise: 9000,
+            orderId: "95000000-0000-4000-8000-000000000004",
+            reason: "Verified delivery.",
+            createdAt: "2026-08-23T00:00:00Z",
+          }, {
+            id: "95000000-0000-4000-8000-000000000005",
+            type: "ROYALTY_FAULT_ADJUSTMENT",
+            amountPaise: -5000,
+            refundId: "95000000-0000-4000-8000-000000000006",
+            reason: "Approved fault.",
+            createdAt: "2026-08-23T01:00:00Z",
+          }],
+          adjustments: [{
+            id: "95000000-0000-4000-8000-000000000005",
+            type: "ROYALTY_FAULT_ADJUSTMENT",
+            amountPaise: -5000,
+            refundId: "95000000-0000-4000-8000-000000000006",
+            reason: "Approved fault.",
+            createdAt: "2026-08-23T01:00:00Z",
+          }],
+          withdrawals: [],
+        }],
+      }));
+    });
+    expect(body).toEqual({ operation: "deliveryRoyaltySnapshot" });
+    expect(snapshot.subjects[0].entries.map((entry) => entry.amountPaise))
+      .toEqual([9000, -5000]);
+    expect(snapshot.availablePaise).toBe(4000);
+  });
+
+  it("requests only a server-reserved withdrawal and forwards idempotency", async () => {
+    let body: unknown;
+    let headers: Headers | undefined;
+    const result = await requestRoyaltyWithdrawal({
+      ...auth,
+      subjectType: "MERCHANT_ORGANIZATION",
+      subjectId,
+      amountPaise: 1500,
+      idempotencyKey: "withdrawal-key",
+    }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      headers = new Headers(init?.headers);
+      return Promise.resolve(Response.json({
+        withdrawalId: "95000000-0000-4000-8000-000000000009",
+        amountPaise: 1500,
+        status: "REQUESTED",
+      }));
+    });
+    expect(body).toEqual({
+      operation: "requestRoyaltyWithdrawal",
+      subjectType: "MERCHANT_ORGANIZATION",
+      subjectId,
+      amountPaise: 1500,
+    });
+    expect(headers?.get("x-idempotency-key")).toBe("withdrawal-key");
+    expect(result.status).toBe("REQUESTED");
+  });
+
+  it("never accepts a false Paid status outside the locked lifecycle", async () => {
+    await expect(requestRoyaltyWithdrawal({
+      ...auth,
+      subjectType: "RIDER",
+      subjectId,
+      amountPaise: 1500,
+      idempotencyKey: "withdrawal-key-2",
+    }, () =>
+      Promise.resolve(Response.json({
+        withdrawalId: "95000000-0000-4000-8000-000000000009",
+        amountPaise: 1500,
+        status: "COMPLETED",
+      })))).rejects.toThrow("invalid");
+  });
+});

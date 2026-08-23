@@ -203,18 +203,24 @@ food_truth="$("${psql_base[@]}" -At -F '|' -c "
 select customer_order.status::text,
   (select count(*) from dastak_v1.packages where order_id=customer_order.id and status='DELIVERED' and current_custody_owner_type='CUSTOMER'),
   (select count(*) from dastak_v1.settlement_entries where order_id=customer_order.id and subject_type='MERCHANT_ORGANIZATION' and status='ELIGIBLE' and amount_paise=7000),
-  (select count(*) from dastak_v1.restaurant_capacity_commitments where order_id=customer_order.id and status='RELEASED')
+  (select count(*) from dastak_v1.restaurant_capacity_commitments where order_id=customer_order.id and status='RELEASED'),
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id=customer_order.id and transaction_type='MERCHANT_ROYALTY_EARNING'),
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id=customer_order.id and transaction_type='RIDER_ROYALTY_EARNING'),
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id=customer_order.id and transaction_type='PLATFORM_FEE_RECOGNITION')
 from dastak_v1.orders customer_order where customer_order.id='$food_order'::uuid")"
-[[ "$food_truth" == 'DELIVERED|1|1|1' ]] || { printf 'Restaurant-only completion truth failed: %s\n' "$food_truth" >&2; exit 1; }
+[[ "$food_truth" == 'DELIVERED|1|1|1|1|1|1' ]] || { printf 'Restaurant-only completion/Royalty truth failed: %s\n' "$food_truth" >&2; exit 1; }
 
 mixed_truth="$("${psql_base[@]}" -At -F '|' -c "
 select customer_order.status::text,
   (select count(*) from dastak_v1.fulfilments where order_id=customer_order.id and status='COMPLETED'),
   (select count(*) from dastak_v1.packages where order_id=customer_order.id and status='DELIVERED' and current_custody_owner_type='CUSTOMER'),
   (select count(*) from dastak_v1.settlement_entries where order_id=customer_order.id and subject_type='MERCHANT_ORGANIZATION' and status='ELIGIBLE'),
-  (select count(*) from dastak_v1.settlement_entries where order_id=customer_order.id and subject_type='RIDER' and status='ELIGIBLE')
+  (select count(*) from dastak_v1.settlement_entries where order_id=customer_order.id and subject_type='RIDER' and status='ELIGIBLE'),
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id=customer_order.id and transaction_type='MERCHANT_ROYALTY_EARNING'),
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id=customer_order.id and transaction_type='RIDER_ROYALTY_EARNING'),
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id=customer_order.id and transaction_type='PLATFORM_FEE_RECOGNITION')
 from dastak_v1.orders customer_order where customer_order.id='$mixed_order'::uuid")"
-[[ "$mixed_truth" == 'DELIVERED|2|2|2|1' ]] || { printf 'Mixed Food + Retail completion truth failed: %s\n' "$mixed_truth" >&2; exit 1; }
+[[ "$mixed_truth" == 'DELIVERED|2|2|2|1|2|1|1' ]] || { printf 'Mixed Food + Retail completion/Royalty truth failed: %s\n' "$mixed_truth" >&2; exit 1; }
 
 customer_projection="$("${psql_base[@]}" -Atc "select dastak_v1_api.order_json('$mixed_order'::uuid,'$customer_id'::uuid)::text")"
 [[ "$customer_projection" == *'V1 Cafe'* \
@@ -224,4 +230,4 @@ customer_projection="$("${psql_base[@]}" -Atc "select dastak_v1_api.order_json('
   exit 1
 }
 
-printf 'Restaurant-only and mixed Food + Retail payment-to-settlement E2E gates passed.\n'
+printf 'Restaurant-only and mixed Food + Retail payment-to-Royalty E2E gates passed.\n'

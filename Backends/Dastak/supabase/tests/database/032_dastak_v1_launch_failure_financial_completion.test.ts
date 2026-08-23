@@ -4,13 +4,15 @@ const files = await Promise.all([
   "20260823001500_dastak_v1_launch_failure_financial_completion.sql",
   "20260823001501_dastak_v1_launch_failure_financial_runtime.sql",
   "20260823001502_dastak_v1_launch_failure_projections.sql",
+  "20260824040000_dastak_v1_royalty_platform_fee.sql",
 ].map((name) => Deno.readTextFile(new URL(`../../migrations/${name}`, import.meta.url))));
 const migration = files.join("\n");
 
 function functionBlock(name: string): string {
-  const block = migration.match(
-    new RegExp(`create (?:or replace )?function ${name}\\s*\\([\\s\\S]*?\\$\\$;`, "i"),
-  )?.[0];
+  const blocks = [...migration.matchAll(
+    new RegExp(`create (?:or replace )?function ${name}\\s*\\([\\s\\S]*?\\$\\$;`, "gi"),
+  )];
+  const block = blocks.at(-1)?.[0];
   assert(block, `missing function ${name}`);
   return block;
 }
@@ -70,10 +72,8 @@ Deno.test("Step 5 preserves recovery, reverse custody, refund, settlement and pr
 
   const settlement = functionBlock("dastak_v1_api\\.settle_entry");
   assertMatch(settlement, /platform\.settlements\.manage/i);
-  assertMatch(settlement, /status = 'SETTLED'/i);
-  assertMatch(settlement, /settlement_reference/i);
-  assertMatch(settlement, /pg_advisory_xact_lock/i);
-  assertMatch(settlement, /idempotency_records/i);
+  assertMatch(settlement, /ROYALTY_WITHDRAWAL_REQUIRED/i);
+  assertNotMatch(settlement, /status = 'SETTLED'/i);
 
   const settlementCalculation = functionBlock(
     "dastak_v1_api\\.finalize_settlement_calculation",

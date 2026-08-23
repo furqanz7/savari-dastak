@@ -198,6 +198,15 @@ insert into dastak_v1.fulfilment_lines (fulfilment_id,order_line_id,confirmed_qu
 ('99400000-0000-4000-8000-000000000111','99400000-0000-4000-8000-000000000121',1),
 ('99400000-0000-4000-8000-000000000112','99400000-0000-4000-8000-000000000122',1)
 on conflict do nothing;
+insert into dastak_v1.settlement_entries (
+  entry_key,subject_type,subject_id,order_id,fulfilment_id,order_line_id,
+  entry_type,status,calculation_status,gross_amount_paise,amount_paise,
+  calculation_snapshot
+) values
+('STEP4A:MERCHANT:A1','MERCHANT_ORGANIZATION','99400000-0000-4000-8000-000000000050','99400000-0000-4000-8000-000000000100','99400000-0000-4000-8000-000000000110','99400000-0000-4000-8000-000000000120','EARNING','PENDING','CALCULATED',900,900,'{"commissionBps":0,"configurationRequired":false}'),
+('STEP4A:MERCHANT:A2','MERCHANT_ORGANIZATION','99400000-0000-4000-8000-000000000050','99400000-0000-4000-8000-000000000100','99400000-0000-4000-8000-000000000111','99400000-0000-4000-8000-000000000121','EARNING','PENDING','CALCULATED',900,900,'{"commissionBps":0,"configurationRequired":false}'),
+('STEP4A:MERCHANT:B','MERCHANT_ORGANIZATION','99400000-0000-4000-8000-000000000050','99400000-0000-4000-8000-000000000101','99400000-0000-4000-8000-000000000112','99400000-0000-4000-8000-000000000122','EARNING','PENDING','CALCULATED',900,900,'{"commissionBps":0,"configurationRequired":false}')
+on conflict(entry_key) do nothing;
 insert into dastak_v1.packages (
   id,order_id,fulfilment_id,package_number,status,
   current_custody_owner_type,current_custody_owner_id,declared_by,
@@ -207,6 +216,13 @@ insert into dastak_v1.packages (
 ('99400000-0000-4000-8000-000000000151','99400000-0000-4000-8000-000000000100','99400000-0000-4000-8000-000000000110',2,'READY','MERCHANT_BRANCH','99400000-0000-4000-8000-000000000020','99400000-0000-4000-8000-000000000003',now()-interval '2 minutes',now()-interval '1 minute'),
 ('99400000-0000-4000-8000-000000000152','99400000-0000-4000-8000-000000000100','99400000-0000-4000-8000-000000000111',1,'READY','MERCHANT_BRANCH','99400000-0000-4000-8000-000000000021','99400000-0000-4000-8000-000000000003',now()-interval '2 minutes',now()-interval '1 minute'),
 ('99400000-0000-4000-8000-000000000153','99400000-0000-4000-8000-000000000101','99400000-0000-4000-8000-000000000112',1,'DECLARED','MERCHANT_BRANCH','99400000-0000-4000-8000-000000000020','99400000-0000-4000-8000-000000000003',now()-interval '2 minutes',null)
+on conflict (id) do nothing;
+insert into dastak_v1.fulfilment_evidence (
+  id,order_id,fulfilment_id,evidence_type,object_path,content_type,
+  content_length_bytes,captured_by,captured_at
+) values
+('99400000-0000-4000-8000-000000000154','99400000-0000-4000-8000-000000000100','99400000-0000-4000-8000-000000000110','MERCHANT_READY_PHOTO','test/step4a/ready-a1.jpg','image/jpeg',1024,'99400000-0000-4000-8000-000000000003',now()-interval '1 minute'),
+('99400000-0000-4000-8000-000000000155','99400000-0000-4000-8000-000000000100','99400000-0000-4000-8000-000000000111','MERCHANT_READY_PHOTO','test/step4a/ready-a2.jpg','image/jpeg',1024,'99400000-0000-4000-8000-000000000003',now()-interval '1 minute')
 on conflict (id) do nothing;
 commit;
 SQL
@@ -308,6 +324,21 @@ then
 fi
 grep -q 'SYSTEM_CONFIGURATION_ERROR' "$work_dir/config-error.out"
 
+# Legacy order-level settlement eligibility cannot bypass verified pickup.
+premature_royalty="$("${psql_base[@]}" -At -F '|' -c "
+select dastak_v1_api.mark_order_settlements_eligible(
+    '$order_a'::uuid,null,'Premature eligibility probe.',true
+  ),
+  dastak_v1_api.royalty_earning_milestone_proven(entry.id),
+  entry.status,
+  (select count(*) from dastak_v1.financial_journal_transactions transaction
+    where transaction.settlement_entry_id=entry.id)
+from dastak_v1.settlement_entries entry
+where entry.fulfilment_id='$fulfilment_a1'::uuid and entry.entry_type='EARNING'")"
+[[ "$premature_royalty" == "0|f|PENDING|0" ]] || {
+  printf 'merchant Royalty became eligible before verified pickup: %s\n' "$premature_royalty" >&2; exit 1;
+}
+
 "${psql_base[@]}" -c "select * from public.dastak_v1_advance_delivery_mission('$rider_c'::uuid,'$mission_a'::uuid,'START_PICKUPS',null,null,null,null,'start-a-$run_token','start-a')" >/dev/null
 stop_a="$("${psql_base[@]}" -Atc "select id from dastak_v1.delivery_stops where mission_id='$mission_a'::uuid and fulfilment_id='$fulfilment_a1'::uuid")"
 code_a="$("${psql_base[@]}" -Atc "select private.dastak_v1_handoff_code(id,handoff_type,code_version) from dastak_v1.verification_handoffs where mission_id='$mission_a'::uuid and fulfilment_id='$fulfilment_a1'::uuid")"
@@ -328,13 +359,13 @@ pickup_sql="select response_status from public.dastak_v1_advance_delivery_missio
 "${psql_base[@]}" -At -c "$pickup_sql" >"$work_dir/pickup-a.out" & pickup_a_pid=$!
 "${psql_base[@]}" -At -c "$pickup_sql" >"$work_dir/pickup-b.out" & pickup_b_pid=$!
 wait "$pickup_a_pid"; wait "$pickup_b_pid"
-pickup_truth="$("${psql_base[@]}" -At -F ' ' -c "select (select count(*) from dastak_v1.packages where fulfilment_id='$fulfilment_a1'::uuid and status='PICKED_UP' and current_custody_owner_type='RIDER' and current_custody_owner_id='$rider_c'::uuid),(select count(*) from dastak_v1.package_custody_events where fulfilment_id='$fulfilment_a1'::uuid),(select count(*) from dastak_v1.verification_handoffs where fulfilment_id='$fulfilment_a1'::uuid and status='CONSUMED'),(select count(*) from dastak_v1.fulfilments where id='$fulfilment_a1'::uuid and status='PICKED_UP'),(select count(*) from dastak_v1.delivery_stops where id='$stop_a'::uuid and status='COMPLETED')")"
-[[ "$pickup_truth" == "2 2 1 1 1" ]] || { printf 'atomic pickup truth failed: %s\n' "$pickup_truth" >&2; exit 1; }
+pickup_truth="$("${psql_base[@]}" -At -F ' ' -c "select (select count(*) from dastak_v1.packages where fulfilment_id='$fulfilment_a1'::uuid and status='PICKED_UP' and current_custody_owner_type='RIDER' and current_custody_owner_id='$rider_c'::uuid),(select count(*) from dastak_v1.package_custody_events where fulfilment_id='$fulfilment_a1'::uuid),(select count(*) from dastak_v1.verification_handoffs where fulfilment_id='$fulfilment_a1'::uuid and status='CONSUMED'),(select count(*) from dastak_v1.fulfilments where id='$fulfilment_a1'::uuid and status='PICKED_UP'),(select count(*) from dastak_v1.delivery_stops where id='$stop_a'::uuid and status='COMPLETED'),(select count(*) from dastak_v1.settlement_entries where fulfilment_id='$fulfilment_a1'::uuid and status='ELIGIBLE'),(select count(*) from dastak_v1.financial_journal_transactions where fulfilment_id='$fulfilment_a1'::uuid and transaction_type='MERCHANT_ROYALTY_EARNING')")"
+[[ "$pickup_truth" == "2 2 1 1 1 1 1" ]] || { printf 'atomic pickup/Royalty truth failed: %s\n' "$pickup_truth" >&2; exit 1; }
 
 replay="$("${psql_base[@]}" -At -F '|' -c "select response_status,response_body->'error'->>'code' from public.dastak_v1_advance_delivery_mission('$rider_c'::uuid,'$mission_a'::uuid,'VERIFY_PICKUP','$stop_a'::uuid,2,'$code_a',null,'replay-$run_token','replay')")"
 [[ "$replay" == "409|invalid_pickup_state" || "$replay" == "409|pickup_code_consumed" ]] || { printf 'consumed pickup replay was unsafe: %s\n' "$replay" >&2; exit 1; }
-post_replay="$("${psql_base[@]}" -At -F ' ' -c "select count(*),(select count(*) from dastak_v1.package_custody_events where fulfilment_id='$fulfilment_a1'::uuid) from dastak_v1.packages where fulfilment_id='$fulfilment_a1'::uuid and status='PICKED_UP'")"
-[[ "$post_replay" == "2 2" ]] || { printf 'replay transferred custody twice\n' >&2; exit 1; }
+post_replay="$("${psql_base[@]}" -At -F ' ' -c "select count(*),(select count(*) from dastak_v1.package_custody_events where fulfilment_id='$fulfilment_a1'::uuid),(select count(*) from dastak_v1.financial_journal_transactions where fulfilment_id='$fulfilment_a1'::uuid and transaction_type='MERCHANT_ROYALTY_EARNING') from dastak_v1.packages where fulfilment_id='$fulfilment_a1'::uuid and status='PICKED_UP'")"
+[[ "$post_replay" == "2 2 1" ]] || { printf 'replay transferred custody or credited Merchant Royalty twice\n' >&2; exit 1; }
 
 after_custody_cancel="$("${psql_base[@]}" -At -F '|' -c "select response_status,response_body->'error'->>'code' from public.dastak_v1_advance_delivery_mission('$rider_c'::uuid,'$mission_a'::uuid,'CANCEL_BEFORE_PICKUP',null,null,null,'Cannot continue after pickup','after-custody-$run_token','after-custody')")"
 [[ "$after_custody_cancel" == "409|delivery_recovery_required" ]] || { printf 'post-custody cancellation was not rejected: %s\n' "$after_custody_cancel" >&2; exit 1; }

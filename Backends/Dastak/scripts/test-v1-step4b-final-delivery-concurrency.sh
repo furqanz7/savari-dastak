@@ -325,12 +325,14 @@ select
   (select count(*) from dastak_v1.packages where order_id='$order_normal'::uuid and status='DELIVERED' and current_custody_owner_type='CUSTOMER' and current_custody_owner_id='$customer_id'::uuid),
   (select count(*) from dastak_v1.package_custody_events where order_id='$order_normal'::uuid and to_owner_type='CUSTOMER'),
   (select count(*) from dastak_v1.fulfilments where order_id='$order_normal'::uuid and status='COMPLETED'),
-  (select count(*) from dastak_v1.order_lines where order_id='$order_normal'::uuid and status='FULFILLED')")"
-[[ "$normal_truth" == "1 1 1 2 2 1 1" ]] || { printf 'atomic normal delivery truth failed: %s\n' "$normal_truth" >&2; exit 1; }
+  (select count(*) from dastak_v1.order_lines where order_id='$order_normal'::uuid and status='FULFILLED'),
+  (select count(*) from dastak_v1.settlement_entries where order_id='$order_normal'::uuid and subject_type='RIDER' and entry_type='EARNING' and status='ELIGIBLE'),
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id='$order_normal'::uuid and transaction_type='RIDER_ROYALTY_EARNING')")"
+[[ "$normal_truth" == "1 1 1 2 2 1 1 1 1" ]] || { printf 'atomic normal delivery/Royalty truth failed: %s\n' "$normal_truth" >&2; exit 1; }
 replay="$(call_final "$rider_id" "$mission_normal" VERIFY_DELIVERY '' "$normal_code" "replay-normal-$run_token" replay-normal)"
 [[ "$replay" == "409|delivery_code_consumed" || "$replay" == "409|invalid_final_delivery_state" ]] || { printf 'consumed final code replay was unsafe: %s\n' "$replay" >&2; exit 1; }
-post_replay="$("${psql_base[@]}" -At -F ' ' -c "select count(*),(select count(*) from dastak_v1.package_custody_events where order_id='$order_normal'::uuid and to_owner_type='CUSTOMER') from dastak_v1.packages where order_id='$order_normal'::uuid and status='DELIVERED'")"
-[[ "$post_replay" == "2 2" ]] || { printf 'delivery replay duplicated custody\n' >&2; exit 1; }
+post_replay="$("${psql_base[@]}" -At -F ' ' -c "select count(*),(select count(*) from dastak_v1.package_custody_events where order_id='$order_normal'::uuid and to_owner_type='CUSTOMER'),(select count(*) from dastak_v1.financial_journal_transactions where order_id='$order_normal'::uuid and transaction_type='RIDER_ROYALTY_EARNING') from dastak_v1.packages where order_id='$order_normal'::uuid and status='DELIVERED'")"
+[[ "$post_replay" == "2 2 1" ]] || { printf 'delivery replay duplicated custody or Rider Royalty\n' >&2; exit 1; }
 delivered_projection="$("${psql_base[@]}" -Atc "select dastak_v1_api.order_json('$order_normal'::uuid,'$customer_id'::uuid)::text")"
 [[ "$delivered_projection" == *'DELIVERED'* && "$delivered_projection" != *"$normal_code"* && "$delivered_projection" != *'Hidden Final Delivery Branch'* ]] || { printf 'delivered customer projection was unsafe\n' >&2; exit 1; }
 recipient_account_count="$("${psql_base[@]}" -Atc "select count(*) from public.accounts where phone_number='+919959999999'")"
@@ -363,7 +365,8 @@ select
   (select count(*) from dastak_v1.exceptional_handoff_authorizations where order_id='$order_override'::uuid and delivery_evidence_id='$override_evidence_id'::uuid and authorized_by='$owner_id'::uuid),
   (select count(*) from dastak_v1.orders where id='$order_override'::uuid and status='DELIVERED'),
   (select count(*) from dastak_v1.packages where order_id='$order_override'::uuid and status='DELIVERED' and current_custody_owner_type='CUSTOMER'),
-  (select count(*) from dastak_v1.audit_events where resource_id='$order_override'::uuid and action='DELIVERY_HANDOFF_OVERRIDDEN')")"
-[[ "$override_truth" == "1 1 1 2 1" ]] || { printf 'authorized OVERRIDDEN truth failed: %s\n' "$override_truth" >&2; exit 1; }
+  (select count(*) from dastak_v1.audit_events where resource_id='$order_override'::uuid and action='DELIVERY_HANDOFF_OVERRIDDEN'),
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id='$order_override'::uuid and transaction_type='RIDER_ROYALTY_EARNING')")"
+[[ "$override_truth" == "1 1 1 2 1 0" ]] || { printf 'authorized OVERRIDDEN truth or Rider Royalty eligibility failed: %s\n' "$override_truth" >&2; exit 1; }
 
 printf 'Dastak V1 final-delivery evidence, verification, override and custody races passed.\n'

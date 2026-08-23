@@ -1,8 +1,8 @@
 - Authoritative spec paths: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`, then newer overrides in `docs/DASTAK_V1_LOCKED_ADDENDA.md`
 - Authoritative branch: `codex/dastak-v1-launch`
-- Last checkpoint: Batch D locked-V1 configuration and acceptance closure at branch HEAD
-- Completed V1 capabilities: full Retail, Restaurant/Cafe and mixed-order lifecycle through settlement/recovery; OAuth identity; canonical Merchant controls; transport/custody safety; operational escalation; RBAC; durable notifications; invariant monitoring; and launch Web/iOS gates
+- Last checkpoint: Royalty and 2% platform-fee financial replacement at branch HEAD
+- Completed V1 capabilities: full Retail, Restaurant/Cafe and mixed-order lifecycle through recovery; OAuth identity; canonical Merchant controls; transport/custody safety; append-only Royalty/platform-fee accounting; provider-independent withdrawals; RBAC; durable notifications; invariant monitoring; and launch Web/iOS gates
 - Current launch target: Customer iOS + Customer Web with founder-operated Merchant Web, Delivery Web and Admin Web
 - Deferred surfaces: Android, Merchant iOS, Delivery iOS, Admin iOS
-- Next implementation batch: none; production activation requires explicit operational configuration and credentials
+- Next implementation batch: external payout-rail integration only after provider authorization; production activation also requires explicit operational configuration and credentials
 - Deployment status: local-only; not pushed, merged or deployed
