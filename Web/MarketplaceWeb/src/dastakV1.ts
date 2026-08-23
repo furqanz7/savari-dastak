@@ -169,6 +169,37 @@ export type V1MerchantOpportunity = {
   }>;
 };
 
+export type V1MerchantCanonicalCatalogue = {
+  branch: {
+    branchId: string;
+    branchName: string;
+    branchStatus: string;
+    branchVersion: number;
+    organizationId: string;
+    organizationName: string;
+    merchantType: string;
+    operationalState: {
+      isOpen: boolean;
+      acceptingOrders: boolean;
+      version: number;
+      updatedAt?: string;
+    };
+    capacity: { limit: number; held: number; available: number };
+  };
+  categories: Array<{ categoryId: string; name: string; slug: string; sortOrder: number }>;
+  subcategories: Array<{
+    subcategoryId: string; categoryId: string; name: string; slug: string; sortOrder: number;
+  }>;
+  skus: Array<{
+    skuId: string; categoryId: string; subcategoryId: string; brandName?: string;
+    name: string; variant?: string; packSize: string; description?: string; imageKey?: string;
+    listPricePaise: number; sellingPricePaise: number; currencyCode: "INR";
+    catalogueStatus: string; selected: boolean; selectionState?: string;
+    selectionVersion: number; selectionUpdatedAt?: string;
+  }>;
+  truncated: boolean;
+};
+
 export type V1MerchantFulfilment = {
   id: string;
   orderId: string;
@@ -471,6 +502,49 @@ export async function updateV1AdminSku(
   }, input.idempotencyKey, fetcher));
   if (!source) invalid("SKU update response");
   return source;
+}
+
+export async function getV1MerchantCanonicalCatalogue(
+  input: DastakV1Auth & { branchId?: string; limit?: number; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1MerchantCanonicalCatalogue> {
+  return parseMerchantCanonicalCatalogue(await invoke(input, "dastak-v1-catalogue", {
+    operation: "merchantSnapshot",
+    branchId: input.branchId ?? null,
+    limit: input.limit ?? 1000,
+  }, undefined, fetcher));
+}
+
+export async function updateV1MerchantSkuSelection(
+  input: DastakV1Auth & {
+    branchId: string; skuId: string; selected: boolean; expectedVersion: number;
+    idempotencyKey: string; signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "updateMerchantSelection",
+    branchId: requiredUuid(input.branchId),
+    skuId: requiredUuid(input.skuId),
+    selected: input.selected,
+    expectedVersion: requiredInteger(input.expectedVersion, 0),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function updateV1MerchantBranchState(
+  input: DastakV1Auth & {
+    branchId: string; isOpen: boolean; acceptingOrders: boolean; expectedVersion: number;
+    idempotencyKey: string; signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "updateBranchOperationalState",
+    branchId: requiredUuid(input.branchId),
+    isOpen: input.isOpen,
+    acceptingOrders: input.acceptingOrders,
+    expectedVersion: requiredInteger(input.expectedVersion, 0),
+  }, input.idempotencyKey, fetcher));
 }
 
 export async function getV1MerchantOpportunities(
@@ -1214,6 +1288,80 @@ function parseMerchantOpportunity(value: unknown): V1MerchantOpportunity {
         quantity: requiredInteger(line.quantity, 1),
       };
     }),
+  };
+}
+
+function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCatalogue {
+  const source = requiredRecord(value);
+  const branch = requiredRecord(source.branch);
+  const operationalState = requiredRecord(branch.operationalState);
+  const capacity = requiredRecord(branch.capacity);
+  const categories = requiredArray(source.categories);
+  const subcategories = requiredArray(source.subcategories);
+  const skus = requiredArray(source.skus);
+  return {
+    branch: {
+      branchId: requiredUuid(branch.branchId),
+      branchName: requiredText(branch.branchName, 100),
+      branchStatus: requiredText(branch.branchStatus, 40),
+      branchVersion: requiredInteger(branch.branchVersion, 1),
+      organizationId: requiredUuid(branch.organizationId),
+      organizationName: requiredText(branch.organizationName, 100),
+      merchantType: requiredText(branch.merchantType, 40),
+      operationalState: {
+        isOpen: requiredBoolean(operationalState.isOpen),
+        acceptingOrders: requiredBoolean(operationalState.acceptingOrders),
+        version: requiredInteger(operationalState.version, 0),
+        updatedAt: optionalTimestamp(operationalState.updatedAt),
+      },
+      capacity: {
+        limit: requiredInteger(capacity.limit, 1),
+        held: requiredInteger(capacity.held, 0),
+        available: requiredInteger(capacity.available, 0),
+      },
+    },
+    categories: categories.map((item) => {
+      const category = requiredRecord(item);
+      return {
+        categoryId: requiredUuid(category.categoryId),
+        name: requiredText(category.name, 100),
+        slug: requiredText(category.slug, 120),
+        sortOrder: requiredInteger(category.sortOrder, 0),
+      };
+    }),
+    subcategories: subcategories.map((item) => {
+      const subcategory = requiredRecord(item);
+      return {
+        subcategoryId: requiredUuid(subcategory.subcategoryId),
+        categoryId: requiredUuid(subcategory.categoryId),
+        name: requiredText(subcategory.name, 100),
+        slug: requiredText(subcategory.slug, 120),
+        sortOrder: requiredInteger(subcategory.sortOrder, 0),
+      };
+    }),
+    skus: skus.map((item) => {
+      const sku = requiredRecord(item);
+      return {
+        skuId: requiredUuid(sku.skuId),
+        categoryId: requiredUuid(sku.categoryId),
+        subcategoryId: requiredUuid(sku.subcategoryId),
+        brandName: optionalText(sku.brandName, 100),
+        name: requiredText(sku.name, 160),
+        variant: optionalText(sku.variant, 160),
+        packSize: requiredText(sku.packSize, 80),
+        description: optionalText(sku.description, 1000),
+        imageKey: optionalText(sku.imageKey, 500),
+        listPricePaise: requiredInteger(sku.listPricePaise, 0),
+        sellingPricePaise: requiredInteger(sku.sellingPricePaise, 0),
+        currencyCode: currency(sku.currencyCode),
+        catalogueStatus: requiredText(sku.catalogueStatus, 40),
+        selected: requiredBoolean(sku.selected),
+        selectionState: optionalText(sku.selectionState, 40),
+        selectionVersion: requiredInteger(sku.selectionVersion, 0),
+        selectionUpdatedAt: optionalTimestamp(sku.selectionUpdatedAt),
+      };
+    }),
+    truncated: requiredBoolean(source.truncated),
   };
 }
 

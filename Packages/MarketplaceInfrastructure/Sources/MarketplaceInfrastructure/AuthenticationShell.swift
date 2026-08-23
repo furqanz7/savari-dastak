@@ -140,6 +140,12 @@ private final class AuthenticationShellModel: ObservableObject {
             },
             checkoutCustomerProvider: {
                 try await operations.checkoutCustomer()
+            },
+            oauthIdentityLinker: { provider in
+                try await operations.linkIdentity(
+                    provider: provider,
+                    redirectTo: try OAuthCallbackConfiguration(bundle: bundle).callbackURL()
+                )
             }
         )
     }

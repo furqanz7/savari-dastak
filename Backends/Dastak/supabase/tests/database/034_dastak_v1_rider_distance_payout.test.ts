@@ -4,9 +4,7 @@ const files = await Promise.all([
   "20260822232358_dastak_v1_rider_distance_band_payout.sql",
   "20260823001500_dastak_v1_launch_failure_financial_completion.sql",
   "20260823001501_dastak_v1_launch_failure_financial_runtime.sql",
-].map((name) =>
-  Deno.readTextFile(new URL(`../../migrations/${name}`, import.meta.url))
-));
+].map((name) => Deno.readTextFile(new URL(`../../migrations/${name}`, import.meta.url))));
 const migration = files.join("\n");
 
 function functionBlock(name: string): string {

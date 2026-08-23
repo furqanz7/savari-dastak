@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { verifyBearerUser } from "../_shared/auth.ts";
+import { verifyBearerSession } from "../_shared/auth.ts";
+import { callAuthenticatedRPC } from "../_shared/v1-rpc.ts";
 import { type AccountProfile, handleAccountProfile } from "./handler.ts";
 
 const supabaseUrl = requiredEnv("SUPABASE_URL");
@@ -10,9 +11,16 @@ const serviceRoleClient = createClient(supabaseUrl, requiredEnv("SUPABASE_SERVIC
 
 Deno.serve((request) =>
   handleAccountProfile(request, {
-    authenticateBearer: verifyBearerUser,
+    authenticateBearer: verifyBearerSession,
     snapshotProfile: readProfile,
     updateProfile,
+    snapshotIdentities: (accessToken) =>
+      callAuthenticatedRPC(accessToken, "dastak_customer_identity_snapshot", {}),
+    beginIdentityLink: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_begin_customer_identity_link", {
+        p_target_provider: input.provider,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     deleteAccount,
   })
 );
@@ -22,6 +30,7 @@ async function readProfile(accountId: string) {
     .from("accounts")
     .select("display_name,phone_number")
     .eq("id", accountId)
+    .eq("account_state", "ACTIVE")
     .maybeSingle();
   if (error) throw error;
   return data ? mapProfile(data) : null;
@@ -36,15 +45,34 @@ async function updateProfile(accountId: string, profile: AccountProfile) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", accountId)
+    .eq("account_state", "ACTIVE")
     .select("display_name,phone_number")
     .maybeSingle();
   if (error) throw error;
   return data ? mapProfile(data) : null;
 }
 
-async function deleteAccount(accountId: string) {
-  const { error } = await serviceRoleClient.auth.admin.deleteUser(accountId);
-  if (error) throw error;
+async function deleteAccount(input: {
+  accountId: string;
+  accessToken: string;
+  idempotencyKey: string;
+}) {
+  const prepared = await serviceRoleClient.rpc("prepare_customer_account_deletion", {
+    p_account_id: input.accountId,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  if (prepared.error) throw prepared.error;
+
+  // Auth deletion removes every refresh token/session. The database is already
+  // fail-closed if either network operation is interrupted and can be retried.
+  await serviceRoleClient.auth.admin.signOut(input.accessToken, "global");
+  const deleted = await serviceRoleClient.auth.admin.deleteUser(input.accountId);
+  if (deleted.error) throw deleted.error;
+
+  const finalized = await serviceRoleClient.rpc("finalize_customer_account_deletion", {
+    p_account_id: input.accountId,
+  });
+  if (finalized.error) throw finalized.error;
 }
 
 function mapProfile(row: { display_name: string; phone_number: string }): AccountProfile {

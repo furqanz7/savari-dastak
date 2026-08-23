@@ -349,6 +349,17 @@ extension SupabaseAuthenticationClient {
             )
         }
 
+        func linkIdentity(
+            provider: MarketplaceOAuthProvider,
+            redirectTo: URL
+        ) async throws {
+            try await supabaseClient.auth.linkIdentity(
+                provider: provider == .apple ? .apple : .google,
+                scopes: provider == .apple ? "name email" : nil,
+                redirectTo: redirectTo
+            )
+        }
+
         func currentAccountID() async -> UUID? {
             do {
                 return try await supabaseClient.auth.session.user.id

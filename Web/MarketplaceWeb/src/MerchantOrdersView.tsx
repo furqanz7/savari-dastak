@@ -7,13 +7,11 @@ import {
   PackageCheck,
   ReceiptText,
   RefreshCw,
-  Store,
   UserRound,
   X,
 } from "lucide-react";
 import { RoleAccountView } from "./RoleAccountView";
 import { formatPrice } from "./catalogue";
-import { MerchantCatalogueView } from "./MerchantCatalogueView";
 import {
   acceptMerchantOrder,
   confirmMerchantCancellationReturn,
@@ -28,6 +26,7 @@ import { processOrderRefund } from "./payments";
 import { getEarnings, type EarningsSnapshot } from "./earnings";
 import { RefreshQueue, useOrderRealtime } from "./orderRealtime";
 import { MerchantV1Opportunities } from "./MerchantV1Opportunities";
+import { MerchantV1CatalogueControl } from "./MerchantV1CatalogueControl";
 
 type Props = {
   accessToken: string;
@@ -42,7 +41,7 @@ type Props = {
 };
 
 type MerchantAction = "accept" | "ready" | "reject" | "confirmReturn" | "refund";
-type MerchantSection = "orders" | "catalogue" | "store" | "account";
+type MerchantSection = "orders" | "catalogue" | "account";
 
 export function MerchantOrdersView({
   accessToken,
@@ -173,19 +172,10 @@ export function MerchantOrdersView({
       <nav className="workspace-tabs merchant-tabs" aria-label="Merchant workspace" role="tablist">
         <MerchantTab selected={section === "orders"} onSelect={() => setSection("orders")} icon={<ClipboardList size={18} />} label="Orders" />
         <MerchantTab selected={section === "catalogue"} onSelect={() => setSection("catalogue")} icon={<BookOpen size={18} />} label="Catalogue" />
-        <MerchantTab selected={section === "store"} onSelect={() => setSection("store")} icon={<Store size={18} />} label="Store" />
         <MerchantTab selected={section === "account"} onSelect={() => setSection("account")} icon={<UserRound size={18} />} label="Account" />
       </nav>
-      {section === "catalogue" || section === "store" ? (
-        <MerchantCatalogueView
-          accessToken={accessToken}
-          accountId={accountId}
-          client={client}
-          supabaseUrl={supabaseUrl}
-          publishableKey={publishableKey}
-          mode={section}
-          onOpenStore={() => setSection("store")}
-        />
+      {section === "catalogue" ? (
+        <MerchantV1CatalogueControl auth={auth} />
       ) : section === "account" ? (
         <RoleAccountView
           accessToken={accessToken}
@@ -195,7 +185,7 @@ export function MerchantOrdersView({
           roleName="Merchant"
           supabaseUrl={supabaseUrl}
           publishableKey={publishableKey}
-          onOpenWorkspace={() => setSection("store")}
+          onOpenWorkspace={() => setSection("catalogue")}
           onSignOut={onSignOut}
         />
       ) : (

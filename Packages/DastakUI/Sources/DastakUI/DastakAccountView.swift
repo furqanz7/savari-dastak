@@ -26,6 +26,9 @@ struct DastakAccountView: View {
     let location: DastakDeliveryLocation?
     let savedAddressCount: Int
     let accountSessionClient: any AccountSessionClient
+    let linkedIdentities: [MarketplaceLinkedIdentity]
+    let isLinkingIdentity: Bool
+    let identityMessage: String?
     let discoveryRadiusKilometres: Int
     let refreshFailure: DastakCustomerRefreshFailure?
     let deliveryPartnerAccess: DeliveryPartnerAccess
@@ -34,6 +37,8 @@ struct DastakAccountView: View {
     let openOrders: () -> Void
     let becomeDeliveryPartner: () -> Void
     let retryAccount: () -> Void
+    let refreshIdentities: () -> Void
+    let linkIdentity: (MarketplaceOAuthProvider) -> Void
     let updateProfile: (String, String) async throws -> Void
     let deleteAccount: () async throws -> Void
 
@@ -52,6 +57,7 @@ struct DastakAccountView: View {
                 }
                 deliverySection
                 preferencesSection
+                identitySection
                 supportSection
                 partnerOpportunity
                 accountActions
@@ -71,6 +77,7 @@ struct DastakAccountView: View {
         .alert(item: $accountAlert, content: makeAccountAlert)
         .task {
             notificationStatus = await DastakNotificationPreferences.status()
+            refreshIdentities()
         }
     }
 
@@ -227,6 +234,62 @@ struct DastakAccountView: View {
             .padding(.horizontal, MarketplaceSpacing.medium)
             .marketplaceFlatSurface()
         }
+    }
+
+    private var identitySection: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Sign-in security")
+                .font(MarketplaceTypography.sectionTitle)
+
+            VStack(spacing: 0) {
+                ForEach(MarketplaceOAuthProvider.allCases, id: \.self) { provider in
+                    HStack(spacing: MarketplaceSpacing.compact) {
+                        accountIcon(provider == .apple ? "apple.logo" : "g.circle.fill")
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(provider == .apple ? "Apple" : "Google")
+                                .font(.headline)
+                            Text(isLinked(provider) ? "Linked to this Dastak account" : "Not linked")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if isLinked(provider) {
+                            Label("Linked", systemImage: "checkmark.shield.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                .labelStyle(.titleAndIcon)
+                        } else {
+                            Button("Add") { linkIdentity(provider) }
+                                .buttonStyle(.bordered)
+                                .disabled(isLinkingIdentity)
+                        }
+                    }
+                    .frame(minHeight: 68)
+
+                    if provider != .google {
+                        Divider().padding(.leading, 52)
+                    }
+                }
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
+
+            if let identityMessage {
+                Label(identityMessage, systemImage: "exclamationmark.shield")
+                    .font(.footnote)
+                    .foregroundStyle(MarketplaceColors.destructive.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Dastak never merges accounts because an email or phone number matches. Link only while signed in to the account you want to keep.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func isLinked(_ provider: MarketplaceOAuthProvider) -> Bool {
+        linkedIdentities.contains { $0.provider == provider }
     }
 
     private func accountRow(

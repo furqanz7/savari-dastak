@@ -129,6 +129,70 @@ Deno.test("V1 SKU update validates optimistic version and idempotency", async ()
   });
 });
 
+Deno.test("V1 merchant catalogue exposes canonical selection and branch controls", async () => {
+  let selection: unknown;
+  let operation: unknown;
+  const merchantSnapshot = await handleV1Catalogue(
+    request({ operation: "merchantSnapshot", branchId: categoryId, limit: 500 }),
+    dependencies({ merchantSnapshot: (input) => Promise.resolve({ recorded: input }) }),
+  );
+  assertEquals((await body(merchantSnapshot)).recorded, {
+    accessToken: actor.accessToken,
+    branchId: categoryId,
+    limit: 500,
+  });
+
+  const selectionResponse = await handleV1Catalogue(
+    request({
+      operation: "updateMerchantSelection",
+      branchId: categoryId,
+      skuId,
+      selected: true,
+      expectedVersion: 0,
+    }, "selection-key"),
+    dependencies({
+      updateMerchantSelection: (input) => {
+        selection = input;
+        return Promise.resolve({ selected: true });
+      },
+    }),
+  );
+  assertEquals(selectionResponse.status, 200);
+  assertEquals(selection, {
+    accessToken: actor.accessToken,
+    branchId: categoryId,
+    skuId,
+    selected: true,
+    expectedVersion: 0,
+    idempotencyKey: "selection-key",
+  });
+
+  const operationResponse = await handleV1Catalogue(
+    request({
+      operation: "updateBranchOperationalState",
+      branchId: categoryId,
+      isOpen: true,
+      acceptingOrders: true,
+      expectedVersion: 0,
+    }, "operation-key"),
+    dependencies({
+      updateBranchOperationalState: (input) => {
+        operation = input;
+        return Promise.resolve({ acceptingOrders: true });
+      },
+    }),
+  );
+  assertEquals(operationResponse.status, 200);
+  assertEquals(operation, {
+    accessToken: actor.accessToken,
+    branchId: categoryId,
+    isOpen: true,
+    acceptingOrders: true,
+    expectedVersion: 0,
+    idempotencyKey: "operation-key",
+  });
+});
+
 Deno.test("V1 catalogue exposes safe database conflict errors", async () => {
   const response = await handleV1Catalogue(
     request({ operation: "adminSnapshot" }),
@@ -175,8 +239,12 @@ function dependencies(
     authenticateBearer: overrides.authenticateBearer ?? (() => Promise.resolve(actor)),
     customerCatalogue: overrides.customerCatalogue ?? (() => Promise.resolve(snapshot)),
     adminSnapshot: overrides.adminSnapshot ?? (() => Promise.resolve(snapshot)),
+    merchantSnapshot: overrides.merchantSnapshot ?? (() => Promise.resolve(snapshot)),
     importCatalogue: overrides.importCatalogue ?? (() => Promise.resolve({})),
     updateSku: overrides.updateSku ?? (() => Promise.resolve({})),
+    updateMerchantSelection: overrides.updateMerchantSelection ?? (() => Promise.resolve({})),
+    updateBranchOperationalState: overrides.updateBranchOperationalState ??
+      (() => Promise.resolve({})),
   };
 }
 

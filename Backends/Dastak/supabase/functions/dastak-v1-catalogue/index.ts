@@ -19,6 +19,11 @@ Deno.serve((request) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_catalogue_snapshot", {
         p_sku_limit: input.skuLimit,
       }),
+    merchantSnapshot: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_merchant_canonical_catalogue_snapshot", {
+        p_branch_id: input.branchId,
+        p_limit: input.limit,
+      }),
     importCatalogue: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_import_catalogue", {
         p_idempotency_key: input.idempotencyKey,
@@ -30,6 +35,22 @@ Deno.serve((request) =>
         p_idempotency_key: input.idempotencyKey,
         p_expected_version: input.expectedVersion,
         p_patch: input.patch,
+      }),
+    updateMerchantSelection: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_update_merchant_sku_selection", {
+        p_branch_id: input.branchId,
+        p_sku_id: input.skuId,
+        p_selected: input.selected,
+        p_expected_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    updateBranchOperationalState: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_set_branch_operational_state", {
+        p_branch_id: input.branchId,
+        p_idempotency_key: input.idempotencyKey,
+        p_expected_version: input.expectedVersion,
+        p_is_open: input.isOpen,
+        p_accepting_orders: input.acceptingOrders,
       }),
   })
 );

@@ -3,6 +3,13 @@ export type AccountProfile = {
   phoneNumber: string;
 };
 
+export type CustomerOAuthProvider = "apple" | "google";
+export type CustomerIdentity = {
+  provider: CustomerOAuthProvider;
+  linkKind: "ORIGIN" | "EXPLICIT";
+  linkedAt: string;
+};
+
 type AuthenticatedInput = {
   accessToken: string;
   supabaseUrl: string;
@@ -50,6 +57,31 @@ export async function deleteAccount(
   }
 }
 
+export async function snapshotCustomerIdentities(
+  input: AuthenticatedInput,
+  fetcher: typeof fetch = fetch,
+) {
+  const body = await callAccountProfile(input, { operation: "identitySnapshot" }, fetcher);
+  const providers = (body as { providers?: unknown }).providers;
+  if (!Array.isArray(providers) || !providers.every(isCustomerIdentity)) {
+    throw new Error("Dastak returned an invalid identity snapshot.");
+  }
+  return providers;
+}
+
+export async function beginCustomerIdentityLink(
+  input: AuthenticatedInput & { provider: CustomerOAuthProvider },
+  fetcher: typeof fetch = fetch,
+) {
+  const body = await callAccountProfile(input, {
+    operation: "beginIdentityLink",
+    provider: input.provider,
+  }, fetcher);
+  const provider = (body as { provider?: unknown }).provider;
+  if (provider !== input.provider) throw new Error("Dastak could not confirm identity linking.");
+  return body;
+}
+
 export function isValidAccountProfile(profile: AccountProfile) {
   const name = profile.displayName.trim().replace(/\s+/g, " ");
   return name.length >= 1 && name.length <= 80 && /^\+[1-9]\d{7,14}$/.test(profile.phoneNumber.trim());
@@ -87,6 +119,14 @@ function isAccountProfile(value: unknown): value is AccountProfile {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return typeof record.displayName === "string" && typeof record.phoneNumber === "string";
+}
+
+function isCustomerIdentity(value: unknown): value is CustomerIdentity {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (record.provider === "apple" || record.provider === "google") &&
+    (record.linkKind === "ORIGIN" || record.linkKind === "EXPLICIT") &&
+    typeof record.linkedAt === "string";
 }
 
 function readError(body: unknown, fallback: string) {

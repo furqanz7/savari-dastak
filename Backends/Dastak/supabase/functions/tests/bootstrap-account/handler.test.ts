@@ -18,6 +18,7 @@ Deno.test("bootstrap account accepts browser CORS preflight", async () => {
         authenticationAttempts += 1;
         return Promise.resolve({
           accountId: "22222222-2222-4222-8222-222222222222",
+          oauthProviders: ["apple"],
         });
       },
     }),
@@ -37,6 +38,7 @@ Deno.test("bootstrap account rejects missing authorization", async () => {
         authenticationAttempts += 1;
         return Promise.resolve({
           accountId: "22222222-2222-4222-8222-222222222222",
+          oauthProviders: ["apple"],
         });
       },
     }),
@@ -84,6 +86,7 @@ Deno.test("bootstrap account rejects malformed authorization without authenticat
         authenticationAttempts += 1;
         return Promise.resolve({
           accountId: "22222222-2222-4222-8222-222222222222",
+          oauthProviders: ["google"],
         });
       },
     }),
@@ -102,6 +105,25 @@ Deno.test("bootstrap account rejects missing idempotency key", async () => {
 
   assertEquals(response.status, 400);
   assertEquals((await jsonBody(response)).error.code, "validation_failed");
+});
+
+Deno.test("bootstrap account rejects authenticated sessions without Apple or Google", async () => {
+  const response = await handleBootstrapAccount(
+    request({
+      authorization: "Bearer session-token",
+      headers: { "X-Idempotency-Key": "key-no-oauth" },
+    }),
+    dependencies({
+      authenticateBearer: () =>
+        Promise.resolve({
+          accountId: "22222222-2222-4222-8222-222222222222",
+          oauthProviders: [],
+        }),
+    }),
+  );
+
+  assertEquals(response.status, 403);
+  assertEquals((await jsonBody(response)).error.code, "oauth_identity_required");
 });
 
 Deno.test("bootstrap account rejects missing display name", async () => {
@@ -231,6 +253,7 @@ function dependencies(
       (() =>
         Promise.resolve({
           accountId: "22222222-2222-4222-8222-222222222222",
+          oauthProviders: ["apple"],
         })),
     bootstrapAccount: overrides.bootstrapAccount ??
       (() =>

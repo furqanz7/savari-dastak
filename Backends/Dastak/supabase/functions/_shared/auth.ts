@@ -2,7 +2,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 export async function verifyBearerUser(bearerToken: string) {
   const session = await verifyBearerSession(bearerToken);
-  return { accountId: session.accountId };
+  return {
+    accountId: session.accountId,
+    oauthProviders: session.oauthProviders,
+  };
 }
 
 export async function verifyBearerSession(bearerToken: string) {
@@ -24,12 +27,40 @@ export async function verifyBearerSession(bearerToken: string) {
     throw new Error("A valid bearer token is required.");
   }
 
+  const oauthProviders = dastakOAuthProviders(data.user);
+
   const sessionId = sessionID(token);
   if (!sessionId) {
     throw new Error("The bearer token does not identify a session.");
   }
 
-  return { accountId: data.user.id, sessionId, accessToken: token };
+  return {
+    accountId: data.user.id,
+    sessionId,
+    accessToken: token,
+    oauthProviders,
+  };
+}
+
+export function dastakOAuthProviders(user: {
+  is_anonymous?: boolean;
+  identities?: Array<{ provider?: string }> | null;
+}) {
+  if (user.is_anonymous) throw new Error("Anonymous Dastak sessions are forbidden.");
+  const providers = [
+    ...new Set(
+      (user.identities ?? []).map((identity) => identity.provider).filter(
+        (provider): provider is string => typeof provider === "string",
+      ),
+    ),
+  ].sort();
+  if (
+    providers.length < 1 ||
+    providers.some((provider) => provider !== "apple" && provider !== "google")
+  ) {
+    throw new Error("Dastak requires an Apple or Google OAuth identity.");
+  }
+  return providers as Array<"apple" | "google">;
 }
 
 function sessionID(token: string) {

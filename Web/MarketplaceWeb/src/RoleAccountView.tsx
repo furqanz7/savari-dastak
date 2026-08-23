@@ -157,8 +157,8 @@ export function RoleAccountView({
       <div className="role-account-group">
         <AccountButtonRow
           icon={<Store size={19} />}
-          title="Manage your store"
-          detail="Catalogue, availability and store details"
+          title="Branch catalogue and availability"
+          detail="Select Dastak canonical SKUs and control new-order acceptance"
           onClick={onOpenWorkspace}
         />
       </div>

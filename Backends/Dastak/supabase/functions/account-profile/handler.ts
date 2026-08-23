@@ -6,15 +6,30 @@ export type AccountProfile = {
 };
 
 export type AccountProfileDependencies = {
-  authenticateBearer: (bearerToken: string) => Promise<{ accountId: string }>;
+  authenticateBearer: (bearerToken: string) => Promise<{
+    accountId: string;
+    accessToken: string;
+  }>;
   snapshotProfile: (accountId: string) => Promise<AccountProfile | null>;
   updateProfile: (accountId: string, profile: AccountProfile) => Promise<AccountProfile | null>;
-  deleteAccount: (accountId: string) => Promise<void>;
+  snapshotIdentities: (accessToken: string) => Promise<unknown>;
+  beginIdentityLink: (input: {
+    accessToken: string;
+    provider: "apple" | "google";
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  deleteAccount: (input: {
+    accountId: string;
+    accessToken: string;
+    idempotencyKey: string;
+  }) => Promise<void>;
 };
 
 type RequestBody =
   | { operation: "snapshot" }
   | { operation: "update"; displayName: string; phoneNumber: string }
+  | { operation: "identitySnapshot" }
+  | { operation: "beginIdentityLink"; provider: "apple" | "google" }
   | { operation: "delete" };
 
 const e164Pattern = /^\+[1-9][0-9]{7,14}$/;
@@ -35,9 +50,9 @@ export async function handleAccountProfile(
     return authenticationRequired();
   }
 
-  let accountId: string;
+  let actor: { accountId: string; accessToken: string };
   try {
-    accountId = (await dependencies.authenticateBearer(authorization)).accountId;
+    actor = await dependencies.authenticateBearer(authorization);
   } catch {
     return authenticationRequired();
   }
@@ -53,18 +68,38 @@ export async function handleAccountProfile(
   try {
     switch (body.operation) {
       case "snapshot": {
-        const profile = await dependencies.snapshotProfile(accountId);
+        const profile = await dependencies.snapshotProfile(actor.accountId);
         return profile ? json({ profile }) : profileRequired();
       }
       case "update": {
         const profile = normalizeProfile(body.displayName, body.phoneNumber);
         if (profile instanceof Response) return profile;
-        const updated = await dependencies.updateProfile(accountId, profile);
+        const updated = await dependencies.updateProfile(actor.accountId, profile);
         return updated ? json({ profile: updated }) : profileRequired();
       }
-      case "delete":
-        await dependencies.deleteAccount(accountId);
+      case "identitySnapshot":
+        return json(await dependencies.snapshotIdentities(actor.accessToken));
+      case "beginIdentityLink": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (!idempotencyKey) return validationError("X-Idempotency-Key is required.");
+        return json(
+          await dependencies.beginIdentityLink({
+            accessToken: actor.accessToken,
+            provider: body.provider,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "delete": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (!idempotencyKey) return validationError("X-Idempotency-Key is required.");
+        await dependencies.deleteAccount({
+          accountId: actor.accountId,
+          accessToken: actor.accessToken,
+          idempotencyKey,
+        });
         return json({ deleted: true });
+      }
     }
   } catch {
     return json(
@@ -95,8 +130,17 @@ function normalizeProfile(displayName: string, phoneNumber: string): AccountProf
 async function readBody(request: Request): Promise<RequestBody | null> {
   try {
     const value = await request.json() as Record<string, unknown>;
-    if (value.operation === "snapshot" || value.operation === "delete") {
+    if (
+      value.operation === "snapshot" || value.operation === "identitySnapshot" ||
+      value.operation === "delete"
+    ) {
       return { operation: value.operation };
+    }
+    if (
+      value.operation === "beginIdentityLink" &&
+      (value.provider === "apple" || value.provider === "google")
+    ) {
+      return { operation: value.operation, provider: value.provider };
     }
     if (
       value.operation === "update" &&
@@ -113,6 +157,15 @@ async function readBody(request: Request): Promise<RequestBody | null> {
     // The typed validation response below covers malformed JSON.
   }
   return null;
+}
+
+function requiredIdempotencyKey(request: Request) {
+  const value = request.headers.get("X-Idempotency-Key")?.trim() ?? "";
+  return value.length >= 1 && value.length <= 200 ? value : undefined;
+}
+
+function validationError(message: string) {
+  return json({ error: { code: "validation_failed", message } }, 400);
 }
 
 function authenticationRequired() {

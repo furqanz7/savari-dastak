@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -10,6 +11,7 @@ import {
   Hand,
   ImageOff,
   LocateFixed,
+  Link2,
   LogOut,
   MapPin,
   Minus,
@@ -30,7 +32,16 @@ import {
 import { AccountProfileSheet } from "./AccountProfileSheet";
 import { AccountActionDialog } from "./AccountActionDialog";
 import { AccountSessionsSheet } from "./AccountSessionsSheet";
-import { AccountProfileRequestError, deleteAccount, updateAccountProfile, type AccountProfile } from "./accountProfile";
+import {
+  AccountProfileRequestError,
+  beginCustomerIdentityLink,
+  deleteAccount,
+  snapshotCustomerIdentities,
+  updateAccountProfile,
+  type AccountProfile,
+  type CustomerIdentity,
+  type CustomerOAuthProvider,
+} from "./accountProfile";
 import {
   browseCatalogue,
   catalogueImageUrl,
@@ -89,6 +100,7 @@ import { RefreshQueue } from "./orderRealtime";
 
 type Props = {
   accessToken: string;
+  client: SupabaseClient;
   displayName?: string;
   email?: string;
   phoneNumber?: string;
@@ -148,6 +160,7 @@ type CatalogueState =
   | { phase: "error"; code: string; message: string };
 export function CatalogueView({
   accessToken,
+  client,
   displayName,
   email,
   phoneNumber,
@@ -190,6 +203,9 @@ export function CatalogueView({
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileError, setProfileError] = useState<string>();
+  const [customerIdentities, setCustomerIdentities] = useState<CustomerIdentity[]>([]);
+  const [identityLoading, setIdentityLoading] = useState(false);
+  const [identityMessage, setIdentityMessage] = useState<string>();
   const [showSignOutConfirmation, setShowSignOutConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -220,6 +236,43 @@ export function CatalogueView({
       });
     return () => { active = false; };
   }, [auth, section]);
+
+  useEffect(() => {
+    if (section !== "account") return;
+    let active = true;
+    setIdentityLoading(true);
+    setIdentityMessage(undefined);
+    void snapshotCustomerIdentities(auth)
+      .then((providers) => { if (active) setCustomerIdentities(providers); })
+      .catch((error) => {
+        if (!active) return;
+        if (error instanceof AccountProfileRequestError && error.status === 401) return onSignOut();
+        setIdentityMessage("Sign-in methods could not be loaded. Try again.");
+      })
+      .finally(() => { if (active) setIdentityLoading(false); });
+    return () => { active = false; };
+  }, [auth, onSignOut, section]);
+
+  const linkIdentity = async (provider: CustomerOAuthProvider) => {
+    setIdentityLoading(true);
+    setIdentityMessage(undefined);
+    try {
+      await beginCustomerIdentityLink({ ...auth, provider });
+      const { error } = await client.auth.linkIdentity({
+        provider,
+        options: { redirectTo: `${window.location.origin}/#account` },
+      });
+      if (error) throw error;
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      setIdentityMessage(
+        message.includes("already") || message.includes("linked") || message.includes("identity")
+          ? "That sign-in belongs to another Dastak account or is already linked. Sign in to that account or contact support; Dastak never merges by email or phone."
+          : "The sign-in method could not be linked. Your existing account is unchanged.",
+      );
+      setIdentityLoading(false);
+    }
+  };
 
   const refreshOrders = useCallback(async () => {
     await ordersRefreshQueue.current.request(false, async () => {
@@ -942,6 +995,35 @@ export function CatalogueView({
               <button className="customer-account-row" type="button" onClick={() => setSessionsOpen(true)}>
                 <MonitorSmartphone size={20} /><span><strong>Devices and sessions</strong><small>Review sign-ins and sign out other devices</small></span><ChevronRight size={18} />
               </button>
+              <div className="customer-account-row customer-privacy-row">
+                <Link2 size={20} />
+                <span>
+                  <strong>Sign-in methods</strong>
+                  <small>
+                    {identityLoading && customerIdentities.length === 0
+                      ? "Loading Apple and Google identities…"
+                      : customerIdentities.length > 0
+                        ? `Linked: ${customerIdentities.map((identity) => identity.provider === "apple" ? "Apple" : "Google").join(" + ")}`
+                        : "Apple or Google identity required"}
+                  </small>
+                  {identityMessage && <small className="error-text" role="alert">{identityMessage}</small>}
+                </span>
+                <span className="customer-identity-actions">
+                  {(["apple", "google"] as const).filter((provider) =>
+                    !customerIdentities.some((identity) => identity.provider === provider)
+                  ).map((provider) => (
+                    <button
+                      key={provider}
+                      type="button"
+                      className="secondary-button"
+                      disabled={identityLoading}
+                      onClick={() => void linkIdentity(provider)}
+                    >
+                      Add {provider === "apple" ? "Apple" : "Google"}
+                    </button>
+                  ))}
+                </span>
+              </div>
               <button className="customer-account-row" type="button" onClick={() => setShowSignOutConfirmation(true)}>
                 <LogOut size={20} /><span><strong>Sign out</strong><small>Keep this account and end this session</small></span><ChevronRight size={18} />
               </button>

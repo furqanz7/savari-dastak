@@ -215,7 +215,14 @@ button.customer-account-row:not(:disabled):hover { color: var(--dastak-accent); 
 .customer-account-row.destructive strong { color: var(--destructive); }
 .customer-privacy-row { align-items: start; }
 .customer-privacy-row > svg { margin-top: 2px; }
+.customer-identity-actions { display: flex !important; grid-auto-flow: column; gap: 7px !important; }
+.customer-identity-actions .secondary-button { min-height: 36px; padding: 0 11px; white-space: nowrap; font-size: 12px; }
 .customer-account-error { display: block; margin-top: 9px; }
+
+@media (max-width: 560px) {
+  .customer-account-row:has(.customer-identity-actions) { grid-template-columns: 24px minmax(0, 1fr); }
+  .customer-identity-actions { grid-column: 2; justify-content: flex-start; margin-top: 5px; }
+}
 
 .customer-saved-place { width: 100%; min-height: 94px; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 13px; align-items: center; padding: 16px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); text-align: left; }
 .customer-saved-place > span:nth-child(2) { min-width: 0; display: grid; gap: 5px; }

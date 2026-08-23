@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   deleteAccount,
+  beginCustomerIdentityLink,
   isValidAccountProfile,
   snapshotAccountProfile,
+  snapshotCustomerIdentities,
   updateAccountProfile,
 } from "./accountProfile";
 
@@ -52,6 +54,27 @@ describe("account profile", () => {
     await expect(deleteAccount(auth, () => Promise.resolve(
       new Response(JSON.stringify({ deleted: false }), { status: 200 }),
     ))).rejects.toThrow("confirm account deletion");
+  });
+
+  it("loads linked providers and starts an explicit link intent", async () => {
+    const providers = await snapshotCustomerIdentities(auth, (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ operation: "identitySnapshot" });
+      return Promise.resolve(new Response(JSON.stringify({
+        providers: [{ provider: "apple", linkKind: "ORIGIN", linkedAt: "2026-08-23T00:00:00Z" }],
+      }), { status: 200 }));
+    });
+    expect(providers.map((identity) => identity.provider)).toEqual(["apple"]);
+
+    await beginCustomerIdentityLink({ ...auth, provider: "google" }, (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        operation: "beginIdentityLink",
+        provider: "google",
+      });
+      return Promise.resolve(new Response(JSON.stringify({
+        provider: "google",
+        intentId: "intent-id",
+      }), { status: 200 }));
+    });
   });
 
   it("requires the shared name and E.164 phone contract", () => {

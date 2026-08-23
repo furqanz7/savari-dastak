@@ -14,7 +14,7 @@ Deno.test("account profile serves CORS preflight without authentication", async 
     dependencies({
       authenticateBearer: () => {
         attempts += 1;
-        return Promise.resolve({ accountId });
+        return Promise.resolve({ accountId, accessToken: "session-token" });
       },
     }),
   );
@@ -61,19 +61,63 @@ Deno.test("account profile rejects an invalid phone number", async () => {
 });
 
 Deno.test("account profile deletes only the authenticated account", async () => {
-  let deletedAccountId: string | undefined;
+  let deletion: { accountId: string; accessToken: string; idempotencyKey: string } | undefined;
   const response = await handleAccountProfile(
     request({ operation: "delete" }),
     dependencies({
       deleteAccount: (value) => {
-        deletedAccountId = value;
+        deletion = value;
         return Promise.resolve();
       },
     }),
   );
   assertEquals(response.status, 200);
-  assertEquals(deletedAccountId, accountId);
+  assertEquals(deletion, {
+    accountId,
+    accessToken: "session-token",
+    idempotencyKey: "profile-request-key",
+  });
   assertEquals(await response.json(), { deleted: true });
+});
+
+Deno.test("account profile exposes and begins only explicit Apple or Google links", async () => {
+  const snapshot = await handleAccountProfile(
+    request({ operation: "identitySnapshot" }),
+    dependencies({
+      snapshotIdentities: () =>
+        Promise.resolve({
+          providers: [{ provider: "apple", linkKind: "ORIGIN" }],
+        }),
+    }),
+  );
+  assertEquals(await snapshot.json(), {
+    providers: [{ provider: "apple", linkKind: "ORIGIN" }],
+  });
+
+  let linkInput: unknown;
+  const link = await handleAccountProfile(
+    request({ operation: "beginIdentityLink", provider: "google" }),
+    dependencies({
+      beginIdentityLink: (input) => {
+        linkInput = input;
+        return Promise.resolve({ provider: "google", intentId: "intent" });
+      },
+    }),
+  );
+  assertEquals(link.status, 200);
+  assertEquals(linkInput, {
+    accessToken: "session-token",
+    provider: "google",
+    idempotencyKey: "profile-request-key",
+  });
+});
+
+Deno.test("account profile rejects non-OAuth identity-link providers", async () => {
+  const response = await handleAccountProfile(
+    request({ operation: "beginIdentityLink", provider: "email" }),
+    dependencies(),
+  );
+  assertEquals(response.status, 400);
 });
 
 function request(body: unknown, authenticated = true) {
@@ -81,6 +125,7 @@ function request(body: unknown, authenticated = true) {
     method: "POST",
     headers: {
       "content-type": "application/json",
+      "X-Idempotency-Key": "profile-request-key",
       ...(authenticated ? { authorization: "Bearer session-token" } : {}),
     },
     body: JSON.stringify(body),
@@ -91,9 +136,12 @@ function dependencies(
   overrides: Partial<AccountProfileDependencies> = {},
 ): AccountProfileDependencies {
   return {
-    authenticateBearer: overrides.authenticateBearer ?? (() => Promise.resolve({ accountId })),
+    authenticateBearer: overrides.authenticateBearer ??
+      (() => Promise.resolve({ accountId, accessToken: "session-token" })),
     snapshotProfile: overrides.snapshotProfile ?? (() => Promise.resolve(profile)),
     updateProfile: overrides.updateProfile ?? ((_accountId, value) => Promise.resolve(value)),
+    snapshotIdentities: overrides.snapshotIdentities ?? (() => Promise.resolve({ providers: [] })),
+    beginIdentityLink: overrides.beginIdentityLink ?? (() => Promise.resolve({})),
     deleteAccount: overrides.deleteAccount ?? (() => Promise.resolve()),
   };
 }

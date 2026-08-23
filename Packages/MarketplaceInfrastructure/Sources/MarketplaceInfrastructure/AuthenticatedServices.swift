@@ -30,6 +30,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         String
     ) async throws -> Void
     private let checkoutCustomerProvider: @Sendable () async throws -> MarketplaceCheckoutCustomer?
+    private let oauthIdentityLinker: @Sendable (MarketplaceOAuthProvider) async throws -> Void
 
     init(
         functions: any FunctionClient,
@@ -42,13 +43,17 @@ public struct MarketplaceAuthenticatedServices: Sendable {
             String,
             String
         ) async throws -> Void,
-        checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer? = { nil }
+        checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer? = { nil },
+        oauthIdentityLinker: @escaping @Sendable (MarketplaceOAuthProvider) async throws -> Void = { _ in
+            throw MarketplaceAuthenticatedServicesError.authenticationRequired
+        }
     ) {
         self.functions = functions
         self.orderEvents = orderEvents
         self.accountIDProvider = accountIDProvider
         self.objectUploader = objectUploader
         self.checkoutCustomerProvider = checkoutCustomerProvider
+        self.oauthIdentityLinker = oauthIdentityLinker
     }
 
     public func accountID() async throws -> UUID {
@@ -57,6 +62,10 @@ public struct MarketplaceAuthenticatedServices: Sendable {
 
     public func checkoutCustomer() async throws -> MarketplaceCheckoutCustomer? {
         try await checkoutCustomerProvider()
+    }
+
+    public func linkOAuthIdentity(_ provider: MarketplaceOAuthProvider) async throws {
+        try await oauthIdentityLinker(provider)
     }
 
     public func uploadObject(

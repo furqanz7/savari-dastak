@@ -1,8 +1,8 @@
-- Authoritative spec path: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`
+- Authoritative spec paths: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`, then newer overrides in `docs/DASTAK_V1_LOCKED_ADDENDA.md`
 - Authoritative branch: `codex/dastak-v1-launch`
-- Last checkpoint: production RC rider-distance payout hotfix at branch HEAD
-- Completed V1 capabilities: launch order lifecycle through settlement/recovery, immutable distance-band rider payout, explicit RBAC, durable outbox notifications, invariant monitoring, minimum system health, customer deep links, Web release gates, and iOS release metadata/privacy manifest
+- Last checkpoint: Batch A customer identity integrity and canonical Merchant control at branch HEAD
+- Completed V1 capabilities: launch order lifecycle through settlement/recovery, OAuth-only customer identity/linking, history-safe account deletion, canonical retail Merchant controls, immutable distance-band rider payout, RBAC, durable notifications, invariant monitoring, and launch Web/iOS gates
 - Current launch target: Customer iOS + Customer Web with founder-operated Merchant Web, Delivery Web and Admin Web
 - Deferred surfaces: Android, Merchant iOS, Delivery iOS, Admin iOS
-- Next implementation batch: signed launch-candidate archive plus staging/production configuration rehearsal after explicit authorization
+- Next implementation batch: Batch B transport revalidation, rider escalation, and scoped emergency controls
 - Deployment status: local-only; not pushed, merged or deployed

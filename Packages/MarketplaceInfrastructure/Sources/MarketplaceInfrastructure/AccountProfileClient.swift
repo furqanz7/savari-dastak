@@ -11,6 +11,22 @@ public struct MarketplaceAccountProfile: Codable, Equatable, Sendable {
     }
 }
 
+public enum MarketplaceOAuthProvider: String, Codable, CaseIterable, Equatable, Sendable {
+    case apple
+    case google
+}
+
+public struct MarketplaceLinkedIdentity: Codable, Equatable, Sendable {
+    public enum LinkKind: String, Codable, Equatable, Sendable {
+        case origin = "ORIGIN"
+        case explicit = "EXPLICIT"
+    }
+
+    public let provider: MarketplaceOAuthProvider
+    public let linkKind: LinkKind
+    public let linkedAt: Date
+}
+
 public protocol AccountProfileClient: Sendable {
     func snapshot(idempotencyKey: IdempotencyKey) async throws -> MarketplaceAccountProfile
     func update(
@@ -18,6 +34,11 @@ public protocol AccountProfileClient: Sendable {
         phoneNumber: String,
         idempotencyKey: IdempotencyKey
     ) async throws -> MarketplaceAccountProfile
+    func identitySnapshot(idempotencyKey: IdempotencyKey) async throws -> [MarketplaceLinkedIdentity]
+    func beginIdentityLink(
+        provider: MarketplaceOAuthProvider,
+        idempotencyKey: IdempotencyKey
+    ) async throws
     func deleteAccount(idempotencyKey: IdempotencyKey) async throws
 }
 
@@ -34,6 +55,14 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
 
     private struct DeleteResponse: Decodable, Sendable {
         let deleted: Bool
+    }
+
+    private struct IdentitySnapshotResponse: Decodable, Sendable {
+        let providers: [MarketplaceLinkedIdentity]
+    }
+
+    private struct IdentityLinkResponse: Decodable, Sendable {
+        let provider: MarketplaceOAuthProvider
     }
 
     private let functions: any FunctionClient
@@ -75,5 +104,32 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
             idempotencyKey: idempotencyKey
         )
         guard response.deleted else { throw FunctionClientError.invalidResponse }
+    }
+
+    public func identitySnapshot(
+        idempotencyKey: IdempotencyKey
+    ) async throws -> [MarketplaceLinkedIdentity] {
+        let response: IdentitySnapshotResponse = try await functions.invoke(
+            "account-profile",
+            request: Request(operation: "identitySnapshot", displayName: nil, phoneNumber: nil),
+            idempotencyKey: idempotencyKey
+        )
+        return response.providers
+    }
+
+    public func beginIdentityLink(
+        provider: MarketplaceOAuthProvider,
+        idempotencyKey: IdempotencyKey
+    ) async throws {
+        struct LinkRequest: Encodable, Sendable {
+            let operation = "beginIdentityLink"
+            let provider: MarketplaceOAuthProvider
+        }
+        let response: IdentityLinkResponse = try await functions.invoke(
+            "account-profile",
+            request: LinkRequest(provider: provider),
+            idempotencyKey: idempotencyKey
+        )
+        guard response.provider == provider else { throw FunctionClientError.invalidResponse }
     }
 }

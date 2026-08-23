@@ -7,6 +7,7 @@ import {
   getV1AdminExecutionTrace,
   getV1AdminSystemHealth,
   getV1Catalogue,
+  getV1MerchantCanonicalCatalogue,
   getV1MerchantFulfilments,
   getV1MerchantOpportunities,
   markV1FulfilmentReady,
@@ -20,6 +21,8 @@ import {
   respondToV1MerchantOpportunity,
   submitV1Order,
   updateV1AdminSku,
+  updateV1MerchantBranchState,
+  updateV1MerchantSkuSelection,
 } from "./dastakV1";
 
 const auth = {
@@ -95,6 +98,55 @@ describe("Dastak V1 web contract", () => {
       operation: "updateSku", skuId, expectedVersion: 7,
       patch: { sellingPricePaise: 9400, status: "ACTIVE" },
     });
+  });
+
+  it("keeps retail Merchant Web on canonical selection and audited branch controls", async () => {
+    const branchId = "88888888-8888-4888-8888-888888888888";
+    const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const catalogue = await getV1MerchantCanonicalCatalogue(auth, async () => Response.json({
+      branch: {
+        branchId, branchName: "Dastak Convenience Store", branchStatus: "ACTIVE",
+        branchVersion: 1, organizationId, organizationName: "Dastak", merchantType: "RETAIL",
+        operationalState: { isOpen: true, acceptingOrders: true, version: 2, updatedAt: null },
+        capacity: { limit: 5, held: 1, available: 4 },
+      },
+      categories: [{ categoryId, name: "Grocery", slug: "grocery", sortOrder: 1 }],
+      subcategories: [{ subcategoryId, categoryId, name: "Staples", slug: "staples", sortOrder: 1 }],
+      skus: [{
+        skuId, categoryId, subcategoryId, brandName: null, name: "Rice", variant: null,
+        packSize: "1 kg", description: null, imageKey: null, listPricePaise: 10000,
+        sellingPricePaise: 9500, currencyCode: "INR", catalogueStatus: "ACTIVE",
+        selected: true, selectionState: "SELECTED", selectionVersion: 3,
+        selectionUpdatedAt: "2026-08-24T00:00:00Z",
+      }],
+      truncated: false,
+    }));
+    expect(catalogue.skus[0]).toMatchObject({ selected: true, sellingPricePaise: 9500 });
+
+    const calls: Record<string, unknown>[] = [];
+    const command = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      expect(new Headers(init?.headers).get("x-idempotency-key")).toBeTruthy();
+      return Response.json({ ok: true });
+    };
+    await updateV1MerchantSkuSelection({
+      ...auth, branchId, skuId, selected: false, expectedVersion: 3,
+      idempotencyKey: "merchant-sku-1",
+    }, command);
+    await updateV1MerchantBranchState({
+      ...auth, branchId, isOpen: true, acceptingOrders: false, expectedVersion: 2,
+      idempotencyKey: "merchant-branch-1",
+    }, command);
+    expect(calls).toEqual([
+      {
+        operation: "updateMerchantSelection", branchId, skuId,
+        selected: false, expectedVersion: 3,
+      },
+      {
+        operation: "updateBranchOperationalState", branchId,
+        isOpen: true, acceptingOrders: false, expectedVersion: 2,
+      },
+    ]);
   });
 
   it("decodes the secured payment window without exposing matching internals", () => {

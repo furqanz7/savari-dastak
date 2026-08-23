@@ -2,7 +2,10 @@ import { corsPreflight, json } from "../_shared/http.ts";
 
 export type AuthenticateBearer = (
   bearerToken: string,
-) => Promise<{ accountId: string }>;
+) => Promise<{
+  accountId: string;
+  oauthProviders?: Array<"apple" | "google">;
+}>;
 
 export type BootstrapAccountInput = {
   accountId: string;
@@ -51,7 +54,10 @@ export async function handleBootstrapAccount(
     );
   }
 
-  let user: { accountId: string };
+  let user: {
+    accountId: string;
+    oauthProviders?: Array<"apple" | "google">;
+  };
   try {
     user = await dependencies.authenticateBearer(authorization);
   } catch {
@@ -63,6 +69,18 @@ export async function handleBootstrapAccount(
         },
       },
       401,
+    );
+  }
+
+  if (!user.oauthProviders?.length) {
+    return json(
+      {
+        error: {
+          code: "oauth_identity_required",
+          message: "Continue with Apple or Google before completing your profile.",
+        },
+      },
+      403,
     );
   }
 

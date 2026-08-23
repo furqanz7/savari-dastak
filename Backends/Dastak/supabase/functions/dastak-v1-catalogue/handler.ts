@@ -14,6 +14,11 @@ export type V1CatalogueDependencies = {
     afterSkuId: string | null;
   }) => Promise<unknown>;
   adminSnapshot: (input: { accessToken: string; skuLimit: number }) => Promise<unknown>;
+  merchantSnapshot: (input: {
+    accessToken: string;
+    branchId: string | null;
+    limit: number;
+  }) => Promise<unknown>;
   importCatalogue: (input: {
     accessToken: string;
     idempotencyKey: string;
@@ -25,6 +30,22 @@ export type V1CatalogueDependencies = {
     idempotencyKey: string;
     expectedVersion: number;
     patch: Record<string, unknown>;
+  }) => Promise<unknown>;
+  updateMerchantSelection: (input: {
+    accessToken: string;
+    branchId: string;
+    skuId: string;
+    selected: boolean;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  updateBranchOperationalState: (input: {
+    accessToken: string;
+    branchId: string;
+    isOpen: boolean;
+    acceptingOrders: boolean;
+    expectedVersion: number;
+    idempotencyKey: string;
   }) => Promise<unknown>;
 };
 
@@ -66,6 +87,23 @@ export async function handleV1Catalogue(
         });
         return json(result);
       }
+      case "merchantSnapshot": {
+        const branchId = optionalUUID(body.branchId);
+        const parsedLimit = optionalInteger(body.limit, 1, 1000);
+        if (
+          branchId === undefined ||
+          (body.limit !== null && body.limit !== undefined && parsedLimit === undefined)
+        ) {
+          return validationError();
+        }
+        return json(
+          await dependencies.merchantSnapshot({
+            accessToken: actor.accessToken,
+            branchId,
+            limit: parsedLimit ?? 1000,
+          }),
+        );
+      }
       case "importCatalogue": {
         const idempotencyKey = requiredIdempotencyKey(request);
         const catalogue = record(body.catalogue);
@@ -79,12 +117,69 @@ export async function handleV1Catalogue(
       }
       case "updateSku":
         return await updateSku(request, body, actor, dependencies);
+      case "updateMerchantSelection":
+        return await updateMerchantSelection(request, body, actor, dependencies);
+      case "updateBranchOperationalState":
+        return await updateBranchOperationalState(request, body, actor, dependencies);
       default:
         return validationError();
     }
   } catch (error) {
     return requestFailure(error);
   }
+}
+
+async function updateMerchantSelection(
+  request: Request,
+  body: Record<string, unknown>,
+  actor: V1Actor,
+  dependencies: V1CatalogueDependencies,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const branchId = requiredUUID(body.branchId);
+  const skuId = requiredUUID(body.skuId);
+  const expectedVersion = optionalInteger(body.expectedVersion, 0, Number.MAX_SAFE_INTEGER);
+  if (
+    !idempotencyKey || !branchId || !skuId || expectedVersion === undefined ||
+    typeof body.selected !== "boolean"
+  ) return validationError();
+  return json(
+    await dependencies.updateMerchantSelection({
+      accessToken: actor.accessToken,
+      branchId,
+      skuId,
+      selected: body.selected,
+      expectedVersion,
+      idempotencyKey,
+    }),
+  );
+}
+
+async function updateBranchOperationalState(
+  request: Request,
+  body: Record<string, unknown>,
+  actor: V1Actor,
+  dependencies: V1CatalogueDependencies,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const branchId = requiredUUID(body.branchId);
+  const expectedVersion = optionalInteger(body.expectedVersion, 0, Number.MAX_SAFE_INTEGER);
+  if (
+    !idempotencyKey || !branchId || expectedVersion === undefined ||
+    typeof body.isOpen !== "boolean" || typeof body.acceptingOrders !== "boolean"
+  ) {
+    return validationError();
+  }
+  return json(
+    await dependencies.updateBranchOperationalState({
+      accessToken: actor.accessToken,
+      branchId,
+      isOpen: body.isOpen,
+      acceptingOrders: body.acceptingOrders,
+      expectedVersion,
+      idempotencyKey,
+    }),
+  );
 }
 
 async function customerCatalogue(

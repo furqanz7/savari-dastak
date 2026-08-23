@@ -47,6 +47,7 @@ public struct DastakCustomerRootView: View {
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
         issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil,
+        oauthIdentityLinker: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil,
         deliveryPartnerAccess: DeliveryPartnerAccess = .unavailable,
         isDeliveryPartnerAccessLoading: Bool = false,
         becomeDeliveryPartner: @escaping () -> Void = {}
@@ -56,7 +57,8 @@ public struct DastakCustomerRootView: View {
                 functions: functions,
                 checkoutCustomerProvider: checkoutCustomerProvider,
                 accountIDProvider: accountIDProvider,
-                issueEvidenceUploader: issueEvidenceUploader
+                issueEvidenceUploader: issueEvidenceUploader,
+                oauthIdentityLinker: oauthIdentityLinker
             )
         )
         isPreview = false
@@ -117,6 +119,9 @@ public struct DastakCustomerRootView: View {
                     location: model.deliveryAddress,
                     savedAddressCount: model.savedAddresses.count,
                     accountSessionClient: accountSessionClient,
+                    linkedIdentities: model.linkedIdentities,
+                    isLinkingIdentity: model.isLinkingIdentity,
+                    identityMessage: model.identityMessage,
                     discoveryRadiusKilometres: model.discoveryRadiusKilometres,
                     refreshFailure: model.accountRefreshFailure,
                     deliveryPartnerAccess: deliveryPartnerAccess,
@@ -125,6 +130,8 @@ public struct DastakCustomerRootView: View {
                     openOrders: { selectedTab = .orders },
                     becomeDeliveryPartner: becomeDeliveryPartner,
                     retryAccount: { Task { await model.refreshCheckoutCustomer() } },
+                    refreshIdentities: { Task { await model.refreshCustomerIdentities() } },
+                    linkIdentity: { provider in Task { await model.linkIdentity(provider) } },
                     updateProfile: { displayName, phoneNumber in
                         try await model.updateAccountProfile(
                             displayName: displayName,
@@ -173,7 +180,10 @@ public struct DastakCustomerRootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard !isPreview, phase == .active else { return }
-            Task { await model.refreshOrdersAndParcels() }
+            Task {
+                await model.refreshOrdersAndParcels()
+                await model.refreshCustomerIdentities()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: dastakOrderNotificationOpened)) { notification in
             guard let destination = DastakCustomerDestination(

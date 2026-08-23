@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyBearerSession } from "../_shared/auth.ts";
 import { handleAccountSessions } from "./handler.ts";
 
-type Actor = Awaited<ReturnType<typeof verifyBearerSession>>;
+type Actor = { accountId: string; sessionId: string; accessToken: string };
 
 const serviceClient = createClient(
   requiredEnv("SUPABASE_URL"),

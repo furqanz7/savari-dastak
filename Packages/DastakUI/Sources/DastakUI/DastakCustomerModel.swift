@@ -92,6 +92,9 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var sessionExpired = false
     @Published private(set) var isDeliveryAddressConfirmed = false
     @Published private(set) var hasCompletedOnboarding = false
+    @Published private(set) var linkedIdentities: [MarketplaceLinkedIdentity] = []
+    @Published private(set) var isLinkingIdentity = false
+    @Published var identityMessage: String?
 
     let parcelClient: any ParcelDeliveryClient
 
@@ -105,6 +108,7 @@ final class DastakCustomerModel: ObservableObject {
     private let checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)?
     private let accountIDProvider: (@Sendable () async throws -> UUID)?
     private let issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)?
+    private let oauthIdentityLinker: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)?
     private var preferenceScope = "default"
     private var orderPlacementAttempt = DastakOrderPlacementAttempt()
     private var v1SubmissionAttempt: (fingerprint: String, key: IdempotencyKey)?
@@ -128,7 +132,8 @@ final class DastakCustomerModel: ObservableObject {
         deviceTokenClient: SupabaseDastakDeviceTokenClient? = nil,
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
-        issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil
+        issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil,
+        oauthIdentityLinker: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil
     ) {
         self.catalogueClient = catalogueClient
         self.v1Client = v1Client
@@ -141,13 +146,15 @@ final class DastakCustomerModel: ObservableObject {
         self.checkoutCustomerProvider = checkoutCustomerProvider
         self.accountIDProvider = accountIDProvider
         self.issueEvidenceUploader = issueEvidenceUploader
+        self.oauthIdentityLinker = oauthIdentityLinker
     }
 
     convenience init(
         functions: any FunctionClient,
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
-        issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil
+        issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil,
+        oauthIdentityLinker: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil
     ) {
         self.init(
             catalogueClient: SupabaseCatalogueClient(functions: functions),
@@ -160,7 +167,8 @@ final class DastakCustomerModel: ObservableObject {
             deviceTokenClient: SupabaseDastakDeviceTokenClient(functions: functions),
             checkoutCustomerProvider: checkoutCustomerProvider,
             accountIDProvider: accountIDProvider,
-            issueEvidenceUploader: issueEvidenceUploader
+            issueEvidenceUploader: issueEvidenceUploader,
+            oauthIdentityLinker: oauthIdentityLinker
         )
     }
 
@@ -245,6 +253,34 @@ final class DastakCustomerModel: ObservableObject {
 
     func deleteAccount() async throws {
         try await accountProfileClient.deleteAccount(idempotencyKey: makeKey())
+    }
+
+    func refreshCustomerIdentities() async {
+        do {
+            linkedIdentities = try await accountProfileClient.identitySnapshot(
+                idempotencyKey: makeKey()
+            )
+            identityMessage = nil
+        } catch {
+            identityMessage = "Sign-in methods could not be loaded. Try again."
+        }
+    }
+
+    func linkIdentity(_ provider: MarketplaceOAuthProvider) async {
+        guard let oauthIdentityLinker, !isLinkingIdentity else { return }
+        isLinkingIdentity = true
+        identityMessage = nil
+        defer { isLinkingIdentity = false }
+        do {
+            try await accountProfileClient.beginIdentityLink(
+                provider: provider,
+                idempotencyKey: makeKey()
+            )
+            try await oauthIdentityLinker(provider)
+            await refreshCustomerIdentities()
+        } catch {
+            identityMessage = "That sign-in may belong to another Dastak account. Sign in to that account or contact support; Dastak never merges accounts by email or phone."
+        }
     }
 
     func setLocation(_ location: DastakDeliveryLocation) async -> Bool {
