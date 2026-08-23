@@ -12,6 +12,7 @@ import {
   getDeliveryDispatch,
   getDeliveryPartnerSnapshot,
   getV1DeliveryDispatch,
+  heartbeatV1DeliveryMission,
   publishDeliveryPartnerLocation,
   setDeliveryPartnerAvailability,
   uploadV1DeliveryEvidence,
@@ -120,6 +121,25 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       window.removeEventListener("online", onOnline);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    const mission = v1Dispatch.currentMission;
+    if (!mission || mission.status === "DELIVERY_RECOVERY") return;
+    const heartbeat = async () => {
+      try {
+        await heartbeatV1DeliveryMission({
+          ...auth,
+          missionId: mission.id,
+          expectedVersion: mission.version,
+        });
+        await refresh();
+      } catch {
+        await refresh();
+      }
+    };
+    const interval = window.setInterval(() => void heartbeat(), 20_000);
+    return () => window.clearInterval(interval);
+  }, [auth, refresh, v1Dispatch.currentMission]);
 
   const changeAvailability = async (online: boolean) => {
     setBusy("availability");
@@ -549,6 +569,7 @@ function V1DeliveryOffer({ offer, busy, onAccept, onDecline }: {
         <div><p className="eyebrow">Dastak order mission</p><h2>{offer.displayOrderNumber}</h2></div>
         <OfferTimer respondBy={offer.respondBy} />
       </header>
+
       <div className="delivery-route-facts">
         <span><Store size={17} /> {offer.pickupCount} {offer.pickupCount === 1 ? "pickup" : "pickups"}</span>
         <span><Navigation size={17} /> {formatDeliveryDistance(Math.round(offer.distanceMeters))} to pickup</span>
@@ -657,6 +678,17 @@ function CurrentV1Mission({
           <small>{mission.displayOrderNumber} · {completed}/{mission.pickupCount} pickups complete</small>
         </div>
       </header>
+
+      {mission.riderSafety.escalationState === "STALLED" && (
+        <p className="delivery-notice" role="status">
+          <RefreshCw size={18} /> Operations detected no route progress. Keep this page open and continue the mission.
+        </p>
+      )}
+      {mission.riderSafety.escalationState === "UNRESPONSIVE" && (
+        <p className="order-error" role="alert">
+          Operations marked this mission unresponsive. Contact Operations before continuing.
+        </p>
+      )}
 
       {mission.status === "ASSIGNED" && (
         <button className="primary-button delivery-next-action" type="button" disabled={busy} onClick={() => onAction("v1StartPickups")}>

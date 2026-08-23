@@ -214,10 +214,10 @@ insert into dastak_v1.platform_settings (
 ('98000000-0000-4000-8000-000000000056', 'matching.operational_reliability_bps',
  'GLOBAL', '9000', '98000000-0000-4000-8000-000000000002', 'Step Two reliability.'),
 ('98000000-0000-4000-8000-000000000057', 'delivery.transport_load_profiles', 'GLOBAL',
- '[{"transportType":"MOTORBIKE","maxWeightGrams":50000,"maxVolumeCubicMillimetres":500000000,"maxLongestSideMillimetres":1500,"allowsBulky":true,"temperatureClasses":["AMBIENT","CHILLED","FROZEN"]}]',
+ '[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]',
  '98000000-0000-4000-8000-000000000002', 'Step Two transport.'),
 ('98000000-0000-4000-8000-000000000058', 'delivery.default_sku_logistics', 'GLOBAL',
- '{"weightGrams":500,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}',
+ '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}',
  '98000000-0000-4000-8000-000000000002', 'Step Two fallback logistics.');
 
 set local role authenticated;

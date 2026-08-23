@@ -115,6 +115,53 @@ Deno.test("V1 partner snapshot and offer actions bind the authenticated rider", 
   assertEquals(declined?.reason, "Too far");
 });
 
+Deno.test("V1 heartbeat binds mission contact to the authenticated rider", async () => {
+  let recorded: unknown;
+  const response = await handleCourierDispatch(
+    request({
+      body: {
+        operation: "v1Heartbeat",
+        missionId,
+        expectedVersion: 7,
+        accountId: assignmentId,
+      },
+    }),
+    dependencies({
+      heartbeatV1Mission: (input) => {
+        recorded = input;
+        return Promise.resolve({ missionId, version: 8 });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accountId, missionId, expectedVersion: 7 });
+});
+
+Deno.test("V1 heartbeat rejects invalid mission/version before RPC", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    heartbeatV1Mission: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
+  assertEquals(
+    (await handleCourierDispatch(
+      request({ body: { operation: "v1Heartbeat", missionId: "bad", expectedVersion: 1 } }),
+      deps,
+    )).status,
+    400,
+  );
+  assertEquals(
+    (await handleCourierDispatch(
+      request({ body: { operation: "v1Heartbeat", missionId, expectedVersion: 0 } }),
+      deps,
+    )).status,
+    400,
+  );
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 pickup actions use server-owned actions and six-digit codes", async () => {
   const recorded: Record<string, unknown>[] = [];
   const deps = dependencies({
@@ -474,6 +521,7 @@ function dependencies(
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     declineV1Offer: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
+    heartbeatV1Mission: () => Promise.resolve({ missionId, version: 2 }),
     advanceV1Mission: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     advanceV1FinalDelivery: () =>

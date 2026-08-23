@@ -150,6 +150,16 @@ export type V1DeliveryMission = {
   canArriveCustomer: boolean;
   canCaptureDeliveryEvidence: boolean;
   canVerifyDelivery: boolean;
+  riderSafety: {
+    lastContactAt: string;
+    lastProgressAt: string;
+    stallDetectedAt: string | null;
+    unresponsiveDetectedAt: string | null;
+    escalationState: "NONE" | "STALLED" | "UNRESPONSIVE" |
+      "RELEASED_PRE_CUSTODY" | "DELIVERY_RECOVERY";
+    escalatedAt: string | null;
+    escalationReason: string | null;
+  };
 };
 export type V1CompletedMission = {
   id: string;
@@ -469,6 +479,19 @@ export async function declineV1DeliveryOffer(
     offerId: input.offerId,
     reason: input.reason?.trim() || null,
   }, fetcher);
+}
+
+export async function heartbeatV1DeliveryMission(
+  input: AuthenticatedInput & { missionId: string; expectedVersion: number },
+  fetcher: Fetcher = fetch,
+) {
+  if (!uuidPattern.test(input.missionId) || !Number.isSafeInteger(input.expectedVersion) ||
+    input.expectedVersion < 1) throw validationError("The active mission changed. Refresh first.");
+  return call("courier-dispatch", input, {
+    operation: "v1Heartbeat",
+    missionId: input.missionId,
+    expectedVersion: input.expectedVersion,
+  }, undefined, fetcher);
 }
 
 export type V1DeliveryMissionOperation =
@@ -816,6 +839,7 @@ function v1Offer(value: unknown): V1RiderOffer {
 
 function v1Mission(value: unknown): V1DeliveryMission {
   const source = record(value);
+  const riderSafety = record(source?.riderSafety);
   const status = source?.status;
   const statuses = [
     "ASSIGNED",
@@ -826,7 +850,7 @@ function v1Mission(value: unknown): V1DeliveryMission {
     "ARRIVED",
     "DELIVERY_RECOVERY",
   ] as const;
-  if (!source || !statuses.includes(status as typeof statuses[number]) ||
+  if (!source || !riderSafety || !statuses.includes(status as typeof statuses[number]) ||
     !Array.isArray(source.pickupStops) || typeof source.canCancelBeforePickup !== "boolean" ||
     typeof source.mustUseDeliveryRecovery !== "boolean") invalid();
   return {
@@ -857,7 +881,23 @@ function v1Mission(value: unknown): V1DeliveryMission {
     canArriveCustomer: requiredBoolean(source.canArriveCustomer),
     canCaptureDeliveryEvidence: requiredBoolean(source.canCaptureDeliveryEvidence),
     canVerifyDelivery: requiredBoolean(source.canVerifyDelivery),
+    riderSafety: {
+      lastContactAt: timestamp(riderSafety.lastContactAt),
+      lastProgressAt: timestamp(riderSafety.lastProgressAt),
+      stallDetectedAt: nullableTimestamp(riderSafety.stallDetectedAt),
+      unresponsiveDetectedAt: nullableTimestamp(riderSafety.unresponsiveDetectedAt),
+      escalationState: requiredRiderEscalationState(riderSafety.escalationState),
+      escalatedAt: nullableTimestamp(riderSafety.escalatedAt),
+      escalationReason: nullableText(riderSafety.escalationReason, 500),
+    },
   };
+}
+
+function requiredRiderEscalationState(value: unknown): V1DeliveryMission["riderSafety"]["escalationState"] {
+  if (![
+    "NONE", "STALLED", "UNRESPONSIVE", "RELEASED_PRE_CUSTODY", "DELIVERY_RECOVERY",
+  ].includes(String(value))) invalid();
+  return value as V1DeliveryMission["riderSafety"]["escalationState"];
 }
 
 function v1CompletedMission(value: unknown): V1CompletedMission {

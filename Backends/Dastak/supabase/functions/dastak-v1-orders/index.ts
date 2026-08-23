@@ -99,6 +99,25 @@ Deno.serve((request) =>
       }),
     getAdminSystemHealth: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_system_health", {}),
+    getAdminOperationalSafety: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_operational_safety", {}),
+    manageRiderEscalation: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_manage_rider_escalation", {
+        p_mission_id: input.missionId,
+        p_action: input.action,
+        p_reason: input.reason,
+        p_expected_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    setOperationalPause: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_set_operational_pause", {
+        p_scope: input.scope,
+        p_target_id: input.targetId,
+        p_active: input.active,
+        p_reason: input.reason,
+        p_expected_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     authorizeExceptionalDeliveryHandoff: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

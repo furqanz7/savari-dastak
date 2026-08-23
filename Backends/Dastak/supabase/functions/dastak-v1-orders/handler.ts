@@ -83,6 +83,24 @@ export type V1OrderDependencies = {
     orderId: string;
   }) => Promise<unknown>;
   getAdminSystemHealth: (input: { accessToken: string }) => Promise<unknown>;
+  getAdminOperationalSafety: (input: { accessToken: string }) => Promise<unknown>;
+  manageRiderEscalation: (input: {
+    accessToken: string;
+    missionId: string;
+    action: "RELEASE_REMATCH" | "ENTER_DELIVERY_RECOVERY";
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  setOperationalPause: (input: {
+    accessToken: string;
+    scope: "ZONE_RETAIL" | "ZONE_FOOD" | "ZONE_MIXED" | "MERCHANT_BRANCH" | "RIDER_ASSIGNMENTS";
+    targetId: string;
+    active: boolean;
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
   authorizeExceptionalDeliveryHandoff: (input: {
     accessToken: string;
     missionId: string;
@@ -423,6 +441,57 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
         return json(
           await dependencies.getAdminSystemHealth({ accessToken: actor.accessToken }),
         );
+      case "adminOperationalSafety":
+        return json(
+          await dependencies.getAdminOperationalSafety({ accessToken: actor.accessToken }),
+        );
+      case "manageRiderEscalation": {
+        const missionId = requiredUUID(body.missionId);
+        const action = body.action === "RELEASE_REMATCH" ||
+            body.action === "ENTER_DELIVERY_RECOVERY"
+          ? body.action
+          : undefined;
+        const reason = requiredText(body.reason, 500);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !missionId || !action || !reason || reason.length < 10 ||
+          !expectedVersion || !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.manageRiderEscalation({
+            accessToken: actor.accessToken,
+            missionId,
+            action,
+            reason,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
+      case "setOperationalPause": {
+        const scope = operationalPauseScope(body.scope);
+        const targetId = requiredUUID(body.targetId);
+        const active = typeof body.active === "boolean" ? body.active : undefined;
+        const reason = requiredText(body.reason, 500);
+        const expectedVersion = integer(body.expectedVersion, 0, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (
+          !scope || !targetId || active === undefined || !reason ||
+          expectedVersion === undefined || !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.setOperationalPause({
+            accessToken: actor.accessToken,
+            scope,
+            targetId,
+            active,
+            reason,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
+      }
       case "authorizeExceptionalDeliveryHandoff": {
         const missionId = requiredUUID(body.missionId);
         const deliveryEvidenceId = requiredUUID(body.deliveryEvidenceId);
@@ -725,6 +794,18 @@ function requiredText(value: unknown, maximum: number) {
 
 function validTimestamp(value: unknown) {
   return typeof value === "string" && value.length <= 40 && Number.isFinite(Date.parse(value));
+}
+
+function operationalPauseScope(value: unknown) {
+  return typeof value === "string" && [
+      "ZONE_RETAIL",
+      "ZONE_FOOD",
+      "ZONE_MIXED",
+      "MERCHANT_BRANCH",
+      "RIDER_ASSIGNMENTS",
+    ].includes(value)
+    ? value as "ZONE_RETAIL" | "ZONE_FOOD" | "ZONE_MIXED" | "MERCHANT_BRANCH" | "RIDER_ASSIGNMENTS"
+    : undefined;
 }
 
 function merchantRequestScope(value: unknown) {

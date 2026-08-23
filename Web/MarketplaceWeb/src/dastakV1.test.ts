@@ -6,12 +6,14 @@ import {
   declareV1FulfilmentPackages,
   getV1AdminExecutionTrace,
   getV1AdminSystemHealth,
+  getV1AdminOperationalSafety,
   getV1Catalogue,
   getV1MerchantCanonicalCatalogue,
   getV1MerchantFulfilments,
   getV1MerchantOpportunities,
   markV1FulfilmentReady,
   manageV1DeliveryRecovery,
+  manageV1RiderEscalation,
   merchantReadyEvidenceObjectPath,
   parseV1Catalogue,
   parseV1MerchantFulfilment,
@@ -20,6 +22,7 @@ import {
   respondV1ExactSkuRecoveryOffer,
   respondToV1MerchantOpportunity,
   submitV1Order,
+  setV1OperationalPause,
   updateV1AdminSku,
   updateV1MerchantBranchState,
   updateV1MerchantSkuSelection,
@@ -295,6 +298,59 @@ describe("Dastak V1 web contract", () => {
       notifications: { inFlight: 1 },
     });
     expect(result.incidents[0].invariantKey).toBe("ORDER_MULTIPLE_ACTIVE_MISSIONS");
+  });
+
+  it("decodes and operates only named V1 safety controls", async () => {
+    const bodies: unknown[] = [];
+    const safety = await getV1AdminOperationalSafety(auth, async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({
+        permissions: { canManageRiderEscalations: true, canManageOperationalPauses: true },
+        pauses: [{
+          id: categoryId, scope: "ZONE_RETAIL", targetId: subcategoryId,
+          active: true, reason: "Weather safety", activatedAt: "2026-08-24T00:00:00Z",
+          clearedAt: null, version: 1,
+        }],
+        riderEscalations: [{
+          missionId: fulfilmentId, orderId, displayOrderNumber: "DV1-0001",
+          status: "ASSIGNED", riderId: skuId, transportType: "MOTORBIKE",
+          lastContactAt: "2026-08-24T00:00:00Z", lastProgressAt: "2026-08-24T00:00:00Z",
+          stallDetectedAt: "2026-08-24T00:01:00Z", unresponsiveDetectedAt: null,
+          escalationState: "STALLED", escalatedAt: "2026-08-24T00:01:00Z",
+          escalationReason: "RIDER_PROGRESS_STALLED", custodyStarted: false, version: 4,
+        }],
+      });
+    });
+    expect(safety.pauses[0].scope).toBe("ZONE_RETAIL");
+    expect(safety.riderEscalations[0].custodyStarted).toBe(false);
+
+    await manageV1RiderEscalation({
+      ...auth, missionId: fulfilmentId, action: "RELEASE_REMATCH",
+      reason: "Operations released an unresponsive rider.", expectedVersion: 4,
+      idempotencyKey: "release-rider",
+    }, async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ missionId: fulfilmentId, status: "SEARCHING_RIDER" });
+    });
+    await setV1OperationalPause({
+      ...auth, scope: "ZONE_MIXED", targetId: subcategoryId, active: true,
+      reason: "Severe weather", expectedVersion: 0, idempotencyKey: "pause-mixed",
+    }, async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ id: categoryId, active: true });
+    });
+    expect(bodies).toEqual([
+      { operation: "adminOperationalSafety" },
+      {
+        operation: "manageRiderEscalation", missionId: fulfilmentId,
+        action: "RELEASE_REMATCH", reason: "Operations released an unresponsive rider.",
+        expectedVersion: 4,
+      },
+      {
+        operation: "setOperationalPause", scope: "ZONE_MIXED",
+        targetId: subcategoryId, active: true, reason: "Severe weather", expectedVersion: 0,
+      },
+    ]);
   });
 
   it("sends a separate evidence-backed Operations override command", async () => {

@@ -1,8 +1,8 @@
 - Authoritative spec paths: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`, then newer overrides in `docs/DASTAK_V1_LOCKED_ADDENDA.md`
 - Authoritative branch: `codex/dastak-v1-launch`
-- Last checkpoint: Batch A customer identity integrity and canonical Merchant control at branch HEAD
-- Completed V1 capabilities: launch order lifecycle through settlement/recovery, OAuth-only customer identity/linking, history-safe account deletion, canonical retail Merchant controls, immutable distance-band rider payout, RBAC, durable notifications, invariant monitoring, and launch Web/iOS gates
+- Last checkpoint: Batch B transport and operational safety at branch HEAD
+- Completed V1 capabilities: launch order lifecycle through settlement/recovery, OAuth-only customer identity/linking, history-safe account deletion, canonical retail Merchant controls, immutable distance-band rider payout, locked transport/load revalidation, rider escalation, scoped emergency controls, RBAC, durable notifications, invariant monitoring, and launch Web/iOS gates
 - Current launch target: Customer iOS + Customer Web with founder-operated Merchant Web, Delivery Web and Admin Web
 - Deferred surfaces: Android, Merchant iOS, Delivery iOS, Admin iOS
-- Next implementation batch: Batch B transport revalidation, rider escalation, and scoped emergency controls
+- Next implementation batch: Batch C complete Restaurant/Cafe V1 vertical
 - Deployment status: local-only; not pushed, merged or deployed

@@ -25,6 +25,12 @@ export type V1RiderOfferDeclineInput = V1RiderOfferMutationInput & {
   reason: string | null;
 };
 
+export type V1RiderHeartbeatInput = {
+  accountId: string;
+  missionId: string;
+  expectedVersion: number;
+};
+
 export type V1DeliveryMissionAction =
   | "START_PICKUPS"
   | "ARRIVE_PICKUP"
@@ -103,6 +109,7 @@ export type CourierDispatchDependencies = {
   getV1PartnerSnapshot: (accountId: string) => Promise<RpcResult>;
   acceptV1Offer: (input: V1RiderOfferMutationInput) => Promise<RpcResult>;
   declineV1Offer: (input: V1RiderOfferDeclineInput) => Promise<RpcResult>;
+  heartbeatV1Mission: (input: V1RiderHeartbeatInput) => Promise<unknown>;
   advanceV1Mission: (input: V1DeliveryMissionMutationInput) => Promise<RpcResult>;
   advanceV1FinalDelivery: (input: V1FinalDeliveryMutationInput) => Promise<RpcResult>;
   advanceV1ReturnMission: (input: V1ReturnMissionMutationInput) => Promise<RpcResult>;
@@ -139,6 +146,18 @@ export async function handleCourierDispatch(
       case "v1PartnerSnapshot": {
         const result = await dependencies.getV1PartnerSnapshot(actor.accountId);
         return json(result.responseBody, result.responseStatus);
+      }
+      case "v1Heartbeat": {
+        const missionId = validUUID(body.missionId);
+        const expectedVersion = validPositiveInteger(body.expectedVersion);
+        if (!missionId || !expectedVersion) return validationError();
+        return json(
+          await dependencies.heartbeatV1Mission({
+            accountId: actor.accountId,
+            missionId,
+            expectedVersion,
+          }),
+        );
       }
       case "v1AcceptOffer":
         return await v1OfferMutation(

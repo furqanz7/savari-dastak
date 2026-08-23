@@ -54,6 +54,21 @@ insert into private.account_memberships (account_id, role, approved_at) values
 ('99400000-0000-4000-8000-000000000006', 'dastak_partner', now())
 on conflict (account_id, role) do update set approved_at = excluded.approved_at;
 
+insert into dastak_v1.platform_permission_grants (
+  account_id, bundle_id, granted_by, grant_reason
+)
+select
+  '99400000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-00000000000c',
+  '99400000-0000-4000-8000-000000000001',
+  'Step 4 operational safety runtime fixture'
+where not exists (
+  select 1 from dastak_v1.platform_permission_grants permission_grant
+  where permission_grant.account_id = '99400000-0000-4000-8000-000000000001'
+    and permission_grant.bundle_id = '10000000-0000-4000-8000-00000000000c'
+    and permission_grant.revoked_at is null
+);
+
 insert into public.service_zones (id, name, boundary, active) values (
   '99400000-0000-4000-8000-000000000010', 'Step Four Zone',
   extensions.st_geomfromtext('POLYGON((80 15,81 15,81 16,80 16,80 15))', 4326), true
@@ -198,13 +213,15 @@ configure_setting 'matching.wave2_timeout_seconds' '120' '99400000-0000-4000-800
 configure_setting 'matching.wave2_hold_seconds' '180' '99400000-0000-4000-8000-000000000201'
 configure_setting 'payment.reservation_seconds' '300' '99400000-0000-4000-8000-000000000202'
 configure_setting 'matching.wave2_max_pickup_route_meters' '50000' '99400000-0000-4000-8000-000000000203'
-configure_setting 'delivery.default_sku_logistics' '{"weightGrams":500,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}' '99400000-0000-4000-8000-000000000204'
-configure_setting 'delivery.transport_load_profiles' '[{"transportType":"WALKING","maxWeightGrams":500,"maxVolumeCubicMillimetres":10000000,"maxLongestSideMillimetres":300,"allowsBulky":false,"temperatureClasses":["AMBIENT"]},{"transportType":"MOTORBIKE","maxWeightGrams":50000,"maxVolumeCubicMillimetres":500000000,"maxLongestSideMillimetres":1500,"allowsBulky":true,"temperatureClasses":["AMBIENT","CHILLED","FROZEN"]}]' '99400000-0000-4000-8000-000000000205'
+configure_setting 'delivery.default_sku_logistics' '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}' '99400000-0000-4000-8000-000000000204'
+configure_setting 'delivery.transport_load_profiles' '[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]' '99400000-0000-4000-8000-000000000205'
 configure_setting 'delivery.rider_initial_pool_size' '2' '99400000-0000-4000-8000-000000000206'
 configure_setting 'delivery.rider_offer_timeout_seconds' '30' '99400000-0000-4000-8000-000000000207'
 configure_setting 'delivery.rider_pool_expansion' '{"initialRadiusMeters":1000,"radiusStepMeters":5000,"additionalRidersPerRound":2,"maximumRounds":4}' '99400000-0000-4000-8000-000000000208'
 configure_setting 'delivery.verification_invalid_attempt_limit' '3' '99400000-0000-4000-8000-000000000209'
 configure_setting 'settlement.rider_distance_payout' '{"base_distance_meters":1000,"base_payout_paise":1500,"increment_distance_meters":1000,"increment_payout_paise":500,"rounding":"STARTED_DISTANCE_BAND"}' '99400000-0000-4000-8000-000000000210'
+configure_setting 'delivery.rider_stall_threshold_seconds' '60' '99400000-0000-4000-8000-000000000211'
+configure_setting 'delivery.rider_unresponsive_threshold_seconds' '120' '99400000-0000-4000-8000-000000000212'
 
 mission_a="$("${psql_base[@]}" -Atc "select dastak_v1_api.ensure_delivery_mission('$order_a'::uuid)" | tail -n 1)"
 mission_b="$("${psql_base[@]}" -Atc "select dastak_v1_api.ensure_delivery_mission('$order_b'::uuid)" | tail -n 1)"
@@ -305,4 +322,189 @@ customer_projection="$("${psql_base[@]}" -Atc "select dastak_v1_api.order_json('
 [[ "$customer_projection" != *'Hidden Branch'* && "$customer_projection" != *"$branch_a"* && "$customer_projection" != *"$branch_b"* ]] || { printf 'customer projection leaked retail merchant identity\n' >&2; exit 1; }
 [[ "$customer_projection" == *'PICKING_UP'* ]] || { printf 'customer pickup state was not projected\n' >&2; exit 1; }
 
-printf 'Dastak V1 rider assignment and atomic pickup custody races passed.\n'
+# Final package declaration is a second authoritative transport gate. Race a
+# Motorbike acceptance against a five-package final declaration: regardless of
+# lock order, an incapable assignment may not survive and no custody may move.
+order_c='99400000-0000-4000-8000-000000000102'
+fulfilment_c='99400000-0000-4000-8000-000000000113'
+"${psql_base[@]}" <<'SQL'
+begin;
+insert into dastak_v1.orders (
+  id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,version
+) values (
+  '99400000-0000-4000-8000-000000000102','DV1-STEP4-C',
+  '99400000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',
+  now()-interval '20 minutes',now()-interval '10 minutes',1
+);
+insert into dastak_v1.order_context_snapshots (
+  order_id,delivery_address,recipient,snapshot_hash
+) values (
+  '99400000-0000-4000-8000-000000000102',
+  '{"line1":"10 Customer Road","countryCode":"IN","latitude":15.69,"longitude":80.61}',
+  '{"name":"Step Customer","phoneNumber":"+919940000002"}',
+  decode(repeat('03',32),'hex')
+);
+insert into dastak_v1.order_lines (
+  id,order_id,line_type,sku_id,product_name_snapshot,pack_size_snapshot,
+  quantity,unit_price_paise,status
+) values (
+  '99400000-0000-4000-8000-000000000123',
+  '99400000-0000-4000-8000-000000000102','RETAIL_SKU',
+  '99400000-0000-4000-8000-000000000042','Step Four Product A','1 unit',
+  1,900,'FULFILLING'
+);
+insert into dastak_v1.matching_attempts (
+  id,order_id,wave,status,started_at,expires_at,closed_at
+) values (
+  '99400000-0000-4000-8000-000000000133',
+  '99400000-0000-4000-8000-000000000102','WAVE_1','EXPIRED',
+  now()-interval '20 minutes',now()-interval '17 minutes',now()-interval '17 minutes'
+);
+insert into dastak_v1.merchant_opportunities (
+  id,matching_attempt_id,order_id,organization_id,branch_id,wave,status,
+  started_at,expires_at
+) values (
+  '99400000-0000-4000-8000-000000000143',
+  '99400000-0000-4000-8000-000000000133',
+  '99400000-0000-4000-8000-000000000102',
+  '99400000-0000-4000-8000-000000000050',
+  '99400000-0000-4000-8000-000000000020','WAVE_1','LOST',
+  now()-interval '20 minutes',now()-interval '17 minutes'
+);
+insert into dastak_v1.fulfilments (
+  id,order_id,organization_id,branch_id,source_opportunity_id,
+  fulfilment_type,status,promised_prep_minutes,committed_at,prep_started_at,
+  estimated_ready_at,package_count
+) values (
+  '99400000-0000-4000-8000-000000000113',
+  '99400000-0000-4000-8000-000000000102',
+  '99400000-0000-4000-8000-000000000050',
+  '99400000-0000-4000-8000-000000000020',
+  '99400000-0000-4000-8000-000000000143','RETAIL','PREPARING',10,
+  now()-interval '15 minutes',now()-interval '10 minutes',now(),null
+);
+insert into dastak_v1.fulfilment_lines (
+  fulfilment_id,order_line_id,confirmed_quantity
+) values (
+  '99400000-0000-4000-8000-000000000113',
+  '99400000-0000-4000-8000-000000000123',1
+);
+commit;
+SQL
+
+mission_c="$("${psql_base[@]}" -Atc "select dastak_v1_api.ensure_delivery_mission('$order_c'::uuid)" | tail -n 1)"
+offer_c_b="$("${psql_base[@]}" -Atc "select id from dastak_v1.delivery_offers where mission_id='$mission_c'::uuid and rider_id='$rider_b'::uuid and status='OFFERED'")"
+[[ -n "$mission_c" && -n "$offer_c_b" ]] || { printf 'pre-offer transport classification did not create the expected mission/offer\n' >&2; exit 1; }
+preoffer_final="$("${psql_base[@]}" -Atc "select transport_snapshot->>'packageCountFinal' from dastak_v1.delivery_missions where id='$mission_c'::uuid")"
+[[ "$preoffer_final" == "false" ]] || { printf 'pre-offer package count was incorrectly final\n' >&2; exit 1; }
+
+("${psql_base[@]}" -At -c "select response_status from public.dastak_v1_accept_delivery_offer('$rider_b'::uuid,'$offer_c_b'::uuid,'final-load-accept-$run_token','final-load-accept')" >"$work_dir/final-load-accept.out" 2>&1 || true) &
+final_accept_pid=$!
+("${psql_base[@]}" >"$work_dir/final-load-declare.out" 2>&1 <<SQL
+begin;
+insert into dastak_v1.packages (
+  id,order_id,fulfilment_id,package_number,status,
+  current_custody_owner_type,current_custody_owner_id,declared_by,declared_at
+)
+select
+  ('99400000-0000-4000-8000-' || pg_catalog.lpad((160 + number)::text,12,'0'))::uuid,
+  '$order_c'::uuid,'$fulfilment_c'::uuid,number,'DECLARED',
+  'MERCHANT_BRANCH','$branch_a'::uuid,'$merchant_id'::uuid,now()
+from pg_catalog.generate_series(1,5) number;
+update dastak_v1.fulfilments
+set package_count=5,version=version+1 where id='$fulfilment_c'::uuid;
+commit;
+SQL
+) &
+final_declare_pid=$!
+wait "$final_accept_pid"; wait "$final_declare_pid"
+final_load_truth="$("${psql_base[@]}" -At -F ' ' -c "select (transport_snapshot->>'packageCountFinal')::boolean,(transport_snapshot->>'packageCount')::int,assigned_rider_id is null,status in ('SEARCHING_RIDER','REASSIGNING'),not dastak_v1_api.mission_has_package_custody(id) from dastak_v1.delivery_missions where id='$mission_c'::uuid")"
+[[ "$final_load_truth" == "t 5 t t t" ]] || { printf 'final package transport race left an unsafe mission: %s\n' "$final_load_truth" >&2; exit 1; }
+
+# Scoped emergency controls block only new commitments. Existing paid work and
+# custody truth stay unchanged.
+pause_retail="$("${psql_base[@]}" -Atc "select dastak_v1_api.set_operational_pause('$owner_id'::uuid,'ZONE_RETAIL','$zone_id'::uuid,true,'Runtime retail emergency pause',0,'pause-retail-$run_token')->>'version' from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor")"
+[[ "$pause_retail" == "1" ]] || { printf 'retail zone pause was not created\n' >&2; exit 1; }
+if "${psql_base[@]}" >"$work_dir/paused-order.out" 2>&1 <<SQL
+begin;
+insert into dastak_v1.orders (
+  id,display_order_number,customer_id,order_type,status
+) values (
+  '99400000-0000-4000-8000-000000000180','DV1-PAUSED-RETAIL',
+  '$customer_id'::uuid,'RETAIL_ONLY','CREATED'
+);
+insert into dastak_v1.order_context_snapshots (
+  order_id,delivery_address,recipient,snapshot_hash
+) values (
+  '99400000-0000-4000-8000-000000000180',
+  '{"latitude":15.69,"longitude":80.61}', '{}',decode(repeat('18',32),'hex')
+);
+commit;
+SQL
+then
+  printf 'paused retail zone accepted a new order\n' >&2; exit 1
+fi
+grep -q 'ORDERING_PAUSED' "$work_dir/paused-order.out"
+"${psql_base[@]}" -c "select dastak_v1_api.set_operational_pause('$owner_id'::uuid,'ZONE_RETAIL','$zone_id'::uuid,false,'Retail ordering restored',1,'resume-retail-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor" >/dev/null
+
+"${psql_base[@]}" -c "select dastak_v1_api.set_operational_pause('$owner_id'::uuid,'MERCHANT_BRANCH','$branch_a'::uuid,true,'Branch intake paused safely',0,'pause-branch-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor" >/dev/null
+"${psql_base[@]}" <<SQL >/dev/null
+insert into dastak_v1.matching_attempts (
+  id,order_id,wave,status,started_at,expires_at
+) values (
+  '99400000-0000-4000-8000-000000000134','$order_c'::uuid,
+  'WAVE_2','OPEN',now(),now()+interval '3 minutes'
+);
+insert into dastak_v1.merchant_opportunities (
+  id,matching_attempt_id,order_id,organization_id,branch_id,wave,status,
+  started_at,expires_at
+) values (
+  '99400000-0000-4000-8000-000000000144',
+  '99400000-0000-4000-8000-000000000134','$order_c'::uuid,
+  '99400000-0000-4000-8000-000000000050','$branch_a'::uuid,
+  'WAVE_2','OFFERED',now(),now()+interval '3 minutes'
+);
+SQL
+paused_branch_count="$("${psql_base[@]}" -Atc "select count(*) from dastak_v1.merchant_opportunities where id='99400000-0000-4000-8000-000000000144'::uuid")"
+[[ "$paused_branch_count" == "0" ]] || { printf 'paused branch received a new opportunity\n' >&2; exit 1; }
+"${psql_base[@]}" -c "select dastak_v1_api.set_operational_pause('$owner_id'::uuid,'MERCHANT_BRANCH','$branch_a'::uuid,false,'Branch intake restored',1,'resume-branch-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor" >/dev/null
+
+# Stall can clear on authenticated heartbeat; unresponsive pre-custody work can
+# be released exactly once by Operations, with paused riders excluded from the
+# rematch pool.
+"${psql_base[@]}" -c "update dastak_v1.delivery_missions set rider_last_progress_at=now()-interval '61 seconds',rider_last_contact_at=now(),version=version+1 where id='$mission_b'::uuid" >/dev/null
+"${psql_base[@]}" -c "select dastak_v1_api.process_rider_escalations(100,now())" >/dev/null
+stalled="$("${psql_base[@]}" -Atc "select escalation_state from dastak_v1.delivery_missions where id='$mission_b'::uuid")"
+[[ "$stalled" == "STALLED" ]] || { printf 'rider stall was not detected: %s\n' "$stalled" >&2; exit 1; }
+mission_b_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.delivery_missions where id='$mission_b'::uuid")"
+heartbeat_state="$("${psql_base[@]}" -Atc "select dastak_v1_api.rider_heartbeat('$rider_a'::uuid,'$mission_b'::uuid,$mission_b_version)->>'escalationState' from (select set_config('request.jwt.claim.sub','$rider_a',false)) actor")"
+[[ "$heartbeat_state" == "NONE" ]] || { printf 'rider heartbeat did not clear a stall\n' >&2; exit 1; }
+"${psql_base[@]}" -c "update dastak_v1.delivery_missions set rider_last_progress_at=now()-interval '121 seconds',rider_last_contact_at=now()-interval '121 seconds',version=version+1 where id='$mission_b'::uuid" >/dev/null
+"${psql_base[@]}" -c "select dastak_v1_api.process_rider_escalations(100,now())" >/dev/null
+unresponsive="$("${psql_base[@]}" -Atc "select escalation_state from dastak_v1.delivery_missions where id='$mission_b'::uuid")"
+[[ "$unresponsive" == "UNRESPONSIVE" ]] || { printf 'rider unresponsive state was not detected: %s\n' "$unresponsive" >&2; exit 1; }
+
+"${psql_base[@]}" -c "select dastak_v1_api.set_operational_pause('$owner_id'::uuid,'RIDER_ASSIGNMENTS','$rider_b'::uuid,true,'Rider assignments paused safely',0,'pause-rider-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor" >/dev/null
+mission_b_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.delivery_missions where id='$mission_b'::uuid")"
+release_sql="select dastak_v1_api.manage_rider_escalation('$owner_id'::uuid,'$mission_b'::uuid,'RELEASE_REMATCH','Authorized pre-custody unresponsive release',$mission_b_version"
+("${psql_base[@]}" -At -c "$release_sql,'release-a-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor" >"$work_dir/release-a.out" 2>&1 || true) & release_a_pid=$!
+("${psql_base[@]}" -At -c "$release_sql,'release-b-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor" >"$work_dir/release-b.out" 2>&1 || true) & release_b_pid=$!
+wait "$release_a_pid"; wait "$release_b_pid"
+release_truth="$("${psql_base[@]}" -At -F ' ' -c "select status='SEARCHING_RIDER',assigned_rider_id is null,escalation_state='RELEASED_PRE_CUSTODY',(select count(*)=0 from dastak_v1.delivery_offers where mission_id='$mission_b'::uuid and rider_id='$rider_b'::uuid and status='OFFERED') from dastak_v1.delivery_missions where id='$mission_b'::uuid")"
+[[ "$release_truth" == "t t t t" ]] || { printf 'pre-custody release/rematch was unsafe: %s\n' "$release_truth" >&2; exit 1; }
+release_a_success="$(grep -c 'missionId' "$work_dir/release-a.out" || true)"
+release_b_success="$(grep -c 'missionId' "$work_dir/release-b.out" || true)"
+[[ $((release_a_success + release_b_success)) -eq 1 ]] || { printf 'concurrent Operations release did not commit exactly once\n' >&2; exit 1; }
+"${psql_base[@]}" -c "select dastak_v1_api.set_operational_pause('$owner_id'::uuid,'RIDER_ASSIGNMENTS','$rider_b'::uuid,false,'Rider assignments restored',1,'resume-rider-$run_token') from (select set_config('request.jwt.claim.sub','$owner_id',false)) actor" >/dev/null
+
+# An unresponsive rider after custody enters Delivery Recovery and is never
+# automatically reassigned.
+"${psql_base[@]}" -c "update dastak_v1.delivery_missions set rider_last_progress_at=now()-interval '121 seconds',rider_last_contact_at=now()-interval '121 seconds',version=version+1 where id='$mission_a'::uuid" >/dev/null
+"${psql_base[@]}" -c "select dastak_v1_api.process_rider_escalations(100,now())" >/dev/null
+recovery_truth="$("${psql_base[@]}" -At -F ' ' -c "select status='DELIVERY_RECOVERY',escalation_state='DELIVERY_RECOVERY',assigned_rider_id='$rider_c'::uuid,dastak_v1_api.mission_has_package_custody(id) from dastak_v1.delivery_missions where id='$mission_a'::uuid")"
+[[ "$recovery_truth" == "t t t t" ]] || { printf 'post-custody unresponsive handling reassigned or lost recovery truth: %s\n' "$recovery_truth" >&2; exit 1; }
+
+paid_commitments="$("${psql_base[@]}" -Atc "select count(*) from dastak_v1.orders where id in ('$order_a'::uuid,'$order_b'::uuid) and paid_at is not null")"
+[[ "$paid_commitments" == "2" ]] || { printf 'emergency controls altered paid commitments\n' >&2; exit 1; }
+
+printf 'Dastak V1 rider assignment, transport revalidation and operational safety races passed.\n'

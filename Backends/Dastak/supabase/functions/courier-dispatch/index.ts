@@ -9,6 +9,7 @@ import {
   type V1DeliveryMissionMutationInput,
   type V1FinalDeliveryMutationInput,
   type V1ReturnMissionMutationInput,
+  type V1RiderHeartbeatInput,
   type V1RiderOfferDeclineInput,
   type V1RiderOfferMutationInput,
 } from "./handler.ts";
@@ -30,11 +31,22 @@ Deno.serve((request) =>
     getV1PartnerSnapshot,
     acceptV1Offer,
     declineV1Offer,
+    heartbeatV1Mission,
     advanceV1Mission,
     advanceV1FinalDelivery,
     advanceV1ReturnMission,
   })
 );
+
+async function heartbeatV1Mission(input: V1RiderHeartbeatInput) {
+  const { data, error } = await serviceClient.rpc("dastak_v1_rider_heartbeat", {
+    p_account_id: input.accountId,
+    p_mission_id: input.missionId,
+    p_expected_version: input.expectedVersion,
+  });
+  if (error) throw error;
+  return data;
+}
 
 async function getV1PartnerSnapshot(accountId: string) {
   const { data, error } = await serviceClient.rpc(

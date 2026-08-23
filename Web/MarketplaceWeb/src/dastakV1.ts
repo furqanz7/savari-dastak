@@ -6,6 +6,47 @@ export type DastakV1Auth = {
   accessToken: string;
 };
 
+export type V1OperationalPauseScope =
+  | "ZONE_RETAIL"
+  | "ZONE_FOOD"
+  | "ZONE_MIXED"
+  | "MERCHANT_BRANCH"
+  | "RIDER_ASSIGNMENTS";
+
+export type V1OperationalSafety = {
+  permissions: {
+    canManageRiderEscalations: boolean;
+    canManageOperationalPauses: boolean;
+  };
+  pauses: Array<{
+    id: string;
+    scope: V1OperationalPauseScope;
+    targetId: string;
+    active: boolean;
+    reason: string;
+    activatedAt: string | null;
+    clearedAt: string | null;
+    version: number;
+  }>;
+  riderEscalations: Array<{
+    missionId: string;
+    orderId: string;
+    displayOrderNumber: string;
+    status: string;
+    riderId: string | null;
+    transportType: string | null;
+    lastContactAt: string | null;
+    lastProgressAt: string | null;
+    stallDetectedAt: string | null;
+    unresponsiveDetectedAt: string | null;
+    escalationState: string;
+    escalatedAt: string | null;
+    escalationReason: string | null;
+    custodyStarted: boolean;
+    version: number;
+  }>;
+};
+
 export type V1CatalogueCategory = {
   id: string;
   name: string;
@@ -948,6 +989,107 @@ export async function getV1AdminSystemHealth(
   return parseV1SystemHealth(await invoke(input, "dastak-v1-orders", {
     operation: "adminSystemHealth",
   }, undefined, fetcher));
+}
+
+export async function getV1AdminOperationalSafety(
+  input: DastakV1Auth & { signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1OperationalSafety> {
+  return parseV1OperationalSafety(await invoke(input, "dastak-v1-orders", {
+    operation: "adminOperationalSafety",
+  }, undefined, fetcher));
+}
+
+export async function manageV1RiderEscalation(
+  input: DastakV1Auth & {
+    missionId: string;
+    action: "RELEASE_REMATCH" | "ENTER_DELIVERY_RECOVERY";
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  const reason = requiredText(input.reason.trim(), 500);
+  if (reason.length < 10) invalidInput("Add a clear Operations reason.");
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "manageRiderEscalation",
+    missionId: requiredUuid(input.missionId),
+    action: input.action,
+    reason,
+    expectedVersion: requiredInteger(input.expectedVersion, 1),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function setV1OperationalPause(
+  input: DastakV1Auth & {
+    scope: V1OperationalPauseScope;
+    targetId: string;
+    active: boolean;
+    reason: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  const reason = requiredText(input.reason.trim(), 500);
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "setOperationalPause",
+    scope: input.scope,
+    targetId: requiredUuid(input.targetId),
+    active: input.active,
+    reason,
+    expectedVersion: requiredInteger(input.expectedVersion, 0),
+  }, input.idempotencyKey, fetcher));
+}
+
+function parseV1OperationalSafety(value: unknown): V1OperationalSafety {
+  const source = record(value);
+  const permissions = record(source?.permissions);
+  if (!source || !permissions || !Array.isArray(source.pauses) ||
+    !Array.isArray(source.riderEscalations)) invalid("operational safety response");
+  return {
+    permissions: {
+      canManageRiderEscalations: requiredBoolean(permissions.canManageRiderEscalations),
+      canManageOperationalPauses: requiredBoolean(permissions.canManageOperationalPauses),
+    },
+    pauses: source.pauses.map((value) => {
+      const pause = requiredRecord(value);
+      const scope = String(pause.scope) as V1OperationalPauseScope;
+      if (!["ZONE_RETAIL", "ZONE_FOOD", "ZONE_MIXED", "MERCHANT_BRANCH", "RIDER_ASSIGNMENTS"].includes(scope)) {
+        invalid("operational pause");
+      }
+      return {
+        id: requiredUuid(pause.id), scope,
+        targetId: requiredUuid(pause.targetId), active: requiredBoolean(pause.active),
+        reason: requiredText(pause.reason, 500),
+        activatedAt: optionalTimestamp(pause.activatedAt) ?? null,
+        clearedAt: optionalTimestamp(pause.clearedAt) ?? null,
+        version: requiredInteger(pause.version, 1),
+      };
+    }),
+    riderEscalations: source.riderEscalations.map((value) => {
+      const escalation = requiredRecord(value);
+      return {
+        missionId: requiredUuid(escalation.missionId),
+        orderId: requiredUuid(escalation.orderId),
+        displayOrderNumber: requiredText(escalation.displayOrderNumber, 40),
+        status: requiredText(escalation.status, 80),
+        riderId: escalation.riderId === null || escalation.riderId === undefined
+          ? null : requiredUuid(escalation.riderId),
+        transportType: optionalText(escalation.transportType, 40) ?? null,
+        lastContactAt: optionalTimestamp(escalation.lastContactAt) ?? null,
+        lastProgressAt: optionalTimestamp(escalation.lastProgressAt) ?? null,
+        stallDetectedAt: optionalTimestamp(escalation.stallDetectedAt) ?? null,
+        unresponsiveDetectedAt: optionalTimestamp(escalation.unresponsiveDetectedAt) ?? null,
+        escalationState: requiredText(escalation.escalationState, 80),
+        escalatedAt: optionalTimestamp(escalation.escalatedAt) ?? null,
+        escalationReason: optionalText(escalation.escalationReason, 500) ?? null,
+        custodyStarted: requiredBoolean(escalation.custodyStarted),
+        version: requiredInteger(escalation.version, 1),
+      };
+    }),
+  };
 }
 
 export async function authorizeV1ExceptionalDeliveryHandoff(

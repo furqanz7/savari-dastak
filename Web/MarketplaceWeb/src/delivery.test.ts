@@ -10,6 +10,7 @@ import {
   getDeliveryDispatch,
   getDeliveryPartnerSnapshot,
   getV1DeliveryDispatch,
+  heartbeatV1DeliveryMission,
   isAcceptedPartnerEvidence,
   isValidVehicleRegistration,
   normalizeVehicleRegistration,
@@ -412,11 +413,21 @@ describe("delivery partner client", () => {
       canArriveCustomer: false,
       canCaptureDeliveryEvidence: true,
       canVerifyDelivery: true,
+      riderSafety: {
+        lastContactAt: "2026-08-22T10:20:30Z",
+        lastProgressAt: "2026-08-22T10:20:00Z",
+        stallDetectedAt: null,
+        unresponsiveDetectedAt: null,
+        escalationState: "NONE",
+        escalatedAt: null,
+        escalationReason: null,
+      },
     };
     const parsed = await getV1DeliveryDispatch(auth, () =>
       Promise.resolve(Response.json({ offer: null, currentMission: mission })));
     expect(parsed.currentMission?.customerDestination?.address).toBe("10 Customer Road");
     expect(parsed.currentMission?.finalVerification?.evidencePresent).toBe(true);
+    expect(parsed.currentMission?.riderSafety.escalationState).toBe("NONE");
 
     const requests: Record<string, unknown>[] = [];
     const fetcher = (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -441,6 +452,17 @@ describe("delivery partner client", () => {
       { operation: "v1AddDeliveryEvidence", missionId: orderId, objectPath },
       { operation: "v1VerifyDelivery", missionId: orderId, verificationCode: "654321" },
     ]);
+  });
+
+  it("sends an authenticated V1 mission heartbeat with its current version", async () => {
+    let body: unknown;
+    await heartbeatV1DeliveryMission({
+      ...auth, missionId: orderId, expectedVersion: 8,
+    }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(Response.json({ missionId: orderId, version: 9 }));
+    });
+    expect(body).toEqual({ operation: "v1Heartbeat", missionId: orderId, expectedVersion: 8 });
   });
 
   it("parses and advances founder-operated reverse custody without rider spoofing", async () => {

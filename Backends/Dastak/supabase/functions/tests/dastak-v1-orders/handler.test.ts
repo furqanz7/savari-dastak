@@ -216,6 +216,120 @@ Deno.test("V1 execution trace is a permission-checked authenticated RPC surface"
   assertEquals(healthInput, { accessToken: actor.accessToken });
 });
 
+Deno.test("V1 operational safety commands validate and preserve authenticated authority", async () => {
+  let snapshotInput: unknown;
+  let escalationInput: unknown;
+  let pauseInput: unknown;
+  const deps = dependencies({
+    getAdminOperationalSafety: (input) => {
+      snapshotInput = input;
+      return Promise.resolve({ pauses: [], riderEscalations: [] });
+    },
+    manageRiderEscalation: (input) => {
+      escalationInput = input;
+      return Promise.resolve({ missionId: orderId });
+    },
+    setOperationalPause: (input) => {
+      pauseInput = input;
+      return Promise.resolve({ targetId: orderId });
+    },
+  });
+  assertEquals(
+    (await handleV1Orders(
+      request({ operation: "adminOperationalSafety" }),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "manageRiderEscalation",
+        missionId: orderId,
+        action: "RELEASE_REMATCH",
+        reason: "Rider is unresponsive before pickup",
+        expectedVersion: 4,
+      }, "escalation-1"),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "setOperationalPause",
+        scope: "ZONE_RETAIL",
+        targetId: orderId,
+        active: true,
+        reason: "Safety pause",
+        expectedVersion: 0,
+      }, "pause-1"),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(snapshotInput, { accessToken: actor.accessToken });
+  assertEquals(escalationInput, {
+    accessToken: actor.accessToken,
+    missionId: orderId,
+    action: "RELEASE_REMATCH",
+    reason: "Rider is unresponsive before pickup",
+    expectedVersion: 4,
+    idempotencyKey: "escalation-1",
+  });
+  assertEquals(pauseInput, {
+    accessToken: actor.accessToken,
+    scope: "ZONE_RETAIL",
+    targetId: orderId,
+    active: true,
+    reason: "Safety pause",
+    expectedVersion: 0,
+    idempotencyKey: "pause-1",
+  });
+});
+
+Deno.test("V1 operational safety rejects generic state edits and weak reasons", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    manageRiderEscalation: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    setOperationalPause: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "manageRiderEscalation",
+        missionId: orderId,
+        action: "FORCE_STATE",
+        reason: "invalid",
+        expectedVersion: 1,
+      }, "bad-1"),
+      deps,
+    )).status,
+    400,
+  );
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "setOperationalPause",
+        scope: "EVERYTHING",
+        targetId: orderId,
+        active: true,
+        reason: "no",
+        expectedVersion: 0,
+      }, "bad-2"),
+      deps,
+    )).status,
+    400,
+  );
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 exceptional handoff preserves evidence, reason, version and authenticated boundary", async () => {
   const evidenceId = "44444444-4444-4444-8444-444444444444";
   let recorded: unknown;
@@ -641,6 +755,9 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
     getAdminExecutionTrace: overrides.getAdminExecutionTrace ??
       (() => Promise.resolve({})),
     getAdminSystemHealth: overrides.getAdminSystemHealth ?? (() => Promise.resolve({})),
+    getAdminOperationalSafety: overrides.getAdminOperationalSafety ?? (() => Promise.resolve({})),
+    manageRiderEscalation: overrides.manageRiderEscalation ?? (() => Promise.resolve({})),
+    setOperationalPause: overrides.setOperationalPause ?? (() => Promise.resolve({})),
     authorizeExceptionalDeliveryHandoff: overrides.authorizeExceptionalDeliveryHandoff ??
       (() => Promise.resolve({})),
     reportExactSkuFailure: overrides.reportExactSkuFailure ?? (() => Promise.resolve({})),
