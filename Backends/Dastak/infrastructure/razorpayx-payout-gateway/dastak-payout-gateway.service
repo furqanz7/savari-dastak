@@ -1,0 +1,19 @@
+[Unit]
+Description=Dastak fixed-egress RazorpayX payout gateway
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/dastak/Backends/Dastak/infrastructure/razorpayx-payout-gateway
+EnvironmentFile=/run/dastak-payout-gateway/environment
+ExecStart=/usr/bin/docker compose up --build --detach --remove-orphans
+ExecReload=/usr/bin/docker compose up --build --detach --remove-orphans
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=300
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

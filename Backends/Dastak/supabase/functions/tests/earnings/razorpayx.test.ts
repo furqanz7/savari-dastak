@@ -4,6 +4,7 @@ import {
   RazorpayXClient,
   safeDestinationPresentation,
 } from "../../_shared/razorpayx.ts";
+import { PayoutGatewayError } from "../../_shared/payout-gateway.ts";
 import {
   executeRazorpayXWithdrawal,
   registerRazorpayXDestination,
@@ -102,6 +103,20 @@ Deno.test("RazorpayX UPI Fund Account creation is replay-safe", async () => {
   }]);
 });
 
+Deno.test("fixed-egress gateway resolves bank and UPI payout mode from the provider destination", async () => {
+  const types = ["bank_account", "vpa"];
+  const client = new RazorpayXClient(testOptions, async (input) => {
+    const type = types.shift();
+    return Response.json({
+      id: String(input).includes(upiFundAccountId) ? upiFundAccountId : bankFundAccountId,
+      account_type: type,
+      active: true,
+    });
+  });
+  assertEquals(await client.fetchFundAccountType(bankFundAccountId), "BANK_ACCOUNT");
+  assertEquals(await client.fetchFundAccountType(upiFundAccountId), "UPI");
+});
+
 Deno.test("destination storage presentation is masked and fingerprinted without raw details", async () => {
   const destination = {
     type: "BANK_ACCOUNT" as const,
@@ -189,8 +204,6 @@ Deno.test("payout creation uses the Dastak withdrawal UUID as mandatory provider
   for (let replay = 0; replay < 2; replay += 1) {
     await client.createPayout({
       withdrawalId,
-      subjectType: "RIDER",
-      subjectId,
       fundAccountId: bankFundAccountId,
       amountPaise: 1500,
       mode: "IMPS",
@@ -201,20 +214,24 @@ Deno.test("payout creation uses the Dastak withdrawal UUID as mandatory provider
   assertEquals(calls[0].headers.get("x-payout-idempotency"), withdrawalId);
   assertEquals(calls[0].body, calls[1].body);
   assertEquals(calls[0].body.reference_id, withdrawalId);
-  assertEquals((calls[0].body.notes as Record<string, unknown>).dastak_subject_id, subjectId);
+  assertEquals((calls[0].body.notes as Record<string, unknown>).dastak_withdrawal_id, withdrawalId);
 });
 
 Deno.test("timeout after provider acceptance retries the identical payout without releasing Royalty", async () => {
   const payoutBodies: string[] = [];
   const idempotencyKeys: string[] = [];
   let providerCalls = 0;
-  const client = new RazorpayXClient(testOptions, async (_input, init) => {
-    providerCalls += 1;
-    payoutBodies.push(String(init?.body));
-    idempotencyKeys.push(new Headers(init?.headers).get("x-payout-idempotency") ?? "");
-    if (providerCalls === 1) throw new TypeError("network timeout after accept");
-    return Response.json(providerPayout("processing"));
-  });
+  const client = {
+    executePayout: async (input: Record<string, unknown>) => {
+      providerCalls += 1;
+      payoutBodies.push(JSON.stringify(input));
+      idempotencyKeys.push(String(input.idempotencyKey));
+      if (providerCalls === 1) {
+        throw new PayoutGatewayError(0, true, "gateway_unreachable");
+      }
+      return gatewayPayout("processing");
+    },
+  };
   const records: Array<{ rpc: string; args: Record<string, unknown> }> = [];
   const callRPC = async (rpc: string, args: Record<string, unknown>) => {
     if (rpc.endsWith("claim_razorpayx_withdrawal")) return executionContext();
@@ -257,13 +274,9 @@ Deno.test("timeout after provider acceptance retries the identical payout withou
 });
 
 Deno.test("known pre-accept provider rejection releases through the Dastak retryable command", async () => {
-  const client = new RazorpayXClient(
-    testOptions,
-    async () =>
-      Response.json({ error: { code: "BAD_REQUEST_ERROR", description: "Rejected" } }, {
-        status: 400,
-      }),
-  );
+  const client = {
+    executePayout: () => Promise.reject(new PayoutGatewayError(422, false, "bad_request_error")),
+  };
   const calls: string[] = [];
   const result = await executeRazorpayXWithdrawal({
     actorId,
@@ -289,10 +302,9 @@ Deno.test("known pre-accept provider rejection releases through the Dastak retry
 });
 
 Deno.test("provider payout ownership mismatch preserves the reservation for reconciliation", async () => {
-  const client = new RazorpayXClient(
-    testOptions,
-    async () => Response.json({ ...providerPayout("processed"), amount: 1600 }),
-  );
+  const client = {
+    executePayout: async () => ({ ...gatewayPayout("processed"), amountPaise: 1600 }),
+  };
   const calls: string[] = [];
   const result = await executeRazorpayXWithdrawal({
     actorId,
@@ -355,5 +367,19 @@ function providerPayout(status: string) {
     status,
     created_at: 1_787_478_400,
     status_details: {},
+  };
+}
+
+function gatewayPayout(status: "processing" | "processed") {
+  return {
+    withdrawalId,
+    providerPayoutReference: payoutId,
+    fundAccountReference: bankFundAccountId,
+    amountPaise: 1500,
+    currency: "INR" as const,
+    mode: "IMPS" as const,
+    status,
+    createdAt: "2026-08-23T00:00:00.000Z",
+    statusDetails: {},
   };
 }

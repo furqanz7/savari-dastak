@@ -1,0 +1,10 @@
+.git
+.gitignore
+supabase/.temp
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/*.pem
+**/*.key
+**/node_modules

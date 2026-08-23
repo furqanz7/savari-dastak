@@ -60,3 +60,14 @@ This section is newer than, and overrides, only the preceding statement that no 
 - Contact, Fund Account, and Payout operations remain behind a server-only adapter. A Dastak withdrawal UUID is the mandatory RazorpayX payout idempotency key, so one withdrawal can never create two external payouts.
 - Provider success, failure, and reversal are verified, deduplicated, preserved, and reconciled without rewriting the original earning or withdrawal history. `Paid` requires authoritative provider confirmation.
 - Integration is test-mode first. Live mode requires explicit credentials, source account, webhook secret/configuration, and confirmed fixed-egress IP allowlisting; no live payout is authorized by this addendum.
+
+## Newest fixed-egress payout authority
+
+This section overrides only any earlier implication that hosted Supabase Edge Functions may call RazorpayX Live payout APIs directly.
+
+- Live payout execution is `Dastak withdrawal domain → Supabase payout adapter → authenticated Dastak fixed-egress gateway → RazorpayX`.
+- The gateway accepts only an already-authorized withdrawal command, authenticated with HMAC-SHA256 over canonical timestamped bytes, with bounded freshness, replay rejection, and the immutable withdrawal UUID as provider idempotency identity.
+- RazorpayX Live key ID, key secret, source account, and allowlist confirmation exist only on the fixed-egress gateway. Supabase holds only the gateway URL/shared secret plus its existing RazorpayX webhook and destination-fingerprint secrets.
+- The gateway must use a dedicated static Elastic IP that is actually allowlisted in RazorpayX before Live mode or `RAZORPAYX_LIVE_EGRESS_ALLOWLIST_CONFIRMED=true` is permitted.
+- RazorpayX payout webhooks continue to terminate at the authenticated Supabase webhook and remain the authoritative asynchronous confirmation/reconciliation path.
+- No direct live Supabase → RazorpayX fallback or bypass is permitted. Test-mode Contact/Fund Account support may remain direct; live destination provisioning must use an explicitly authorized fixed-egress/operations process.

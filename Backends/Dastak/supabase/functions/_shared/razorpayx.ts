@@ -131,15 +131,12 @@ export class RazorpayXClient {
 
   async createPayout(input: {
     withdrawalId: string;
-    subjectType: "MERCHANT_ORGANIZATION" | "RIDER";
-    subjectId: string;
     fundAccountId: string;
     amountPaise: number;
     mode: "IMPS" | "UPI";
     idempotencyKey: string;
   }) {
     validateUuid(input.withdrawalId);
-    validateUuid(input.subjectId);
     if (
       input.idempotencyKey !== input.withdrawalId ||
       input.idempotencyKey.length > 36 ||
@@ -161,12 +158,27 @@ export class RazorpayXClient {
         narration: "Dastak Royalty",
         notes: {
           dastak_withdrawal_id: input.withdrawalId,
-          dastak_subject_type: input.subjectType,
-          dastak_subject_id: input.subjectId,
         },
       }),
     });
     return assertPayoutMatches(parsePayout(payload), input);
+  }
+
+  async fetchFundAccountType(fundAccountId: string) {
+    const id = providerId(fundAccountId, "fa");
+    if (!id) throw new Error("Invalid RazorpayX fund account reference");
+    const source = record(
+      await this.request(`/fund_accounts/${encodeURIComponent(id)}`, {}),
+    );
+    const type = source?.account_type === "bank_account"
+      ? "BANK_ACCOUNT"
+      : source?.account_type === "vpa"
+      ? "UPI"
+      : undefined;
+    if (source?.id !== id || source?.active !== true || !type) {
+      throw new RazorpayXApiError(409, false, "fund_account_unavailable");
+    }
+    return type;
   }
 
   async fetchPayout(providerPayoutId: string) {
@@ -176,6 +188,7 @@ export class RazorpayXClient {
   }
 
   private async request(path: string, init: RequestInit) {
+    const payoutMayHaveBeenCreated = path === "/payouts" && init.method === "POST";
     let response: Response;
     try {
       response = await this.fetcher(`${this.apiBaseUrl}${path}`, {
@@ -188,14 +201,14 @@ export class RazorpayXClient {
         },
       });
     } catch {
-      throw new RazorpayXApiError(0, true, "network_timeout");
+      throw new RazorpayXApiError(0, payoutMayHaveBeenCreated, "network_timeout");
     }
     const payload = await response.json().catch(() => undefined);
     if (!response.ok || payload === undefined) {
       const metadata = safeErrorMetadata(payload);
       throw new RazorpayXApiError(
         response.status || 502,
-        response.status >= 500,
+        payoutMayHaveBeenCreated && response.status >= 500,
         typeof metadata.code === "string" ? metadata.code : "provider_request_failed",
         metadata,
       );

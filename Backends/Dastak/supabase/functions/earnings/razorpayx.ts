@@ -1,13 +1,12 @@
 import {
   destinationFingerprint,
   normalizeDestination,
-  RazorpayXApiError,
   type RazorpayXClient,
   type RazorpayXDestinationInput,
-  type RazorpayXPayout,
   safeDestinationPresentation,
   sha256,
 } from "../_shared/razorpayx.ts";
+import { PayoutGatewayError, type PayoutGatewayResult } from "../_shared/payout-gateway.ts";
 
 type CallRPC = (rpc: string, args: Record<string, unknown>) => Promise<unknown>;
 
@@ -57,7 +56,15 @@ export async function executeRazorpayXWithdrawal(input: {
   actorId: string;
   withdrawalId: string;
   expectedVersion: number;
-  client: RazorpayXClient;
+  client: {
+    executePayout: (request: {
+      withdrawalId: string;
+      amountPaise: number;
+      currency: "INR";
+      fundAccountReference: string;
+      idempotencyKey: string;
+    }) => Promise<PayoutGatewayResult>;
+  };
   callRPC: CallRPC;
   requestId?: () => string;
   now?: () => Date;
@@ -71,22 +78,16 @@ export async function executeRazorpayXWithdrawal(input: {
   );
   const requestId = input.requestId ? input.requestId() : crypto.randomUUID();
   const now = (input.now ?? (() => new Date()))();
-  const operation = context.providerPayoutReference ? "PAYOUT_FETCH" : "PAYOUT_CREATE";
-  const requestDigest = context.providerPayoutReference
-    ? await sha256(`FETCH|${context.providerPayoutReference}`)
-    : context.requestDigest;
+  const operation = "PAYOUT_CREATE";
+  const requestDigest = context.requestDigest;
   try {
-    const payout = context.providerPayoutReference
-      ? await input.client.fetchPayout(context.providerPayoutReference)
-      : await input.client.createPayout({
-        withdrawalId: context.withdrawalId,
-        subjectType: context.subjectType,
-        subjectId: context.subjectId,
-        fundAccountId: context.fundAccountReference,
-        amountPaise: context.amountPaise,
-        mode: context.payoutMode,
-        idempotencyKey: context.payoutIdempotencyKey,
-      });
+    const payout = await input.client.executePayout({
+      withdrawalId: context.withdrawalId,
+      amountPaise: context.amountPaise,
+      currency: "INR",
+      fundAccountReference: context.fundAccountReference,
+      idempotencyKey: context.payoutIdempotencyKey,
+    });
     assertProviderPayoutMatches(payout, context);
     const safePayload = payoutMetadata(payout);
     await input.callRPC("dastak_v1_record_razorpayx_provider_request", {
@@ -98,22 +99,22 @@ export async function executeRazorpayXWithdrawal(input: {
       p_request_digest: requestDigest,
       p_outcome: "ACCEPTED",
       p_http_status: 200,
-      p_provider_payout_reference: payout.id,
+      p_provider_payout_reference: payout.providerPayoutReference,
       p_response_metadata: safePayload,
       p_occurred_at: now.toISOString(),
     });
     const responseDigest = await sha256(JSON.stringify(safePayload));
     return await input.callRPC("dastak_v1_apply_razorpayx_payout_status", {
       p_provider_event_id: `api:${requestId}`,
-      p_source: operation === "PAYOUT_FETCH" ? "API_FETCH" : "API_RESPONSE",
+      p_source: "API_RESPONSE",
       p_withdrawal_id: context.withdrawalId,
       p_attempt_id: context.attemptId,
-      p_provider_payout_reference: payout.id,
+      p_provider_payout_reference: payout.providerPayoutReference,
       p_provider_event_type: operation.toLowerCase(),
       p_provider_status: payout.status,
       p_amount_paise: payout.amountPaise,
       p_currency_code: payout.currency,
-      p_fund_account_reference: payout.fundAccountId,
+      p_fund_account_reference: payout.fundAccountReference,
       p_request_digest: responseDigest,
       p_payload_metadata: safePayload,
       p_occurred_at: now.toISOString(),
@@ -122,7 +123,7 @@ export async function executeRazorpayXWithdrawal(input: {
       p_status_details: payout.statusDetails,
     });
   } catch (error) {
-    if (!(error instanceof RazorpayXApiError)) throw error;
+    if (!(error instanceof PayoutGatewayError)) throw error;
     await input.callRPC("dastak_v1_record_razorpayx_provider_request", {
       p_request_id: requestId,
       p_withdrawal_id: context.withdrawalId,
@@ -137,15 +138,15 @@ export async function executeRazorpayXWithdrawal(input: {
       p_occurred_at: now.toISOString(),
     });
     if (
-      error.providerCode === "payout_ownership_mismatch" ||
-      error.providerCode === "idempotency_payload_mismatch" ||
-      error.providerCode === "invalid_provider_response"
+      error.code === "payout_ownership_mismatch" ||
+      error.code === "idempotency_payload_mismatch" ||
+      error.code === "invalid_provider_response" || error.code === "invalid_gateway_response"
     ) {
       return await input.callRPC("dastak_v1_mark_razorpayx_reconciliation_required", {
         p_withdrawal_id: context.withdrawalId,
         p_attempt_id: context.attemptId,
         p_request_id: requestId,
-        p_reason: error.providerCode.toUpperCase(),
+        p_reason: error.code.toUpperCase(),
       });
     }
     if (error.ambiguous || context.providerPayoutReference) {
@@ -161,7 +162,7 @@ export async function executeRazorpayXWithdrawal(input: {
       p_withdrawal_id: context.withdrawalId,
       p_attempt_id: context.attemptId,
       p_request_id: requestId,
-      p_failure_code: `RAZORPAYX_${error.providerCode.toUpperCase().replace(/[^A-Z0-9_]/g, "_")}`,
+      p_failure_code: `RAZORPAYX_${error.code.toUpperCase().replace(/[^A-Z0-9_]/g, "_")}`,
     });
   }
 }
@@ -199,31 +200,33 @@ function parseExecutionContext(value: unknown): ExecutionContext {
   return source as unknown as ExecutionContext;
 }
 
-function assertProviderPayoutMatches(payout: RazorpayXPayout, context: ExecutionContext) {
+function assertProviderPayoutMatches(payout: PayoutGatewayResult, context: ExecutionContext) {
   if (
-    payout.fundAccountId !== context.fundAccountReference ||
+    payout.withdrawalId !== context.withdrawalId ||
+    payout.fundAccountReference !== context.fundAccountReference ||
     payout.amountPaise !== context.amountPaise || payout.currency !== "INR" ||
     payout.mode !== context.payoutMode ||
-    (context.providerPayoutReference && payout.id !== context.providerPayoutReference)
+    (context.providerPayoutReference &&
+      payout.providerPayoutReference !== context.providerPayoutReference)
   ) {
-    throw new RazorpayXApiError(409, true, "payout_ownership_mismatch", {
-      providerPayoutReference: payout.id,
+    throw new PayoutGatewayError(409, true, "payout_ownership_mismatch", {
+      providerPayoutReference: payout.providerPayoutReference,
       providerStatus: payout.status,
-      fundAccountReference: payout.fundAccountId,
+      fundAccountReference: payout.fundAccountReference,
       amountPaise: payout.amountPaise,
       mode: payout.mode,
     });
   }
 }
 
-function payoutMetadata(payout: RazorpayXPayout) {
+function payoutMetadata(payout: PayoutGatewayResult) {
   return {
-    id: payout.id,
+    id: payout.providerPayoutReference,
     status: payout.status,
     amountPaise: payout.amountPaise,
     currency: payout.currency,
     mode: payout.mode,
-    fundAccountReference: payout.fundAccountId,
+    fundAccountReference: payout.fundAccountReference,
     createdAt: payout.createdAt,
     ...(payout.utr ? { utr: payout.utr } : {}),
     statusDetails: payout.statusDetails,
