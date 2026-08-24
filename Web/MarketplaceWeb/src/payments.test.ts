@@ -25,6 +25,10 @@ const checkout = {
   currency: "INR" as const,
   receipt: "dst_8a000000000040008000000000000080",
 };
+const customer = {
+  email: "customer@example.test",
+  phoneNumber: "+919500000000",
+};
 
 describe("Dastak payments", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -162,7 +166,7 @@ describe("Dastak payments", () => {
     });
     const result = await launchRazorpayCustomUPI(
       { ...checkout, entityType: "dastak_v1_order", attemptId: "8a000000-0000-4000-8000-000000000081" },
-      { email: "customer@example.test", phoneNumber: "+919500000000" },
+      customer,
       flow,
     );
 
@@ -170,6 +174,8 @@ describe("Dastak payments", () => {
       order_id: checkout.providerOrderId,
       amount: checkout.amountPaise,
       currency: "INR",
+      email: customer.email,
+      contact: customer.phoneNumber,
       method: "upi",
       "_[flow]": flow,
     });
@@ -192,7 +198,7 @@ describe("Dastak payments", () => {
       },
     });
     await expect(launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" }, {}, "intent",
+      { ...checkout, entityType: "dastak_v1_order" }, customer, "intent",
     )).resolves.toMatchObject({ status: "failed" });
   });
 
@@ -204,7 +210,7 @@ describe("Dastak payments", () => {
         razorpay_signature: "d".repeat(64),
       },
     });
-    await launchRazorpayCustomUPI({ ...checkout, entityType: "dastak_v1_order" }, {}, "intent");
+    await launchRazorpayCustomUPI({ ...checkout, entityType: "dastak_v1_order" }, customer, "intent");
     expect(RAZORPAY_CUSTOM_CHECKOUT_SCRIPT).toBe("https://checkout.razorpay.com/v1/razorpay.js");
     expect(custom.opened).toBe(false);
     expect(custom.payload?.method).toBe("upi");
@@ -220,11 +226,35 @@ describe("Dastak payments", () => {
       },
     });
     await expect(launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" }, {}, "intent",
+      { ...checkout, entityType: "dastak_v1_order" }, customer, "intent",
     )).resolves.toEqual({
       status: "failed",
       message: "Payment was cancelled. Your secured basket remains reserved.",
     });
+  });
+
+  it("rejects missing OAuth contact data before invoking Razorpay", async () => {
+    const custom = installCustomCheckout({});
+
+    await expect(launchRazorpayCustomUPI(
+      { ...checkout, entityType: "dastak_v1_order" },
+      { phoneNumber: customer.phoneNumber },
+      "intent",
+    )).resolves.toEqual({
+      status: "failed",
+      message: "Your signed-in email is unavailable. Sign out and sign in again before payment.",
+    });
+    expect(custom.payload).toBeUndefined();
+
+    await expect(launchRazorpayCustomUPI(
+      { ...checkout, entityType: "dastak_v1_order" },
+      { email: customer.email },
+      "intent",
+    )).resolves.toEqual({
+      status: "failed",
+      message: "Add a delivery phone number to your Dastak profile before payment.",
+    });
+    expect(custom.payload).toBeUndefined();
   });
 
   it("processes only an approved V1 refund identity with no client-authored amount", async () => {

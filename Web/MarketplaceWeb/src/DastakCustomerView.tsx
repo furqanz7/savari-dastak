@@ -91,6 +91,7 @@ export function DastakCustomerView(props: Props) {
           accountId={props.accountId}
           client={props.client}
           displayName={props.displayName}
+          email={props.email}
           phoneNumber={props.phoneNumber}
           supabaseUrl={props.supabaseUrl}
           publishableKey={props.publishableKey}

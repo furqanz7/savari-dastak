@@ -21,6 +21,22 @@ public enum DastakRazorpayResult: Equatable, Sendable {
     case dismissed
 }
 
+enum DastakPaymentCurrencyFormatter {
+    static func inr(paise: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_IN")
+        formatter.currencyCode = "INR"
+        formatter.currencySymbol = "₹"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        if let value = formatter.string(from: NSNumber(value: Double(paise) / 100)) {
+            return value
+        }
+        return String(format: "₹%d.%02d", paise / 100, abs(paise % 100))
+    }
+}
+
 public struct DastakDiscoveredUPIApp: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
@@ -83,13 +99,15 @@ public struct DastakDiscoveredUPIApp: Identifiable, Equatable, Sendable {
     }
 }
 
-#if canImport(RazorpayCustom) && canImport(RazorpayCore) && canImport(UIKit)
+#if canImport(Razorpay) && canImport(RazorpayCustom) && canImport(RazorpayCore) && canImport(UIKit)
+import Razorpay
 import RazorpayCore
 import RazorpayCustom
 import UIKit
 import WebKit
 
 private typealias CustomRazorpayCheckout = RazorpayCustom.RazorpayCheckout
+private typealias RazorpayUPIAppDiscovery = Razorpay.RazorpayCheckout
 
 @MainActor
 private enum DastakPaymentAuthorizationState: Equatable {
@@ -139,7 +157,10 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
 
     func discoverApps() {
         state = .loading
-        CustomRazorpayCheckout.getAppsWhichSupportUpi { [weak self] values in
+        // Razorpay documents runtime UPI discovery on the unified entry point.
+        // The lower-level Custom module can return an empty list even when its
+        // supported apps are installed, so it must not be used for availability.
+        RazorpayUPIAppDiscovery.getAppsWhichSupportUpi { [weak self] values in
             Task { @MainActor in
                 guard let self else { return }
                 self.apps = DastakDiscoveredUPIApp.parse(values)
@@ -151,6 +172,17 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
     func authorize(with app: DastakDiscoveredUPIApp) {
         guard state == .ready else { return }
 
+        let email = customerEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phone = customerPhone?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let email, !email.isEmpty else {
+            state = .failed("Your signed-in email is unavailable. Sign out and sign in again before payment.")
+            return
+        }
+        guard let phone, !phone.isEmpty else {
+            state = .failed("Add a delivery phone number to your Dastak profile before payment.")
+            return
+        }
+
         state = .launching
         var options: [AnyHashable: Any] = [
             "key": session.keyID,
@@ -161,8 +193,8 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
             "_[flow]": "intent",
             "upi_app_package_name": app.packageName
         ]
-        if let customerEmail, !customerEmail.isEmpty { options["email"] = customerEmail }
-        if let customerPhone, !customerPhone.isEmpty { options["contact"] = customerPhone }
+        options["email"] = email
+        options["contact"] = phone
         checkout?.authorize(options)
         state = .awaitingReturn
     }
@@ -454,7 +486,7 @@ public struct DastakRazorpayCheckoutView: View {
             HStack(alignment: .center, spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("TOTAL").font(.caption.weight(.bold)).foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
-                    Text(Self.currency(session.amountPaise)).font(.title2.weight(.bold)).foregroundStyle(MarketplaceColors.dastakText.color)
+                    Text(DastakPaymentCurrencyFormatter.inr(paise: session.amountPaise)).font(.title2.weight(.bold)).foregroundStyle(MarketplaceColors.dastakText.color)
                 }
                 Button("Continue") {
                     guard let app = controller.apps.first(where: { $0.id == selectedAppID }) else { return }
@@ -469,10 +501,6 @@ public struct DastakRazorpayCheckoutView: View {
         .background(MarketplaceColors.dastakBackground.color)
     }
 
-    private static func currency(_ paise: Int) -> String {
-        NumberFormatter.localizedString(from: NSNumber(value: Double(paise) / 100), number: .currency)
-            .replacingOccurrences(of: "INR", with: "₹")
-    }
 }
 #else
 public enum DastakRazorpayRedirection {

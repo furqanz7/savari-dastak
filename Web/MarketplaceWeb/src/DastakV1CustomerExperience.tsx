@@ -58,6 +58,7 @@ type Props = DastakV1Auth & {
   accountId: string;
   client: SupabaseClient;
   displayName?: string;
+  email?: string;
   phoneNumber?: string;
   orderRefreshToken: number;
   initialOrderId?: string;
@@ -649,7 +650,7 @@ export function DastakV1CustomerExperience(props: Props) {
     return <DastakPaymentOptions
       auth={auth}
       session={paymentSession}
-      customer={{ name: props.displayName, phoneNumber: props.phoneNumber }}
+      customer={{ name: props.displayName, email: props.email, phoneNumber: props.phoneNumber }}
       expiresAt={selectedOrder.payment?.expiresAt}
       onDismiss={() => {
         setPaymentSession(undefined);

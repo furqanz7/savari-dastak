@@ -5,6 +5,11 @@ import XCTest
 @testable import DastakUI
 
 final class DastakCustomerLifecycleTests: XCTestCase {
+    func testPaymentAmountAlwaysUsesIndianRupeesInsteadOfDeviceLocale() {
+        XCTAssertEqual(DastakPaymentCurrencyFormatter.inr(paise: 7_500), "₹75.00")
+        XCTAssertEqual(DastakPaymentCurrencyFormatter.inr(paise: 123_456_789), "₹12,34,567.89")
+    }
+
     func testUPIAppAvailabilityComesOnlyFromRazorpayDiscovery() {
         XCTAssertTrue(DastakDiscoveredUPIApp.parse([]).isEmpty)
 

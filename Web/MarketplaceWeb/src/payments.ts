@@ -205,6 +205,14 @@ export async function launchRazorpayCustomUPI(
   customer: { name?: string; email?: string; phoneNumber?: string },
   flow: CustomUPIFlow,
 ): Promise<CustomCheckoutResult> {
+  const email = customer.email?.trim();
+  const contact = customer.phoneNumber?.trim();
+  if (!email) {
+    return { status: "failed", message: "Your signed-in email is unavailable. Sign out and sign in again before payment." };
+  }
+  if (!contact) {
+    return { status: "failed", message: "Add a delivery phone number to your Dastak profile before payment." };
+  }
   const Razorpay = await loadRazorpayCustomCheckout();
   return await new Promise((resolve) => {
     let completed = false;
@@ -239,8 +247,8 @@ export async function launchRazorpayCustomUPI(
         amount: session.amountPaise,
         currency: session.currency,
         order_id: session.providerOrderId,
-        email: customer.email,
-        contact: customer.phoneNumber,
+        email,
+        contact,
         method: "upi",
         "_[flow]": flow,
       });
