@@ -1,4 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Dastak">
-  <rect width="64" height="64" rx="15" fill="#0f0f10"/>
-  <path d="M19 17h13c11 0 18 6 18 15s-7 15-18 15H19V17zm11 7h-3v16h3c8 0 12-2 12-8s-4-8-12-8z" fill="#b08d57"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Dastak wordmark D</title>
+  <rect width="64" height="64" rx="14" fill="#f4ebdd"/>
+  <!-- Exact D outline from the bundled Instrument Serif wordmark font. -->
+  <path
+    fill="#21130e"
+    transform="translate(12.205 60) scale(.077778 -.077778)"
+    d="M34 0Q19 0 19 11Q19 20 32 23L55 27Q89 33 89 66V654Q89 675 82.5 682Q76 689 55 693L32 697Q19 700 19 709Q19 720 34 720H236Q314 720 371 674.5Q428 629 459 547Q490 465 490 357Q490 248 457.5 168Q425 88 366 44Q307 0 226 0ZM230 26Q319 26 365.5 111Q412 196 412 357Q412 517 367.5 605.5Q323 694 236 694Q160 694 160 621V99Q160 59 176.5 42.5Q193 26 230 26Z"
+  />
 </svg>
