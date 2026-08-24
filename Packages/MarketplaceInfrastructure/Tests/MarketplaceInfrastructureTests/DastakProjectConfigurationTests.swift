@@ -35,6 +35,17 @@ final class DastakProjectConfigurationTests: XCTestCase {
         )
     }
 
+    func testCustomerLegalLinksUseFirstPartyHTTPSPages() throws {
+        let defaultsURL = repositoryRoot
+            .appendingPathComponent("Apps/Dastak/Configuration/Defaults.xcconfig")
+        let defaults = try String(contentsOf: defaultsURL, encoding: .utf8)
+
+        XCTAssertTrue(defaults.contains("MARKETPLACE_PRIVACY_POLICY_URL = https:/$()/dastak-customer.vercel.app/privacy"))
+        XCTAssertTrue(defaults.contains("MARKETPLACE_TERMS_URL = https:/$()/dastak-customer.vercel.app/terms"))
+        XCTAssertTrue(defaults.contains("MARKETPLACE_SUPPORT_URL = https:/$()/dastak-customer.vercel.app/support"))
+        XCTAssertFalse(defaults.localizedCaseInsensitiveContains("mailto:"))
+    }
+
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

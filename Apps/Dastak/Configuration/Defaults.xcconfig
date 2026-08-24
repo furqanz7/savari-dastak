@@ -4,7 +4,7 @@ CURRENT_PROJECT_VERSION = 1
 MARKETPLACE_PRODUCT = Dastak
 MARKETPLACE_SUPABASE_URL = https:/$()/not-configured.invalid
 MARKETPLACE_SUPABASE_PUBLISHABLE_KEY = not-configured
-MARKETPLACE_PRIVACY_POLICY_URL =
-MARKETPLACE_TERMS_URL =
-MARKETPLACE_SUPPORT_URL =
+MARKETPLACE_PRIVACY_POLICY_URL = https:/$()/dastak-customer.vercel.app/privacy
+MARKETPLACE_TERMS_URL = https:/$()/dastak-customer.vercel.app/terms
+MARKETPLACE_SUPPORT_URL = https:/$()/dastak-customer.vercel.app/support
 #include? "Secrets.xcconfig"

@@ -16,7 +16,7 @@ public struct MarketplaceLegalLinks: Equatable, Sendable {
     public init(values: [String: Any]) {
         privacyPolicy = Self.validURL(values[Self.privacyPolicyKey], allowedSchemes: ["https"])
         terms = Self.validURL(values[Self.termsKey], allowedSchemes: ["https"])
-        support = Self.validURL(values[Self.supportKey], allowedSchemes: ["https", "mailto"])
+        support = Self.validURL(values[Self.supportKey], allowedSchemes: ["https"])
     }
 
     private static func validURL(_ rawValue: Any?, allowedSchemes: Set<String>) -> URL? {
@@ -27,8 +27,6 @@ public struct MarketplaceLegalLinks: Equatable, Sendable {
               allowedSchemes.contains(scheme) else { return nil }
         if scheme == "https" {
             guard url.host?.isEmpty == false else { return nil }
-        } else if scheme == "mailto" {
-            guard !url.path.isEmpty else { return nil }
         }
         return url
     }

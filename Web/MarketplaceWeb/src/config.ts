@@ -112,7 +112,7 @@ export function readAppConfig(environment: PublicEnvironment): AppConfig {
 function readCustomerLaunchConfiguration(environment: PublicEnvironment) {
   const privacy = requiredPublicUrl("VITE_DASTAK_PRIVACY_URL", environment.VITE_DASTAK_PRIVACY_URL);
   const terms = requiredPublicUrl("VITE_DASTAK_TERMS_URL", environment.VITE_DASTAK_TERMS_URL);
-  const support = requiredSupportUrl(environment.VITE_DASTAK_SUPPORT_URL);
+  const support = requiredPublicUrl("VITE_DASTAK_SUPPORT_URL", environment.VITE_DASTAK_SUPPORT_URL);
   const webPushPublicKey = environment.VITE_DASTAK_WEB_PUSH_PUBLIC_KEY?.trim() ?? "";
   if (!/^[A-Za-z0-9_-]{80,100}$/.test(webPushPublicKey)) {
     throw new Error("VITE_DASTAK_WEB_PUSH_PUBLIC_KEY must be a VAPID public key.");
@@ -129,20 +129,6 @@ function requiredPublicUrl(name: string, value: string | undefined) {
     throw new Error(`${name} must be a public HTTPS URL.`);
   }
   if (url.protocol !== "https:") throw new Error(`${name} must be a public HTTPS URL.`);
-  return url.toString();
-}
-
-function requiredSupportUrl(value: string | undefined) {
-  const normalized = value?.trim() ?? "";
-  let url: URL;
-  try {
-    url = new URL(normalized);
-  } catch {
-    throw new Error("VITE_DASTAK_SUPPORT_URL must be a public HTTPS or mailto URL.");
-  }
-  if (url.protocol !== "https:" && url.protocol !== "mailto:") {
-    throw new Error("VITE_DASTAK_SUPPORT_URL must be a public HTTPS or mailto URL.");
-  }
   return url.toString();
 }
 

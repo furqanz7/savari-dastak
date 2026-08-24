@@ -8,7 +8,7 @@ const customerEnvironment = {
   VITE_SUPABASE_PUBLISHABLE_KEY: anonJwt,
   VITE_DASTAK_PRIVACY_URL: "https://dastak.example/privacy",
   VITE_DASTAK_TERMS_URL: "https://dastak.example/terms",
-  VITE_DASTAK_SUPPORT_URL: "mailto:help@dastak.example",
+  VITE_DASTAK_SUPPORT_URL: "https://dastak.example/support",
   VITE_DASTAK_WEB_PUSH_PUBLIC_KEY: "BNVx8M9WlK9nyJ8y8Q0XxPRm8sZ7CsYdlHBJtxMxoEQ8QXyzzYEbUnmdlsfKZQ1r6OUKo6IdHtVFwSXvbpC2ZIc",
 };
 
@@ -42,7 +42,7 @@ describe("readAppConfig", () => {
       legalLinks: {
         privacy: "https://dastak.example/privacy",
         terms: "https://dastak.example/terms",
-        support: "mailto:help@dastak.example",
+        support: "https://dastak.example/support",
       },
       webPushPublicKey: customerEnvironment.VITE_DASTAK_WEB_PUSH_PUBLIC_KEY,
     });
@@ -50,6 +50,8 @@ describe("readAppConfig", () => {
       .toThrow(/PRIVACY/);
     expect(() => readAppConfig({ ...customerEnvironment, VITE_DASTAK_WEB_PUSH_PUBLIC_KEY: "invalid" }))
       .toThrow(/VAPID/);
+    expect(() => readAppConfig({ ...customerEnvironment, VITE_DASTAK_SUPPORT_URL: "mailto:help@dastak.example" }))
+      .toThrow(/SUPPORT/);
   });
 });
 
