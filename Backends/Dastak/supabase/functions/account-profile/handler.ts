@@ -1,4 +1,5 @@
 import { corsPreflight, json } from "../_shared/http.ts";
+import { isValidDastakPhoneNumber } from "../_shared/phone.ts";
 
 export type AccountProfile = {
   displayName: string;
@@ -31,8 +32,6 @@ type RequestBody =
   | { operation: "identitySnapshot" }
   | { operation: "beginIdentityLink"; provider: "apple" | "google" }
   | { operation: "delete" };
-
-const e164Pattern = /^\+[1-9][0-9]{7,14}$/;
 
 export async function handleAccountProfile(
   request: Request,
@@ -98,7 +97,7 @@ export async function handleAccountProfile(
           accessToken: actor.accessToken,
           idempotencyKey,
         });
-        return json({ deleted: true });
+        return json({ deleted: true, deletionQueued: true });
       }
     }
   } catch {
@@ -116,7 +115,7 @@ function normalizeProfile(displayName: string, phoneNumber: string): AccountProf
   }
 
   const normalizedPhone = phoneNumber.trim();
-  if (!e164Pattern.test(normalizedPhone)) {
+  if (!isValidDastakPhoneNumber(normalizedPhone)) {
     return json(
       {
         error: { code: "invalid_phone_number", message: "Enter a phone number with country code." },

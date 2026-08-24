@@ -34,8 +34,13 @@ import { AccountActionDialog } from "./AccountActionDialog";
 import { AccountSessionsSheet } from "./AccountSessionsSheet";
 import {
   AccountProfileRequestError,
+  accountDeletionIdempotencyKey,
   beginCustomerIdentityLink,
+  clearAccountDeletionIdempotencyKey,
+  clearPendingIdentityLink,
   deleteAccount,
+  pendingIdentityLink,
+  rememberPendingIdentityLink,
   snapshotCustomerIdentities,
   updateAccountProfile,
   type AccountProfile,
@@ -97,6 +102,7 @@ import {
   type DeliveryPartnerAccountState,
 } from "./deliveryPartnerAccount";
 import { RefreshQueue } from "./orderRealtime";
+import type { DastakWebPushController } from "./useDastakWebPush";
 
 type Props = {
   accessToken: string;
@@ -114,6 +120,8 @@ type Props = {
   onCloseOrder: () => void;
   onOpenParcel: () => void;
   onSignOut: () => void;
+  supportUrl?: string;
+  webPush?: DastakWebPushController;
 };
 
 type SelectedLocation = { label: string; coordinates: CatalogueLocation };
@@ -174,6 +182,8 @@ export function CatalogueView({
   onCloseOrder,
   onOpenParcel,
   onSignOut,
+  supportUrl,
+  webPush,
 }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [initialDiscovery] = useState(savedCustomerDiscovery);
@@ -206,6 +216,7 @@ export function CatalogueView({
   const [customerIdentities, setCustomerIdentities] = useState<CustomerIdentity[]>([]);
   const [identityLoading, setIdentityLoading] = useState(false);
   const [identityMessage, setIdentityMessage] = useState<string>();
+  const [identityMessageIsSuccess, setIdentityMessageIsSuccess] = useState(false);
   const [showSignOutConfirmation, setShowSignOutConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -218,6 +229,7 @@ export function CatalogueView({
   const restoredDiscovery = useRef(false);
   const ordersRefreshQueue = useRef(new RefreshQueue());
   const addressSaveRequest = useRef<string | undefined>(undefined);
+  const accountDeletionKey = useRef(accountDeletionIdempotencyKey());
 
   useEffect(() => {
     saveCustomerDiscovery(selectedLocation, discoveryRadiusKm);
@@ -242,8 +254,21 @@ export function CatalogueView({
     let active = true;
     setIdentityLoading(true);
     setIdentityMessage(undefined);
+    setIdentityMessageIsSuccess(false);
     void snapshotCustomerIdentities(auth)
-      .then((providers) => { if (active) setCustomerIdentities(providers); })
+      .then((providers) => {
+        if (!active) return;
+        setCustomerIdentities(providers);
+        const pendingProvider = pendingIdentityLink();
+        if (!pendingProvider) return;
+        clearPendingIdentityLink();
+        if (providers.some((identity) => identity.provider === pendingProvider)) {
+          setIdentityMessage(`${pendingProvider === "apple" ? "Apple" : "Google"} is now linked to this Dastak account.`);
+          setIdentityMessageIsSuccess(true);
+        } else {
+          setIdentityMessage("The new sign-in method was not linked. Your existing account is unchanged.");
+        }
+      })
       .catch((error) => {
         if (!active) return;
         if (error instanceof AccountProfileRequestError && error.status === 401) return onSignOut();
@@ -256,14 +281,17 @@ export function CatalogueView({
   const linkIdentity = async (provider: CustomerOAuthProvider) => {
     setIdentityLoading(true);
     setIdentityMessage(undefined);
+    setIdentityMessageIsSuccess(false);
     try {
       await beginCustomerIdentityLink({ ...auth, provider });
+      rememberPendingIdentityLink(provider);
       const { error } = await client.auth.linkIdentity({
         provider,
-        options: { redirectTo: `${window.location.origin}/#account` },
+        options: { redirectTo: `${window.location.origin}/#/account` },
       });
       if (error) throw error;
     } catch (error) {
+      clearPendingIdentityLink();
       const message = error instanceof Error ? error.message.toLowerCase() : "";
       setIdentityMessage(
         message.includes("already") || message.includes("linked") || message.includes("identity")
@@ -595,7 +623,8 @@ export function CatalogueView({
     setProfileBusy(true);
     setProfileError(undefined);
     try {
-      await deleteAccount(auth);
+      await deleteAccount({ ...auth, idempotencyKey: accountDeletionKey.current });
+      clearAccountDeletionIdempotencyKey();
       onSignOut();
     } catch (error) {
       if (error instanceof AccountProfileRequestError && error.status === 401) {
@@ -941,7 +970,20 @@ export function CatalogueView({
           <section className="customer-account-group" aria-labelledby="account-preferences-title">
             <h2 id="account-preferences-title">Preferences</h2>
             <div className="customer-account-rows">
-              <div className="customer-account-row"><Bell size={20} /><span><strong>Order updates</strong><small>Shown in Dastak</small></span><b>On</b></div>
+              <button
+                className="customer-account-row"
+                type="button"
+                disabled={!webPush || webPush.status === "checking" || webPush.status === "enabling"}
+                onClick={() => void webPush?.enable()}
+              >
+                <Bell size={20} />
+                <span>
+                  <strong>Order alerts</strong>
+                  <small>{webPushPresentation(webPush).detail}</small>
+                  {webPush?.message && <small className="error-text" role="status">{webPush.message}</small>}
+                </span>
+                <b>{webPushPresentation(webPush).label}</b>
+              </button>
               <div className="customer-account-row"><LocateFixed size={20} /><span><strong>Browse range</strong><small>Stores shown around your browse area</small></span><b>{discoveryRadiusKm} km</b></div>
             </div>
           </section>
@@ -952,6 +994,9 @@ export function CatalogueView({
               <button className="customer-account-row" type="button" onClick={() => onNavigate("orders")}>
                 <CircleHelp size={20} /><span><strong>Help with an order</strong><small>Open an order to get relevant support</small></span><ChevronRight size={18} />
               </button>
+              {supportUrl && <a className="customer-account-row" href={supportUrl} target="_blank" rel="noreferrer">
+                <CircleHelp size={20} /><span><strong>Contact Dastak support</strong><small>Get help with account access or identity linking</small></span><ArrowUpRight size={18} />
+              </a>}
               <a className="customer-account-row emergency" href="tel:112">
                 <ShieldAlert size={20} /><span><strong>Emergency assistance</strong><small>Call India emergency services</small></span><ChevronRight size={18} />
               </a>
@@ -1006,7 +1051,7 @@ export function CatalogueView({
                         ? `Linked: ${customerIdentities.map((identity) => identity.provider === "apple" ? "Apple" : "Google").join(" + ")}`
                         : "Apple or Google identity required"}
                   </small>
-                  {identityMessage && <small className="error-text" role="alert">{identityMessage}</small>}
+                  {identityMessage && <small className={identityMessageIsSuccess ? "success-text" : "error-text"} role="status">{identityMessage}</small>}
                 </span>
                 <span className="customer-identity-actions">
                   {(["apple", "google"] as const).filter((provider) =>
@@ -1084,7 +1129,7 @@ export function CatalogueView({
       {showDeleteConfirmation && <AccountActionDialog
         action="delete-account"
         busy={profileBusy}
-        message="Completed order records may be retained without your identity where legally required. This cannot be undone."
+        message="This cannot be undone. Any active order will continue, but you will lose in-app tracking and support access. Completed order, payment and safety records may be retained without your identity where legally required."
         onConfirm={() => void confirmAccountDeletion()}
         onDismiss={() => setShowDeleteConfirmation(false)}
       />}
@@ -1102,6 +1147,20 @@ export function CatalogueView({
       />}
     </div>
   );
+}
+
+function webPushPresentation(controller: DastakWebPushController | undefined) {
+  switch (controller?.status) {
+    case "enabled": return { label: "On", detail: "Browser and in-app order updates" };
+    case "blocked": return { label: "Blocked", detail: "Allow notifications in browser settings" };
+    case "unsupported": return { label: "Unavailable", detail: "In-app order updates remain available" };
+    case "checking":
+    case "enabling": return { label: "Checking", detail: "Confirming browser notification access" };
+    case "error": return { label: "Retry", detail: "Browser alerts need attention" };
+    case "dismissed": return { label: "Off", detail: "In-app updates only; tap to enable alerts" };
+    case "prompt": return { label: "Set up", detail: "Tap to receive background order alerts" };
+    default: return { label: "In app", detail: "Order updates appear while Dastak is open" };
+  }
 }
 
 function CustomerDataNotice({ issue, onRetry, onSignOut }: {

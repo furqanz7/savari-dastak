@@ -34,4 +34,19 @@ final class DastakPhoneNumberFieldTests: XCTestCase {
 
         XCTAssertEqual(number, "+911234567890123")
     }
+
+    func testValidatorAcceptsARealIndianMobileNumber() {
+        XCTAssertEqual(
+            DastakPhoneNumberValidator.canonicalE164("+919876543210"),
+            "+919876543210"
+        )
+    }
+
+    func testValidatorRejectsAnImpossibleIndianNumber() {
+        XCTAssertFalse(DastakPhoneNumberValidator.isValidE164("+910000000000"))
+    }
+
+    func testValidatorRequiresCanonicalE164Input() {
+        XCTAssertNil(DastakPhoneNumberValidator.canonicalE164("+91 98765 43210"))
+    }
 }

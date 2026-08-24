@@ -4,16 +4,10 @@ public struct E164PhoneNumber: Equatable, Sendable {
     public let rawValue: String
 
     public init(_ rawValue: String) throws {
-        let bytes = Array(rawValue.utf8)
-        guard
-            (9...16).contains(bytes.count),
-            bytes.first == 43,
-            (49...57).contains(bytes[1]),
-            bytes.dropFirst().allSatisfy({ (48...57).contains($0) })
-        else {
+        guard let canonical = DastakPhoneNumberValidator.canonicalE164(rawValue) else {
             throw AuthenticationClientError.invalidE164PhoneNumber
         }
-        self.rawValue = rawValue
+        self.rawValue = canonical
     }
 }
 

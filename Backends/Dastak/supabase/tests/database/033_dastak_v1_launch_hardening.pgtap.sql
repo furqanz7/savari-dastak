@@ -138,8 +138,8 @@ select is(
     from dastak_v1.notification_intents intent
     where intent.recipient_account_id = '94000000-0000-4000-8000-000000000002'
   ),
-  1::bigint,
-  'event plus recipient plus notification type deduplicates to one intent'
+  2::bigint,
+  'event plus recipient plus notification type deduplicates once per supported platform'
 );
 select is(
   (
@@ -152,8 +152,10 @@ select is(
 );
 select ok(
   (
-    select intent.payload ?& array['entityType', 'orderId', 'eventType']
+    select pg_catalog.bool_and(
+      intent.payload ?& array['entityType', 'orderId', 'eventType']
       and not (intent.payload ?| array['branchId', 'merchantId', 'merchantDisplayName'])
+    )
     from dastak_v1.notification_intents intent
     where intent.recipient_account_id = '94000000-0000-4000-8000-000000000002'
   ),

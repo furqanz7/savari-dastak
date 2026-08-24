@@ -31,8 +31,16 @@ describe("auth callback handling", () => {
     const href = "https://dastak.example/#error=access_denied&error_description=The+request+was+cancelled";
     const callback = readAuthCallback(href);
 
-    expect(callback).toEqual({ kind: "error", message: "The request was cancelled" });
-    expect(callbackFailureMessage(callback!)).toBe("The request was cancelled");
+    expect(callback).toEqual({ kind: "error", errorCode: "access_denied" });
+    expect(callbackFailureMessage(callback!)).toBe("Sign-in was cancelled. No account changes were made.");
     expect(sanitizedAuthCallbackUrl(href)).toBe("https://dastak.example/");
+  });
+
+  it("never reflects technical provider descriptions into customer copy", () => {
+    const callback = readAuthCallback(
+      "https://dastak.example/?error=server_error&error_description=%3Cscript%3Einternal+provider+detail%3C%2Fscript%3E",
+    );
+
+    expect(callbackFailureMessage(callback!)).toBe("Sign-in could not be completed. Please try again.");
   });
 });

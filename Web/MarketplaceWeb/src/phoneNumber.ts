@@ -42,3 +42,8 @@ export function canonicalPhoneNumber(country: CountryCode, nationalNumber: strin
   const maximumLength = Math.max(0, 15 - callingCode.length);
   return `+${callingCode}${nationalNumber.replace(/\D/g, "").slice(0, maximumLength)}`;
 }
+
+export function isValidDastakPhoneNumber(value: string) {
+  const parsed = parsePhoneNumberFromString(value.trim());
+  return parsed?.isValid() === true;
+}

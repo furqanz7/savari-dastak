@@ -11,7 +11,14 @@ import {
 } from "react";
 import { LogOut, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
-import { completeProfile, isValidProfile, resolveAccess, type AccessResult } from "./access";
+import {
+  completeProfile,
+  isValidProfile,
+  ProfileSubmissionAttempt,
+  profileValidation,
+  resolveAccess,
+  type AccessResult,
+} from "./access";
 import { AccountActionDialog } from "./AccountActionDialog";
 import { endCurrentAccountSession, getAccountSessions, webSessionMetadata } from "./accountSessions";
 import {
@@ -36,8 +43,18 @@ const config = readAppConfig({
   VITE_APP_VARIANT: import.meta.env.VITE_APP_VARIANT,
   VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
   VITE_SUPABASE_PUBLISHABLE_KEY: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  VITE_DASTAK_PRIVACY_URL: import.meta.env.VITE_DASTAK_PRIVACY_URL,
+  VITE_DASTAK_TERMS_URL: import.meta.env.VITE_DASTAK_TERMS_URL,
+  VITE_DASTAK_SUPPORT_URL: import.meta.env.VITE_DASTAK_SUPPORT_URL,
+  VITE_DASTAK_WEB_PUSH_PUBLIC_KEY: import.meta.env.VITE_DASTAK_WEB_PUSH_PUBLIC_KEY,
 });
 document.title = `${config.brand} ${config.roleLabel}`;
+document.querySelector('meta[name="description"]')?.setAttribute(
+  "content",
+  config.product === "dastak"
+    ? `Sign in to Dastak as ${config.roleLabel}.`
+    : `Sign in to Savari as ${config.roleLabel}.`,
+);
 const initialAuthCallback = readAuthCallback(window.location.href);
 const supabase = createClient(config.supabaseUrl, config.supabasePublishableKey, {
   auth: {
@@ -65,11 +82,12 @@ type ViewState =
   | { phase: "profile"; session: Session }
   | { phase: "ready"; session: Session; access: AccessResult }
   | { phase: "restricted"; session: Session; access: AccessResult }
-  | { phase: "error"; session?: Session; message: string };
+  | { phase: "error"; session?: Session; kind: "connection" | "sign_in" | "account"; message: string };
 
 export default function App() {
   const [view, setView] = useState<ViewState>({ phase: "loading" });
   const [busy, setBusy] = useState(false);
+  const [signingInProvider, setSigningInProvider] = useState<Provider>();
   const [showsDastakLaunch, setShowsDastakLaunch] = useState(config.product === "dastak");
   const knownUserId = useRef<string | undefined>(undefined);
   const registeredSessionToken = useRef<string | undefined>(undefined);
@@ -95,7 +113,7 @@ export default function App() {
       else if (access.state === "active") setView({ phase: "ready", session, access });
       else setView({ phase: "restricted", session, access });
     } catch (error) {
-      setView({ phase: "error", session, message: errorMessage(error) });
+      setView({ phase: "error", session, kind: "connection", message: errorMessage(error) });
     }
   }, []);
 
@@ -107,7 +125,11 @@ export default function App() {
         hasHandledAuthCallback.current = true;
         window.history.replaceState(window.history.state, "", sanitizedAuthCallbackUrl(window.location.href));
         if (!session) {
-          setView({ phase: "error", message: callbackFailureMessage(initialAuthCallback) });
+          setView({
+            phase: "error",
+            kind: "sign_in",
+            message: callbackFailureMessage(initialAuthCallback),
+          });
           return;
         }
       }
@@ -139,7 +161,9 @@ export default function App() {
   }, [view]);
 
   const signIn = async (provider: Provider) => {
+    if (busy) return;
     setBusy(true);
+    setSigningInProvider(provider);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -149,7 +173,12 @@ export default function App() {
     });
     if (error) {
       setBusy(false);
-      setView({ phase: "error", message: error.message });
+      setSigningInProvider(undefined);
+      setView({
+        phase: "error",
+        kind: "sign_in",
+        message: providerSignInFailure(provider, error),
+      });
     }
   };
 
@@ -169,7 +198,11 @@ export default function App() {
     }
     const { error } = await supabase.auth.signOut({ scope: "local" });
     setBusy(false);
-    if (error) setView({ phase: "error", message: "Dastak could not sign you out. Try again." });
+    if (error) setView({
+      phase: "error",
+      kind: "account",
+      message: "Dastak could not sign you out. Try again.",
+    });
   }, []);
 
   return (
@@ -191,7 +224,7 @@ export default function App() {
         className={`content ${usesFullDastakAuth ? "dastak-auth-content" : ""} ${view.phase === "ready" && ["dastak-admin", "dastak-customer", "dastak-delivery", "dastak-merchant", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}
       >
         {view.phase === "loading" && <Loading />}
-        {view.phase === "signed_out" && <SignIn busy={busy} onSignIn={signIn} />}
+        {view.phase === "signed_out" && <SignIn busy={busy} signingInProvider={signingInProvider} onSignIn={signIn} />}
         {view.phase === "profile" && (
           <ProfileForm session={view.session} onComplete={() => evaluate(view.session)} onSignOut={signOut} />
         )}
@@ -201,9 +234,11 @@ export default function App() {
         )}
         {view.phase === "error" && (
           <ErrorState
+            kind={view.kind}
             message={view.message}
             onRetry={() => evaluate(view.session ?? null)}
             onSignOut={view.session ? signOut : undefined}
+            supportUrl={config.legalLinks?.support}
           />
         )}
       </section>
@@ -249,7 +284,14 @@ function Brand() {
   );
 }
 
-function SignIn({ busy, onSignIn }: { busy: boolean; onSignIn: (provider: Provider) => void }) {
+function SignIn({ busy, signingInProvider, onSignIn }: {
+  busy: boolean;
+  signingInProvider?: Provider;
+  onSignIn: (provider: Provider) => void;
+}) {
+  const providerName = signingInProvider === "apple"
+    ? "Apple"
+    : signingInProvider === "google" ? "Google" : undefined;
   return (
     <div className={`auth-layout ${config.product === "dastak" ? "dastak-auth-layout" : ""}`}>
       <div className="auth-copy">
@@ -266,13 +308,25 @@ function SignIn({ busy, onSignIn }: { busy: boolean; onSignIn: (provider: Provid
           </>
         )}
       </div>
-      <div className="auth-actions" aria-label="Sign in options">
+      <div className="auth-actions" aria-label="Sign in options" aria-busy={busy || undefined}>
         <button className="provider-button apple" type="button" disabled={busy} onClick={() => onSignIn("apple")}>
-          <span aria-hidden="true">&#63743;</span> Continue with Apple
+          <span aria-hidden="true">&#63743;</span> {signingInProvider === "apple" ? "Opening Apple…" : "Continue with Apple"}
         </button>
         <button className="provider-button google" type="button" disabled={busy} onClick={() => onSignIn("google")}>
-          <GoogleLogo /> Continue with Google
+          <GoogleLogo /> {signingInProvider === "google" ? "Opening Google…" : "Continue with Google"}
         </button>
+        <p className="auth-progress" role="status" aria-live="polite">
+          {providerName ? `Opening ${providerName} securely…` : ""}
+        </p>
+        {config.product === "dastak" && config.legalLinks && (
+          <p className="auth-legal">
+            By continuing, you agree to Dastak’s{" "}
+            <a href={config.legalLinks.terms} target="_blank" rel="noreferrer">Terms</a>
+            {" "}and acknowledge the{" "}
+            <a href={config.legalLinks.privacy} target="_blank" rel="noreferrer">Privacy Policy</a>.
+            {" "}<a href={config.legalLinks.support} target="_blank" rel="noreferrer">Get help</a>
+          </p>
+        )}
       </div>
     </div>
   );
@@ -381,22 +435,40 @@ function ProfileForm({ session, onComplete, onSignOut }: {
 }) {
   const suggestedName = useMemo(() => {
     const metadata = session.user.user_metadata as Record<string, unknown>;
-    return typeof metadata.full_name === "string" ? metadata.full_name : "";
+    const value = typeof metadata.full_name === "string"
+      ? metadata.full_name
+      : typeof metadata.name === "string" ? metadata.name : "";
+    const normalized = value.trim().replace(/\s+/g, " ");
+    return normalized.length <= 80 ? normalized : "";
   }, [session.user.user_metadata]);
   const [displayName, setDisplayName] = useState(suggestedName);
   const [phoneNumber, setPhoneNumber] = useState("+91");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const [touched, setTouched] = useState({ name: false, phone: false });
+  const submissionAttempt = useRef(new ProfileSubmissionAttempt());
+  const validation = profileValidation({ displayName, phoneNumber });
   const valid = isValidProfile({ displayName, phoneNumber });
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!valid) return;
+    if (!valid) {
+      setTouched({ name: true, phone: true });
+      return;
+    }
     setBusy(true);
     setError(undefined);
     try {
-      await completeProfile(supabase, session, config, { displayName, phoneNumber });
+      const profile = { displayName, phoneNumber };
+      await completeProfile(
+        supabase,
+        session,
+        config,
+        profile,
+        submissionAttempt.current.keyFor(profile),
+      );
+      submissionAttempt.current.reset();
       onComplete();
     } catch (submitError) {
       setError(errorMessage(submitError));
@@ -421,15 +493,42 @@ function ProfileForm({ session, onComplete, onSignOut }: {
       </>}
       <label>
         Full name
-        <input autoComplete="name" value={displayName} maxLength={80} onChange={(event) => setDisplayName(event.target.value)} />
+        <input
+          autoComplete="name"
+          value={displayName}
+          maxLength={80}
+          required
+          disabled={busy}
+          aria-invalid={touched.name && Boolean(validation.name) || undefined}
+          aria-describedby="name-hint"
+          onBlur={() => setTouched((current) => ({ ...current, name: true }))}
+          onChange={(event) => setDisplayName(event.target.value)}
+        />
       </label>
+      <small id="name-hint" className={touched.name && validation.name ? "field-error" : undefined}>
+        {touched.name && validation.name ? validation.name : "Use the name you want shown on your Dastak account."}
+      </small>
       <div className="phone-field-group">
         <label htmlFor="profile-phone">Phone number</label>
-        <PhoneNumberField value={phoneNumber} onChange={setPhoneNumber} id="profile-phone" />
+        <PhoneNumberField
+          value={phoneNumber}
+          onChange={setPhoneNumber}
+          id="profile-phone"
+          required
+          disabled={busy}
+          invalid={touched.phone && Boolean(validation.phone)}
+          describedBy="phone-hint phone-error"
+          onBlur={() => setTouched((current) => ({ ...current, phone: true }))}
+        />
       </div>
       <small id="phone-hint">Used only when an active delivery requires contact. It is not used to sign in.</small>
+      <small id="phone-error" className="field-error" aria-live="polite">
+        {touched.phone ? validation.phone ?? "" : ""}
+      </small>
       {error && <p className="error-text" role="alert">{error}</p>}
-      <button className="primary-button" disabled={!valid || busy} type="submit">Save and continue</button>
+      <button className="primary-button" disabled={busy} type="submit">
+        {busy ? "Saving your details…" : "Save and continue"}
+      </button>
     </form>
     {confirmingSignOut && <AccountActionDialog
       action="sign-out"
@@ -467,6 +566,8 @@ function Ready({ access, email, session, onSignOut }: {
         phoneNumber={access.profile?.phoneNumber}
         supabaseUrl={config.supabaseUrl}
         publishableKey={config.supabasePublishableKey}
+        legalLinks={config.legalLinks!}
+        webPushPublicKey={config.webPushPublicKey!}
         onSignOut={onSignOut}
       />
     );
@@ -602,19 +703,27 @@ function RestrictedShell({ children, onSignOut }: { children: ReactNode; onSignO
   </>;
 }
 
-function ErrorState({ message, onRetry, onSignOut }: {
+function ErrorState({ kind, message, onRetry, onSignOut, supportUrl }: {
+  kind: "connection" | "sign_in" | "account";
   message: string;
   onRetry: () => void;
   onSignOut?: () => void;
+  supportUrl?: string;
 }) {
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const presentation = kind === "sign_in"
+    ? { eyebrow: "Sign-in", title: "Sign-in didn’t finish", retry: "Back to sign-in" }
+    : kind === "account"
+      ? { eyebrow: "Account", title: "Account action didn’t finish", retry: "Try again" }
+      : { eyebrow: "Connection", title: "Unable to continue", retry: "Try again" };
   return (
     <>
       <div className="status-panel">
-        <p className="eyebrow">Connection error</p>
-        <h1>Unable to continue</h1>
+        <p className="eyebrow">{presentation.eyebrow}</p>
+        <h1>{presentation.title}</h1>
         <p className="error-text" role="alert">{message}</p>
-        <button className="secondary-button" type="button" onClick={onRetry}><RefreshCw size={17} /> Retry</button>
+        <button className="secondary-button" type="button" onClick={onRetry}><RefreshCw size={17} /> {presentation.retry}</button>
+        {supportUrl && <a className="status-support-link" href={supportUrl} target="_blank" rel="noreferrer">Contact Dastak support</a>}
         {onSignOut && <button className="restricted-account-switch" type="button" onClick={() => setConfirmingSignOut(true)}>
           <LogOut size={17} /> Use a different account
         </button>}
@@ -635,4 +744,16 @@ function Loading() {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
+}
+
+function providerSignInFailure(provider: Provider, error: unknown) {
+  const providerName = provider === "apple" ? "Apple" : "Google";
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("cancel") || message.includes("denied")) {
+    return `${providerName} sign-in was cancelled. No account changes were made.`;
+  }
+  if (message.includes("network") || message.includes("fetch") || message.includes("offline")) {
+    return `Dastak could not reach ${providerName}. Check your connection and try again.`;
+  }
+  return `${providerName} sign-in could not be completed. Please try again.`;
 }

@@ -153,6 +153,20 @@ Deno.test("bootstrap account rejects invalid phone numbers", async () => {
   assertEquals((await jsonBody(response)).error.code, "invalid_phone_number");
 });
 
+Deno.test("bootstrap account rejects structurally E.164 but nationally invalid numbers", async () => {
+  const response = await handleBootstrapAccount(
+    request({
+      authorization: "Bearer session-token",
+      body: { displayName: "Test User", phoneNumber: "+910000000000" },
+      headers: { "X-Idempotency-Key": "key-national-validation" },
+    }),
+    dependencies(),
+  );
+
+  assertEquals(response.status, 400);
+  assertEquals((await jsonBody(response)).error.code, "invalid_phone_number");
+});
+
 Deno.test("bootstrap account forwards normalized server-only RPC payload", async () => {
   let recorded: BootstrapAccountInput | undefined;
   const response = await handleBootstrapAccount(

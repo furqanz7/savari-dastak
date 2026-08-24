@@ -856,6 +856,28 @@ button:disabled { cursor: wait; opacity: .55; }
 .eyebrow { margin: 0; color: var(--accent); font-size: 13px; font-weight: 750; text-transform: uppercase; }
 
 .auth-actions { display: grid; gap: 12px; }
+.auth-progress {
+  min-height: 18px;
+  margin: -2px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+.auth-legal {
+  margin: 4px auto 0;
+  max-width: 390px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: center;
+}
+.auth-legal a,
+.status-support-link {
+  color: var(--text-primary);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+.status-support-link { display: inline-block; margin-top: 16px; }
 .provider-button, .primary-button, .secondary-button {
   min-height: 54px;
   border-radius: 7px;
@@ -1298,7 +1320,7 @@ button:disabled { cursor: wait; opacity: .55; }
   font-size: 13px;
   font-weight: 700;
 }
-.field-error { margin: -8px 0 0; color: var(--error); font-size: 12px; }
+.field-error { min-height: 16px; margin: -8px 0 0; color: var(--error); font-size: 12px; }
 .application-submit-panel { display: grid; gap: 12px; }
 .application-submit { width: 100%; margin: 0; }
 .application-privacy { display: flex; align-items: flex-start; justify-content: center; gap: 7px; margin: 0; color: var(--text-secondary); font-size: 12px; text-align: center; }
@@ -1342,6 +1364,7 @@ button:disabled { cursor: wait; opacity: .55; }
   background: var(--surface);
 }
 .phone-number-field:focus-within { outline: 3px solid var(--accent-soft); border-color: var(--accent); }
+.phone-number-field:has(input[aria-invalid="true"]) { border-color: var(--error); }
 .phone-number-field select,
 .phone-number-field input {
   width: 100%;
@@ -1359,6 +1382,52 @@ button:disabled { cursor: wait; opacity: .55; }
 .section-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; color: var(--accent); background: var(--accent-soft); }
 .section-icon.success { color: #176b3a; background: #e4f1e8; }
 .error-text { color: #ad2f2a !important; font-size: 14px !important; }
+
+.web-notification-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  background: rgb(0 0 0 / 62%);
+  backdrop-filter: blur(6px);
+}
+.web-notification-onboarding {
+  width: min(100%, 430px);
+  margin: 0 auto;
+  padding: 26px;
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--divider);
+  border-radius: 24px;
+  color: var(--text-primary);
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 35%);
+}
+.web-notification-onboarding h2 { margin: 4px 0 8px; font-size: 28px; }
+.web-notification-onboarding p { margin: 0; line-height: 1.5; }
+.web-notification-onboarding .primary-button,
+.web-notification-onboarding .secondary-button { width: 100%; margin: 0; }
+.web-notification-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.web-notification-privacy {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.web-notification-privacy svg { margin-top: 1px; }
 
 .account-list { margin: 26px 0 0; border-top: 1px solid var(--divider); }
 .account-list div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--divider); }
@@ -1520,6 +1589,12 @@ button:disabled { cursor: wait; opacity: .55; }
   .vehicle-options { grid-template-columns: 1fr; }
   .ride-facts { gap: 12px; }
   .ride-facts dd { font-size: 16px; }
+}
+
+@media (max-height: 680px) {
+  .content.dastak-auth-content { align-items: start; overflow-y: auto; }
+  .product-dastak .dastak-auth-layout { align-self: start; gap: 28px; }
+  .web-notification-backdrop { overflow-y: auto; align-items: start; }
 }
 
 @media (prefers-reduced-motion: reduce) {

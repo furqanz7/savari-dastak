@@ -102,6 +102,53 @@ Deno.test("provider exceptions become durable retry completions", async () => {
   assertEquals(completion?.providerResponse, "network unavailable");
 });
 
+Deno.test("account deletion credentials are durably completed before notification work", async () => {
+  const calls: string[] = [];
+  const response = await handleV1OutboxWorker(
+    request("secret"),
+    dependencies({
+      claimAccountDeletions: () => Promise.resolve([{ accountId: "account-one", attempt: 1 }]),
+      deleteAuthAccount: () => {
+        calls.push("delete-auth");
+        return Promise.resolve();
+      },
+      completeAccountDeletion: (_job, succeeded) => {
+        calls.push(succeeded ? "finalize" : "retry");
+        return Promise.resolve();
+      },
+      fanout: () => {
+        calls.push("fanout");
+        return Promise.resolve({});
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(calls, ["delete-auth", "finalize", "fanout"]);
+  assertEquals((await response.json()).accountDeletions, {
+    claimed: 1,
+    completed: 1,
+    retrying: 0,
+  });
+});
+
+Deno.test("account deletion provider failure schedules a retry without blocking notifications", async () => {
+  let completion: unknown;
+  const response = await handleV1OutboxWorker(
+    request("secret"),
+    dependencies({
+      claimAccountDeletions: () => Promise.resolve([{ accountId: "account-one", attempt: 2 }]),
+      deleteAuthAccount: () => Promise.reject(new Error("network detail must not escape")),
+      completeAccountDeletion: (_job, succeeded, error) => {
+        completion = { succeeded, error };
+        return Promise.resolve();
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(completion, { succeeded: false, error: "Auth credential deletion failed" });
+  assertEquals((await response.json()).accountDeletions.retrying, 1);
+});
+
 Deno.test("V1 worker bounds provider concurrency while completing every claim", async () => {
   let active = 0;
   let maximumActive = 0;
@@ -164,6 +211,9 @@ function dependencies(
         providerResponse: "",
       }),
     complete: () => Promise.resolve(),
+    claimAccountDeletions: () => Promise.resolve([]),
+    deleteAuthAccount: () => Promise.resolve(),
+    completeAccountDeletion: () => Promise.resolve(),
     runInvariantMonitors: () => Promise.resolve({ healthy: true, findingCount: 0 }),
     ...overrides,
   };

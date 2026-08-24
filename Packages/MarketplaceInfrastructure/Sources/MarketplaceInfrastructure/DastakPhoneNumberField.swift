@@ -1,5 +1,26 @@
 import Foundation
+import PhoneNumberKit
 import SwiftUI
+
+private final class DastakPhoneNumberUtilityBox: @unchecked Sendable {
+    let utility = PhoneNumberUtility()
+}
+
+public enum DastakPhoneNumberValidator {
+    private static let box = DastakPhoneNumberUtilityBox()
+
+    public static func canonicalE164(_ value: String) -> String? {
+        let normalized = value
+        guard normalized.first == "+",
+              let parsed = try? box.utility.parse(normalized) else { return nil }
+        let canonical = box.utility.format(parsed, toType: .e164)
+        return canonical == normalized ? canonical : nil
+    }
+
+    public static func isValidE164(_ value: String) -> Bool {
+        canonicalE164(value) != nil
+    }
+}
 
 struct DastakCallingCode: Identifiable, Hashable, Sendable {
     let regionCode: String

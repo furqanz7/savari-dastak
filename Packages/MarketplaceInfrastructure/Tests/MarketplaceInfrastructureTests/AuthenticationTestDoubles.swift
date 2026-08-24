@@ -4,10 +4,12 @@ import MarketplaceFoundation
 
 actor FakeAuthenticationClient: AuthenticationClient {
     let restoredRoute: AccountRoute
+    let suggestedName: String?
     private var googleRedirectURL: URL?
 
-    init(restoredRoute: AccountRoute) {
+    init(restoredRoute: AccountRoute, suggestedName: String? = nil) {
         self.restoredRoute = restoredRoute
+        self.suggestedName = suggestedName
     }
 
     func signInWithApple(identityToken: String, nonce: String) async throws {}
@@ -16,6 +18,7 @@ actor FakeAuthenticationClient: AuthenticationClient {
         googleRedirectURL = redirectTo
     }
     func restoreAccount() async throws -> AccountRoute { restoredRoute }
+    func suggestedDisplayName() async -> String? { suggestedName }
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,

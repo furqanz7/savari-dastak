@@ -60,6 +60,15 @@ Deno.test("account profile rejects an invalid phone number", async () => {
   assertEquals((await response.json()).error.code, "invalid_phone_number");
 });
 
+Deno.test("account profile rejects a nationally invalid E.164 phone number", async () => {
+  const response = await handleAccountProfile(
+    request({ operation: "update", displayName: "Test User", phoneNumber: "+910000000000" }),
+    dependencies(),
+  );
+  assertEquals(response.status, 400);
+  assertEquals((await response.json()).error.code, "invalid_phone_number");
+});
+
 Deno.test("account profile deletes only the authenticated account", async () => {
   let deletion: { accountId: string; accessToken: string; idempotencyKey: string } | undefined;
   const response = await handleAccountProfile(
@@ -77,7 +86,7 @@ Deno.test("account profile deletes only the authenticated account", async () => 
     accessToken: "session-token",
     idempotencyKey: "profile-request-key",
   });
-  assertEquals(await response.json(), { deleted: true });
+  assertEquals(await response.json(), { deleted: true, deletionQueued: true });
 });
 
 Deno.test("account profile exposes and begins only explicit Apple or Google links", async () => {

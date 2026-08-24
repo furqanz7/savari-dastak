@@ -1,5 +1,5 @@
 export type CustomerSection = "home" | "search" | "orders" | "account" | "parcel";
-export type CustomerEntityType = "merchantOrder" | "parcel";
+export type CustomerEntityType = "dastakV1Order" | "merchantOrder" | "parcel";
 export type CustomerDestination = {
   section: CustomerSection;
   entityType?: CustomerEntityType;
@@ -8,7 +8,9 @@ export type CustomerDestination = {
 
 export function serializeCustomerDestination(destination: CustomerDestination) {
   if (destination.entityType && destination.entityId) {
-    const route = destination.entityType === "merchantOrder" ? "orders" : "parcel";
+    const route = destination.entityType === "dastakV1Order"
+      ? "v1-orders"
+      : destination.entityType === "merchantOrder" ? "orders" : "parcel";
     return `#/${route}/${destination.entityId}`;
   }
   return `#/${destination.section}`;
@@ -21,6 +23,9 @@ export function parseCustomerDestination(value: string | null | undefined): Cust
     if (section === "orders" && entityId && uuidPattern.test(entityId)) {
       return { section: "orders", entityType: "merchantOrder", entityId: entityId.toLowerCase() };
     }
+    if (section === "v1-orders" && entityId && uuidPattern.test(entityId)) {
+      return { section: "orders", entityType: "dastakV1Order", entityId: entityId.toLowerCase() };
+    }
     if (section === "parcel" && entityId && uuidPattern.test(entityId)) {
       return { section: "parcel", entityType: "parcel", entityId: entityId.toLowerCase() };
     }
@@ -29,7 +34,7 @@ export function parseCustomerDestination(value: string | null | undefined): Cust
   try {
     const source = JSON.parse(value) as Record<string, unknown>;
     if (!customerSections.has(String(source.section))) return { section: "home" };
-    if (source.entityType === "merchantOrder" || source.entityType === "parcel") {
+    if (source.entityType === "dastakV1Order" || source.entityType === "merchantOrder" || source.entityType === "parcel") {
       if (typeof source.entityId === "string" && uuidPattern.test(source.entityId)) {
         return {
           section: source.section as CustomerSection,

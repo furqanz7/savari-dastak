@@ -1,6 +1,6 @@
 export type AuthCallback = {
   kind: "implicit" | "pkce" | "error";
-  message?: string;
+  errorCode?: string;
 };
 
 const authKeys = new Set([
@@ -26,7 +26,7 @@ export function readAuthCallback(href: string): AuthCallback | null {
   if (params.has("error") || params.has("error_description") || params.has("error_code")) {
     return {
       kind: "error",
-      message: cleanCallbackMessage(params.get("error_description")),
+      errorCode: cleanCallbackCode(params.get("error_code") ?? params.get("error")),
     };
   }
   if (hash.has("access_token")) return { kind: "implicit" };
@@ -44,11 +44,22 @@ export function sanitizedAuthCallbackUrl(href: string): string {
 }
 
 export function callbackFailureMessage(callback: AuthCallback): string {
-  return callback.message ?? "Sign-in could not be completed. Please try again.";
+  switch (callback.errorCode) {
+    case "access_denied":
+    case "user_cancelled":
+    case "user_canceled":
+      return "Sign-in was cancelled. No account changes were made.";
+    case "bad_oauth_state":
+    case "oauth_state_expired":
+      return "The secure sign-in session expired. Please start again.";
+    case "provider_disabled":
+      return "That sign-in method is temporarily unavailable. Please use Apple or Google.";
+    default:
+      return "Sign-in could not be completed. Please try again.";
+  }
 }
 
-function cleanCallbackMessage(value: string | null): string | undefined {
-  const message = value?.replace(/\+/g, " ").trim();
-  if (!message || message.length > 180) return undefined;
-  return message;
+function cleanCallbackCode(value: string | null): string | undefined {
+  const code = value?.trim().toLowerCase();
+  return code && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
 }

@@ -29,6 +29,7 @@ type Props = DastakV1Auth & {
   displayName?: string;
   phoneNumber?: string;
   orderRefreshToken: number;
+  initialOrderId?: string;
   section: Extract<CustomerSection, "home" | "search" | "orders">;
   onNavigate: (section: CustomerSection) => void;
   onOpenParcel: () => void;
@@ -102,6 +103,16 @@ export function DastakV1CustomerExperience(props: Props) {
   }, [auth]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!props.initialOrderId) return;
+    const controller = new AbortController();
+    void getV1Order({ ...auth, orderId: props.initialOrderId, signal: controller.signal })
+      .then(setSelectedOrder)
+      .catch((requestError) => {
+        if (!controller.signal.aborted) setError(message(requestError));
+      });
+    return () => controller.abort();
+  }, [auth, props.initialOrderId]);
   useEffect(() => {
     if (props.orderRefreshToken === 0) return;
     void getV1Orders({ ...auth, limit: 50 }).then((result) => setOrders(result.orders)).catch(() => undefined);

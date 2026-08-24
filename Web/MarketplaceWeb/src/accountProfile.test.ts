@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  accountDeletionIdempotencyKey,
+  clearAccountDeletionIdempotencyKey,
+  clearPendingIdentityLink,
   deleteAccount,
   beginCustomerIdentityLink,
   isValidAccountProfile,
+  pendingIdentityLink,
+  rememberPendingIdentityLink,
   snapshotAccountProfile,
   snapshotCustomerIdentities,
   updateAccountProfile,
@@ -48,12 +53,32 @@ describe("account profile", () => {
   });
 
   it("deletes only after server confirmation", async () => {
-    await expect(deleteAccount(auth, () => Promise.resolve(
-      new Response(JSON.stringify({ deleted: true }), { status: 200 }),
-    ))).resolves.toBeUndefined();
+    await expect(deleteAccount({ ...auth, idempotencyKey: "stable-delete-key" }, (_input, init) => {
+      expect(new Headers(init?.headers).get("X-Idempotency-Key")).toBe("stable-delete-key");
+      return Promise.resolve(new Response(JSON.stringify({ deleted: true }), { status: 200 }));
+    })).resolves.toBeUndefined();
     await expect(deleteAccount(auth, () => Promise.resolve(
       new Response(JSON.stringify({ deleted: false }), { status: 200 }),
     ))).rejects.toThrow("confirm account deletion");
+  });
+
+  it("persists destructive retry identity and pending identity-link state", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+
+    const deletionKey = accountDeletionIdempotencyKey(storage);
+    expect(accountDeletionIdempotencyKey(storage)).toBe(deletionKey);
+    clearAccountDeletionIdempotencyKey(storage);
+    expect(accountDeletionIdempotencyKey(storage)).not.toBe(deletionKey);
+
+    rememberPendingIdentityLink("google", storage);
+    expect(pendingIdentityLink(storage)).toBe("google");
+    clearPendingIdentityLink(storage);
+    expect(pendingIdentityLink(storage)).toBeUndefined();
   });
 
   it("loads linked providers and starts an explicit link intent", async () => {
@@ -80,6 +105,7 @@ describe("account profile", () => {
   it("requires the shared name and E.164 phone contract", () => {
     expect(isValidAccountProfile({ displayName: "F", phoneNumber: "+919876543210" })).toBe(true);
     expect(isValidAccountProfile({ displayName: "F", phoneNumber: "9876543210" })).toBe(false);
+    expect(isValidAccountProfile({ displayName: "F", phoneNumber: "+910000000000" })).toBe(false);
     expect(isValidAccountProfile({ displayName: "F".repeat(81), phoneNumber: "+919876543210" })).toBe(false);
   });
 

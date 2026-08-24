@@ -62,10 +62,16 @@
 	</array>
 	<key>MarketplaceProduct</key>
 	<string>$(MARKETPLACE_PRODUCT)</string>
+	<key>MarketplacePrivacyPolicyURL</key>
+	<string>$(MARKETPLACE_PRIVACY_POLICY_URL)</string>
+	<key>MarketplaceSupportURL</key>
+	<string>$(MARKETPLACE_SUPPORT_URL)</string>
 	<key>MarketplaceSupabasePublishableKey</key>
 	<string>$(MARKETPLACE_SUPABASE_PUBLISHABLE_KEY)</string>
 	<key>MarketplaceSupabaseURL</key>
 	<string>$(MARKETPLACE_SUPABASE_URL)</string>
+	<key>MarketplaceTermsURL</key>
+	<string>$(MARKETPLACE_TERMS_URL)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Dastak uses your location to confirm service availability and help you choose a delivery address.</string>
 	<key>UILaunchScreen</key>

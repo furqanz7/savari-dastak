@@ -1,4 +1,5 @@
 import { corsPreflight, json } from "../_shared/http.ts";
+import { isValidDastakPhoneNumber } from "../_shared/phone.ts";
 
 export type AuthenticateBearer = (
   bearerToken: string,
@@ -31,8 +32,6 @@ type NormalizedBootstrapBody = {
   displayName: string;
   phoneNumber: string;
 };
-
-const e164Pattern = /^\+[1-9][0-9]{7,14}$/;
 
 export async function handleBootstrapAccount(
   request: Request,
@@ -170,7 +169,7 @@ function normalizeBody(value: unknown):
   }
 
   const normalizedPhone = phoneNumber.trim();
-  if (!e164Pattern.test(normalizedPhone)) {
+  if (!isValidDastakPhoneNumber(normalizedPhone)) {
     return { ok: false, response: invalidPhoneNumber() };
   }
 

@@ -96,6 +96,7 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var linkedIdentities: [MarketplaceLinkedIdentity] = []
     @Published private(set) var isLinkingIdentity = false
     @Published var identityMessage: String?
+    @Published private(set) var identityMessageIsSuccess = false
 
     let parcelClient: any ParcelDeliveryClient
 
@@ -111,6 +112,7 @@ final class DastakCustomerModel: ObservableObject {
     private let issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)?
     private let oauthIdentityLinker: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)?
     private var preferenceScope = "default"
+    private var accountDeletionAttempt = DastakAccountDeletionAttempt()
     private var orderPlacementAttempt = DastakOrderPlacementAttempt()
     private var v1SubmissionAttempt: (fingerprint: String, key: IdempotencyKey)?
     private var v1IssueAttempt: (
@@ -198,6 +200,16 @@ final class DastakCustomerModel: ObservableObject {
         return failures.first(where: { $0 == .sessionExpired }) ?? failures.first
     }
 
+    var hasActiveOrders: Bool {
+        let inactiveV1Statuses: [DastakV1OrderStatus] = [
+            .delivered, .unavailable, .paymentExpired, .cancelledPrepayment,
+            .fulfilmentFailure,
+        ]
+        return v1Orders.contains { !inactiveV1Statuses.contains($0.status) }
+            || orders.contains { ![.delivered, .cancelled].contains($0.status) }
+            || parcels.contains { ![.delivered, .cancelled].contains($0.parcel.status) }
+    }
+
     func bootstrap() async {
         await restorePreferencesAndAddress()
         async let orders: Void = refreshOrders()
@@ -253,17 +265,24 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func deleteAccount() async throws {
-        try await accountProfileClient.deleteAccount(idempotencyKey: makeKey())
+        let key = accountDeletionAttempt.key(scope: preferenceScope)
+        try await accountProfileClient.deleteAccount(idempotencyKey: key)
+        accountDeletionAttempt.complete(scope: preferenceScope)
     }
 
-    func refreshCustomerIdentities() async {
+    @discardableResult
+    func refreshCustomerIdentities() async -> Bool {
         do {
             linkedIdentities = try await accountProfileClient.identitySnapshot(
                 idempotencyKey: makeKey()
             )
             identityMessage = nil
+            identityMessageIsSuccess = false
+            return true
         } catch {
             identityMessage = "Sign-in methods could not be loaded. Try again."
+            identityMessageIsSuccess = false
+            return false
         }
     }
 
@@ -271,6 +290,7 @@ final class DastakCustomerModel: ObservableObject {
         guard let oauthIdentityLinker, !isLinkingIdentity else { return }
         isLinkingIdentity = true
         identityMessage = nil
+        identityMessageIsSuccess = false
         defer { isLinkingIdentity = false }
         do {
             try await accountProfileClient.beginIdentityLink(
@@ -278,9 +298,17 @@ final class DastakCustomerModel: ObservableObject {
                 idempotencyKey: makeKey()
             )
             try await oauthIdentityLinker(provider)
-            await refreshCustomerIdentities()
+            linkedIdentities = try await accountProfileClient.identitySnapshot(
+                idempotencyKey: makeKey()
+            )
+            guard linkedIdentities.contains(where: { $0.provider == provider }) else {
+                throw DastakIdentityLinkError.notConfirmed
+            }
+            identityMessage = "\(provider == .apple ? "Apple" : "Google") is now linked to this Dastak account."
+            identityMessageIsSuccess = true
         } catch {
             identityMessage = "That sign-in may belong to another Dastak account. Sign in to that account or contact support; Dastak never merges accounts by email or phone."
+            identityMessageIsSuccess = false
         }
     }
 
@@ -1256,6 +1284,37 @@ final class DastakCustomerModel: ObservableObject {
             sessionExpired = true
         }
         return failure
+    }
+}
+
+private enum DastakIdentityLinkError: Error {
+    case notConfirmed
+}
+
+struct DastakAccountDeletionAttempt {
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    mutating func key(scope: String) -> IdempotencyKey {
+        let storageKey = keyName(scope: scope)
+        if let rawValue = defaults.string(forKey: storageKey),
+           let key = IdempotencyKey(rawValue: rawValue) {
+            return key
+        }
+        let key = IdempotencyKey(rawValue: UUID().uuidString)!
+        defaults.set(key.rawValue, forKey: storageKey)
+        return key
+    }
+
+    mutating func complete(scope: String) {
+        defaults.removeObject(forKey: keyName(scope: scope))
+    }
+
+    private func keyName(scope: String) -> String {
+        "dastak.customer.\(scope).accountDeletionIdempotencyKey"
     }
 }
 

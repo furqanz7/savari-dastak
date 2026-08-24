@@ -10,6 +10,8 @@ export type CustomerIdentity = {
   linkedAt: string;
 };
 
+const identityLinkStorageName = "dastak.identityLink.pendingProvider.v1";
+
 type AuthenticatedInput = {
   accessToken: string;
   supabaseUrl: string;
@@ -48,10 +50,15 @@ export async function updateAccountProfile(
 }
 
 export async function deleteAccount(
-  input: AuthenticatedInput,
+  input: AuthenticatedInput & { idempotencyKey?: string },
   fetcher: typeof fetch = fetch,
 ) {
-  const body = await callAccountProfile(input, { operation: "delete" }, fetcher);
+  const body = await callAccountProfile(
+    input,
+    { operation: "delete" },
+    fetcher,
+    input.idempotencyKey,
+  );
   if ((body as { deleted?: unknown }).deleted !== true) {
     throw new Error("Dastak could not confirm account deletion.");
   }
@@ -84,13 +91,14 @@ export async function beginCustomerIdentityLink(
 
 export function isValidAccountProfile(profile: AccountProfile) {
   const name = profile.displayName.trim().replace(/\s+/g, " ");
-  return name.length >= 1 && name.length <= 80 && /^\+[1-9]\d{7,14}$/.test(profile.phoneNumber.trim());
+  return name.length >= 1 && name.length <= 80 && isValidDastakPhoneNumber(profile.phoneNumber);
 }
 
 async function callAccountProfile(
   input: AuthenticatedInput,
   operation: unknown,
   fetcher: typeof fetch,
+  idempotencyKey: string = crypto.randomUUID(),
 ) {
   let response: Response;
   try {
@@ -100,7 +108,7 @@ async function callAccountProfile(
         apikey: input.publishableKey,
         authorization: `Bearer ${input.accessToken}`,
         "content-type": "application/json",
-        "X-Idempotency-Key": crypto.randomUUID(),
+        "X-Idempotency-Key": idempotencyKey,
       },
       body: JSON.stringify(operation),
     });
@@ -113,6 +121,62 @@ async function callAccountProfile(
     throw new AccountProfileRequestError(message, response.status, code);
   }
   return body;
+}
+
+const deletionKeyStorageName = "dastak.accountDeletion.idempotencyKey.v1";
+
+export function accountDeletionIdempotencyKey(storage: Pick<Storage, "getItem" | "setItem"> = localStorage) {
+  const created = crypto.randomUUID();
+  try {
+    const existing = storage.getItem(deletionKeyStorageName)?.trim();
+    if (existing) return existing;
+    storage.setItem(deletionKeyStorageName, created);
+  } catch {
+    // A stable in-memory caller key still protects private-browsing sessions.
+  }
+  return created;
+}
+
+export function clearAccountDeletionIdempotencyKey(
+  storage: Pick<Storage, "removeItem"> = localStorage,
+) {
+  try {
+    storage.removeItem(deletionKeyStorageName);
+  } catch {
+    // Storage can be unavailable in private browsing.
+  }
+}
+
+export function rememberPendingIdentityLink(
+  provider: CustomerOAuthProvider,
+  storage: Pick<Storage, "setItem"> = sessionStorage,
+) {
+  try {
+    storage.setItem(identityLinkStorageName, provider);
+  } catch {
+    // The provider snapshot still confirms the result when storage is unavailable.
+  }
+}
+
+export function pendingIdentityLink(
+  storage: Pick<Storage, "getItem"> = sessionStorage,
+): CustomerOAuthProvider | undefined {
+  try {
+    const value = storage.getItem(identityLinkStorageName);
+    return value === "apple" || value === "google" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function clearPendingIdentityLink(
+  storage: Pick<Storage, "removeItem"> = sessionStorage,
+) {
+  try {
+    storage.removeItem(identityLinkStorageName);
+  } catch {
+    // Storage can be unavailable in private browsing.
+  }
 }
 
 function isAccountProfile(value: unknown): value is AccountProfile {
@@ -137,3 +201,4 @@ function readError(body: unknown, fallback: string) {
     message: typeof error?.message === "string" ? error.message : fallback,
   };
 }
+import { isValidDastakPhoneNumber } from "./phoneNumber";

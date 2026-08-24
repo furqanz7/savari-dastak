@@ -114,17 +114,19 @@ public final class AuthenticationCoordinator: ObservableObject {
 
     public func signInWithGoogle(
         configuration: OAuthCallbackConfiguration = OAuthCallbackConfiguration(bundle: .main)
-    ) async throws {
+    ) async throws -> String? {
         route = .signedOut
         restorationFailed = false
         let callbackURL = try configuration.callbackURL()
         try await client.signInWithGoogle(redirectTo: callbackURL)
+        let suggestedDisplayName = await client.suggestedDisplayName()
         do {
             route = try await client.restoreAccount()
         } catch {
             restorationFailed = true
             throw error
         }
+        return suggestedDisplayName
     }
 
     public func completeProfile(

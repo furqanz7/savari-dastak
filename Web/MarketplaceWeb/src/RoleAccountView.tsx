@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -26,6 +26,8 @@ import { AccountActionDialog } from "./AccountActionDialog";
 import { AccountSessionsSheet } from "./AccountSessionsSheet";
 import {
   AccountProfileRequestError,
+  accountDeletionIdempotencyKey,
+  clearAccountDeletionIdempotencyKey,
   deleteAccount,
   snapshotAccountProfile,
   updateAccountProfile,
@@ -78,6 +80,7 @@ export function RoleAccountView({
   const [detail, setDetail] = useState<AccountDetail>();
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const accountDeletionKey = useRef(accountDeletionIdempotencyKey());
   const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -114,7 +117,8 @@ export function RoleAccountView({
   const remove = async () => {
     setBusy(true); setError(undefined);
     try {
-      await deleteAccount(auth);
+      await deleteAccount({ ...auth, idempotencyKey: accountDeletionKey.current });
+      clearAccountDeletionIdempotencyKey();
       onSignOut();
     } catch (deleteError) {
       setError(message(deleteError, "Your account could not be deleted."));

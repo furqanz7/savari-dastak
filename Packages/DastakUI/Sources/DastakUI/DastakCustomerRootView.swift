@@ -122,6 +122,8 @@ public struct DastakCustomerRootView: View {
                     linkedIdentities: model.linkedIdentities,
                     isLinkingIdentity: model.isLinkingIdentity,
                     identityMessage: model.identityMessage,
+                    identityMessageIsSuccess: model.identityMessageIsSuccess,
+                    hasActiveOrders: model.hasActiveOrders,
                     discoveryRadiusKilometres: model.discoveryRadiusKilometres,
                     refreshFailure: model.accountRefreshFailure,
                     deliveryPartnerAccess: deliveryPartnerAccess,
@@ -161,8 +163,16 @@ public struct DastakCustomerRootView: View {
         .task {
             guard !isPreview else { return }
             await model.bootstrap()
+            let notificationState = await DastakNotificationPreferences.status()
+            if notificationState != .notRequested {
+                model.completeOnboarding()
+                if notificationState == .enabled {
+                    await model.registerDeviceTokenIfAvailable()
+                }
+            }
             onboardingStep = DastakCustomerOnboardingStep.next(
-                hasCompleted: model.hasCompletedOnboarding
+                hasCompleted: model.hasCompletedOnboarding,
+                notificationState: notificationState
             )
             if let destination = consumePendingDestination() {
                 open(destination)

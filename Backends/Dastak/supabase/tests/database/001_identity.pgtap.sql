@@ -155,7 +155,7 @@ select is(
 
 select is(
   (
-    select response_body #>> '{error,code}'
+    select response_body ->> 'accountId'
     from public.bootstrap_account(
       '22222222-2222-4222-8222-222222222222',
       'Test Customer',
@@ -164,8 +164,8 @@ select is(
       'digest-1'
     )
   ),
-  'account_already_exists',
-  'fresh key after account creation is rejected'
+  '22222222-2222-4222-8222-222222222222',
+  'fresh key safely reconciles the exact same already-committed profile'
 );
 
 reset role;

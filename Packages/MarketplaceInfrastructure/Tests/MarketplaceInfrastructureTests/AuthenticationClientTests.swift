@@ -444,14 +444,18 @@ final class AuthenticationClientTests: XCTestCase {
 
     @MainActor
     func testSharedCoordinatorUsesSupabaseGoogleWebFlowAndRestoresServerRoute() async throws {
-        let client = FakeAuthenticationClient(restoredRoute: .needsProfile)
+        let client = FakeAuthenticationClient(
+            restoredRoute: .needsProfile,
+            suggestedName: "Google Customer"
+        )
         let coordinator = AuthenticationCoordinator(client: client)
 
-        try await coordinator.signInWithGoogle(
+        let suggestedName = try await coordinator.signInWithGoogle(
             configuration: OAuthCallbackConfiguration(scheme: "com.dastak.app")
         )
 
         XCTAssertEqual(coordinator.route, .needsProfile)
+        XCTAssertEqual(suggestedName, "Google Customer")
         let redirectURL = await client.recordedGoogleRedirectURL()
         XCTAssertEqual(
             redirectURL,

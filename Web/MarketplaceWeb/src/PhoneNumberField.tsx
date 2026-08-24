@@ -12,10 +12,24 @@ const countryNames = new Intl.DisplayNames(
   { type: "region" },
 );
 
-export function PhoneNumberField({ value, onChange, id }: {
+export function PhoneNumberField({
+  value,
+  onChange,
+  id,
+  describedBy,
+  invalid = false,
+  required = false,
+  disabled = false,
+  onBlur,
+}: {
   value: string;
   onChange: (value: string) => void;
   id?: string;
+  describedBy?: string;
+  invalid?: boolean;
+  required?: boolean;
+  disabled?: boolean;
+  onBlur?: () => void;
 }) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
@@ -40,6 +54,7 @@ export function PhoneNumberField({ value, onChange, id }: {
     <select
       aria-label="Country or region"
       value={country}
+      disabled={disabled}
       onChange={(event) => updateCountry(event.target.value as CountryCode)}
     >
       {countries.map((code) => <option key={code} value={code}>
@@ -54,7 +69,12 @@ export function PhoneNumberField({ value, onChange, id }: {
       autoComplete="tel-national"
       placeholder="Phone number"
       value={nationalNumber}
+      required={required}
+      disabled={disabled}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
       onChange={(event) => updateNumber(event.target.value)}
+      onBlur={onBlur}
     />
   </div>;
 }

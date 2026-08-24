@@ -12,6 +12,9 @@ export async function handleRegisterDeviceToken(
 ) {
   const preflight = corsPreflight(request);
   if (preflight) return preflight;
+  if (request.method !== "POST") {
+    return json({ error: { code: "method_not_allowed" } }, 405);
+  }
   const authorization = request.headers.get("authorization") ?? "";
   if (!/^Bearer\s+\S+$/.test(authorization)) {
     return json({ error: { code: "authentication_required" } }, 401);
@@ -27,7 +30,11 @@ export async function handleRegisterDeviceToken(
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const token = typeof body?.token === "string" ? body.token.trim() : "";
   const platform = body?.platform === "ios" || body?.platform === "web" ? body.platform : null;
-  if (!token || token.length > 512 || !platform) {
+  if (
+    !token || !platform ||
+    (platform === "ios" && token.length > 512) ||
+    (platform === "web" && (token.length > 4096 || !validWebSubscription(token)))
+  ) {
     return json({ error: { code: "invalid_device_token" } }, 400);
   }
 
@@ -36,5 +43,20 @@ export async function handleRegisterDeviceToken(
     return json({ registered: true }, 200);
   } catch {
     return json({ error: { code: "device_token_registration_failed" } }, 500);
+  }
+}
+
+function validWebSubscription(value: string) {
+  try {
+    const subscription = JSON.parse(value) as Record<string, unknown>;
+    const keys = subscription.keys && typeof subscription.keys === "object"
+      ? subscription.keys as Record<string, unknown>
+      : undefined;
+    return typeof subscription.endpoint === "string" &&
+      /^https:\/\/\S+$/.test(subscription.endpoint) &&
+      typeof keys?.auth === "string" && keys.auth.length > 0 && keys.auth.length <= 512 &&
+      typeof keys.p256dh === "string" && keys.p256dh.length > 0 && keys.p256dh.length <= 512;
+  } catch {
+    return false;
   }
 }

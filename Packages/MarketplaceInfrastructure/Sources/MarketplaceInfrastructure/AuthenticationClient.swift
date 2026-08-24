@@ -25,6 +25,7 @@ public protocol AuthenticationClient: Sendable {
     func signInWithApple(identityToken: String, nonce: String) async throws
     func signInWithGoogle(idToken: String) async throws
     func signInWithGoogle(redirectTo: URL) async throws
+    func suggestedDisplayName() async -> String?
     func restoreAccount() async throws -> AccountRoute
     func bootstrapAccount(
         displayName: String,
@@ -32,6 +33,10 @@ public protocol AuthenticationClient: Sendable {
         key: IdempotencyKey
     ) async throws
     func signOut() async throws
+}
+
+public extension AuthenticationClient {
+    func suggestedDisplayName() async -> String? { nil }
 }
 
 public enum AuthenticationClientError: Error, Equatable, Sendable {
@@ -153,6 +158,7 @@ protocol SupabaseAuthenticationOperations: Sendable {
     func signInWithApple(identityToken: String, nonce: String) async throws
     func signInWithGoogle(idToken: String) async throws
     func signInWithGoogle(redirectTo: URL) async throws
+    func suggestedDisplayName() async -> String?
     func currentAccountID() async -> UUID?
     func accountProfileID(for accountID: UUID) async throws -> UUID?
     func resolveAppAccess(for requiredAccess: MarketplaceApplicationAccess) async throws -> AccountRoute
@@ -162,6 +168,10 @@ protocol SupabaseAuthenticationOperations: Sendable {
         key: IdempotencyKey
     ) async throws -> AccountBootstrapResult
     func signOut() async throws
+}
+
+extension SupabaseAuthenticationOperations {
+    func suggestedDisplayName() async -> String? { nil }
 }
 
 public struct SupabaseAuthenticationClient: AuthenticationClient {
@@ -202,6 +212,10 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
         } catch {
             throw OAuthSignInErrorMapper.map(error)
         }
+    }
+
+    public func suggestedDisplayName() async -> String? {
+        await operations.suggestedDisplayName()
     }
 
     public func restoreAccount() async throws -> AccountRoute {
@@ -347,6 +361,19 @@ extension SupabaseAuthenticationClient {
                 provider: .google,
                 redirectTo: redirectTo
             )
+        }
+
+        func suggestedDisplayName() async -> String? {
+            guard let user = try? await supabaseClient.auth.session.user else { return nil }
+            for key in ["full_name", "name"] {
+                guard let rawName = user.userMetadata[key]?.stringValue else { continue }
+                let normalized = rawName
+                    .split(whereSeparator: \.isWhitespace)
+                    .joined(separator: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if (1...80).contains(normalized.count) { return normalized }
+            }
+            return nil
         }
 
         func linkIdentity(

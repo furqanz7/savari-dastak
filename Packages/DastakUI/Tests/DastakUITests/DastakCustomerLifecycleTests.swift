@@ -7,12 +7,21 @@ import XCTest
 final class DastakCustomerLifecycleTests: XCTestCase {
     func testCustomerOnboardingNeverRequiresDeliveryAddress() {
         XCTAssertEqual(
-            DastakCustomerOnboardingStep.next(hasCompleted: false),
+            DastakCustomerOnboardingStep.next(
+                hasCompleted: false,
+                notificationState: .notRequested
+            ),
             .notifications
         )
         XCTAssertNil(
-            DastakCustomerOnboardingStep.next(hasCompleted: true)
+            DastakCustomerOnboardingStep.next(
+                hasCompleted: true,
+                notificationState: .notRequested
+            )
         )
+        XCTAssertNil(DastakCustomerOnboardingStep.next(hasCompleted: false, notificationState: .enabled))
+        XCTAssertNil(DastakCustomerOnboardingStep.next(hasCompleted: false, notificationState: .disabled))
+        XCTAssertNil(DastakCustomerOnboardingStep.next(hasCompleted: false, notificationState: .unavailable))
     }
 
     func testDiscoveryLocationNeverRetainsDoorstepDetails() {
@@ -29,6 +38,20 @@ final class DastakCustomerLifecycleTests: XCTestCase {
         XCTAssertEqual(discovery.point, savedAddress.point)
         XCTAssertNil(discovery.label)
         XCTAssertNil(discovery.details)
+    }
+
+    func testAccountDeletionRetryUsesOneDurableKeyUntilConfirmed() throws {
+        let suiteName = "DastakCustomerLifecycleTests.accountDeletion.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var firstLaunch = DastakAccountDeletionAttempt(defaults: defaults)
+        let firstKey = firstLaunch.key(scope: "customer-1")
+        var nextLaunch = DastakAccountDeletionAttempt(defaults: defaults)
+        XCTAssertEqual(nextLaunch.key(scope: "customer-1"), firstKey)
+
+        nextLaunch.complete(scope: "customer-1")
+        XCTAssertNotEqual(nextLaunch.key(scope: "customer-1"), firstKey)
     }
 
     func testEveryMerchantOrderStateHasOneHumanLabelAndPrimaryAction() {

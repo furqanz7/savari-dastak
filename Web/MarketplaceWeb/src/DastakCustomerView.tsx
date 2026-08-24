@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Home, ReceiptText, Search, UserRound } from "lucide-react";
 import { CatalogueView } from "./CatalogueView";
@@ -11,6 +11,8 @@ import {
   type CustomerSection,
 } from "./customerNavigation";
 import { useOrderRealtime } from "./orderRealtime";
+import { useDastakWebPush } from "./useDastakWebPush";
+import { WebNotificationOnboarding } from "./WebNotificationOnboarding";
 
 type Props = {
   accessToken: string;
@@ -21,6 +23,8 @@ type Props = {
   phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  legalLinks: { privacy: string; terms: string; support: string };
+  webPushPublicKey: string;
   onSignOut: () => void;
 };
 
@@ -31,6 +35,14 @@ export function DastakCustomerView(props: Props) {
   );
   const section = destination.section;
   const v1Section = section === "search" || section === "orders" ? section : "home";
+  const webPushAuthentication = useMemo(() => ({
+    accountId: props.accountId,
+    accessToken: props.accessToken,
+    supabaseUrl: props.supabaseUrl,
+    publishableKey: props.publishableKey,
+    publicKey: props.webPushPublicKey,
+  }), [props.accountId, props.accessToken, props.publishableKey, props.supabaseUrl, props.webPushPublicKey]);
+  const webPush = useDastakWebPush(webPushAuthentication);
 
   useOrderRealtime({
     client: props.client,
@@ -79,6 +91,7 @@ export function DastakCustomerView(props: Props) {
           supabaseUrl={props.supabaseUrl}
           publishableKey={props.publishableKey}
           orderRefreshToken={orderRefreshToken}
+          initialOrderId={destination.entityType === "dastakV1Order" ? destination.entityId : undefined}
           section={v1Section}
           onNavigate={navigateSection}
           onOpenParcel={() => navigate({ section: "parcel" })}
@@ -93,6 +106,8 @@ export function DastakCustomerView(props: Props) {
           onOpenOrder={(orderId) => navigate({ section: "orders", entityType: "merchantOrder", entityId: orderId })}
           onCloseOrder={() => navigate({ section: "orders" })}
           onOpenParcel={() => navigate({ section: "parcel" })}
+          supportUrl={props.legalLinks.support}
+          webPush={webPush}
         />
       </div>}
       {section === "parcel" && (
@@ -109,6 +124,11 @@ export function DastakCustomerView(props: Props) {
           />
         </div>
       )}
+      {webPush.shouldPrompt && <WebNotificationOnboarding
+        busy={webPush.status === "enabling"}
+        onEnable={() => void webPush.enable()}
+        onDismiss={webPush.dismiss}
+      />}
     </div>
   );
 }

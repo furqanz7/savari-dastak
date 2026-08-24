@@ -1,6 +1,7 @@
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { AccountProfileRequestError, snapshotAccountProfile } from "./accountProfile";
 import type { AppConfig } from "./config";
+import { isValidDastakPhoneNumber } from "./phoneNumber";
 
 export type AccessState = "signed_out" | "needs_profile" | "active" | "pending" | "suspended" | "denied";
 
@@ -14,6 +15,28 @@ export type AccessResult = {
   profile?: AccountProfile;
   message?: string;
 };
+
+export class ProfileSubmissionAttempt {
+  private fingerprint?: string;
+  private idempotencyKey?: string;
+
+  keyFor(profile: AccountProfile) {
+    const fingerprint = JSON.stringify({
+      displayName: normalizeName(profile.displayName),
+      phoneNumber: profile.phoneNumber.trim(),
+    });
+    if (this.fingerprint !== fingerprint || !this.idempotencyKey) {
+      this.fingerprint = fingerprint;
+      this.idempotencyKey = crypto.randomUUID();
+    }
+    return this.idempotencyKey;
+  }
+
+  reset() {
+    this.fingerprint = undefined;
+    this.idempotencyKey = undefined;
+  }
+}
 
 type SavariProfile = {
   name: string | null;
@@ -42,6 +65,7 @@ export async function completeProfile(
   session: Session,
   config: AppConfig,
   profile: AccountProfile,
+  idempotencyKey: string = crypto.randomUUID(),
 ) {
   if (!isValidProfile(profile)) throw new Error("Enter a valid name and phone number with country code.");
 
@@ -58,16 +82,40 @@ export async function completeProfile(
     return;
   }
 
-  const response = await callFunction(session, config, "bootstrap-account", {
-    displayName: normalizeName(profile.displayName),
-    phoneNumber: profile.phoneNumber.trim(),
-  }, { "X-Idempotency-Key": crypto.randomUUID() });
-  if (!response.ok) throw new Error(readErrorMessage(response.body, "Profile could not be saved."));
+  let response: Awaited<ReturnType<typeof callFunction>>;
+  try {
+    response = await callFunction(session, config, "bootstrap-account", {
+      displayName: normalizeName(profile.displayName),
+      phoneNumber: profile.phoneNumber.trim(),
+    }, { "X-Idempotency-Key": idempotencyKey });
+  } catch {
+    if (await confirmsProfileExists(client, session, config)) return;
+    throw new Error("Dastak could not confirm your profile. Check your connection and retry the same details.");
+  }
+  if (response.ok) return;
+
+  const failure = readFunctionError(response.body, "Profile could not be saved.");
+  if (failure.code === "account_already_exists" && await confirmsProfileExists(client, session, config)) {
+    return;
+  }
+  throw new Error(failure.message);
 }
 
 export function isValidProfile(profile: AccountProfile) {
   const name = normalizeName(profile.displayName);
-  return name.length >= 1 && name.length <= 80 && /^\+[1-9]\d{7,14}$/.test(profile.phoneNumber.trim());
+  return name.length >= 1 && name.length <= 80 && isValidDastakPhoneNumber(profile.phoneNumber);
+}
+
+export function profileValidation(profile: AccountProfile) {
+  const name = normalizeName(profile.displayName);
+  return {
+    name: name.length < 1
+      ? "Enter your full name."
+      : name.length > 80 ? "Use 80 characters or fewer." : undefined,
+    phone: isValidDastakPhoneNumber(profile.phoneNumber)
+      ? undefined
+      : "Enter a valid phone number for the selected country or region.",
+  };
 }
 
 export function mapSavariAccess(
@@ -213,11 +261,31 @@ async function callFunction(
 }
 
 function readErrorMessage(body: unknown, fallback: string) {
+  return readFunctionError(body, fallback).message;
+}
+
+function readFunctionError(body: unknown, fallback: string) {
   const record = body && typeof body === "object" ? body as Record<string, unknown> : undefined;
   const error = record?.error && typeof record.error === "object" ? record.error as Record<string, unknown> : undefined;
-  return typeof error?.message === "string" ? error.message : fallback;
+  return {
+    code: typeof error?.code === "string" ? error.code : undefined,
+    message: typeof error?.message === "string" ? error.message : fallback,
+  };
 }
 
 function normalizeName(value: string) {
   return value.trim().replace(/\s+/g, " ");
+}
+
+async function confirmsProfileExists(
+  client: SupabaseClient,
+  session: Session,
+  config: AppConfig,
+) {
+  try {
+    const access = await resolveDastakAccess(client, session, config);
+    return access.state !== "needs_profile" && access.state !== "signed_out";
+  } catch {
+    return false;
+  }
 }

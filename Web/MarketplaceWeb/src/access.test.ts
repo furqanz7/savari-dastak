@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isValidProfile, mapDastakRoute, mapDeliverySnapshot, mapSavariAccess } from "./access";
+import {
+  isValidProfile,
+  mapDastakRoute,
+  mapDeliverySnapshot,
+  mapSavariAccess,
+  ProfileSubmissionAttempt,
+} from "./access";
 
 const passenger = {
   name: "Furqan",
@@ -56,6 +62,14 @@ describe("profile validation", () => {
     expect(isValidProfile({ displayName: "Furqan", phoneNumber: "+919876543210" })).toBe(true);
     expect(isValidProfile({ displayName: "F", phoneNumber: "+919876543210" })).toBe(true);
     expect(isValidProfile({ displayName: "F", phoneNumber: "9876543210" })).toBe(false);
+    expect(isValidProfile({ displayName: "F", phoneNumber: "+910000000000" })).toBe(false);
     expect(isValidProfile({ displayName: "F".repeat(81), phoneNumber: "+919876543210" })).toBe(false);
+  });
+
+  it("reuses one idempotency key for retries of the same normalized profile", () => {
+    const attempt = new ProfileSubmissionAttempt();
+    const first = attempt.keyFor({ displayName: " Furqan  Ahmed ", phoneNumber: "+919876543210" });
+    expect(attempt.keyFor({ displayName: "Furqan Ahmed", phoneNumber: "+919876543210" })).toBe(first);
+    expect(attempt.keyFor({ displayName: "Furqan Ahmed", phoneNumber: "+919876543211" })).not.toBe(first);
   });
 });

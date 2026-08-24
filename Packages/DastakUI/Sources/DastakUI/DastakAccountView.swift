@@ -29,6 +29,8 @@ struct DastakAccountView: View {
     let linkedIdentities: [MarketplaceLinkedIdentity]
     let isLinkingIdentity: Bool
     let identityMessage: String?
+    let identityMessageIsSuccess: Bool
+    let hasActiveOrders: Bool
     let discoveryRadiusKilometres: Int
     let refreshFailure: DastakCustomerRefreshFailure?
     let deliveryPartnerAccess: DeliveryPartnerAccess
@@ -47,6 +49,7 @@ struct DastakAccountView: View {
     @State private var accountAlert: AccountAlert?
     @State private var isDeleting = false
     @State private var notificationStatus: DastakNotificationPermissionState = .notRequested
+    private let legalLinks = MarketplaceLegalLinks(bundle: .main)
 
     var body: some View {
         ScrollView {
@@ -189,6 +192,16 @@ struct DastakAccountView: View {
                 }
                 .buttonStyle(.plain)
                 Divider().padding(.leading, 56)
+                if let supportURL = legalLinks.support {
+                    Link(destination: supportURL) {
+                        accountRow(
+                            title: "Contact Dastak support",
+                            value: "Account, access or delivery help",
+                            symbol: "message"
+                        )
+                    }
+                    Divider().padding(.leading, 56)
+                }
                 Link(destination: URL(string: "tel:112")!) {
                     accountRow(
                         title: "Emergency assistance",
@@ -275,9 +288,16 @@ struct DastakAccountView: View {
             .marketplaceFlatSurface()
 
             if let identityMessage {
-                Label(identityMessage, systemImage: "exclamationmark.shield")
+                Label(
+                    identityMessage,
+                    systemImage: identityMessageIsSuccess ? "checkmark.shield.fill" : "exclamationmark.shield"
+                )
                     .font(.footnote)
-                    .foregroundStyle(MarketplaceColors.destructive.color)
+                    .foregroundStyle(
+                        identityMessageIsSuccess
+                            ? MarketplaceColors.dastakAccent.color
+                            : MarketplaceColors.destructive.color
+                    )
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("Dastak never merges accounts because an email or phone number matches. Link only while signed in to the account you want to keep.")
@@ -525,7 +545,7 @@ struct DastakAccountView: View {
         case .deleteAccount:
             Alert(
                 title: Text("Delete your Dastak account?"),
-                message: Text("This permanently deletes your account and signs you out. Completed order records may be retained without your identity where legally required."),
+                message: Text(deletionWarning),
                 primaryButton: .cancel(Text("Cancel")),
                 secondaryButton: .destructive(Text("Delete account")) {
                     Task { await performAccountDeletion() }
@@ -538,6 +558,14 @@ struct DastakAccountView: View {
                 dismissButton: .cancel(Text("OK"))
             )
         }
+    }
+
+    private var deletionWarning: String {
+        let history = "Completed order and financial records may be retained without your identity where legally required."
+        guard hasActiveOrders else {
+            return "This permanently deletes your account and signs you out. \(history)"
+        }
+        return "You have an active order. It will continue, but deleting now removes your access to tracking and in-app support. This permanently signs you out. \(history)"
     }
 
     @MainActor
@@ -855,7 +883,7 @@ struct DastakProfileEditor: View {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let phone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         return (1...80).contains(name.count)
-            && phone.range(of: #"^\+[1-9][0-9]{7,14}$"#, options: .regularExpression) != nil
+            && DastakPhoneNumberValidator.isValidE164(phone)
     }
 
     @MainActor

@@ -6,10 +6,15 @@ export type V1NotificationJob = {
   notificationType: string;
   recipientAccountId: string;
   deviceToken: string;
-  platform: "ios";
+  platform: "ios" | "web";
   title: string;
   body: string;
   payload: Record<string, unknown>;
+  attempt: number;
+};
+
+export type CustomerAccountDeletionJob = {
+  accountId: string;
   attempt: number;
 };
 
@@ -27,6 +32,13 @@ export type V1OutboxWorkerDependencies = {
   claim: () => Promise<V1NotificationJob[]>;
   deliver: (job: V1NotificationJob) => Promise<V1ProviderDelivery>;
   complete: (job: V1NotificationJob, result: V1ProviderDelivery) => Promise<void>;
+  claimAccountDeletions: () => Promise<CustomerAccountDeletionJob[]>;
+  deleteAuthAccount: (job: CustomerAccountDeletionJob) => Promise<void>;
+  completeAccountDeletion: (
+    job: CustomerAccountDeletionJob,
+    succeeded: boolean,
+    error?: string,
+  ) => Promise<void>;
   runInvariantMonitors: () => Promise<Record<string, unknown>>;
 };
 
@@ -47,6 +59,23 @@ export async function handleV1OutboxWorker(
   }
 
   try {
+    const deletionJobs = await dependencies.claimAccountDeletions();
+    const deletionOutcomes = await mapWithConcurrency(deletionJobs, 5, async (job) => {
+      try {
+        await dependencies.deleteAuthAccount(job);
+        await dependencies.completeAccountDeletion(job, true);
+        return true;
+      } catch (error) {
+        await dependencies.completeAccountDeletion(
+          job,
+          false,
+          error instanceof Error && error.name === "AuthApiError"
+            ? "Auth credential deletion was rejected"
+            : "Auth credential deletion failed",
+        );
+        return false;
+      }
+    });
     const fanout = await dependencies.fanout();
     const jobs = await dependencies.claim();
     const outcomes = await mapWithConcurrency(jobs, 10, async (job) => {
@@ -69,6 +98,11 @@ export async function handleV1OutboxWorker(
     const invariants = await dependencies.runInvariantMonitors();
     return json({
       workerId: dependencies.workerId,
+      accountDeletions: {
+        claimed: deletionJobs.length,
+        completed: deletionOutcomes.filter(Boolean).length,
+        retrying: deletionOutcomes.filter((succeeded) => !succeeded).length,
+      },
       fanout,
       claimed: jobs.length,
       sent,

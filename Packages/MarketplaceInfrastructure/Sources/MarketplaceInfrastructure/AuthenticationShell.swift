@@ -156,6 +156,7 @@ public struct MarketplaceAuthenticationShell: View {
     private let product: MarketplaceProduct
     private let requiredAccess: MarketplaceApplicationAccess
     private let showsPersistentSignOut: Bool
+    private let legalLinks: MarketplaceLegalLinks
     private let activeContent: (MarketplaceAuthenticatedServices) -> AnyView
     private let restrictedContent: ((AccountRoute, MarketplaceAuthenticatedServices) -> AnyView)?
     @StateObject private var model: AuthenticationShellModel
@@ -237,6 +238,7 @@ public struct MarketplaceAuthenticationShell: View {
         self.product = product
         self.requiredAccess = requiredAccess
         self.showsPersistentSignOut = showsPersistentSignOut
+        legalLinks = MarketplaceLegalLinks(bundle: bundle)
         self.activeContent = activeContent
         self.restrictedContent = restrictedContent
         _model = StateObject(
@@ -258,6 +260,7 @@ public struct MarketplaceAuthenticationShell: View {
                     product: product,
                     requiredAccess: requiredAccess,
                     coordinator: coordinator,
+                    legalLinks: legalLinks,
                     showsPersistentSignOut: showsPersistentSignOut,
                     activeContent: sessionRegistered(
                         activeContent(services),
@@ -339,10 +342,16 @@ private struct DefaultMarketplaceActiveView: View {
 }
 
 private struct AuthenticationRouteView: View {
+    private enum SignInProvider: String {
+        case apple = "Apple"
+        case google = "Google"
+    }
+
     let applicationName: String
     let product: MarketplaceProduct
     let requiredAccess: MarketplaceApplicationAccess
     @ObservedObject var coordinator: AuthenticationCoordinator
+    let legalLinks: MarketplaceLegalLinks
     let showsPersistentSignOut: Bool
     let activeContent: AnyView
     let restrictedContent: ((AccountRoute) -> AnyView)?
@@ -353,6 +362,7 @@ private struct AuthenticationRouteView: View {
     @State private var errorMessage: String?
     @State private var restored = false
     @State private var showsSignOutConfirmation = false
+    @State private var signingInProvider: SignInProvider?
 
     var body: some View {
         Group {
@@ -592,16 +602,30 @@ private struct AuthenticationRouteView: View {
     }
 
     private var dastakStandardAuthenticationView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            dastakAuthenticationHeader(showsSubtitle: true)
-            Spacer(minLength: 72)
-            dastakRouteContent
-                .frame(maxWidth: .infinity)
-            dastakErrorView
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    dastakAuthenticationHeader(showsSubtitle: true)
+                    Spacer(minLength: 52)
+                    dastakRouteContent
+                        .frame(maxWidth: .infinity)
+                    signInProgressView
+                    dastakErrorView
+                    if coordinator.route == .signedOut {
+                        dastakLegalLinks
+                    }
+                    Spacer(minLength: 28)
+                }
+                .frame(
+                    maxWidth: 430,
+                    minHeight: proxy.size.height,
+                    alignment: .topLeading
+                )
+                .padding(.horizontal, 28)
+                .padding(.vertical, 36)
+            }
+            .scrollIndicators(.hidden)
         }
-        .frame(maxWidth: 430, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, 28)
-        .padding(.vertical, 36)
     }
 
     private func dastakAuthenticationHeader(showsSubtitle: Bool) -> some View {
@@ -693,12 +717,15 @@ private struct AuthenticationRouteView: View {
     private var dastakSignedOutView: some View {
         VStack(spacing: 12) {
             SignInWithAppleButton(.continue) { request in
+                guard signingInProvider == nil else { return }
                 do {
+                    signingInProvider = .apple
                     let nonce = try AppleSignInNonce.make()
                     appleNonce = nonce
                     request.requestedScopes = [.fullName, .email]
                     request.nonce = AppleSignInNonce.sha256(nonce)
                 } catch {
+                    signingInProvider = nil
                     errorMessage = "Apple sign-in is unavailable."
                 }
             } onCompletion: { result in
@@ -707,17 +734,53 @@ private struct AuthenticationRouteView: View {
             .signInWithAppleButtonStyle(.white)
             .frame(height: 54)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .disabled(signingInProvider != nil)
 
             Button {
                 Task { await signInWithGoogle() }
             } label: {
-                HStack(spacing: 10) {
-                    GoogleLogoMark()
-                    Text("Continue with Google")
-                }
+                DastakGoogleSignInLabel(
+                    title: signingInProvider == .google
+                        ? "Opening Google securely…"
+                        : "Continue with Google"
+                )
             }
             .buttonStyle(DastakGoogleButtonStyle())
+            .disabled(signingInProvider != nil)
         }
+    }
+
+    @ViewBuilder
+    private var signInProgressView: some View {
+        if let signingInProvider {
+            HStack(spacing: 8) {
+                ProgressView().tint(dastakAccent)
+                Text("Opening \(signingInProvider.rawValue) securely…")
+                    .font(.footnote)
+                    .foregroundStyle(dastakSecondaryText)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 16)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    @ViewBuilder
+    private var dastakLegalLinks: some View {
+        let links = [
+            ("Privacy", legalLinks.privacyPolicy),
+            ("Terms", legalLinks.terms),
+            ("Support", legalLinks.support),
+        ]
+        HStack(spacing: 18) {
+            ForEach(links.compactMap { title, url in url.map { (title, $0) } }, id: \.0) { title, url in
+                Link(title, destination: url)
+            }
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(dastakSecondaryText)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 22)
     }
 
     private var profileView: some View {
@@ -930,6 +993,7 @@ private struct AuthenticationRouteView: View {
     ) {
         if case let .failure(error) = result {
             appleNonce = nil
+            signingInProvider = nil
             if let authorizationError = error as? ASAuthorizationError,
                authorizationError.code == .canceled {
                 errorMessage = nil
@@ -947,6 +1011,7 @@ private struct AuthenticationRouteView: View {
             let nonce = appleNonce
         else {
             appleNonce = nil
+            signingInProvider = nil
             errorMessage = "Apple sign-in could not be completed."
             return
         }
@@ -961,6 +1026,7 @@ private struct AuthenticationRouteView: View {
         }
 
         Task {
+            defer { signingInProvider = nil }
             do {
                 errorMessage = nil
                 try await coordinator.signInWithApple(identityToken: identityToken, nonce: nonce)
@@ -972,9 +1038,16 @@ private struct AuthenticationRouteView: View {
 
     @MainActor
     private func signInWithGoogle() async {
+        guard signingInProvider == nil else { return }
+        signingInProvider = .google
+        defer { signingInProvider = nil }
         do {
             errorMessage = nil
-            try await coordinator.signInWithGoogle()
+            let suggestion = try await coordinator.signInWithGoogle()
+            if displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let suggestion {
+                displayName = suggestion
+            }
         } catch let error as AuthenticationClientError {
             errorMessage = error.googleSignInMessage
         } catch {
@@ -1075,7 +1148,7 @@ private struct AuthenticationRouteView: View {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let phone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         return (1...80).contains(name.count)
-            && phone.range(of: #"^\+[1-9][0-9]{7,14}$"#, options: .regularExpression) != nil
+            && DastakPhoneNumberValidator.isValidE164(phone)
     }
 }
 
@@ -1124,6 +1197,7 @@ private struct DastakGoogleButtonStyle: ButtonStyle {
         configuration.label
             .frame(maxWidth: .infinity)
             .frame(minHeight: 54)
+            .padding(.vertical, 12)
             .font(.headline)
             .foregroundStyle(Color(red: 33 / 255, green: 19 / 255, blue: 14 / 255))
             .background(Color(red: 245 / 255, green: 242 / 255, blue: 236 / 255))
@@ -1134,6 +1208,25 @@ private struct DastakGoogleButtonStyle: ButtonStyle {
             }
             .opacity(configuration.isPressed ? 0.9 : 1)
             .scaleEffect(configuration.isPressed ? 0.99 : 1)
+    }
+}
+
+private struct DastakGoogleSignInLabel: View {
+    let title: String
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                GoogleLogoMark()
+                Text(title)
+            }
+
+            VStack(spacing: 8) {
+                GoogleLogoMark()
+                Text(title)
+                    .multilineTextAlignment(.center)
+            }
+        }
     }
 }
 

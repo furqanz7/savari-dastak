@@ -1,6 +1,15 @@
 {
-  "originHash" : "ef12acb8568040018b1637c10bca124d5139c011ab9e50e2cba1847450ff9a79",
+  "originHash" : "41615f9c0997cb3d04f0d3fc8cb59845af96d48cd9d6f4161044845ed7b28884",
   "pins" : [
+    {
+      "identity" : "phonenumberkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PhoneNumberKit/PhoneNumberKit.git",
+      "state" : {
+        "revision" : "754d0d5597593ba8bcdc2b4ddf5f85fc3a4e799f",
+        "version" : "5.0.7"
+      }
+    },
     {
       "identity" : "razorpay-pod",
       "kind" : "remoteSourceControl",
