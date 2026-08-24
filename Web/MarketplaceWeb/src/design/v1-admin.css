@@ -51,7 +51,7 @@
   .v1-admin-sku-list button { grid-column: 2; }
 }
 
-.v1-execution-panel { padding-top: 24px; }
+.v1-execution-panel { min-width: 0; max-width: 100%; padding-top: 24px; }
 .v1-execution-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 .v1-execution-panel h2 { margin: 5px 0; font-size: 26px; }
 .v1-execution-panel > header span { color: var(--text-secondary); font-size: 13px; }

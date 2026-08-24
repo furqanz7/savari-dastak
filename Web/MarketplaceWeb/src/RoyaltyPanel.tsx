@@ -91,6 +91,7 @@ export function RoyaltyPanel({
                   key={subject.subjectType + ":" + subject.subjectId}
                   auth={auth}
                   subject={subject}
+                  payoutAvailability={snapshot.payoutAvailability}
                   showSubject={snapshot.subjects.length > 1}
                   onChanged={refresh}
                 />
@@ -123,11 +124,13 @@ function RoyaltyMetric({
 function RoyaltySubjectCard({
   auth,
   subject,
+  payoutAvailability,
   showSubject,
   onChanged,
 }: {
   auth: Auth;
   subject: RoyaltySubject;
+  payoutAvailability: RoyaltySnapshot["payoutAvailability"];
   showSubject: boolean;
   onChanged: () => Promise<void>;
 }) {
@@ -204,7 +207,17 @@ function RoyaltySubjectCard({
           <strong>{formatPrice(subject.negativeBalancePaise)}</strong>
         </div>
       </div>
-      {editingDestination || !subject.payoutDestination
+      {!payoutAvailability.destinationRegistrationAvailable && !subject.payoutDestination
+        ? (
+          <div className="royalty-notice royalty-payout-unavailable" role="status">
+            <strong>Royalty payout setup is not active yet.</strong>
+            <span>
+              Your earnings remain safe in Royalty. Bank or UPI setup will open after the
+              secure payout service is connected.
+            </span>
+          </div>
+        )
+        : editingDestination || !subject.payoutDestination
         ? (
           <PayoutDestinationForm
             auth={auth}
@@ -216,7 +229,8 @@ function RoyaltySubjectCard({
             }}
           />
         )
-        : (
+        : payoutAvailability.destinationRegistrationAvailable
+        ? (
           <button
             className="secondary-button royalty-destination-change"
             type="button"
@@ -224,7 +238,8 @@ function RoyaltySubjectCard({
           >
             <Landmark size={16} /> Change payout destination
           </button>
-        )}
+        )
+        : null}
       <form
         className="royalty-withdraw-form"
         onSubmit={(event) => {
@@ -244,7 +259,8 @@ function RoyaltySubjectCard({
               inputMode="decimal"
               value={amount}
               onChange={(event) => setAmount(event.currentTarget.value)}
-              disabled={busy || !subject.canWithdraw}
+              disabled={busy || !subject.canWithdraw ||
+                !payoutAvailability.withdrawalExecutionAvailable}
               aria-describedby={"withdraw-help-" + subject.subjectId}
             />
           </span>
@@ -252,14 +268,17 @@ function RoyaltySubjectCard({
         <button
           className="primary-button"
           type="submit"
-          disabled={busy || !subject.canWithdraw || !amountPaise ||
+          disabled={busy || !subject.canWithdraw ||
+            !payoutAvailability.withdrawalExecutionAvailable || !amountPaise ||
             amountPaise > subject.availablePaise}
         >
           {busy ? "Requesting…" : "Withdraw"}
         </button>
       </form>
       <p id={"withdraw-help-" + subject.subjectId} className="royalty-help">
-        {subject.payoutDestination
+        {!payoutAvailability.withdrawalExecutionAvailable
+          ? "Withdrawals will open after Dastak activates the secure payout service. Your Royalty balance remains unchanged."
+          : subject.payoutDestination
           ? "Available Royalty is reserved immediately. Paid appears only after provider confirmation."
           : "Complete payout-method onboarding before requesting a withdrawal."}
       </p>

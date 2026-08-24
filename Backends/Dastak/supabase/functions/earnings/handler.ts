@@ -30,6 +30,10 @@ export type EarningsDependencies = {
     withdrawalId: string,
     expectedVersion: number,
   ) => Promise<unknown>;
+  payoutAvailability: () => {
+    destinationRegistrationAvailable: boolean;
+    withdrawalExecutionAvailable: boolean;
+  };
 };
 
 type RequestBody = {
@@ -99,6 +103,7 @@ export async function handleEarnings(request: Request, dependencies: EarningsDep
             p_kind: operation === "merchantRoyaltySnapshot" ? "MERCHANT" : "RIDER",
           },
         ),
+        { payoutAvailability: dependencies.payoutAvailability() },
       );
     }
     if (operation === "requestRoyaltyWithdrawal") {
@@ -282,7 +287,10 @@ function parsePayoutDestination(body: RequestBody | null): PayoutDestinationRequ
   return undefined;
 }
 
-function snapshotResponse(data: unknown) {
+function snapshotResponse(
+  data: unknown,
+  additions?: Record<string, unknown>,
+) {
   const result = (Array.isArray(data) ? data[0] : data) as
     | Record<string, unknown>
     | undefined;
@@ -291,7 +299,11 @@ function snapshotResponse(data: unknown) {
   }
   const status = result.response_status as number;
   if (status < 100 || status > 599) throw new Error("Invalid earnings status");
-  return json(result.response_body, status);
+  const responseBody = record(result.response_body);
+  return json(
+    additions && responseBody ? { ...responseBody, ...additions } : result.response_body,
+    status,
+  );
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

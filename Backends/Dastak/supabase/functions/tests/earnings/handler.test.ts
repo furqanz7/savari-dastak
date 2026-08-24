@@ -37,6 +37,10 @@ const dependencies = (
     status: "PROCESSING",
     providerStatus: "PENDING",
   }),
+  payoutAvailability: () => ({
+    destinationRegistrationAvailable: true,
+    withdrawalExecutionAvailable: true,
+  }),
   ...overrides,
 });
 
@@ -99,6 +103,10 @@ Deno.test("merchant Royalty snapshot uses authenticated account ownership", asyn
     p_account_id: accountId,
     p_kind: "MERCHANT",
   }]);
+  assertEquals((await response.json()).payoutAvailability, {
+    destinationRegistrationAvailable: true,
+    withdrawalExecutionAvailable: true,
+  });
 });
 
 Deno.test("withdrawal reserves in Dastak then executes the same withdrawal externally", async () => {

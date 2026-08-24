@@ -31,6 +31,29 @@ export function razorpayXTestDestinationClientFromEnvironment(
   }, fetcher);
 }
 
+export function royaltyPayoutAvailability(
+  readEnvironment: ReadEnvironment = Deno.env.get,
+) {
+  let destinationRegistrationAvailable = false;
+  let withdrawalExecutionAvailable = false;
+  try {
+    razorpayXTestDestinationClientFromEnvironment(readEnvironment);
+    destinationRegistrationAvailable = Boolean(
+      readEnvironment("RAZORPAYX_DESTINATION_FINGERPRINT_SECRET"),
+    );
+  } catch {
+    // Live Contact/Fund Account creation is deliberately unavailable until it
+    // has a fixed-egress provider boundary. Never fall back to direct egress.
+  }
+  try {
+    payoutGatewayFromEnvironment(readEnvironment);
+    withdrawalExecutionAvailable = true;
+  } catch {
+    // A missing or invalid gateway leaves Royalty authoritative and untouched.
+  }
+  return { destinationRegistrationAvailable, withdrawalExecutionAvailable };
+}
+
 function requiredEnvironment(readEnvironment: ReadEnvironment, name: string) {
   const value = readEnvironment(name);
   if (!value) throw new Error(`${name} is required`);

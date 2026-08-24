@@ -5,6 +5,7 @@ import { handleEarnings } from "./handler.ts";
 import {
   payoutGatewayFromEnvironment,
   razorpayXTestDestinationClientFromEnvironment,
+  royaltyPayoutAvailability,
 } from "./provider-clients.ts";
 import { executeRazorpayXWithdrawal, registerRazorpayXDestination } from "./razorpayx.ts";
 
@@ -34,6 +35,7 @@ Deno.serve((request) =>
         client: payoutGatewayFromEnvironment(),
         callRPC,
       }),
+    payoutAvailability: royaltyPayoutAvailability,
   })
 );
 

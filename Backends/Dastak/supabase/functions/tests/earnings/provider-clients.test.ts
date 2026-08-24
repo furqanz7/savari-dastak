@@ -2,6 +2,7 @@ import { assertEquals, assertThrows } from "jsr:@std/assert";
 import {
   payoutGatewayFromEnvironment,
   razorpayXTestDestinationClientFromEnvironment,
+  royaltyPayoutAvailability,
 } from "../../earnings/provider-clients.ts";
 
 const withdrawalId = "31000000-0000-4000-8000-000000000001";
@@ -70,4 +71,28 @@ Deno.test("Razorpay provider origins cannot be configured as the Dastak gateway"
     Error,
     "Invalid payout gateway URL",
   );
+});
+
+Deno.test("production reports unavailable payout actions instead of attempting direct live egress", () => {
+  const values: Record<string, string> = { RAZORPAYX_MODE: "LIVE" };
+  assertEquals(royaltyPayoutAvailability((name) => values[name]), {
+    destinationRegistrationAvailable: false,
+    withdrawalExecutionAvailable: false,
+  });
+});
+
+Deno.test("test destination setup and fixed gateway availability are explicit capabilities", () => {
+  const values: Record<string, string> = {
+    RAZORPAYX_MODE: "TEST",
+    RAZORPAYX_TEST_KEY_ID: "rzp_test_Dastak123",
+    RAZORPAYX_TEST_KEY_SECRET: "test-secret-value",
+    RAZORPAYX_TEST_ACCOUNT_NUMBER: "1234567890",
+    RAZORPAYX_DESTINATION_FINGERPRINT_SECRET: "fingerprint-secret-value",
+    DASTAK_PAYOUT_GATEWAY_URL: "https://payout-gateway.dastak.example",
+    DASTAK_PAYOUT_GATEWAY_SECRET: "dastak-gateway-secret-with-32-bytes-minimum",
+  };
+  assertEquals(royaltyPayoutAvailability((name) => values[name]), {
+    destinationRegistrationAvailable: true,
+    withdrawalExecutionAvailable: true,
+  });
 });

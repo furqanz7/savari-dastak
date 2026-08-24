@@ -61,6 +61,10 @@ export type RoyaltySnapshot = {
   balancePaise: number;
   negativeBalancePaise: number;
   lifetimeEarnedPaise: number;
+  payoutAvailability: {
+    destinationRegistrationAvailable: boolean;
+    withdrawalExecutionAvailable: boolean;
+  };
   subjects: RoyaltySubject[];
 };
 
@@ -128,12 +132,22 @@ export async function getRoyalty(
     !validMoney(payload.negativeBalancePaise) ||
     !validMoney(payload.lifetimeEarnedPaise) || !Array.isArray(payload.subjects)
   ) throw new Error("Royalty is unavailable.");
+  const payoutAvailability = payload.payoutAvailability === null ||
+      payload.payoutAvailability === undefined
+    ? undefined
+    : record(payload.payoutAvailability);
   return {
     currency: "INR",
     balancePaise: payload.balancePaise,
     availablePaise: payload.availablePaise,
     negativeBalancePaise: payload.negativeBalancePaise,
     lifetimeEarnedPaise: payload.lifetimeEarnedPaise,
+    payoutAvailability: {
+      destinationRegistrationAvailable:
+        payoutAvailability?.destinationRegistrationAvailable === true,
+      withdrawalExecutionAvailable:
+        payoutAvailability?.withdrawalExecutionAvailable === true,
+    },
     subjects: payload.subjects.map(parseRoyaltySubject),
   } as RoyaltySnapshot;
 }

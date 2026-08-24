@@ -582,7 +582,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .v1-delivered-card > div { display: grid; gap: 3px; }
 .v1-delivered-card span { color: var(--text-secondary); font-size: 13px; }
 
-.admin-shell { width: 100%; }
+.admin-shell { width: 100%; min-width: 0; max-width: 100%; overflow-x: clip; }
 .admin-heading {
   display: flex;
   align-items: end;
@@ -601,7 +601,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .admin-summary p { min-width: 0; display: grid; gap: 3px; margin: 0; }
 .admin-summary small { color: var(--text-secondary); overflow-wrap: anywhere; }
 .admin-summary strong { font-size: 22px; }
-.admin-tabs { display: flex; gap: 8px; overflow-x: auto; border-bottom: 1px solid var(--divider); scrollbar-width: none; scroll-snap-type: x proximity; }
+.admin-tabs { width: 100%; max-width: 100%; display: flex; gap: 8px; overflow-x: auto; border-bottom: 1px solid var(--divider); scrollbar-width: none; scroll-snap-type: x proximity; }
 .admin-tabs::-webkit-scrollbar { display: none; }
 .admin-tabs button { min-height: 52px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-bottom: 3px solid transparent; color: var(--text-secondary); background: transparent; font-weight: 750; scroll-snap-align: start; white-space: nowrap; }
 .admin-tabs button.selected { border-bottom-color: var(--accent); color: var(--text-primary); }
@@ -721,6 +721,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .royalty-destination-grid label:last-child { grid-column: 1 / -1; }
 .royalty-withdrawal-action { display: grid; justify-items: end; gap: 8px; }
 .royalty-notice { margin: 0; padding: 11px 13px; border-radius: 11px; color: var(--success); background: color-mix(in srgb, var(--success) 10%, var(--surface)); font-size: 13px; }
+.royalty-payout-unavailable { display: grid; gap: 5px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--divider)); color: var(--text-primary); background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.royalty-payout-unavailable strong { color: var(--accent); }
+.royalty-payout-unavailable span { color: var(--text-secondary); line-height: 1.45; }
 .royalty-history { display: grid; gap: 10px; }
 .royalty-history h2 { margin: 0; font-size: 16px; }
 .royalty-history > p { margin: 0; color: var(--text-secondary); font-size: 13px; }

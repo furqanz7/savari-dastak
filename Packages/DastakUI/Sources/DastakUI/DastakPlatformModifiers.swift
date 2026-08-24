@@ -1,6 +1,37 @@
+import MarketplaceDesignSystem
 import SwiftUI
 
+private struct DastakOpaqueNavigationBar: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .toolbarBackground(
+                MarketplaceColors.canvas(for: colorScheme),
+                for: .navigationBar
+            )
+            .toolbarBackground(.visible, for: .navigationBar)
+        #else
+        content
+        #endif
+    }
+}
+
 extension View {
+    @ViewBuilder
+    func dastakFullScreenCover<Content: View>(
+        isPresented: Binding<Bool>,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        #if os(iOS)
+        fullScreenCover(isPresented: isPresented, content: content)
+        #else
+        sheet(isPresented: isPresented, content: content)
+        #endif
+    }
+
     @ViewBuilder
     func dastakInlineNavigationTitle() -> some View {
         #if os(iOS)
@@ -8,6 +39,10 @@ extension View {
         #else
         self
         #endif
+    }
+
+    func dastakOpaqueNavigationBar() -> some View {
+        modifier(DastakOpaqueNavigationBar())
     }
 
     @ViewBuilder

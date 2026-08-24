@@ -174,8 +174,17 @@ public final class CheckoutHostController: UIViewController, @preconcurrency Raz
 
     public override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
+        view.isOpaque = true
+        view.backgroundColor = UIColor(
+            red: 15.0 / 255.0,
+            green: 15.0 / 255.0,
+            blue: 16.0 / 255.0,
+            alpha: 1
+        )
+        modalPresentationCapturesStatusBarAppearance = true
     }
+
+    public override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
     public override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)

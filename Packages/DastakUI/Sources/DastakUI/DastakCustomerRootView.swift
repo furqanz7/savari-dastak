@@ -282,10 +282,8 @@ public struct DastakCustomerRootView: View {
                 orderSubmitted: { showingV1Order = true }
             )
         }
-        .sheet(isPresented: $showingV1Order) {
+        .dastakFullScreenCover(isPresented: $showingV1Order) {
             DastakV1MatchingView(model: model)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingParcel) {
             DastakParcelComposerView(
@@ -294,7 +292,7 @@ public struct DastakCustomerRootView: View {
                 requestCurrentLocation: locationManager.requestLocation
             )
         }
-        .sheet(isPresented: $showingCheckout) {
+        .dastakFullScreenCover(isPresented: $showingCheckout) {
             if let session = model.checkoutSession {
                 DastakRazorpayCheckoutView(
                     session: session,

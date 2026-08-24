@@ -132,6 +132,7 @@ struct DastakV1MatchingView: View {
         }
         .navigationTitle("Order status")
         .dastakInlineNavigationTitle()
+        .dastakOpaqueNavigationBar()
     }
 
     private func statusCard(_ order: DastakV1OrderSnapshot) -> some View {

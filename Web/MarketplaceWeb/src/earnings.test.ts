@@ -25,6 +25,10 @@ describe("Royalty", () => {
         balancePaise: 4000,
         negativeBalancePaise: 0,
         lifetimeEarnedPaise: 9000,
+        payoutAvailability: {
+          destinationRegistrationAvailable: false,
+          withdrawalExecutionAvailable: false,
+        },
         subjects: [{
           subjectType: "RIDER",
           subjectId,
@@ -72,6 +76,10 @@ describe("Royalty", () => {
     expect(snapshot.subjects[0].entries.map((entry) => entry.amountPaise))
       .toEqual([9000, -5000]);
     expect(snapshot.availablePaise).toBe(4000);
+    expect(snapshot.payoutAvailability).toEqual({
+      destinationRegistrationAvailable: false,
+      withdrawalExecutionAvailable: false,
+    });
   });
 
   it("requests only a server-reserved withdrawal and forwards idempotency", async () => {
