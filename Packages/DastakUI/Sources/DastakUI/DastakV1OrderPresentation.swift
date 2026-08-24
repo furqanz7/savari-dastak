@@ -3,10 +3,10 @@ import MarketplaceInfrastructure
 
 enum DastakV1OrderPresentation {
     static let journeySteps = [
-        "Matching",
-        "Secured",
+        "Finding items",
+        "Ready for payment",
         "Preparing",
-        "Pickup",
+        "Picking up",
         "On the way",
         "Delivered",
     ]
@@ -33,7 +33,7 @@ enum DastakV1OrderPresentation {
     static func message(_ status: DastakV1OrderStatus) -> String {
         switch status {
         case .created, .matching:
-            "Dastak is matching every exact item. Retail merchant identities stay private."
+            "We’re checking availability for every exact item in your basket. You’ll pay only after everything is secured."
         case .fullySecured, .awaitingPayment:
             "Every item is reserved. Payment is requested before preparation begins."
         case .paid, .preparing:
@@ -96,7 +96,7 @@ enum DastakV1OrderPresentation {
 
     static func journeyLabel(_ status: DastakV1OrderStatus) -> String? {
         guard let step = journeyStep(status) else { return nil }
-        return "Stage \(step + 1) of \(journeySteps.count) · \(journeySteps[step])"
+        return journeySteps[step]
     }
 
     static func orderType(_ value: String) -> String {
@@ -119,11 +119,30 @@ enum DastakV1OrderPresentation {
     }
 
     static func addressLine(_ address: DastakV1DeliveryAddressInput) -> String {
-        [address.line1, address.line2, address.landmark, address.city, address.state,
-         address.postalCode]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        var seen = Set<String>()
+        return [address.line2, address.line1, address.landmark, address.city,
+                address.state, address.postalCode]
+            .compactMap(normalizedAddressComponent)
+            .flatMap {
+                $0.components(separatedBy: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }
+            .filter { seen.insert($0.lowercased()).inserted }
             .joined(separator: ", ")
+    }
+
+    static func phoneNumber(_ value: String) -> String {
+        let digits = value.filter { $0.isNumber }
+        let local: String
+        if digits.count == 12, digits.hasPrefix("91") {
+            local = String(digits.dropFirst(2))
+        } else if digits.count == 10 {
+            local = digits
+        } else {
+            return value
+        }
+        return "+91 \(local.prefix(5)) \(local.suffix(5))"
     }
 
     static func optionSummary(_ line: DastakV1OrderLine) -> String? {
@@ -169,6 +188,19 @@ enum DastakV1OrderPresentation {
         .compactMap { $0 }
         .joined(separator: " ")
         .lowercased()
+    }
+
+    private static func normalizedAddressComponent(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let collapsedCommas = value.replacingOccurrences(
+            of: #"(?:\s*,\s*)+"#,
+            with: ", ",
+            options: .regularExpression
+        )
+        let trimmed = collapsedCommas.trimmingCharacters(
+            in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ","))
+        )
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

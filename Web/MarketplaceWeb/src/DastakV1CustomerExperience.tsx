@@ -37,6 +37,8 @@ import {
 } from "./payments";
 import {
   canReorderV1Order,
+  customerPhoneNumber,
+  deliveryAddressLine,
   deliveredDurationLabel,
   humanizeV1State,
   isIssueEvidenceRequired,
@@ -1084,6 +1086,8 @@ export function MatchingSheet({
 }) {
   const dialog = useModalDialog<HTMLElement>({ busy, onDismiss });
   const matching = matchingStatuses.has(order.status);
+  const paid = Boolean(order.paidAt);
+  const currentTimelineItem = activeTimelineItem(order.status);
   const [now, setNow] = useState(() => Date.now());
   const [reportingIssue, setReportingIssue] = useState(false);
   const [confirmingCancellation, setConfirmingCancellation] = useState(false);
@@ -1130,7 +1134,7 @@ export function MatchingSheet({
 
   return <div className="v1-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-matching-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-order-status-title">
     <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">Order status</h2><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)} · {formatOrderDate(order.submittedAt ?? order.createdAt)}</small></div><button type="button" onClick={onDismiss} aria-label="Close order status"><X size={19} /></button></header>
-    <div className={`v1-status-hero ${isFailureStatus(order.status) ? "failure" : ""}`}><span className={matching ? "matching" : ""}>{matching ? <i /> : <OrderStatusIcon status={order.status} size={25} />}</span><div><h3>{deliveredDurationLabel(order) ?? statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p></div><strong>{formatV1Price(order.price.totalPaise)}</strong>{isV1OrderActive(order.status) ? <OrderJourneyProgress status={order.status} /> : null}<small className="v1-order-assurance"><ShieldCheck size={16} /> {statusAssurance(order.status)}</small></div>
+    <div className={`v1-status-hero ${isFailureStatus(order.status) ? "failure" : ""}`}><span className={matching ? "matching" : ""}>{matching ? <i /> : <OrderStatusIcon status={order.status} size={25} />}</span><div><header><h3>{deliveredDurationLabel(order) ?? statusTitle(order.status)}</h3><strong>{formatV1Price(order.price.totalPaise)}</strong></header><p>{statusMessage(order.status)}</p></div>{isV1OrderActive(order.status) ? <OrderJourneyProgress status={order.status} /> : null}<small className="v1-order-assurance"><ShieldCheck size={16} /> {statusAssurance(order.status)}</small></div>
 
     {(order.status === "PAID" || order.status === "PREPARING") && readyAt ? <section className={`v1-order-eta ${runningLate ? "late" : ""}`} aria-label="Preparation estimate"><ClockAlert size={21} /><span><strong>{runningLate ? "Taking a little longer" : "Preparation estimate"}</strong><small>{runningLate ? "Your order stays in preparation until it is genuinely ready." : `Expected around ${formatOrderTime(readyAt)}`}</small></span><b>{runningLate ? "We’re watching" : relativeTime(readyAt, now)}</b></section> : null}
 
@@ -1138,9 +1142,9 @@ export function MatchingSheet({
 
     <section className="v1-order-contents" aria-label="Order items"><header><div><p>ITEMS IN THIS ORDER</p><h3>{orderItemCount(order)} {orderItemCount(order) === 1 ? "item" : "items"}</h3>{order.restaurant ? <small>{order.restaurant.name} · {order.restaurant.branchName}</small> : null}</div></header><div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><ProductImage src={imageUrlForLine(line)} alt="" /><span><b>{line.name}</b>{orderLineDetail(line) ? <small>{orderLineDetail(line)}</small> : null}<small>{line.quantity} × {formatV1Price(line.unitPricePaise)}</small></span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}</div></section>
 
-    {order.deliveryAddress ? <section className="v1-order-destination"><div><MapPin size={20} /><span><small>{order.deliveryAddress.label ?? "DELIVERY ADDRESS"}</small><strong>{orderAddress(order)}</strong></span></div>{order.recipient ? <div><UserRound size={20} /><span><small>RECIPIENT</small><strong>{order.recipient.name} · {order.recipient.phoneNumber}</strong></span></div> : null}{order.deliveryAddress.instructions ? <p><strong>Delivery note</strong>{order.deliveryAddress.instructions}</p> : null}</section> : null}
+    {order.deliveryAddress ? <section className="v1-order-destination"><div><MapPin size={20} /><span><small>{order.deliveryAddress.label ?? "DELIVERY ADDRESS"}</small><strong>{orderAddress(order)}</strong></span></div>{order.recipient ? <div><UserRound size={20} /><span><small>RECIPIENT</small><strong>{order.recipient.name} · {customerPhoneNumber(order.recipient.phoneNumber)}</strong></span></div> : null}{order.deliveryAddress.instructions ? <p><strong>Delivery note</strong>{order.deliveryAddress.instructions}</p> : null}</section> : null}
 
-    <section className="v1-order-receipt" aria-label="Bill summary"><header><h3><ReceiptText size={19} /> Bill summary</h3><button type="button" onClick={() => downloadReceipt(order)}><Download size={16} /> Download receipt</button></header><ReceiptRow label="Items" amount={order.price.subtotalPaise} />{order.price.deliveryFeePaise ? <ReceiptRow label="Delivery" amount={order.price.deliveryFeePaise} /> : null}{order.price.platformFeePaise ? <ReceiptRow label="Dastak platform fee" amount={order.price.platformFeePaise} /> : null}{order.price.taxPaise ? <ReceiptRow label="Taxes" amount={order.price.taxPaise} /> : null}{order.price.discountPaise ? <ReceiptRow label="Discount" amount={-order.price.discountPaise} /> : null}<ReceiptRow label={order.paidAt ? "Total paid" : "Order total"} amount={order.price.totalPaise} total /></section>
+    <section className="v1-order-receipt" aria-label={paid ? "Bill summary" : "Order summary"}><header><h3><ReceiptText size={19} /> {paid ? "Bill summary" : "Order summary"}</h3>{paid ? <button type="button" onClick={() => downloadReceipt(order)}><Download size={16} /> Download receipt</button> : null}</header><ReceiptRow label="Items" amount={order.price.subtotalPaise} />{order.price.deliveryFeePaise ? <ReceiptRow label="Delivery" amount={order.price.deliveryFeePaise} /> : null}{order.price.platformFeePaise ? <ReceiptRow label="Dastak platform fee" amount={order.price.platformFeePaise} /> : null}{order.price.taxPaise ? <ReceiptRow label="Taxes" amount={order.price.taxPaise} /> : null}{order.price.discountPaise ? <ReceiptRow label="Discount" amount={-order.price.discountPaise} /> : null}<ReceiptRow label={orderTotalLabel(order)} amount={order.price.totalPaise} total /></section>
 
     <section className="v1-order-facts" aria-label="Order details"><h3>Order details</h3><div><span><small>ORDER NUMBER</small><strong>{order.displayOrderNumber}</strong></span><button type="button" onClick={() => void copyText(order.displayOrderNumber)} aria-label={`Copy order number ${order.displayOrderNumber}`}><Copy size={16} /> Copy</button></div><div><span><small>PAYMENT</small><strong>{order.paidAt ? "Paid online via Razorpay" : "Not yet confirmed"}</strong></span></div><div><span><small>ORDER PLACED</small><strong>{formatOrderDate(order.submittedAt ?? order.createdAt)}</strong></span></div>{order.paidAt ? <div><span><small>PAYMENT CONFIRMED</small><strong>{formatOrderDate(order.paidAt)}</strong></span></div> : null}{order.deliveredAt ?? order.delivery?.deliveredAt ? <div><span><small>DELIVERED</small><strong>{formatOrderDate(order.deliveredAt ?? order.delivery!.deliveredAt!)}</strong></span></div> : null}</section>
 
@@ -1150,6 +1154,7 @@ export function MatchingSheet({
       { label: "Payment confirmed", value: order.paidAt },
       { label: "Out for delivery", value: order.delivery?.outForDeliveryAt },
       { label: "Delivered", value: order.deliveredAt ?? order.delivery?.deliveredAt },
+      ...(currentTimelineItem ? [currentTimelineItem] : []),
     ]} />
 
     {order.status === "AWAITING_PAYMENT" && order.payment ? <div className="v1-payment-window">
@@ -1197,7 +1202,7 @@ export function MatchingSheet({
     {liveError ? <div className="v1-live-error" role="status"><CircleAlert size={17} /><span>Live updates paused: {liveError}</span><button type="button" onClick={onRefresh}>Refresh now</button></div> : null}
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {paymentReady ? <button className="primary-button v1-pay" type="button" disabled={busy} onClick={onPay}>{busy ? "Opening secure payment…" : `Pay ${formatV1Price(order.payment?.amountPaise ?? order.price.totalPaise)}`}<ArrowRight size={18} /></button> : null}
-    {cancellableStatuses.has(order.status) ? confirmingCancellation ? <div className="v1-cancel-confirm" role="alert"><strong>Cancel this order?</strong><p>Reserved items will be released. This action is available only before payment.</p><div><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmingCancellation(false)}>Keep order</button><button className="danger-button" type="button" disabled={busy} onClick={onCancel}>{busy ? "Cancelling…" : "Cancel order"}</button></div></div> : <button className="v1-cancel" type="button" disabled={busy} onClick={() => setConfirmingCancellation(true)}>Cancel before payment</button> : null}
+    {cancellableStatuses.has(order.status) ? confirmingCancellation ? <div className="v1-cancel-confirm" role="alert"><strong>Cancel this order?</strong><p>Reserved items will be released. This action is available only before payment.</p><div><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmingCancellation(false)}>Keep order</button><button className="danger-button" type="button" disabled={busy} onClick={onCancel}>{busy ? "Cancelling…" : "Cancel order"}</button></div></div> : <button className="v1-cancel" type="button" disabled={busy} onClick={() => setConfirmingCancellation(true)}><Ban size={17} /> Cancel order</button> : null}
     {canReorderV1Order(order.status) ? <button className="primary-button v1-reorder" type="button" disabled={busy} onClick={onReorder}><RotateCcw size={17} /> Order again</button> : null}
   </section></div>;
 }
@@ -1319,8 +1324,32 @@ function mergeV1Orders(incoming: V1Order[], current: V1Order[]) {
 function orderAddress(order: V1Order) {
   const address = order.deliveryAddress;
   if (!address) return "Delivery address";
-  return [address.line1, address.line2, address.landmark, address.city, address.state,
-    address.postalCode].filter(Boolean).join(", ");
+  return deliveryAddressLine(address);
+}
+
+function orderTotalLabel(order: V1Order) {
+  if (order.paidAt) return "Total paid";
+  if (["FULLY_SECURED", "AWAITING_PAYMENT"].includes(order.status)) return "Amount to pay";
+  return "Current basket total";
+}
+
+function activeTimelineItem(status: V1Order["status"]) {
+  if (status === "CREATED" || status === "MATCHING") {
+    return { label: "Finding every item", statusText: "In progress" };
+  }
+  if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") {
+    return { label: "Ready for payment", statusText: "Action needed" };
+  }
+  if (status === "PAID" || status === "PREPARING") {
+    return { label: "Preparing your order", statusText: "In progress" };
+  }
+  if (status === "PICKUP_IN_PROGRESS") {
+    return { label: "Picking up your order", statusText: "In progress" };
+  }
+  if (status === "DASTAK_FULFILMENT_FAILURE") {
+    return { label: "Recovery in progress", statusText: "Operations is helping" };
+  }
+  return undefined;
 }
 
 function formatOrderDate(value: string) {

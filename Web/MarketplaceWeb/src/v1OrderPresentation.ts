@@ -3,7 +3,7 @@ import type { V1Order } from "./dastakV1";
 const matchingStatuses = new Set<V1Order["status"]>(["CREATED", "MATCHING"]);
 
 export const orderJourneySteps = [
-  "Matching", "Secured", "Preparing", "Pickup", "On the way", "Delivered",
+  "Finding items", "Ready for payment", "Preparing", "Picking up", "On the way", "Delivered",
 ] as const;
 
 export function statusTitle(status: V1Order["status"]) {
@@ -36,7 +36,7 @@ export function statusTitle(status: V1Order["status"]) {
 
 export function statusMessage(status: V1Order["status"]) {
   if (matchingStatuses.has(status)) {
-    return "Dastak is matching every exact item. Retail merchant identities stay private.";
+    return "We’re checking availability for every exact item in your basket. You’ll pay only after everything is secured.";
   }
   if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") {
     return "Every item is reserved. Payment is requested before preparation begins.";
@@ -100,9 +100,29 @@ export function orderJourneyStep(status: V1Order["status"]) {
 
 export function orderJourneyLabel(status: V1Order["status"]) {
   const step = orderJourneyStep(status);
-  return step === undefined
-    ? undefined
-    : `Stage ${step + 1} of ${orderJourneySteps.length} · ${orderJourneySteps[step]}`;
+  return step === undefined ? undefined : orderJourneySteps[step];
+}
+
+export function deliveryAddressLine(address: NonNullable<V1Order["deliveryAddress"]>) {
+  const seen = new Set<string>();
+  return [address.line2, address.line1, address.landmark, address.city, address.state,
+    address.postalCode]
+    .map(normalizeAddressComponent)
+    .flatMap((value) => value?.split(",").map((segment) => segment.trim()).filter(Boolean) ?? [])
+    .filter((value): value is string => {
+      if (!value || seen.has(value.toLocaleLowerCase())) return false;
+      seen.add(value.toLocaleLowerCase());
+      return true;
+    })
+    .join(", ");
+}
+
+export function customerPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const local = digits.length === 12 && digits.startsWith("91")
+    ? digits.slice(2)
+    : digits.length === 10 ? digits : undefined;
+  return local ? `+91 ${local.slice(0, 5)} ${local.slice(5)}` : value;
 }
 
 export function orderKindLabel(orderType: string) {
@@ -159,4 +179,9 @@ export function orderSearchText(order: V1Order) {
 
 export function isIssueEvidenceRequired(category: string) {
   return !["DELIVERY_PROBLEM", "OTHER"].includes(category);
+}
+
+function normalizeAddressComponent(value: string | undefined) {
+  const normalized = value?.replace(/(?:\s*,\s*)+/g, ", ").replace(/^\s*,|,\s*$/g, "").trim();
+  return normalized || undefined;
 }

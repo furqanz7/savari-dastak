@@ -6,26 +6,51 @@ import SwiftUI
 struct DastakHomeView: View {
     @ObservedObject var model: DastakCustomerModel
     let chooseLocation: () -> Void
-    let openSearch: () -> Void
     let openCart: () -> Void
     let sendParcel: () -> Void
     @State private var selectedRestaurant: DastakV1RestaurantMenu?
+    @State private var isSearchPresented = false
+    @FocusState private var isSearchFieldFocused: Bool
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                header
-                promise
-                searchButton
-                restaurantRail
-                categoryRail
-                catalogueContent
-                parcelBand
+        ZStack(alignment: .top) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                    header
+                    promise
+                    restaurantRail
+                    categoryRail
+                    catalogueContent
+                    parcelBand
+                }
+                .padding(.horizontal, MarketplaceSpacing.medium)
+                .padding(.bottom, 104)
             }
-            .padding(.horizontal, MarketplaceSpacing.medium)
-            .padding(.bottom, 104)
+            .scrollIndicators(.hidden)
+            .allowsHitTesting(!isSearchPresented)
+
+            if isSearchPresented {
+                Color.black.opacity(0.2)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: closeSearch)
+
+                searchOverlay
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .padding(.top, MarketplaceSpacing.small)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
-        .scrollIndicators(.hidden)
+        .animation(.snappy(duration: 0.28), value: isSearchPresented)
+        .overlay(alignment: .bottom) {
+            if !model.cart.isEmpty, !isSearchPresented {
+                floatingCartButton
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .padding(.bottom, MarketplaceSpacing.small)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.28), value: model.cart.itemCount)
         .marketplacePage()
         .dastakNavigationBarHidden()
         .refreshable { await model.refreshV1Catalogue() }
@@ -97,6 +122,7 @@ struct DastakHomeView: View {
             HStack {
                 DastakWordmark(size: 31)
                 Spacer()
+                searchIconButton
                 cartButton
             }
 
@@ -140,29 +166,6 @@ struct DastakHomeView: View {
         .padding(.vertical, MarketplaceSpacing.small)
     }
 
-    private var searchButton: some View {
-        Button(action: openSearch) {
-            HStack(spacing: MarketplaceSpacing.compact) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                Text("Search products and essentials")
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, MarketplaceSpacing.medium)
-            .frame(minHeight: 52)
-            .background(.regularMaterial)
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: MarketplaceMetrics.controlCornerRadius,
-                    style: .continuous
-                )
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Search the Dastak product catalogue")
-    }
-
     @ViewBuilder
     private var categoryRail: some View {
         if !model.canonicalCategories.isEmpty {
@@ -172,7 +175,7 @@ struct DastakHomeView: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: MarketplaceSpacing.compact) {
                         ForEach(model.canonicalCategories) { category in
-                            Button(action: openSearch) {
+                            Button(action: presentSearch) {
                                 VStack(spacing: 8) {
                                     Image(systemName: categorySymbol(category.slug))
                                         .font(.title2.weight(.light))
@@ -245,7 +248,7 @@ struct DastakHomeView: View {
                 Text(category.name)
                     .font(MarketplaceTypography.sectionTitle)
                 Spacer()
-                Button("See all", action: openSearch)
+                Button("See all", action: presentSearch)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
             }
@@ -317,6 +320,234 @@ struct DastakHomeView: View {
         }
         .buttonStyle(MarketplaceIconButtonStyle())
         .accessibilityLabel("Basket, \(model.cart.itemCount) items")
+    }
+
+    @ViewBuilder
+    private var floatingCartButton: some View {
+        let button = Button(action: openCart) {
+            HStack(spacing: MarketplaceSpacing.compact) {
+                Image(systemName: "bag.fill")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        MarketplaceColors.dastakAccentSoft.color,
+                        in: Circle()
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(model.cart.itemCount) \(model.cart.itemCount == 1 ? "item" : "items")")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(DastakFormatting.money(model.cart.subtotal))
+                        .font(.headline.monospacedDigit())
+                }
+
+                Spacer(minLength: MarketplaceSpacing.small)
+
+                Text("View basket")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+            .padding(.horizontal, MarketplaceSpacing.small)
+            .frame(maxWidth: .infinity, minHeight: 60)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            "View basket, \(model.cart.itemCount) items, \(DastakFormatting.money(model.cart.subtotal))"
+        )
+
+        if #available(iOS 26.0, macOS 26.0, *) {
+            button.glassEffect(
+                .regular
+                    .tint(MarketplaceColors.dastakAccent.color.opacity(0.14))
+                    .interactive(),
+                in: Capsule()
+            )
+        } else {
+            button.marketplaceGlass(cornerRadius: 30)
+        }
+    }
+
+    private var searchIconButton: some View {
+        Button(action: presentSearch) {
+            Image(systemName: "magnifyingglass")
+                .font(.body.weight(.semibold))
+        }
+        .buttonStyle(MarketplaceIconButtonStyle())
+        .accessibilityLabel("Search Dastak")
+        .accessibilityHint("Opens product search")
+    }
+
+    private var searchOverlay: some View {
+        VStack(spacing: MarketplaceSpacing.small) {
+            HStack(spacing: MarketplaceSpacing.small) {
+                searchField
+                searchCloseButton
+            }
+
+            if !trimmedSearchText.isEmpty {
+                searchResults
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .task(id: model.searchText) {
+            guard !trimmedSearchText.isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await model.searchV1Catalogue()
+        }
+    }
+
+    @ViewBuilder
+    private var searchField: some View {
+        let field = HStack(spacing: MarketplaceSpacing.small) {
+            Image(systemName: "magnifyingglass")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+
+            TextField("Search products and essentials", text: $model.searchText)
+#if os(iOS)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+#endif
+                .focused($isSearchFieldFocused)
+                .onSubmit {
+                    Task { await model.searchV1Catalogue() }
+                }
+        }
+        .padding(.horizontal, MarketplaceSpacing.medium)
+        .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)
+
+        if #available(iOS 26.0, macOS 26.0, *) {
+            field.glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            field.marketplaceGlass(cornerRadius: MarketplaceMetrics.minimumTouchTarget / 2)
+        }
+    }
+
+    @ViewBuilder
+    private var searchCloseButton: some View {
+        let button = Button(action: closeSearch) {
+            Image(systemName: "xmark")
+                .font(.body.weight(.semibold))
+                .frame(
+                    width: MarketplaceMetrics.minimumTouchTarget,
+                    height: MarketplaceMetrics.minimumTouchTarget
+                )
+        }
+        .accessibilityLabel("Close search")
+
+        if #available(iOS 26.0, macOS 26.0, *) {
+            button
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            button.buttonStyle(MarketplaceIconButtonStyle())
+        }
+    }
+
+    @ViewBuilder
+    private var searchResults: some View {
+        if model.isSearchingV1Catalogue, model.activeProducts.isEmpty {
+            DastakLoadingOverlay(title: "Searching Dastak")
+        } else {
+            ScrollView {
+                LazyVStack(spacing: MarketplaceSpacing.small) {
+                    if model.activeProducts.isEmpty {
+                        ContentUnavailableView.search(text: trimmedSearchText)
+                            .padding(.vertical, MarketplaceSpacing.large)
+                    } else {
+                        ForEach(model.activeProducts) { product in
+                            searchResultRow(product)
+                        }
+                    }
+                }
+                .padding(MarketplaceSpacing.small)
+            }
+            .scrollIndicators(.hidden)
+            .frame(maxHeight: 520)
+            .marketplaceGlass(cornerRadius: MarketplaceMetrics.sheetCornerRadius)
+        }
+    }
+
+    private func searchResultRow(_ product: DastakV1CatalogueSKU) -> some View {
+        HStack(spacing: MarketplaceSpacing.compact) {
+            DastakProductArtwork(imageKey: product.imageKey, fallbackSymbol: artworkSymbol(for: product))
+                .frame(width: 66, height: 66)
+
+            VStack(alignment: .leading, spacing: 3) {
+                if let brand = product.brand?.name {
+                    Text(brand.uppercased())
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        .lineLimit(1)
+                }
+                Text(product.name)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                Text(DastakFormatting.money(product.price))
+                    .font(.subheadline.bold().monospacedDigit())
+            }
+
+            Spacer(minLength: 4)
+
+            Button {
+                Task { await model.toggleWishlist(kind: .retailSKU, itemID: product.id) }
+            } label: {
+                Image(systemName: model.isWishlisted(kind: .retailSKU, itemID: product.id) ? "heart.fill" : "heart")
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            .disabled(model.wishlistUpdatingIDs.contains(product.id))
+            .accessibilityLabel(model.isWishlisted(kind: .retailSKU, itemID: product.id) ? "Remove \(product.name) from Wishlist" : "Save \(product.name) to Wishlist")
+
+            Button { model.addToCart(product) } label: {
+                Image(systemName: "plus")
+                    .font(.subheadline.bold())
+                    .frame(width: 40, height: 40)
+                    .foregroundStyle(.white)
+                    .background(
+                        MarketplaceColors.primaryAction.color,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add \(product.name)")
+        }
+        .padding(MarketplaceSpacing.small)
+        .marketplaceFlatSurface()
+    }
+
+    private var trimmedSearchText: String {
+        model.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func presentSearch() {
+        isSearchPresented = true
+        Task { @MainActor in
+            await Task.yield()
+            isSearchFieldFocused = true
+        }
+    }
+
+    private func closeSearch() {
+        isSearchFieldFocused = false
+        model.searchText = ""
+        isSearchPresented = false
+    }
+
+    private func artworkSymbol(for product: DastakV1CatalogueSKU) -> String {
+        switch product.logisticsAttributes.temperatureClass {
+        case "CHILLED", "FROZEN": "snowflake"
+        default: product.logisticsAttributes.fragile == true ? "shippingbox" : "basket"
+        }
     }
 
     private func categorySymbol(_ slug: String) -> String {
@@ -580,7 +811,6 @@ private struct DastakHomeView_Previews: PreviewProvider {
             DastakHomeView(
                 model: .preview(),
                 chooseLocation: {},
-                openSearch: {},
                 openCart: {},
                 sendParcel: {}
             )

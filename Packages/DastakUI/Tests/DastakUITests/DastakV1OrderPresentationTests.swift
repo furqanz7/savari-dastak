@@ -50,8 +50,15 @@ final class DastakV1OrderPresentationTests: XCTestCase {
         XCTAssertNil(DastakV1OrderPresentation.journeyStep(.paymentExpired))
         XCTAssertEqual(
             DastakV1OrderPresentation.journeyLabel(.outForDelivery),
-            "Stage 5 of 6 · On the way"
+            "On the way"
         )
+    }
+
+    func testMatchingCopyKeepsInternalMerchantAndWaveDetailsPrivate() {
+        let copy = DastakV1OrderPresentation.message(.matching).lowercased()
+        XCTAssertTrue(copy.contains("every exact item"))
+        XCTAssertFalse(copy.contains("merchant"))
+        XCTAssertFalse(copy.contains("wave"))
     }
 
     func testRestaurantOptionsAndImmutableAddressAreHumanReadable() throws {
@@ -82,7 +89,14 @@ final class DastakV1OrderPresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(DastakV1OrderPresentation.optionSummary(line), "Large")
-        XCTAssertTrue(DastakV1OrderPresentation.addressLine(address).contains("Vaniyambadi"))
+        XCTAssertEqual(
+            DastakV1OrderPresentation.addressLine(address),
+            "First floor, 1 Launch Road, Near the park, Vaniyambadi, Tamil Nadu, 635751"
+        )
+        XCTAssertEqual(
+            DastakV1OrderPresentation.phoneNumber("+919876543210"),
+            "+91 98765 43210"
+        )
     }
 
     func testOrderHistorySupportsSearchDeliveryDurationAndReorderEligibility() throws {

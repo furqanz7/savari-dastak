@@ -328,11 +328,11 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
 
   return <section className="v1-merchant-panel" aria-labelledby="v1-merchant-title">
     <header>
-      <div><p className="eyebrow">DASTAK V1</p><h2 id="v1-merchant-title">Launch fulfilments</h2><span>Confirm exact items, then prepare every declared package after payment.</span></div>
-      <button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={refreshing} aria-label="Refresh V1 fulfilments"><RefreshCw size={18} /></button>
+      <div><p className="eyebrow">LIVE OPERATIONS</p><h2 id="v1-merchant-title">Current fulfilments</h2><span>Confirm exact items, then prepare every declared package after payment.</span></div>
+      <button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={refreshing} aria-label="Refresh fulfilments"><RefreshCw size={18} /></button>
     </header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
-    {loading ? <div className="catalogue-loading" role="status"><span /> Loading V1 fulfilments</div> : <>
+    {loading ? <div className="catalogue-loading" role="status"><span /> Loading fulfilments</div> : <>
       {restaurantRequests.some((request) => request.status === "OFFERED") ? <div className="v1-opportunity-list">
         {restaurantRequests.filter((request) => request.status === "OFFERED").map((request) => <article className="v1-opportunity-card" key={request.id}>
           <header><span className="v1-opportunity-icon"><PackageCheck size={20} /></span><span><strong>{request.displayOrderNumber}</strong><small>Exact Restaurant/Cafe request · {request.branch.displayName}</small></span><b>CONFIRM FOOD</b></header>
@@ -395,7 +395,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
           </article>;
         })}
       </div> : null}
-      {visibleOpportunities.length === 0 ? <p className="v1-merchant-empty">No item requests waiting right now.</p> : <div className="v1-opportunity-list">
+      {visibleOpportunities.length === 0 ? <p className="v1-merchant-empty">You’re online. New exact-item requests will appear here.</p> : <div className="v1-opportunity-list">
         {visibleOpportunities.map((opportunity) => {
           const seconds = Math.max(0, Math.ceil((Date.parse(opportunity.expiresAt) - now) / 1_000));
           const offered = opportunity.status === "OFFERED" && seconds > 0;

@@ -371,7 +371,7 @@ a.customer-account-row:hover { color: var(--dastak-accent); }
 .customer-timeline li > span { width: 11px; height: 11px; margin-top: 3px; border: 2px solid var(--dastak-accent); border-radius: 50%; background: var(--canvas); }
 .customer-timeline li.current > span { background: var(--dastak-accent); }
 .customer-timeline li div { display: grid; gap: 4px; }
-.customer-timeline time { color: var(--text-secondary); font-size: 13px; }
+.customer-timeline time, .customer-timeline li small { color: var(--text-secondary); font-size: 13px; }
 .customer-detail-actions { display: grid; gap: 10px; margin-top: 26px; }
 .customer-detail-actions button { width: 100%; min-height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .customer-support-sheet form { display: grid; gap: 16px; }

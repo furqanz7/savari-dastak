@@ -156,22 +156,24 @@ struct DastakV1MatchingView: View {
                     Text(DastakV1OrderPresentation.message(order.status))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.compact) {
+                Text(order.displayOrderNumber)
+                    .font(.caption.monospaced().weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
                 Spacer(minLength: MarketplaceSpacing.small)
                 Text(DastakFormatting.money(order.price.total))
                     .font(.headline.monospacedDigit())
             }
-
-            HStack {
-                Text(order.displayOrderNumber)
-                    .font(.caption.monospaced().weight(.semibold))
-                Spacer()
-                if let date = DastakV1OrderPresentation.date(order.submittedAt ?? order.createdAt) {
-                    Text(date.formatted(date: .abbreviated, time: .shortened))
-                }
+            if let date = DastakV1OrderPresentation.date(order.submittedAt ?? order.createdAt) {
+                Text(date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
 
             if DastakV1OrderPresentation.isActive(order.status) {
                 DastakV1JourneyProgress(status: order.status)
@@ -516,7 +518,10 @@ struct DastakV1MatchingView: View {
                     .font(.subheadline)
                 if let recipient = order.recipient {
                     Divider()
-                    Label("\(recipient.name) · \(recipient.phoneNumber)", systemImage: "person.fill")
+                    Label(
+                        "\(recipient.name) · \(DastakV1OrderPresentation.phoneNumber(recipient.phoneNumber))",
+                        systemImage: "person.fill"
+                    )
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -535,12 +540,14 @@ struct DastakV1MatchingView: View {
     private func receiptCard(_ order: DastakV1OrderSnapshot) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             HStack {
-                Label("Bill summary", systemImage: "receipt")
+                Label(order.paidAt == nil ? "Order summary" : "Bill summary", systemImage: "receipt")
                     .font(.headline)
                 Spacer()
-                ShareLink(item: receiptText(order)) {
-                    Label("Share receipt", systemImage: "square.and.arrow.up")
-                        .font(.caption.bold())
+                if order.paidAt != nil {
+                    ShareLink(item: receiptText(order)) {
+                        Label("Share receipt", systemImage: "square.and.arrow.up")
+                            .font(.caption.bold())
+                    }
                 }
             }
             receiptRow("Items", paise: order.price.subtotalPaise)
@@ -559,27 +566,37 @@ struct DastakV1MatchingView: View {
             Divider()
             receiptRow(receiptTotalLabel(order), paise: order.price.totalPaise, emphasized: true)
             Divider()
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(order.paidAt == nil ? "Payment" : "Paid online via Razorpay")
-                        .font(.footnote.weight(.semibold))
-                    if let paidAt = DastakV1OrderPresentation.date(order.paidAt) {
-                        Text(paidAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Payment is not yet confirmed")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(order.paidAt == nil ? "Payment" : "Paid online via Razorpay")
+                    .font(.footnote.weight(.semibold))
+                if let paidAt = DastakV1OrderPresentation.date(order.paidAt) {
+                    Text(paidAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Payment is not yet confirmed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Spacer()
+            }
+            Divider()
+            HStack(spacing: MarketplaceSpacing.compact) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Order number")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(order.displayOrderNumber)
+                        .font(.caption.monospaced().weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+                Spacer(minLength: MarketplaceSpacing.small)
                 Button {
                     copyToPasteboard(order.displayOrderNumber)
                     model.ordersActionMessage = "Order number copied."
                 } label: {
-                    Label(order.displayOrderNumber, systemImage: "doc.on.doc")
-                        .font(.caption.monospaced().weight(.semibold))
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .font(.caption.weight(.semibold))
                 }
                 .accessibilityLabel("Copy order number \(order.displayOrderNumber)")
             }
@@ -629,6 +646,19 @@ struct DastakV1MatchingView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+            }
+            if let current = currentTimelineEntry(order.status) {
+                HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.compact) {
+                    Circle()
+                        .strokeBorder(MarketplaceColors.dastakAccent.color, lineWidth: 2)
+                        .frame(width: 9, height: 9)
+                    Text(current.label)
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: MarketplaceSpacing.small)
+                    Text(current.status)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 }
             }
         }
@@ -843,10 +873,11 @@ struct DastakV1MatchingView: View {
         Button(role: .destructive) {
             showingCancellationConfirmation = true
         } label: {
-            Text("Cancel before payment")
+            Label("Cancel order", systemImage: "xmark.circle")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
+        .tint(.red)
         .controlSize(.large)
     }
 
@@ -1018,7 +1049,24 @@ struct DastakV1MatchingView: View {
     }
 
     private func receiptTotalLabel(_ order: DastakV1OrderSnapshot) -> String {
-        order.paidAt == nil ? "Order total" : "Total paid"
+        if order.paidAt != nil { return "Total paid" }
+        if [.fullySecured, .awaitingPayment].contains(order.status) { return "Amount to pay" }
+        return "Current basket total"
+    }
+
+    private func currentTimelineEntry(
+        _ status: DastakV1OrderStatus
+    ) -> (label: String, status: String)? {
+        switch status {
+        case .created, .matching: ("Finding every item", "In progress")
+        case .fullySecured: ("Ready for payment", "Secured")
+        case .awaitingPayment: ("Ready for payment", "Action needed")
+        case .paid, .preparing: ("Preparing", "In progress")
+        case .pickupInProgress: ("Picking up", "In progress")
+        case .outForDelivery: ("On the way", "In progress")
+        case .delivered, .unavailable, .paymentExpired,
+             .cancelledPrepayment, .fulfilmentFailure: nil
+        }
     }
 
     private func issueCategoryTitle(_ category: DastakV1CustomerIssueCategory) -> String {

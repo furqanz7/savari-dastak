@@ -51,15 +51,19 @@ export function CustomerRouteMap({ points }: { points: CustomerMapPoint[] }) {
   );
 }
 
-export function CustomerTimeline({ items }: { items: Array<{ label: string; value?: string }> }) {
-  const visible = items.filter((item) => item.value);
+export function CustomerTimeline({ items }: {
+  items: Array<{ label: string; value?: string; statusText?: string }>;
+}) {
+  const visible = items.filter((item) => item.value || item.statusText);
   if (visible.length === 0) return null;
   return (
     <section className="customer-timeline" aria-label="Delivery timeline">
       <h2>Timeline</h2>
       <ol>{visible.map((item, index) => (
         <li key={item.label} className={index === visible.length - 1 ? "current" : ""}>
-          <span /><div><strong>{item.label}</strong><time dateTime={item.value}>{formatDate(item.value!)}</time></div>
+          <span /><div><strong>{item.label}</strong>{item.value
+            ? <time dateTime={item.value}>{formatDate(item.value)}</time>
+            : <small>{item.statusText}</small>}</div>
         </li>
       ))}</ol>
     </section>

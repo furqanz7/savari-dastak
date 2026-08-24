@@ -15,7 +15,6 @@ private let dastakLegacyPendingOrderIDKey = "dastak.notification.pendingOrderID"
 public struct DastakCustomerRootView: View {
     private enum Tab: Hashable {
         case home
-        case search
         case orders
         case account
     }
@@ -106,23 +105,12 @@ public struct DastakCustomerRootView: View {
                 DastakHomeView(
                     model: model,
                     chooseLocation: { showingDiscoveryLocationPicker = true },
-                    openSearch: { selectedTab = .search },
                     openCart: { showingCart = true },
                     sendParcel: { showingParcel = true }
                 )
             }
             .tag(Tab.home)
             .tabItem { Label("Home", systemImage: "house") }
-
-            NavigationStack {
-                DastakSearchView(
-                    model: model,
-                    chooseLocation: { showingDiscoveryLocationPicker = true },
-                    openCart: { showingCart = true }
-                )
-            }
-            .tag(Tab.search)
-            .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
             NavigationStack(path: $ordersPath) {
                 DastakOrdersView(

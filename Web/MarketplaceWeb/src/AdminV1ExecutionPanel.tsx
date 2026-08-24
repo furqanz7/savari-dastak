@@ -68,11 +68,11 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
     void loadTrace(orderId);
   };
 
-  return <section className="v1-execution-panel" role="tabpanel" aria-label="Dastak V1 execution trace">
-    <header><div><p className="eyebrow">LAUNCH SPINE</p><h2>V1 execution trace</h2><span>Matching through verified final delivery and package custody.</span></div><button className="icon-button" type="button" disabled={busy} onClick={() => void refresh(true)} aria-label="Refresh V1 trace"><RefreshCw size={18} /></button></header>
+  return <section className="v1-execution-panel" role="tabpanel" aria-label="Current Dastak orders">
+    <header><div><p className="eyebrow">LIVE ORDER CONTROL</p><h2>Orders</h2><span>Inspect matching, payment, fulfilment, custody and recovery in one trace.</span></div><button className="icon-button" type="button" disabled={busy} onClick={() => void refresh(true)} aria-label="Refresh orders"><RefreshCw size={18} /></button></header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
-    {loading ? <div className="catalogue-loading" role="status"><span /> Loading V1 trace</div> : orders.length === 0 ? <p className="admin-empty">No V1 orders have been submitted.</p> : <div className="v1-execution-layout">
-      <nav aria-label="V1 orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>
+    {loading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length === 0 ? <p className="admin-empty">No current-generation orders have been submitted.</p> : <div className="v1-execution-layout">
+      <nav aria-label="Current orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>
       <div className="v1-trace-detail">{trace ? <Trace trace={trace} auth={auth} onChanged={() => void loadTrace(trace.order.id)} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
     </div>}
   </section>;

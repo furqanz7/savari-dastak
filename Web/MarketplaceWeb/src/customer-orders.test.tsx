@@ -6,6 +6,8 @@ import {
 } from "./DastakV1CustomerExperience";
 import {
   canReorderV1Order,
+  customerPhoneNumber,
+  deliveryAddressLine,
   deliveredDurationLabel,
   isIssueEvidenceRequired,
   isV1OrderActive,
@@ -27,7 +29,7 @@ describe("customer V1 Orders experience", () => {
     expect(isV1OrderActive("OUT_FOR_DELIVERY")).toBe(true);
     expect(isV1OrderActive("DASTAK_FULFILMENT_FAILURE")).toBe(false);
     expect(orderJourneyStep("OUT_FOR_DELIVERY")).toBe(4);
-    expect(orderJourneyLabel("OUT_FOR_DELIVERY")).toBe("Stage 5 of 6 · On the way");
+    expect(orderJourneyLabel("OUT_FOR_DELIVERY")).toBe("On the way");
     expect(orderJourneyStep("PAYMENT_EXPIRED")).toBeUndefined();
   });
 
@@ -46,7 +48,7 @@ describe("customer V1 Orders experience", () => {
 
     expect(markup).toContain("Dastak Cafe");
     expect(markup).toContain("Preparing your order");
-    expect(markup).toContain("Stage 3 of 6 · Preparing");
+    expect(markup).toContain("Preparing");
     expect(markup).toContain("Active");
     expect(markup).toContain("Past");
     expect(markup).not.toContain("Ongoing");
@@ -86,16 +88,43 @@ describe("customer V1 Orders experience", () => {
     expect(markup).toContain("Dastak Cafe");
     expect(markup).toContain("Large · Extra shot");
     expect(markup).toContain("12 Market Road");
-    expect(markup).toContain("A Customer · +919876543210");
+    expect(markup).toContain("A Customer · +91 98765 43210");
     expect(markup).toContain("LIVE DELIVERY");
     expect(markup).toContain("725 m");
-    expect(markup).toContain("Stage 5 of 6 · On the way");
+    expect(markup).toContain("On the way");
     expect(markup).toContain("Bill summary");
     expect(markup).toContain("Timeline");
     expect(markup).toContain("Dastak platform fee");
     expect(markup).toContain("Paid online via Razorpay");
     expect(markup).toContain("Download receipt");
     expect(markup).not.toMatch(/retail merchant|pickup route/i);
+  });
+
+  it("presents an unpaid matching order as an in-progress order, not a receipt", () => {
+    const order = orderFixture();
+    order.status = "MATCHING";
+    order.customerState = "FINDING_ITEMS";
+    order.paidAt = undefined;
+    order.fullySecuredAt = undefined;
+
+    const markup = renderToStaticMarkup(<MatchingSheet
+      order={order}
+      busy={false}
+      imageUrlForLine={() => null}
+      onDismiss={() => undefined}
+      onCancel={() => undefined}
+      onPay={() => undefined}
+      onReorder={() => undefined}
+      onRefresh={() => undefined}
+      onReportIssue={async () => true}
+    />);
+
+    expect(markup).toContain("Finding every item");
+    expect(markup).toContain("In progress");
+    expect(markup).toContain("Order summary");
+    expect(markup).toContain("Current basket total");
+    expect(markup).not.toContain("Download receipt");
+    expect(markup).not.toMatch(/retail merchant|wave 1|wave 2/i);
   });
 
   it("requires evidence for product-condition issues", () => {
@@ -107,6 +136,21 @@ describe("customer V1 Orders experience", () => {
 
   it("presents selected food options rather than dropping add-ons", () => {
     expect(orderLineDetail(orderFixture().lines[1])).toBe("Large · Extra shot");
+  });
+
+  it("normalizes customer-facing address and phone formatting", () => {
+    expect(deliveryAddressLine({
+      label: "Home",
+      line1: "128, Mandi street,, neelfield,",
+      line2: "CL Road, Vaniyambadi, Tamil Nadu",
+      city: "Vaniyambadi",
+      state: "Tamil Nadu",
+      postalCode: "635751",
+      countryCode: "IN",
+      latitude: 12.68,
+      longitude: 78.62,
+    })).toBe("CL Road, Vaniyambadi, Tamil Nadu, 128, Mandi street, neelfield, 635751");
+    expect(customerPhoneNumber("+919876543210")).toBe("+91 98765 43210");
   });
 
   it("supports truthful order search, delivery duration and reorder eligibility", () => {
