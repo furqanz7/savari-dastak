@@ -16,8 +16,9 @@ describe("customer saved, payment and merchant-entry experience", () => {
   });
 
   it("keeps payment settings truthful and provider-secured", () => {
-    expect(experience).toContain("Razorpay-secured checkout");
-    expect(experience).toContain("never stores your card number, UPI PIN or bank credentials");
+    expect(experience).toContain("Razorpay-secured payment");
+    expect(experience).toContain("never stores your UPI PIN or bank credentials");
+    expect(experience).toContain("processes only the payment method you choose in Dastak");
     expect(experience).toContain("Recent payment activity");
     expect(experience).not.toContain("Saved Cards");
   });

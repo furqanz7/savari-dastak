@@ -5,6 +5,21 @@ import XCTest
 @testable import DastakUI
 
 final class DastakCustomerLifecycleTests: XCTestCase {
+    func testUPIAppAvailabilityComesOnlyFromRazorpayDiscovery() {
+        XCTAssertTrue(DastakDiscoveredUPIApp.parse([]).isEmpty)
+
+        let apps = DastakDiscoveredUPIApp.parse([
+            ["appPackage": "com.phonepe.PhonePe", "appName": "PhonePe"],
+            ["appPackage": "com.google.GPay", "appName": "Google Pay"],
+            ["appPackage": "com.google.GPay", "appName": "Duplicate must disappear"],
+            ["packageName": "com.example.supported", "displayName": "Another UPI app"],
+        ])
+
+        XCTAssertEqual(apps.map(\.title), ["Google Pay", "PhonePe", "Another UPI app"])
+        XCTAssertEqual(Set(apps.map(\.packageName)).count, 3)
+        XCTAssertFalse(apps.contains(where: { $0.title == "CRED" || $0.title == "Paytm" }))
+    }
+
     func testCustomerOnboardingNeverRequiresDeliveryAddress() {
         XCTAssertEqual(
             DastakCustomerOnboardingStep.next(

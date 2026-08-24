@@ -250,7 +250,7 @@ struct DastakPaymentSettingsView: View {
                 Text("Razorpay-secured checkout")
                     .font(.headline)
                     .foregroundStyle(MarketplaceColors.textPrimaryDark.color)
-                Text("Dastak never stores your card number, UPI PIN or bank credentials. Available methods are chosen inside Razorpay for each payment.")
+                Text("Dastak never stores your UPI PIN or bank credentials. Razorpay processes only the payment method you choose in Dastak.")
                     .font(.footnote)
                     .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
                     .fixedSize(horizontal: false, vertical: true)

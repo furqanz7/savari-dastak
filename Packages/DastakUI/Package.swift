@@ -14,7 +14,7 @@ let package = Package(
         .package(path: "../MarketplaceDesignSystem"),
         .package(path: "../MarketplaceFoundation"),
         .package(path: "../MarketplaceInfrastructure"),
-        .package(url: "https://github.com/razorpay/razorpay-pod.git", exact: "1.5.7")
+        .package(url: "https://github.com/razorpay/razorpay-customui-pod.git", exact: "2.2.0")
     ],
     targets: [
         .target(
@@ -30,8 +30,8 @@ let package = Package(
                 "MarketplaceFoundation",
                 "MarketplaceInfrastructure",
                 .product(
-                    name: "RazorpayCheckout",
-                    package: "razorpay-pod",
+                    name: "RazorpayCustomUI",
+                    package: "razorpay-customui-pod",
                     condition: .when(platforms: [.iOS])
                 )
             ]

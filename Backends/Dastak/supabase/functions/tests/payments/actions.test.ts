@@ -3,8 +3,14 @@ import {
   type DastakPaymentDependencies,
   handleDastakPayments,
   type PaymentActionInput,
+  type PaymentCompletionInput,
   type PaymentFailureInput,
 } from "../../dastak-payments/handler.ts";
+import {
+  constantTimeHexEqual,
+  hmacSHA256Hex,
+  verifyRazorpayPaymentSignature,
+} from "../../dastak-payments/verification.ts";
 
 Deno.test("Dastak payments serve browser preflight without authentication", async () => {
   let authenticationAttempts = 0;
@@ -163,6 +169,95 @@ Deno.test("V1 checkout failure is recorded against the authenticated reservation
   assertEquals(recorded?.failureCode, "CHECKOUT_DISMISSED");
 });
 
+Deno.test("Custom Checkout completion accepts only authenticated V1 provider values", async () => {
+  let recorded: PaymentCompletionInput | undefined;
+  const response = await handleDastakPayments(
+    request(
+      {
+        operation: "completeCustomCheckout",
+        entityType: "dastak_v1_order",
+        orderId,
+        paymentAttemptId: otherAccountId,
+        razorpay_order_id: "order_custom123",
+        razorpay_payment_id: "pay_custom456",
+        razorpay_signature: "a".repeat(64),
+        amountPaise: 1,
+      },
+      "Bearer session",
+      "v1-custom-completion",
+    ),
+    dependencies({
+      completeCustomCheckout: (input) => {
+        recorded = input;
+        return Promise.resolve({
+          responseBody: { state: "AWAITING_PROVIDER_CONFIRMATION" },
+          responseStatus: 202,
+        });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 202);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.orderId, orderId);
+  assertEquals(recorded?.attemptId, otherAccountId);
+  assertEquals(recorded?.providerOrderId, "order_custom123");
+  assertEquals(recorded?.providerPaymentId, "pay_custom456");
+  assertEquals("amountPaise" in (recorded ?? {}), false);
+});
+
+Deno.test("Custom Checkout completion rejects malformed or non-V1 responses", async () => {
+  const malformed = await handleDastakPayments(
+    request(
+      {
+        operation: "completeCustomCheckout",
+        entityType: "dastak_v1_order",
+        orderId,
+        paymentAttemptId: otherAccountId,
+        razorpay_order_id: "order_custom123",
+        razorpay_payment_id: "pay_custom456",
+        razorpay_signature: "not-a-signature",
+      },
+      "Bearer session",
+      "bad-completion",
+    ),
+    dependencies(),
+  );
+  const legacy = await handleDastakPayments(
+    request(
+      {
+        operation: "completeCustomCheckout",
+        orderId,
+        paymentAttemptId: otherAccountId,
+        razorpay_order_id: "order_custom123",
+        razorpay_payment_id: "pay_custom456",
+        razorpay_signature: "a".repeat(64),
+      },
+      "Bearer session",
+      "legacy-completion",
+    ),
+    dependencies(),
+  );
+  assertEquals(malformed.status, 400);
+  assertEquals(legacy.status, 400);
+});
+
+Deno.test("Razorpay completion signature verification is HMAC-SHA256 and timing-safe", async () => {
+  const secret = "test-secret";
+  const signature = await hmacSHA256Hex(secret, "order_custom123|pay_custom456");
+  assertEquals(
+    await verifyRazorpayPaymentSignature(secret, "order_custom123", "pay_custom456", signature),
+    true,
+  );
+  assertEquals(
+    await verifyRazorpayPaymentSignature(secret, "order_other", "pay_custom456", signature),
+    false,
+  );
+  const tampered = `${signature[0] === "0" ? "1" : "0"}${signature.slice(1)}`;
+  assertEquals(constantTimeHexEqual(signature, tampered), false);
+  assertEquals(constantTimeHexEqual(signature, signature.slice(2)), false);
+});
+
 Deno.test("payment actions reject missing auth and malformed input", async () => {
   const unauthenticated = await handleDastakPayments(
     request({ operation: "createCheckout", orderId }, undefined, "attempt"),
@@ -201,6 +296,12 @@ function dependencies(
       (() => Promise.resolve({ responseBody: { orderId }, responseStatus: 202 })),
     reportPaymentFailure: overrides.reportPaymentFailure ??
       (() => Promise.resolve({ responseBody: { status: "FAILED" }, responseStatus: 200 })),
+    completeCustomCheckout: overrides.completeCustomCheckout ??
+      (() =>
+        Promise.resolve({
+          responseBody: { state: "AWAITING_PROVIDER_CONFIRMATION" },
+          responseStatus: 202,
+        })),
   };
 }
 

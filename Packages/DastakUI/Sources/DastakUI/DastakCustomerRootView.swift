@@ -298,23 +298,40 @@ public struct DastakCustomerRootView: View {
                     session: session,
                     customerName: model.checkoutCustomer?.displayName,
                     customerEmail: model.checkoutCustomer?.email,
-                    customerPhone: model.checkoutCustomer?.phoneNumber,
-                    paymentMethod: model.selectedPaymentMethod
+                    customerPhone: model.checkoutCustomer?.phoneNumber
                 ) { result in
                     switch result {
-                    case .succeeded:
-                        model.clearCheckoutSession()
-                        showingCheckout = false
-                        selectedTab = .orders
-                        isConfirmingPayment = true
+                    case let .succeeded(completion):
                         Task {
+                            if session.entityType == .dastakV1Order {
+                                do {
+                                    _ = try await model.completeV1CustomCheckout(
+                                        session: session,
+                                        providerOrderID: completion.orderID,
+                                        providerPaymentID: completion.paymentID,
+                                        providerSignature: completion.signature
+                                    )
+                                } catch {
+                                    model.clearCheckoutSession()
+                                    showingCheckout = false
+                                    selectedTab = .orders
+                                    model.v1OrderErrorMessage = "Dastak could not verify the payment return. No second charge will be attempted; provider reconciliation is still running."
+                                    showingV1Order = true
+                                    return
+                                }
+                            }
+
+                            model.clearCheckoutSession()
+                            showingCheckout = false
+                            selectedTab = .orders
+                            isConfirmingPayment = true
                             let confirmed = await model.waitForPaymentConfirmation(session: session)
                             isConfirmingPayment = false
                             if !confirmed {
                                 if session.entityType == .dastakV1Order {
-                                    model.v1OrderErrorMessage = "Payment was received. Dastak is still confirming it securely."
+                                    model.v1OrderErrorMessage = "Authorization returned successfully. Dastak is waiting for Razorpay's captured-payment confirmation."
                                 } else {
-                                    model.errorMessage = "Payment was received. We are confirming it securely and will update your order shortly."
+                                    model.errorMessage = "Authorization returned successfully. We are waiting for secure payment confirmation."
                                 }
                             }
                             if session.entityType == .dastakV1Order { showingV1Order = true }

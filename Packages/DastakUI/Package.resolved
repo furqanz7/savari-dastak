@@ -1,5 +1,5 @@
 {
-  "originHash" : "41615f9c0997cb3d04f0d3fc8cb59845af96d48cd9d6f4161044845ed7b28884",
+  "originHash" : "2618ee42c586ca253fddfdf1e5621291a4ad0c1a8b7565cf2590b5e8826287de",
   "pins" : [
     {
       "identity" : "phonenumberkit",
@@ -11,12 +11,12 @@
       }
     },
     {
-      "identity" : "razorpay-pod",
+      "identity" : "razorpay-customui-pod",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/razorpay/razorpay-pod.git",
+      "location" : "https://github.com/razorpay/razorpay-customui-pod.git",
       "state" : {
-        "revision" : "952726216dd642d5502f001ea2df1041a568753a",
-        "version" : "1.5.7"
+        "revision" : "b607c6a7bf7382c8d7962bfc7dbee9e8e6e59f19",
+        "version" : "2.2.0"
       }
     },
     {

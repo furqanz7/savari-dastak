@@ -62,6 +62,14 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         UserDefaults.standard.removeObject(forKey: "dastak.apns.deviceToken")
     }
 
+    func application(
+        _ application: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        DastakRazorpayRedirection.handle(url)
+    }
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification

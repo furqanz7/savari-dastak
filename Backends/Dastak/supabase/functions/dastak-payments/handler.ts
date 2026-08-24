@@ -17,11 +17,19 @@ export type PaymentFailureInput = PaymentActionInput & {
   failureCode: string;
 };
 
+export type PaymentCompletionInput = PaymentActionInput & {
+  attemptId: string;
+  providerOrderId: string;
+  providerPaymentId: string;
+  providerSignature: string;
+};
+
 export type DastakPaymentDependencies = {
   authenticateBearer: AuthenticateBearer;
   createCheckout: (input: PaymentActionInput) => Promise<RpcResult>;
   processRefund: (input: PaymentActionInput) => Promise<RpcResult>;
   reportPaymentFailure: (input: PaymentFailureInput) => Promise<RpcResult>;
+  completeCustomCheckout: (input: PaymentCompletionInput) => Promise<RpcResult>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -61,12 +69,18 @@ export async function handleDastakPayments(
 
   const attemptId = validUUID(body.paymentAttemptId);
   const failureCode = validFailureCode(body.failureCode);
+  const providerOrderId = validProviderReference(body.razorpay_order_id, "order");
+  const providerPaymentId = validProviderReference(body.razorpay_payment_id, "pay");
+  const providerSignature = validSignature(body.razorpay_signature);
   const normalized = {
     operation: body.operation,
     entityType,
     orderId,
     ...(attemptId ? { attemptId } : {}),
     ...(failureCode ? { failureCode } : {}),
+    ...(providerOrderId ? { providerOrderId } : {}),
+    ...(providerPaymentId ? { providerPaymentId } : {}),
+    ...(providerSignature ? { providerSignature } : {}),
     ...(refundId ? { refundId } : {}),
   };
   const input: PaymentActionInput = {
@@ -98,6 +112,19 @@ export async function handleDastakPayments(
       });
       return json(result.responseBody, result.responseStatus);
     }
+    if (
+      body.operation === "completeCustomCheckout" && entityType === "dastak_v1_order" &&
+      attemptId && providerOrderId && providerPaymentId && providerSignature
+    ) {
+      const result = await dependencies.completeCustomCheckout({
+        ...input,
+        attemptId,
+        providerOrderId,
+        providerPaymentId,
+        providerSignature,
+      });
+      return json(result.responseBody, result.responseStatus);
+    }
     return validationError();
   } catch {
     return json({
@@ -126,6 +153,18 @@ function validUUID(value: unknown) {
 
 function validFailureCode(value: unknown) {
   return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,79}$/.test(value) ? value : undefined;
+}
+
+function validProviderReference(value: unknown, prefix: "order" | "pay") {
+  return typeof value === "string" && new RegExp(`^${prefix}_[A-Za-z0-9]{1,190}$`).test(value)
+    ? value
+    : undefined;
+}
+
+function validSignature(value: unknown) {
+  return typeof value === "string" && /^[0-9a-f]{64}$/i.test(value)
+    ? value.toLowerCase()
+    : undefined;
 }
 
 function requiredIdempotencyKey(request: Request) {

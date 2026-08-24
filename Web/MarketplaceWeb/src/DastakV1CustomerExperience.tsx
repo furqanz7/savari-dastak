@@ -32,9 +32,9 @@ import {
 import { useModalDialog } from "./useModalDialog";
 import {
   createV1CheckoutSession,
-  openRazorpayCheckout,
-  reportV1CheckoutFailure,
+  type CheckoutSession,
 } from "./payments";
+import { DastakPaymentOptions } from "./DastakPaymentOptions";
 import {
   canReorderV1Order,
   customerPhoneNumber,
@@ -114,6 +114,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const [error, setError] = useState<string>();
   const [orderActionError, setOrderActionError] = useState<string>();
   const [paymentMessage, setPaymentMessage] = useState<string>();
+  const [paymentSession, setPaymentSession] = useState<CheckoutSession>();
   const [ordersError, setOrdersError] = useState<string>();
   const [liveOrderError, setLiveOrderError] = useState<string>();
   const [showingCart, setShowingCart] = useState(false);
@@ -559,35 +560,7 @@ export function DastakV1CustomerExperience(props: Props) {
         orderId: selectedOrder.id,
         idempotencyKey: crypto.randomUUID(),
       });
-      const result = await openRazorpayCheckout(session, {
-        name: props.displayName,
-        phoneNumber: props.phoneNumber,
-      });
-      if (result !== "success") {
-        if (session.attemptId) {
-          await reportV1CheckoutFailure({
-            ...auth,
-            orderId: selectedOrder.id,
-            paymentAttemptId: session.attemptId,
-            failureCode: result === "failed" ? "CHECKOUT_FAILED" : "CHECKOUT_DISMISSED",
-            idempotencyKey: crypto.randomUUID(),
-          }).catch(() => undefined);
-        }
-        await refreshSelectedOrder(selectedOrder.id).catch(() => undefined);
-        setPaymentMessage(
-          result === "failed"
-            ? "Payment failed. Your secured basket is still reserved—try again before the timer ends."
-            : "Payment was not completed. Your reservation is unchanged and you can retry.",
-        );
-        return;
-      }
-
-      setPaymentMessage("Payment received. Confirming it securely with Dastak…");
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        const order = await refreshSelectedOrder(selectedOrder.id);
-        if (order.status === "PAID" || order.status === "PREPARING" || order.status === "PAYMENT_EXPIRED") break;
-        await new Promise((resolve) => window.setTimeout(resolve, 1_500));
-      }
+      setPaymentSession(session);
     } catch (paymentError) {
       setOrderActionError(message(paymentError));
     } finally {
@@ -670,6 +643,29 @@ export function DastakV1CustomerExperience(props: Props) {
 
   if (loading && props.section !== "orders") {
     return <div className="v1-loading" role="status"><span /> Opening Dastak catalogue</div>;
+  }
+
+  if (paymentSession && selectedOrder) {
+    return <DastakPaymentOptions
+      auth={auth}
+      session={paymentSession}
+      customer={{ name: props.displayName, phoneNumber: props.phoneNumber }}
+      expiresAt={selectedOrder.payment?.expiresAt}
+      onDismiss={() => {
+        setPaymentSession(undefined);
+        void refreshSelectedOrder(selectedOrder.id).catch((requestError) => setOrderActionError(message(requestError)));
+      }}
+      onProviderReturn={async () => {
+        setPaymentMessage("Authorization returned. Waiting for Razorpay's captured-payment confirmation…");
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const order = await refreshSelectedOrder(selectedOrder.id);
+          if (order.status === "PAID" || order.status === "PREPARING") return "paid";
+          if (order.status === "PAYMENT_EXPIRED") return "expired";
+          await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+        }
+        return "awaiting";
+      }}
+    />;
   }
 
   return <main className="v1-customer-shell">
@@ -977,7 +973,7 @@ function PaymentsSection({ orders, loading, onRefresh, onOpen }: {
       <div><p>PAYMENTS</p><h1>Secure at checkout</h1><span>Payment opens only after every required item in your basket is secured.</span></div>
       <button type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button>
     </header>
-    <section className="v1-payment-security"><LockKeyhole size={26} /><div><strong>Razorpay-secured checkout</strong><span>Dastak never stores your card number, UPI PIN or bank credentials. Available methods are selected securely for each payment.</span></div></section>
+    <section className="v1-payment-security"><LockKeyhole size={26} /><div><strong>Razorpay-secured payment</strong><span>Dastak never stores your UPI PIN or bank credentials. Razorpay processes only the payment method you choose in Dastak.</span></div></section>
     <section className="v1-payment-methods"><header><h2>Ways to pay</h2><span>AT CHECKOUT</span></header>
       <div><PaymentMethod label="UPI apps & UPI ID" icon={<ArrowRight />} /><PaymentMethod label="Credit & debit cards" icon={<CreditCard />} /><PaymentMethod label="Net banking" icon={<ReceiptText />} /><PaymentMethod label="Supported wallets / Pay Later" icon={<WalletCards />} /></div>
       <p>Availability depends on Razorpay, your bank and your account at payment time.</p>

@@ -58,6 +58,28 @@ public struct DastakV1PaymentAttemptResult: Codable, Equatable, Sendable {
     }
 }
 
+public enum DastakCustomCheckoutCompletionState: String, Codable, Equatable, Sendable {
+    case paid = "PAID"
+    case awaitingProviderConfirmation = "AWAITING_PROVIDER_CONFIRMATION"
+    case reconciliationRequired = "RECONCILIATION_REQUIRED"
+}
+
+public struct DastakCustomCheckoutCompletionResult: Codable, Equatable, Sendable {
+    public let orderID: UUID
+    public let paymentAttemptID: UUID
+    public let providerPaymentID: String
+    public let state: DastakCustomCheckoutCompletionState
+    public let duplicate: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case orderID = "orderId"
+        case paymentAttemptID = "paymentAttemptId"
+        case providerPaymentID = "providerPaymentId"
+        case state
+        case duplicate
+    }
+}
+
 public enum DastakRefundState: String, Codable, Equatable, Sendable {
     case pending
     case processed
@@ -96,6 +118,15 @@ public protocol DastakCheckoutClient: Sendable {
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakV1PaymentAttemptResult
 
+    func completeV1CustomCheckout(
+        orderID: UUID,
+        attemptID: UUID,
+        providerOrderID: String,
+        providerPaymentID: String,
+        providerSignature: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakCustomCheckoutCompletionResult
+
     func processMerchantOrderRefund(
         orderID: UUID,
         idempotencyKey: IdempotencyKey
@@ -115,6 +146,16 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
         let parcelId: UUID?
         let paymentAttemptId: UUID?
         let failureCode: DastakV1CheckoutFailureCode?
+        let razorpayOrderID: String?
+        let razorpayPaymentID: String?
+        let razorpaySignature: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case operation, entityType, orderId, parcelId, paymentAttemptId, failureCode
+            case razorpayOrderID = "razorpay_order_id"
+            case razorpayPaymentID = "razorpay_payment_id"
+            case razorpaySignature = "razorpay_signature"
+        }
     }
 
     private let functions: any FunctionClient
@@ -134,7 +175,10 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 orderId: orderID,
                 parcelId: nil,
                 paymentAttemptId: nil,
-                failureCode: nil
+                failureCode: nil,
+                razorpayOrderID: nil,
+                razorpayPaymentID: nil,
+                razorpaySignature: nil
             ),
             key: idempotencyKey
         )
@@ -151,7 +195,10 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 orderId: nil,
                 parcelId: parcelID,
                 paymentAttemptId: nil,
-                failureCode: nil
+                failureCode: nil,
+                razorpayOrderID: nil,
+                razorpayPaymentID: nil,
+                razorpaySignature: nil
             ),
             key: idempotencyKey
         )
@@ -168,7 +215,10 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 orderId: orderID,
                 parcelId: nil,
                 paymentAttemptId: nil,
-                failureCode: nil
+                failureCode: nil,
+                razorpayOrderID: nil,
+                razorpayPaymentID: nil,
+                razorpaySignature: nil
             ),
             key: idempotencyKey
         )
@@ -187,7 +237,34 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 orderId: orderID,
                 parcelId: nil,
                 paymentAttemptId: attemptID,
-                failureCode: failureCode
+                failureCode: failureCode,
+                razorpayOrderID: nil,
+                razorpayPaymentID: nil,
+                razorpaySignature: nil
+            ),
+            key: idempotencyKey
+        )
+    }
+
+    public func completeV1CustomCheckout(
+        orderID: UUID,
+        attemptID: UUID,
+        providerOrderID: String,
+        providerPaymentID: String,
+        providerSignature: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakCustomCheckoutCompletionResult {
+        try await invoke(
+            Request(
+                operation: "completeCustomCheckout",
+                entityType: .dastakV1Order,
+                orderId: orderID,
+                parcelId: nil,
+                paymentAttemptId: attemptID,
+                failureCode: nil,
+                razorpayOrderID: providerOrderID,
+                razorpayPaymentID: providerPaymentID,
+                razorpaySignature: providerSignature
             ),
             key: idempotencyKey
         )
@@ -204,7 +281,10 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 orderId: orderID,
                 parcelId: nil,
                 paymentAttemptId: nil,
-                failureCode: nil
+                failureCode: nil,
+                razorpayOrderID: nil,
+                razorpayPaymentID: nil,
+                razorpaySignature: nil
             ),
             key: idempotencyKey
         )
@@ -221,7 +301,10 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 orderId: nil,
                 parcelId: parcelID,
                 paymentAttemptId: nil,
-                failureCode: nil
+                failureCode: nil,
+                razorpayOrderID: nil,
+                razorpayPaymentID: nil,
+                razorpaySignature: nil
             ),
             key: idempotencyKey
         )

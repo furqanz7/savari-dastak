@@ -18,7 +18,22 @@ export type CheckoutSession = {
 };
 
 export type CheckoutResult = "success" | "failed" | "dismissed";
-type PaymentMethod = "upi" | "card" | "netbanking" | "wallet" | "paylater";
+
+export type RazorpayCustomCheckoutCompletion = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
+
+export type CustomCheckoutResult =
+  | { status: "success"; completion: RazorpayCustomCheckoutCompletion }
+  | { status: "failed"; message: string };
+
+export type RazorpayMethodAvailability = {
+  upi: boolean;
+};
+
+export type CustomUPIFlow = "intent" | "qr";
 
 export class PaymentRequestError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) {
@@ -77,6 +92,35 @@ export async function reportV1CheckoutFailure(
   }, input.idempotencyKey, fetcher);
 }
 
+export async function completeV1CustomCheckout(
+  input: AuthenticatedInput & {
+    orderId: string;
+    paymentAttemptId: string;
+    completion: RazorpayCustomCheckoutCompletion;
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  const payload = record(await call(input, {
+    operation: "completeCustomCheckout",
+    entityType: "dastak_v1_order",
+    orderId: input.orderId,
+    paymentAttemptId: input.paymentAttemptId,
+    razorpay_order_id: input.completion.razorpay_order_id,
+    razorpay_payment_id: input.completion.razorpay_payment_id,
+    razorpay_signature: input.completion.razorpay_signature,
+  }, input.idempotencyKey, fetcher));
+  const state = payload?.state;
+  if (state !== "PAID" && state !== "AWAITING_PROVIDER_CONFIRMATION" && state !== "RECONCILIATION_REQUIRED") invalid();
+  return {
+    orderId: requiredUUID(payload?.orderId),
+    paymentAttemptId: requiredUUID(payload?.paymentAttemptId),
+    providerPaymentId: requiredText(payload?.providerPaymentId, 200),
+    state,
+    duplicate: payload?.duplicate === true,
+  };
+}
+
 export async function processOrderRefund(
   input: AuthenticatedInput & { orderId: string; idempotencyKey: string },
   fetcher: Fetcher = fetch,
@@ -126,92 +170,103 @@ export async function openRazorpayCheckout(
   session: CheckoutSession,
   customer: { name?: string; email?: string; phoneNumber?: string },
 ): Promise<CheckoutResult> {
-  const method = await selectPaymentMethod();
-  if (!method) return "dismissed";
-  const Razorpay = await loadRazorpayCheckout();
-  return await new Promise((resolve) => {
-    let completed = false;
-    const finish = (result: CheckoutResult) => {
-      if (completed) return;
-      completed = true;
-      resolve(result);
-    };
-    const checkout = new Razorpay({
-      key: session.keyId,
-      amount: session.amountPaise,
-      currency: session.currency,
-      name: "Dastak",
-      description: session.entityType === "parcel"
-        ? "Parcel delivery"
-        : session.entityType === "dastak_v1_order"
-        ? "Secured Dastak basket"
-        : "Merchant order",
-      order_id: session.providerOrderId,
-      prefill: {
-        name: customer.name,
-        email: customer.email,
-        contact: customer.phoneNumber,
-      },
-      retry: { enabled: true },
-      method: {
-        upi: method === "upi",
-        card: method === "card",
-        netbanking: method === "netbanking",
-        wallet: method === "wallet",
-        paylater: method === "paylater",
-      },
-      modal: { ondismiss: () => finish("dismissed") },
-      handler: () => finish("success"),
-      theme: { color: "#166534" },
-    });
-    checkout.on("payment.failed", () => finish("failed"));
-    checkout.open();
-  });
+  const methods = await discoverRazorpayMethods(session.keyId);
+  if (!methods.upi) return "failed";
+  const result = await launchRazorpayCustomUPI(session, customer, isMobileWeb() ? "intent" : "qr");
+  return result.status;
 }
 
-function selectPaymentMethod(): Promise<PaymentMethod | undefined> {
-  return new Promise((resolve) => {
-    const overlay = document.createElement("div");
-    overlay.className = "payment-method-overlay";
-    overlay.innerHTML = `
-      <div class="payment-method-sheet" role="dialog" aria-modal="true" aria-labelledby="payment-method-title">
-        <div class="payment-method-header"><div><p class="eyebrow">Dastak</p><h2 id="payment-method-title">Select payment method</h2><p>Choose how you want to pay. Razorpay securely completes the payment.</p></div><button class="icon-button" data-dismiss aria-label="Close">×</button></div>
-        <section><h3>UPI</h3>
-          <button class="payment-method-row selected" data-method="upi"><span class="payment-method-icon">↗</span><span><strong>UPI ID</strong><small>Enter your UPI ID</small></span><span class="payment-check">✓</span></button>
-          ${["Google Pay", "Paytm", "PhonePe", "CRED", "POP", "super.money", "Jupiter", "JioFinance", "slice"].map((name) => `<button class="payment-method-row" data-method="upi"><span class="payment-method-icon">↗</span><span><strong>${name}</strong><small>Pay with the app if installed</small></span><span class="payment-check"></span></button>`).join("")}
-        </section>
-        <section><h3>Other payment methods</h3>
-          <button class="payment-method-row" data-method="card"><span class="payment-method-icon">▣</span><span><strong>Credit or debit card</strong><small>Add a card securely at checkout</small></span><span class="payment-check"></span></button>
-          <button class="payment-method-row" data-method="netbanking"><span class="payment-method-icon">▤</span><span><strong>Net banking</strong><small>Select your bank</small></span><span class="payment-check"></span></button>
-          <button class="payment-method-row" data-method="wallet"><span class="payment-method-icon">▱</span><span><strong>Wallets</strong><small>Available wallets</small></span><span class="payment-check"></span></button>
-          <button class="payment-method-row" data-method="paylater"><span class="payment-method-icon">◷</span><span><strong>Pay later</strong><small>Where supported by your account</small></span><span class="payment-check"></span></button>
-        </section>
-        <button class="primary-button payment-method-continue">Continue securely</button>
-      </div>`;
-    document.body.append(overlay);
-    let selected: PaymentMethod = "upi";
-    const close = (value?: PaymentMethod) => { overlay.remove(); resolve(value); };
-    overlay.querySelectorAll<HTMLButtonElement>("[data-method]").forEach((button) => button.addEventListener("click", () => {
-      selected = button.dataset.method as PaymentMethod;
-      overlay.querySelectorAll(".payment-method-row").forEach((row) => row.classList.remove("selected"));
-      button.classList.add("selected");
-    }));
-    overlay.querySelector("[data-dismiss]")?.addEventListener("click", () => close());
-    overlay.querySelector(".payment-method-continue")?.addEventListener("click", () => close(selected));
-    overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
-  });
-}
-
-type RazorpayConstructor = new (options: Record<string, unknown>) => {
-  open: () => void;
-  on: (event: string, handler: () => void) => void;
+type RazorpayCustomInstance = {
+  once: (event: "ready", handler: (response: { methods?: Record<string, unknown> }) => void) => void;
+  on: (event: "payment.success" | "payment.error", handler: (response: unknown) => void) => void;
+  createPayment: (data: Record<string, unknown>) => void;
 };
 
-async function loadRazorpayCheckout(): Promise<RazorpayConstructor> {
-  const existing = razorpayConstructor();
+type RazorpayCustomConstructor = new (options: { key: string }) => RazorpayCustomInstance;
+
+export async function discoverRazorpayMethods(keyId: string): Promise<RazorpayMethodAvailability> {
+  const Razorpay = await loadRazorpayCustomCheckout();
+  return await new Promise((resolve, reject) => {
+    const razorpay = new Razorpay({ key: keyId });
+    const timeout = window.setTimeout(() => reject(new PaymentRequestError(
+      "method_discovery_timeout",
+      "Available payment methods could not be loaded. Try again.",
+      0,
+    )), 8_000);
+    razorpay.once("ready", (response) => {
+      window.clearTimeout(timeout);
+      resolve({ upi: response.methods?.upi === true || record(response.methods?.upi)?.enabled === true });
+    });
+  });
+}
+
+export async function launchRazorpayCustomUPI(
+  session: CheckoutSession,
+  customer: { name?: string; email?: string; phoneNumber?: string },
+  flow: CustomUPIFlow,
+): Promise<CustomCheckoutResult> {
+  const Razorpay = await loadRazorpayCustomCheckout();
+  return await new Promise((resolve) => {
+    let completed = false;
+    const finish = (value: CustomCheckoutResult) => {
+      if (completed) return;
+      completed = true;
+      resolve(value);
+    };
+    const razorpay = new Razorpay({ key: session.keyId });
+    razorpay.on("payment.success", (response) => {
+      const completion = parseCustomCheckoutCompletion(response, session.providerOrderId);
+      if (!completion) {
+        finish({ status: "failed", message: "Payment returned without verifiable provider details. Dastak is reconciling it securely." });
+        return;
+      }
+      finish({ status: "success", completion });
+    });
+    razorpay.on("payment.error", (response) => {
+      const source = record(response);
+      const error = record(source?.error);
+      const reason = optionalText(error?.reason, 100)?.toLowerCase();
+      const description = optionalText(error?.description, 300);
+      finish({
+        status: "failed",
+        message: reason === "payment_cancelled" || reason === "user_cancelled"
+          ? "Payment was cancelled. Your secured basket remains reserved."
+          : description ?? "Payment could not be completed. Try again while your basket remains reserved.",
+      });
+    });
+    try {
+      razorpay.createPayment({
+        amount: session.amountPaise,
+        currency: session.currency,
+        order_id: session.providerOrderId,
+        email: customer.email,
+        contact: customer.phoneNumber,
+        method: "upi",
+        "_[flow]": flow,
+      });
+    } catch {
+      finish({ status: "failed", message: "The selected UPI authorization could not be opened." });
+    }
+  });
+}
+
+function parseCustomCheckoutCompletion(
+  value: unknown,
+  expectedOrderId: string,
+): RazorpayCustomCheckoutCompletion | undefined {
+  const source = record(value);
+  const paymentId = optionalText(source?.razorpay_payment_id, 200);
+  const orderId = optionalText(source?.razorpay_order_id, 200);
+  const signature = optionalText(source?.razorpay_signature, 200);
+  if (!paymentId || !orderId || !signature || orderId !== expectedOrderId) return undefined;
+  return { razorpay_payment_id: paymentId, razorpay_order_id: orderId, razorpay_signature: signature };
+}
+
+async function loadRazorpayCustomCheckout(): Promise<RazorpayCustomConstructor> {
+  const existing = razorpayCustomConstructor();
   if (existing) return existing;
 
-  const scriptId = "razorpay-checkout-script";
+  const scriptId = "razorpay-custom-checkout-script";
   const present = document.getElementById(scriptId) as HTMLScriptElement | null;
   await new Promise<void>((resolve, reject) => {
     const script = present ?? document.createElement("script");
@@ -221,33 +276,36 @@ async function loadRazorpayCheckout(): Promise<RazorpayConstructor> {
     };
     const failed = () => {
       script.remove();
-      reject(new PaymentRequestError(
-        "checkout_unavailable",
-        "Razorpay checkout could not be loaded.",
-        0,
-      ));
+      reject(new PaymentRequestError("checkout_unavailable", "Razorpay Custom Checkout could not be loaded.", 0));
     };
     if (present?.dataset.loaded === "true") {
-      reject(new PaymentRequestError("checkout_unavailable", "Razorpay checkout is unavailable.", 0));
+      if (razorpayCustomConstructor()) resolve();
+      else reject(new PaymentRequestError("checkout_unavailable", "Razorpay Custom Checkout is unavailable.", 0));
       return;
     }
     script.addEventListener("load", loaded, { once: true });
     script.addEventListener("error", failed, { once: true });
     if (!present) {
       script.id = scriptId;
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.src = RAZORPAY_CUSTOM_CHECKOUT_SCRIPT;
       script.async = true;
       document.head.appendChild(script);
     }
   });
-  const loaded = razorpayConstructor();
-  if (!loaded) throw new PaymentRequestError("checkout_unavailable", "Razorpay checkout is unavailable.", 0);
+  const loaded = razorpayCustomConstructor();
+  if (!loaded) throw new PaymentRequestError("checkout_unavailable", "Razorpay Custom Checkout is unavailable.", 0);
   return loaded;
 }
 
-function razorpayConstructor() {
-  return (window as unknown as { Razorpay?: RazorpayConstructor }).Razorpay;
+function razorpayCustomConstructor() {
+  return (window as unknown as { Razorpay?: RazorpayCustomConstructor }).Razorpay;
 }
+
+export function isMobileWeb(userAgent = navigator.userAgent) {
+  return /android|iphone|ipad|ipod|mobile/i.test(userAgent);
+}
+
+export const RAZORPAY_CUSTOM_CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/razorpay.js";
 
 async function call(
   auth: AuthenticatedInput,

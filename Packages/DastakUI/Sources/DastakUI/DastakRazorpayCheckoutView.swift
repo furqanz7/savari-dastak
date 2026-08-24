@@ -1,267 +1,484 @@
 import Foundation
+import MarketplaceDesignSystem
 import MarketplaceInfrastructure
 import SwiftUI
 
-#if canImport(Razorpay) && canImport(UIKit)
-import Razorpay
-import UIKit
+public struct DastakRazorpayCompletion: Equatable, Sendable {
+    public let paymentID: String
+    public let orderID: String
+    public let signature: String
 
-private typealias StandardRazorpayCheckout = Razorpay.RazorpayCheckout
-#endif
+    public init(paymentID: String, orderID: String, signature: String) {
+        self.paymentID = paymentID
+        self.orderID = orderID
+        self.signature = signature
+    }
+}
 
 public enum DastakRazorpayResult: Equatable, Sendable {
-    case succeeded(String)
+    case succeeded(DastakRazorpayCompletion)
     case failed(String)
     case dismissed
 }
 
-public enum DastakPaymentMethod: String, CaseIterable, Identifiable, Sendable {
-    case upiID, googlePay, paytm, phonePe, cred, pop, superMoney, jupiter, jioFinance, slice
-    case card, netbanking, wallet, payLater
+public struct DastakDiscoveredUPIApp: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let packageName: String
+    public let uriScheme: String?
 
-    public var id: String { rawValue }
+    public init(id: String, title: String, packageName: String, uriScheme: String?) {
+        self.id = id
+        self.title = title
+        self.packageName = packageName
+        self.uriScheme = uriScheme
+    }
 
-    public var title: String {
-        switch self {
-        case .upiID: "UPI ID"
-        case .googlePay: "Google Pay"
-        case .paytm: "Paytm"
-        case .phonePe: "PhonePe"
-        case .cred: "CRED"
-        case .pop: "POP"
-        case .superMoney: "super.money"
-        case .jupiter: "Jupiter"
-        case .jioFinance: "JioFinance"
-        case .slice: "slice"
-        case .card: "Credit or debit card"
-        case .netbanking: "Net banking"
-        case .wallet: "Wallets"
-        case .payLater: "Pay later"
+    static func parse(_ values: [[AnyHashable: Any]]) -> [DastakDiscoveredUPIApp] {
+        let packageKeys = ["appPackage", "packageName", "upi_app_package_name", "package"]
+        let titleKeys = ["appName", "displayName", "name", "title"]
+        let schemeKeys = ["uriScheme", "scheme"]
+        var seen = Set<String>()
+
+        return values.compactMap { value in
+            guard let package = firstString(in: value, keys: packageKeys)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !package.isEmpty,
+                  seen.insert(package.lowercased()).inserted else { return nil }
+
+            let providerTitle = firstString(in: value, keys: titleKeys)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallback = package
+                .split(whereSeparator: { $0 == "." || $0 == "_" || $0 == "-" })
+                .last
+                .map { String($0).replacingOccurrences(of: "upi", with: "", options: .caseInsensitive).capitalized }
+            let title = providerTitle?.isEmpty == false ? providerTitle! : (fallback?.isEmpty == false ? fallback! : "UPI app")
+
+            return DastakDiscoveredUPIApp(
+                id: package.lowercased(),
+                title: title,
+                packageName: package,
+                uriScheme: firstString(in: value, keys: schemeKeys)
+            )
+        }
+        .sorted { lhs, rhs in
+            let left = priority(lhs)
+            let right = priority(rhs)
+            return left == right ? lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending : left < right
         }
     }
 
-    public var detail: String {
-        switch self {
-        case .upiID:
-            "Enter a UPI ID in Razorpay"
-        case .googlePay, .paytm, .phonePe, .cred, .pop, .superMoney, .jupiter, .jioFinance, .slice:
-            "Razorpay opens this app when it is available"
-        case .card:
-            "Secure card entry and bank verification"
-        case .netbanking:
-            "Choose your bank securely"
-        case .wallet:
-            "Available wallets in Razorpay"
-        case .payLater:
-            "Shown when supported by your account"
+    private static func firstString(in value: [AnyHashable: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let result = value[key] as? String, !result.isEmpty { return result }
         }
+        return nil
     }
 
-    public var symbol: String {
-        switch self {
-        case .upiID, .googlePay, .paytm, .phonePe, .cred, .pop, .superMoney, .jupiter, .jioFinance, .slice:
-            "arrow.up.right.circle"
-        case .card:
-            "creditcard"
-        case .netbanking:
-            "building.columns"
-        case .wallet:
-            "wallet.pass"
-        case .payLater:
-            "clock"
-        }
-    }
-
-    fileprivate var razorpayMethod: String {
-        switch self {
-        case .card: "card"
-        case .netbanking: "netbanking"
-        case .wallet: "wallet"
-        case .payLater: "paylater"
-        case .upiID, .googlePay, .paytm, .phonePe, .cred, .pop, .superMoney, .jupiter, .jioFinance, .slice:
-            "upi"
-        }
+    private static func priority(_ app: DastakDiscoveredUPIApp) -> Int {
+        let value = "\(app.title) \(app.packageName)".lowercased()
+        if value.contains("google") || value.contains("gpay") { return 0 }
+        if value.contains("phonepe") { return 1 }
+        if value.contains("cred") { return 2 }
+        if value.contains("paytm") { return 3 }
+        return 10
     }
 }
 
-/// Hosts Razorpay's official Standard iOS Checkout. Dastak does not render the
-/// provider page in its own web view: the SDK owns UPI app switching and return.
-#if canImport(Razorpay) && canImport(UIKit)
-public struct DastakRazorpayCheckoutView: UIViewControllerRepresentable {
-    public let session: DastakCheckoutSession
-    public let customerName: String?
-    public let customerEmail: String?
-    public let customerPhone: String?
-    public let paymentMethod: DastakPaymentMethod
-    public let onResult: @MainActor (DastakRazorpayResult) -> Void
+#if canImport(RazorpayCustom) && canImport(RazorpayCore) && canImport(UIKit)
+import RazorpayCore
+import RazorpayCustom
+import UIKit
+import WebKit
+
+private typealias CustomRazorpayCheckout = RazorpayCustom.RazorpayCheckout
+
+@MainActor
+private enum DastakPaymentAuthorizationState: Equatable {
+    case loading
+    case ready
+    case launching
+    case awaitingReturn
+    case processing
+    case failed(String)
+}
+
+@MainActor
+private final class DastakCustomCheckoutController: NSObject, ObservableObject,
+    @preconcurrency RazorpayPaymentCompletionProtocol, @preconcurrency WKNavigationDelegate
+{
+    @Published private(set) var apps: [DastakDiscoveredUPIApp] = []
+    @Published private(set) var state: DastakPaymentAuthorizationState = .loading
+
+    fileprivate let webView: WKWebView
+    private let session: DastakCheckoutSession
+    private let customerEmail: String?
+    private let customerPhone: String?
+    private let onResult: @MainActor (DastakRazorpayResult) -> Void
+    private var checkout: CustomRazorpayCheckout?
+    private var finished = false
+
+    init(
+        session: DastakCheckoutSession,
+        customerEmail: String?,
+        customerPhone: String?,
+        onResult: @escaping @MainActor (DastakRazorpayResult) -> Void
+    ) {
+        self.session = session
+        self.customerEmail = customerEmail
+        self.customerPhone = customerPhone
+        self.onResult = onResult
+        webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        super.init()
+        webView.navigationDelegate = self
+        checkout = CustomRazorpayCheckout.initWithKey(
+            session.keyID,
+            andDelegate: self,
+            withPaymentWebView: webView
+        )
+        discoverApps()
+    }
+
+    func discoverApps() {
+        state = .loading
+        CustomRazorpayCheckout.getAppsWhichSupportUpi { [weak self] values in
+            Task { @MainActor in
+                guard let self else { return }
+                self.apps = DastakDiscoveredUPIApp.parse(values)
+                self.state = .ready
+            }
+        }
+    }
+
+    func authorize(with app: DastakDiscoveredUPIApp) {
+        guard state == .ready else { return }
+
+        state = .launching
+        var options: [AnyHashable: Any] = [
+            "key": session.keyID,
+            "order_id": session.providerOrderID,
+            "amount": session.amountPaise,
+            "currency": session.currency,
+            "method": "upi",
+            "_[flow]": "intent",
+            "upi_app_package_name": app.packageName
+        ]
+        if let customerEmail, !customerEmail.isEmpty { options["email"] = customerEmail }
+        if let customerPhone, !customerPhone.isEmpty { options["contact"] = customerPhone }
+        checkout?.authorize(options)
+        state = .awaitingReturn
+    }
+
+    func cancel() {
+        guard !finished else { return }
+        checkout?.userCancelledPayment()
+        finish(.dismissed)
+    }
+
+    func onPaymentSuccess(_ paymentID: String, andData response: [AnyHashable: Any]) {
+        state = .processing
+        guard let orderID = response["razorpay_order_id"] as? String,
+              let signature = response["razorpay_signature"] as? String,
+              orderID == session.providerOrderID,
+              !paymentID.isEmpty,
+              !signature.isEmpty else {
+            finish(.failed("Dastak could not verify the payment return. Your payment is being reconciled securely."))
+            return
+        }
+        finish(.succeeded(.init(paymentID: paymentID, orderID: orderID, signature: signature)))
+    }
+
+    func onPaymentSuccess(_ paymentID: String) {
+        finish(.failed("Payment authorization returned without verification details. Dastak is reconciling it securely."))
+    }
+
+    func onPaymentError(_ code: Int32, description message: String, andData response: [AnyHashable: Any]) {
+        finish(.failed(Self.userFacingPaymentError(code: code, description: message)))
+    }
+
+    func onPaymentError(_ code: Int32, description message: String) {
+        finish(.failed(Self.userFacingPaymentError(code: code, description: message)))
+    }
+
+    private static func userFacingPaymentError(code: Int32, description: String) -> String {
+        let normalized = description.lowercased()
+        if normalized.contains("cancel") || code == 2 { return "Payment was cancelled. You can try again while your basket remains reserved." }
+        if normalized.contains("network") || normalized.contains("timeout") {
+            return "Payment could not connect. Check your internet connection and try again."
+        }
+        return "Payment could not be completed. Try again while your basket remains reserved."
+    }
+
+    private func finish(_ value: DastakRazorpayResult) {
+        guard !finished else { return }
+        finished = true
+        state = .processing
+        onResult(value)
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        checkout?.webView(webView, didCommit: navigation)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        checkout?.webView(webView, didFinish: navigation)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        checkout?.webView(webView, didFail: navigation, withError: error)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        checkout?.webView(webView, didFailProvisionalNavigation: navigation, withError: error)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let checkout else {
+            decisionHandler(.allow)
+            return
+        }
+        checkout.webView(webView, decidePolicyFor: navigationAction, handler: decisionHandler)
+    }
+}
+
+public enum DastakRazorpayRedirection {
+    @MainActor
+    public static func handle(_ url: URL) -> Bool {
+        CustomRazorpayCheckout.handleRedirection(url.absoluteString)
+    }
+}
+
+private struct DastakPaymentWebViewHost: UIViewRepresentable {
+    let webView: WKWebView
+
+    func makeUIView(context: Context) -> WKWebView { webView }
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+}
+
+public struct DastakRazorpayCheckoutView: View {
+    private let session: DastakCheckoutSession
+    @StateObject private var controller: DastakCustomCheckoutController
+    @State private var selectedAppID: String?
 
     public init(
         session: DastakCheckoutSession,
         customerName: String?,
         customerEmail: String?,
         customerPhone: String?,
-        paymentMethod: DastakPaymentMethod = .googlePay,
         onResult: @escaping @MainActor (DastakRazorpayResult) -> Void
     ) {
         self.session = session
-        self.customerName = customerName
-        self.customerEmail = customerEmail
-        self.customerPhone = customerPhone
-        self.paymentMethod = paymentMethod
-        self.onResult = onResult
-    }
-
-    public func makeCoordinator() -> Coordinator {
-        Coordinator(onResult: onResult)
-    }
-
-    public func makeUIViewController(context: Context) -> CheckoutHostController {
-        let controller = CheckoutHostController(
+        _ = customerName
+        _controller = StateObject(wrappedValue: DastakCustomCheckoutController(
             session: session,
-            customerName: customerName,
             customerEmail: customerEmail,
             customerPhone: customerPhone,
-            paymentMethod: paymentMethod
-        )
-        controller.result = { result in
-            Task { @MainActor in context.coordinator.onResult(result) }
+            onResult: onResult
+        ))
+    }
+
+    public var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) {
+                    header
+                    statusContent
+                    if !controller.apps.isEmpty {
+                        appSection(title: "Recommended", apps: Array(controller.apps.prefix(3)))
+                        if controller.apps.count > 3 {
+                            appSection(title: "All UPI apps", apps: controller.apps)
+                        }
+                    }
+                    unavailableMethods
+                    securityNote
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 124)
+            }
+            .background(DastakMatteBackground(style: .dark).ignoresSafeArea())
+            .safeAreaInset(edge: .bottom) { paymentBar }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { controller.cancel() }
+                        .foregroundStyle(MarketplaceColors.dastakText.color)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                DastakPaymentWebViewHost(webView: controller.webView)
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+                    .accessibilityHidden(true)
+            }
         }
-        return controller
-    }
-
-    public func updateUIViewController(_ uiViewController: CheckoutHostController, context: Context) {}
-
-    @MainActor
-    public final class Coordinator {
-        let onResult: @MainActor (DastakRazorpayResult) -> Void
-
-        init(onResult: @escaping @MainActor (DastakRazorpayResult) -> Void) {
-            self.onResult = onResult
+        .preferredColorScheme(.dark)
+        .onChange(of: controller.apps) { _, apps in
+            if selectedAppID == nil { selectedAppID = apps.first?.id }
         }
     }
 
-}
-
-@MainActor
-public final class CheckoutHostController: UIViewController, @preconcurrency RazorpayPaymentCompletionProtocol {
-    private let session: DastakCheckoutSession
-    private let customerName: String?
-    private let customerEmail: String?
-    private let customerPhone: String?
-    private let paymentMethod: DastakPaymentMethod
-    private var checkout: StandardRazorpayCheckout?
-    private var hasOpenedCheckout = false
-    private var completed = false
-    var result: ((DastakRazorpayResult) -> Void)?
-
-    init(
-        session: DastakCheckoutSession,
-        customerName: String?,
-        customerEmail: String?,
-        customerPhone: String?,
-        paymentMethod: DastakPaymentMethod
-    ) {
-        self.session = session
-        self.customerName = customerName
-        self.customerEmail = customerEmail
-        self.customerPhone = customerPhone
-        self.paymentMethod = paymentMethod
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    public override func viewDidLoad() {
-        super.viewDidLoad()
-        view.isOpaque = true
-        view.backgroundColor = UIColor(
-            red: 15.0 / 255.0,
-            green: 15.0 / 255.0,
-            blue: 16.0 / 255.0,
-            alpha: 1
-        )
-        modalPresentationCapturesStatusBarAppearance = true
-    }
-
-    public override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
-
-    public override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        openCheckoutIfNeeded()
-    }
-
-    private func openCheckoutIfNeeded() {
-        guard !hasOpenedCheckout else { return }
-        hasOpenedCheckout = true
-
-        StandardRazorpayCheckout.checkIntegration(withMerchantKey: session.keyID)
-        checkout = StandardRazorpayCheckout.initWithKey(session.keyID, andDelegate: self)
-        checkout?.open(options, displayController: self)
-    }
-
-    private var options: [AnyHashable: Any] {
-        var prefill: [String: Any] = [:]
-        if let customerName, !customerName.isEmpty { prefill["name"] = customerName }
-        if let customerEmail, !customerEmail.isEmpty { prefill["email"] = customerEmail }
-        if let customerPhone, !customerPhone.isEmpty { prefill["contact"] = customerPhone }
-
-        var value: [AnyHashable: Any] = [
-            "key": session.keyID,
-            "order_id": session.providerOrderID,
-            "amount": session.amountPaise,
-            "currency": session.currency,
-            "name": "Dastak",
-            "description": session.entityType == .parcel ? "Parcel delivery" : "Store order",
-            "retry": ["enabled": true, "max_count": 4],
-            "theme": ["color": "#B08D57", "backdrop_color": "#0F0F10"],
-            "modal": ["confirm_close": true, "backdropclose": false, "animation": true]
-        ]
-
-        if !prefill.isEmpty { value["prefill"] = prefill }
-
-        // Standard Checkout only supports category pre-selection. It discovers
-        // installed UPI apps itself and launches the chosen app with an intent.
-        if prefill["email"] != nil, prefill["contact"] != nil {
-            value["method"] = paymentMethod.razorpayMethod
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("PAYMENT")
+                .font(.caption.weight(.bold))
+                .tracking(1.6)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text("Payment options")
+                .font(.system(size: 38, weight: .bold, design: .rounded))
+                .foregroundStyle(MarketplaceColors.dastakText.color)
+            Text("Choose an available UPI app. Dastak never sees your UPI PIN.")
+                .font(.body)
+                .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
         }
-
-        return value
     }
 
-    public func onPaymentSuccess(_ paymentID: String, andData response: [AnyHashable: Any]) {
-        finish(.succeeded(paymentID))
-    }
-
-    public func onPaymentSuccess(_ paymentID: String) {
-        finish(.succeeded(paymentID))
-    }
-
-    public func onPaymentError(_ code: Int32, description message: String, andData response: [AnyHashable: Any]) {
-        finish(.failed(Self.userFacingPaymentError(code: code, description: message)))
-    }
-
-    public func onPaymentError(_ code: Int32, description message: String) {
-        finish(.failed(Self.userFacingPaymentError(code: code, description: message)))
-    }
-
-    private static func userFacingPaymentError(code: Int32, description: String) -> String {
-        let normalized = description.lowercased()
-        if normalized.contains("cancel") || code == 2 { return "Payment was cancelled." }
-        if normalized.contains("network") || normalized.contains("timeout") {
-            return "Payment could not connect. Check your internet connection and try again."
+    @ViewBuilder
+    private var statusContent: some View {
+        switch controller.state {
+        case .loading:
+            statusCard(symbol: "arrow.triangle.2.circlepath", title: "Finding available UPI apps", detail: "Checking this iPhone securely.", spins: true)
+        case .launching:
+            statusCard(symbol: "arrow.up.right.square", title: "Opening your UPI app", detail: "Authorize there, then return to Dastak.", spins: false)
+        case .awaitingReturn:
+            statusCard(symbol: "iphone.and.arrow.forward", title: "Waiting for authorization", detail: "Complete payment in the selected UPI app.", spins: false)
+        case .processing:
+            statusCard(symbol: "checkmark.shield", title: "Payment processing", detail: "Dastak is waiting for secure provider confirmation.", spins: false)
+        case let .failed(message):
+            statusCard(symbol: "exclamationmark.triangle", title: "Payment needs attention", detail: message, spins: false)
+        case .ready:
+            if controller.apps.isEmpty {
+                VStack(alignment: .leading, spacing: 14) {
+                    statusCard(symbol: "apps.iphone", title: "No supported UPI app found", detail: "Install a supported UPI app, then check again. Dastak will not show unavailable apps.", spins: false)
+                    Button("Check again") { controller.discoverApps() }
+                        .buttonStyle(MarketplaceSecondaryButtonStyle())
+                }
+            }
         }
-        return "Payment could not be completed. Please try again or choose another payment method."
     }
 
-    private func finish(_ value: DastakRazorpayResult) {
-        guard !completed else { return }
-        completed = true
-        checkout = nil
-        result?(value)
+    private func statusCard(symbol: String, title: String, detail: String, spins: Bool) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Group {
+                if spins {
+                    ProgressView()
+                        .tint(MarketplaceColors.dastakAccent.color)
+                } else {
+                    Image(systemName: symbol)
+                        .font(.title2)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                }
+            }
+            .frame(width: 42, height: 42)
+            .background(MarketplaceColors.dastakAccent.color.opacity(0.12))
+            .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline).foregroundStyle(MarketplaceColors.dastakText.color)
+                Text(detail).font(.footnote).foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(MarketplaceColors.dastakSurface.color)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private func appSection(title: String, apps: [DastakDiscoveredUPIApp]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title.uppercased())
+                .font(.caption.weight(.semibold))
+                .tracking(0.9)
+                .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
+            VStack(spacing: 0) {
+                ForEach(apps) { app in
+                    Button {
+                        selectedAppID = app.id
+                    } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "arrow.up.right.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            Text(app.title)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(MarketplaceColors.dastakText.color)
+                            Spacer()
+                            Image(systemName: selectedAppID == app.id ? "checkmark.circle.fill" : "circle")
+                                .font(.title3)
+                                .foregroundStyle(selectedAppID == app.id ? MarketplaceColors.dastakAccent.color : MarketplaceColors.dastakSecondaryText.color)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 16)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if app.id != apps.last?.id {
+                        Divider().overlay(MarketplaceColors.dastakSecondaryText.color.opacity(0.16)).padding(.leading, 54)
+                    }
+                }
+            }
+            .background(MarketplaceColors.dastakSurface.color)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+    }
+
+    private var unavailableMethods: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("UPI FIRST")
+                .font(.caption.weight(.bold))
+                .tracking(1.1)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text("Cards, net banking, wallets and EMI are not available in this release.")
+                .font(.footnote)
+                .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(MarketplaceColors.dastakSurface.color.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var securityNote: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "lock.shield.fill")
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text("Amount and Razorpay order are fixed by Dastak. Payment is complete only after Razorpay confirms capture.")
+                .font(.footnote)
+                .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
+        }
+    }
+
+    private var paymentBar: some View {
+        VStack(spacing: 12) {
+            Divider().overlay(MarketplaceColors.dastakSecondaryText.color.opacity(0.16))
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("TOTAL").font(.caption.weight(.bold)).foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
+                    Text(Self.currency(session.amountPaise)).font(.title2.weight(.bold)).foregroundStyle(MarketplaceColors.dastakText.color)
+                }
+                Button("Continue") {
+                    guard let app = controller.apps.first(where: { $0.id == selectedAppID }) else { return }
+                    controller.authorize(with: app)
+                }
+                .buttonStyle(MarketplacePrimaryButtonStyle())
+                .disabled(selectedAppID == nil || controller.state != .ready)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+        }
+        .background(MarketplaceColors.dastakBackground.color)
+    }
+
+    private static func currency(_ paise: Int) -> String {
+        NumberFormatter.localizedString(from: NSNumber(value: Double(paise) / 100), number: .currency)
+            .replacingOccurrences(of: "INR", with: "₹")
     }
 }
 #else
+public enum DastakRazorpayRedirection {
+    @MainActor public static func handle(_ url: URL) -> Bool { false }
+}
+
 public struct DastakRazorpayCheckoutView: View {
     private let onResult: @MainActor (DastakRazorpayResult) -> Void
 
@@ -270,17 +487,13 @@ public struct DastakRazorpayCheckoutView: View {
         customerName: String?,
         customerEmail: String?,
         customerPhone: String?,
-        paymentMethod: DastakPaymentMethod = .googlePay,
         onResult: @escaping @MainActor (DastakRazorpayResult) -> Void
     ) {
         self.onResult = onResult
     }
 
     public var body: some View {
-        Color.clear
-            .task {
-                onResult(.failed("Razorpay checkout is only available on iPhone and iPad."))
-            }
+        Color.clear.task { onResult(.failed("Razorpay Custom Checkout is available only on iPhone and iPad.")) }
     }
 }
 #endif

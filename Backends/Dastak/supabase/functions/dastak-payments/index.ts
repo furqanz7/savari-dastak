@@ -2,7 +2,12 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyBearerUser } from "../_shared/auth.ts";
 import { RazorpayApiError, RazorpayTestClient } from "../_shared/razorpay.ts";
-import { handleDastakPayments, type PaymentActionInput } from "./handler.ts";
+import {
+  handleDastakPayments,
+  type PaymentActionInput,
+  type PaymentCompletionInput,
+} from "./handler.ts";
+import { sha256Hex, verifyRazorpayPaymentSignature } from "./verification.ts";
 
 const serviceClient = createClient(
   requiredEnv("SUPABASE_URL"),
@@ -16,8 +21,61 @@ Deno.serve((request) =>
     createCheckout,
     processRefund,
     reportPaymentFailure,
+    completeCustomCheckout,
   })
 );
+
+async function completeCustomCheckout(input: PaymentCompletionInput) {
+  try {
+    const context = completionContext(
+      await rpcJson(
+        "dastak_v1_custom_checkout_completion_context",
+        {
+          p_account_id: input.accountId,
+          p_order_id: input.orderId,
+          p_attempt_id: input.attemptId,
+        },
+      ),
+    );
+    if (context.providerOrderId !== input.providerOrderId) {
+      return completionRejected(
+        409,
+        "provider_order_mismatch",
+        "The payment response belongs to a different provider order.",
+      );
+    }
+    if (
+      !await verifyRazorpayPaymentSignature(
+        requiredEnv("RAZORPAY_KEY_SECRET"),
+        context.providerOrderId,
+        input.providerPaymentId,
+        input.providerSignature,
+      )
+    ) {
+      return completionRejected(
+        400,
+        "invalid_payment_signature",
+        "The payment response could not be verified.",
+      );
+    }
+
+    return {
+      responseBody: await rpcJson("dastak_v1_record_custom_checkout_completion", {
+        p_account_id: input.accountId,
+        p_order_id: input.orderId,
+        p_attempt_id: input.attemptId,
+        p_provider_order_reference: context.providerOrderId,
+        p_provider_payment_reference: input.providerPaymentId,
+        p_signature_digest: await sha256Hex(input.providerSignature),
+        p_request_digest: input.requestDigest,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+      responseStatus: 202,
+    };
+  } catch (error) {
+    return completionDatabaseError(error);
+  }
+}
 
 async function reportPaymentFailure(
   input: PaymentActionInput & {
@@ -259,6 +317,20 @@ function refundDetails(value: unknown) {
   };
 }
 
+function completionContext(value: unknown) {
+  const source = record(value);
+  const orderId = text(source?.orderId, 36);
+  const paymentId = text(source?.paymentId, 36);
+  const attemptId = text(source?.attemptId, 36);
+  const providerOrderId = text(source?.providerOrderId, 200);
+  const amountPaise = money(source?.amountPaise);
+  if (
+    !orderId || !paymentId || !attemptId || !providerOrderId || !amountPaise ||
+    !/^order_[A-Za-z0-9]+$/.test(providerOrderId) || source?.currency !== "INR"
+  ) throw new Error("Invalid custom checkout completion context");
+  return { orderId, paymentId, attemptId, providerOrderId, amountPaise };
+}
+
 function razorpayClient() {
   return new RazorpayTestClient(requiredEnv("RAZORPAY_KEY_ID"), requiredEnv("RAZORPAY_KEY_SECRET"));
 }
@@ -280,6 +352,40 @@ function providerError(error: unknown) {
 
 function providerConflict() {
   return providerError(new RazorpayApiError(409));
+}
+
+function completionRejected(status: number, code: string, message: string) {
+  return { responseBody: { error: { code, message } }, responseStatus: status };
+}
+
+function completionDatabaseError(error: unknown) {
+  const code = record(error)?.code;
+  if (code === "42501") {
+    return completionRejected(
+      403,
+      "payment_completion_forbidden",
+      "This payment cannot be completed by this account.",
+    );
+  }
+  if (code === "P0002") {
+    return completionRejected(
+      404,
+      "payment_attempt_not_found",
+      "The payment attempt was not found.",
+    );
+  }
+  if (code === "22023" || code === "23505" || code === "55000") {
+    return completionRejected(
+      409,
+      "payment_completion_conflict",
+      "The payment response conflicts with the active attempt.",
+    );
+  }
+  return completionRejected(
+    503,
+    "payment_completion_unavailable",
+    "Dastak could not verify the payment response right now.",
+  );
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

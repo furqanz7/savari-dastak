@@ -63,7 +63,6 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var quote: MerchantOrderQuote?
     @Published private(set) var checkoutSession: DastakCheckoutSession?
     @Published private(set) var checkoutCustomer: MarketplaceCheckoutCustomer?
-    @Published var selectedPaymentMethod: DastakPaymentMethod = .googlePay
     @Published private(set) var parcelQuote: ParcelQuote?
     @Published private(set) var parcels: [CustomerParcelDelivery] = []
     @Published private(set) var orderDetails: [UUID: MerchantOrderSnapshot] = [:]
@@ -1222,6 +1221,26 @@ final class DastakCustomerModel: ObservableObject {
         } else {
             await refreshV1Orders()
         }
+    }
+
+    func completeV1CustomCheckout(
+        session: DastakCheckoutSession,
+        providerOrderID: String,
+        providerPaymentID: String,
+        providerSignature: String
+    ) async throws -> DastakCustomCheckoutCompletionResult {
+        guard session.entityType == .dastakV1Order,
+              let attemptID = session.attemptID else {
+            throw FunctionClientError.invalidResponse
+        }
+        return try await checkoutClient.completeV1CustomCheckout(
+            orderID: session.orderID,
+            attemptID: attemptID,
+            providerOrderID: providerOrderID,
+            providerPaymentID: providerPaymentID,
+            providerSignature: providerSignature,
+            idempotencyKey: makeKey()
+        )
     }
 
     func retryPayment(for parcel: CustomerParcelDelivery) async {
