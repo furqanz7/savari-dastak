@@ -928,6 +928,246 @@ button:disabled { cursor: wait; opacity: .55; }
   color: var(--text-primary);
 }
 
+/* Customer onboarding follows the native iOS visual authority. */
+.app.customer-onboarding-active {
+  --canvas: #0f0f10;
+  --surface: #181716;
+  --surface-raised: #211f1d;
+  --surface-muted: #141313;
+  --text-primary: #f5f2ec;
+  --text-secondary: #b8b1a8;
+  --divider: #352c26;
+  --dastak-accent: #d1b37e;
+  --dastak-accent-soft: #2a2018;
+  --primary-action: #f5f2ec;
+  --primary-action-foreground: #21130e;
+  position: relative;
+  overflow: hidden;
+  color-scheme: dark;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 92% 4%, rgb(176 141 87 / 19%), transparent 30rem),
+    radial-gradient(circle at 4% 98%, rgb(58 36 26 / 42%), transparent 32rem),
+    linear-gradient(155deg, #111112 0%, #0f0f10 58%, #0b0b0c 100%);
+}
+.app.customer-onboarding-active::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .22;
+  background-image: radial-gradient(rgb(255 255 255 / 16%) .55px, transparent .55px);
+  background-size: 7px 7px;
+  mask-image: linear-gradient(to bottom, black, transparent 74%);
+}
+.content.dastak-customer-auth-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1180px;
+  padding: clamp(26px, 4vw, 48px) clamp(12px, 3vw, 36px);
+}
+.customer-onboarding { width: 100%; margin: 0 auto; }
+.customer-sign-in-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(360px, 430px);
+  gap: clamp(64px, 9vw, 118px);
+  align-items: end;
+}
+.customer-onboarding-hero {
+  min-height: min(680px, calc(100vh - 96px));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  align-items: start;
+}
+.customer-onboarding-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.customer-onboarding-wordmark {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-dastak-wordmark);
+  font-size: 42px;
+  line-height: 1;
+}
+.customer-onboarding-wordmark span[lang="ur"] {
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--text-secondary);
+  font-family: var(--font-system);
+  font-size: .72em;
+  font-weight: 500;
+  transform: translateY(5px);
+}
+.customer-onboarding-brand > span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 11px;
+  border: 1px solid rgb(209 179 126 / 28%);
+  border-radius: 999px;
+  color: var(--dastak-accent);
+  background: rgb(209 179 126 / 9%);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.customer-onboarding-copy { align-self: center; max-width: 650px; padding: 48px 0; }
+.customer-onboarding-copy .eyebrow,
+.customer-auth-panel .eyebrow,
+.dastak-customer-profile-heading .eyebrow { letter-spacing: .14em; }
+.customer-onboarding-copy h1 {
+  margin: 14px 0 18px;
+  color: var(--text-primary);
+  font-family: var(--font-dastak-wordmark);
+  font-size: clamp(52px, 5.7vw, 78px);
+  font-weight: 400;
+  line-height: .98;
+}
+.customer-onboarding-copy h1 em { color: var(--dastak-accent); font-style: normal; }
+.customer-onboarding-copy > p:last-child {
+  max-width: 570px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 17px;
+  line-height: 1.65;
+}
+.customer-onboarding-promises {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.customer-onboarding-promises li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; align-items: start; }
+.customer-onboarding-promises li > svg {
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: 50%;
+  color: var(--dastak-accent);
+  background: rgb(209 179 126 / 10%);
+}
+.customer-onboarding-promises span { display: grid; gap: 3px; }
+.customer-onboarding-promises strong { color: var(--text-primary); font-size: 13px; }
+.customer-onboarding-promises small { color: var(--text-secondary); font-size: 12px; }
+.customer-auth-panel {
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 28px;
+  background: rgb(24 23 22 / 92%);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 38%);
+  backdrop-filter: blur(22px);
+}
+.customer-auth-panel-heading { display: grid; gap: 6px; }
+.customer-auth-panel-heading h2 {
+  margin: 2px 0 0;
+  color: var(--text-primary);
+  font-size: 27px;
+  line-height: 1.12;
+}
+.customer-auth-panel-heading > p:last-child { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.customer-auth-panel .auth-actions { gap: 11px; }
+.customer-auth-panel .provider-button {
+  min-height: 56px;
+  border-radius: 16px;
+  transition: transform 160ms ease, filter 160ms ease, border-color 160ms ease;
+}
+.customer-auth-panel .provider-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.035); }
+.customer-auth-panel .provider-button:active:not(:disabled) { transform: translateY(0) scale(.992); }
+.customer-auth-panel .provider-button:focus-visible,
+.dastak-customer-profile-card input:focus-visible,
+.dastak-customer-profile-card select:focus-visible {
+  outline: 3px solid rgb(209 179 126 / 35%);
+  outline-offset: 2px;
+}
+.customer-auth-panel .provider-button.apple,
+.customer-auth-panel .provider-button.google {
+  border-color: rgb(255 255 255 / 10%);
+  color: #21130e;
+  background: #f5f2ec;
+}
+.auth-inline-spinner {
+  width: 13px;
+  height: 13px;
+  display: inline-block;
+  flex: 0 0 auto;
+  margin-right: 7px;
+  border: 1.5px solid rgb(184 177 168 / 36%);
+  border-top-color: var(--dastak-accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  vertical-align: -2px;
+}
+.customer-auth-panel .auth-progress { margin: 0; }
+.customer-auth-trust {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  margin: 0;
+  padding-top: 17px;
+  border-top: 1px solid rgb(255 255 255 / 9%);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.customer-auth-trust svg { margin-top: 1px; color: var(--dastak-accent); }
+.customer-auth-panel .auth-legal { margin-top: -2px; color: #938c84; }
+.customer-auth-panel .auth-legal a { color: var(--text-primary); }
+.customer-auth-loading {
+  min-height: 280px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  color: var(--text-secondary);
+}
+.customer-auth-loading > p,
+.customer-status-wordmark {
+  margin: 0 0 5px;
+  color: var(--text-primary);
+  font-family: var(--font-dastak-wordmark);
+  font-size: 42px;
+  line-height: 1;
+}
+.customer-auth-loading > p span[lang="ur"],
+.customer-status-wordmark span[lang="ur"] {
+  display: inline-block;
+  margin-left: 3px;
+  color: var(--text-secondary);
+  font-family: var(--font-system);
+  font-size: .72em;
+  font-weight: 500;
+  transform: translateY(5px);
+}
+.customer-auth-loading > span {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgb(184 177 168 / 28%);
+  border-top-color: var(--dastak-accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+.customer-auth-loading small { font-size: 12px; }
+.customer-auth-status {
+  padding: 28px;
+  border-color: rgb(255 255 255 / 10%);
+  border-radius: 28px;
+  background: rgb(24 23 22 / 92%);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 38%);
+  backdrop-filter: blur(22px);
+}
+.customer-auth-status > p:last-of-type { color: #d68c76; }
+.customer-auth-status .secondary-button { width: 100%; border-radius: 14px; }
+
 .dastak-launch {
   position: fixed;
   z-index: 100;
@@ -1352,6 +1592,112 @@ button:disabled { cursor: wait; opacity: .55; }
 .dastak-profile-heading > p:last-child { max-width: 440px; margin: 0; color: var(--text-secondary); line-height: 1.55; }
 .dastak-profile-wordmark { margin: 0 0 4px; color: var(--text-primary); font-family: var(--font-dastak-wordmark); font-size: 46px; line-height: 1; }
 .dastak-profile-wordmark span[lang="ur"] { display: inline-block; margin-left: 4px; font-size: .72em; transform: translateY(5px); }
+.dastak-customer-profile-form {
+  width: min(100%, 1060px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 470px);
+  gap: clamp(56px, 8vw, 106px);
+  align-items: center;
+  padding: 0;
+}
+.dastak-customer-profile-heading { display: grid; gap: 13px; }
+.dastak-customer-profile-heading .dastak-profile-topline { margin-bottom: clamp(44px, 8vh, 84px); }
+.dastak-customer-profile-heading .dastak-profile-topline > button {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+}
+.dastak-customer-profile-heading .dastak-profile-topline > button:hover { color: var(--text-primary); }
+.dastak-customer-profile-heading .dastak-profile-wordmark {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 42px;
+}
+.dastak-profile-progress { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-width: 160px; margin-bottom: 4px; }
+.dastak-profile-progress span { height: 3px; border-radius: 999px; background: var(--dastak-accent); }
+.dastak-customer-profile-heading h1 {
+  margin: 2px 0 0;
+  color: var(--text-primary);
+  font-family: var(--font-dastak-wordmark);
+  font-size: clamp(48px, 5vw, 66px);
+  font-weight: 400;
+  line-height: 1;
+}
+.dastak-customer-profile-heading > p:last-child {
+  max-width: 480px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1.65;
+}
+.dastak-customer-profile-card {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+  padding: 26px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 28px;
+  background: rgb(24 23 22 / 92%);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 34%);
+  backdrop-filter: blur(22px);
+}
+.dastak-profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 3px;
+  color: var(--dastak-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.dastak-customer-profile-card label { color: var(--text-primary); }
+.dastak-customer-profile-card input,
+.dastak-customer-profile-card select {
+  height: 54px;
+  border-color: rgb(255 255 255 / 12%);
+  border-radius: 14px;
+  background: #211f1d;
+}
+.dastak-customer-profile-card input::placeholder { color: #77716b; }
+.dastak-customer-profile-card .phone-number-field {
+  border-color: rgb(255 255 255 / 12%);
+  border-radius: 14px;
+  background: #211f1d;
+}
+.dastak-customer-profile-card .phone-number-field select,
+.dastak-customer-profile-card .phone-number-field input { height: 54px; }
+.dastak-customer-profile-card > small {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.45;
+}
+.dastak-customer-profile-card > small svg { flex: 0 0 auto; margin-top: 1px; color: var(--dastak-accent); }
+.dastak-customer-profile-card .field-error { color: #d68c76; }
+.profile-submit-error {
+  margin: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgb(166 90 69 / 12%);
+}
+.profile-continue-button {
+  width: 100%;
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 16px;
+  transition: transform 160ms ease, filter 160ms ease;
+}
+.profile-continue-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
+.profile-continue-button:active:not(:disabled) { transform: translateY(0) scale(.992); }
+.profile-continue-button:disabled { cursor: not-allowed; }
+.profile-continue-button[aria-busy="true"] { cursor: wait; }
 .phone-number-field {
   min-width: 0;
   display: grid;
@@ -1391,43 +1737,113 @@ button:disabled { cursor: wait; opacity: .55; }
   align-items: end;
   padding: 20px;
   padding-bottom: max(20px, env(safe-area-inset-bottom));
-  background: rgb(0 0 0 / 62%);
-  backdrop-filter: blur(6px);
+  background: rgb(0 0 0 / 70%);
+  backdrop-filter: blur(12px);
 }
 .web-notification-onboarding {
   width: min(100%, 430px);
   margin: 0 auto;
-  padding: 26px;
+  padding: 24px;
   display: grid;
-  gap: 16px;
-  border: 1px solid var(--divider);
-  border-radius: 24px;
-  color: var(--text-primary);
-  background: var(--surface);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 35%);
+  gap: 18px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 28px;
+  color: #f5f2ec;
+  background:
+    radial-gradient(circle at 100% 0, rgb(176 141 87 / 18%), transparent 18rem),
+    #181716;
+  box-shadow: 0 30px 100px rgb(0 0 0 / 48%);
 }
-.web-notification-onboarding h2 { margin: 4px 0 8px; font-size: 28px; }
+.web-notification-onboarding h2 {
+  margin: 7px 0 10px;
+  font-family: var(--font-dastak-wordmark);
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1.02;
+}
 .web-notification-onboarding p { margin: 0; line-height: 1.5; }
 .web-notification-onboarding .primary-button,
-.web-notification-onboarding .secondary-button { width: 100%; margin: 0; }
+.web-notification-onboarding .secondary-button { width: 100%; min-height: 54px; margin: 0; border-radius: 15px; }
+.web-notification-onboarding .primary-button { background: #f5f2ec; color: #21130e; }
+.web-notification-onboarding .secondary-button { border-color: #352c26; color: #f5f2ec; background: #211f1d; }
+.web-notification-brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.web-notification-brand > p {
+  color: #f5f2ec;
+  font-family: var(--font-dastak-wordmark);
+  font-size: 27px;
+  line-height: 1;
+}
+.web-notification-brand > p span[lang="ur"] {
+  display: inline-block;
+  margin-left: 3px;
+  color: #b8b1a8;
+  font-family: var(--font-system);
+  font-size: .72em;
+  font-weight: 500;
+  transform: translateY(3px);
+}
+.web-notification-brand small {
+  color: #d1b37e;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.web-notification-heading { display: grid; justify-items: start; }
+.web-notification-heading > p:last-child { color: #b8b1a8; font-size: 13px; }
 .web-notification-icon {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   display: grid;
   place-items: center;
-  border-radius: 16px;
-  color: var(--accent);
-  background: var(--accent-soft);
+  margin-bottom: 13px;
+  border: 1px solid rgb(209 179 126 / 22%);
+  border-radius: 18px;
+  color: #d1b37e;
+  background: rgb(209 179 126 / 10%);
 }
+.web-notification-previews {
+  overflow: hidden;
+  padding: 0 15px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 20px;
+  background: rgb(33 31 29 / 88%);
+}
+.web-notification-previews > div {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+}
+.web-notification-previews > div + div { border-top: 1px solid #352c26; }
+.web-notification-previews > div > span {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #d1b37e;
+  background: rgb(209 179 126 / 10%);
+}
+.web-notification-previews p { display: grid; gap: 3px; }
+.web-notification-previews strong { font-size: 13px; }
+.web-notification-previews small { color: #b8b1a8; font-size: 11px; }
+.web-notification-previews time { color: #817a73; font-size: 10px; }
+.web-notification-actions { display: grid; gap: 10px; }
+.web-notification-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.web-notification-actions .auth-inline-spinner { border-color: rgb(33 19 14 / 24%); border-top-color: #21130e; }
 .web-notification-privacy {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 9px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: #b8b1a8;
+  font-size: 11px;
+  line-height: 1.5;
 }
-.web-notification-privacy svg { margin-top: 1px; }
+.web-notification-privacy svg { margin-top: 1px; color: #d1b37e; }
 
 .account-list { margin: 26px 0 0; border-top: 1px solid var(--divider); }
 .account-list div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--divider); }
@@ -1567,6 +1983,19 @@ button:disabled { cursor: wait; opacity: .55; }
   .topbar { height: 68px; }
   .content { min-height: calc(100vh - 86px); padding: 32px 0 64px; align-items: stretch; }
   .content.dastak-auth-content { min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding-top: 40px; padding-bottom: 40px; align-items: center; }
+  .content.dastak-customer-auth-content { padding: 22px 0 34px; align-items: start; }
+  .customer-sign-in-layout { grid-template-columns: 1fr; gap: 34px; }
+  .customer-onboarding-hero { min-height: 0; grid-template-rows: auto auto auto; }
+  .customer-onboarding-wordmark { font-size: 38px; }
+  .customer-onboarding-copy { padding: 54px 0 26px; }
+  .customer-onboarding-copy h1 { margin-top: 12px; font-size: clamp(44px, 13vw, 58px); }
+  .customer-onboarding-copy > p:last-child { font-size: 15px; line-height: 1.6; }
+  .customer-onboarding-promises { gap: 14px; }
+  .customer-auth-panel { padding: 20px; border-radius: 24px; }
+  .dastak-customer-profile-form { grid-template-columns: 1fr; gap: 30px; }
+  .dastak-customer-profile-heading .dastak-profile-topline { margin-bottom: 40px; }
+  .dastak-customer-profile-heading h1 { font-size: 48px; }
+  .dastak-customer-profile-card { padding: 20px; border-radius: 24px; }
   .auth-layout { grid-template-columns: 1fr; gap: 52px; align-content: space-between; }
   .auth-copy h1 { font-size: 48px; }
   .product-dastak .dastak-auth-layout { align-self: center; gap: 36px; }
@@ -1734,11 +2163,26 @@ button:disabled { cursor: wait; opacity: .55; }
 @media (max-height: 680px) {
   .content.dastak-auth-content { align-items: start; overflow-y: auto; }
   .product-dastak .dastak-auth-layout { align-self: start; gap: 28px; }
+  .customer-onboarding-hero { min-height: 0; }
   .web-notification-backdrop { overflow-y: auto; align-items: start; }
+}
+
+@media (max-width: 720px) and (max-height: 700px) {
+  .customer-sign-in-layout { gap: 24px; }
+  .customer-onboarding-copy { padding: 34px 0 20px; }
+  .customer-onboarding-copy h1 { font-size: 42px; }
+  .customer-onboarding-promises { gap: 10px; }
+  .customer-auth-panel { padding: 18px; }
+}
+
+@media (min-width: 721px) {
+  .web-notification-backdrop { align-items: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .loading span { animation: none; }
+  .auth-inline-spinner { animation: none; }
+  .customer-auth-loading > span { animation: none; }
   .dastak-launch, .dastak-launch-video { transition: none; }
   .dastak-launch-video { display: none; }
 }

@@ -9,7 +9,15 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { LogOut, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
+import {
+  ArrowRight,
+  BadgeCheck,
+  LockKeyhole,
+  LogOut,
+  RefreshCw,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
 import {
   completeProfile,
@@ -95,7 +103,13 @@ export default function App() {
   const hasHandledAuthCallback = useRef(false);
   const finishDastakLaunch = useCallback(() => setShowsDastakLaunch(false), []);
   const usesFullDastakAuth = config.product === "dastak"
-    && (view.phase === "loading" || view.phase === "signed_out" || view.phase === "profile");
+    && (
+      view.phase === "loading"
+      || view.phase === "signed_out"
+      || view.phase === "profile"
+      || view.phase === "error"
+    );
+  const usesCustomerOnboarding = config.variant === "dastak-customer" && usesFullDastakAuth;
 
   const evaluate = useCallback(async (session: Session | null) => {
     if (!session) {
@@ -207,7 +221,7 @@ export default function App() {
   }, []);
 
   return (
-    <main className={`app product-${config.product}`}>
+    <main className={`app product-${config.product} variant-${config.variant}${usesCustomerOnboarding ? " customer-onboarding-active" : ""}`}>
       {!usesFullDastakAuth && <header className="topbar" aria-hidden={showsDastakLaunch || undefined}>
         <Brand />
         {view.phase !== "signed_out" && view.phase !== "loading" && !(
@@ -222,7 +236,7 @@ export default function App() {
 
       <section
         aria-hidden={showsDastakLaunch || undefined}
-        className={`content ${usesFullDastakAuth ? "dastak-auth-content" : ""} ${view.phase === "ready" && ["dastak-admin", "dastak-customer", "dastak-delivery", "dastak-merchant", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}
+        className={`content ${usesFullDastakAuth ? "dastak-auth-content" : ""} ${usesCustomerOnboarding ? "dastak-customer-auth-content" : ""} ${view.phase === "ready" && ["dastak-admin", "dastak-customer", "dastak-delivery", "dastak-merchant", "savari-passenger"].includes(config.variant) ? "workspace-content" : ""}`}
       >
         {view.phase === "loading" && <Loading />}
         {view.phase === "signed_out" && <SignIn busy={busy} signingInProvider={signingInProvider} onSignIn={signIn} />}
@@ -290,6 +304,14 @@ function SignIn({ busy, signingInProvider, onSignIn }: {
   signingInProvider?: Provider;
   onSignIn: (provider: Provider) => void;
 }) {
+  if (config.variant === "dastak-customer") {
+    return <CustomerSignIn
+      busy={busy}
+      signingInProvider={signingInProvider}
+      onSignIn={onSignIn}
+    />;
+  }
+
   const providerName = signingInProvider === "apple"
     ? "Apple"
     : signingInProvider === "google" ? "Google" : undefined;
@@ -329,6 +351,91 @@ function SignIn({ busy, signingInProvider, onSignIn }: {
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+function CustomerSignIn({ busy, signingInProvider, onSignIn }: {
+  busy: boolean;
+  signingInProvider?: Provider;
+  onSignIn: (provider: Provider) => void;
+}) {
+  const providerName = signingInProvider === "apple"
+    ? "Apple"
+    : signingInProvider === "google" ? "Google" : undefined;
+
+  return (
+    <div className="customer-onboarding customer-sign-in-layout">
+      <section className="customer-onboarding-hero" aria-labelledby="customer-sign-in-title">
+        <header className="customer-onboarding-brand">
+          <p className="customer-onboarding-wordmark">
+            <span>Dastak</span> <span lang="ur">دستک</span>
+          </p>
+          <span>Customer</span>
+        </header>
+
+        <div className="customer-onboarding-copy">
+          <p className="eyebrow">Welcome to Dastak</p>
+          <h1 id="customer-sign-in-title">Everything you need,<br /><em>thoughtfully delivered.</em></h1>
+          <p>Food and everyday essentials in one basket. We secure every item before you pay.</p>
+        </div>
+
+        <ul className="customer-onboarding-promises" aria-label="Dastak promises">
+          <li>
+            <BadgeCheck size={18} aria-hidden="true" />
+            <span><strong>Exact items</strong><small>Secured first</small></span>
+          </li>
+          <li>
+            <ShieldCheck size={18} aria-hidden="true" />
+            <span><strong>Private by design</strong><small>One protected checkout</small></span>
+          </li>
+        </ul>
+      </section>
+
+      <section className="customer-auth-panel" aria-labelledby="customer-auth-panel-title">
+        <div className="customer-auth-panel-heading">
+          <p className="eyebrow">Secure sign-in</p>
+          <h2 id="customer-auth-panel-title">Your Dastak starts here.</h2>
+          <p>Use Apple or Google to create or return to your account.</p>
+        </div>
+
+        <div className="auth-actions" aria-label="Sign in options" aria-busy={busy || undefined}>
+          <button
+            className="provider-button apple"
+            type="button"
+            disabled={busy}
+            onClick={() => onSignIn("apple")}
+          >
+            <AppleLogo /> Continue with Apple
+          </button>
+          <button
+            className="provider-button google"
+            type="button"
+            disabled={busy}
+            onClick={() => onSignIn("google")}
+          >
+            <GoogleLogo /> Continue with Google
+          </button>
+          <p className="auth-progress" role="status" aria-live="polite">
+            {providerName && <><span className="auth-inline-spinner" aria-hidden="true" />Opening {providerName} securely…</>}
+          </p>
+        </div>
+
+        <p className="customer-auth-trust">
+          <LockKeyhole size={16} aria-hidden="true" />
+          <span>Your phone number is added later for delivery contact—not for sign-in.</span>
+        </p>
+
+        {config.legalLinks && (
+          <p className="auth-legal">
+            By continuing, you agree to Dastak’s{" "}
+            <a href={config.legalLinks.terms} target="_blank" rel="noreferrer">Terms</a>
+            {" "}and acknowledge the{" "}
+            <a href={config.legalLinks.privacy} target="_blank" rel="noreferrer">Privacy Policy</a>.
+            {" "}<a href={config.legalLinks.support} target="_blank" rel="noreferrer">Get help</a>
+          </p>
+        )}
+      </section>
     </div>
   );
 }
@@ -440,6 +547,10 @@ function ProfileForm({ session, onComplete, onSignOut }: {
   const submissionAttempt = useRef(new ProfileSubmissionAttempt());
   const validation = profileValidation({ displayName, phoneNumber });
   const valid = isValidProfile({ displayName, phoneNumber });
+  const isCustomerProfile = config.variant === "dastak-customer";
+  const provider = session.user.app_metadata.provider === "apple"
+    ? "Apple"
+    : session.user.app_metadata.provider === "google" ? "Google" : "your identity provider";
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -466,59 +577,95 @@ function ProfileForm({ session, onComplete, onSignOut }: {
     }
   };
 
-  return <>
-    <form className={`form-panel${config.product === "dastak" ? " dastak-profile-form" : ""}`} onSubmit={submit}>
-      {config.product === "dastak" ? <header className="dastak-profile-heading">
-        <div className="dastak-profile-topline">
-          <p className="dastak-profile-wordmark"><span>Dastak</span> <span lang="ur">دستک</span></p>
-          <button type="button" onClick={() => setConfirmingSignOut(true)}>Use a different account</button>
-        </div>
-        <p className="eyebrow">{config.roleLabel}</p>
-        <h1>Your details</h1>
-        <p>Tell us how to address you and how an active delivery can reach you.</p>
-      </header> : <>
-        <div className="section-icon"><UserRound size={22} /></div>
-        <p className="eyebrow">Account details</p>
-        <h1>Complete your profile</h1>
+  const profileFields = <>
+    <label>
+      Full name
+      <input
+        autoComplete="name"
+        value={displayName}
+        maxLength={80}
+        required
+        disabled={busy}
+        placeholder="Enter your full name"
+        aria-invalid={touched.name && Boolean(validation.name) || undefined}
+        aria-describedby="name-hint"
+        onBlur={() => setTouched((current) => ({ ...current, name: true }))}
+        onChange={(event) => setDisplayName(event.target.value)}
+      />
+    </label>
+    <small id="name-hint" className={touched.name && validation.name ? "field-error" : undefined}>
+      {touched.name && validation.name
+        ? validation.name
+        : isCustomerProfile
+          ? "As you want it shown on your Dastak account."
+          : "Use the name you want shown on your Dastak account."}
+    </small>
+    <div className="phone-field-group">
+      <label htmlFor="profile-phone">{isCustomerProfile ? "Delivery phone" : "Phone number"}</label>
+      <PhoneNumberField
+        value={phoneNumber}
+        onChange={setPhoneNumber}
+        id="profile-phone"
+        required
+        disabled={busy}
+        invalid={touched.phone && Boolean(validation.phone)}
+        describedBy="phone-hint phone-error"
+        onBlur={() => setTouched((current) => ({ ...current, phone: true }))}
+      />
+    </div>
+    <small id="phone-hint">{isCustomerProfile ? <>
+      <LockKeyhole size={13} aria-hidden="true" /> Used only when an active delivery requires contact—not for sign-in.
+    </> : "Used only when an active delivery requires contact. It is not used to sign in."}</small>
+    <small id="phone-error" className="field-error" aria-live="polite">
+      {touched.phone ? validation.phone ?? "" : ""}
+    </small>
+    {error && <p className="error-text profile-submit-error" role="alert">{error}</p>}
+    <button
+      className={`primary-button${isCustomerProfile ? " profile-continue-button" : ""}`}
+      disabled={busy || (isCustomerProfile && !valid)}
+      aria-busy={busy || undefined}
+      type="submit"
+    >
+      {busy ? "Saving your details…" : <>
+        Save and continue
+        {isCustomerProfile && <ArrowRight size={18} aria-hidden="true" />}
       </>}
-      <label>
-        Full name
-        <input
-          autoComplete="name"
-          value={displayName}
-          maxLength={80}
-          required
-          disabled={busy}
-          aria-invalid={touched.name && Boolean(validation.name) || undefined}
-          aria-describedby="name-hint"
-          onBlur={() => setTouched((current) => ({ ...current, name: true }))}
-          onChange={(event) => setDisplayName(event.target.value)}
-        />
-      </label>
-      <small id="name-hint" className={touched.name && validation.name ? "field-error" : undefined}>
-        {touched.name && validation.name ? validation.name : "Use the name you want shown on your Dastak account."}
-      </small>
-      <div className="phone-field-group">
-        <label htmlFor="profile-phone">Phone number</label>
-        <PhoneNumberField
-          value={phoneNumber}
-          onChange={setPhoneNumber}
-          id="profile-phone"
-          required
-          disabled={busy}
-          invalid={touched.phone && Boolean(validation.phone)}
-          describedBy="phone-hint phone-error"
-          onBlur={() => setTouched((current) => ({ ...current, phone: true }))}
-        />
-      </div>
-      <small id="phone-hint">Used only when an active delivery requires contact. It is not used to sign in.</small>
-      <small id="phone-error" className="field-error" aria-live="polite">
-        {touched.phone ? validation.phone ?? "" : ""}
-      </small>
-      {error && <p className="error-text" role="alert">{error}</p>}
-      <button className="primary-button" disabled={busy} type="submit">
-        {busy ? "Saving your details…" : "Save and continue"}
-      </button>
+    </button>
+  </>;
+
+  return <>
+    <form className={`form-panel${config.product === "dastak" ? " dastak-profile-form" : ""}${isCustomerProfile ? " dastak-customer-profile-form" : ""}`} onSubmit={submit}>
+      {isCustomerProfile ? <>
+        <header className="dastak-customer-profile-heading">
+          <div className="dastak-profile-topline">
+            <p className="dastak-profile-wordmark"><span>Dastak</span> <span lang="ur">دستک</span></p>
+            <button type="button" onClick={() => setConfirmingSignOut(true)}>Use a different account</button>
+          </div>
+          <div className="dastak-profile-progress" aria-hidden="true"><span /><span /></div>
+          <p className="eyebrow">Account setup · 2 of 2</p>
+          <h1>Make Dastak yours.</h1>
+          <p>Tell us what to call you and where an active delivery can reach you.</p>
+        </header>
+        <div className="dastak-customer-profile-card">
+          <p className="dastak-profile-identity"><ShieldCheck size={17} aria-hidden="true" /> Signed in securely with {provider}</p>
+          {profileFields}
+        </div>
+      </> : <>
+        {config.product === "dastak" ? <header className="dastak-profile-heading">
+          <div className="dastak-profile-topline">
+            <p className="dastak-profile-wordmark"><span>Dastak</span> <span lang="ur">دستک</span></p>
+            <button type="button" onClick={() => setConfirmingSignOut(true)}>Use a different account</button>
+          </div>
+          <p className="eyebrow">{config.roleLabel}</p>
+          <h1>Your details</h1>
+          <p>Tell us how to address you and how an active delivery can reach you.</p>
+        </header> : <>
+          <div className="section-icon"><UserRound size={22} /></div>
+          <p className="eyebrow">Account details</p>
+          <h1>Complete your profile</h1>
+        </>}
+        {profileFields}
+      </>}
     </form>
     {confirmingSignOut && <AccountActionDialog
       action="sign-out"
@@ -708,7 +855,8 @@ function ErrorState({ kind, message, onRetry, onSignOut, supportUrl }: {
       : { eyebrow: "Connection", title: "Unable to continue", retry: "Try again" };
   return (
     <>
-      <div className="status-panel">
+      <div className={`status-panel${config.variant === "dastak-customer" ? " customer-auth-status" : ""}`}>
+        {config.variant === "dastak-customer" && <p className="customer-status-wordmark"><span>Dastak</span> <span lang="ur">دستک</span></p>}
         <p className="eyebrow">{presentation.eyebrow}</p>
         <h1>{presentation.title}</h1>
         <p className="error-text" role="alert">{message}</p>
@@ -729,6 +877,13 @@ function ErrorState({ kind, message, onRetry, onSignOut, supportUrl }: {
 }
 
 function Loading() {
+  if (config.variant === "dastak-customer") {
+    return <div className="customer-auth-loading" role="status">
+      <p><span>Dastak</span> <span lang="ur">دستک</span></p>
+      <span aria-hidden="true" />
+      <small>Checking your account securely</small>
+    </div>;
+  }
   return <div className="loading" role="status"><span /> Checking account</div>;
 }
 

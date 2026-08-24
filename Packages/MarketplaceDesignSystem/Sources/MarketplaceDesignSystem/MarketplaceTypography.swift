@@ -23,4 +23,12 @@ public extension MarketplaceTypography {
         _ = instrumentSerifRegistration
         return .custom(instrumentSerifPostScriptName, fixedSize: size)
     }
+
+    static func instrumentSerif(
+        size: CGFloat,
+        relativeTo textStyle: Font.TextStyle = .largeTitle
+    ) -> Font {
+        _ = instrumentSerifRegistration
+        return .custom(instrumentSerifPostScriptName, size: size, relativeTo: textStyle)
+    }
 }
