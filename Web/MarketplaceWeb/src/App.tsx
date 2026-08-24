@@ -48,16 +48,7 @@ const MerchantApplicationForm = lazy(() => import("./MerchantApplicationForm").t
 const MerchantOrdersView = lazy(() => import("./MerchantOrdersView").then((module) => ({ default: module.MerchantOrdersView })));
 const SavariRideView = lazy(() => import("./SavariRideView").then((module) => ({ default: module.SavariRideView })));
 
-const config = readAppConfig({
-  VITE_APP_VARIANT: import.meta.env.VITE_APP_VARIANT,
-  VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
-  VITE_SUPABASE_PUBLISHABLE_KEY: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-  VITE_DASTAK_PRIVACY_URL: import.meta.env.VITE_DASTAK_PRIVACY_URL,
-  VITE_DASTAK_TERMS_URL: import.meta.env.VITE_DASTAK_TERMS_URL,
-  VITE_DASTAK_SUPPORT_URL: import.meta.env.VITE_DASTAK_SUPPORT_URL,
-  VITE_DASTAK_WEB_PUSH_PUBLIC_KEY: import.meta.env.VITE_DASTAK_WEB_PUSH_PUBLIC_KEY,
-  VITE_DASTAK_DELIVERY_URL: import.meta.env.VITE_DASTAK_DELIVERY_URL,
-});
+const config = readAppConfig(import.meta.env);
 document.title = `${config.brand} ${config.roleLabel}`;
 document.querySelector('meta[name="description"]')?.setAttribute(
   "content",
