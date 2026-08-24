@@ -25,6 +25,46 @@ public struct MarketplaceLinkedIdentity: Codable, Equatable, Sendable {
     public let provider: MarketplaceOAuthProvider
     public let linkKind: LinkKind
     public let linkedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case provider
+        case linkKind
+        case linkedAt
+    }
+
+    public init(provider: MarketplaceOAuthProvider, linkKind: LinkKind, linkedAt: Date) {
+        self.provider = provider
+        self.linkKind = linkKind
+        self.linkedAt = linkedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try container.decode(MarketplaceOAuthProvider.self, forKey: .provider)
+        linkKind = try container.decode(LinkKind.self, forKey: .linkKind)
+
+        let timestamp = try container.decode(String.self, forKey: .linkedAt)
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let standard = ISO8601DateFormatter()
+        guard let date = fractional.date(from: timestamp) ?? standard.date(from: timestamp) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .linkedAt,
+                in: container,
+                debugDescription: "Expected an ISO-8601 identity timestamp."
+            )
+        }
+        linkedAt = date
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(provider, forKey: .provider)
+        try container.encode(linkKind, forKey: .linkKind)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        try container.encode(formatter.string(from: linkedAt), forKey: .linkedAt)
+    }
 }
 
 public protocol AccountProfileClient: Sendable {
