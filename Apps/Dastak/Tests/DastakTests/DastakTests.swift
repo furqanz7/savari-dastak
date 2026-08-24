@@ -4,6 +4,17 @@ import XCTest
 
 @MainActor
 final class DastakTests: XCTestCase {
+    func testMerchantAppRouteUsesInstalledAppThenAppStoreFallback() {
+        XCTAssertEqual(
+            DastakMerchantAppRoute.destination(isAppInstalled: true).scheme,
+            "com.dastak.merchant"
+        )
+        XCTAssertEqual(
+            DastakMerchantAppRoute.destination(isAppInstalled: false).scheme,
+            "itms-apps"
+        )
+    }
+
     func testApprovedPartnerAccessEnablesModeSwitch() async {
         let model = DastakRootModel(
             accessProvider: StubPartnerAccessProvider(result: .success(.approved)),

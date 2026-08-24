@@ -36,6 +36,7 @@
 	<true/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
+		<string>com.dastak.merchant</string>
 		<string>tez</string>
 		<string>phonepe</string>
 		<string>paytmmp</string>

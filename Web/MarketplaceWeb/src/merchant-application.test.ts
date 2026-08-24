@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evidenceObjectPath,
+  getMerchantAccountState,
   getMerchantApplicationSnapshot,
   isAcceptedEvidenceFile,
   MerchantApplicationRequestError,
@@ -84,5 +85,36 @@ describe("merchant application", () => {
     expect(snapshot.onboardingState).toBe("rejected");
     expect(snapshot.businessName).toBe("Corner Store");
     expect(snapshot.reviewReason).toBe("Upload a clearer document.");
+  });
+
+  it("uses active Merchant app access as the registration truth", async () => {
+    const state = await getMerchantAccountState(auth, (url, init) => {
+      expect(String(url)).toContain("/resolve-app-access");
+      expect(JSON.parse(String(init?.body))).toEqual({ application: "merchant" });
+      return Promise.resolve(new Response(JSON.stringify({ route: "active" }), { status: 200 }));
+    });
+
+    expect(state).toBe("approved");
+  });
+
+  it("falls back to application status only when Merchant access is absent", async () => {
+    let requestCount = 0;
+    const state = await getMerchantAccountState(auth, (url) => {
+      requestCount += 1;
+      if (String(url).includes("resolve-app-access")) {
+        return Promise.resolve(new Response(JSON.stringify({ route: "access_denied" }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        onboardingState: "rejected",
+        applicationId,
+        businessName: "Corner Store",
+        businessAddress: "12 Main Road",
+        evidenceObjectPath: `merchant/${accountId}/evidence.pdf`,
+        reviewReason: "Upload a clearer document.",
+      }), { status: 200 }));
+    });
+
+    expect(state).toBe("rejected");
+    expect(requestCount).toBe(2);
   });
 });

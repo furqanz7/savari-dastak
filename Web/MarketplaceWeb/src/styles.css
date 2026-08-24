@@ -962,6 +962,8 @@ button:disabled { cursor: wait; opacity: .55; }
   --primary-action: #f5f2ec;
   --primary-action-foreground: #21130e;
   position: relative;
+  height: 100dvh;
+  min-height: 0;
   overflow: hidden;
   color-scheme: dark;
   color: var(--text-primary);
@@ -985,7 +987,10 @@ button:disabled { cursor: wait; opacity: .55; }
   position: relative;
   z-index: 1;
   width: 100%;
+  height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  min-height: 0;
   max-width: 1180px;
+  overflow: hidden;
   padding: clamp(26px, 4vw, 48px) clamp(12px, 3vw, 36px);
 }
 .customer-onboarding { width: 100%; margin: 0 auto; }
@@ -2036,19 +2041,35 @@ button:disabled { cursor: wait; opacity: .55; }
   .topbar { height: 68px; }
   .content { min-height: calc(100vh - 86px); padding: 32px 0 64px; align-items: stretch; }
   .content.dastak-auth-content { min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding-top: 40px; padding-bottom: 40px; align-items: center; }
-  .content.dastak-customer-auth-content { padding: 22px 0 34px; align-items: start; }
-  .customer-sign-in-layout { grid-template-columns: 1fr; gap: 34px; }
+  .content.dastak-customer-auth-content { padding: 8px 0; align-items: center; }
+  .customer-sign-in-layout { grid-template-columns: 1fr; gap: 14px; }
   .customer-onboarding-hero { min-height: 0; grid-template-rows: auto auto auto; }
-  .customer-onboarding-wordmark { font-size: 38px; }
-  .customer-onboarding-copy { padding: 54px 0 26px; }
-  .customer-onboarding-copy h1 { margin-top: 12px; font-size: clamp(44px, 13vw, 58px); }
-  .customer-onboarding-copy > p:last-child { font-size: 15px; line-height: 1.6; }
-  .customer-onboarding-promises { gap: 14px; }
-  .customer-auth-panel { padding: 20px; border-radius: 24px; }
-  .dastak-customer-profile-form { grid-template-columns: 1fr; gap: 30px; }
-  .dastak-customer-profile-heading .dastak-profile-topline { margin-bottom: 40px; }
-  .dastak-customer-profile-heading h1 { font-size: 48px; }
-  .dastak-customer-profile-card { padding: 20px; border-radius: 24px; }
+  .customer-onboarding-wordmark { font-size: 32px; }
+  .customer-onboarding-copy { padding: 16px 0 10px; }
+  .customer-onboarding-copy h1 { margin: 7px 0 9px; font-size: clamp(34px, 10vw, 42px); line-height: .96; }
+  .customer-onboarding-copy > p:last-child { font-size: 13px; line-height: 1.4; }
+  .customer-onboarding-promises { display: none; }
+  .customer-auth-panel { gap: 10px; padding: 14px; border-radius: 22px; }
+  .customer-auth-panel-heading { gap: 3px; }
+  .customer-auth-panel-heading .eyebrow { display: none; }
+  .customer-auth-panel-heading h2 { font-size: 20px; }
+  .customer-auth-panel-heading > p:last-child { font-size: 12px; line-height: 1.35; }
+  .customer-auth-panel .provider-button { min-height: 50px; }
+  .customer-auth-trust { padding-top: 10px; font-size: 11px; }
+  .customer-auth-panel .auth-legal { font-size: 11px; line-height: 1.35; }
+  .dastak-customer-profile-form { grid-template-columns: 1fr; gap: 14px; }
+  .dastak-customer-profile-heading { gap: 7px; }
+  .dastak-customer-profile-heading .dastak-profile-topline { margin-bottom: 8px; }
+  .dastak-customer-profile-heading .dastak-profile-wordmark { font-size: 32px; }
+  .dastak-customer-profile-heading h1 { font-size: 36px; }
+  .dastak-customer-profile-heading > p:last-child { font-size: 13px; line-height: 1.4; }
+  .dastak-customer-profile-card { gap: 10px; padding: 14px; border-radius: 22px; }
+  .dastak-customer-profile-card input,
+  .dastak-customer-profile-card select,
+  .dastak-customer-profile-card .phone-number-field select,
+  .dastak-customer-profile-card .phone-number-field input { height: 48px; }
+  .dastak-customer-profile-card > small { font-size: 11px; }
+  .profile-continue-button { min-height: 50px; }
   .auth-layout { grid-template-columns: 1fr; gap: 52px; align-content: space-between; }
   .auth-copy h1 { font-size: 48px; }
   .product-dastak .dastak-auth-layout { align-self: center; gap: 36px; }
@@ -2214,18 +2235,23 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 
 @media (max-height: 680px) {
-  .content.dastak-auth-content { align-items: start; overflow-y: auto; }
+  .content.dastak-auth-content:not(.dastak-customer-auth-content) { align-items: start; overflow-y: auto; }
   .product-dastak .dastak-auth-layout { align-self: start; gap: 28px; }
   .customer-onboarding-hero { min-height: 0; }
   .web-notification-backdrop { overflow-y: auto; align-items: start; }
 }
 
 @media (max-width: 720px) and (max-height: 700px) {
-  .customer-sign-in-layout { gap: 24px; }
-  .customer-onboarding-copy { padding: 34px 0 20px; }
-  .customer-onboarding-copy h1 { font-size: 42px; }
-  .customer-onboarding-promises { gap: 10px; }
-  .customer-auth-panel { padding: 18px; }
+  .customer-sign-in-layout { gap: 8px; }
+  .customer-onboarding-copy { padding: 10px 0 6px; }
+  .customer-onboarding-copy h1 { font-size: 32px; }
+  .customer-onboarding-copy > p:last-child { display: none; }
+  .customer-auth-panel-heading > p:last-child { display: none; }
+  .customer-auth-panel { padding: 12px; }
+  .customer-auth-panel .provider-button { min-height: 46px; }
+  .customer-auth-trust { display: none; }
+  .dastak-customer-profile-heading > p:last-child { display: none; }
+  .dastak-customer-profile-card { gap: 8px; padding: 12px; }
 }
 
 @media (min-width: 721px) {

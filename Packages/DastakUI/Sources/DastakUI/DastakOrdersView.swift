@@ -7,14 +7,20 @@ import SwiftUI
 struct DastakOrdersView: View {
     @ObservedObject var model: DastakCustomerModel
     let openCart: () -> Void
+    let openDestination: (DastakCustomerDestination) -> Void
     @Environment(\.scenePhase) private var scenePhase
-    @State private var scope: DastakOrderHistoryScope = .all
-    @State private var searchText = ""
+    @State private var scope: DastakOrderHistoryScope = .active
+    @State private var hasChosenScope = false
     @State private var pendingReorder: DastakV1OrderSnapshot?
 
-    init(model: DastakCustomerModel, openCart: @escaping () -> Void = {}) {
+    init(
+        model: DastakCustomerModel,
+        openCart: @escaping () -> Void = {},
+        openDestination: @escaping (DastakCustomerDestination) -> Void = { _ in }
+    ) {
         self.model = model
         self.openCart = openCart
+        self.openDestination = openDestination
     }
 
     var body: some View {
@@ -25,8 +31,7 @@ struct DastakOrdersView: View {
                 DastakOrdersLoadingView()
             } else if model.orders.isEmpty, model.v1Orders.isEmpty, model.parcels.isEmpty {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                        DastakOrdersHeader(activeCount: 0, pastCount: 0)
+                    Group {
                         if let failure = model.ordersAndParcelsRefreshFailure {
                             DastakEmptyState(
                                 symbol: failure.symbol,
@@ -38,8 +43,8 @@ struct DastakOrdersView: View {
                         } else {
                             DastakEmptyState(
                                 symbol: "clock",
-                                title: "Your first journey starts here",
-                                message: "New orders will appear here from matching through verified delivery."
+                                title: "No orders yet",
+                                message: "Your active and past orders will appear here."
                             )
                         }
                     }
@@ -48,22 +53,13 @@ struct DastakOrdersView: View {
             } else {
                 List {
                     Section {
-                        DastakOrdersHeader(
-                            activeCount: activeOrderCount,
-                            pastCount: pastOrderCount
-                        )
-                        .listRowInsets(EdgeInsets(
-                            top: MarketplaceSpacing.medium,
-                            leading: MarketplaceSpacing.medium,
-                            bottom: MarketplaceSpacing.small,
-                            trailing: MarketplaceSpacing.medium
-                        ))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                    }
-
-                    Section {
-                        Picker("Order history", selection: $scope) {
+                        Picker("Order history", selection: Binding(
+                            get: { scope },
+                            set: { value in
+                                scope = value
+                                hasChosenScope = true
+                            }
+                        )) {
                             ForEach(DastakOrderHistoryScope.allCases) { value in
                                 Text(value.title).tag(value)
                             }
@@ -91,74 +87,77 @@ struct DastakOrdersView: View {
                         }
                     }
 
-                    if !filteredV1Orders.isEmpty {
-                        Section("Your Dastak orders") {
+                    Section {
+                        if !filteredV1Orders.isEmpty {
                             ForEach(filteredV1Orders) { order in
                                 DastakV1OrderHistoryRow(
                                     order: order,
                                     imageKey: model.imageKey(for:),
-                                    reorder: { reorder(order) }
+                                    reorder: { reorder(order) },
+                                    open: {
+                                        openDestination(.dastakV1Order(order.id))
+                                    }
                                 )
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                             }
-
-                            if model.canLoadMoreV1Orders {
-                                Button {
-                                    Task { await model.loadMoreV1Orders() }
-                                } label: {
-                                    HStack {
-                                        Spacer()
-                                        if model.isLoadingMoreV1Orders {
-                                            ProgressView()
-                                            Text("Loading earlier orders…")
-                                        } else {
-                                            Label("Load earlier orders", systemImage: "clock.arrow.circlepath")
-                                        }
-                                        Spacer()
-                                    }
-                                }
-                                .disabled(model.isLoadingMoreV1Orders)
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                            }
                         }
-                    }
 
-                    if !filteredParcels.isEmpty {
-                        Section("Parcel deliveries") {
+                        if !filteredParcels.isEmpty {
                             ForEach(filteredParcels, id: \.parcel.parcelID) { customerParcel in
-                                NavigationLink(value: DastakCustomerDestination.parcel(customerParcel.parcel.parcelID)) {
+                                Button {
+                                    openDestination(.parcel(customerParcel.parcel.parcelID))
+                                } label: {
                                     DastakParcelHistoryRow(customerParcel: customerParcel)
                                 }
+                                .buttonStyle(.plain)
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                             }
                         }
-                    }
 
-                    if !filteredOrders.isEmpty {
-                        Section("Store orders") {
-                        ForEach(filteredOrders, id: \.orderID) { order in
-                            NavigationLink(value: DastakCustomerDestination.merchantOrder(order.orderID)) {
-                                DastakOrderRow(order: order)
+                        if !filteredOrders.isEmpty {
+                            ForEach(filteredOrders, id: \.orderID) { order in
+                                Button {
+                                    openDestination(.merchantOrder(order.orderID))
+                                } label: {
+                                    DastakOrderRow(order: order)
+                                }
+                                .buttonStyle(.plain)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
                             }
+                        }
+
+                        if scope == .past, model.canLoadMoreV1Orders {
+                            Button {
+                                Task { await model.loadMoreV1Orders() }
+                            } label: {
+                                HStack {
+                                    Spacer()
+                                    if model.isLoadingMoreV1Orders {
+                                        ProgressView()
+                                        Text("Loading earlier orders…")
+                                    } else {
+                                        Label("Load earlier orders", systemImage: "clock.arrow.circlepath")
+                                    }
+                                    Spacer()
+                                }
+                            }
+                            .disabled(model.isLoadingMoreV1Orders)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
-                        }
                         }
                     }
 
                     if filteredV1Orders.isEmpty, filteredOrders.isEmpty, filteredParcels.isEmpty {
                         Section {
                             DastakEmptyState(
-                                symbol: searchText.isEmpty ? "clock.arrow.circlepath" : "magnifyingglass",
-                                title: searchText.isEmpty
-                                    ? (scope == .active ? "Nothing ongoing" : "No orders here")
-                                    : "No matching orders",
-                                message: searchText.isEmpty
-                                    ? "Orders will appear here from matching through verified delivery."
-                                    : "Try another product name or order number."
+                                symbol: "clock.arrow.circlepath",
+                                title: scope == .active ? "No active orders" : "No past orders",
+                                message: scope == .active
+                                    ? "When an order is in progress, you can track it here."
+                                    : "Completed and cancelled orders will appear here."
                             )
                             .listRowBackground(Color.clear)
                         }
@@ -170,7 +169,9 @@ struct DastakOrdersView: View {
         }
         .marketplacePage()
         .navigationTitle("Orders")
-        .searchable(text: $searchText, prompt: "Products or order number")
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
         .navigationDestination(for: DastakCustomerDestination.self) { destination in
             DastakCustomerDeliveryDestinationView(
                 model: model,
@@ -191,7 +192,10 @@ struct DastakOrdersView: View {
         }
         .task {
             await model.refreshOrdersAndParcels()
+            selectInitialScopeIfNeeded()
         }
+        .onChange(of: activeOrderCount) { _, _ in selectInitialScopeIfNeeded() }
+        .onChange(of: pastOrderCount) { _, _ in selectInitialScopeIfNeeded() }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
@@ -219,8 +223,7 @@ struct DastakOrdersView: View {
 
     private var filteredV1Orders: [DastakV1OrderSnapshot] {
         model.v1Orders.filter {
-            scope.includes(isActive: isActive($0.status)) &&
-                matches(DastakV1OrderPresentation.searchText($0))
+            scope.includes(isActive: isActive($0.status))
         }
     }
 
@@ -236,15 +239,13 @@ struct DastakOrdersView: View {
 
     private var filteredOrders: [MerchantOrderSnapshot] {
         model.orders.filter {
-            scope.includes(isActive: isActive($0.status)) &&
-                matches(($0.orderID.uuidString + " " + $0.lines.map(\.name).joined(separator: " ")).lowercased())
+            scope.includes(isActive: isActive($0.status))
         }
     }
 
     private var filteredParcels: [CustomerParcelDelivery] {
         model.parcels.filter {
-            scope.includes(isActive: isActive($0.parcel.status)) &&
-                matches(($0.parcel.parcelID.uuidString + " " + $0.parcel.dropoff.address).lowercased())
+            scope.includes(isActive: isActive($0.parcel.status))
         }
     }
 
@@ -260,9 +261,10 @@ struct DastakOrdersView: View {
         DastakV1OrderPresentation.isActive(status)
     }
 
-    private func matches(_ haystack: String) -> Bool {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return query.isEmpty || haystack.contains(query)
+    private func selectInitialScopeIfNeeded() {
+        guard !hasChosenScope, !model.isLoadingOrders, !model.isLoadingV1Orders,
+              !model.isLoadingParcels else { return }
+        scope = activeOrderCount > 0 ? .active : .past
     }
 
     private func reorder(_ order: DastakV1OrderSnapshot) {
@@ -277,62 +279,15 @@ struct DastakOrdersView: View {
 
 private struct DastakOrdersLoadingView: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-            DastakOrdersHeader(activeCount: 0, pastCount: 0)
-
-            HStack(spacing: MarketplaceSpacing.compact) {
-                ProgressView()
-                    .tint(MarketplaceColors.dastakAccent.color)
-                Text("Loading your orders")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(MarketplaceSpacing.large)
-            .marketplaceFlatSurface()
+        HStack(spacing: MarketplaceSpacing.compact) {
+            ProgressView()
+                .tint(MarketplaceColors.dastakAccent.color)
+            Text("Loading your orders")
+                .font(.subheadline.weight(.semibold))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(MarketplaceSpacing.large)
-    }
-}
-
-private struct DastakOrdersHeader: View {
-    let activeCount: Int
-    let pastCount: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-            Text("Your orders")
-                .font(.title2.bold())
-                .accessibilityAddTraits(.isHeader)
-            Text("Track ongoing deliveries or quickly find and reorder something from the past.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: MarketplaceSpacing.small) {
-                metric("\(activeCount)", label: "active")
-                metric("\(pastCount)", label: "past")
-                Spacer(minLength: 0)
-                Label("Live when active", systemImage: "dot.radiowaves.left.and.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-            }
-        }
-        .padding(.vertical, MarketplaceSpacing.small)
-    }
-
-    private func metric(_ value: String, label: String) -> some View {
-        HStack(spacing: 5) {
-            Text(value)
-                .font(.subheadline.weight(.bold).monospacedDigit())
-                .foregroundStyle(.primary)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.thinMaterial, in: Capsule())
-        .accessibilityElement(children: .combine)
+        .marketplaceFlatSurface()
     }
 }
 
@@ -340,10 +295,11 @@ private struct DastakV1OrderHistoryRow: View {
     let order: DastakV1OrderSnapshot
     let imageKey: (DastakV1OrderLine) -> String?
     let reorder: () -> Void
+    let open: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            NavigationLink(value: DastakCustomerDestination.dastakV1Order(order.id)) {
+            Button(action: open) {
                 VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
                     HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
                         Image(systemName: DastakV1OrderPresentation.symbol(order.status))
@@ -428,11 +384,8 @@ private struct DastakV1OrderHistoryRow: View {
                     .accessibilityHint("Rebuilds this order using products currently available")
                     Divider().frame(height: 26)
                 }
-                NavigationLink(value: DastakCustomerDestination.dastakV1Order(order.id)) {
-                    HStack {
-                        Text(DastakV1OrderPresentation.isActive(order.status) ? "Track order" : "Details")
-                        Image(systemName: "chevron.right")
-                    }
+                Button(action: open) {
+                    Text(DastakV1OrderPresentation.isActive(order.status) ? "Track order" : "Details")
                     .frame(maxWidth: .infinity)
                 }
             }
@@ -537,16 +490,14 @@ private extension View {
 private enum DastakOrderHistoryScope: String, CaseIterable, Identifiable {
     case active
     case past
-    case all
 
     var id: String { rawValue }
-    var title: String { self == .active ? "Ongoing" : rawValue.capitalized }
+    var title: String { rawValue.capitalized }
 
     func includes(isActive: Bool) -> Bool {
         switch self {
         case .active: isActive
         case .past: !isActive
-        case .all: true
         }
     }
 }

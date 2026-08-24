@@ -30,8 +30,9 @@ struct DastakAccountView: View {
     let identityMessage: String?
     let identityMessageIsSuccess: Bool
     let hasActiveOrders: Bool
-    let discoveryRadiusKilometres: Int
     let refreshFailure: DastakCustomerRefreshFailure?
+    let merchantOnboardingState: MerchantOnboardingState?
+    let isMerchantAccessLoading: Bool
     let deliveryPartnerAccess: DeliveryPartnerAccess
     let isDeliveryPartnerAccessLoading: Bool
     let chooseLocation: () -> Void
@@ -382,13 +383,6 @@ struct DastakAccountView: View {
                 }
                 .buttonStyle(.plain)
                 Divider().padding(.leading, 64)
-                accountRow(
-                    title: "Browse range",
-                    value: "\(discoveryRadiusKilometres) km",
-                    symbol: "scope",
-                    showsDisclosure: false
-                )
-                Divider().padding(.leading, 64)
                 NavigationLink {
                     DastakPrivacyAndDataView()
                 } label: {
@@ -410,7 +404,9 @@ struct DastakAccountView: View {
                         MarketplaceIdentityProviderMark(provider)
                             .frame(width: 40, height: 40)
                             .background(
-                                MarketplaceColors.dastakAccentSoft.color,
+                                provider == .apple
+                                    ? Color.white.opacity(0.96)
+                                    : MarketplaceColors.dastakAccentSoft.color,
                                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
                             )
                         VStack(alignment: .leading, spacing: 3) {
@@ -560,33 +556,42 @@ struct DastakAccountView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
                 accountSectionHeader(
-                    "Sell on Dastak",
-                    detail: "Bring your Restaurant/Cafe or retail operation to Dastak"
+                    merchantSectionTitle,
+                    detail: merchantSectionDetail,
+                    trailing: merchantStatusLabel
                 )
                 Button(action: becomeMerchant) {
                     HStack(spacing: MarketplaceSpacing.compact) {
                         accountIcon("storefront.fill")
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Become a Dastak Merchant")
+                            Text(merchantActionTitle)
                                 .font(.headline)
                                 .foregroundStyle(.primary)
-                            Text("Apply, manage your business details and follow review status in the Merchant workspace.")
+                            Text(merchantActionDetail)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.leading)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 8)
-                        Image(systemName: "arrow.up.right")
+                        if isMerchantAccessLoading {
+                            ProgressView()
+                                .tint(MarketplaceColors.dastakAccent.color)
+                        } else {
+                            Image(systemName: merchantOnboardingState == .approved ? "arrow.up.right" : "chevron.right")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        }
                     }
                     .padding(18)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(isMerchantAccessLoading)
                 .dastakAccountSurface(accented: true)
-                .accessibilityHint("Open the Merchant application")
+                .accessibilityHint(merchantOnboardingState == .approved
+                    ? "Open the Dastak Merchant app"
+                    : "Open Merchant registration or application status")
             }
 
             VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
@@ -646,6 +651,54 @@ struct DastakAccountView: View {
             .accessibilityLabel(partnerPresentation.title)
             .accessibilityHint(partnerPresentation.detail)
             }
+        }
+    }
+
+    private var merchantSectionTitle: String {
+        switch merchantOnboardingState {
+        case .approved: "Dastak Merchant"
+        case .pending, .rejected: "Merchant application"
+        case .notApplied: "Sell on Dastak"
+        case nil: isMerchantAccessLoading ? "Checking Merchant access" : "Merchant access"
+        }
+    }
+
+    private var merchantSectionDetail: String {
+        switch merchantOnboardingState {
+        case .approved: "Your Merchant account is approved"
+        case .pending: "Your application is under review"
+        case .rejected: "Your application needs attention"
+        case .notApplied: "Bring your Restaurant/Cafe or retail operation to Dastak"
+        case nil: "Use your Dastak identity in the separate Merchant workspace"
+        }
+    }
+
+    private var merchantStatusLabel: String? {
+        switch merchantOnboardingState {
+        case .approved: "APPROVED"
+        case .pending: "PENDING"
+        case .rejected: "ACTION NEEDED"
+        case .notApplied, nil: nil
+        }
+    }
+
+    private var merchantActionTitle: String {
+        switch merchantOnboardingState {
+        case .approved: "Open Dastak Merchant"
+        case .pending: "View Merchant application"
+        case .rejected: "Update Merchant application"
+        case .notApplied: "Become a Dastak Merchant"
+        case nil: isMerchantAccessLoading ? "Checking Merchant access" : "Open Merchant workspace"
+        }
+    }
+
+    private var merchantActionDetail: String {
+        switch merchantOnboardingState {
+        case .approved: "Continue in your Merchant workspace."
+        case .pending: "Follow your review status in the Merchant workspace."
+        case .rejected: "Review the decision and resubmit from the Merchant workspace."
+        case .notApplied: "Apply and manage your business details in the Merchant workspace."
+        case nil: "Open the Merchant workspace to verify access."
         }
     }
 

@@ -47,7 +47,6 @@ import {
   orderKindLabel,
   orderItemCount,
   orderLineDetail,
-  orderSearchText,
   statusAssurance,
   statusMessage,
   statusTitle,
@@ -993,7 +992,7 @@ function PaymentMethod({ label, icon }: { label: string; icon: React.ReactNode }
   return <div><span>{icon}</span><strong>{label}</strong><small>AT CHECKOUT</small></div>;
 }
 
-type OrderScope = "active" | "past" | "all";
+type OrderScope = "active" | "past";
 
 export function OrdersSection({
   orders, loading, loadingMore, canLoadMore, error, imageUrlForLine,
@@ -1010,28 +1009,25 @@ export function OrdersSection({
   onOpen: (order: V1Order) => void;
   onReorder: (order: V1Order) => void;
 }) {
-  const [scope, setScope] = useState<OrderScope>("all");
-  const [orderQuery, setOrderQuery] = useState("");
-  const normalizedQuery = orderQuery.trim().toLowerCase();
+  const [scope, setScope] = useState<OrderScope>("active");
+  const scopeWasChosen = useRef(false);
   const visible = useMemo(() => orders.filter((order) =>
-    (scope === "all" || (scope === "active") === isV1OrderActive(order.status)) &&
-    (!normalizedQuery || orderSearchText(order).includes(normalizedQuery))
-  ), [normalizedQuery, orders, scope]);
+    (scope === "active") === isV1OrderActive(order.status)
+  ), [orders, scope]);
   const activeCount = useMemo(
     () => orders.reduce((count, order) => count + Number(isV1OrderActive(order.status)), 0),
     [orders],
   );
-  const pastCount = orders.length - activeCount;
+  useEffect(() => {
+    if (!scopeWasChosen.current && orders.length > 0) {
+      setScope(activeCount > 0 ? "active" : "past");
+    }
+  }, [activeCount, orders.length]);
 
   return <section className="v1-orders-page">
-    <header className="v1-orders-header"><div><p>YOUR ORDERS</p><h1>Orders &amp; receipts</h1><span>Track ongoing deliveries, find past products and reorder what is still available.</span></div><button className="v1-orders-refresh" type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button></header>
-    <form className="v1-order-search" role="search" onSubmit={(event) => event.preventDefault()}>
-      <Search size={19} />
-      <input value={orderQuery} onChange={(event) => setOrderQuery(event.target.value)} placeholder="Search products or order number" aria-label="Search your orders" />
-      {orderQuery ? <button type="button" onClick={() => setOrderQuery("")} aria-label="Clear order search"><X size={17} /></button> : null}
-    </form>
+    <header className="v1-orders-header"><div><p>YOUR ORDERS</p><h1>Orders</h1><span>Track an active delivery or revisit a past order.</span></div><button className="v1-orders-refresh" type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button></header>
     <div className="v1-order-scopes" role="group" aria-label="Filter orders">
-      {(["all", "active", "past"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => setScope(value)}><span>{value === "active" ? "Ongoing" : value[0].toUpperCase() + value.slice(1)}</span><small>{value === "active" ? activeCount : value === "past" ? pastCount : orders.length}</small></button>)}
+      {(["active", "past"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => { scopeWasChosen.current = true; setScope(value); }}><span>{value[0].toUpperCase() + value.slice(1)}</span></button>)}
     </div>
     {error ? <div className="v1-orders-error" role="alert"><CircleAlert size={18} /><span>{error}</span><button type="button" onClick={onRefresh}>Try again</button></div> : null}
     {loading && orders.length === 0 ? <div className="v1-orders-loading" role="status"><span /> Loading your orders</div> : visible.length ? <div className="v1-order-list">{visible.map((order) => {
@@ -1043,15 +1039,15 @@ export function OrdersSection({
         <button className="v1-order-card-main" type="button" onClick={() => onOpen(order)} aria-label={`Open ${order.displayOrderNumber}, ${statusTitle(order.status)}`}>
           <span className={`v1-order-icon ${active ? "active" : "terminal"}`}><OrderStatusIcon status={order.status} size={21} /></span>
           <span className="v1-order-card-copy"><strong>{duration ?? statusTitle(order.status)}</strong><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)}</small></span>
-          <span className="v1-order-card-trailing"><b>{formatV1Price(order.price.totalPaise)}</b><ChevronRight size={18} /></span>
+          <span className="v1-order-card-trailing"><b>{formatV1Price(order.price.totalPaise)}</b></span>
           <span className="v1-order-thumbnails">{order.lines.slice(0, 4).map((line) => <ProductImage key={line.id} src={imageUrlForLine(line)} alt="" />)}{order.lines.length > 4 ? <i>+{order.lines.length - 4}</i> : null}</span>
           <span className="v1-order-products"><b>{productNames}{order.lines.length > 2 ? ` + ${order.lines.length - 2} more` : ""}</b><small>{itemCount} {itemCount === 1 ? "item" : "items"} · {order.displayOrderNumber}</small><time dateTime={order.submittedAt ?? order.createdAt}>{formatOrderDate(order.submittedAt ?? order.createdAt)}</time></span>
           {active ? <OrderJourneyProgress status={order.status} compact /> : null}
         </button>
-        <footer>{canReorderV1Order(order.status) ? <button type="button" onClick={() => onReorder(order)}><RotateCcw size={16} /> Order again</button> : null}<button type="button" onClick={() => onOpen(order)}>{active ? "Track order" : "Details"}<ChevronRight size={16} /></button></footer>
+        <footer>{canReorderV1Order(order.status) ? <button type="button" onClick={() => onReorder(order)}><RotateCcw size={16} /> Order again</button> : null}<button type="button" onClick={() => onOpen(order)}>{active ? "Track order" : "Details"}</button></footer>
       </article>;
-    })}</div> : <EmptyState title={normalizedQuery ? "No matching orders" : scope === "active" ? "Nothing ongoing" : scope === "past" ? "No past orders" : "No Dastak orders yet"} copy={normalizedQuery ? "Try another product name or order number." : "Orders appear here from matching through verified delivery."} />}
-    {canLoadMore ? <button className="secondary-button v1-load-more" type="button" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading earlier orders…" : "Load earlier orders"}</button> : null}
+    })}</div> : <EmptyState title={scope === "active" ? "No active orders" : "No past orders"} copy={scope === "active" ? "When an order is in progress, you can track it here." : "Completed and cancelled orders will appear here."} />}
+    {scope === "past" && canLoadMore ? <button className="secondary-button v1-load-more" type="button" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading earlier orders…" : "Load earlier orders"}</button> : null}
   </section>;
 }
 

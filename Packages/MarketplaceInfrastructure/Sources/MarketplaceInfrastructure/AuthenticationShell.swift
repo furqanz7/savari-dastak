@@ -141,6 +141,9 @@ private final class AuthenticationShellModel: ObservableObject {
             checkoutCustomerProvider: {
                 try await operations.checkoutCustomer()
             },
+            appAccessProvider: { application in
+                try await operations.resolveAppAccess(for: application)
+            },
             oauthIdentityLinker: { provider in
                 try await operations.linkIdentity(
                     provider: provider,
@@ -599,23 +602,26 @@ private struct AuthenticationRouteView: View {
     }
 
     private var dastakCustomerProfileAuthenticationView: some View {
-        ScrollView {
+        GeometryReader { proxy in
+            let compact = proxy.size.height < 820
             VStack(alignment: .leading, spacing: 0) {
-                dastakCustomerBrandHeader
-                dastakCustomerProfileHero
-                    .padding(.top, 40)
-                dastakProfileView
-                    .padding(.top, 28)
+                dastakCustomerBrandHeader(compact: compact)
+                dastakCustomerProfileHero(compact: compact)
+                    .padding(.top, compact ? 16 : 32)
+                dastakCustomerProfileForm(compact: compact)
+                    .padding(.top, compact ? 14 : 24)
                 dastakErrorView
+                    .padding(.top, compact ? 6 : 10)
             }
             .frame(maxWidth: 430, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.top, 22)
-            .padding(.bottom, 30)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, compact ? 20 : 24)
+            .padding(.top, compact ? 8 : 16)
+            .padding(.bottom, compact ? 8 : 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .clipped()
         }
 #if os(iOS)
-        .scrollDismissesKeyboard(.interactively)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -660,52 +666,56 @@ private struct AuthenticationRouteView: View {
 
     private var dastakCustomerSignInView: some View {
         GeometryReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    dastakCustomerBrandHeader
+            let compact = proxy.size.height < 900
+            VStack(alignment: .leading, spacing: 0) {
+                    dastakCustomerBrandHeader(compact: compact)
 
-                    VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: compact ? 8 : 14) {
                         Text("WELCOME TO DASTAK")
                             .font(.caption2.weight(.bold))
                             .tracking(1.7)
                             .foregroundStyle(dastakAccent)
 
                         Text("Everything you need,\nthoughtfully delivered.")
-                            .font(MarketplaceTypography.instrumentSerif(size: 44))
+                            .font(MarketplaceTypography.instrumentSerif(size: compact ? 36 : 44))
                             .foregroundStyle(.white)
                             .lineSpacing(-2)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text("Food and everyday essentials in one basket. We secure every item before you pay.")
-                            .font(.system(size: 16, weight: .regular))
+                            .font(.system(size: compact ? 14 : 16, weight: .regular))
                             .foregroundStyle(dastakSecondaryText)
-                            .lineSpacing(3)
+                            .lineSpacing(compact ? 1 : 3)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(.top, 48)
+                    .padding(.top, compact ? 18 : 40)
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 18) {
-                            dastakCustomerPromises
-                        }
+                    if !compact {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 18) {
+                                dastakCustomerPromises
+                            }
 
-                        VStack(alignment: .leading, spacing: 12) {
-                            dastakCustomerPromises
+                            VStack(alignment: .leading, spacing: 12) {
+                                dastakCustomerPromises
+                            }
                         }
+                        .padding(.top, 20)
                     }
-                    .padding(.top, 24)
 
-                    Spacer(minLength: 42)
+                    Spacer(minLength: compact ? 10 : 30)
 
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: compact ? 10 : 16) {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Continue securely")
                                 .font(.headline)
                                 .foregroundStyle(.white)
-                            Text("Use Apple or Google to create or return to your Dastak account.")
-                                .font(.footnote)
-                                .foregroundStyle(dastakSecondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
+                            if !compact {
+                                Text("Use Apple or Google to create or return to your Dastak account.")
+                                    .font(.footnote)
+                                    .foregroundStyle(dastakSecondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
 
                         dastakSignedOutView
@@ -716,14 +726,16 @@ private struct AuthenticationRouteView: View {
                             .overlay(Color.white.opacity(0.10))
 
                         Label(
-                            "Your phone number is added later for delivery contact—not for sign-in.",
+                            compact
+                                ? "Phone is added later for delivery—not sign-in."
+                                : "Your phone number is added later for delivery contact—not for sign-in.",
                             systemImage: "lock.fill"
                         )
                         .font(.caption)
                         .foregroundStyle(dastakSecondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(18)
+                    .padding(compact ? 14 : 18)
                     .background(dastakSurface.opacity(0.94))
                     .overlay {
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -733,15 +745,14 @@ private struct AuthenticationRouteView: View {
                     .shadow(color: Color.black.opacity(0.28), radius: 28, y: 18)
 
                     dastakLegalLinks
-                    Spacer(minLength: 22)
+                    Spacer(minLength: compact ? 4 : 12)
                 }
-                .frame(maxWidth: 430, minHeight: proxy.size.height, alignment: .topLeading)
-                .padding(.horizontal, 24)
-                .padding(.top, 22)
-                .padding(.bottom, 18)
-                .frame(maxWidth: .infinity)
-            }
-            .scrollIndicators(.hidden)
+                .frame(maxWidth: 430, alignment: .topLeading)
+                .padding(.horizontal, compact ? 20 : 24)
+                .padding(.top, compact ? 8 : 16)
+                .padding(.bottom, compact ? 6 : 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .clipped()
         }
     }
 
@@ -772,9 +783,9 @@ private struct AuthenticationRouteView: View {
         }
     }
 
-    private var dastakCustomerBrandHeader: some View {
+    private func dastakCustomerBrandHeader(compact: Bool = false) -> some View {
         HStack(alignment: .center, spacing: 16) {
-            DastakAuthWordmark(size: 38)
+            DastakAuthWordmark(size: compact ? 32 : 38)
             Spacer(minLength: 10)
             Text("Customer")
                 .font(.caption2.weight(.bold))
@@ -790,11 +801,11 @@ private struct AuthenticationRouteView: View {
                 }
                 .clipShape(Capsule())
         }
-        .padding(.top, 18)
+        .padding(.top, compact ? 4 : 12)
     }
 
-    private var dastakCustomerProfileHero: some View {
-        VStack(alignment: .leading, spacing: 16) {
+    private func dastakCustomerProfileHero(compact: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 9 : 16) {
             HStack(spacing: 8) {
                 Capsule().fill(dastakAccent).frame(height: 3)
                 Capsule().fill(dastakAccent).frame(height: 3)
@@ -807,13 +818,13 @@ private struct AuthenticationRouteView: View {
                 .foregroundStyle(dastakAccent)
 
             Text("Make Dastak yours.")
-                .font(MarketplaceTypography.instrumentSerif(size: 42))
+                .font(MarketplaceTypography.instrumentSerif(size: compact ? 34 : 42))
                 .foregroundStyle(.white)
 
             Text("Tell us what to call you and where an active delivery can reach you.")
-                .font(.system(size: 16))
+                .font(.system(size: compact ? 14 : 16))
                 .foregroundStyle(dastakSecondaryText)
-                .lineSpacing(3)
+                .lineSpacing(compact ? 1 : 3)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -1047,7 +1058,11 @@ private struct AuthenticationRouteView: View {
     }
 
     private var dastakCustomerProfileForm: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        dastakCustomerProfileForm(compact: false)
+    }
+
+    private func dastakCustomerProfileForm(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 12 : 18) {
             Label("Signed in securely with Apple or Google", systemImage: "checkmark.shield.fill")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(dastakAccent)
@@ -1122,7 +1137,7 @@ private struct AuthenticationRouteView: View {
             .frame(maxWidth: .infinity, minHeight: 44)
             .buttonStyle(.plain)
         }
-        .padding(18)
+        .padding(compact ? 14 : 18)
         .background(dastakSurface.opacity(0.94))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -1561,8 +1576,7 @@ private struct DastakGoogleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .frame(maxWidth: .infinity)
-            .frame(minHeight: 54)
-            .padding(.vertical, 12)
+            .frame(height: 56)
             .font(.headline)
             .foregroundStyle(Color(red: 33 / 255, green: 19 / 255, blue: 14 / 255))
             .background(Color(red: 245 / 255, green: 242 / 255, blue: 236 / 255))
@@ -1580,17 +1594,11 @@ private struct DastakGoogleSignInLabel: View {
     let title: String
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
-                GoogleLogoMark()
-                Text(title)
-            }
-
-            VStack(spacing: 8) {
-                GoogleLogoMark()
-                Text(title)
-                    .multilineTextAlignment(.center)
-            }
+        HStack(spacing: 10) {
+            GoogleLogoMark()
+            Text(title)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
         }
     }
 }

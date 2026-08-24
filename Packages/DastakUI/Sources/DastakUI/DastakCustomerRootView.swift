@@ -35,6 +35,8 @@ public struct DastakCustomerRootView: View {
     @Environment(\.marketplaceSignOut) private var signOut
     @Environment(\.scenePhase) private var scenePhase
     private let isPreview: Bool
+    private let merchantOnboardingState: MerchantOnboardingState?
+    private let isMerchantAccessLoading: Bool
     private let deliveryPartnerAccess: DeliveryPartnerAccess
     private let isDeliveryPartnerAccessLoading: Bool
     private let becomeMerchant: () -> Void
@@ -52,6 +54,8 @@ public struct DastakCustomerRootView: View {
         issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil,
         oauthIdentityLinker: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil,
         oauthReauthenticator: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil,
+        merchantOnboardingState: MerchantOnboardingState? = nil,
+        isMerchantAccessLoading: Bool = false,
         deliveryPartnerAccess: DeliveryPartnerAccess = .unavailable,
         isDeliveryPartnerAccessLoading: Bool = false,
         becomeMerchant: @escaping () -> Void = {},
@@ -67,6 +71,8 @@ public struct DastakCustomerRootView: View {
             )
         )
         isPreview = false
+        self.merchantOnboardingState = merchantOnboardingState
+        self.isMerchantAccessLoading = isMerchantAccessLoading
         self.deliveryPartnerAccess = deliveryPartnerAccess
         self.isDeliveryPartnerAccessLoading = isDeliveryPartnerAccessLoading
         self.becomeMerchant = becomeMerchant
@@ -81,6 +87,8 @@ public struct DastakCustomerRootView: View {
     public init(preview: Bool) {
         _model = StateObject(wrappedValue: DastakCustomerModel.preview())
         isPreview = preview
+        merchantOnboardingState = .notApplied
+        isMerchantAccessLoading = false
         deliveryPartnerAccess = .notApplied
         isDeliveryPartnerAccessLoading = false
         becomeMerchant = {}
@@ -117,7 +125,11 @@ public struct DastakCustomerRootView: View {
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
             NavigationStack(path: $ordersPath) {
-                DastakOrdersView(model: model, openCart: { showingCart = true })
+                DastakOrdersView(
+                    model: model,
+                    openCart: { showingCart = true },
+                    openDestination: { ordersPath.append($0) }
+                )
             }
             .tag(Tab.orders)
             .tabItem { Label("Orders", systemImage: "clock") }
@@ -134,8 +146,9 @@ public struct DastakCustomerRootView: View {
                     identityMessage: model.identityMessage,
                     identityMessageIsSuccess: model.identityMessageIsSuccess,
                     hasActiveOrders: model.hasActiveOrders,
-                    discoveryRadiusKilometres: model.discoveryRadiusKilometres,
                     refreshFailure: model.accountRefreshFailure,
+                    merchantOnboardingState: merchantOnboardingState,
+                    isMerchantAccessLoading: isMerchantAccessLoading,
                     deliveryPartnerAccess: deliveryPartnerAccess,
                     isDeliveryPartnerAccessLoading: isDeliveryPartnerAccessLoading,
                     chooseLocation: { showingDeliveryAddressEditor = true },

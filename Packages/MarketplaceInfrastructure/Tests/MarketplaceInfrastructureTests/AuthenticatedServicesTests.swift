@@ -74,6 +74,22 @@ final class AuthenticatedServicesTests: XCTestCase {
         let recordedUpload = await recorder.lastUpload()
         XCTAssertNil(recordedUpload)
     }
+
+    func testAppAccessUsesAuthenticatedResolver() async throws {
+        let services = MarketplaceAuthenticatedServices(
+            functions: UnusedFunctionClient(),
+            accountIDProvider: { UUID() },
+            objectUploader: { _, _, _, _, _ in },
+            appAccessProvider: { application in
+                application == .dastakMerchant ? .active : .accessDenied
+            }
+        )
+
+        let merchantAccess = try await services.resolveAppAccess(.dastakMerchant)
+        let adminAccess = try await services.resolveAppAccess(.dastakAdmin)
+        XCTAssertEqual(merchantAccess, .active)
+        XCTAssertEqual(adminAccess, .accessDenied)
+    }
 }
 
 private struct RecordedUpload: Sendable {

@@ -27,4 +27,10 @@ describe("customer saved, payment and merchant-entry experience", () => {
     expect(account).toContain("merchantUrl");
     expect(account).toContain("href={merchantUrl}");
   });
+
+  it("does not expose an arbitrary customer-controlled browse radius", () => {
+    expect(account).not.toContain("Browse range");
+    expect(account).not.toContain("Store search radius");
+    expect(account).not.toContain("changeDiscoveryRadius");
+  });
 });

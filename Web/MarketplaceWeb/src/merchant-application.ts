@@ -23,6 +23,8 @@ export type MerchantApplicationSnapshot = {
   reviewReason: string | null;
 };
 
+export type MerchantAccountState = MerchantApplicationSnapshot["onboardingState"] | "unavailable";
+
 export class MerchantApplicationRequestError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) {
     super(message);
@@ -110,6 +112,42 @@ export async function getMerchantApplicationSnapshot(
     evidenceObjectPath: nullableText(result.evidenceObjectPath, 500),
     reviewReason: nullableText(result.reviewReason, 500),
   };
+}
+
+export async function getMerchantAccountState(
+  input: AuthenticatedInput,
+  fetcher: Fetcher = fetch,
+): Promise<MerchantAccountState> {
+  let response: Response;
+  try {
+    response = await fetcher(`${input.supabaseUrl.replace(/\/$/, "")}/functions/v1/resolve-app-access`, {
+      method: "POST",
+      headers: {
+        apikey: input.publishableKey,
+        authorization: `Bearer ${input.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ application: "merchant" }),
+    });
+  } catch {
+    throw new MerchantApplicationRequestError(
+      "network_error",
+      "Dastak could not verify Merchant access.",
+      0,
+    );
+  }
+
+  const payload = await response.json().catch(() => undefined);
+  if (!response.ok) throw responseError(response.status, payload, "Merchant access could not be verified.");
+  const route = record(payload)?.route;
+  if (route === "active" || route === "suspended") return "approved";
+  if (route === "pending_approval") return "pending";
+  if (route === "access_denied") {
+    const snapshot = await getMerchantApplicationSnapshot(input, fetcher);
+    return snapshot.onboardingState === "approved" ? "unavailable" : snapshot.onboardingState;
+  }
+  if (route === "needs_profile" || route === "signed_out") return "unavailable";
+  throw new MerchantApplicationRequestError("invalid_response", "Dastak received an invalid Merchant access response.", 502);
 }
 
 export async function submitMerchantApplication(

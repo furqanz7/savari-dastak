@@ -31,6 +31,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         String
     ) async throws -> Void
     private let checkoutCustomerProvider: @Sendable () async throws -> MarketplaceCheckoutCustomer?
+    private let appAccessProvider: @Sendable (MarketplaceApplicationAccess) async throws -> AccountRoute
     private let oauthIdentityLinker: @Sendable (MarketplaceOAuthProvider) async throws -> Void
     private let oauthReauthenticator: @Sendable (MarketplaceOAuthProvider) async throws -> Void
 
@@ -46,6 +47,9 @@ public struct MarketplaceAuthenticatedServices: Sendable {
             String
         ) async throws -> Void,
         checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer? = { nil },
+        appAccessProvider: @escaping @Sendable (MarketplaceApplicationAccess) async throws -> AccountRoute = { _ in
+            .accessDenied
+        },
         oauthIdentityLinker: @escaping @Sendable (MarketplaceOAuthProvider) async throws -> Void = { _ in
             throw MarketplaceAuthenticatedServicesError.authenticationRequired
         },
@@ -58,6 +62,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         self.accountIDProvider = accountIDProvider
         self.objectUploader = objectUploader
         self.checkoutCustomerProvider = checkoutCustomerProvider
+        self.appAccessProvider = appAccessProvider
         self.oauthIdentityLinker = oauthIdentityLinker
         self.oauthReauthenticator = oauthReauthenticator
     }
@@ -68,6 +73,10 @@ public struct MarketplaceAuthenticatedServices: Sendable {
 
     public func checkoutCustomer() async throws -> MarketplaceCheckoutCustomer? {
         try await checkoutCustomerProvider()
+    }
+
+    public func resolveAppAccess(_ application: MarketplaceApplicationAccess) async throws -> AccountRoute {
+        try await appAccessProvider(application)
     }
 
     public func linkOAuthIdentity(_ provider: MarketplaceOAuthProvider) async throws {

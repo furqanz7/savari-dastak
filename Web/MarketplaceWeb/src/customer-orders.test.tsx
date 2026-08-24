@@ -47,8 +47,13 @@ describe("customer V1 Orders experience", () => {
     expect(markup).toContain("Dastak Cafe");
     expect(markup).toContain("Preparing your order");
     expect(markup).toContain("Stage 3 of 6 · Preparing");
-    expect(markup).toContain("Load earlier orders");
+    expect(markup).toContain("Active");
+    expect(markup).toContain("Past");
+    expect(markup).not.toContain("Ongoing");
+    expect(markup).not.toContain("Search your orders");
+    expect(markup).not.toContain(">All<");
     expect(markup).not.toContain("Retail order");
+    expect(markup).not.toContain("lucide-chevron-right");
   });
 
   it("renders immutable destination, food options, receipt, timeline, ETA and live map", () => {

@@ -107,6 +107,7 @@ import { CustomerAddressBookSheet } from "./CustomerAddressBookSheet";
 import { CancellationSheet, CustomerRouteMap, CustomerSupportSheet, CustomerTimeline } from "./CustomerDeliveryDetails";
 import { merchantOrderPresentation, paymentStateLabel } from "./customerLifecycle";
 import { getDeliveryPartnerSnapshot } from "./delivery";
+import { getMerchantAccountState, type MerchantAccountState } from "./merchant-application";
 import {
   deliveryPartnerAccountPresentation,
   type DeliveryPartnerAccountState,
@@ -145,6 +146,65 @@ type CustomerDiscoveryPreference = {
 };
 
 const customerDiscoveryStorageKey = "dastak.customer.discovery.v1";
+
+function merchantPresentation(state: MerchantAccountState | "loading") {
+  switch (state) {
+    case "approved":
+      return {
+        sectionTitle: "Dastak Merchant",
+        sectionDetail: "Your Merchant account is approved",
+        status: "APPROVED",
+        tone: "approved",
+        title: "Open Dastak Merchant",
+        detail: "Continue in your Merchant workspace.",
+      };
+    case "pending":
+      return {
+        sectionTitle: "Merchant application",
+        sectionDetail: "Your application is under review",
+        status: "PENDING",
+        tone: "pending",
+        title: "View Merchant application",
+        detail: "Follow your review status in the Merchant workspace.",
+      };
+    case "rejected":
+      return {
+        sectionTitle: "Merchant application",
+        sectionDetail: "Your application needs attention",
+        status: "ACTION NEEDED",
+        tone: "rejected",
+        title: "Update Merchant application",
+        detail: "Review the decision and resubmit in the Merchant workspace.",
+      };
+    case "not_applied":
+      return {
+        sectionTitle: "Sell on Dastak",
+        sectionDetail: "Bring your Restaurant/Cafe or retail operation to Dastak",
+        status: undefined,
+        tone: "not-applied",
+        title: "Become a Dastak Merchant",
+        detail: "Apply and manage your business details in the Merchant workspace.",
+      };
+    case "loading":
+      return {
+        sectionTitle: "Checking Merchant access",
+        sectionDetail: "Confirming your Dastak account",
+        status: undefined,
+        tone: "loading",
+        title: "Checking Merchant access",
+        detail: "This will only take a moment.",
+      };
+    case "unavailable":
+      return {
+        sectionTitle: "Merchant access",
+        sectionDetail: "Use your Dastak identity in the separate Merchant workspace",
+        status: "CHECK ACCESS",
+        tone: "unavailable",
+        title: "Open Merchant workspace",
+        detail: "Open the Merchant workspace to verify access.",
+      };
+  }
+}
 
 function savedCustomerDiscovery(): CustomerDiscoveryPreference {
   if (typeof window === "undefined") return { version: 1, radiusKm: 10 };
@@ -204,7 +264,7 @@ export function CatalogueView({
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [initialDiscovery] = useState(savedCustomerDiscovery);
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | undefined>(initialDiscovery.location);
-  const [discoveryRadiusKm, setDiscoveryRadiusKm] = useState(initialDiscovery.radiusKm);
+  const discoveryRadiusKm = initialDiscovery.radiusKm;
   const [state, setState] = useState<CatalogueState>({ phase: "idle" });
   const [cartState, dispatchCart] = useReducer(cartReducer, undefined, createEmptyCart);
   const [quote, setQuote] = useState<MerchantOrderQuote>();
@@ -242,6 +302,7 @@ export function CatalogueView({
   const [exportMessage, setExportMessage] = useState<string>();
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [deliveryPartnerAccountState, setDeliveryPartnerAccountState] = useState<DeliveryPartnerAccountState>("loading");
+  const [merchantAccountState, setMerchantAccountState] = useState<MerchantAccountState | "loading">("loading");
   const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderSnapshot>();
   const [supportingOrder, setSupportingOrder] = useState<MerchantOrderSnapshot>();
   const [searchQuery, setSearchQuery] = useState("");
@@ -280,6 +341,16 @@ export function CatalogueView({
       .catch(() => {
         if (active) setDeliveryPartnerAccountState("unavailable");
       });
+    return () => { active = false; };
+  }, [auth, section]);
+
+  useEffect(() => {
+    if (section !== "account") return;
+    let active = true;
+    setMerchantAccountState("loading");
+    void getMerchantAccountState(auth)
+      .then((state) => { if (active) setMerchantAccountState(state); })
+      .catch(() => { if (active) setMerchantAccountState("unavailable"); });
     return () => { active = false; };
   }, [auth, section]);
 
@@ -524,12 +595,6 @@ export function CatalogueView({
       }),
       { enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 },
     );
-  };
-
-  const changeDiscoveryRadius = (deltaKm: number) => {
-    const nextRadius = Math.min(30, Math.max(10, discoveryRadiusKm + deltaKm));
-    setDiscoveryRadiusKm(nextRadius);
-    if (selectedLocation) void load(selectedLocation, nextRadius);
   };
 
   const cart = cartState.entries;
@@ -871,6 +936,7 @@ export function CatalogueView({
     .join("")
     .toUpperCase();
   const partnerAccountPresentation = deliveryPartnerAccountPresentation(deliveryPartnerAccountState);
+  const merchantAccountPresentation = merchantPresentation(merchantAccountState);
 
   return (
     <div className={`catalogue-shell customer-section customer-section-${section}`}>
@@ -888,11 +954,9 @@ export function CatalogueView({
           </header>
           <LocationControls
             selectedLocation={selectedLocation}
-            discoveryRadiusKm={discoveryRadiusKm}
             loading={state.phase === "loading"}
             onChooseLocation={chooseLocation}
             onUseCurrentLocation={useCurrentLocation}
-            onChangeRadius={changeDiscoveryRadius}
           />
           <button className="parcel-promo" type="button" onClick={onOpenParcel}>
             <span className="parcel-promo-icon"><Bike size={22} /></span>
@@ -966,11 +1030,9 @@ export function CatalogueView({
           </label>
           <LocationControls
             selectedLocation={selectedLocation}
-            discoveryRadiusKm={discoveryRadiusKm}
             loading={state.phase === "loading"}
             onChooseLocation={chooseLocation}
             onUseCurrentLocation={useCurrentLocation}
-            onChangeRadius={changeDiscoveryRadius}
             compact
           />
           {cartEntries.length > 0 && (
@@ -1103,7 +1165,6 @@ export function CatalogueView({
                 </span>
                 <b>{webPushPresentation(webPush).label}</b>
               </button>
-              <div className="customer-account-row"><LocateFixed size={20} /><span><strong>Browse range</strong><small>Stores shown around your browse area</small></span><b>{discoveryRadiusKm} km</b></div>
             </div>
           </section>
 
@@ -1180,15 +1241,16 @@ export function CatalogueView({
 
           <section className="customer-account-group customer-earn-section" aria-labelledby="account-sell-title">
             <div className="customer-account-section-heading">
-              <div><h2 id="account-sell-title">Sell on Dastak</h2><small>Bring your Restaurant/Cafe or retail operation to Dastak</small></div>
+              <div><h2 id="account-sell-title">{merchantAccountPresentation.sectionTitle}</h2><small>{merchantAccountPresentation.sectionDetail}</small></div>
+              {merchantAccountPresentation.status ? <span className={`customer-partner-status ${merchantAccountPresentation.tone}`}>{merchantAccountPresentation.status}</span> : null}
             </div>
-            <a className="customer-partner-cta" href={merchantUrl} role="button">
+            <a className={`customer-partner-cta ${merchantAccountPresentation.tone}`} href={merchantUrl} role="button" aria-busy={merchantAccountState === "loading" || undefined}>
               <span className="customer-account-icon"><Store size={21} /></span>
               <span>
-                <strong>Become a Dastak Merchant</strong>
-                <small>Apply, manage your business details and follow review status in the Merchant workspace.</small>
+                <strong>{merchantAccountPresentation.title}</strong>
+                <small>{merchantAccountPresentation.detail}</small>
               </span>
-              <ArrowUpRight size={19} />
+              {merchantAccountState === "loading" ? <RefreshCw className="customer-partner-loading" size={18} /> : merchantAccountState === "not_applied" ? <ArrowUpRight size={19} /> : <ChevronRight size={19} />}
             </a>
           </section>
 
@@ -1339,14 +1401,12 @@ function CustomerDataRecovery({ issue, onRetry, onSignOut }: {
   );
 }
 
-function LocationControls({ selectedLocation, discoveryRadiusKm, loading, compact = false, onChooseLocation, onUseCurrentLocation, onChangeRadius }: {
+function LocationControls({ selectedLocation, loading, compact = false, onChooseLocation, onUseCurrentLocation }: {
   selectedLocation?: SelectedLocation;
-  discoveryRadiusKm: number;
   loading: boolean;
   compact?: boolean;
   onChooseLocation: (place: SelectedPlace) => void;
   onUseCurrentLocation: () => void;
-  onChangeRadius: (deltaKm: number) => void;
 }) {
   const place = selectedLocation ? {
     address: selectedLocation.label,
@@ -1355,19 +1415,11 @@ function LocationControls({ selectedLocation, discoveryRadiusKm, loading, compac
   } : undefined;
 
   return (
-    <section className={`customer-location-band ${compact ? "compact" : ""}`} aria-label="Browse area">
-      <LocationSearchField label="Browse near" value={place} onChange={onChooseLocation} disabled={loading} />
+    <section className={`customer-location-band ${compact ? "compact" : ""}`} aria-label="Delivery area">
+      <LocationSearchField label="Deliver near" value={place} onChange={onChooseLocation} disabled={loading} />
       <button type="button" className="location-current-button" onClick={onUseCurrentLocation} disabled={loading} aria-label="Use current location" title="Use current location">
         <LocateFixed size={18} />
       </button>
-      <div className="range-filter" role="group" aria-label="Store search radius">
-        <span>Range</span>
-        <div className="range-stepper">
-          <button type="button" onClick={() => onChangeRadius(-5)} disabled={discoveryRadiusKm === 10} aria-label="Decrease search radius" title="Decrease search radius"><Minus size={15} /></button>
-          <strong aria-live="polite">{discoveryRadiusKm} km</strong>
-          <button type="button" onClick={() => onChangeRadius(5)} disabled={discoveryRadiusKm === 30} aria-label="Increase search radius" title="Increase search radius"><Plus size={15} /></button>
-        </div>
-      </div>
     </section>
   );
 }

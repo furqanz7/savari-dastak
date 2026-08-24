@@ -124,6 +124,17 @@ protocol DeliveryPartnerAccessProviding: Sendable {
     func currentAccess() async throws -> DeliveryPartnerAccess
 }
 
+enum DastakMerchantAppRoute {
+    static let appURL = URL(string: "com.dastak.merchant://")!
+    static let appStoreURL = URL(
+        string: "itms-apps://itunes.apple.com/search?term=Dastak%20Merchant&entity=software"
+    )!
+
+    static func destination(isAppInstalled: Bool) -> URL {
+        isAppInstalled ? appURL : appStoreURL
+    }
+}
+
 @MainActor
 protocol DastakRootSelectionStoring {
     func load() -> DastakAppRoot?
@@ -243,6 +254,9 @@ final class DastakRootModel: ObservableObject {
 private struct DastakCustomerPartnerRoot: View {
     @StateObject private var model: DastakRootModel
     @State private var showingMerchantApplication = false
+    @State private var merchantOnboardingState: MerchantOnboardingState?
+    @State private var isMerchantAccessLoading = true
+    @Environment(\.scenePhase) private var scenePhase
     private let services: MarketplaceAuthenticatedServices
 
     init(services: MarketplaceAuthenticatedServices) {
@@ -262,6 +276,13 @@ private struct DastakCustomerPartnerRoot: View {
             .task {
                 guard !model.hasLoadedPartnerAccess else { return }
                 await model.refreshPartnerAccess()
+            }
+            .task {
+                await refreshMerchantAccess()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task { await refreshMerchantAccess() }
             }
             .sheet(isPresented: $showingMerchantApplication) {
                 DastakMerchantAccessView(route: .accessDenied, services: services)
@@ -307,10 +328,16 @@ private struct DastakCustomerPartnerRoot: View {
                 oauthReauthenticator: { provider in
                     try await services.reauthenticateOAuthIdentity(provider)
                 },
+                merchantOnboardingState: merchantOnboardingState,
+                isMerchantAccessLoading: isMerchantAccessLoading,
                 deliveryPartnerAccess: model.rootState.deliveryPartnerAccess,
                 isDeliveryPartnerAccessLoading: !model.hasLoadedPartnerAccess || model.isRefreshing,
                 becomeMerchant: {
-                    showingMerchantApplication = true
+                    if merchantOnboardingState == .approved {
+                        openMerchantApp()
+                    } else {
+                        showingMerchantApplication = true
+                    }
                 },
                 becomeDeliveryPartner: {
                     Task { await model.openDeliveryPartner() }
@@ -347,5 +374,40 @@ private struct DastakCustomerPartnerRoot: View {
         case .merchant, .admin:
             EmptyView()
         }
+    }
+
+    @MainActor
+    private func refreshMerchantAccess() async {
+        isMerchantAccessLoading = true
+        defer { isMerchantAccessLoading = false }
+
+        do {
+            let route = try await services.resolveAppAccess(.dastakMerchant)
+            switch route {
+            case .active, .suspended:
+                merchantOnboardingState = .approved
+            case .pendingApproval:
+                merchantOnboardingState = .pending
+            case .accessDenied:
+                let key = IdempotencyKey(rawValue: UUID().uuidString)!
+                merchantOnboardingState = try await SupabaseMerchantApplicationClient(
+                    functions: services.functions
+                ).selfSnapshot(idempotencyKey: key).onboardingState
+            case .signedOut, .needsProfile:
+                merchantOnboardingState = nil
+            }
+        } catch {
+            merchantOnboardingState = nil
+        }
+    }
+
+    @MainActor
+    private func openMerchantApp() {
+        let application = UIApplication.shared
+        application.open(
+            DastakMerchantAppRoute.destination(
+                isAppInstalled: application.canOpenURL(DastakMerchantAppRoute.appURL)
+            )
+        )
     }
 }
