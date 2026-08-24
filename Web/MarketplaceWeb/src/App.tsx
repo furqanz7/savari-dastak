@@ -56,6 +56,7 @@ const config = readAppConfig({
   VITE_DASTAK_TERMS_URL: import.meta.env.VITE_DASTAK_TERMS_URL,
   VITE_DASTAK_SUPPORT_URL: import.meta.env.VITE_DASTAK_SUPPORT_URL,
   VITE_DASTAK_WEB_PUSH_PUBLIC_KEY: import.meta.env.VITE_DASTAK_WEB_PUSH_PUBLIC_KEY,
+  VITE_DASTAK_DELIVERY_URL: import.meta.env.VITE_DASTAK_DELIVERY_URL,
 });
 document.title = `${config.brand} ${config.roleLabel}`;
 document.querySelector('meta[name="description"]')?.setAttribute(
