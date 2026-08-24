@@ -35,6 +35,8 @@ struct DastakParcelComposerView: View {
                 }
                 actionSection
             }
+            .scrollContentBackground(.hidden)
+            .marketplacePage()
             .navigationTitle("Send a parcel")
             .dastakInlineNavigationTitle()
             .toolbar {

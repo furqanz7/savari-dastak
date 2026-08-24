@@ -429,7 +429,7 @@ private struct DastakSessionExpiredView: View {
 
     var body: some View {
         ZStack {
-            MarketplaceColors.dastakBackground.color
+            DastakMatteBackground(style: .dark)
                 .ignoresSafeArea()
 
             DastakEmptyState(

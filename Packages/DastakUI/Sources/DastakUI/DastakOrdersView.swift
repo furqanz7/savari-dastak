@@ -113,9 +113,11 @@ struct DastakOrdersView: View {
                         }
                     }
                 }
+                .scrollContentBackground(.hidden)
                 .listStyle(.plain)
             }
         }
+        .marketplacePage()
         .navigationTitle("Orders")
         .navigationDestination(for: DastakCustomerDestination.self) { destination in
             DastakCustomerDeliveryDestinationView(model: model, destination: destination)
@@ -1193,6 +1195,7 @@ private struct DastakOrderSupportSheet: View {
                 }
             }
         }
+        .marketplacePage()
     }
 
     private func success(_ supportCase: CustomerOrderSupportCase) -> some View {

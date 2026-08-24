@@ -24,7 +24,7 @@ struct DastakNotificationOnboardingView: View {
 
     var body: some View {
         ZStack {
-            DastakMatteBackground().ignoresSafeArea()
+            DastakMatteBackground(style: .dark).ignoresSafeArea()
 
             GeometryReader { proxy in
                 ScrollView {

@@ -1,16 +1,37 @@
 import SwiftUI
 
-/// Dastak's shared dark canvas with a quiet, deterministic matte grain.
+/// Dastak's shared canvas with a quiet, deterministic matte grain.
 public struct DastakMatteBackground: View {
-    public init() {}
+    public enum Style: Sendable {
+        case adaptive
+        case dark
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
+    private let style: Style
+
+    public init(style: Style = .adaptive) {
+        self.style = style
+    }
+
+    private var resolvedColorScheme: ColorScheme {
+        switch style {
+        case .adaptive: colorScheme
+        case .dark: .dark
+        }
+    }
 
     public var body: some View {
+        let scheme = resolvedColorScheme
+        let isDark = scheme == .dark
+
         ZStack {
-            MarketplaceColors.dastakBackground.color
+            MarketplaceColors.canvas(for: scheme)
 
             RadialGradient(
                 colors: [
-                    MarketplaceColors.dastakAccent.color.opacity(0.19),
+                    MarketplaceColors.accent(for: scheme)
+                        .opacity(isDark ? 0.19 : 0.13),
                     .clear,
                 ],
                 center: .topTrailing,
@@ -20,7 +41,8 @@ public struct DastakMatteBackground: View {
 
             RadialGradient(
                 colors: [
-                    Color(red: 58 / 255, green: 36 / 255, blue: 26 / 255).opacity(0.34),
+                    Color(red: 58 / 255, green: 36 / 255, blue: 26 / 255)
+                        .opacity(isDark ? 0.34 : 0.08),
                     .clear,
                 ],
                 center: .bottomLeading,
@@ -29,12 +51,15 @@ public struct DastakMatteBackground: View {
             )
 
             LinearGradient(
-                colors: [.clear, Color.black.opacity(0.18)],
+                colors: [
+                    isDark ? Color.clear : Color.white.opacity(0.08),
+                    Color.black.opacity(isDark ? 0.18 : 0.035),
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
 
-            DastakMatteGrain()
+            DastakMatteGrain(isDark: isDark)
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
@@ -42,6 +67,8 @@ public struct DastakMatteBackground: View {
 }
 
 private struct DastakMatteGrain: View {
+    let isDark: Bool
+
     var body: some View {
         Canvas(opaque: false, rendersAsynchronously: true) { context, size in
             guard size.width > 0, size.height > 0 else { return }
@@ -54,10 +81,20 @@ private struct DastakMatteGrain: View {
                 let x = random.unitInterval() * size.width
                 let y = random.unitInterval() * size.height
                 let diameter = 0.35 + (random.unitInterval() * 0.90)
-                let alpha = 0.045 + (random.unitInterval() * 0.085)
-                let color = index.isMultiple(of: 4)
-                    ? Color.black.opacity(alpha)
-                    : Color(red: 232 / 255, green: 224 / 255, blue: 211 / 255).opacity(alpha)
+                let alpha = (isDark ? 0.045 : 0.025)
+                    + (random.unitInterval() * (isDark ? 0.085 : 0.045))
+                let color: Color
+                if isDark {
+                    color = index.isMultiple(of: 4)
+                        ? Color.black.opacity(alpha)
+                        : Color(red: 232 / 255, green: 224 / 255, blue: 211 / 255)
+                            .opacity(alpha)
+                } else {
+                    color = index.isMultiple(of: 5)
+                        ? Color.white.opacity(alpha)
+                        : Color(red: 58 / 255, green: 36 / 255, blue: 26 / 255)
+                            .opacity(alpha)
+                }
 
                 context.fill(
                     Path(ellipseIn: CGRect(x: x, y: y, width: diameter, height: diameter)),
@@ -66,7 +103,7 @@ private struct DastakMatteGrain: View {
             }
         }
         .blendMode(.softLight)
-        .opacity(0.72)
+        .opacity(isDark ? 0.72 : 0.55)
     }
 }
 
@@ -91,7 +128,7 @@ public struct MarketplacePageBackground: ViewModifier {
     public func body(content: Content) -> some View {
         content
             .foregroundStyle(MarketplaceColors.primaryText(for: colorScheme))
-            .background(MarketplaceColors.canvas(for: colorScheme).ignoresSafeArea())
+            .background(DastakMatteBackground().ignoresSafeArea())
     }
 }
 

@@ -36,6 +36,7 @@ struct DastakSearchView: View {
                 .refreshable { await model.refreshV1Catalogue() }
             }
         }
+        .marketplacePage()
         .navigationTitle("Search")
         .searchable(text: $model.searchText, prompt: "Products, brands and categories")
         .task(id: model.searchText) {

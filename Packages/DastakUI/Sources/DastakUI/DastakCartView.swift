@@ -53,6 +53,7 @@ struct DastakCartView: View {
                 }
             }
         }
+        .marketplacePage()
         .sheet(isPresented: $showingDeliveryAddressEditor) {
             DastakAddressBookView(
                 model: model,

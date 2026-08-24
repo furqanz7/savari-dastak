@@ -66,6 +66,7 @@ struct DastakV1MatchingView: View {
                 }
             }
         }
+        .marketplacePage()
         .task { await pollWhileActive() }
     }
 

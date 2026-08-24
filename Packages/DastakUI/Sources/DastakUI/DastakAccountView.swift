@@ -71,6 +71,7 @@ struct DastakAccountView: View {
             .padding(.bottom, MarketplaceSpacing.xxLarge)
         }
         .scrollIndicators(.hidden)
+        .marketplacePage()
         .navigationTitle("Account")
         .sheet(isPresented: $showingProfileEditor) {
             DastakProfileEditor(customer: customer, updateProfile: updateProfile)

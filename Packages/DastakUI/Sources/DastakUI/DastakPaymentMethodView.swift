@@ -36,7 +36,7 @@ struct DastakPaymentMethodView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 112)
             }
-            .background(MarketplaceColors.dastakBackground.color.ignoresSafeArea())
+            .background(DastakMatteBackground(style: .dark).ignoresSafeArea())
             .safeAreaInset(edge: .bottom) {
                 continueButton
             }

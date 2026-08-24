@@ -560,7 +560,7 @@ private struct AuthenticationRouteView: View {
         ZStack {
             Group {
                 if requiredAccess == .dastakCustomer {
-                    DastakMatteBackground()
+                    DastakMatteBackground(style: .dark)
                 } else {
                     dastakCanvas
                 }

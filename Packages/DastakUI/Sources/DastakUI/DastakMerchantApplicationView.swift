@@ -240,7 +240,7 @@ public struct DastakMerchantAccessView: View {
 
     public var body: some View {
         ZStack {
-            MarketplaceColors.dastakBackground.color.ignoresSafeArea()
+            DastakMatteBackground(style: .dark).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 header

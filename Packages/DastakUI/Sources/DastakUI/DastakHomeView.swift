@@ -26,6 +26,7 @@ struct DastakHomeView: View {
             .padding(.bottom, 104)
         }
         .scrollIndicators(.hidden)
+        .marketplacePage()
         .dastakNavigationBarHidden()
         .refreshable { await model.refreshV1Catalogue() }
         .sheet(item: $selectedRestaurant) { restaurant in
@@ -368,6 +369,7 @@ private struct DastakRestaurantMenuView: View {
             .dastakInlineNavigationTitle()
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }
+        .marketplacePage()
     }
 }
 

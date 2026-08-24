@@ -37,8 +37,27 @@ button:disabled { cursor: wait; opacity: .55; }
   --accent: var(--dastak-accent);
   --accent-soft: var(--dastak-accent-soft);
   --contrast: var(--dastak-icon-background);
-  background: var(--canvas);
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 92% -8%, color-mix(in srgb, var(--dastak-accent) 14%, transparent), transparent 34rem),
+    radial-gradient(circle at -8% 102%, color-mix(in srgb, var(--dastak-brand) 10%, transparent), transparent 40rem),
+    var(--canvas);
   color: var(--text-primary);
+}
+
+.app.product-dastak::before,
+.public-information-page::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  opacity: .115;
+  background-image: var(--dastak-matte-noise);
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+  filter: contrast(128%);
 }
 
 .topbar {
@@ -1887,6 +1906,8 @@ button:disabled { cursor: wait; opacity: .55; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .public-information-page {
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   color: var(--text-primary);
   background:
