@@ -24,7 +24,7 @@ struct DastakNotificationOnboardingView: View {
 
     var body: some View {
         ZStack {
-            notificationBackground.ignoresSafeArea()
+            DastakMatteBackground().ignoresSafeArea()
 
             GeometryReader { proxy in
                 ScrollView {
@@ -144,24 +144,6 @@ struct DastakNotificationOnboardingView: View {
         }
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled()
-    }
-
-    private var notificationBackground: some View {
-        ZStack {
-            MarketplaceColors.dastakBackground.color
-            RadialGradient(
-                colors: [MarketplaceColors.dastakAccent.color.opacity(0.18), .clear],
-                center: .topTrailing,
-                startRadius: 10,
-                endRadius: 360
-            )
-            LinearGradient(
-                colors: [.clear, Color.black.opacity(0.16)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .accessibilityHidden(true)
     }
 
     private func notificationPreview(

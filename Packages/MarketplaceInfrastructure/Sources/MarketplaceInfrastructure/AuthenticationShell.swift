@@ -560,7 +560,7 @@ private struct AuthenticationRouteView: View {
         ZStack {
             Group {
                 if requiredAccess == .dastakCustomer {
-                    DastakOnboardingBackground()
+                    DastakMatteBackground()
                 } else {
                     dastakCanvas
                 }
@@ -1478,41 +1478,6 @@ private struct AuthenticationRouteView: View {
         let phone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         return (1...80).contains(name.count)
             && DastakPhoneNumberValidator.isValidE164(phone)
-    }
-}
-
-private struct DastakOnboardingBackground: View {
-    var body: some View {
-        ZStack {
-            Color(red: 15 / 255, green: 15 / 255, blue: 16 / 255)
-
-            RadialGradient(
-                colors: [
-                    Color(red: 176 / 255, green: 141 / 255, blue: 87 / 255).opacity(0.19),
-                    .clear,
-                ],
-                center: .topTrailing,
-                startRadius: 10,
-                endRadius: 360
-            )
-
-            RadialGradient(
-                colors: [
-                    Color(red: 58 / 255, green: 36 / 255, blue: 26 / 255).opacity(0.34),
-                    .clear,
-                ],
-                center: .bottomLeading,
-                startRadius: 20,
-                endRadius: 420
-            )
-
-            LinearGradient(
-                colors: [.clear, Color.black.opacity(0.18)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .accessibilityHidden(true)
     }
 }
 

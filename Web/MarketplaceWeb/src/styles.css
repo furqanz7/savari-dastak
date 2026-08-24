@@ -12,6 +12,7 @@
   font-family: var(--font-system);
   color: var(--text-primary);
   background: var(--canvas);
+  --dastak-matte-noise: url("data:image/svg+xml,%3Csvg%20viewBox='0%200%20180%20180'%20xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter%20id='noise'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='.78'%20numOctaves='4'%20seed='23'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23noise)'%20opacity='.92'/%3E%3C/svg%3E");
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   letter-spacing: 0;
@@ -955,10 +956,11 @@ button:disabled { cursor: wait; opacity: .55; }
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: .22;
-  background-image: radial-gradient(rgb(255 255 255 / 16%) .55px, transparent .55px);
-  background-size: 7px 7px;
-  mask-image: linear-gradient(to bottom, black, transparent 74%);
+  opacity: .17;
+  background-image: var(--dastak-matte-noise);
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+  filter: contrast(128%);
 }
 .content.dastak-customer-auth-content {
   position: relative;
@@ -1739,8 +1741,25 @@ button:disabled { cursor: wait; opacity: .55; }
   padding-bottom: max(20px, env(safe-area-inset-bottom));
   background: rgb(0 0 0 / 70%);
   backdrop-filter: blur(12px);
+  isolation: isolate;
+  overflow: hidden;
+}
+.web-notification-backdrop::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  opacity: .12;
+  background-image: var(--dastak-matte-noise);
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+  filter: contrast(128%);
 }
 .web-notification-onboarding {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
   width: min(100%, 430px);
   margin: 0 auto;
   padding: 24px;
@@ -1755,6 +1774,19 @@ button:disabled { cursor: wait; opacity: .55; }
     #181716;
   box-shadow: 0 30px 100px rgb(0 0 0 / 48%);
 }
+.web-notification-onboarding::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  opacity: .08;
+  background-image: var(--dastak-matte-noise);
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+  filter: contrast(128%);
+}
+.web-notification-onboarding > * { position: relative; z-index: 1; }
 .web-notification-onboarding h2 {
   margin: 7px 0 10px;
   font-family: var(--font-dastak-wordmark);
