@@ -106,7 +106,7 @@ export function DastakCustomerView(props: Props) {
           onOpenOrder={(orderId) => navigate({ section: "orders", entityType: "merchantOrder", entityId: orderId })}
           onCloseOrder={() => navigate({ section: "orders" })}
           onOpenParcel={() => navigate({ section: "parcel" })}
-          supportUrl={props.legalLinks.support}
+          legalLinks={props.legalLinks}
           webPush={webPush}
         />
       </div>}

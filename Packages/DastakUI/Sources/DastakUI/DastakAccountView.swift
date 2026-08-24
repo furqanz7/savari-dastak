@@ -180,7 +180,7 @@ struct DastakAccountView: View {
 
     private var supportSection: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Support")
+            Text("Help and legal")
                 .font(MarketplaceTypography.sectionTitle)
             VStack(spacing: 0) {
                 Button(action: openOrders) {
@@ -198,6 +198,26 @@ struct DastakAccountView: View {
                             title: "Contact Dastak support",
                             value: "Account, access or delivery help",
                             symbol: "message"
+                        )
+                    }
+                    Divider().padding(.leading, 56)
+                }
+                if let privacyURL = legalLinks.privacyPolicy {
+                    Link(destination: privacyURL) {
+                        accountRow(
+                            title: "Privacy Policy",
+                            value: "How Dastak uses and protects your information",
+                            symbol: "hand.raised"
+                        )
+                    }
+                    Divider().padding(.leading, 56)
+                }
+                if let termsURL = legalLinks.terms {
+                    Link(destination: termsURL) {
+                        accountRow(
+                            title: "Terms of Service",
+                            value: "Ordering, payment, delivery and account terms",
+                            symbol: "doc.text"
                         )
                     }
                     Divider().padding(.leading, 56)

@@ -120,7 +120,7 @@ type Props = {
   onCloseOrder: () => void;
   onOpenParcel: () => void;
   onSignOut: () => void;
-  supportUrl?: string;
+  legalLinks?: { privacy: string; terms: string; support: string };
   webPush?: DastakWebPushController;
 };
 
@@ -182,7 +182,7 @@ export function CatalogueView({
   onCloseOrder,
   onOpenParcel,
   onSignOut,
-  supportUrl,
+  legalLinks,
   webPush,
 }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
@@ -994,7 +994,7 @@ export function CatalogueView({
               <button className="customer-account-row" type="button" onClick={() => onNavigate("orders")}>
                 <CircleHelp size={20} /><span><strong>Help with an order</strong><small>Open an order to get relevant support</small></span><ChevronRight size={18} />
               </button>
-              {supportUrl && <a className="customer-account-row" href={supportUrl} target="_blank" rel="noreferrer">
+              {legalLinks?.support && <a className="customer-account-row" href={legalLinks.support} target="_blank" rel="noreferrer">
                 <CircleHelp size={20} /><span><strong>Contact Dastak support</strong><small>Get help with account access or identity linking</small></span><ArrowUpRight size={18} />
               </a>}
               <a className="customer-account-row emergency" href="tel:112">
@@ -1034,9 +1034,14 @@ export function CatalogueView({
           <section className="customer-account-group" aria-labelledby="account-privacy-title">
             <h2 id="account-privacy-title">Privacy and account security</h2>
             <div className="customer-account-rows">
-              <div className="customer-account-row customer-privacy-row">
+              {legalLinks?.privacy ? <a className="customer-account-row customer-privacy-row" href={legalLinks.privacy} target="_blank" rel="noreferrer">
+                <Hand size={20} /><span><strong>Privacy Policy</strong><small>How Dastak uses and protects your account, location, order and support information</small></span><ArrowUpRight size={18} />
+              </a> : <div className="customer-account-row customer-privacy-row">
                 <Hand size={20} /><span><strong>Privacy and data</strong><small>Your unverified number is shared only for an active delivery. Your browse area is separate; the saved address is used to price and fulfil an order.</small></span>
-              </div>
+              </div>}
+              {legalLinks?.terms && <a className="customer-account-row" href={legalLinks.terms} target="_blank" rel="noreferrer">
+                <ReceiptText size={20} /><span><strong>Terms of Service</strong><small>Customer ordering, payment, delivery, refund and account terms</small></span><ArrowUpRight size={18} />
+              </a>}
               <button className="customer-account-row" type="button" onClick={() => setSessionsOpen(true)}>
                 <MonitorSmartphone size={20} /><span><strong>Devices and sessions</strong><small>Review sign-ins and sign out other devices</small></span><ChevronRight size={18} />
               </button>
