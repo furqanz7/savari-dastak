@@ -95,9 +95,23 @@ struct DastakAddressBookView: View {
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
             Text("Where should we bring it?")
                 .font(MarketplaceTypography.instrumentSerif(size: 40, relativeTo: .largeTitle))
-            Text("Choose a saved address or add another. You can keep up to ten.")
+            Text(requiresCompletion
+                ? "Choose a saved address or add another. You can keep up to ten."
+                : "Tap an address to use it as your default. You can keep up to ten.")
                 .font(MarketplaceTypography.supporting)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Label("Touch and hold an address to edit or delete it.", systemImage: "hand.tap")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, MarketplaceSpacing.compact)
+                .padding(.vertical, 10)
+                .background(
+                    MarketplaceColors.dastakAccent.color.opacity(0.09),
+                    in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                )
+                .padding(.top, MarketplaceSpacing.small)
         }
         .padding(.bottom, MarketplaceSpacing.small)
     }
@@ -109,7 +123,7 @@ struct DastakAddressBookView: View {
             Task {
                 let didSelect = await model.selectSavedAddress(address)
                 isBusy = false
-                if didSelect && requiresCompletion { dismiss() }
+                if didSelect { dismiss() }
             }
         } label: {
             HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
@@ -153,6 +167,7 @@ struct DastakAddressBookView: View {
         .buttonStyle(.plain)
         .disabled(isBusy)
         .dastakAccountSurface(accented: selected)
+        .accessibilityHint("Tap to use this address. Touch and hold to edit or delete it.")
         .contextMenu {
             Button { edit(address) } label: { Label("Edit", systemImage: "pencil") }
             Button(role: .destructive) { deletingAddress = address } label: { Label("Delete", systemImage: "trash") }

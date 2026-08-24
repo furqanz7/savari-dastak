@@ -70,7 +70,7 @@ struct DastakAccountView: View {
             .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
             .padding(.horizontal, MarketplaceSpacing.medium)
             .padding(.top, MarketplaceSpacing.medium)
-            .padding(.bottom, MarketplaceSpacing.xxLarge)
+            .padding(.bottom, MarketplaceSpacing.xxLarge * 2)
         }
         .scrollIndicators(.hidden)
         .marketplacePage()
@@ -448,18 +448,23 @@ struct DastakAccountView: View {
                 Text(title)
                     .font(.headline)
                     .foregroundStyle(isDestructive ? MarketplaceColors.destructive.color : Color.primary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let value, value.count > 12 {
                     Text(value)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
             if let value, value.count <= 12 {
                 Text(value)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             if showsDisclosure {
                 Image(systemName: "chevron.right")
@@ -468,6 +473,7 @@ struct DastakAccountView: View {
             }
         }
         .frame(minHeight: 74)
+        .padding(.vertical, MarketplaceSpacing.small)
         .contentShape(Rectangle())
     }
 
@@ -538,13 +544,16 @@ struct DastakAccountView: View {
                         Text(partnerPresentation.title)
                             .font(.headline)
                             .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(partnerPresentation.detail)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Spacer(minLength: MarketplaceSpacing.small)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
                     if isDeliveryPartnerAccessLoading {
                         ProgressView()
                             .tint(MarketplaceColors.dastakAccent.color)
@@ -891,17 +900,28 @@ private struct DastakDeleteAccountSheet: View {
                         Button(role: .destructive) {
                             Task { await requestDeletion() }
                         } label: {
-                            HStack {
-                                Text(isBusy ? "Please wait..." : "Delete account")
-                                Spacer()
-                                if isBusy { ProgressView() }
+                            ZStack {
+                                Label(
+                                    isBusy ? "Deleting account…" : "Permanently delete account",
+                                    systemImage: "trash.fill"
+                                )
+                                if isBusy {
+                                    HStack {
+                                        Spacer()
+                                        ProgressView().tint(.white)
+                                    }
+                                }
                             }
                             .frame(maxWidth: .infinity)
-                            .frame(minHeight: 52)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(MarketplaceColors.destructive.color)
+                        .buttonStyle(DastakDestructiveActionButtonStyle())
                         .disabled(!confirmed || isBusy)
+                        .accessibilityHint("Permanently deletes this account after identity verification.")
+
+                        Label("This cannot be undone.", systemImage: "exclamationmark.shield.fill")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(MarketplaceColors.destructive.color)
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
 
                     if let errorMessage {
@@ -995,6 +1015,44 @@ private struct DastakDeleteAccountSheet: View {
         } catch {
             errorMessage = "Identity verification could not be completed. Your account is unchanged."
         }
+    }
+}
+
+private struct DastakDestructiveActionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline.weight(.semibold))
+            .foregroundStyle(Color.white)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 56)
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .background {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                MarketplaceColors.destructive.color,
+                                MarketplaceColors.destructive.color.opacity(0.88),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+            }
+            .shadow(
+                color: MarketplaceColors.destructive.color.opacity(isEnabled ? 0.22 : 0),
+                radius: 18,
+                y: 8
+            )
+            .opacity(isEnabled ? 1 : 0.38)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.snappy(duration: 0.18), value: configuration.isPressed)
     }
 }
 
