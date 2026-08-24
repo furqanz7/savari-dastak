@@ -5,11 +5,14 @@ import {
   OrdersSection,
 } from "./DastakV1CustomerExperience";
 import {
+  canReorderV1Order,
+  deliveredDurationLabel,
   isIssueEvidenceRequired,
   isV1OrderActive,
   orderJourneyLabel,
   orderJourneyStep,
   orderLineDetail,
+  orderSearchText,
   statusAssurance,
   statusMessage,
   statusTitle,
@@ -34,9 +37,11 @@ describe("customer V1 Orders experience", () => {
       loading={false}
       loadingMore={false}
       canLoadMore
+      imageUrlForLine={() => null}
       onRefresh={() => undefined}
       onLoadMore={() => undefined}
       onOpen={() => undefined}
+      onReorder={() => undefined}
     />);
 
     expect(markup).toContain("Dastak Cafe");
@@ -64,9 +69,11 @@ describe("customer V1 Orders experience", () => {
     const markup = renderToStaticMarkup(<MatchingSheet
       order={order}
       busy={false}
+      imageUrlForLine={() => null}
       onDismiss={() => undefined}
       onCancel={() => undefined}
       onPay={() => undefined}
+      onReorder={() => undefined}
       onRefresh={() => undefined}
       onReportIssue={async () => true}
     />);
@@ -78,9 +85,11 @@ describe("customer V1 Orders experience", () => {
     expect(markup).toContain("LIVE DELIVERY");
     expect(markup).toContain("725 m");
     expect(markup).toContain("Stage 5 of 6 · On the way");
-    expect(markup).toContain("Receipt");
+    expect(markup).toContain("Bill summary");
     expect(markup).toContain("Timeline");
-    expect(markup).not.toContain("Platform fee");
+    expect(markup).toContain("Dastak platform fee");
+    expect(markup).toContain("Paid online via Razorpay");
+    expect(markup).toContain("Download receipt");
     expect(markup).not.toMatch(/retail merchant|pickup route/i);
   });
 
@@ -93,6 +102,17 @@ describe("customer V1 Orders experience", () => {
 
   it("presents selected food options rather than dropping add-ons", () => {
     expect(orderLineDetail(orderFixture().lines[1])).toBe("Large · Extra shot");
+  });
+
+  it("supports truthful order search, delivery duration and reorder eligibility", () => {
+    const order = orderFixture();
+    order.status = "DELIVERED";
+    order.deliveredAt = "2026-08-24T09:21:00Z";
+    expect(orderSearchText(order)).toContain("filter coffee");
+    expect(orderSearchText(order)).toContain("dv1-0001");
+    expect(deliveredDurationLabel(order)).toBe("Delivered in 21 min");
+    expect(canReorderV1Order(order.status)).toBe(true);
+    expect(canReorderV1Order("PREPARING")).toBe(false);
   });
 });
 

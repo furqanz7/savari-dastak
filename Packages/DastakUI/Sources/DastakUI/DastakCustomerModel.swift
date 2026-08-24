@@ -44,6 +44,12 @@ enum DastakCustomerRefreshFailure: Equatable {
     }
 }
 
+struct DastakWishlistMenuSelection: Identifiable {
+    let restaurant: DastakV1RestaurantMenu
+    let item: DastakV1RestaurantMenuItem
+    var id: UUID { item.id }
+}
+
 @MainActor
 final class DastakCustomerModel: ObservableObject {
     @Published private(set) var catalogue: CatalogueSnapshot?
@@ -51,6 +57,7 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var v1Restaurants: [DastakV1RestaurantMenu] = []
     @Published private(set) var v1SearchResults: [DastakV1CatalogueSKU] = []
     @Published private(set) var v1Orders: [DastakV1OrderSnapshot] = []
+    @Published private(set) var wishlistItems: [CustomerWishlistItem] = []
     @Published private(set) var activeV1Order: DastakV1OrderSnapshot?
     @Published private(set) var orders: [MerchantOrderSnapshot] = []
     @Published private(set) var quote: MerchantOrderQuote?
@@ -71,6 +78,8 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var isSubmittingV1Order = false
     @Published private(set) var isLoadingV1Orders = false
     @Published private(set) var isLoadingMoreV1Orders = false
+    @Published private(set) var isLoadingWishlist = false
+    @Published private(set) var wishlistUpdatingIDs: Set<UUID> = []
     @Published private(set) var isLoadingOrders = false
     @Published private(set) var isLoadingParcels = false
     @Published private(set) var isCheckingOut = false
@@ -107,6 +116,7 @@ final class DastakCustomerModel: ObservableObject {
 
     private let catalogueClient: any CatalogueClient
     private let v1Client: any DastakV1CustomerClient
+    private let wishlistClient: any CustomerWishlistClient
     private let orderClient: any MerchantOrderClient
     private let checkoutClient: any DastakCheckoutClient
     private let addressClient: any CustomerAddressClient
@@ -134,6 +144,7 @@ final class DastakCustomerModel: ObservableObject {
     init(
         catalogueClient: any CatalogueClient,
         v1Client: any DastakV1CustomerClient,
+        wishlistClient: any CustomerWishlistClient,
         orderClient: any MerchantOrderClient,
         parcelClient: any ParcelDeliveryClient,
         checkoutClient: any DastakCheckoutClient,
@@ -147,6 +158,7 @@ final class DastakCustomerModel: ObservableObject {
     ) {
         self.catalogueClient = catalogueClient
         self.v1Client = v1Client
+        self.wishlistClient = wishlistClient
         self.orderClient = orderClient
         self.parcelClient = parcelClient
         self.checkoutClient = checkoutClient
@@ -169,6 +181,7 @@ final class DastakCustomerModel: ObservableObject {
         self.init(
             catalogueClient: SupabaseCatalogueClient(functions: functions),
             v1Client: SupabaseDastakV1CustomerClient(functions: functions),
+            wishlistClient: SupabaseCustomerWishlistClient(functions: functions),
             orderClient: SupabaseMerchantOrderClient(functions: functions),
             parcelClient: SupabaseParcelDeliveryClient(functions: functions),
             checkoutClient: SupabaseDastakCheckoutClient(functions: functions),
@@ -189,6 +202,33 @@ final class DastakCustomerModel: ObservableObject {
 
     var canonicalCategories: [DastakV1CatalogueCategory] {
         v1Catalogue?.categories ?? []
+    }
+
+    var wishlistRetailProducts: [DastakV1CatalogueSKU] {
+        let products = Dictionary(uniqueKeysWithValues: (v1Catalogue?.skus ?? []).map { ($0.id, $0) })
+        return wishlistItems.compactMap { item in
+            item.kind == .retailSKU ? products[item.itemID] : nil
+        }
+    }
+
+    var wishlistMenuSelections: [DastakWishlistMenuSelection] {
+        let selections = v1Restaurants.flatMap { restaurant in
+            restaurant.categories.flatMap { category in
+                category.items.map { item in (item.id, DastakWishlistMenuSelection(restaurant: restaurant, item: item)) }
+            }
+        }
+        let byID = Dictionary(uniqueKeysWithValues: selections)
+        return wishlistItems.compactMap { item in
+            item.kind == .menuItem ? byID[item.itemID] : nil
+        }
+    }
+
+    var unresolvedWishlistItemCount: Int {
+        wishlistItems.count - wishlistRetailProducts.count - wishlistMenuSelections.count
+    }
+
+    func isWishlisted(kind: CustomerWishlistItemKind, itemID: UUID) -> Bool {
+        wishlistItems.contains { $0.kind == kind && $0.itemID == itemID }
     }
 
     func products(in categoryID: UUID) -> [DastakV1CatalogueSKU] {
@@ -224,6 +264,7 @@ final class DastakCustomerModel: ObservableObject {
         async let orders: Void = refreshOrders()
         async let v1Orders: Void = refreshV1Orders()
         async let v1Catalogue: Void = refreshV1Catalogue()
+        async let wishlist: Void = refreshWishlist()
         async let parcels: Void = refreshParcels()
         async let deviceToken: Void = registerDeviceTokenIfAvailable()
         async let checkoutCustomer: Void = refreshCheckoutCustomer()
@@ -231,10 +272,40 @@ final class DastakCustomerModel: ObservableObject {
             orders,
             v1Orders,
             v1Catalogue,
+            wishlist,
             parcels,
             deviceToken,
             checkoutCustomer
         )
+    }
+
+    func refreshWishlist() async {
+        guard !isLoadingWishlist else { return }
+        isLoadingWishlist = true
+        defer { isLoadingWishlist = false }
+        do {
+            wishlistItems = try await wishlistClient.snapshot(idempotencyKey: makeKey()).items
+        } catch {
+            presentError(for: error, fallback: "Your Wishlist could not be loaded.")
+        }
+    }
+
+    func toggleWishlist(kind: CustomerWishlistItemKind, itemID: UUID) async {
+        guard !wishlistUpdatingIDs.contains(itemID) else { return }
+        wishlistUpdatingIDs.insert(itemID)
+        defer { wishlistUpdatingIDs.remove(itemID) }
+        let desiredState = !isWishlisted(kind: kind, itemID: itemID)
+        do {
+            wishlistItems = try await wishlistClient.setItem(
+                kind: kind,
+                itemID: itemID,
+                wished: desiredState,
+                idempotencyKey: makeKey()
+            ).items
+            errorMessage = nil
+        } catch {
+            presentError(for: error, fallback: "Your Wishlist could not be updated.")
+        }
     }
 
     func registerDeviceTokenIfAvailable() async {
@@ -797,6 +868,82 @@ final class DastakCustomerModel: ObservableObject {
         case .differentRestaurant:
             cartErrorMessage = "A basket can contain food from one Restaurant/Cafe. Remove it before choosing another."
         }
+    }
+
+    func imageKey(for line: DastakV1OrderLine) -> String? {
+        if let skuID = line.skuID {
+            return (v1Catalogue?.skus.first { $0.id == skuID } ??
+                    v1SearchResults.first { $0.id == skuID })?.imageKey
+        }
+        guard let menuItemID = line.menuItemID else { return nil }
+        return v1Restaurants
+            .lazy
+            .flatMap(\.categories)
+            .flatMap(\.items)
+            .first { $0.id == menuItemID }?
+            .imageKey
+    }
+
+    @discardableResult
+    func reorder(_ order: DastakV1OrderSnapshot) -> DastakReorderResult {
+        var rebuilt = DastakCart()
+        var addedUnits = 0
+        var skippedLines = 0
+        let knownSKUs = (v1Catalogue?.skus ?? []) + v1SearchResults
+
+        for line in order.lines {
+            if let skuID = line.skuID,
+               let product = knownSKUs.first(where: { $0.id == skuID }) {
+                let quantity = min(max(1, line.quantity), DastakCart.maximumQuantity)
+                for _ in 0..<quantity { _ = rebuilt.add(product) }
+                addedUnits += quantity
+                continue
+            }
+
+            if let menuItemID = line.menuItemID,
+               let restaurant = v1Restaurants.first(where: {
+                   $0.restaurant.branchID == order.restaurant?.branchID
+               }),
+               let item = restaurant.categories.lazy.flatMap(\.items)
+                   .first(where: { $0.id == menuItemID }) {
+                let availableOptionIDs = Set(item.optionGroups.flatMap(\.options).map(\.id))
+                let requestedOptionIDs = line.foodSelection?.options.map(\.id) ?? []
+                guard requestedOptionIDs.allSatisfy(availableOptionIDs.contains) else {
+                    skippedLines += 1
+                    continue
+                }
+                let quantity = min(max(1, line.quantity), DastakCart.maximumQuantity)
+                var added = true
+                for _ in 0..<quantity {
+                    if rebuilt.addFood(
+                        restaurant: restaurant.restaurant,
+                        item: item,
+                        optionIDs: requestedOptionIDs
+                    ) != .added {
+                        added = false
+                        break
+                    }
+                }
+                if added { addedUnits += quantity }
+                else { skippedLines += 1 }
+                continue
+            }
+
+            skippedLines += 1
+        }
+
+        guard addedUnits > 0 else {
+            ordersActionMessage = "These items are not currently available to reorder."
+            return DastakReorderResult(addedUnits: 0, skippedLines: skippedLines)
+        }
+
+        cart = rebuilt
+        v1SubmissionAttempt = nil
+        cartErrorMessage = nil
+        ordersActionMessage = skippedLines == 0
+            ? "Added \(addedUnits) item\(addedUnits == 1 ? "" : "s") to your basket."
+            : "Added \(addedUnits) available item\(addedUnits == 1 ? "" : "s"); \(skippedLines) unavailable line\(skippedLines == 1 ? " was" : "s were") skipped."
+        return DastakReorderResult(addedUnits: addedUnits, skippedLines: skippedLines)
     }
 
     func decrementCartItem(_ productID: UUID) {

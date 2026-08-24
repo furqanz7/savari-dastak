@@ -26,6 +26,7 @@ type Props = {
   legalLinks: { privacy: string; terms: string; support: string };
   webPushPublicKey: string;
   deliveryPartnerUrl: string;
+  merchantUrl: string;
   onSignOut: () => void;
 };
 
@@ -35,7 +36,9 @@ export function DastakCustomerView(props: Props) {
     parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
   );
   const section = destination.section;
-  const v1Section = section === "search" || section === "orders" ? section : "home";
+  const v1Section = section === "search" || section === "orders" || section === "wishlist" || section === "payments"
+    ? section
+    : "home";
   const webPushAuthentication = useMemo(() => ({
     accountId: props.accountId,
     accessToken: props.accessToken,
@@ -80,7 +83,7 @@ export function DastakCustomerView(props: Props) {
         <CustomerNavigationButton icon={<Home />} label="Home" selected={section === "home"} onClick={() => navigateSection("home")} />
         <CustomerNavigationButton icon={<Search />} label="Search" selected={section === "search"} onClick={() => navigateSection("search")} />
         <CustomerNavigationButton icon={<ReceiptText />} label="Orders" selected={section === "orders"} onClick={() => navigateSection("orders")} />
-        <CustomerNavigationButton icon={<UserRound />} label="Account" selected={section === "account"} onClick={() => navigateSection("account")} />
+        <CustomerNavigationButton icon={<UserRound />} label="Account" selected={section === "account" || section === "wishlist" || section === "payments"} onClick={() => navigateSection("account")} />
       </nav>
       <div className="customer-view" hidden={section === "parcel" || section === "account"}>
         <DastakV1CustomerExperience
@@ -113,6 +116,7 @@ export function DastakCustomerView(props: Props) {
           onOpenParcel={() => navigate({ section: "parcel" })}
           legalLinks={props.legalLinks}
           webPush={webPush}
+          merchantUrl={props.merchantUrl}
         />
       </div>}
       {section === "parcel" && (

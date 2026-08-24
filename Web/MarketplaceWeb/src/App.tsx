@@ -698,6 +698,7 @@ function Ready({ access, email, session, onSignOut }: {
         legalLinks={config.legalLinks!}
         webPushPublicKey={config.webPushPublicKey!}
         deliveryPartnerUrl={config.deliveryPartnerUrl!}
+        merchantUrl={config.merchantUrl!}
         onSignOut={onSignOut}
       />
     );

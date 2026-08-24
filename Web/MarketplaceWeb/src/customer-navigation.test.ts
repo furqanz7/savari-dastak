@@ -7,6 +7,8 @@ describe("customer navigation", () => {
     expect(parseCustomerDestination(serializeCustomerDestination(order))).toEqual(order);
     const v1Order = { section: "orders", entityType: "dastakV1Order", entityId: "88888888-8888-4888-8888-888888888888" } as const;
     expect(parseCustomerDestination(serializeCustomerDestination(v1Order))).toEqual(v1Order);
+    expect(parseCustomerDestination("#/wishlist")).toEqual({ section: "wishlist" });
+    expect(parseCustomerDestination("#/payments")).toEqual({ section: "payments" });
     expect(parseCustomerDestination('{"section":"admin"}')).toEqual({ section: "home" });
   });
 });

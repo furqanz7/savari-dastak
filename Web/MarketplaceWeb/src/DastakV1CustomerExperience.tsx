@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  ArrowRight, Ban, Check, ChevronRight, CircleAlert, ClockAlert, MapPin, Minus,
-  PackageCheck, PackageX, Plus, RefreshCw, Search, ShieldCheck, ShoppingBag,
-  Sparkles, UserRound, X,
+  ArrowRight, Ban, Check, ChevronRight, CircleAlert, ClockAlert, Copy, Download,
+  CreditCard, Heart, LockKeyhole, MapPin, Minus, PackageCheck, PackageX, Plus,
+  ReceiptText, RefreshCw, RotateCcw, Search, ShieldCheck, ShoppingBag, Sparkles,
+  UserRound, WalletCards, X,
 } from "lucide-react";
+import { catalogueImageUrl } from "./catalogue";
 import { CustomerAddressBookSheet } from "./CustomerAddressBookSheet";
 import { CustomerAddressSheet, type CustomerAddressDraft } from "./CustomerAddressSheet";
 import {
@@ -12,6 +14,12 @@ import {
   type CustomerDeliveryAddress,
 } from "./customerAddresses";
 import type { CustomerSection } from "./customerNavigation";
+import {
+  getCustomerWishlist,
+  setCustomerWishlistItem,
+  type CustomerWishlistItem,
+  type CustomerWishlistItemKind,
+} from "./customerWishlist";
 import {
   cancelV1Order, formatV1Price, getV1Catalogue, getV1Order, getV1Orders,
   getV1Restaurants, reportV1CustomerIssue, submitV1Order, uploadV1CustomerIssueEvidence,
@@ -28,6 +36,8 @@ import {
   reportV1CheckoutFailure,
 } from "./payments";
 import {
+  canReorderV1Order,
+  deliveredDurationLabel,
   humanizeV1State,
   isIssueEvidenceRequired,
   isV1OrderActive,
@@ -35,7 +45,9 @@ import {
   orderJourneyStep,
   orderJourneySteps,
   orderKindLabel,
+  orderItemCount,
   orderLineDetail,
+  orderSearchText,
   statusAssurance,
   statusMessage,
   statusTitle,
@@ -48,7 +60,7 @@ type Props = DastakV1Auth & {
   phoneNumber?: string;
   orderRefreshToken: number;
   initialOrderId?: string;
-  section: Extract<CustomerSection, "home" | "search" | "orders">;
+  section: Extract<CustomerSection, "home" | "search" | "orders" | "wishlist" | "payments">;
   onNavigate: (section: CustomerSection) => void;
   onOpenParcel: () => void;
   onOpenOrder: (orderId: string) => void;
@@ -84,6 +96,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<V1RestaurantMenu>();
   const [searchResults, setSearchResults] = useState<V1CatalogueSku[]>([]);
   const [orders, setOrders] = useState<V1Order[]>([]);
+  const [wishlistItems, setWishlistItems] = useState<CustomerWishlistItem[]>([]);
   const [ordersNextCursor, setOrdersNextCursor] = useState<V1OrderCursor>();
   const [addresses, setAddresses] = useState<CustomerDeliveryAddress[]>([]);
   const [query, setQuery] = useState("");
@@ -93,6 +106,8 @@ export function DastakV1CustomerExperience(props: Props) {
   const [loading, setLoading] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loadingMoreOrders, setLoadingMoreOrders] = useState(false);
+  const [loadingWishlist, setLoadingWishlist] = useState(true);
+  const [wishlistUpdatingIds, setWishlistUpdatingIds] = useState<Set<string>>(new Set());
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -104,11 +119,13 @@ export function DastakV1CustomerExperience(props: Props) {
   const [showingAddressBook, setShowingAddressBook] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CustomerDeliveryAddress | null>();
   const [selectedOrder, setSelectedOrder] = useState<V1Order>();
+  const [pendingReorder, setPendingReorder] = useState<V1Order>();
   const submissionKeys = useRef(new Map<string, string>());
   const ordersRequestVersion = useRef(0);
   const ordersPaginationAdvanced = useRef(false);
   const selectedOrderId = selectedOrder?.id;
   const selectedOrderStatus = selectedOrder?.status;
+  const onCloseOrder = props.onCloseOrder;
 
   const refreshStorefront = useCallback(async () => {
     const [nextCatalogue, nextRestaurants, nextAddresses] = await Promise.allSettled([
@@ -145,6 +162,18 @@ export function DastakV1CustomerExperience(props: Props) {
     }
   }, [auth]);
 
+  const refreshWishlist = useCallback(async () => {
+    setLoadingWishlist(true);
+    try {
+      const result = await getCustomerWishlist(auth);
+      setWishlistItems(result.items);
+    } catch (wishlistError) {
+      setError(message(wishlistError));
+    } finally {
+      setLoadingWishlist(false);
+    }
+  }, [auth]);
+
   const loadMoreOrders = useCallback(async () => {
     if (!ordersNextCursor || loadingMoreOrders) return;
     setLoadingMoreOrders(true);
@@ -162,6 +191,7 @@ export function DastakV1CustomerExperience(props: Props) {
   }, [auth, loadingMoreOrders, ordersNextCursor]);
 
   useEffect(() => { void refreshStorefront(); }, [refreshStorefront]);
+  useEffect(() => { void refreshWishlist(); }, [refreshWishlist]);
   useEffect(() => {
     const controller = new AbortController();
     void refreshOrders(controller.signal);
@@ -255,6 +285,17 @@ export function DastakV1CustomerExperience(props: Props) {
     searchResults.forEach((sku) => result.set(sku.id, sku));
     return result;
   }, [catalogue, searchResults]);
+  const menuItemById = useMemo(() => {
+    const result = new Map<string, { restaurant: V1RestaurantMenu; item: V1RestaurantMenuItem }>();
+    restaurants.forEach((restaurant) => restaurant.categories.forEach((category) =>
+      category.items.forEach((item) => result.set(item.id, { restaurant, item }))
+    ));
+    return result;
+  }, [restaurants]);
+  const wishlistIds = useMemo(
+    () => new Set(wishlistItems.map((item) => `${item.kind}:${item.itemId}`)),
+    [wishlistItems],
+  );
   const cartLines = useMemo(() => Object.entries(cart).flatMap(([skuId, quantity]) => {
     const sku = skuById.get(skuId);
     return sku && quantity > 0 ? [{ sku, quantity }] : [];
@@ -264,6 +305,30 @@ export function DastakV1CustomerExperience(props: Props) {
   const cartSubtotal = cartLines.reduce((total, line) => total + line.sku.sellingPricePaise * line.quantity, 0) +
     foodCart.reduce((total, line) => total + line.unitPricePaise * line.quantity, 0);
   const defaultAddress = addresses.find((address) => address.isDefault) ?? addresses[0];
+
+  const toggleWishlist = async (itemKind: CustomerWishlistItemKind, itemId: string) => {
+    if (wishlistUpdatingIds.has(itemId)) return;
+    setWishlistUpdatingIds((current) => new Set(current).add(itemId));
+    try {
+      const result = await setCustomerWishlistItem({
+        ...auth,
+        itemKind,
+        itemId,
+        wished: !wishlistIds.has(`${itemKind}:${itemId}`),
+        idempotencyKey: crypto.randomUUID(),
+      });
+      setWishlistItems(result.items);
+      setError(undefined);
+    } catch (wishlistError) {
+      setError(message(wishlistError));
+    } finally {
+      setWishlistUpdatingIds((current) => {
+        const next = new Set(current);
+        next.delete(itemId);
+        return next;
+      });
+    }
+  };
 
   const add = (sku: V1CatalogueSku) => setCart((current) => ({
     ...current, [sku.id]: Math.min((current[sku.id] ?? 0) + 1, 99),
@@ -322,6 +387,80 @@ export function DastakV1CustomerExperience(props: Props) {
   const incrementFood = (key: string) => setFoodCart((current) => current.map((line) =>
     line.key === key ? { ...line, quantity: Math.min(line.quantity + 1, 99) } : line
   ));
+
+  const imageUrlForLine = useCallback((line: V1Order["lines"][number]) => {
+    const imageKey = line.skuId
+      ? skuById.get(line.skuId)?.imageKey
+      : line.menuItemId ? menuItemById.get(line.menuItemId)?.item.imageKey : undefined;
+    return catalogueImageUrl(props.supabaseUrl, imageKey ?? null);
+  }, [menuItemById, props.supabaseUrl, skuById]);
+
+  const reorderOrder = useCallback((order: V1Order) => {
+    const nextCart: Cart = {};
+    const nextFoodCart: FoodCartLine[] = [];
+    let addedUnits = 0;
+    let skippedLines = 0;
+
+    order.lines.forEach((line) => {
+      const quantity = Math.min(Math.max(line.quantity, 1), 99);
+      if (line.skuId && skuById.has(line.skuId)) {
+        nextCart[line.skuId] = quantity;
+        addedUnits += quantity;
+        return;
+      }
+      if (line.menuItemId) {
+        const current = menuItemById.get(line.menuItemId);
+        if (current && current.restaurant.restaurant.branchId === order.restaurant?.branchId) {
+          const availableOptions = new Set(current.item.optionGroups.flatMap((group) =>
+            group.options.map((option) => option.id)
+          ));
+          const optionIds = line.foodSelection?.options.map((option) => option.id) ?? [];
+          if (optionIds.every((id) => availableOptions.has(id))) {
+            const options = current.item.optionGroups.flatMap((group) => group.options)
+              .filter((option) => optionIds.includes(option.id));
+            const normalizedIds = options.map((option) => option.id).sort();
+            nextFoodCart.push({
+              key: `${current.item.id}:${normalizedIds.join(",")}`,
+              branchId: current.restaurant.restaurant.branchId,
+              restaurantName: current.restaurant.restaurant.name,
+              item: current.item,
+              optionIds: normalizedIds,
+              optionNames: options.map((option) => option.name),
+              unitPricePaise: current.item.basePricePaise +
+                options.reduce((total, option) => total + option.priceDeltaPaise, 0),
+              quantity,
+            });
+            addedUnits += quantity;
+            return;
+          }
+        }
+      }
+      skippedLines += 1;
+    });
+
+    setPendingReorder(undefined);
+    if (!addedUnits) {
+      setError("These items are not currently available to reorder.");
+      return;
+    }
+    setCart(nextCart);
+    setFoodCart(nextFoodCart);
+    if (selectedOrderId === order.id) {
+      setSelectedOrder(undefined);
+      setOrderActionError(undefined);
+      setLiveOrderError(undefined);
+      onCloseOrder();
+    }
+    setError(skippedLines
+      ? `Added ${addedUnits} available item${addedUnits === 1 ? "" : "s"}; ${skippedLines} unavailable line${skippedLines === 1 ? " was" : "s were"} skipped.`
+      : undefined);
+    setShowingCart(true);
+  }, [menuItemById, onCloseOrder, selectedOrderId, skuById]);
+
+  const requestReorder = useCallback((order: V1Order) => {
+    if (cartCount > 0) setPendingReorder(order);
+    else reorderOrder(order);
+  }, [cartCount, reorderOrder]);
 
   const submit = async () => {
     if (!defaultAddress) { setShowingAddressBook(true); return; }
@@ -536,6 +675,7 @@ export function DastakV1CustomerExperience(props: Props) {
     <CustomerHeader address={defaultAddress} count={cartCount} onCart={() => setShowingCart(true)} />
     {error && <div className="v1-alert" role="alert"><CircleAlert size={18} /><span>{error}</span><button type="button" onClick={() => setError(undefined)} aria-label="Dismiss error"><X size={16} /></button></div>}
     {props.section === "home" ? <HomeSection
+      supabaseUrl={props.supabaseUrl}
       restaurants={restaurants}
       categories={catalogue?.categories ?? []}
       skus={catalogue?.skus ?? []}
@@ -546,10 +686,36 @@ export function DastakV1CustomerExperience(props: Props) {
       onParcel={props.onOpenParcel}
       onAdd={add}
       onRestaurant={setSelectedRestaurant}
+      wishlistIds={wishlistIds}
+      wishlistUpdatingIds={wishlistUpdatingIds}
+      onWishlist={toggleWishlist}
     /> : props.section === "search" ? <SearchSection
+      supabaseUrl={props.supabaseUrl}
       query={query} onQuery={setQuery} searching={searching}
       skus={query.trim() ? searchResults : catalogue?.skus ?? []} onAdd={add}
+      wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={toggleWishlist}
+    /> : props.section === "wishlist" ? <WishlistSection
+      supabaseUrl={props.supabaseUrl}
+      items={wishlistItems}
+      loading={loadingWishlist}
+      skuById={skuById}
+      menuItemById={menuItemById}
+      updatingIds={wishlistUpdatingIds}
+      onRefresh={() => void refreshWishlist()}
+      onAdd={add}
+      onAddFood={addFood}
+      onChooseFood={(restaurant) => setSelectedRestaurant(restaurant)}
+      onRemove={(kind, itemId) => void toggleWishlist(kind, itemId)}
+    /> : props.section === "payments" ? <PaymentsSection
+      orders={orders}
+      loading={loadingOrders}
+      onRefresh={() => void refreshOrders()}
+      onOpen={(order) => {
+        setSelectedOrder(order);
+        props.onOpenOrder(order.id);
+      }}
     /> : <OrdersSection
+      imageUrlForLine={imageUrlForLine}
       orders={orders}
       loading={loadingOrders}
       loadingMore={loadingMoreOrders}
@@ -557,6 +723,7 @@ export function DastakV1CustomerExperience(props: Props) {
       error={ordersError}
       onRefresh={() => void refreshOrders()}
       onLoadMore={() => void loadMoreOrders()}
+      onReorder={requestReorder}
       onOpen={(order) => {
         setSelectedOrder(order);
         setOrderActionError(undefined);
@@ -579,10 +746,14 @@ export function DastakV1CustomerExperience(props: Props) {
       menu={selectedRestaurant}
       onDismiss={() => setSelectedRestaurant(undefined)}
       onAdd={(item, optionIds) => addFood(selectedRestaurant, item, optionIds)}
+      wishlistIds={wishlistIds}
+      wishlistUpdatingIds={wishlistUpdatingIds}
+      onWishlist={(itemId) => void toggleWishlist("MENU_ITEM", itemId)}
     />}
     {selectedOrder && <MatchingSheet
       order={selectedOrder} busy={busy} error={orderActionError} liveError={liveOrderError}
       paymentMessage={paymentMessage}
+      imageUrlForLine={imageUrlForLine}
       onDismiss={() => {
         setSelectedOrder(undefined);
         setOrderActionError(undefined);
@@ -595,6 +766,12 @@ export function DastakV1CustomerExperience(props: Props) {
         setLiveOrderError(message(requestError));
       })}
       onReportIssue={reportIssue}
+      onReorder={() => requestReorder(selectedOrder)}
+    />}
+    {pendingReorder && <BasketReplacementDialog
+      busy={busy}
+      onDismiss={() => setPendingReorder(undefined)}
+      onConfirm={() => reorderOrder(pendingReorder)}
     />}
     {showingAddressBook && <CustomerAddressBookSheet
       addresses={addresses} selectedAddressId={defaultAddress?.addressId} busy={busy} error={error} context="checkout"
@@ -616,11 +793,14 @@ function CustomerHeader({ address, count, onCart }: { address?: CustomerDelivery
   </header>;
 }
 
-function HomeSection({ restaurants, categories, skus, selectedCategory, onCategory, onSearch, onOrders, onParcel, onAdd, onRestaurant }: {
+function HomeSection({ supabaseUrl, restaurants, categories, skus, selectedCategory, onCategory, onSearch, onOrders, onParcel, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+  supabaseUrl: string;
   restaurants: V1RestaurantMenu[];
   categories: V1CatalogueCategory[]; skus: V1CatalogueSku[]; selectedCategory?: string;
   onCategory: (id?: string) => void; onSearch: () => void; onOrders: () => void; onParcel: () => void;
   onAdd: (sku: V1CatalogueSku) => void; onRestaurant: (restaurant: V1RestaurantMenu) => void;
+  wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>;
+  onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void;
 }) {
   const visible = selectedCategory ? skus.filter((sku) => sku.categoryId === selectedCategory) : skus;
   return <>
@@ -640,25 +820,28 @@ function HomeSection({ restaurants, categories, skus, selectedCategory, onCatego
       </div>
     </section>
     <section className="v1-section"><header><div><p>EXACT PRODUCTS</p><h2>{categories.find((category) => category.id === selectedCategory)?.name ?? "Everyday essentials"}</h2></div><span>{visible.length} products</span></header>
-      <ProductGrid skus={visible} onAdd={onAdd} />
+      <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />
     </section>
     <section className="v1-service-band"><PackageCheck size={24} /><div><strong>Send a parcel</strong><span>Door-to-door delivery across your city</span></div><button type="button" onClick={onParcel}>Open <ChevronRight size={17} /></button></section>
     <button className="v1-order-link" type="button" onClick={onOrders}>View your Dastak orders <ArrowRight size={17} /></button>
   </>;
 }
 
-function SearchSection({ query, onQuery, searching, skus, onAdd }: { query: string; onQuery: (value: string) => void; searching: boolean; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void }) {
+function SearchSection({ supabaseUrl, query, onQuery, searching, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; query: string; onQuery: (value: string) => void; searching: boolean; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
   const submit = (event: FormEvent) => event.preventDefault();
   return <section className="v1-search-page"><header><p>CANONICAL CATALOGUE</p><h1>Find an exact product</h1><span>Search by product, brand or category. Retail merchant identity stays private.</span></header>
     <form className="v1-search-field" role="search" onSubmit={submit}><Search size={20} /><input autoFocus value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Products, brands and categories" aria-label="Search Dastak products" />{query ? <button type="button" onClick={() => onQuery("")} aria-label="Clear search"><X size={17} /></button> : null}</form>
-    {searching ? <div className="v1-inline-loading" role="status"><span /> Searching Dastak</div> : skus.length ? <ProductGrid skus={skus} onAdd={onAdd} /> : <EmptyState title={query ? "No exact matches" : "Catalogue is empty"} copy={query ? "Try another product, brand or category." : "Dastak is preparing launch products."} />}
+    {searching ? <div className="v1-inline-loading" role="status"><span /> Searching Dastak</div> : skus.length ? <ProductGrid supabaseUrl={supabaseUrl} skus={skus} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <EmptyState title={query ? "No exact matches" : "Catalogue is empty"} copy={query ? "Try another product, brand or category." : "Dastak is preparing launch products."} />}
   </section>;
 }
 
-function ProductGrid({ skus, onAdd }: { skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void }) {
+function ProductGrid({ supabaseUrl, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
   if (!skus.length) return <EmptyState title="No products here yet" copy="Choose another category." />;
   return <div className="v1-product-grid">{skus.map((sku) => <article className="v1-product-card" key={sku.id}>
-    <div className="v1-product-art"><ShoppingBag size={30} /></div>
+    <ProductImage className="v1-product-art" src={catalogueImageUrl(supabaseUrl, sku.imageKey ?? null)} alt="" />
+    <button className="v1-wishlist-button" type="button" disabled={wishlistUpdatingIds.has(sku.id)} onClick={() => onWishlist("RETAIL_SKU", sku.id)} aria-label={wishlistIds.has(`RETAIL_SKU:${sku.id}`) ? `Remove ${sku.name} from Wishlist` : `Save ${sku.name} to Wishlist`}>
+      <Heart size={18} fill={wishlistIds.has(`RETAIL_SKU:${sku.id}`) ? "currentColor" : "none"} />
+    </button>
     <div className="v1-product-copy">{sku.brand ? <small>{sku.brand.name.toUpperCase()}</small> : null}<h3>{sku.name}</h3><p>{[sku.variant, sku.packSize].filter(Boolean).join(" · ")}</p>
       <div><span><strong>{formatV1Price(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise ? <del>{formatV1Price(sku.listPricePaise)}</del> : null}</span><button type="button" onClick={() => onAdd(sku)} aria-label={`Add ${sku.name}`}><Plus size={18} /></button></div>
     </div>
@@ -686,19 +869,21 @@ function CartSheet({ lines, foodLines, subtotal, address, busy, onDismiss, onAdd
   </section></div>;
 }
 
-function RestaurantMenuSheet({ menu, onDismiss, onAdd }: {
+function RestaurantMenuSheet({ menu, onDismiss, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: {
   menu: V1RestaurantMenu; onDismiss: () => void;
   onAdd: (item: V1RestaurantMenuItem, optionIds: string[]) => void;
+  wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (itemId: string) => void;
 }) {
   return <div className="v1-overlay" role="presentation"><section className="v1-sheet v1-menu-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-menu-title">
     <header><div><p>RESTAURANT / CAFE</p><h2 id="v1-menu-title">{menu.restaurant.name}</h2><small>{menu.restaurant.branchName}</small></div><button type="button" onClick={onDismiss} aria-label="Close restaurant menu"><X size={19} /></button></header>
     <div className="v1-security-note"><ShieldCheck size={20} /><span><strong>This restaurant confirms your exact food request</strong><small>Dastak never silently reroutes food to another restaurant. Payment starts only after the whole basket is secured.</small></span></div>
-    {menu.categories.map((category) => <section className="v1-menu-category" key={category.id}><h3>{category.name}</h3>{category.description ? <p>{category.description}</p> : null}<div>{category.items.map((item) => <RestaurantItemCard key={item.id} item={item} onAdd={onAdd} />)}</div></section>)}
+    {menu.categories.map((category) => <section className="v1-menu-category" key={category.id}><h3>{category.name}</h3>{category.description ? <p>{category.description}</p> : null}<div>{category.items.map((item) => <RestaurantItemCard key={item.id} item={item} onAdd={onAdd} wished={wishlistIds.has(`MENU_ITEM:${item.id}`)} updatingWishlist={wishlistUpdatingIds.has(item.id)} onWishlist={() => onWishlist(item.id)} />)}</div></section>)}
   </section></div>;
 }
 
-function RestaurantItemCard({ item, onAdd }: {
+function RestaurantItemCard({ item, onAdd, wished, updatingWishlist, onWishlist }: {
   item: V1RestaurantMenuItem; onAdd: (item: V1RestaurantMenuItem, optionIds: string[]) => void;
+  wished: boolean; updatingWishlist: boolean; onWishlist: () => void;
 }) {
   const [selection, setSelection] = useState<Record<string, string[]>>(() => Object.fromEntries(
     item.optionGroups.map((group) => [group.id, group.options.slice(0, group.minimumSelections).map((option) => option.id)]),
@@ -718,30 +903,120 @@ function RestaurantItemCard({ item, onAdd }: {
     if (selected.length >= maximum) return current;
     return { ...current, [groupId]: [...selected, optionId] };
   });
-  return <article className="v1-menu-item"><div className="v1-menu-item-copy"><strong>{item.name}</strong>{item.description ? <p>{item.description}</p> : null}<b>{formatV1Price(item.basePricePaise)}</b></div>
+  return <article className="v1-menu-item"><div className="v1-menu-item-copy"><strong>{item.name}</strong>{item.description ? <p>{item.description}</p> : null}<b>{formatV1Price(item.basePricePaise)}</b></div><button className="v1-menu-wishlist" type="button" disabled={updatingWishlist} onClick={onWishlist} aria-label={wished ? `Remove ${item.name} from Wishlist` : `Save ${item.name} to Wishlist`}><Heart size={18} fill={wished ? "currentColor" : "none"} /></button>
     {item.optionGroups.map((group) => <fieldset key={group.id}><legend>{group.name} <small>{group.minimumSelections ? "Required" : "Optional"} · up to {group.maximumSelections}</small></legend>{group.options.map((option) => <label key={option.id}><input type={group.selectionType === "SINGLE" ? "radio" : "checkbox"} name={`${item.id}-${group.id}`} checked={(selection[group.id] ?? []).includes(option.id)} onChange={() => toggle(group.id, option.id, group.selectionType === "SINGLE", group.maximumSelections)} /><span>{option.name}</span><b>{option.priceDeltaPaise ? `+${formatV1Price(option.priceDeltaPaise)}` : "Included"}</b></label>)}</fieldset>)}
     <button className="primary-button" type="button" disabled={!valid} onClick={() => onAdd(item, optionIds)}>Add · {formatV1Price(total)}</button>
   </article>;
 }
 
+function WishlistSection({
+  supabaseUrl, items, loading, skuById, menuItemById, updatingIds,
+  onRefresh, onAdd, onAddFood, onChooseFood, onRemove,
+}: {
+  supabaseUrl: string;
+  items: CustomerWishlistItem[];
+  loading: boolean;
+  skuById: Map<string, V1CatalogueSku>;
+  menuItemById: Map<string, { restaurant: V1RestaurantMenu; item: V1RestaurantMenuItem }>;
+  updatingIds: Set<string>;
+  onRefresh: () => void;
+  onAdd: (sku: V1CatalogueSku) => void;
+  onAddFood: (restaurant: V1RestaurantMenu, item: V1RestaurantMenuItem, optionIds: string[]) => void;
+  onChooseFood: (restaurant: V1RestaurantMenu) => void;
+  onRemove: (kind: CustomerWishlistItemKind, itemId: string) => void;
+}) {
+  const retail = items.flatMap((saved) => {
+    if (saved.kind !== "RETAIL_SKU") return [];
+    const sku = skuById.get(saved.itemId);
+    return sku ? [{ saved, sku }] : [];
+  });
+  const food = items.flatMap((saved) => {
+    if (saved.kind !== "MENU_ITEM") return [];
+    const selection = menuItemById.get(saved.itemId);
+    return selection ? [{ saved, ...selection }] : [];
+  });
+  const unresolved = items.length - retail.length - food.length;
+
+  return <section className="v1-wishlist-page">
+    <header className="v1-feature-header">
+      <div><p>SAVED FOR LATER</p><h1>Things worth remembering</h1><span>Prices and availability refresh from Dastak's current catalogue before anything reaches your basket.</span></div>
+      <button type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button>
+    </header>
+    {loading && !items.length ? <div className="v1-inline-loading" role="status"><span /> Opening your Wishlist</div>
+      : !items.length ? <EmptyState title="Your Wishlist is ready" copy="Tap the heart on a product or Restaurant/Cafe item to save it here." />
+        : <>
+          {retail.length ? <section className="v1-saved-group"><header><h2>Retail essentials</h2><span>{retail.length}</span></header><div className="v1-saved-list">
+            {retail.map(({ saved, sku }) => <article key={saved.itemId}>
+              <ProductImage src={catalogueImageUrl(supabaseUrl, sku.imageKey ?? null)} alt="" />
+              <div><small>{sku.brand?.name?.toUpperCase() ?? "DASTAK CATALOGUE"}</small><strong>{sku.name}</strong><span>{[sku.variant, sku.packSize].filter(Boolean).join(" · ")}</span><b>{formatV1Price(sku.sellingPricePaise)}</b></div>
+              <div className="v1-saved-actions"><button type="button" disabled={updatingIds.has(sku.id)} onClick={() => onRemove("RETAIL_SKU", sku.id)} aria-label={`Remove ${sku.name} from Wishlist`}><Heart size={18} fill="currentColor" /></button><button type="button" onClick={() => onAdd(sku)}><Plus size={17} /> Add</button></div>
+            </article>)}
+          </div></section> : null}
+          {food.length ? <section className="v1-saved-group"><header><h2>Restaurant &amp; Cafe</h2><span>{food.length}</span></header><div className="v1-saved-list">
+            {food.map(({ saved, restaurant, item }) => <article key={saved.itemId}>
+              <ProductImage src={catalogueImageUrl(supabaseUrl, item.imageKey ?? null)} alt="" />
+              <div><small>{restaurant.restaurant.name.toUpperCase()}</small><strong>{item.name}</strong><span>{restaurant.restaurant.branchName}</span><b>{formatV1Price(item.basePricePaise)}</b></div>
+              <div className="v1-saved-actions"><button type="button" disabled={updatingIds.has(item.id)} onClick={() => onRemove("MENU_ITEM", item.id)} aria-label={`Remove ${item.name} from Wishlist`}><Heart size={18} fill="currentColor" /></button><button type="button" onClick={() => item.optionGroups.length ? onChooseFood(restaurant) : onAddFood(restaurant, item, [])}>{item.optionGroups.length ? "Choose" : <><Plus size={17} /> Add</>}</button></div>
+            </article>)}
+          </div></section> : null}
+          {unresolved > 0 ? <div className="v1-unavailable-note"><PackageX size={18} /><span>{unresolved} saved {unresolved === 1 ? "item is" : "items are"} not available in your current area.</span></div> : null}
+        </>}
+  </section>;
+}
+
+function PaymentsSection({ orders, loading, onRefresh, onOpen }: {
+  orders: V1Order[];
+  loading: boolean;
+  onRefresh: () => void;
+  onOpen: (order: V1Order) => void;
+}) {
+  const paid = orders.filter((order) => Boolean(order.paidAt));
+  return <section className="v1-payments-page">
+    <header className="v1-feature-header">
+      <div><p>PAYMENTS</p><h1>Secure at checkout</h1><span>Payment opens only after every required item in your basket is secured.</span></div>
+      <button type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button>
+    </header>
+    <section className="v1-payment-security"><LockKeyhole size={26} /><div><strong>Razorpay-secured checkout</strong><span>Dastak never stores your card number, UPI PIN or bank credentials. Available methods are selected securely for each payment.</span></div></section>
+    <section className="v1-payment-methods"><header><h2>Ways to pay</h2><span>AT CHECKOUT</span></header>
+      <div><PaymentMethod label="UPI apps & UPI ID" icon={<ArrowRight />} /><PaymentMethod label="Credit & debit cards" icon={<CreditCard />} /><PaymentMethod label="Net banking" icon={<ReceiptText />} /><PaymentMethod label="Supported wallets / Pay Later" icon={<WalletCards />} /></div>
+      <p>Availability depends on Razorpay, your bank and your account at payment time.</p>
+    </section>
+    <section className="v1-payment-activity"><header><h2>Recent payment activity</h2><span>{paid.length}</span></header>
+      {loading && !paid.length ? <div className="v1-inline-loading" role="status"><span /> Loading payments</div>
+        : !paid.length ? <EmptyState title="No confirmed payments yet" copy="Paid orders will appear here with their immutable total." />
+          : <div>{paid.slice(0, 20).map((order) => <button type="button" key={order.id} onClick={() => onOpen(order)}><span className="v1-payment-status"><ShieldCheck size={18} /></span><span><strong>{order.displayOrderNumber}</strong><small>{order.paidAt ? formatOrderDate(order.paidAt) : "Confirmed"}</small></span><b>{formatV1Price(order.price.totalPaise)}</b><ChevronRight size={17} /></button>)}</div>}
+    </section>
+  </section>;
+}
+
+function PaymentMethod({ label, icon }: { label: string; icon: React.ReactNode }) {
+  return <div><span>{icon}</span><strong>{label}</strong><small>AT CHECKOUT</small></div>;
+}
+
 type OrderScope = "active" | "past" | "all";
 
 export function OrdersSection({
-  orders, loading, loadingMore, canLoadMore, error, onRefresh, onLoadMore, onOpen,
+  orders, loading, loadingMore, canLoadMore, error, imageUrlForLine,
+  onRefresh, onLoadMore, onOpen, onReorder,
 }: {
   orders: V1Order[];
   loading: boolean;
   loadingMore: boolean;
   canLoadMore: boolean;
   error?: string;
+  imageUrlForLine: (line: V1Order["lines"][number]) => string | null;
   onRefresh: () => void;
   onLoadMore: () => void;
   onOpen: (order: V1Order) => void;
+  onReorder: (order: V1Order) => void;
 }) {
-  const [scope, setScope] = useState<OrderScope>("active");
+  const [scope, setScope] = useState<OrderScope>("all");
+  const [orderQuery, setOrderQuery] = useState("");
+  const normalizedQuery = orderQuery.trim().toLowerCase();
   const visible = useMemo(() => orders.filter((order) =>
-    scope === "all" || (scope === "active") === isV1OrderActive(order.status)
-  ), [orders, scope]);
+    (scope === "all" || (scope === "active") === isV1OrderActive(order.status)) &&
+    (!normalizedQuery || orderSearchText(order).includes(normalizedQuery))
+  ), [normalizedQuery, orders, scope]);
   const activeCount = useMemo(
     () => orders.reduce((count, order) => count + Number(isV1OrderActive(order.status)), 0),
     [orders],
@@ -749,23 +1024,33 @@ export function OrdersSection({
   const pastCount = orders.length - activeCount;
 
   return <section className="v1-orders-page">
-    <header className="v1-orders-header"><div><p>YOUR ORDERS</p><h1>Every Dastak,<br />in one place.</h1><span>Follow the complete journey—from securing every item to verified delivery.</span></div><button className="v1-orders-refresh" type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button></header>
-    <div className="v1-orders-overview" aria-label={`${activeCount} active and ${pastCount} past orders`}>
-      <span><b>{activeCount}</b> active</span><span><b>{pastCount}</b> past</span><em><i /> Live updates</em>
-    </div>
+    <header className="v1-orders-header"><div><p>YOUR ORDERS</p><h1>Orders &amp; receipts</h1><span>Track ongoing deliveries, find past products and reorder what is still available.</span></div><button className="v1-orders-refresh" type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button></header>
+    <form className="v1-order-search" role="search" onSubmit={(event) => event.preventDefault()}>
+      <Search size={19} />
+      <input value={orderQuery} onChange={(event) => setOrderQuery(event.target.value)} placeholder="Search products or order number" aria-label="Search your orders" />
+      {orderQuery ? <button type="button" onClick={() => setOrderQuery("")} aria-label="Clear order search"><X size={17} /></button> : null}
+    </form>
     <div className="v1-order-scopes" role="group" aria-label="Filter orders">
-      {(["active", "past", "all"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => setScope(value)}><span>{value[0].toUpperCase() + value.slice(1)}</span><small>{value === "active" ? activeCount : value === "past" ? pastCount : orders.length}</small></button>)}
+      {(["all", "active", "past"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => setScope(value)}><span>{value === "active" ? "Ongoing" : value[0].toUpperCase() + value.slice(1)}</span><small>{value === "active" ? activeCount : value === "past" ? pastCount : orders.length}</small></button>)}
     </div>
     {error ? <div className="v1-orders-error" role="alert"><CircleAlert size={18} /><span>{error}</span><button type="button" onClick={onRefresh}>Try again</button></div> : null}
-    {loading && orders.length === 0 ? <div className="v1-orders-loading" role="status"><span /> Loading your orders</div> : visible.length ? <div className="v1-order-list">{visible.map((order, index) => {
+    {loading && orders.length === 0 ? <div className="v1-orders-loading" role="status"><span /> Loading your orders</div> : visible.length ? <div className="v1-order-list">{visible.map((order) => {
       const active = isV1OrderActive(order.status);
-      const featured = active && index === 0;
-      return <button className={featured ? "featured" : undefined} type="button" key={order.id} onClick={() => onOpen(order)} aria-label={`Open ${order.displayOrderNumber}, ${statusTitle(order.status)}`}>
-        <span className={`v1-order-icon ${active ? "active" : "terminal"}`}><OrderStatusIcon status={order.status} size={featured ? 24 : 21} /></span>
-        <span className="v1-order-card-copy"><small className="v1-order-kicker">{featured ? "LIVE JOURNEY · " : ""}{order.restaurant?.name ?? orderKindLabel(order.orderType)}</small><strong>{statusTitle(order.status)}</strong><small>{order.lines.length} {order.lines.length === 1 ? "item" : "items"} · {order.displayOrderNumber}</small><time dateTime={order.submittedAt ?? order.createdAt}>{formatOrderDate(order.submittedAt ?? order.createdAt)}</time>{orderJourneyStep(order.status) !== undefined ? <OrderJourneyProgress status={order.status} compact /> : null}</span>
-        <span className="v1-order-card-trailing"><b>{formatV1Price(order.price.totalPaise)}</b><small>{active ? "View live order" : "View details"}</small></span><ChevronRight size={18} />
-      </button>;
-    })}</div> : <EmptyState title={scope === "active" ? "Nothing active" : scope === "past" ? "No past orders" : "No Dastak orders yet"} copy={scope === "active" ? "New and ongoing orders stay here until complete." : "Completed, cancelled and unavailable orders will appear here."} />}
+      const duration = deliveredDurationLabel(order);
+      const itemCount = orderItemCount(order);
+      const productNames = order.lines.slice(0, 2).map((line) => line.name).join(" · ");
+      return <article className={`v1-commerce-order-card ${active ? "active" : ""}`} key={order.id}>
+        <button className="v1-order-card-main" type="button" onClick={() => onOpen(order)} aria-label={`Open ${order.displayOrderNumber}, ${statusTitle(order.status)}`}>
+          <span className={`v1-order-icon ${active ? "active" : "terminal"}`}><OrderStatusIcon status={order.status} size={21} /></span>
+          <span className="v1-order-card-copy"><strong>{duration ?? statusTitle(order.status)}</strong><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)}</small></span>
+          <span className="v1-order-card-trailing"><b>{formatV1Price(order.price.totalPaise)}</b><ChevronRight size={18} /></span>
+          <span className="v1-order-thumbnails">{order.lines.slice(0, 4).map((line) => <ProductImage key={line.id} src={imageUrlForLine(line)} alt="" />)}{order.lines.length > 4 ? <i>+{order.lines.length - 4}</i> : null}</span>
+          <span className="v1-order-products"><b>{productNames}{order.lines.length > 2 ? ` + ${order.lines.length - 2} more` : ""}</b><small>{itemCount} {itemCount === 1 ? "item" : "items"} · {order.displayOrderNumber}</small><time dateTime={order.submittedAt ?? order.createdAt}>{formatOrderDate(order.submittedAt ?? order.createdAt)}</time></span>
+          {active ? <OrderJourneyProgress status={order.status} compact /> : null}
+        </button>
+        <footer>{canReorderV1Order(order.status) ? <button type="button" onClick={() => onReorder(order)}><RotateCcw size={16} /> Order again</button> : null}<button type="button" onClick={() => onOpen(order)}>{active ? "Track order" : "Details"}<ChevronRight size={16} /></button></footer>
+      </article>;
+    })}</div> : <EmptyState title={normalizedQuery ? "No matching orders" : scope === "active" ? "Nothing ongoing" : scope === "past" ? "No past orders" : "No Dastak orders yet"} copy={normalizedQuery ? "Try another product name or order number." : "Orders appear here from matching through verified delivery."} />}
     {canLoadMore ? <button className="secondary-button v1-load-more" type="button" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading earlier orders…" : "Load earlier orders"}</button> : null}
   </section>;
 }
@@ -784,16 +1069,18 @@ function OrderJourneyProgress({ status, compact = false }: {
 
 export function MatchingSheet({
   order, busy, error, liveError, paymentMessage, onDismiss, onCancel, onPay,
-  onRefresh, onReportIssue,
+  imageUrlForLine, onRefresh, onReportIssue, onReorder,
 }: {
   order: V1Order;
   busy: boolean;
   error?: string;
   liveError?: string;
   paymentMessage?: string;
+  imageUrlForLine: (line: V1Order["lines"][number]) => string | null;
   onDismiss: () => void;
   onCancel: () => void;
   onPay: () => void;
+  onReorder: () => void;
   onRefresh: () => void;
   onReportIssue: (input: {
     category: string; description: string; orderLineId?: string; evidenceFile?: File;
@@ -847,17 +1134,19 @@ export function MatchingSheet({
 
   return <div className="v1-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-matching-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-order-status-title">
     <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">Order status</h2><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)} · {formatOrderDate(order.submittedAt ?? order.createdAt)}</small></div><button type="button" onClick={onDismiss} aria-label="Close order status"><X size={19} /></button></header>
-    <div className={`v1-status-hero ${isFailureStatus(order.status) ? "failure" : ""}`}><span className={matching ? "matching" : ""}>{matching ? <i /> : <OrderStatusIcon status={order.status} size={34} />}</span><div><small>{orderKindLabel(order.orderType)}</small><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p></div><OrderJourneyProgress status={order.status} /><small className="v1-order-assurance"><ShieldCheck size={16} /> {statusAssurance(order.status)}</small></div>
+    <div className={`v1-status-hero ${isFailureStatus(order.status) ? "failure" : ""}`}><span className={matching ? "matching" : ""}>{matching ? <i /> : <OrderStatusIcon status={order.status} size={25} />}</span><div><h3>{deliveredDurationLabel(order) ?? statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p></div><strong>{formatV1Price(order.price.totalPaise)}</strong>{isV1OrderActive(order.status) ? <OrderJourneyProgress status={order.status} /> : null}<small className="v1-order-assurance"><ShieldCheck size={16} /> {statusAssurance(order.status)}</small></div>
 
     {(order.status === "PAID" || order.status === "PREPARING") && readyAt ? <section className={`v1-order-eta ${runningLate ? "late" : ""}`} aria-label="Preparation estimate"><ClockAlert size={21} /><span><strong>{runningLate ? "Taking a little longer" : "Preparation estimate"}</strong><small>{runningLate ? "Your order stays in preparation until it is genuinely ready." : `Expected around ${formatOrderTime(readyAt)}`}</small></span><b>{runningLate ? "We’re watching" : relativeTime(readyAt, now)}</b></section> : null}
 
     {mapPoints.length ? <section className="v1-live-delivery"><header><div><p><i /> LIVE DELIVERY</p><h3>{order.delivery?.riderLocation ? "Your rider is on the way" : "Waiting for a fresh rider location"}</h3></div>{order.delivery?.distanceToDestinationMeters !== undefined ? <strong>{formatDistance(order.delivery.distanceToDestinationMeters)} away</strong> : null}</header><CustomerRouteMap points={mapPoints} />{order.delivery?.riderLocationUpdatedAt ? <small aria-live="polite">Location updated {relativeTime(order.delivery.riderLocationUpdatedAt, now)}</small> : null}</section> : null}
 
+    <section className="v1-order-contents" aria-label="Order items"><header><div><p>ITEMS IN THIS ORDER</p><h3>{orderItemCount(order)} {orderItemCount(order) === 1 ? "item" : "items"}</h3>{order.restaurant ? <small>{order.restaurant.name} · {order.restaurant.branchName}</small> : null}</div></header><div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><ProductImage src={imageUrlForLine(line)} alt="" /><span><b>{line.name}</b>{orderLineDetail(line) ? <small>{orderLineDetail(line)}</small> : null}<small>{line.quantity} × {formatV1Price(line.unitPricePaise)}</small></span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}</div></section>
+
     {order.deliveryAddress ? <section className="v1-order-destination"><div><MapPin size={20} /><span><small>{order.deliveryAddress.label ?? "DELIVERY ADDRESS"}</small><strong>{orderAddress(order)}</strong></span></div>{order.recipient ? <div><UserRound size={20} /><span><small>RECIPIENT</small><strong>{order.recipient.name} · {order.recipient.phoneNumber}</strong></span></div> : null}{order.deliveryAddress.instructions ? <p><strong>Delivery note</strong>{order.deliveryAddress.instructions}</p> : null}</section> : null}
 
-    <section className="v1-order-contents" aria-label="Order items"><header><div><p>{orderKindLabel(order.orderType)}</p><h3>{order.restaurant?.name ?? "Your basket"}</h3>{order.restaurant?.branchName ? <small>{order.restaurant.branchName}</small> : null}</div><span>{order.lines.length} {order.lines.length === 1 ? "item" : "items"}</span></header><div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><span><b>{line.quantity}× {line.name}</b>{orderLineDetail(line) ? <small>{orderLineDetail(line)}</small> : null}</span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}</div></section>
+    <section className="v1-order-receipt" aria-label="Bill summary"><header><h3><ReceiptText size={19} /> Bill summary</h3><button type="button" onClick={() => downloadReceipt(order)}><Download size={16} /> Download receipt</button></header><ReceiptRow label="Items" amount={order.price.subtotalPaise} />{order.price.deliveryFeePaise ? <ReceiptRow label="Delivery" amount={order.price.deliveryFeePaise} /> : null}{order.price.platformFeePaise ? <ReceiptRow label="Dastak platform fee" amount={order.price.platformFeePaise} /> : null}{order.price.taxPaise ? <ReceiptRow label="Taxes" amount={order.price.taxPaise} /> : null}{order.price.discountPaise ? <ReceiptRow label="Discount" amount={-order.price.discountPaise} /> : null}<ReceiptRow label={order.paidAt ? "Total paid" : "Order total"} amount={order.price.totalPaise} total /></section>
 
-    <section className="v1-order-receipt" aria-label="Receipt"><h3>Receipt</h3><ReceiptRow label="Items" amount={order.price.subtotalPaise} />{order.price.deliveryFeePaise ? <ReceiptRow label="Delivery" amount={order.price.deliveryFeePaise} /> : null}{order.price.taxPaise ? <ReceiptRow label="Taxes" amount={order.price.taxPaise} /> : null}{order.price.discountPaise ? <ReceiptRow label="Discount" amount={-order.price.discountPaise} /> : null}<ReceiptRow label={order.paidAt ? "Total paid" : "Order total"} amount={order.price.totalPaise} total /></section>
+    <section className="v1-order-facts" aria-label="Order details"><h3>Order details</h3><div><span><small>ORDER NUMBER</small><strong>{order.displayOrderNumber}</strong></span><button type="button" onClick={() => void copyText(order.displayOrderNumber)} aria-label={`Copy order number ${order.displayOrderNumber}`}><Copy size={16} /> Copy</button></div><div><span><small>PAYMENT</small><strong>{order.paidAt ? "Paid online via Razorpay" : "Not yet confirmed"}</strong></span></div><div><span><small>ORDER PLACED</small><strong>{formatOrderDate(order.submittedAt ?? order.createdAt)}</strong></span></div>{order.paidAt ? <div><span><small>PAYMENT CONFIRMED</small><strong>{formatOrderDate(order.paidAt)}</strong></span></div> : null}{order.deliveredAt ?? order.delivery?.deliveredAt ? <div><span><small>DELIVERED</small><strong>{formatOrderDate(order.deliveredAt ?? order.delivery!.deliveredAt!)}</strong></span></div> : null}</section>
 
     <CustomerTimeline items={[
       { label: "Order placed", value: order.submittedAt ?? order.createdAt },
@@ -907,16 +1196,45 @@ export function MatchingSheet({
       <label className="v1-photo-field"><span>Evidence photo {evidenceRequired ? "(required)" : "(optional)"}</span><input type="file" required={evidenceRequired} accept="image/jpeg,image/png,image/heic" capture="environment" onChange={(event) => setIssueEvidence(event.target.files?.[0])} /><small>{issueEvidence?.name ?? "JPG, PNG or HEIC up to 10 MB"}</small></label>
       <div><button className="secondary-button" type="button" disabled={busy} onClick={() => setReportingIssue(false)}>Back</button><button className="primary-button" type="submit" disabled={busy || issueDescription.trim().length < 3 || (evidenceRequired && !issueEvidence)}>{busy ? "Sending…" : "Send to support"}</button></div>
     </form> : order.support?.canReportIssue ? <button className="secondary-button v1-secondary-action" type="button" disabled={busy} onClick={() => setReportingIssue(true)}><CircleAlert size={17} /> Get help with this order</button> : null}
+    <a className="v1-support-link" href="/support"><span><strong>Contact Dastak support</strong><small>Account, payment or delivery help</small></span><ChevronRight size={17} /></a>
     {paymentMessage ? <p className="v1-payment-message" role="status">{paymentMessage}</p> : null}
     {liveError ? <div className="v1-live-error" role="status"><CircleAlert size={17} /><span>Live updates paused: {liveError}</span><button type="button" onClick={onRefresh}>Refresh now</button></div> : null}
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {paymentReady ? <button className="primary-button v1-pay" type="button" disabled={busy} onClick={onPay}>{busy ? "Opening secure payment…" : `Pay ${formatV1Price(order.payment?.amountPaise ?? order.price.totalPaise)}`}<ArrowRight size={18} /></button> : null}
     {cancellableStatuses.has(order.status) ? confirmingCancellation ? <div className="v1-cancel-confirm" role="alert"><strong>Cancel this order?</strong><p>Reserved items will be released. This action is available only before payment.</p><div><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmingCancellation(false)}>Keep order</button><button className="danger-button" type="button" disabled={busy} onClick={onCancel}>{busy ? "Cancelling…" : "Cancel order"}</button></div></div> : <button className="v1-cancel" type="button" disabled={busy} onClick={() => setConfirmingCancellation(true)}>Cancel before payment</button> : null}
+    {canReorderV1Order(order.status) ? <button className="primary-button v1-reorder" type="button" disabled={busy} onClick={onReorder}><RotateCcw size={17} /> Order again</button> : null}
   </section></div>;
 }
 
 function EmptyState({ title, copy }: { title: string; copy: string }) {
   return <div className="v1-empty"><ShoppingBag size={30} /><strong>{title}</strong><span>{copy}</span></div>;
+}
+
+function ProductImage({ src, alt, className }: {
+  src: string | null;
+  alt: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [src]);
+  return <span className={`v1-catalogue-image ${className ?? ""}`}>
+    {src && !failed
+      ? <img src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} />
+      : <ShoppingBag size={24} aria-hidden="true" />}
+  </span>;
+}
+
+function BasketReplacementDialog({ busy, onDismiss, onConfirm }: {
+  busy: boolean;
+  onDismiss: () => void;
+  onConfirm: () => void;
+}) {
+  const dialog = useModalDialog<HTMLElement>({ busy, onDismiss });
+  return <div className="v1-overlay v1-confirm-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="replace-basket-title">
+    <header><div><p>ORDER AGAIN</p><h2 id="replace-basket-title">Replace your current basket?</h2></div><button type="button" onClick={onDismiss} aria-label="Keep current basket"><X size={19} /></button></header>
+    <p>Items already in your basket will be replaced. You can review current availability and prices before submitting.</p>
+    <div><button className="secondary-button" type="button" disabled={busy} onClick={onDismiss}>Keep current basket</button><button className="primary-button" type="button" disabled={busy} onClick={onConfirm}>Replace and reorder</button></div>
+  </section></div>;
 }
 
 function OrderStatusIcon({ status, size }: { status: V1Order["status"]; size: number }) {
@@ -932,6 +1250,51 @@ function ReceiptRow({ label, amount, total = false }: {
   label: string; amount: number; total?: boolean;
 }) {
   return <div className={total ? "total" : ""}><span>{label}</span><strong>{formatV1Price(amount)}</strong></div>;
+}
+
+function receiptText(order: V1Order) {
+  const lines = [
+    "Dastak receipt",
+    `Order ${order.displayOrderNumber}`,
+    "",
+    ...order.lines.map((line) => `${line.quantity} × ${line.name} — ${formatV1Price(line.lineTotalPaise)}`),
+    "",
+    `Items: ${formatV1Price(order.price.subtotalPaise)}`,
+    `Delivery: ${formatV1Price(order.price.deliveryFeePaise)}`,
+    `Dastak platform fee: ${formatV1Price(order.price.platformFeePaise)}`,
+    `Taxes: ${formatV1Price(order.price.taxPaise)}`,
+  ];
+  if (order.price.discountPaise) lines.push(`Discount: −${formatV1Price(order.price.discountPaise)}`);
+  lines.push(`Total: ${formatV1Price(order.price.totalPaise)}`);
+  if (order.paidAt) lines.push(`Paid online via Razorpay: ${formatOrderDate(order.paidAt)}`);
+  if (order.deliveryAddress) lines.push(`Delivered to: ${orderAddress(order)}`);
+  return lines.join("\n");
+}
+
+function downloadReceipt(order: V1Order) {
+  const url = URL.createObjectURL(new Blob([receiptText(order)], { type: "text/plain;charset=utf-8" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `Dastak-${order.displayOrderNumber}-receipt.txt`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const field = document.createElement("textarea");
+  field.value = value;
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.append(field);
+  field.select();
+  document.execCommand("copy");
+  field.remove();
 }
 
 function isFailureStatus(status: V1Order["status"]) {

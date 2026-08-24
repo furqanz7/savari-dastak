@@ -242,6 +242,7 @@ final class DastakRootModel: ObservableObject {
 
 private struct DastakCustomerPartnerRoot: View {
     @StateObject private var model: DastakRootModel
+    @State private var showingMerchantApplication = false
     private let services: MarketplaceAuthenticatedServices
 
     init(services: MarketplaceAuthenticatedServices) {
@@ -261,6 +262,11 @@ private struct DastakCustomerPartnerRoot: View {
             .task {
                 guard !model.hasLoadedPartnerAccess else { return }
                 await model.refreshPartnerAccess()
+            }
+            .sheet(isPresented: $showingMerchantApplication) {
+                DastakMerchantAccessView(route: .accessDenied, services: services)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
     }
 
@@ -303,6 +309,9 @@ private struct DastakCustomerPartnerRoot: View {
                 },
                 deliveryPartnerAccess: model.rootState.deliveryPartnerAccess,
                 isDeliveryPartnerAccessLoading: !model.hasLoadedPartnerAccess || model.isRefreshing,
+                becomeMerchant: {
+                    showingMerchantApplication = true
+                },
                 becomeDeliveryPartner: {
                     Task { await model.openDeliveryPartner() }
                 }

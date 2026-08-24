@@ -59,15 +59,24 @@ struct DastakRefreshNotice: View {
 struct DastakProductArtwork: View {
     private let kind: CatalogueKind?
     private let customSymbol: String?
+    private let imageKey: String?
 
     init(kind: CatalogueKind) {
         self.kind = kind
         customSymbol = nil
+        imageKey = nil
     }
 
     init(symbol: String) {
         kind = nil
         customSymbol = symbol
+        imageKey = nil
+    }
+
+    init(imageKey: String?, fallbackSymbol: String = "basket") {
+        kind = nil
+        customSymbol = fallbackSymbol
+        self.imageKey = imageKey
     }
 
     @Environment(\.colorScheme) private var colorScheme
@@ -75,9 +84,20 @@ struct DastakProductArtwork: View {
     var body: some View {
         ZStack {
             MarketplaceColors.accent(for: colorScheme).opacity(0.08)
-            Image(systemName: symbol)
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
+            if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    if let image = phase.image {
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .padding(6)
+                    } else {
+                        fallback
+                    }
+                }
+            } else {
+                fallback
+            }
         }
         .aspectRatio(1.18, contentMode: .fit)
         .clipShape(
@@ -87,6 +107,28 @@ struct DastakProductArtwork: View {
             )
         )
         .accessibilityHidden(true)
+    }
+
+    private var fallback: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 30, weight: .light))
+            .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
+    }
+
+    private var imageURL: URL? {
+        guard let imageKey,
+              let base = Bundle.main.object(forInfoDictionaryKey: "MarketplaceSupabaseURL") as? String
+        else { return nil }
+        let segments = imageKey.split(separator: "/", omittingEmptySubsequences: false)
+        guard !segments.isEmpty,
+              segments.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\\") })
+        else { return nil }
+        let encoded = segments.compactMap {
+            String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        }
+        guard encoded.count == segments.count else { return nil }
+        return URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) +
+            "/storage/v1/object/public/dastak-catalogue/" + encoded.joined(separator: "/"))
     }
 
     private var symbol: String {

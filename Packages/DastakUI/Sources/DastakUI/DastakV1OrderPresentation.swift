@@ -135,6 +135,41 @@ enum DastakV1OrderPresentation {
             .joined(separator: " · ")
             .nilIfEmpty
     }
+
+    static func itemCount(_ order: DastakV1OrderSnapshot) -> Int {
+        order.lines.reduce(0) { $0 + $1.quantity }
+    }
+
+    static func canReorder(_ status: DastakV1OrderStatus) -> Bool {
+        [.delivered, .unavailable, .paymentExpired, .cancelledPrepayment].contains(status)
+    }
+
+    static func deliveredDuration(_ order: DastakV1OrderSnapshot) -> String? {
+        guard let started = date(order.submittedAt ?? order.createdAt),
+              let finished = date(order.deliveredAt ?? order.delivery?.deliveredAt)
+        else { return nil }
+        let minutes = max(1, Int((finished.timeIntervalSince(started) / 60.0).rounded()))
+        if minutes < 60 { return "Delivered in \(minutes) min" }
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        return remainder == 0
+            ? "Delivered in \(hours) hr"
+            : "Delivered in \(hours) hr \(remainder) min"
+    }
+
+    static func searchText(_ order: DastakV1OrderSnapshot) -> String {
+        [
+            order.displayOrderNumber,
+            order.restaurant?.name,
+            order.restaurant?.branchName,
+            order.recipient?.name,
+            order.deliveryAddress.map(addressLine),
+            order.lines.map(\.name).joined(separator: " "),
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
+        .lowercased()
+    }
 }
 
 private extension String {

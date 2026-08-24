@@ -20,6 +20,7 @@ struct DastakAccountView: View {
         }
     }
 
+    @ObservedObject var customerModel: DastakCustomerModel
     let customer: MarketplaceCheckoutCustomer?
     let location: DastakDeliveryLocation?
     let savedAddressCount: Int
@@ -35,6 +36,7 @@ struct DastakAccountView: View {
     let isDeliveryPartnerAccessLoading: Bool
     let chooseLocation: () -> Void
     let openOrders: () -> Void
+    let becomeMerchant: () -> Void
     let becomeDeliveryPartner: () -> Void
     let retryAccount: () -> Void
     let refreshIdentities: () -> Void
@@ -61,6 +63,7 @@ struct DastakAccountView: View {
                     DastakRefreshNotice(failure: refreshFailure, action: retryAccount)
                 }
                 deliverySection
+                commerceSection
                 preferencesSection
                 identitySection
                 accountActions
@@ -265,6 +268,46 @@ struct DastakAccountView: View {
             .buttonStyle(.plain)
             .dastakAccountSurface()
             .accessibilityHint(location == nil ? "Add a saved delivery address" : "Manage your saved delivery addresses")
+        }
+    }
+
+    private var commerceSection: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            accountSectionHeader("Shopping", detail: "Saved items, payments and order history")
+            VStack(spacing: 0) {
+                NavigationLink {
+                    DastakWishlistView(model: customerModel)
+                } label: {
+                    accountRow(
+                        title: "Wishlist",
+                        value: customerModel.wishlistItems.isEmpty
+                            ? "Save products and Restaurant/Cafe items"
+                            : "\(customerModel.wishlistItems.count) saved \(customerModel.wishlistItems.count == 1 ? "item" : "items")",
+                        symbol: "heart"
+                    )
+                }
+                Divider().padding(.leading, 64)
+                NavigationLink {
+                    DastakPaymentSettingsView(model: customerModel)
+                } label: {
+                    accountRow(
+                        title: "Payments",
+                        value: "Secure methods and confirmed payment history",
+                        symbol: "creditcard"
+                    )
+                }
+                Divider().padding(.leading, 64)
+                Button(action: openOrders) {
+                    accountRow(
+                        title: "Orders and receipts",
+                        value: "Track, reorder, download receipts and get help",
+                        symbol: "clock.arrow.circlepath"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .dastakAccountSurface()
         }
     }
 
@@ -514,7 +557,39 @@ struct DastakAccountView: View {
     }
 
     private var partnerOpportunity: some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                accountSectionHeader(
+                    "Sell on Dastak",
+                    detail: "Bring your Restaurant/Cafe or retail operation to Dastak"
+                )
+                Button(action: becomeMerchant) {
+                    HStack(spacing: MarketplaceSpacing.compact) {
+                        accountIcon("storefront.fill")
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Become a Dastak Merchant")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Text("Apply, manage your business details and follow review status in the Merchant workspace.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "arrow.up.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    }
+                    .padding(18)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .dastakAccountSurface(accented: true)
+                .accessibilityHint("Open the Merchant application")
+            }
+
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(partnerPresentation.sectionTitle)
@@ -570,6 +645,7 @@ struct DastakAccountView: View {
             .dastakAccountSurface(accented: true)
             .accessibilityLabel(partnerPresentation.title)
             .accessibilityHint(partnerPresentation.detail)
+            }
         }
     }
 

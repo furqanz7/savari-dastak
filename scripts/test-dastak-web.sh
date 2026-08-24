@@ -27,5 +27,6 @@ for variant in dastak-customer dastak-delivery dastak-merchant dastak-admin; do
   VITE_DASTAK_SUPPORT_URL=https://example.test/support \
   VITE_DASTAK_WEB_PUSH_PUBLIC_KEY=BNVx8M9WlK9nyJ8y8Q0XxPRm8sZ7CsYdlHBJtxMxoEQ8QXyzzYEbUnmdlsfKZQ1r6OUKo6IdHtVFwSXvbpC2ZIc \
   VITE_DASTAK_DELIVERY_URL=https://delivery.example.test \
+  VITE_DASTAK_MERCHANT_URL=https://merchant.example.test \
   npm run build
 done

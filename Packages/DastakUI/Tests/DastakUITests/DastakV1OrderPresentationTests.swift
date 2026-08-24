@@ -84,4 +84,35 @@ final class DastakV1OrderPresentationTests: XCTestCase {
         XCTAssertEqual(DastakV1OrderPresentation.optionSummary(line), "Large")
         XCTAssertTrue(DastakV1OrderPresentation.addressLine(address).contains("Vaniyambadi"))
     }
+
+    func testOrderHistorySupportsSearchDeliveryDurationAndReorderEligibility() throws {
+        let order = try JSONDecoder().decode(
+            DastakV1OrderSnapshot.self,
+            from: Data(
+                """
+                {
+                  "id":"11111111-1111-4111-8111-111111111111",
+                  "displayOrderNumber":"DV1-0042","orderType":"RETAIL_ONLY",
+                  "status":"DELIVERED","version":4,
+                  "price":{"snapshotKind":"FINAL_PAYABLE","subtotalPaise":10000,
+                    "deliveryFeePaise":0,"platformFeePaise":200,"discountPaise":0,
+                    "taxPaise":0,"totalPaise":10200,"currencyCode":"INR"},
+                  "lines":[{"id":"22222222-2222-4222-8222-222222222222",
+                    "lineType":"RETAIL_SKU","skuId":"33333333-3333-4333-8333-333333333333",
+                    "name":"Filter Coffee","packSize":"250 g","quantity":2,
+                    "unitPricePaise":5000,"lineTotalPaise":10000,"status":"DELIVERED"}],
+                  "submittedAt":"2026-08-24T09:00:00Z",
+                  "deliveredAt":"2026-08-24T09:21:00Z",
+                  "createdAt":"2026-08-24T09:00:00Z","updatedAt":"2026-08-24T09:21:00Z"
+                }
+                """.utf8
+            )
+        )
+
+        XCTAssertEqual(DastakV1OrderPresentation.deliveredDuration(order), "Delivered in 21 min")
+        XCTAssertEqual(DastakV1OrderPresentation.itemCount(order), 2)
+        XCTAssertTrue(DastakV1OrderPresentation.searchText(order).contains("filter coffee"))
+        XCTAssertTrue(DastakV1OrderPresentation.canReorder(.delivered))
+        XCTAssertFalse(DastakV1OrderPresentation.canReorder(.preparing))
+    }
 }

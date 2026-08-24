@@ -96,6 +96,24 @@ struct DastakSearchView: View {
 
             Spacer(minLength: 4)
 
+            Button {
+                Task { await model.toggleWishlist(kind: .retailSKU, itemID: product.id) }
+            } label: {
+                Image(systemName: model.isWishlisted(kind: .retailSKU, itemID: product.id) ? "heart.fill" : "heart")
+                    .frame(
+                        width: MarketplaceMetrics.minimumTouchTarget,
+                        height: MarketplaceMetrics.minimumTouchTarget
+                    )
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            .disabled(model.wishlistUpdatingIDs.contains(product.id))
+            .accessibilityLabel(
+                model.isWishlisted(kind: .retailSKU, itemID: product.id)
+                    ? "Remove \(product.name) from Wishlist"
+                    : "Save \(product.name) to Wishlist"
+            )
+
             Button { model.addToCart(product) } label: {
                 Image(systemName: "plus")
                     .frame(

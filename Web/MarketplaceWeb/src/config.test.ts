@@ -11,6 +11,7 @@ const customerEnvironment = {
   VITE_DASTAK_SUPPORT_URL: "https://dastak.example/support",
   VITE_DASTAK_WEB_PUSH_PUBLIC_KEY: "BNVx8M9WlK9nyJ8y8Q0XxPRm8sZ7CsYdlHBJtxMxoEQ8QXyzzYEbUnmdlsfKZQ1r6OUKo6IdHtVFwSXvbpC2ZIc",
   VITE_DASTAK_DELIVERY_URL: "https://delivery.dastak.example",
+  VITE_DASTAK_MERCHANT_URL: "https://merchant.dastak.example",
 };
 
 describe("readAppConfig", () => {
@@ -47,6 +48,7 @@ describe("readAppConfig", () => {
       },
       webPushPublicKey: customerEnvironment.VITE_DASTAK_WEB_PUSH_PUBLIC_KEY,
       deliveryPartnerUrl: "https://delivery.dastak.example/",
+      merchantUrl: "https://merchant.dastak.example/",
     });
     expect(() => readAppConfig({ ...customerEnvironment, VITE_DASTAK_PRIVACY_URL: undefined }))
       .toThrow(/PRIVACY/);
@@ -56,6 +58,8 @@ describe("readAppConfig", () => {
       .toThrow(/SUPPORT/);
     expect(() => readAppConfig({ ...customerEnvironment, VITE_DASTAK_DELIVERY_URL: undefined }))
       .toThrow(/DELIVERY/);
+    expect(() => readAppConfig({ ...customerEnvironment, VITE_DASTAK_MERCHANT_URL: undefined }))
+      .toThrow(/MERCHANT/);
   });
 });
 

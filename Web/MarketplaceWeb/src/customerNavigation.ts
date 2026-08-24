@@ -1,4 +1,4 @@
-export type CustomerSection = "home" | "search" | "orders" | "account" | "parcel";
+export type CustomerSection = "home" | "search" | "orders" | "wishlist" | "payments" | "account" | "parcel";
 export type CustomerEntityType = "dastakV1Order" | "merchantOrder" | "parcel";
 export type CustomerDestination = {
   section: CustomerSection;
@@ -49,5 +49,5 @@ export function parseCustomerDestination(value: string | null | undefined): Cust
   }
 }
 
-const customerSections = new Set(["home", "search", "orders", "account", "parcel"]);
+const customerSections = new Set(["home", "search", "orders", "wishlist", "payments", "account", "parcel"]);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

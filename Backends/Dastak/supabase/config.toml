@@ -485,6 +485,13 @@ verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/customer-addresses/index.ts"
 
+[functions.customer-wishlist]
+enabled = true
+# The handler authenticates bearer tokens after serving browser CORS preflight.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/customer-wishlist/index.ts"
+
 [functions.merchant-orders]
 enabled = true
 # The handler authenticates bearer tokens after serving browser CORS preflight.

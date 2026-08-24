@@ -36,6 +36,13 @@ public enum DastakFoodCartAddResult: Equatable, Sendable {
     case differentRestaurant
 }
 
+struct DastakReorderResult: Equatable, Sendable {
+    let addedUnits: Int
+    let skippedLines: Int
+
+    var openedBasket: Bool { addedUnits > 0 }
+}
+
 public struct DastakCart: Equatable, Sendable {
     public static let maximumQuantity = 99
     public private(set) var entries: [DastakCartEntry] = []

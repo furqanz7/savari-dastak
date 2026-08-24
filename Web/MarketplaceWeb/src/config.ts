@@ -26,6 +26,7 @@ export type AppConfig = {
   };
   webPushPublicKey?: string;
   deliveryPartnerUrl?: string;
+  merchantUrl?: string;
 };
 
 type PublicEnvironment = {
@@ -38,6 +39,7 @@ type PublicEnvironment = {
   VITE_DASTAK_SUPPORT_URL?: string;
   VITE_DASTAK_WEB_PUSH_PUBLIC_KEY?: string;
   VITE_DASTAK_DELIVERY_URL?: string;
+  VITE_DASTAK_MERCHANT_URL?: string;
 };
 
 const variants: Record<AppVariant, Omit<AppConfig, "supabaseUrl" | "supabasePublishableKey">> = {
@@ -124,7 +126,11 @@ function readCustomerLaunchConfiguration(environment: PublicEnvironment) {
     "VITE_DASTAK_DELIVERY_URL",
     environment.VITE_DASTAK_DELIVERY_URL,
   );
-  return { legalLinks: { privacy, terms, support }, webPushPublicKey, deliveryPartnerUrl };
+  const merchantUrl = requiredPublicUrl(
+    "VITE_DASTAK_MERCHANT_URL",
+    environment.VITE_DASTAK_MERCHANT_URL,
+  );
+  return { legalLinks: { privacy, terms, support }, webPushPublicKey, deliveryPartnerUrl, merchantUrl };
 }
 
 function requiredPublicUrl(name: string, value: string | undefined) {

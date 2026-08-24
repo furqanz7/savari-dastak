@@ -10,6 +10,7 @@ import {
   CreditCard,
   Download,
   Hand,
+  Heart,
   ImageOff,
   LocateFixed,
   Link2,
@@ -133,6 +134,7 @@ type Props = {
   legalLinks?: { privacy: string; terms: string; support: string };
   webPush?: DastakWebPushController;
   deliveryPartnerUrl: string;
+  merchantUrl: string;
 };
 
 type SelectedLocation = { label: string; coordinates: CatalogueLocation };
@@ -197,6 +199,7 @@ export function CatalogueView({
   legalLinks,
   webPush,
   deliveryPartnerUrl,
+  merchantUrl,
 }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [initialDiscovery] = useState(savedCustomerDiscovery);
@@ -1068,6 +1071,21 @@ export function CatalogueView({
             {addressError && <small className="error-text customer-account-error">{addressError}</small>}
           </section>
 
+          <section className="customer-account-group" aria-labelledby="account-shopping-title">
+            <div className="customer-account-section-heading"><div><h2 id="account-shopping-title">Shopping</h2><small>Saved items, payments and order history</small></div></div>
+            <div className="customer-account-rows">
+              <button className="customer-account-row" type="button" onClick={() => onNavigate("wishlist")}>
+                <Heart size={20} /><span><strong>Wishlist</strong><small>Products and Restaurant/Cafe items saved for later</small></span><ChevronRight size={18} />
+              </button>
+              <button className="customer-account-row" type="button" onClick={() => onNavigate("payments")}>
+                <CreditCard size={20} /><span><strong>Payments</strong><small>Secure methods and confirmed payment history</small></span><ChevronRight size={18} />
+              </button>
+              <button className="customer-account-row" type="button" onClick={() => onNavigate("orders")}>
+                <ReceiptText size={20} /><span><strong>Orders and receipts</strong><small>Track, reorder, download receipts and get help</small></span><ChevronRight size={18} />
+              </button>
+            </div>
+          </section>
+
           <section className="customer-account-group" aria-labelledby="account-preferences-title">
             <div className="customer-account-section-heading"><div><h2 id="account-preferences-title">Preferences</h2><small>How Dastak works on this device</small></div></div>
             <div className="customer-account-rows">
@@ -1158,6 +1176,20 @@ export function CatalogueView({
                 <Trash2 size={20} /><span><strong>Delete account</strong><small>Permanently remove your Dastak account</small></span><ChevronRight size={18} />
               </button>
             </div>
+          </section>
+
+          <section className="customer-account-group customer-earn-section" aria-labelledby="account-sell-title">
+            <div className="customer-account-section-heading">
+              <div><h2 id="account-sell-title">Sell on Dastak</h2><small>Bring your Restaurant/Cafe or retail operation to Dastak</small></div>
+            </div>
+            <a className="customer-partner-cta" href={merchantUrl} role="button">
+              <span className="customer-account-icon"><Store size={21} /></span>
+              <span>
+                <strong>Become a Dastak Merchant</strong>
+                <small>Apply, manage your business details and follow review status in the Merchant workspace.</small>
+              </span>
+              <ArrowUpRight size={19} />
+            </a>
           </section>
 
           <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">

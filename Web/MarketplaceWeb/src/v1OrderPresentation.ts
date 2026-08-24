@@ -120,6 +120,43 @@ export function orderLineDetail(line: V1Order["lines"][number]) {
   return (options.length ? options : [line.variant, line.packSize].filter(Boolean)).join(" · ");
 }
 
+export function orderItemCount(order: V1Order) {
+  return order.lines.reduce((total, line) => total + line.quantity, 0);
+}
+
+export function canReorderV1Order(status: V1Order["status"]) {
+  return ["DELIVERED", "UNAVAILABLE", "PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(status);
+}
+
+export function deliveredDurationLabel(order: V1Order) {
+  const started = Date.parse(order.submittedAt ?? order.createdAt);
+  const finished = Date.parse(order.deliveredAt ?? order.delivery?.deliveredAt ?? "");
+  if (!Number.isFinite(started) || !Number.isFinite(finished)) return undefined;
+  const minutes = Math.max(1, Math.round((finished - started) / 60_000));
+  if (minutes < 60) return `Delivered in ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `Delivered in ${hours} hr ${remainder} min` : `Delivered in ${hours} hr`;
+}
+
+export function orderSearchText(order: V1Order) {
+  return [
+    order.displayOrderNumber,
+    order.restaurant?.name,
+    order.restaurant?.branchName,
+    order.recipient?.name,
+    order.deliveryAddress && [
+      order.deliveryAddress.line1,
+      order.deliveryAddress.line2,
+      order.deliveryAddress.landmark,
+      order.deliveryAddress.city,
+      order.deliveryAddress.state,
+      order.deliveryAddress.postalCode,
+    ].filter(Boolean).join(" "),
+    ...order.lines.map((line) => line.name),
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
 export function isIssueEvidenceRequired(category: string) {
   return !["DELIVERY_PROBLEM", "OTHER"].includes(category);
 }

@@ -37,6 +37,7 @@ public struct DastakCustomerRootView: View {
     private let isPreview: Bool
     private let deliveryPartnerAccess: DeliveryPartnerAccess
     private let isDeliveryPartnerAccessLoading: Bool
+    private let becomeMerchant: () -> Void
     private let becomeDeliveryPartner: () -> Void
     private let accountSessionClient: any AccountSessionClient
     private let orderEvents: any OrderEventClient
@@ -53,6 +54,7 @@ public struct DastakCustomerRootView: View {
         oauthReauthenticator: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil,
         deliveryPartnerAccess: DeliveryPartnerAccess = .unavailable,
         isDeliveryPartnerAccessLoading: Bool = false,
+        becomeMerchant: @escaping () -> Void = {},
         becomeDeliveryPartner: @escaping () -> Void = {}
     ) {
         _model = StateObject(
@@ -67,6 +69,7 @@ public struct DastakCustomerRootView: View {
         isPreview = false
         self.deliveryPartnerAccess = deliveryPartnerAccess
         self.isDeliveryPartnerAccessLoading = isDeliveryPartnerAccessLoading
+        self.becomeMerchant = becomeMerchant
         self.becomeDeliveryPartner = becomeDeliveryPartner
         accountSessionClient = SupabaseAccountSessionClient(functions: functions)
         self.orderEvents = orderEvents
@@ -80,6 +83,7 @@ public struct DastakCustomerRootView: View {
         isPreview = preview
         deliveryPartnerAccess = .notApplied
         isDeliveryPartnerAccessLoading = false
+        becomeMerchant = {}
         becomeDeliveryPartner = {}
         accountSessionClient = DastakPreviewAccountSessionClient()
         orderEvents = NoopOrderEventClient()
@@ -113,13 +117,14 @@ public struct DastakCustomerRootView: View {
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
             NavigationStack(path: $ordersPath) {
-                DastakOrdersView(model: model)
+                DastakOrdersView(model: model, openCart: { showingCart = true })
             }
             .tag(Tab.orders)
             .tabItem { Label("Orders", systemImage: "clock") }
 
             NavigationStack {
                 DastakAccountView(
+                    customerModel: model,
                     customer: model.checkoutCustomer,
                     location: model.deliveryAddress,
                     savedAddressCount: model.savedAddresses.count,
@@ -135,6 +140,7 @@ public struct DastakCustomerRootView: View {
                     isDeliveryPartnerAccessLoading: isDeliveryPartnerAccessLoading,
                     chooseLocation: { showingDeliveryAddressEditor = true },
                     openOrders: { selectedTab = .orders },
+                    becomeMerchant: becomeMerchant,
                     becomeDeliveryPartner: becomeDeliveryPartner,
                     retryAccount: { Task { await model.refreshCheckoutCustomer() } },
                     refreshIdentities: { Task { await model.refreshCustomerIdentities() } },

@@ -30,13 +30,7 @@ struct DastakHomeView: View {
         .dastakNavigationBarHidden()
         .refreshable { await model.refreshV1Catalogue() }
         .sheet(item: $selectedRestaurant) { restaurant in
-            DastakRestaurantMenuView(restaurant: restaurant) { item, optionIDs in
-                model.addFoodToCart(
-                    restaurant: restaurant,
-                    item: item,
-                    optionIDs: optionIDs
-                )
-            }
+            DastakRestaurantMenuView(model: model, restaurant: restaurant)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -264,9 +258,15 @@ struct DastakHomeView: View {
                 spacing: MarketplaceSpacing.compact
             ) {
                 ForEach(products) { product in
-                    DastakV1ProductTile(product: product) {
-                        model.addToCart(product)
-                    }
+                    DastakV1ProductTile(
+                        product: product,
+                        isWishlisted: model.isWishlisted(kind: .retailSKU, itemID: product.id),
+                        isUpdatingWishlist: model.wishlistUpdatingIDs.contains(product.id),
+                        add: { model.addToCart(product) },
+                        toggleWishlist: {
+                            Task { await model.toggleWishlist(kind: .retailSKU, itemID: product.id) }
+                        }
+                    )
                 }
             }
         }
@@ -327,9 +327,9 @@ struct DastakHomeView: View {
     }
 }
 
-private struct DastakRestaurantMenuView: View {
+struct DastakRestaurantMenuView: View {
+    @ObservedObject var model: DastakCustomerModel
     let restaurant: DastakV1RestaurantMenu
-    let add: (DastakV1RestaurantMenuItem, [UUID]) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -358,7 +358,21 @@ private struct DastakRestaurantMenuView: View {
                                 Text(description).font(.footnote).foregroundStyle(.secondary)
                             }
                             ForEach(category.items) { item in
-                                DastakRestaurantItemCard(item: item, add: add)
+                                DastakRestaurantItemCard(
+                                    item: item,
+                                    isWishlisted: model.isWishlisted(kind: .menuItem, itemID: item.id),
+                                    isUpdatingWishlist: model.wishlistUpdatingIDs.contains(item.id),
+                                    add: { item, optionIDs in
+                                        model.addFoodToCart(
+                                            restaurant: restaurant,
+                                            item: item,
+                                            optionIDs: optionIDs
+                                        )
+                                    },
+                                    toggleWishlist: {
+                                        Task { await model.toggleWishlist(kind: .menuItem, itemID: item.id) }
+                                    }
+                                )
                             }
                         }
                     }
@@ -375,15 +389,24 @@ private struct DastakRestaurantMenuView: View {
 
 private struct DastakRestaurantItemCard: View {
     let item: DastakV1RestaurantMenuItem
+    let isWishlisted: Bool
+    let isUpdatingWishlist: Bool
     let add: (DastakV1RestaurantMenuItem, [UUID]) -> Void
+    let toggleWishlist: () -> Void
     @State private var selections: [UUID: Set<UUID>]
 
     init(
         item: DastakV1RestaurantMenuItem,
-        add: @escaping (DastakV1RestaurantMenuItem, [UUID]) -> Void
+        isWishlisted: Bool,
+        isUpdatingWishlist: Bool,
+        add: @escaping (DastakV1RestaurantMenuItem, [UUID]) -> Void,
+        toggleWishlist: @escaping () -> Void
     ) {
         self.item = item
+        self.isWishlisted = isWishlisted
+        self.isUpdatingWishlist = isUpdatingWishlist
         self.add = add
+        self.toggleWishlist = toggleWishlist
         _selections = State(initialValue: Dictionary(uniqueKeysWithValues: item.optionGroups.map {
             ($0.id, Set($0.options.prefix($0.minimumSelections).map(\.id)))
         }))
@@ -407,7 +430,20 @@ private struct DastakRestaurantItemCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text(item.name).font(.headline)
+            HStack(alignment: .top, spacing: MarketplaceSpacing.small) {
+                Text(item.name).font(.headline)
+                Spacer(minLength: 8)
+                Button(action: toggleWishlist) {
+                    Image(systemName: isWishlisted ? "heart.fill" : "heart")
+                        .font(.headline)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        .frame(width: 44, height: 44)
+                        .background(.thinMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isUpdatingWishlist)
+                .accessibilityLabel(isWishlisted ? "Remove \(item.name) from Wishlist" : "Save \(item.name) to Wishlist")
+            }
             if let description = item.description {
                 Text(description).font(.footnote).foregroundStyle(.secondary)
             }
@@ -461,11 +497,27 @@ private struct DastakRestaurantItemCard: View {
 
 struct DastakV1ProductTile: View {
     let product: DastakV1CatalogueSKU
+    let isWishlisted: Bool
+    let isUpdatingWishlist: Bool
     let add: () -> Void
+    let toggleWishlist: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-            DastakProductArtwork(symbol: artworkSymbol)
+            DastakProductArtwork(imageKey: product.imageKey, fallbackSymbol: artworkSymbol)
+                .overlay(alignment: .topTrailing) {
+                    Button(action: toggleWishlist) {
+                        Image(systemName: isWishlisted ? "heart.fill" : "heart")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            .frame(width: 42, height: 42)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isUpdatingWishlist)
+                    .padding(7)
+                    .accessibilityLabel(isWishlisted ? "Remove \(product.name) from Wishlist" : "Save \(product.name) to Wishlist")
+                }
 
             if let brand = product.brand?.name {
                 Text(brand.uppercased())

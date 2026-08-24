@@ -6,10 +6,16 @@ import MarketplaceInfrastructure
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct DastakV1MatchingView: View {
     @ObservedObject var model: DastakCustomerModel
     let isPresentedModally: Bool
+    let openCart: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var isReportingIssue = false
     @State private var issueCategory = DastakV1CustomerIssueCategory.wrongSKU
@@ -20,10 +26,16 @@ struct DastakV1MatchingView: View {
     @State private var issueEvidenceContentType: String?
     @State private var issueEvidenceError: String?
     @State private var showingCancellationConfirmation = false
+    @State private var showingReorderConfirmation = false
 
-    init(model: DastakCustomerModel, isPresentedModally: Bool = true) {
+    init(
+        model: DastakCustomerModel,
+        isPresentedModally: Bool = true,
+        openCart: @escaping () -> Void = {}
+    ) {
         self.model = model
         self.isPresentedModally = isPresentedModally
+        self.openCart = openCart
     }
 
     var body: some View {
@@ -55,6 +67,16 @@ struct DastakV1MatchingView: View {
         } message: {
             Text("Cancellation is available only before payment. Reserved items will be released.")
         }
+        .confirmationDialog(
+            "Replace your current basket?",
+            isPresented: $showingReorderConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Replace basket and reorder") { reorderCurrentOrder() }
+            Button("Keep current basket", role: .cancel) {}
+        } message: {
+            Text("Current basket items will be replaced. You can review current availability and prices before submitting.")
+        }
     }
 
     @ViewBuilder
@@ -72,13 +94,14 @@ struct DastakV1MatchingView: View {
                             liveDeliveryCard(order: order, delivery: delivery)
                             deliveryCard(delivery)
                         }
-                        deliveryDetails(order)
                         orderSummary(order)
                         receiptCard(order)
+                        deliveryDetails(order)
                         timelineCard(order)
                         if let support = order.support {
                             supportCard(support, order: order)
                         }
+                        supportContactCard
                         if order.status == .awaitingPayment,
                            let payment = order.payment {
                             paymentCard(order: order, payment: payment)
@@ -93,6 +116,9 @@ struct DastakV1MatchingView: View {
                             payButton(order)
                         }
                         if canCancel(order) { cancelButton }
+                        if DastakV1OrderPresentation.canReorder(order.status) {
+                            reorderButton(order)
+                        }
                     }
                     .padding(MarketplaceSpacing.medium)
                 }
@@ -109,53 +135,47 @@ struct DastakV1MatchingView: View {
     }
 
     private func statusCard(_ order: DastakV1OrderSnapshot) -> some View {
-        VStack(spacing: MarketplaceSpacing.large) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(DastakV1OrderPresentation.orderType(order.orderType).uppercased())
-                        .font(.caption2.weight(.bold))
-                        .tracking(1.2)
-                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    Text(order.displayOrderNumber)
-                        .font(.caption.monospaced().weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if let date = DastakV1OrderPresentation.date(order.submittedAt ?? order.createdAt) {
-                    Text(date.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            HStack(alignment: .center, spacing: MarketplaceSpacing.medium) {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
                 ZStack {
-                    Circle()
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(MarketplaceColors.dastakAccentSoft.color)
-                        .frame(width: 76, height: 76)
+                        .frame(width: 52, height: 52)
                     if isMatching(order.status) {
-                        ProgressView()
-                            .controlSize(.large)
-                            .tint(MarketplaceColors.dastakAccent.color)
+                        ProgressView().tint(MarketplaceColors.dastakAccent.color)
                     } else {
                         Image(systemName: DastakV1OrderPresentation.symbol(order.status))
-                            .font(.system(size: 30, weight: .semibold))
+                            .font(.system(size: 21, weight: .bold))
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     }
                 }
-
-                VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                    Text(DastakV1OrderPresentation.title(order.status))
-                        .font(MarketplaceTypography.instrumentSerif(size: 34, relativeTo: .title))
-                        .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(DastakV1OrderPresentation.deliveredDuration(order) ??
+                         DastakV1OrderPresentation.title(order.status))
+                        .font(.title2.bold())
                     Text(DastakV1OrderPresentation.message(order.status))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
+                Spacer(minLength: MarketplaceSpacing.small)
+                Text(DastakFormatting.money(order.price.total))
+                    .font(.headline.monospacedDigit())
             }
 
-            DastakV1JourneyProgress(status: order.status)
+            HStack {
+                Text(order.displayOrderNumber)
+                    .font(.caption.monospaced().weight(.semibold))
+                Spacer()
+                if let date = DastakV1OrderPresentation.date(order.submittedAt ?? order.createdAt) {
+                    Text(date.formatted(date: .abbreviated, time: .shortened))
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if DastakV1OrderPresentation.isActive(order.status) {
+                DastakV1JourneyProgress(status: order.status)
+            }
 
             Label(
                 DastakV1OrderPresentation.assurance(order.status),
@@ -163,13 +183,9 @@ struct DastakV1MatchingView: View {
             )
             .font(.footnote.weight(.semibold))
             .foregroundStyle(MarketplaceColors.dastakAccent.color)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, MarketplaceSpacing.compact)
-            .padding(.vertical, 10)
-            .background(MarketplaceColors.dastakAccentSoft.color, in: Capsule())
         }
         .frame(maxWidth: .infinity)
-        .padding(MarketplaceSpacing.large)
+        .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
         .accessibilityElement(children: .combine)
     }
@@ -308,14 +324,11 @@ struct DastakV1MatchingView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("ORDER")
+                    Text("ITEMS IN THIS ORDER")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                    Text(order.displayOrderNumber)
-                        .font(.headline.monospaced())
-                    Text(DastakV1OrderPresentation.orderType(order.orderType))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text("\(DastakV1OrderPresentation.itemCount(order)) item\(DastakV1OrderPresentation.itemCount(order) == 1 ? "" : "s")")
+                        .font(.headline)
                 }
                 Spacer()
                 if let restaurant = order.restaurant {
@@ -331,10 +344,12 @@ struct DastakV1MatchingView: View {
             }
             Divider()
             ForEach(order.lines) { line in
-                HStack(alignment: .firstTextBaseline) {
-                    Text("\(line.quantity)×")
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                HStack(alignment: .center, spacing: MarketplaceSpacing.compact) {
+                    DastakProductArtwork(
+                        imageKey: model.imageKey(for: line),
+                        fallbackSymbol: line.lineType == "FOOD_MENU_ITEM" ? "fork.knife" : "basket"
+                    )
+                    .frame(width: 58, height: 58)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(line.name)
                             .font(.subheadline.weight(.medium))
@@ -343,11 +358,15 @@ struct DastakV1MatchingView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        Text("\(line.quantity) × \(DastakFormatting.money(Money(paise: line.unitPricePaise)))")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Text(DastakFormatting.money(Money(paise: line.lineTotalPaise)))
-                        .font(.subheadline.monospacedDigit())
+                        .font(.subheadline.bold().monospacedDigit())
                 }
+                if line.id != order.lines.last?.id { Divider().padding(.leading, 70) }
             }
         }
         .padding(MarketplaceSpacing.medium)
@@ -515,11 +534,21 @@ struct DastakV1MatchingView: View {
 
     private func receiptCard(_ order: DastakV1OrderSnapshot) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Receipt")
-                .font(.headline)
+            HStack {
+                Label("Bill summary", systemImage: "receipt")
+                    .font(.headline)
+                Spacer()
+                ShareLink(item: receiptText(order)) {
+                    Label("Share receipt", systemImage: "square.and.arrow.up")
+                        .font(.caption.bold())
+                }
+            }
             receiptRow("Items", paise: order.price.subtotalPaise)
             if order.price.deliveryFeePaise > 0 {
                 receiptRow("Delivery", paise: order.price.deliveryFeePaise)
+            }
+            if order.price.platformFeePaise > 0 {
+                receiptRow("Dastak platform fee", paise: order.price.platformFeePaise)
             }
             if order.price.taxPaise > 0 {
                 receiptRow("Taxes", paise: order.price.taxPaise)
@@ -529,6 +558,31 @@ struct DastakV1MatchingView: View {
             }
             Divider()
             receiptRow(receiptTotalLabel(order), paise: order.price.totalPaise, emphasized: true)
+            Divider()
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(order.paidAt == nil ? "Payment" : "Paid online via Razorpay")
+                        .font(.footnote.weight(.semibold))
+                    if let paidAt = DastakV1OrderPresentation.date(order.paidAt) {
+                        Text(paidAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Payment is not yet confirmed")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Button {
+                    copyToPasteboard(order.displayOrderNumber)
+                    model.ordersActionMessage = "Order number copied."
+                } label: {
+                    Label(order.displayOrderNumber, systemImage: "doc.on.doc")
+                        .font(.caption.monospaced().weight(.semibold))
+                }
+                .accessibilityLabel("Copy order number \(order.displayOrderNumber)")
+            }
         }
         .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
@@ -794,6 +848,86 @@ struct DastakV1MatchingView: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
+    }
+
+    private var supportContactCard: some View {
+        Link(destination: URL(string: "https://dastak-customer.vercel.app/support")!) {
+            HStack(spacing: MarketplaceSpacing.compact) {
+                Image(systemName: "message.fill")
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Contact Dastak support")
+                        .font(.subheadline.bold())
+                    Text("Account, payment or delivery help")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.bold())
+            }
+            .padding(MarketplaceSpacing.medium)
+            .marketplaceFlatSurface()
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func reorderButton(_ order: DastakV1OrderSnapshot) -> some View {
+        Button {
+            if model.cart.isEmpty { reorderCurrentOrder() }
+            else { showingReorderConfirmation = true }
+        } label: {
+            Label("Order again", systemImage: "arrow.clockwise")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(MarketplacePrimaryButtonStyle())
+        .accessibilityHint("Rebuilds this order using products currently available")
+    }
+
+    private func reorderCurrentOrder() {
+        guard let order = model.activeV1Order else { return }
+        if model.reorder(order).openedBasket {
+            if isPresentedModally { dismiss() }
+            openCart()
+        }
+    }
+
+    private func receiptText(_ order: DastakV1OrderSnapshot) -> String {
+        var lines = [
+            "Dastak receipt",
+            "Order \(order.displayOrderNumber)",
+            "",
+        ]
+        lines.append(contentsOf: order.lines.map {
+            "\($0.quantity) × \($0.name) — \(DastakFormatting.money(Money(paise: $0.lineTotalPaise)))"
+        })
+        lines.append(contentsOf: [
+            "",
+            "Items: \(DastakFormatting.money(Money(paise: order.price.subtotalPaise)))",
+            "Delivery: \(DastakFormatting.money(Money(paise: order.price.deliveryFeePaise)))",
+            "Dastak platform fee: \(DastakFormatting.money(Money(paise: order.price.platformFeePaise)))",
+            "Taxes: \(DastakFormatting.money(Money(paise: order.price.taxPaise)))",
+        ])
+        if order.price.discountPaise > 0 {
+            lines.append("Discount: −\(DastakFormatting.money(Money(paise: order.price.discountPaise)))")
+        }
+        lines.append("Total: \(DastakFormatting.money(order.price.total))")
+        if let paidAt = DastakV1OrderPresentation.date(order.paidAt) {
+            lines.append("Paid online via Razorpay: \(paidAt.formatted(date: .abbreviated, time: .shortened))")
+        }
+        if let address = order.deliveryAddress {
+            lines.append("Delivered to: \(DastakV1OrderPresentation.addressLine(address))")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func copyToPasteboard(_ value: String) {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = value
+        #elseif canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
+        #endif
     }
 
     private func pollWhileActive() async {
