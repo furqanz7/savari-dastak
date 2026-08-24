@@ -96,6 +96,10 @@ export function DastakCustomerView(props: Props) {
           section={v1Section}
           onNavigate={navigateSection}
           onOpenParcel={() => navigate({ section: "parcel" })}
+          onOpenOrder={(orderId) => navigate({
+            section: "orders", entityType: "dastakV1Order", entityId: orderId,
+          })}
+          onCloseOrder={() => navigate({ section: "orders" })}
         />
       </div>
       {section === "account" && <div className="customer-view">

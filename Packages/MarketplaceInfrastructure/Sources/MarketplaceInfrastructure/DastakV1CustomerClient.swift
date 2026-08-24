@@ -321,6 +321,8 @@ public enum DastakV1OrderStatus: String, Codable, Equatable, Sendable {
 public struct DastakV1FulfilmentProgress: Codable, Equatable, Sendable {
     public let state: String
     public let title: String?
+    public let estimatedReadyAt: String?
+    public let runningLate: Bool?
 }
 
 public struct DastakV1PaymentAttempt: Codable, Equatable, Sendable {
@@ -358,8 +360,17 @@ public struct DastakV1DeliveryProgress: Codable, Equatable, Sendable {
     public let verificationStatus: DastakV1DeliveryVerificationStatus
     public let deliveryCode: String?
     public let riderArrivedAt: String?
+    public let outForDeliveryAt: String?
     public let deliveredAt: String?
     public let recipientAccountRequired: Bool
+    public let riderLocation: DastakV1Coordinate?
+    public let riderLocationUpdatedAt: String?
+    public let distanceToDestinationMeters: Int?
+}
+
+public struct DastakV1Coordinate: Codable, Equatable, Sendable {
+    public let latitude: Double
+    public let longitude: Double
 }
 
 public enum DastakV1CustomerIssueCategory: String, Codable, CaseIterable, Equatable, Sendable {
@@ -508,6 +519,7 @@ public struct DastakV1OrderLine: Codable, Equatable, Identifiable, Sendable {
     public let unitPricePaise: Int
     public let lineTotalPaise: Int
     public let status: String
+    public let foodSelection: DastakV1FoodSelection?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -521,6 +533,24 @@ public struct DastakV1OrderLine: Codable, Equatable, Identifiable, Sendable {
         case unitPricePaise
         case lineTotalPaise
         case status
+        case foodSelection
+    }
+}
+
+public struct DastakV1FoodSelection: Codable, Equatable, Sendable {
+    public let options: [DastakV1FoodOption]
+}
+
+public struct DastakV1FoodOption: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let groupID: UUID
+    public let groupName: String
+    public let name: String
+    public let priceDeltaPaise: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case id, groupName, name, priceDeltaPaise
+        case groupID = "groupId"
     }
 }
 
@@ -535,6 +565,8 @@ public struct DastakV1OrderSnapshot: Codable, Equatable, Identifiable, Sendable 
     public let payment: DastakV1PaymentReservation?
     public let delivery: DastakV1DeliveryProgress?
     public let support: DastakV1OrderSupport?
+    public let deliveryAddress: DastakV1DeliveryAddressInput?
+    public let recipient: DastakV1RecipientInput?
     public let price: DastakV1OrderPrice
     public let lines: [DastakV1OrderLine]
     public let restaurant: DastakV1OrderRestaurant?

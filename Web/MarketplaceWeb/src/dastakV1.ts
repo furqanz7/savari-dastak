@@ -131,8 +131,18 @@ export type V1OrderLine = {
   unitPricePaise: number;
   lineTotalPaise: number;
   status: string;
-  foodSelection?: Record<string, unknown>;
+  foodSelection?: {
+    options: Array<{
+      id: string;
+      groupId: string;
+      groupName: string;
+      name: string;
+      priceDeltaPaise: number;
+    }>;
+  };
 };
+
+export type V1OrderCursor = { createdAt: string; orderId: string };
 
 export type V1Order = {
   id: string;
@@ -141,7 +151,12 @@ export type V1Order = {
   status: V1OrderStatus;
   version: number;
   customerState?: string;
-  fulfilmentProgress?: { state: string; title?: string };
+  fulfilmentProgress?: {
+    state: string;
+    title?: string;
+    estimatedReadyAt?: string;
+    runningLate?: boolean;
+  };
   payment?: {
     status: string;
     amountPaise: number;
@@ -165,8 +180,12 @@ export type V1Order = {
     verificationStatus: "ACTIVE" | "BLOCKED" | "CONSUMED" | "OVERRIDDEN";
     deliveryCode?: string;
     riderArrivedAt?: string;
+    outForDeliveryAt?: string;
     deliveredAt?: string;
     recipientAccountRequired: false;
+    riderLocation?: { latitude: number; longitude: number };
+    riderLocationUpdatedAt?: string;
+    distanceToDestinationMeters?: number;
   };
   support?: {
     canReportIssue: boolean;
@@ -210,6 +229,20 @@ export type V1Order = {
     organizationId: string; branchId: string; name: string;
     branchName: string; imageKey?: string;
   };
+  deliveryAddress?: {
+    label?: string;
+    line1: string;
+    line2?: string;
+    landmark?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    countryCode: "IN";
+    latitude: number;
+    longitude: number;
+    instructions?: string;
+  };
+  recipient?: { name: string; phoneNumber: string };
   submittedAt?: string;
   fullySecuredAt?: string;
   paymentExpiresAt?: string;
@@ -580,12 +613,23 @@ export async function getV1Restaurants(
   return requiredArray(source.restaurants).map(parseRestaurantMenu);
 }
 
-export async function getV1Orders(input: DastakV1Auth & { limit?: number; signal?: AbortSignal }, fetcher: Fetcher = fetch) {
+export async function getV1Orders(
+  input: DastakV1Auth & { limit?: number; cursor?: V1OrderCursor; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+) {
   const source = record(await invoke(input, "dastak-v1-orders", {
-    operation: "list", limit: input.limit ?? 50, cursor: null,
+    operation: "list", limit: input.limit ?? 50, cursor: input.cursor ?? null,
   }, undefined, fetcher));
   if (!source || !Array.isArray(source.orders)) invalid("order collection");
-  return { orders: source.orders.map(parseV1Order) };
+  const cursor = source.nextCursor === null || source.nextCursor === undefined
+    ? undefined : requiredRecord(source.nextCursor);
+  return {
+    orders: source.orders.map(parseV1Order),
+    nextCursor: cursor ? {
+      createdAt: requiredTimestamp(cursor.createdAt),
+      orderId: requiredUuid(cursor.orderId),
+    } : undefined,
+  };
 }
 
 export async function getV1Order(input: DastakV1Auth & { orderId: string; signal?: AbortSignal }, fetcher: Fetcher = fetch) {
@@ -1540,7 +1584,12 @@ export function parseV1Order(value: unknown): V1Order {
     version: requiredInteger(source.version, 1),
     customerState: optionalText(source.customerState, 80),
     fulfilmentProgress: progress
-      ? { state: requiredText(progress.state, 80), title: optionalText(progress.title, 160) }
+      ? {
+        state: requiredText(progress.state, 80),
+        title: optionalText(progress.title, 160),
+        estimatedReadyAt: optionalTimestamp(progress.estimatedReadyAt),
+        runningLate: optionalBoolean(progress.runningLate),
+      }
       : undefined,
     payment: source.payment === null || source.payment === undefined
       ? undefined
@@ -1554,6 +1603,8 @@ export function parseV1Order(value: unknown): V1Order {
       branchName: requiredText(restaurant.branchName, 160),
       imageKey: optionalText(restaurant.imageKey, 500),
     } : undefined,
+    deliveryAddress: parseOrderAddress(source.deliveryAddress),
+    recipient: parseOrderRecipient(source.recipient),
     price: {
       snapshotKind: requiredText(price.snapshotKind, 40),
       subtotalPaise: requiredInteger(price.subtotalPaise, 0),
@@ -1659,13 +1710,22 @@ function parseOrderDelivery(source: Record<string, unknown>): NonNullable<V1Orde
   ) invalid("delivery state");
   const deliveryCode = optionalText(source.deliveryCode, 6);
   if (deliveryCode !== undefined && !/^\d{6}$/.test(deliveryCode)) invalid("delivery code");
+  const riderLocation = source.riderLocation === null || source.riderLocation === undefined
+    ? undefined : requiredRecord(source.riderLocation);
   return {
     state: state as NonNullable<V1Order["delivery"]>["state"],
     verificationStatus: verificationStatus as NonNullable<V1Order["delivery"]>["verificationStatus"],
     deliveryCode,
     riderArrivedAt: optionalTimestamp(source.riderArrivedAt),
+    outForDeliveryAt: optionalTimestamp(source.outForDeliveryAt),
     deliveredAt: optionalTimestamp(source.deliveredAt),
     recipientAccountRequired: false,
+    riderLocation: riderLocation ? {
+      latitude: requiredFiniteNumber(riderLocation.latitude),
+      longitude: requiredFiniteNumber(riderLocation.longitude),
+    } : undefined,
+    riderLocationUpdatedAt: optionalTimestamp(source.riderLocationUpdatedAt),
+    distanceToDestinationMeters: optionalInteger(source.distanceToDestinationMeters, 0),
   };
 }
 
@@ -2192,8 +2252,52 @@ function parseOrderLine(value: unknown): V1OrderLine {
     name: requiredText(source.name, 200), variant: optionalText(source.variant, 160), packSize: optionalText(source.packSize, 80),
     quantity: requiredInteger(source.quantity, 1), unitPricePaise: requiredInteger(source.unitPricePaise, 0),
     lineTotalPaise: requiredInteger(source.lineTotalPaise, 0), status: requiredText(source.status, 60),
-    foodSelection: source.foodSelection === null || source.foodSelection === undefined
-      ? undefined : requiredRecord(source.foodSelection),
+    foodSelection: parseFoodSelection(source.foodSelection),
+  };
+}
+
+function parseFoodSelection(value: unknown): V1OrderLine["foodSelection"] {
+  if (value === null || value === undefined) return undefined;
+  const source = requiredRecord(value);
+  return {
+    options: requiredArray(source.options).map((entry) => {
+      const option = requiredRecord(entry);
+      return {
+        id: requiredUuid(option.id),
+        groupId: requiredUuid(option.groupId),
+        groupName: requiredText(option.groupName, 100),
+        name: requiredText(option.name, 100),
+        priceDeltaPaise: requiredInteger(option.priceDeltaPaise, 0),
+      };
+    }),
+  };
+}
+
+function parseOrderAddress(value: unknown): V1Order["deliveryAddress"] {
+  if (value === null || value === undefined) return undefined;
+  const source = requiredRecord(value);
+  if (source.countryCode !== "IN") invalid("delivery address");
+  return {
+    label: optionalText(source.label, 60),
+    line1: requiredText(source.line1, 240),
+    line2: optionalText(source.line2, 240),
+    landmark: optionalText(source.landmark, 160),
+    city: optionalText(source.city, 120),
+    state: optionalText(source.state, 120),
+    postalCode: optionalText(source.postalCode, 20),
+    countryCode: "IN",
+    latitude: requiredFiniteNumber(source.latitude),
+    longitude: requiredFiniteNumber(source.longitude),
+    instructions: optionalText(source.instructions, 500),
+  };
+}
+
+function parseOrderRecipient(value: unknown): V1Order["recipient"] {
+  if (value === null || value === undefined) return undefined;
+  const source = requiredRecord(value);
+  return {
+    name: requiredText(source.name, 80),
+    phoneNumber: requiredText(source.phoneNumber, 20),
   };
 }
 
@@ -2257,7 +2361,13 @@ function requiredInteger(value: unknown, minimum: number) {
 function optionalInteger(value: unknown, minimum: number) {
   return value === null || value === undefined ? undefined : requiredInteger(value, minimum);
 }
+function requiredFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : invalid("number");
+}
 function requiredBoolean(value: unknown) { return typeof value === "boolean" ? value : invalid("boolean"); }
+function optionalBoolean(value: unknown) {
+  return value === null || value === undefined ? undefined : requiredBoolean(value);
+}
 function requiredUuid(value: unknown) {
   return typeof value === "string" && uuidPattern.test(value) ? value.toLowerCase() : invalid("identifier");
 }

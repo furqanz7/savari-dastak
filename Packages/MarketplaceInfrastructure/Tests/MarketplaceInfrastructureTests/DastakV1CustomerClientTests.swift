@@ -168,8 +168,12 @@ final class DastakV1CustomerClientTests: XCTestCase {
             "verificationStatus": "ACTIVE",
             "deliveryCode": "654321",
             "riderArrivedAt": NSNull(),
+            "outForDeliveryAt": "2026-08-22T10:20:00Z",
             "deliveredAt": NSNull(),
             "recipientAccountRequired": false,
+            "riderLocation": ["latitude": 12.6822, "longitude": 78.6210],
+            "riderLocationUpdatedAt": "2026-08-22T10:21:00Z",
+            "distanceToDestinationMeters": 640,
         ]
 
         let data = try JSONSerialization.data(withJSONObject: source)
@@ -179,8 +183,59 @@ final class DastakV1CustomerClientTests: XCTestCase {
         XCTAssertEqual(order.delivery?.deliveryCode, "654321")
         XCTAssertEqual(order.delivery?.verificationStatus, .active)
         XCTAssertEqual(order.delivery?.recipientAccountRequired, false)
+        XCTAssertEqual(order.delivery?.riderLocation?.latitude, 12.6822)
+        XCTAssertEqual(order.delivery?.distanceToDestinationMeters, 640)
+        XCTAssertEqual(order.deliveryAddress?.instructions, "Ring once")
+        XCTAssertEqual(order.recipient?.name, "Launch Customer")
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("merchant"))
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("branch"))
+    }
+
+    func testOrderDecodesPreparationETAAndCustomerVisibleRestaurantSelections() throws {
+        var source = try XCTUnwrap(JSONSerialization.jsonObject(with: orderJSON) as? [String: Any])
+        source["orderType"] = "MIXED"
+        source["status"] = "PREPARING"
+        source["fulfilmentProgress"] = [
+            "state": "PREPARING",
+            "estimatedReadyAt": "2026-08-22T10:30:00Z",
+            "runningLate": false,
+        ]
+        source["restaurant"] = [
+            "organizationId": "77777777-7777-4777-8777-777777777777",
+            "branchId": "88888888-8888-4888-8888-888888888888",
+            "name": "Dastak Cafe",
+            "branchName": "Main Road",
+            "imageKey": NSNull(),
+        ]
+        var lines = try XCTUnwrap(source["lines"] as? [[String: Any]])
+        lines.append([
+            "id": "99999999-9999-4999-8999-999999999999",
+            "lineType": "FOOD_MENU_ITEM",
+            "menuItemId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "name": "Filter Coffee",
+            "quantity": 1,
+            "unitPricePaise": 5000,
+            "lineTotalPaise": 5000,
+            "status": "ORDERED",
+            "foodSelection": [
+                "options": [[
+                    "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                    "groupId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    "groupName": "Size",
+                    "name": "Large",
+                    "priceDeltaPaise": 500,
+                ]],
+            ],
+        ])
+        source["lines"] = lines
+
+        let data = try JSONSerialization.data(withJSONObject: source)
+        let order = try JSONDecoder().decode(DastakV1OrderSnapshot.self, from: data)
+
+        XCTAssertEqual(order.fulfilmentProgress?.estimatedReadyAt, "2026-08-22T10:30:00Z")
+        XCTAssertEqual(order.fulfilmentProgress?.runningLate, false)
+        XCTAssertEqual(order.restaurant?.name, "Dastak Cafe")
+        XCTAssertEqual(order.lines.last?.foodSelection?.options.first?.name, "Large")
     }
 
     func testIssueReportCarriesOptionalImmutableEvidenceWithoutFinancialInput() async throws {
@@ -359,6 +414,8 @@ private let orderJSON = """
 {
   "id":"\(orderID)","displayOrderNumber":"DSK-260822-00000001","orderType":"RETAIL_ONLY",
   "status":"MATCHING","version":2,"fulfilmentProgress":{"state":"FINDING_ITEMS"},
+  "deliveryAddress":{"label":"Home","line1":"1 Launch Road","line2":null,"landmark":null,"city":"Vaniyambadi","state":"Tamil Nadu","postalCode":"635751","countryCode":"IN","latitude":12.6819,"longitude":78.6201,"instructions":"Ring once"},
+  "recipient":{"name":"Launch Customer","phoneNumber":"+919700000002"},
   "price":{"snapshotKind":"SUBMITTED","subtotalPaise":13800,"deliveryFeePaise":0,"platformFeePaise":0,"discountPaise":0,"taxPaise":0,"totalPaise":13800,"currencyCode":"INR"},
   "lines":[{"id":"\(lineID)","lineType":"RETAIL_SKU","skuId":"\(skuID)","name":"Whole Milk","variant":"Full cream","packSize":"1 litre","quantity":2,"unitPricePaise":6900,"lineTotalPaise":13800,"status":"ORDERED"}],
   "submittedAt":"2026-08-22T10:00:00Z","fullySecuredAt":null,"paymentExpiresAt":null,"paidAt":null,"deliveredAt":null,

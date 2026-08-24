@@ -16,6 +16,7 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({ busy = fal
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     const originalOverflow = document.body.style.overflow;
+    const isolated = isolateDialog(dialog.current);
     document.body.style.overflow = "hidden";
 
     const focusTarget = initialFocus?.current ?? focusableElements(dialog.current)[0] ?? dialog.current;
@@ -49,11 +50,36 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({ busy = fal
     return () => {
       document.removeEventListener("keydown", handleKey);
       document.body.style.overflow = originalOverflow;
+      isolated.forEach(({ element, inert, ariaHidden }) => {
+        element.inert = inert;
+        if (ariaHidden === null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", ariaHidden);
+      });
       opener?.focus();
     };
   }, [initialFocus]);
 
   return dialog;
+}
+
+function isolateDialog(dialog: HTMLElement | null) {
+  const isolated: Array<{ element: HTMLElement; inert: boolean; ariaHidden: string | null }> = [];
+  let active: HTMLElement | null = dialog;
+  while (active?.parentElement && active.parentElement !== document.body) {
+    const parent: HTMLElement = active.parentElement;
+    Array.from(parent.children).forEach((sibling) => {
+      if (!(sibling instanceof HTMLElement) || sibling === active || sibling.contains(active)) return;
+      isolated.push({
+        element: sibling,
+        inert: sibling.inert,
+        ariaHidden: sibling.getAttribute("aria-hidden"),
+      });
+      sibling.inert = true;
+      sibling.setAttribute("aria-hidden", "true");
+    });
+    active = parent;
+  }
+  return isolated;
 }
 
 function focusableElements(root: HTMLElement | null) {

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  ArrowRight, Check, ChevronRight, CircleAlert, MapPin, Minus, PackageCheck,
-  Plus, Search, ShieldCheck, ShoppingBag, Sparkles, X,
+  ArrowRight, Ban, Check, ChevronRight, CircleAlert, ClockAlert, MapPin, Minus,
+  PackageCheck, PackageX, Plus, RefreshCw, Search, ShieldCheck, ShoppingBag,
+  Sparkles, UserRound, X,
 } from "lucide-react";
 import { CustomerAddressBookSheet } from "./CustomerAddressBookSheet";
 import { CustomerAddressSheet, type CustomerAddressDraft } from "./CustomerAddressSheet";
@@ -15,13 +16,27 @@ import {
   cancelV1Order, formatV1Price, getV1Catalogue, getV1Order, getV1Orders,
   getV1Restaurants, reportV1CustomerIssue, submitV1Order, uploadV1CustomerIssueEvidence,
   type DastakV1Auth, type V1CatalogueCategory, type V1CatalogueSku, type V1Order,
-  type V1RestaurantMenu, type V1RestaurantMenuItem,
+  type V1OrderCursor, type V1RestaurantMenu, type V1RestaurantMenuItem,
 } from "./dastakV1";
+import {
+  CustomerRouteMap, CustomerTimeline, type CustomerMapPoint,
+} from "./CustomerDeliveryDetails";
+import { useModalDialog } from "./useModalDialog";
 import {
   createV1CheckoutSession,
   openRazorpayCheckout,
   reportV1CheckoutFailure,
 } from "./payments";
+import {
+  humanizeV1State,
+  isIssueEvidenceRequired,
+  isV1OrderActive,
+  orderKindLabel,
+  orderLineDetail,
+  statusAssurance,
+  statusMessage,
+  statusTitle,
+} from "./v1OrderPresentation";
 
 type Props = DastakV1Auth & {
   accountId: string;
@@ -33,6 +48,8 @@ type Props = DastakV1Auth & {
   section: Extract<CustomerSection, "home" | "search" | "orders">;
   onNavigate: (section: CustomerSection) => void;
   onOpenParcel: () => void;
+  onOpenOrder: (orderId: string) => void;
+  onCloseOrder: () => void;
 };
 
 type Cart = Record<string, number>;
@@ -64,70 +81,123 @@ export function DastakV1CustomerExperience(props: Props) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<V1RestaurantMenu>();
   const [searchResults, setSearchResults] = useState<V1CatalogueSku[]>([]);
   const [orders, setOrders] = useState<V1Order[]>([]);
+  const [ordersNextCursor, setOrdersNextCursor] = useState<V1OrderCursor>();
   const [addresses, setAddresses] = useState<CustomerDeliveryAddress[]>([]);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>();
   const [cart, setCart] = useState<Cart>(() => loadCart(props.accountId));
   const [foodCart, setFoodCart] = useState<FoodCartLine[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [loadingMoreOrders, setLoadingMoreOrders] = useState(false);
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [orderActionError, setOrderActionError] = useState<string>();
   const [paymentMessage, setPaymentMessage] = useState<string>();
+  const [ordersError, setOrdersError] = useState<string>();
+  const [liveOrderError, setLiveOrderError] = useState<string>();
   const [showingCart, setShowingCart] = useState(false);
   const [showingAddressBook, setShowingAddressBook] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CustomerDeliveryAddress | null>();
   const [selectedOrder, setSelectedOrder] = useState<V1Order>();
   const submissionKeys = useRef(new Map<string, string>());
+  const ordersRequestVersion = useRef(0);
+  const ordersPaginationAdvanced = useRef(false);
   const selectedOrderId = selectedOrder?.id;
   const selectedOrderStatus = selectedOrder?.status;
 
-  const refresh = useCallback(async () => {
+  const refreshStorefront = useCallback(async () => {
+    const [nextCatalogue, nextRestaurants, nextAddresses] = await Promise.allSettled([
+      getV1Catalogue({ ...auth, limit: 250 }),
+      getV1Restaurants({ ...auth, limit: 50 }),
+      getCustomerAddresses(auth),
+    ]);
+    if (nextCatalogue.status === "fulfilled") setCatalogue(nextCatalogue.value);
+    if (nextRestaurants.status === "fulfilled") setRestaurants(nextRestaurants.value);
+    if (nextAddresses.status === "fulfilled") setAddresses(nextAddresses.value.addresses);
+    const firstFailure = [nextCatalogue, nextRestaurants, nextAddresses]
+      .find((result) => result.status === "rejected");
+    if (firstFailure?.status === "rejected") setError(message(firstFailure.reason));
+    else setError(undefined);
+    setLoading(false);
+  }, [auth]);
+
+  const refreshOrders = useCallback(async (signal?: AbortSignal) => {
+    const requestVersion = ++ordersRequestVersion.current;
+    setLoadingOrders(true);
     try {
-      const [nextCatalogue, nextRestaurants, nextOrders, nextAddresses] = await Promise.all([
-        getV1Catalogue({ ...auth, limit: 250 }),
-        getV1Restaurants({ ...auth, limit: 50 }),
-        getV1Orders({ ...auth, limit: 50 }),
-        getCustomerAddresses(auth),
-      ]);
-      setCatalogue(nextCatalogue);
-      setRestaurants(nextRestaurants);
-      setOrders(nextOrders.orders);
-      setAddresses(nextAddresses.addresses);
-      setError(undefined);
-    } catch (refreshError) {
-      setError(message(refreshError));
+      const result = await getV1Orders({ ...auth, limit: 50, signal });
+      if (requestVersion !== ordersRequestVersion.current || signal?.aborted) return;
+      setOrders((current) => mergeV1Orders(result.orders, current));
+      if (!ordersPaginationAdvanced.current) setOrdersNextCursor(result.nextCursor);
+      setOrdersError(undefined);
+    } catch (requestError) {
+      if (signal?.aborted || requestVersion !== ordersRequestVersion.current) return;
+      setOrdersError(message(requestError));
     } finally {
-      setLoading(false);
+      if (requestVersion === ordersRequestVersion.current && !signal?.aborted) {
+        setLoadingOrders(false);
+      }
     }
   }, [auth]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  const loadMoreOrders = useCallback(async () => {
+    if (!ordersNextCursor || loadingMoreOrders) return;
+    setLoadingMoreOrders(true);
+    try {
+      const result = await getV1Orders({ ...auth, limit: 50, cursor: ordersNextCursor });
+      ordersPaginationAdvanced.current = true;
+      setOrders((current) => mergeV1Orders(result.orders, current));
+      setOrdersNextCursor(result.nextCursor);
+      setOrdersError(undefined);
+    } catch (requestError) {
+      setOrdersError(message(requestError));
+    } finally {
+      setLoadingMoreOrders(false);
+    }
+  }, [auth, loadingMoreOrders, ordersNextCursor]);
+
+  useEffect(() => { void refreshStorefront(); }, [refreshStorefront]);
   useEffect(() => {
-    if (!props.initialOrderId) return;
+    const controller = new AbortController();
+    void refreshOrders(controller.signal);
+    return () => controller.abort();
+  }, [refreshOrders]);
+  useEffect(() => {
+    if (!props.initialOrderId) {
+      setSelectedOrder(undefined);
+      setOrderActionError(undefined);
+      setLiveOrderError(undefined);
+      return;
+    }
     const controller = new AbortController();
     void getV1Order({ ...auth, orderId: props.initialOrderId, signal: controller.signal })
-      .then(setSelectedOrder)
+      .then((order) => {
+        setSelectedOrder((current) => newerOrder(current, order));
+        setOrders((current) => mergeV1Orders([order], current));
+        setOrderActionError(undefined);
+        setLiveOrderError(undefined);
+      })
       .catch((requestError) => {
-        if (!controller.signal.aborted) setError(message(requestError));
+        if (!controller.signal.aborted) setLiveOrderError(message(requestError));
       });
     return () => controller.abort();
   }, [auth, props.initialOrderId]);
   useEffect(() => {
     if (props.orderRefreshToken === 0) return;
-    void getV1Orders({ ...auth, limit: 50 }).then((result) => setOrders(result.orders)).catch(() => undefined);
-  }, [auth, props.orderRefreshToken]);
+    void refreshOrders();
+  }, [props.orderRefreshToken, refreshOrders]);
   useEffect(() => { saveCart(props.accountId, cart); }, [cart, props.accountId]);
 
   useEffect(() => {
     const dismiss = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || busy) return;
-      if (selectedOrderId) setSelectedOrder(undefined);
-      else if (showingCart) setShowingCart(false);
+      if (showingCart) setShowingCart(false);
     };
     window.addEventListener("keydown", dismiss);
     return () => window.removeEventListener("keydown", dismiss);
-  }, [busy, selectedOrderId, showingCart]);
+  }, [busy, showingCart]);
 
   useEffect(() => {
     const normalized = query.trim();
@@ -152,15 +222,28 @@ export function DastakV1CustomerExperience(props: Props) {
   useEffect(() => {
     if (!selectedOrderId || !selectedOrderStatus || !liveStatuses.has(selectedOrderStatus)) return;
     const controller = new AbortController();
-    const poll = window.setInterval(() => {
-      void getV1Order({ ...auth, orderId: selectedOrderId, signal: controller.signal })
-        .then((order) => {
-          setSelectedOrder(order);
-          setOrders((current) => [order, ...current.filter((item) => item.id !== order.id)]);
-        })
-        .catch(() => undefined);
-    }, 3000);
-    return () => { window.clearInterval(poll); controller.abort(); };
+    let timer: number | undefined;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const order = await getV1Order({ ...auth, orderId: selectedOrderId, signal: controller.signal });
+        if (stopped) return;
+        setSelectedOrder((current) => newerOrder(current, order));
+        setOrders((current) => mergeV1Orders([order], current));
+        setLiveOrderError(undefined);
+        if (liveStatuses.has(order.status)) timer = window.setTimeout(poll, 3_000);
+      } catch (requestError) {
+        if (stopped || controller.signal.aborted) return;
+        setLiveOrderError(message(requestError));
+        timer = window.setTimeout(poll, 5_000);
+      }
+    };
+    timer = window.setTimeout(poll, 3_000);
+    return () => {
+      stopped = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [auth, selectedOrderId, selectedOrderStatus]);
 
   const skuById = useMemo(() => {
@@ -282,11 +365,12 @@ export function DastakV1CustomerExperience(props: Props) {
         },
       });
       submissionKeys.current.delete(fingerprint);
-      setOrders((current) => [order, ...current.filter((item) => item.id !== order.id)]);
+      setOrders((current) => mergeV1Orders([order], current));
       setCart({});
       setFoodCart([]);
       setShowingCart(false);
       setSelectedOrder(order);
+      props.onOpenOrder(order.id);
     } catch (submitError) {
       setError(message(submitError));
     } finally {
@@ -297,15 +381,15 @@ export function DastakV1CustomerExperience(props: Props) {
   const cancelOrder = async () => {
     if (!selectedOrder || busy) return false;
     setBusy(true);
-    setError(undefined);
+    setOrderActionError(undefined);
     try {
       const order = await cancelV1Order({
         ...auth, orderId: selectedOrder.id, expectedVersion: selectedOrder.version, idempotencyKey: crypto.randomUUID(),
       });
-      setSelectedOrder(order);
-      setOrders((current) => [order, ...current.filter((item) => item.id !== order.id)]);
+      setSelectedOrder((current) => newerOrder(current, order));
+      setOrders((current) => mergeV1Orders([order], current));
     } catch (cancelError) {
-      setError(message(cancelError));
+      setOrderActionError(message(cancelError));
     } finally {
       setBusy(false);
     }
@@ -313,8 +397,9 @@ export function DastakV1CustomerExperience(props: Props) {
 
   const refreshSelectedOrder = useCallback(async (orderId: string) => {
     const order = await getV1Order({ ...auth, orderId });
-    setSelectedOrder(order);
-    setOrders((current) => [order, ...current.filter((item) => item.id !== order.id)]);
+    setSelectedOrder((current) => newerOrder(current, order));
+    setOrders((current) => mergeV1Orders([order], current));
+    setLiveOrderError(undefined);
     return order;
   }, [auth]);
 
@@ -323,7 +408,7 @@ export function DastakV1CustomerExperience(props: Props) {
       return;
     }
     setBusy(true);
-    setError(undefined);
+    setOrderActionError(undefined);
     setPaymentMessage(undefined);
     try {
       const session = await createV1CheckoutSession({
@@ -361,7 +446,7 @@ export function DastakV1CustomerExperience(props: Props) {
         await new Promise((resolve) => window.setTimeout(resolve, 1_500));
       }
     } catch (paymentError) {
-      setError(message(paymentError));
+      setOrderActionError(message(paymentError));
     } finally {
       setBusy(false);
     }
@@ -375,7 +460,7 @@ export function DastakV1CustomerExperience(props: Props) {
   }): Promise<boolean> => {
     if (!selectedOrder || busy) return false;
     setBusy(true);
-    setError(undefined);
+    setOrderActionError(undefined);
     try {
       const objectPath = input.evidenceFile
         ? await uploadV1CustomerIssueEvidence(props.client, props.accountId, input.evidenceFile)
@@ -393,7 +478,7 @@ export function DastakV1CustomerExperience(props: Props) {
       await refreshSelectedOrder(selectedOrder.id);
       return true;
     } catch (issueError) {
-      setError(message(issueError));
+      setOrderActionError(message(issueError));
       return false;
     } finally {
       setBusy(false);
@@ -440,7 +525,9 @@ export function DastakV1CustomerExperience(props: Props) {
     finally { setBusy(false); }
   };
 
-  if (loading) return <div className="v1-loading" role="status"><span /> Opening Dastak catalogue</div>;
+  if (loading && props.section !== "orders") {
+    return <div className="v1-loading" role="status"><span /> Opening Dastak catalogue</div>;
+  }
 
   return <main className="v1-customer-shell">
     <CustomerHeader address={defaultAddress} count={cartCount} onCart={() => setShowingCart(true)} />
@@ -459,7 +546,21 @@ export function DastakV1CustomerExperience(props: Props) {
     /> : props.section === "search" ? <SearchSection
       query={query} onQuery={setQuery} searching={searching}
       skus={query.trim() ? searchResults : catalogue?.skus ?? []} onAdd={add}
-    /> : <OrdersSection orders={orders} onOpen={setSelectedOrder} />}
+    /> : <OrdersSection
+      orders={orders}
+      loading={loadingOrders}
+      loadingMore={loadingMoreOrders}
+      canLoadMore={Boolean(ordersNextCursor)}
+      error={ordersError}
+      onRefresh={() => void refreshOrders()}
+      onLoadMore={() => void loadMoreOrders()}
+      onOpen={(order) => {
+        setSelectedOrder(order);
+        setOrderActionError(undefined);
+        setLiveOrderError(undefined);
+        props.onOpenOrder(order.id);
+      }}
+    />}
 
     {cartCount > 0 && !showingCart && <button className="v1-cart-bar" type="button" onClick={() => setShowingCart(true)}>
       <span><ShoppingBag size={18} /> {cartCount} {cartCount === 1 ? "item" : "items"}</span>
@@ -477,9 +578,19 @@ export function DastakV1CustomerExperience(props: Props) {
       onAdd={(item, optionIds) => addFood(selectedRestaurant, item, optionIds)}
     />}
     {selectedOrder && <MatchingSheet
-      order={selectedOrder} busy={busy} error={error} paymentMessage={paymentMessage}
-      onDismiss={() => { setSelectedOrder(undefined); setPaymentMessage(undefined); }}
+      order={selectedOrder} busy={busy} error={orderActionError} liveError={liveOrderError}
+      paymentMessage={paymentMessage}
+      onDismiss={() => {
+        setSelectedOrder(undefined);
+        setOrderActionError(undefined);
+        setPaymentMessage(undefined);
+        setLiveOrderError(undefined);
+        props.onCloseOrder();
+      }}
       onCancel={cancelOrder} onPay={payOrder}
+      onRefresh={() => void refreshSelectedOrder(selectedOrder.id).catch((requestError) => {
+        setLiveOrderError(message(requestError));
+      })}
       onReportIssue={reportIssue}
     />}
     {showingAddressBook && <CustomerAddressBookSheet
@@ -610,70 +721,145 @@ function RestaurantItemCard({ item, onAdd }: {
   </article>;
 }
 
-function OrdersSection({ orders, onOpen }: { orders: V1Order[]; onOpen: (order: V1Order) => void }) {
-  return <section className="v1-orders-page"><header><p>YOUR ORDERS</p><h1>Dastak activity</h1><span>Canonical retail orders and live matching status.</span></header>
-    {orders.length ? <div className="v1-order-list">{orders.map((order) => <button type="button" key={order.id} onClick={() => onOpen(order)}><span className="v1-order-icon"><PackageCheck size={21} /></span><span><strong>{statusTitle(order.status)}</strong><small>{order.displayOrderNumber} · {order.lines.length} products</small></span><b>{formatV1Price(order.price.totalPaise)}</b><ChevronRight size={18} /></button>)}</div> : <EmptyState title="No Dastak orders yet" copy="Submitted baskets and matching progress will appear here." />}
+type OrderScope = "active" | "past" | "all";
+
+export function OrdersSection({
+  orders, loading, loadingMore, canLoadMore, error, onRefresh, onLoadMore, onOpen,
+}: {
+  orders: V1Order[];
+  loading: boolean;
+  loadingMore: boolean;
+  canLoadMore: boolean;
+  error?: string;
+  onRefresh: () => void;
+  onLoadMore: () => void;
+  onOpen: (order: V1Order) => void;
+}) {
+  const [scope, setScope] = useState<OrderScope>("active");
+  const visible = useMemo(() => orders.filter((order) =>
+    scope === "all" || (scope === "active") === isV1OrderActive(order.status)
+  ), [orders, scope]);
+
+  return <section className="v1-orders-page">
+    <header className="v1-orders-header"><div><p>YOUR ORDERS</p><h1>Dastak activity</h1><span>Food, retail and mixed orders—from matching through delivery and recovery.</span></div><button className="v1-orders-refresh" type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button></header>
+    <div className="v1-order-scopes" role="group" aria-label="Filter orders">
+      {(["active", "past", "all"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
+    </div>
+    {error ? <div className="v1-orders-error" role="alert"><CircleAlert size={18} /><span>{error}</span><button type="button" onClick={onRefresh}>Try again</button></div> : null}
+    {loading && orders.length === 0 ? <div className="v1-orders-loading" role="status"><span /> Loading your orders</div> : visible.length ? <div className="v1-order-list">{visible.map((order) => <button type="button" key={order.id} onClick={() => onOpen(order)} aria-label={`Open ${order.displayOrderNumber}, ${statusTitle(order.status)}`}>
+      <span className={`v1-order-icon ${isV1OrderActive(order.status) ? "active" : "terminal"}`}><OrderStatusIcon status={order.status} size={21} /></span>
+      <span><strong>{statusTitle(order.status)}</strong><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)} · {order.lines.length} {order.lines.length === 1 ? "item" : "items"}</small><time dateTime={order.submittedAt ?? order.createdAt}>{formatOrderDate(order.submittedAt ?? order.createdAt)}</time></span>
+      <b>{formatV1Price(order.price.totalPaise)}</b><ChevronRight size={18} />
+    </button>)}</div> : <EmptyState title={scope === "active" ? "Nothing active" : scope === "past" ? "No past orders" : "No Dastak orders yet"} copy={scope === "active" ? "New and ongoing orders stay here until complete." : "Completed, cancelled and unavailable orders will appear here."} />}
+    {canLoadMore ? <button className="secondary-button v1-load-more" type="button" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading earlier orders…" : "Load earlier orders"}</button> : null}
   </section>;
 }
 
-function MatchingSheet({
-  order, busy, error, paymentMessage, onDismiss, onCancel, onPay, onReportIssue,
+export function MatchingSheet({
+  order, busy, error, liveError, paymentMessage, onDismiss, onCancel, onPay,
+  onRefresh, onReportIssue,
 }: {
   order: V1Order;
   busy: boolean;
   error?: string;
+  liveError?: string;
   paymentMessage?: string;
   onDismiss: () => void;
   onCancel: () => void;
   onPay: () => void;
+  onRefresh: () => void;
   onReportIssue: (input: {
     category: string; description: string; orderLineId?: string; evidenceFile?: File;
   }) => Promise<boolean>;
 }) {
+  const dialog = useModalDialog<HTMLElement>({ busy, onDismiss });
   const matching = matchingStatuses.has(order.status);
-  const preparing = order.status === "PAID" || order.status === "PREPARING" ||
-    order.status === "PICKUP_IN_PROGRESS";
-  const fulfilmentActive = preparing || order.status === "OUT_FOR_DELIVERY";
   const [now, setNow] = useState(() => Date.now());
   const [reportingIssue, setReportingIssue] = useState(false);
+  const [confirmingCancellation, setConfirmingCancellation] = useState(false);
   const [issueCategory, setIssueCategory] = useState("WRONG_SKU");
   const [issueLineId, setIssueLineId] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
   const [issueEvidence, setIssueEvidence] = useState<File>();
   useEffect(() => {
-    if (order.status !== "AWAITING_PAYMENT") return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    const cadence = order.status === "AWAITING_PAYMENT"
+      ? 1_000
+      : ["PAID", "PREPARING", "OUT_FOR_DELIVERY"].includes(order.status) ? 30_000 : undefined;
+    if (!cadence) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), cadence);
     return () => window.clearInterval(timer);
   }, [order.status]);
+  useEffect(() => { setConfirmingCancellation(false); }, [order.id, order.status]);
   const paymentSeconds = order.payment
     ? Math.max(0, Math.ceil((Date.parse(order.payment.expiresAt) - now) / 1_000))
     : 0;
   const paymentReady = order.status === "AWAITING_PAYMENT" && order.payment?.canAttempt && paymentSeconds > 0;
-  return <div className="v1-overlay" role="presentation"><section className="v1-sheet v1-matching-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-order-status-title">
-    <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">Order status</h2></div><button type="button" onClick={onDismiss} aria-label="Close order status"><X size={19} /></button></header>
-    <div className="v1-status-hero"><span className={matching ? "matching" : ""}>{matching ? <i /> : fulfilmentActive ? <PackageCheck size={34} /> : <Check size={34} />}</span><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p>{fulfilmentActive || order.status === "DELIVERED" ? <small><ShieldCheck size={16} /> Secure package custody is tracked by Dastak</small> : <small><ShieldCheck size={16} /> No charge until the complete basket is secured</small>}</div>
-    <div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><span>{line.quantity}× {line.name}</span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}<div className="total"><span>Current total</span><strong>{formatV1Price(order.price.totalPaise)}</strong></div></div>
+  const evidenceRequired = isIssueEvidenceRequired(issueCategory);
+  const readyAt = order.fulfilmentProgress?.estimatedReadyAt;
+  const runningLate = Boolean(order.fulfilmentProgress?.runningLate ||
+    (readyAt && Date.parse(readyAt) < now));
+  const mapPoints: CustomerMapPoint[] = order.status === "OUT_FOR_DELIVERY" && order.deliveryAddress
+    ? [
+      {
+        label: order.deliveryAddress.label ?? "Delivery address",
+        address: orderAddress(order),
+        latitude: order.deliveryAddress.latitude,
+        longitude: order.deliveryAddress.longitude,
+        kind: "dropoff",
+      },
+      ...(order.delivery?.riderLocation ? [{
+        label: "Your delivery partner",
+        address: order.delivery.distanceToDestinationMeters === undefined
+          ? "Live location" : `${formatDistance(order.delivery.distanceToDestinationMeters)} away`,
+        latitude: order.delivery.riderLocation.latitude,
+        longitude: order.delivery.riderLocation.longitude,
+        kind: "courier" as const,
+      }] : []),
+    ] : [];
+
+  return <div className="v1-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-matching-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-order-status-title">
+    <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">Order status</h2><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)} · {formatOrderDate(order.submittedAt ?? order.createdAt)}</small></div><button type="button" onClick={onDismiss} aria-label="Close order status"><X size={19} /></button></header>
+    <div className={`v1-status-hero ${isFailureStatus(order.status) ? "failure" : ""}`}><span className={matching ? "matching" : ""}>{matching ? <i /> : <OrderStatusIcon status={order.status} size={34} />}</span><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p><small><ShieldCheck size={16} /> {statusAssurance(order.status)}</small></div>
+
+    {(order.status === "PAID" || order.status === "PREPARING") && readyAt ? <section className={`v1-order-eta ${runningLate ? "late" : ""}`} aria-label="Preparation estimate"><ClockAlert size={21} /><span><strong>{runningLate ? "Taking a little longer" : "Estimated ready"}</strong><small>{runningLate ? "Your order stays in preparation until the merchant confirms Ready." : `Around ${formatOrderTime(readyAt)}`}</small></span>{!runningLate ? <b>{relativeTime(readyAt, now)}</b> : null}</section> : null}
+
+    {mapPoints.length ? <section className="v1-live-delivery"><header><div><p>LIVE DELIVERY</p><h3>{order.delivery?.riderLocation ? "Your rider is on the way" : "Waiting for a fresh rider location"}</h3></div>{order.delivery?.distanceToDestinationMeters !== undefined ? <strong>{formatDistance(order.delivery.distanceToDestinationMeters)}</strong> : null}</header><CustomerRouteMap points={mapPoints} />{order.delivery?.riderLocationUpdatedAt ? <small>Location updated {relativeTime(order.delivery.riderLocationUpdatedAt, now)}</small> : null}</section> : null}
+
+    {order.deliveryAddress ? <section className="v1-order-destination"><div><MapPin size={20} /><span><small>{order.deliveryAddress.label ?? "DELIVERY ADDRESS"}</small><strong>{orderAddress(order)}</strong></span></div>{order.recipient ? <div><UserRound size={20} /><span><small>RECIPIENT</small><strong>{order.recipient.name} · {order.recipient.phoneNumber}</strong></span></div> : null}{order.deliveryAddress.instructions ? <p><strong>Delivery note</strong>{order.deliveryAddress.instructions}</p> : null}</section> : null}
+
+    <section className="v1-order-contents" aria-label="Order items"><header><div><p>{orderKindLabel(order.orderType)}</p><h3>{order.restaurant?.name ?? "Your basket"}</h3>{order.restaurant?.branchName ? <small>{order.restaurant.branchName}</small> : null}</div><span>{order.lines.length} {order.lines.length === 1 ? "item" : "items"}</span></header><div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><span><b>{line.quantity}× {line.name}</b>{orderLineDetail(line) ? <small>{orderLineDetail(line)}</small> : null}</span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}</div></section>
+
+    <section className="v1-order-receipt" aria-label="Receipt"><h3>Receipt</h3><ReceiptRow label="Items" amount={order.price.subtotalPaise} />{order.price.deliveryFeePaise ? <ReceiptRow label="Delivery" amount={order.price.deliveryFeePaise} /> : null}{order.price.taxPaise ? <ReceiptRow label="Taxes" amount={order.price.taxPaise} /> : null}{order.price.discountPaise ? <ReceiptRow label="Discount" amount={-order.price.discountPaise} /> : null}<ReceiptRow label={order.paidAt ? "Total paid" : "Order total"} amount={order.price.totalPaise} total /></section>
+
+    <CustomerTimeline items={[
+      { label: "Order placed", value: order.submittedAt ?? order.createdAt },
+      { label: "Basket secured", value: order.fullySecuredAt },
+      { label: "Payment confirmed", value: order.paidAt },
+      { label: "Out for delivery", value: order.delivery?.outForDeliveryAt },
+      { label: "Delivered", value: order.deliveredAt ?? order.delivery?.deliveredAt },
+    ]} />
+
     {order.status === "AWAITING_PAYMENT" && order.payment ? <div className="v1-payment-window">
       <span><strong>Reserved for payment</strong><small>{paymentSeconds > 0 ? `${formatDuration(paymentSeconds)} remaining` : "Reservation ending"}</small></span>
       <strong>{formatV1Price(order.payment.amountPaise)}</strong>
     </div> : null}
-    {order.payment?.latestAttempt?.status === "FAILED" ? <p className="v1-payment-retry" role="status">Your previous attempt failed. No rematching occurred.</p> : null}
+    {order.payment?.latestAttempt?.status === "FAILED" ? <p className="v1-payment-retry" role="status">Your previous attempt failed. The same secured basket remains reserved—no rematching occurred.</p> : null}
     {order.status === "OUT_FOR_DELIVERY" && order.delivery?.deliveryCode ? <div className="v1-delivery-code" role="status">
       <span><small>DELIVERY CODE</small><strong>{order.delivery.deliveryCode}</strong></span>
       <p>Share this in-app code only when every package is with you. A trusted recipient may use it without a Dastak account.</p>
     </div> : null}
     {order.status === "OUT_FOR_DELIVERY" && order.delivery?.verificationStatus === "BLOCKED" ? <p className="v1-payment-retry" role="status">Delivery verification needs Operations support. Your rider must keep every package secure.</p> : null}
     {order.support?.recovery.map((recovery) => <p className="v1-payment-retry" role="status" key={recovery.id}>{recovery.customerMessage}</p>)}
-    {order.support?.issues.length ? <div className="v1-matching-lines" aria-label="Reported issues">
-      {order.support.issues.map((issue) => <div key={issue.id}><span>{issue.category.replaceAll("_", " ")} · {issue.status.replaceAll("_", " ")}</span><strong>{issue.resolution ?? "Operations reviewing"}</strong></div>)}
-    </div> : null}
+    {order.support?.issues.length ? <section className="v1-order-support-history" aria-label="Reported issues"><h3>Support updates</h3>{order.support.issues.map((issue) => <div key={issue.id}><span><strong>{humanizeV1State(issue.category)}</strong><small>{humanizeV1State(issue.status)}</small></span><p>{issue.resolution ?? "Operations is reviewing your report."}</p></div>)}</section> : null}
     {order.support?.returns.map((customerReturn) => <div className="v1-delivery-code" role="status" key={customerReturn.id}>
-      <span><small>RETURN {customerReturn.status.replaceAll("_", " ")}</small><strong>{customerReturn.mission?.pickupCode ?? `${customerReturn.packageCount} pkg`}</strong></span>
+      <span><small>RETURN · {humanizeV1State(customerReturn.status)}</small><strong>{customerReturn.mission?.pickupCode ?? `${customerReturn.packageCount} pkg`}</strong></span>
       <p>{customerReturn.mission?.pickupCode ? "Share this in-app code only after the assigned rider photographs and accounts for every return package." : "Operations will arrange secure reverse custody when required."}</p>
     </div>)}
-    {order.support?.refunds.map((refund) => <p className="v1-payment-message" role="status" key={refund.id}>Refund {refund.status.replaceAll("_", " ").toLowerCase()} · {formatV1Price(refund.amountPaise)} to original payment method</p>)}
+    {order.support?.refunds.map((refund) => <p className="v1-payment-message" role="status" key={refund.id}>Refund {humanizeV1State(refund.status).toLowerCase()} · {formatV1Price(refund.amountPaise)} to original payment method</p>)}
     {reportingIssue ? <form className="v1-problem-form" onSubmit={(event) => {
       event.preventDefault();
+      if (evidenceRequired && !issueEvidence) return;
       void onReportIssue({
         category: issueCategory,
         description: issueDescription,
@@ -683,19 +869,21 @@ function MatchingSheet({
         if (!success) return;
         setReportingIssue(false);
         setIssueDescription("");
+        setIssueLineId("");
         setIssueEvidence(undefined);
       });
     }}>
-      <label><span>What went wrong?</span><select value={issueCategory} onChange={(event) => setIssueCategory(event.target.value)}><option value="WRONG_SKU">Wrong product</option><option value="WRONG_QUANTITY">Wrong quantity</option><option value="DAMAGED">Damaged</option><option value="DEFECTIVE">Defective</option><option value="EXPIRED">Expired</option><option value="TAMPERED_OR_BROKEN_SEAL">Seal or tampering</option><option value="INCORRECT_PACKAGE">Incorrect package</option><option value="DELIVERY_PROBLEM">Delivery problem</option><option value="OTHER">Other</option></select></label>
+      <label><span>What went wrong?</span><select value={issueCategory} onChange={(event) => setIssueCategory(event.target.value)}><option value="WRONG_SKU">Wrong product</option><option value="WRONG_QUANTITY">Wrong quantity</option><option value="DAMAGED">Damaged</option><option value="DEFECTIVE">Defective</option><option value="EXPIRED">Expired</option><option value="TAMPERED_OR_BROKEN_SEAL">Seal or tampering</option><option value="INCORRECT_PACKAGE">Incorrect package</option><option value="SUSPECTED_MERCHANT_MISFULFILMENT">Merchant fulfilment concern</option><option value="DELIVERY_PROBLEM">Delivery problem</option><option value="OTHER">Other</option></select></label>
       <label><span>Product (optional)</span><select value={issueLineId} onChange={(event) => setIssueLineId(event.target.value)}><option value="">Whole order</option>{order.lines.map((line) => <option key={line.id} value={line.id}>{line.quantity}× {line.name}</option>)}</select></label>
       <label><span>Details</span><textarea rows={3} minLength={3} maxLength={1000} required value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} /></label>
-      <label className="v1-photo-field"><span>Photo (optional)</span><input type="file" accept="image/jpeg,image/png,image/heic" capture="environment" onChange={(event) => setIssueEvidence(event.target.files?.[0])} /><small>{issueEvidence?.name ?? "JPG, PNG or HEIC up to 10 MB"}</small></label>
-      <div><button className="secondary-button" type="button" disabled={busy} onClick={() => setReportingIssue(false)}>Back</button><button className="primary-button" type="submit" disabled={busy || issueDescription.trim().length < 3}>{busy ? "Sending…" : "Send to support"}</button></div>
+      <label className="v1-photo-field"><span>Evidence photo {evidenceRequired ? "(required)" : "(optional)"}</span><input type="file" required={evidenceRequired} accept="image/jpeg,image/png,image/heic" capture="environment" onChange={(event) => setIssueEvidence(event.target.files?.[0])} /><small>{issueEvidence?.name ?? "JPG, PNG or HEIC up to 10 MB"}</small></label>
+      <div><button className="secondary-button" type="button" disabled={busy} onClick={() => setReportingIssue(false)}>Back</button><button className="primary-button" type="submit" disabled={busy || issueDescription.trim().length < 3 || (evidenceRequired && !issueEvidence)}>{busy ? "Sending…" : "Send to support"}</button></div>
     </form> : order.support?.canReportIssue ? <button className="secondary-button v1-secondary-action" type="button" disabled={busy} onClick={() => setReportingIssue(true)}><CircleAlert size={17} /> Get help with this order</button> : null}
     {paymentMessage ? <p className="v1-payment-message" role="status">{paymentMessage}</p> : null}
+    {liveError ? <div className="v1-live-error" role="status"><CircleAlert size={17} /><span>Live updates paused: {liveError}</span><button type="button" onClick={onRefresh}>Refresh now</button></div> : null}
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {paymentReady ? <button className="primary-button v1-pay" type="button" disabled={busy} onClick={onPay}>{busy ? "Opening secure payment…" : `Pay ${formatV1Price(order.payment?.amountPaise ?? order.price.totalPaise)}`}<ArrowRight size={18} /></button> : null}
-    {cancellableStatuses.has(order.status) ? <button className="v1-cancel" type="button" disabled={busy} onClick={onCancel}>{busy ? "Cancelling…" : "Cancel before payment"}</button> : null}
+    {cancellableStatuses.has(order.status) ? confirmingCancellation ? <div className="v1-cancel-confirm" role="alert"><strong>Cancel this order?</strong><p>Reserved items will be released. This action is available only before payment.</p><div><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmingCancellation(false)}>Keep order</button><button className="danger-button" type="button" disabled={busy} onClick={onCancel}>{busy ? "Cancelling…" : "Cancel order"}</button></div></div> : <button className="v1-cancel" type="button" disabled={busy} onClick={() => setConfirmingCancellation(true)}>Cancel before payment</button> : null}
   </section></div>;
 }
 
@@ -703,32 +891,72 @@ function EmptyState({ title, copy }: { title: string; copy: string }) {
   return <div className="v1-empty"><ShoppingBag size={30} /><strong>{title}</strong><span>{copy}</span></div>;
 }
 
-function statusTitle(status: V1Order["status"]) {
-  switch (status) {
-    case "CREATED": case "MATCHING": return "Finding every item";
-    case "FULLY_SECURED": case "AWAITING_PAYMENT": return "Your basket is secured";
-    case "PAID": case "PREPARING": return "Preparing your order";
-    case "PICKUP_IN_PROGRESS": return "Picking up your order";
-    case "OUT_FOR_DELIVERY": return "On the way";
-    case "DELIVERED": return "Delivered";
-    case "UNAVAILABLE": return "Basket unavailable";
-    case "PAYMENT_EXPIRED": return "Payment window expired";
-    case "CANCELLED_PREPAYMENT": return "Order cancelled";
-    case "DASTAK_FULFILMENT_FAILURE": return "Order needs attention";
-  }
+function OrderStatusIcon({ status, size }: { status: V1Order["status"]; size: number }) {
+  if (status === "UNAVAILABLE") return <PackageX size={size} />;
+  if (status === "PAYMENT_EXPIRED") return <ClockAlert size={size} />;
+  if (status === "CANCELLED_PREPAYMENT") return <Ban size={size} />;
+  if (status === "DASTAK_FULFILMENT_FAILURE") return <CircleAlert size={size} />;
+  if (status === "DELIVERED") return <Check size={size} />;
+  return <PackageCheck size={size} />;
 }
 
-function statusMessage(status: V1Order["status"]) {
-  if (matchingStatuses.has(status)) return "Dastak is matching your exact products. Retail merchant identities stay private.";
-  if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") return "Every item has been reserved. Secure payment is requested before preparation.";
-  if (status === "PAID" || status === "PREPARING") return "Payment is confirmed and your secured items are being prepared.";
-  if (status === "PICKUP_IN_PROGRESS") return "Your delivery partner is collecting the complete order for you.";
-  if (status === "OUT_FOR_DELIVERY") return "Every package has been collected and your delivery partner is heading to you.";
-  if (status === "DELIVERED") return "Every package was securely handed over. Your order is complete.";
-  if (status === "UNAVAILABLE") return "Dastak could not secure the complete basket. You were not charged.";
-  if (status === "CANCELLED_PREPAYMENT") return "This order was cancelled before payment.";
-  if (status === "PAYMENT_EXPIRED") return "The reservation expired without payment.";
-  return "The latest verified order state is shown below.";
+function ReceiptRow({ label, amount, total = false }: {
+  label: string; amount: number; total?: boolean;
+}) {
+  return <div className={total ? "total" : ""}><span>{label}</span><strong>{formatV1Price(amount)}</strong></div>;
+}
+
+function isFailureStatus(status: V1Order["status"]) {
+  return ["UNAVAILABLE", "PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT",
+    "DASTAK_FULFILMENT_FAILURE"].includes(status);
+}
+
+function newerOrder(current: V1Order | undefined, incoming: V1Order) {
+  if (!current || current.id !== incoming.id || incoming.version >= current.version) return incoming;
+  return current;
+}
+
+function mergeV1Orders(incoming: V1Order[], current: V1Order[]) {
+  const currentById = new Map(current.map((order) => [order.id, order]));
+  const merged = new Map<string, V1Order>(currentById);
+  incoming.forEach((order) => {
+    const existing = currentById.get(order.id) ?? merged.get(order.id);
+    merged.set(order.id, existing && existing.version > order.version ? existing : order);
+  });
+  return [...merged.values()].sort((left, right) => {
+    const date = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+    return date || right.id.localeCompare(left.id);
+  });
+}
+
+function orderAddress(order: V1Order) {
+  const address = order.deliveryAddress;
+  if (!address) return "Delivery address";
+  return [address.line1, address.line2, address.landmark, address.city, address.state,
+    address.postalCode].filter(Boolean).join(", ");
+}
+
+function formatOrderDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium", timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatOrderTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(new Date(value));
+}
+
+function relativeTime(value: string, now: number) {
+  const seconds = Math.round((Date.parse(value) - now) / 1_000);
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  if (Math.abs(seconds) < 90) return formatter.format(seconds, "second");
+  const minutes = Math.round(seconds / 60);
+  if (Math.abs(minutes) < 90) return formatter.format(minutes, "minute");
+  return formatter.format(Math.round(minutes / 60), "hour");
+}
+
+function formatDistance(meters: number) {
+  return meters < 1_000 ? `${meters} m` : `${(meters / 1_000).toFixed(1)} km`;
 }
 
 function formatDuration(seconds: number) {

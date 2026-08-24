@@ -8,6 +8,7 @@ import {
   getV1AdminSystemHealth,
   getV1AdminOperationalSafety,
   getV1Catalogue,
+  getV1Orders,
   getV1Restaurants,
   getV1MerchantCanonicalCatalogue,
   getV1MerchantRestaurantMenu,
@@ -261,13 +262,87 @@ describe("Dastak V1 web contract", () => {
         verificationStatus: "ACTIVE",
         deliveryCode: "654321",
         riderArrivedAt: null,
+        outForDeliveryAt: "2026-08-22T00:30:00Z",
         deliveredAt: null,
         recipientAccountRequired: false,
+        riderLocation: { latitude: 12.681, longitude: 78.621 },
+        riderLocationUpdatedAt: "2026-08-22T00:31:00Z",
+        distanceToDestinationMeters: 725,
       },
     });
     const order = parseV1Order(fixture);
-    expect(order.delivery).toMatchObject({ deliveryCode: "654321", recipientAccountRequired: false });
+    expect(order.delivery).toMatchObject({
+      deliveryCode: "654321",
+      recipientAccountRequired: false,
+      riderLocation: { latitude: 12.681, longitude: 78.621 },
+      distanceToDestinationMeters: 725,
+    });
+    expect(order.deliveryAddress).toMatchObject({ line1: "12 Market Road", instructions: "Call at gate" });
+    expect(order.recipient).toEqual({ name: "A Customer", phoneNumber: "+919876543210" });
     expect(JSON.stringify(order)).not.toMatch(/merchant|branch|store/i);
+  });
+
+  it("paginates order history with the opaque order cursor", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const cursor = { createdAt: "2026-08-21T23:59:00Z", orderId };
+    const result = await getV1Orders({ ...auth, limit: 25, cursor }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({ orders: [orderFixture()], nextCursor: cursor });
+    });
+
+    expect(requestBody).toEqual({ operation: "list", limit: 25, cursor });
+    expect(result.orders).toHaveLength(1);
+    expect(result.nextCursor).toEqual(cursor);
+  });
+
+  it("decodes mixed food selections and authoritative preparation timing", () => {
+    const fixture = orderFixture();
+    Object.assign(fixture, {
+      orderType: "MIXED",
+      status: "PREPARING",
+      fulfilmentProgress: {
+        state: "PREPARING",
+        estimatedReadyAt: "2026-08-22T00:20:00Z",
+        runningLate: false,
+      },
+      restaurant: {
+        organizationId: categoryId,
+        branchId: subcategoryId,
+        name: "Dastak Cafe",
+        branchName: "Main Road",
+        imageKey: null,
+      },
+    });
+    (fixture.lines as Array<Record<string, unknown>>).push({
+      id: packageId,
+      lineType: "FOOD_MENU_ITEM",
+      skuId: null,
+      menuItemId: fulfilmentId,
+      name: "Filter Coffee",
+      variant: null,
+      packSize: null,
+      quantity: 1,
+      unitPricePaise: 5000,
+      lineTotalPaise: 5000,
+      status: "SECURED",
+      foodSelection: {
+        options: [{
+          id: lineId,
+          groupId: orderId,
+          groupName: "Size",
+          name: "Large",
+          priceDeltaPaise: 500,
+        }],
+      },
+    });
+
+    const order = parseV1Order(fixture);
+    expect(order.restaurant?.name).toBe("Dastak Cafe");
+    expect(order.lines[1].foodSelection?.options[0]).toMatchObject({ groupName: "Size", name: "Large" });
+    expect(order.fulfilmentProgress).toMatchObject({
+      estimatedReadyAt: "2026-08-22T00:20:00Z",
+      runningLate: false,
+    });
   });
 
   it("preserves exact Wave 2 subset identity in merchant responses", async () => {
@@ -697,6 +772,13 @@ function orderFixture() {
       id: lineId, lineType: "RETAIL_SKU", skuId, name: "Rice", variant: null,
       packSize: "1 kg", quantity: 2, unitPricePaise: 9500, lineTotalPaise: 19000, status: "PENDING_MATCH",
     }],
+    deliveryAddress: {
+      label: "Home", line1: "12 Market Road", line2: null, landmark: null,
+      city: "Vaniyambadi", state: "Tamil Nadu", postalCode: "635751",
+      countryCode: "IN", latitude: 12.68, longitude: 78.62,
+      instructions: "Call at gate",
+    },
+    recipient: { name: "A Customer", phoneNumber: "+919876543210" },
     submittedAt: "2026-08-22T00:00:00Z", fullySecuredAt: null, paymentExpiresAt: null,
     paidAt: null, deliveredAt: null, createdAt: "2026-08-22T00:00:00Z", updatedAt: "2026-08-22T00:00:00Z",
   };

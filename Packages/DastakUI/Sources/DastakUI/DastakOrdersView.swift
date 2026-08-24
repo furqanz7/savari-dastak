@@ -8,13 +8,13 @@ struct DastakOrdersView: View {
     @ObservedObject var model: DastakCustomerModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var scope: DastakOrderHistoryScope = .active
-    @State private var showingV1Order = false
 
     var body: some View {
         Group {
-            if model.isLoadingOrders, model.isLoadingParcels, model.orders.isEmpty,
+            if (model.isLoadingOrders || model.isLoadingV1Orders || model.isLoadingParcels),
+               model.orders.isEmpty,
                model.v1Orders.isEmpty, model.parcels.isEmpty {
-                ProgressView("Refreshing orders")
+                ProgressView("Loading your orders")
             } else if model.orders.isEmpty, model.v1Orders.isEmpty, model.parcels.isEmpty {
                 if let failure = model.ordersAndParcelsRefreshFailure {
                     DastakEmptyState(
@@ -63,13 +63,29 @@ struct DastakOrdersView: View {
                     if !filteredV1Orders.isEmpty {
                         Section("Dastak orders") {
                             ForEach(filteredV1Orders) { order in
-                                Button {
-                                    model.focusV1Order(order)
-                                    showingV1Order = true
-                                } label: {
+                                NavigationLink(value: DastakCustomerDestination.dastakV1Order(order.id)) {
                                     DastakV1OrderHistoryRow(order: order)
                                 }
-                                .buttonStyle(.plain)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                            }
+
+                            if model.canLoadMoreV1Orders {
+                                Button {
+                                    Task { await model.loadMoreV1Orders() }
+                                } label: {
+                                    HStack {
+                                        Spacer()
+                                        if model.isLoadingMoreV1Orders {
+                                            ProgressView()
+                                            Text("Loading earlier orders…")
+                                        } else {
+                                            Label("Load earlier orders", systemImage: "clock.arrow.circlepath")
+                                        }
+                                        Spacer()
+                                    }
+                                }
+                                .disabled(model.isLoadingMoreV1Orders)
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
                             }
@@ -142,11 +158,6 @@ struct DastakOrdersView: View {
                 await model.refreshOrdersAndParcels()
             }
         }
-        .sheet(isPresented: $showingV1Order) {
-            DastakV1MatchingView(model: model)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
     }
 
     private var filteredV1Orders: [DastakV1OrderSnapshot] {
@@ -170,7 +181,7 @@ struct DastakOrdersView: View {
     }
 
     private func isActive(_ status: DastakV1OrderStatus) -> Bool {
-        ![.delivered, .unavailable, .paymentExpired, .cancelledPrepayment].contains(status)
+        DastakV1OrderPresentation.isActive(status)
     }
 }
 
@@ -179,7 +190,7 @@ private struct DastakV1OrderHistoryRow: View {
 
     var body: some View {
         HStack(spacing: MarketplaceSpacing.compact) {
-            Image(systemName: "checkmark.shield")
+            Image(systemName: DastakV1OrderPresentation.symbol(order.status))
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 .frame(width: 42, height: 42)
                 .background(
@@ -189,7 +200,7 @@ private struct DastakV1OrderHistoryRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline)
-                Text("\(order.displayOrderNumber) · \(order.lines.count) products")
+                Text(summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -205,18 +216,19 @@ private struct DastakV1OrderHistoryRow: View {
     }
 
     private var title: String {
-        switch order.status {
-        case .created, .matching: "Finding every item"
-        case .fullySecured, .awaitingPayment: "Basket secured"
-        case .paid, .preparing: "Preparing"
-        case .pickupInProgress: "Picking up your order"
-        case .outForDelivery: "On the way"
-        case .delivered: "Delivered"
-        case .unavailable: "Basket unavailable"
-        case .paymentExpired: "Payment expired"
-        case .cancelledPrepayment: "Cancelled"
-        case .fulfilmentFailure: "Needs attention"
+        DastakV1OrderPresentation.title(order.status)
+    }
+
+    private var summary: String {
+        var parts = [
+            order.restaurant?.name ?? DastakV1OrderPresentation.orderType(order.orderType),
+            order.displayOrderNumber,
+            "\(order.lines.count) \(order.lines.count == 1 ? "item" : "items")",
+        ]
+        if let date = DastakV1OrderPresentation.date(order.submittedAt ?? order.createdAt) {
+            parts.append(date.formatted(date: .abbreviated, time: .shortened))
         }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -245,8 +257,22 @@ private struct DastakCustomerDeliveryDestinationView: View {
     var body: some View {
         switch destination {
         case let .dastakV1Order(orderID):
-            DastakV1MatchingView(model: model)
-                .task { _ = await model.focusV1Order(id: orderID) }
+            Group {
+                if model.activeV1Order?.id == orderID {
+                    DastakV1MatchingView(model: model, isPresentedModally: false)
+                } else if let failure = model.v1OrderErrorMessage {
+                    DastakEmptyState(
+                        symbol: "arrow.clockwise",
+                        title: "Order unavailable",
+                        message: failure,
+                        actionTitle: "Try again",
+                        action: { Task { _ = await model.focusV1Order(id: orderID) } }
+                    )
+                } else {
+                    ProgressView("Loading order")
+                }
+            }
+            .task { _ = await model.focusV1Order(id: orderID) }
         case let .merchantOrder(orderID):
             if let order = model.order(withID: orderID) {
                 DastakOrderDetailView(

@@ -69,6 +69,8 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var isLoadingV1Catalogue = false
     @Published private(set) var isSearchingV1Catalogue = false
     @Published private(set) var isSubmittingV1Order = false
+    @Published private(set) var isLoadingV1Orders = false
+    @Published private(set) var isLoadingMoreV1Orders = false
     @Published private(set) var isLoadingOrders = false
     @Published private(set) var isLoadingParcels = false
     @Published private(set) var isCheckingOut = false
@@ -89,6 +91,7 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var v1CatalogueRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var accountRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var ordersRefreshFailure: DastakCustomerRefreshFailure?
+    @Published private(set) var v1OrdersRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var parcelsRefreshFailure: DastakCustomerRefreshFailure?
     @Published private(set) var sessionExpired = false
     @Published private(set) var isDeliveryAddressConfirmed = false
@@ -97,6 +100,8 @@ final class DastakCustomerModel: ObservableObject {
     @Published private(set) var isLinkingIdentity = false
     @Published var identityMessage: String?
     @Published private(set) var identityMessageIsSuccess = false
+
+    private var hasLoadedAdditionalV1OrderPage = false
 
     let parcelClient: any ParcelDeliveryClient
 
@@ -122,7 +127,9 @@ final class DastakCustomerModel: ObservableObject {
     )?
     private var parcelPlacementAttempt = DastakOrderPlacementAttempt()
     private var ordersRefreshQueued = false
+    private var v1OrdersRefreshQueued = false
     private var parcelsRefreshQueued = false
+    private var v1OrdersNextCursor: DastakV1OrderCursor?
 
     init(
         catalogueClient: any CatalogueClient,
@@ -196,18 +203,20 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     var ordersAndParcelsRefreshFailure: DastakCustomerRefreshFailure? {
-        let failures = [ordersRefreshFailure, parcelsRefreshFailure].compactMap { $0 }
+        let failures = [v1OrdersRefreshFailure, ordersRefreshFailure, parcelsRefreshFailure]
+            .compactMap { $0 }
         return failures.first(where: { $0 == .sessionExpired }) ?? failures.first
     }
 
     var hasActiveOrders: Bool {
-        let inactiveV1Statuses: [DastakV1OrderStatus] = [
-            .delivered, .unavailable, .paymentExpired, .cancelledPrepayment,
-            .fulfilmentFailure,
-        ]
-        return v1Orders.contains { !inactiveV1Statuses.contains($0.status) }
+        return v1Orders.contains { Self.isActiveV1Order($0.status) }
             || orders.contains { ![.delivered, .cancelled].contains($0.status) }
             || parcels.contains { ![.delivered, .cancelled].contains($0.parcel.status) }
+    }
+
+    nonisolated static func isActiveV1Order(_ status: DastakV1OrderStatus) -> Bool {
+        ![.delivered, .unavailable, .paymentExpired, .cancelledPrepayment,
+          .fulfilmentFailure].contains(status)
     }
 
     func bootstrap() async {
@@ -473,20 +482,70 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func refreshV1Orders() async {
+        v1OrdersRefreshQueued = true
+        guard !isLoadingV1Orders else { return }
+        isLoadingV1Orders = true
+        defer { isLoadingV1Orders = false }
+
+        while v1OrdersRefreshQueued, !Task.isCancelled {
+            v1OrdersRefreshQueued = false
+            do {
+                let result = try await v1Client.orders(
+                    limit: 50,
+                    cursor: nil,
+                    idempotencyKey: makeKey()
+                )
+                v1Orders = mergeV1Orders(result.orders)
+                if !hasLoadedAdditionalV1OrderPage {
+                    v1OrdersNextCursor = result.nextCursor
+                }
+                if let focused = activeV1Order,
+                   let refreshed = v1Orders.first(where: { $0.id == focused.id }) {
+                    activeV1Order = refreshed
+                } else if activeV1Order == nil {
+                    activeV1Order = v1Orders.first(where: {
+                        Self.isActiveV1Order($0.status)
+                    })
+                }
+                v1OrdersRefreshFailure = nil
+            } catch {
+                v1OrdersRefreshFailure = refreshFailure(for: error)
+            }
+        }
+    }
+
+    var canLoadMoreV1Orders: Bool { v1OrdersNextCursor != nil }
+
+    func loadMoreV1Orders() async {
+        guard let cursor = v1OrdersNextCursor,
+              !isLoadingV1Orders, !isLoadingMoreV1Orders else { return }
+        isLoadingMoreV1Orders = true
+        defer { isLoadingMoreV1Orders = false }
         do {
             let result = try await v1Client.orders(
                 limit: 50,
-                cursor: nil,
+                cursor: cursor,
                 idempotencyKey: makeKey()
             )
-            v1Orders = result.orders
-            if activeV1Order == nil {
-                activeV1Order = result.orders.first(where: {
-                    [.created, .matching, .fullySecured, .awaitingPayment].contains($0.status)
-                })
-            }
+            hasLoadedAdditionalV1OrderPage = true
+            v1Orders = mergeV1Orders(result.orders)
+            v1OrdersNextCursor = result.nextCursor
+            v1OrdersRefreshFailure = nil
         } catch {
-            // Legacy orders and parcels remain independently refreshable.
+            v1OrdersRefreshFailure = refreshFailure(for: error)
+        }
+    }
+
+    private func mergeV1Orders(
+        _ incoming: [DastakV1OrderSnapshot]
+    ) -> [DastakV1OrderSnapshot] {
+        var byID = Dictionary(uniqueKeysWithValues: v1Orders.map { ($0.id, $0) })
+        for order in incoming where order.version >= (byID[order.id]?.version ?? 0) {
+            byID[order.id] = order
+        }
+        return byID.values.sorted {
+            if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
+            return $0.id.uuidString > $1.id.uuidString
         }
     }
 
@@ -497,6 +556,7 @@ final class DastakCustomerModel: ObservableObject {
                 id: activeV1Order.id,
                 idempotencyKey: makeKey()
             )
+            guard refreshed.version >= activeV1Order.version else { return }
             self.activeV1Order = refreshed
             v1Orders = [refreshed] + v1Orders.filter { $0.id != refreshed.id }
             v1OrderErrorMessage = nil
