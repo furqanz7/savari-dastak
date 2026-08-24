@@ -1,4 +1,5 @@
 import { useId, useRef } from "react";
+import { LogOut, ShieldAlert } from "lucide-react";
 import { useModalDialog } from "./useModalDialog";
 
 type Props = {
@@ -31,7 +32,12 @@ export function AccountActionDialog({ action, busy = false, message, onConfirm, 
       aria-describedby={messageId}
       tabIndex={-1}
     >
-      <header><div><p className="eyebrow">{deleting ? "Permanent action" : "Account"}</p><h2 id={titleId}>{deleting ? "Delete your account?" : "Sign out of Dastak?"}</h2></div></header>
+      <header className="account-sheet-heading">
+        <span className={`account-dialog-mark ${deleting ? "destructive" : ""}`} aria-hidden="true">
+          {deleting ? <ShieldAlert size={21} /> : <LogOut size={21} />}
+        </span>
+        <div><p className="eyebrow">{deleting ? "Permanent action" : "Account"}</p><h2 id={titleId}>{deleting ? "Delete your account?" : "Sign out of Dastak?"}</h2></div>
+      </header>
       <p id={messageId}>{message}</p>
       <button
         className={deleting ? "danger-button" : "primary-button"}

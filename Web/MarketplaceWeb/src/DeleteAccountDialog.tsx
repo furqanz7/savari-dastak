@@ -1,4 +1,5 @@
 import { useId, useMemo, useRef, useState } from "react";
+import { ShieldAlert } from "lucide-react";
 import { AppleLogo, GoogleLogo } from "./IdentityProviderLogos";
 import type { CustomerIdentity, CustomerOAuthProvider } from "./accountProfile";
 import { useModalDialog } from "./useModalDialog";
@@ -39,7 +40,7 @@ export function DeleteAccountDialog({
     if (event.target === event.currentTarget && !busy) onDismiss();
   }}>
     <section ref={dialog} className="customer-sheet delete-account-sheet" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId} tabIndex={-1}>
-      <header><div><p className="eyebrow">Permanent action</p><h2 id={titleId}>Delete your account?</h2></div></header>
+      <header className="account-sheet-heading"><span className="account-dialog-mark destructive" aria-hidden="true"><ShieldAlert size={21} /></span><div><p className="eyebrow">Permanent action</p><h2 id={titleId}>Delete your account?</h2></div></header>
       <p id={messageId}>{warning}</p>
       {!reauthenticationRequired && <label className="delete-account-confirmation">
         <span>Type <strong>DELETE</strong> to confirm</span>

@@ -45,4 +45,17 @@ describe("customer account dialogs", () => {
     expect(source).toContain('event.key !== "Tab"');
     expect(source).toContain("opener?.focus()");
   });
+
+  it("keeps the premium Account hierarchy responsive and accessible", () => {
+    const catalogue = readFileSync(new URL("./CatalogueView.tsx", import.meta.url), "utf8");
+    const addresses = readFileSync(new URL("./CustomerAddressBookSheet.tsx", import.meta.url), "utf8");
+    const styles = readFileSync(new URL("./design/customer.css", import.meta.url), "utf8");
+
+    expect(catalogue).toContain('className="customer-profile-meta"');
+    expect(catalogue).toContain("Identity, sessions, privacy and access");
+    expect(addresses).toContain("useModalDialog<HTMLElement>");
+    expect(styles).toContain(".customer-profile-card::before");
+    expect(styles).toContain("width: min(100%, 780px)");
+    expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
+  });
 });

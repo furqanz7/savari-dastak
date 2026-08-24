@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { CheckCircle2, Laptop, LogOut, RefreshCw, Smartphone, X } from "lucide-react";
+import { CheckCircle2, Laptop, LogOut, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react";
 import {
   AccountSessionRequestError,
   getAccountSessions,
@@ -68,7 +68,7 @@ export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey,
 
   return <div className="customer-sheet-backdrop" role="presentation" onMouseDown={dismissFromBackdrop}>
     <section ref={dialog} className="customer-sheet account-sessions-sheet" role="dialog" aria-modal="true" aria-labelledby="sessions-title" tabIndex={-1}>
-      <header><div><p className="eyebrow">Security</p><h2 id="sessions-title">Devices and sessions</h2><p>Review where your Dastak account is signed in.</p></div><button ref={closeButton} className="icon-button" type="button" onClick={onDismiss} disabled={operationBusy} aria-label="Close sessions" title="Close"><X size={19} /></button></header>
+      <header className="account-sheet-heading"><span className="account-dialog-mark" aria-hidden="true"><ShieldCheck size={21} /></span><div><p className="eyebrow">Security</p><h2 id="sessions-title">Devices and sessions</h2><p>Review where your Dastak account is signed in.</p></div><button ref={closeButton} className="icon-button" type="button" onClick={onDismiss} disabled={operationBusy} aria-label="Close sessions" title="Close"><X size={19} /></button></header>
       {loading ? <div className="account-sessions-loading" role="status"><RefreshCw size={18} /> Checking devices…</div> : <div className="account-session-list">
         {sessions.map((session) => <SessionRow key={session.sessionId} session={session} busy={revokingSessionId === session.sessionId} disabled={operationBusy} onRemove={() => void removeSession(session.sessionId)} />)}
         {sessions.length === 0 && !error && <p className="account-sessions-empty">No active sessions were returned.</p>}

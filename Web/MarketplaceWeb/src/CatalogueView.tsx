@@ -25,6 +25,7 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
+  ShieldCheck,
   ShoppingBag,
   Store,
   Trash2,
@@ -1043,16 +1044,22 @@ export function CatalogueView({
           <header className="customer-page-heading customer-account-heading">
             <p className="eyebrow">Account</p>
             <h1>Your Dastak</h1>
-            <p>Personal details, saved places and account controls.</p>
+            <p>Your details, saved places and account controls—kept together and protected.</p>
           </header>
           <button className="customer-profile-card" type="button" onClick={() => setProfileEditorOpen(true)}>
             <span className="customer-profile-avatar" aria-hidden="true">{accountInitials}</span>
             <span><strong>{accountProfile.displayName || "Your account"}</strong><small>{accountProfile.phoneNumber || "Add a contact number"}</small>{email && <small>{email}</small>}</span>
             <span className="customer-profile-edit"><Pencil size={15} /> Edit</span>
+            <span className="customer-profile-meta" aria-hidden="true">
+              <span><ShieldCheck size={15} /> {customerIdentities.length > 0
+                ? `${customerIdentities.map((identity) => identity.provider === "apple" ? "Apple" : "Google").join(" + ")} sign-in`
+                : "Secure sign-in"}</span>
+              <span><MapPin size={15} /> {savedAddresses.length} saved {savedAddresses.length === 1 ? "place" : "places"}</span>
+            </span>
           </button>
 
           <section className="customer-account-group" aria-labelledby="account-delivery-title">
-            <div className="customer-account-section-heading"><h2 id="account-delivery-title">Saved addresses</h2><span>{savedAddresses.length}/10</span></div>
+            <div className="customer-account-section-heading"><div><h2 id="account-delivery-title">Saved places</h2><small>Your default doorstep for checkout</small></div><span>{savedAddresses.length}/10</span></div>
             <button className="customer-saved-place" type="button" onClick={() => { setReviewAfterAddress(false); setAddressBookOpen(true); }} disabled={addressLoading}>
               <span className="customer-account-icon"><MapPin size={20} /></span>
               <span><strong>{deliveryAddress?.label ?? "Add delivery address"}</strong><small>{deliveryAddress?.displayAddress ?? "Save precise pins and doorstep instructions for checkout."}</small></span>
@@ -1062,7 +1069,7 @@ export function CatalogueView({
           </section>
 
           <section className="customer-account-group" aria-labelledby="account-preferences-title">
-            <h2 id="account-preferences-title">Preferences</h2>
+            <div className="customer-account-section-heading"><div><h2 id="account-preferences-title">Preferences</h2><small>How Dastak works on this device</small></div></div>
             <div className="customer-account-rows">
               <button
                 className="customer-account-row"
@@ -1083,7 +1090,7 @@ export function CatalogueView({
           </section>
 
           <section className="customer-account-group" aria-labelledby="account-support-title">
-            <h2 id="account-support-title">Help and safety</h2>
+            <div className="customer-account-section-heading"><div><h2 id="account-support-title">Help and safety</h2><small>Support, policies and emergency help</small></div></div>
             <div className="customer-account-rows">
               <button className="customer-account-row" type="button" onClick={() => onNavigate("orders")}>
                 <CircleHelp size={20} /><span><strong>Help with an order</strong><small>Open an order to get relevant support</small></span><ChevronRight size={18} />
@@ -1098,7 +1105,7 @@ export function CatalogueView({
           </section>
 
           <section className="customer-account-group" aria-labelledby="account-privacy-title">
-            <h2 id="account-privacy-title">Privacy and account security</h2>
+            <div className="customer-account-section-heading"><div><h2 id="account-privacy-title">Account and data</h2><small>Identity, sessions, privacy and access</small></div></div>
             <div className="customer-account-rows">
               {legalLinks?.privacy ? <a className="customer-account-row customer-privacy-row" href={legalLinks.privacy} target="_blank" rel="noreferrer">
                 <Hand size={20} /><span><strong>Privacy Policy</strong><small>How Dastak uses and protects your account, location, order and support information</small></span><ArrowUpRight size={18} />
@@ -1155,7 +1162,7 @@ export function CatalogueView({
 
           <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">
             <div className="customer-account-section-heading">
-              <h2 id="account-earn-title">{partnerAccountPresentation.sectionTitle}</h2>
+              <div><h2 id="account-earn-title">{partnerAccountPresentation.sectionTitle}</h2><small>One account, a separate partner workspace</small></div>
               {partnerAccountPresentation.status && (
                 <span className={`customer-partner-status ${partnerAccountPresentation.tone}`}>
                   {partnerAccountPresentation.status}

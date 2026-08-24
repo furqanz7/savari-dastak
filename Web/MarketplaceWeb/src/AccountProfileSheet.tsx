@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
-import { Check, X } from "lucide-react";
+import { Check, UserRound, X } from "lucide-react";
 import { accountProfileValidation, isValidAccountProfile, type AccountProfile } from "./accountProfile";
 import { PhoneNumberField } from "./PhoneNumberField";
 import { useModalDialog } from "./useModalDialog";
@@ -35,7 +35,8 @@ export function AccountProfileSheet({ profile, busy, error, contactMessage, onDi
       onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onDismiss(); }}
     >
       <form ref={dialog} className="customer-sheet account-profile-sheet" aria-modal="true" aria-labelledby="profile-sheet-title" role="dialog" onSubmit={submit} tabIndex={-1}>
-        <header>
+        <header className="account-sheet-heading">
+          <span className="account-dialog-mark" aria-hidden="true"><UserRound size={21} /></span>
           <div><p className="eyebrow">Personal details</p><h2 id="profile-sheet-title">Edit profile</h2></div>
           <button className="icon-button" type="button" onClick={onDismiss} disabled={busy} aria-label="Close profile editor" title="Close"><X size={19} /></button>
         </header>

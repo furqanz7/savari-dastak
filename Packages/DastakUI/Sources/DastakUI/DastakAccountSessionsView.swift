@@ -118,7 +118,7 @@ struct DastakAccountSessionsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+            VStack(alignment: .leading, spacing: 30) {
                 heading
                 sessionContent
                 securityNote
@@ -131,6 +131,9 @@ struct DastakAccountSessionsView: View {
         }
         .scrollIndicators(.hidden)
         .navigationTitle("Devices")
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
         .refreshable { await model.load() }
         .task { await model.load() }
         .onChange(of: model.sessionExpired) { _, expired in
@@ -147,7 +150,7 @@ struct DastakAccountSessionsView: View {
                 .tracking(1.4)
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
             Text("Devices and sessions")
-                .font(MarketplaceTypography.instrumentSerif(fixedSize: 36))
+                .font(MarketplaceTypography.instrumentSerif(size: 40, relativeTo: .largeTitle))
             Text("Review the devices currently signed in to your Dastak account.")
                 .font(MarketplaceTypography.supporting)
                 .foregroundStyle(.secondary)
@@ -165,8 +168,8 @@ struct DastakAccountSessionsView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
+            .padding(18)
+            .dastakAccountSurface()
         } else if model.sessions.isEmpty {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
                 Label("No sessions available", systemImage: "lock.shield")
@@ -179,8 +182,8 @@ struct DastakAccountSessionsView: View {
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
+            .padding(18)
+            .dastakAccountSurface()
         } else {
             VStack(spacing: 0) {
                 ForEach(Array(model.sessions.enumerated()), id: \.element.id) { index, session in
@@ -191,7 +194,7 @@ struct DastakAccountSessionsView: View {
                 }
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
+            .dastakAccountSurface()
 
             if let errorMessage = model.errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -207,8 +210,11 @@ struct DastakAccountSessionsView: View {
             Image(systemName: session.platform == "ios" ? "iphone" : "laptopcomputer")
                 .font(.headline)
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                .frame(width: 40, height: 40)
-                .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
+                .frame(width: 44, height: 44)
+                .background(
+                    MarketplaceColors.dastakAccentSoft.color,
+                    in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                )
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.deviceName)
                     .font(.headline)
@@ -243,7 +249,7 @@ struct DastakAccountSessionsView: View {
                 .accessibilityLabel("Remove session on \(session.deviceName)")
             }
         }
-        .frame(minHeight: 72)
+        .frame(minHeight: 80)
     }
 
     private var securityNote: some View {
@@ -259,6 +265,12 @@ struct DastakAccountSessionsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(MarketplaceSpacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            MarketplaceColors.success.color.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
     }
 
     private var signOutOthersButton: some View {
@@ -279,7 +291,7 @@ struct DastakAccountSessionsView: View {
         }
         .buttonStyle(.plain)
         .disabled(model.otherSessionCount == 0 || model.isLoading || model.isSigningOutOthers)
-        .marketplaceFlatSurface()
+        .dastakAccountSurface(accented: model.otherSessionCount > 0)
         .opacity(model.otherSessionCount == 0 ? 0.62 : 1)
     }
 

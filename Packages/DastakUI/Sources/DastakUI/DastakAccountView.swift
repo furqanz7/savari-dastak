@@ -55,7 +55,7 @@ struct DastakAccountView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+            VStack(alignment: .leading, spacing: 30) {
                 profileSection
                 if let refreshFailure {
                     DastakRefreshNotice(failure: refreshFailure, action: retryAccount)
@@ -75,6 +75,9 @@ struct DastakAccountView: View {
         .scrollIndicators(.hidden)
         .marketplacePage()
         .navigationTitle("Account")
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
         .sheet(isPresented: $showingProfileEditor) {
             DastakProfileEditor(customer: customer, updateProfile: updateProfile)
                 .presentationDetents([.medium, .large])
@@ -103,65 +106,130 @@ struct DastakAccountView: View {
     }
 
     private var profileSection: some View {
-        Button { showingProfileEditor = true } label: {
-            HStack(spacing: MarketplaceSpacing.medium) {
-                ZStack {
-                    Circle()
-                        .fill(MarketplaceColors.dastakAccentSoft.color)
-                    Text(profileInitials)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                }
-                .frame(width: 64, height: 64)
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("ACCOUNT")
+                    .font(.caption.weight(.bold))
+                    .tracking(1.6)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Text("Your Dastak")
+                    .font(MarketplaceTypography.instrumentSerif(size: 44, relativeTo: .largeTitle))
+                Text("Your details, saved places and account controls—kept together and protected.")
+                    .font(MarketplaceTypography.supporting)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(customer?.displayName ?? "Your account")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(customer?.phoneNumber ?? customer?.email ?? "Complete your details")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    if let email = customer?.email,
-                       !email.isEmpty,
-                       customer?.phoneNumber != nil {
-                        Text(email)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+            Button { showingProfileEditor = true } label: {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                    HStack(spacing: MarketplaceSpacing.medium) {
+                        ZStack {
+                            Circle()
+                                .fill(.white.opacity(0.09))
+                            Circle()
+                                .stroke(.white.opacity(0.12), lineWidth: 1)
+                            Text(profileInitials)
+                                .font(.title2.weight(.semibold))
+                                .foregroundStyle(MarketplaceColors.dastakAccentDark.color)
+                        }
+                        .frame(width: 68, height: 68)
+
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(customer?.displayName ?? "Your account")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(MarketplaceColors.textPrimaryDark.color)
+                                .lineLimit(1)
+                            Text(customer?.phoneNumber ?? "Add a contact number")
+                                .font(.subheadline)
+                                .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
+                                .lineLimit(1)
+                            if let email = customer?.email, !email.isEmpty {
+                                Text(email)
+                                    .font(.caption)
+                                    .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        Spacer(minLength: 0)
+
+                        ViewThatFits(in: .horizontal) {
+                            Label("Edit", systemImage: "pencil")
+                                .padding(.horizontal, 11)
+                            Image(systemName: "pencil")
+                                .frame(width: 36)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(MarketplaceColors.textPrimaryDark.color)
+                        .frame(minHeight: 36)
+                        .background(.white.opacity(0.09), in: Capsule())
+                    }
+
+                    Rectangle()
+                        .fill(.white.opacity(0.11))
+                        .frame(height: 1)
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: MarketplaceSpacing.compact) {
+                            profileSecurityBadge
+                            profilePlacesBadge
+                        }
+                        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                            profileSecurityBadge
+                            profilePlacesBadge
+                        }
                     }
                 }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "pencil")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    .frame(width: 38, height: 38)
-                    .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
+                .padding(20)
+                .contentShape(Rectangle())
+                .background {
+                    DastakMatteBackground(style: .dark)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .stroke(MarketplaceColors.dastakAccentDark.color.opacity(0.28), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
             }
-            .padding(MarketplaceSpacing.medium)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("Edit your name and contact number")
         }
-        .buttonStyle(.plain)
-        .marketplaceFlatSurface()
-        .accessibilityHint("Edit your name and contact number")
+    }
+
+    private func profileBadge(_ title: String, symbol: String) -> some View {
+        Label(title, systemImage: symbol)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+    }
+
+    private var profileSecurityBadge: some View {
+        profileBadge(
+            linkedIdentities.isEmpty ? "Secure sign-in" : linkedProviderSummary,
+            symbol: "checkmark.shield.fill"
+        )
+    }
+
+    private var profilePlacesBadge: some View {
+        profileBadge(
+            savedAddressCount == 1 ? "1 saved place" : "\(savedAddressCount) saved places",
+            symbol: "mappin.and.ellipse"
+        )
     }
 
     private var deliverySection: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            HStack {
-                Text("Saved addresses")
-                    .font(MarketplaceTypography.sectionTitle)
-                Spacer()
-                Text("\(savedAddressCount)/10")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            accountSectionHeader(
+                "Saved places",
+                detail: "Your default doorstep for checkout",
+                trailing: "\(savedAddressCount)/10"
+            )
 
             Button(action: chooseLocation) {
-                HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                HStack(alignment: .center, spacing: MarketplaceSpacing.medium) {
                     accountIcon("location.fill")
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: MarketplaceSpacing.small) {
@@ -172,6 +240,12 @@ struct DastakAccountView: View {
                                 Text("DEFAULT")
                                     .font(.caption2.weight(.bold))
                                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        MarketplaceColors.dastakAccent.color.opacity(0.10),
+                                        in: Capsule()
+                                    )
                             }
                         }
                         Text(location?.displayAddress ?? "Save a precise pin and doorstep details for checkout.")
@@ -184,21 +258,19 @@ struct DastakAccountView: View {
                     Image(systemName: "chevron.right")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.tertiary)
-                        .padding(.top, 8)
                 }
-                .padding(MarketplaceSpacing.medium)
+                .padding(18)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .marketplaceFlatSurface()
+            .dastakAccountSurface()
             .accessibilityHint(location == nil ? "Add a saved delivery address" : "Manage your saved delivery addresses")
         }
     }
 
     private var supportSection: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Help and legal")
-                .font(MarketplaceTypography.sectionTitle)
+            accountSectionHeader("Help and safety", detail: "Support, policies and emergency help")
             VStack(spacing: 0) {
                 Button(action: openOrders) {
                     accountRow(
@@ -208,7 +280,7 @@ struct DastakAccountView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                Divider().padding(.leading, 56)
+                Divider().padding(.leading, 64)
                 if let supportURL = legalLinks.support {
                     Link(destination: supportURL) {
                         accountRow(
@@ -217,7 +289,7 @@ struct DastakAccountView: View {
                             symbol: "message"
                         )
                     }
-                    Divider().padding(.leading, 56)
+                    Divider().padding(.leading, 64)
                 }
                 if let privacyURL = legalLinks.privacyPolicy {
                     Link(destination: privacyURL) {
@@ -227,7 +299,7 @@ struct DastakAccountView: View {
                             symbol: "hand.raised"
                         )
                     }
-                    Divider().padding(.leading, 56)
+                    Divider().padding(.leading, 64)
                 }
                 if let termsURL = legalLinks.terms {
                     Link(destination: termsURL) {
@@ -237,7 +309,7 @@ struct DastakAccountView: View {
                             symbol: "doc.text"
                         )
                     }
-                    Divider().padding(.leading, 56)
+                    Divider().padding(.leading, 64)
                 }
                 Link(destination: URL(string: "tel:112")!) {
                     accountRow(
@@ -249,14 +321,13 @@ struct DastakAccountView: View {
                 }
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
+            .dastakAccountSurface()
         }
     }
 
     private var preferencesSection: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Preferences")
-                .font(MarketplaceTypography.sectionTitle)
+            accountSectionHeader("Preferences", detail: "How Dastak works on this device")
 
             VStack(spacing: 0) {
                 Button { Task { await manageNotifications() } } label: {
@@ -267,14 +338,14 @@ struct DastakAccountView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                Divider().padding(.leading, 56)
+                Divider().padding(.leading, 64)
                 accountRow(
                     title: "Browse range",
                     value: "\(discoveryRadiusKilometres) km",
                     symbol: "scope",
                     showsDisclosure: false
                 )
-                Divider().padding(.leading, 56)
+                Divider().padding(.leading, 64)
                 NavigationLink {
                     DastakPrivacyAndDataView()
                 } label: {
@@ -282,23 +353,22 @@ struct DastakAccountView: View {
                 }
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
+            .dastakAccountSurface()
         }
     }
 
     private var identitySection: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Sign-in security")
-                .font(MarketplaceTypography.sectionTitle)
+            accountSectionHeader("Sign-in security", detail: "Apple and Google identities you control")
 
             VStack(spacing: 0) {
                 ForEach(MarketplaceOAuthProvider.allCases, id: \.self) { provider in
                     HStack(spacing: MarketplaceSpacing.compact) {
                         MarketplaceIdentityProviderMark(provider)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 40, height: 40)
                             .background(
                                 MarketplaceColors.dastakAccentSoft.color,
-                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
                             )
                         VStack(alignment: .leading, spacing: 3) {
                             Text(provider == .apple ? "Apple" : "Google")
@@ -311,7 +381,7 @@ struct DastakAccountView: View {
                         if isLinked(provider) {
                             Label("Linked", systemImage: "checkmark.shield.fill")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                .foregroundStyle(MarketplaceColors.success.color)
                                 .labelStyle(.titleAndIcon)
                         } else {
                             Button("Add") { linkIdentity(provider) }
@@ -319,15 +389,15 @@ struct DastakAccountView: View {
                                 .disabled(isLinkingIdentity)
                         }
                     }
-                    .frame(minHeight: 68)
+                    .frame(minHeight: 76)
 
                     if provider != .google {
-                        Divider().padding(.leading, 52)
+                        Divider().padding(.leading, 60)
                     }
                 }
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
+            .dastakAccountSurface()
 
             if let identityMessage {
                 Label(
@@ -341,11 +411,22 @@ struct DastakAccountView: View {
                             : MarketplaceColors.destructive.color
                     )
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(MarketplaceSpacing.compact)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        (identityMessageIsSuccess ? MarketplaceColors.success.color : MarketplaceColors.destructive.color)
+                            .opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
             } else {
-                Text("Dastak never merges accounts because an email or phone number matches. Link only while signed in to the account you want to keep.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Label(
+                    "Dastak never merges accounts because an email or phone number matches. Link only while signed in to the account you want to keep.",
+                    systemImage: "lock.shield"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 2)
             }
         }
     }
@@ -361,7 +442,7 @@ struct DastakAccountView: View {
         showsDisclosure: Bool = true,
         isDestructive: Bool = false
     ) -> some View {
-        HStack(spacing: MarketplaceSpacing.compact) {
+        HStack(spacing: MarketplaceSpacing.medium) {
             accountIcon(symbol, isDestructive: isDestructive)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -386,7 +467,7 @@ struct DastakAccountView: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .frame(minHeight: 64)
+        .frame(minHeight: 74)
         .contentShape(Rectangle())
     }
 
@@ -394,28 +475,58 @@ struct DastakAccountView: View {
         Image(systemName: symbol)
             .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(isDestructive ? MarketplaceColors.destructive.color : MarketplaceColors.dastakAccent.color)
-            .frame(width: 36, height: 36)
+            .frame(width: 42, height: 42)
             .background(
                 (isDestructive ? MarketplaceColors.destructive.color : MarketplaceColors.dastakAccent.color).opacity(0.12),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
+    }
+
+    private func accountSectionHeader(
+        _ title: String,
+        detail: String,
+        trailing: String? = nil
+    ) -> some View {
+        HStack(alignment: .bottom, spacing: MarketplaceSpacing.medium) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            if let trailing {
+                Text(trailing)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(.secondary.opacity(0.08), in: Capsule())
+            }
+        }
     }
 
     private var partnerOpportunity: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             HStack(alignment: .firstTextBaseline) {
-                Text(partnerPresentation.sectionTitle)
-                    .font(MarketplaceTypography.sectionTitle)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(partnerPresentation.sectionTitle)
+                        .font(.title3.weight(.semibold))
+                    Text("One account, a separate partner workspace")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 if let status = partnerPresentation.status {
                     Text(status)
                         .font(.caption2.bold())
                         .foregroundStyle(partnerPresentation.isAttention ? MarketplaceColors.destructive.color : MarketplaceColors.dastakAccent.color)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
                         .background(
                             (partnerPresentation.isAttention ? MarketplaceColors.destructive.color : MarketplaceColors.dastakAccent.color).opacity(0.12),
-                            in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            in: Capsule()
                         )
                 }
             }
@@ -443,11 +554,11 @@ struct DastakAccountView: View {
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     }
                 }
-                .padding(MarketplaceSpacing.medium)
+                .padding(18)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .marketplaceFlatSurface()
+            .dastakAccountSurface(accented: true)
             .accessibilityLabel(partnerPresentation.title)
             .accessibilityHint(partnerPresentation.detail)
         }
@@ -527,8 +638,7 @@ struct DastakAccountView: View {
 
     private var accountActions: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Text("Account security")
-                .font(MarketplaceTypography.sectionTitle)
+            accountSectionHeader("Account and data", detail: "Sessions, export and account access")
             VStack(spacing: 0) {
                 NavigationLink {
                     DastakAccountSessionsView(
@@ -542,7 +652,7 @@ struct DastakAccountView: View {
                         symbol: "laptopcomputer.and.iphone"
                     )
                 }
-                Divider().padding(.leading, 56)
+                Divider().padding(.leading, 64)
                 Button { Task { await prepareAccountExport() } } label: {
                     accountRow(
                         title: isExporting ? "Preparing your data..." : "Download your data",
@@ -551,7 +661,7 @@ struct DastakAccountView: View {
                     )
                 }
                 .disabled(isExporting)
-                Divider().padding(.leading, 56)
+                Divider().padding(.leading, 64)
                 Button { accountAlert = .signOut } label: {
                     accountRow(
                         title: "Sign out",
@@ -559,7 +669,7 @@ struct DastakAccountView: View {
                         symbol: "rectangle.portrait.and.arrow.right"
                     )
                 }
-                Divider().padding(.leading, 56)
+                Divider().padding(.leading, 64)
                 Button(role: .destructive) { showingDeleteAccount = true } label: {
                     accountRow(
                         title: "Delete account",
@@ -570,7 +680,7 @@ struct DastakAccountView: View {
                 }
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
+            .dastakAccountSurface()
         }
     }
 
@@ -579,6 +689,12 @@ struct DastakAccountView: View {
             .split(whereSeparator: \.isWhitespace)
             .prefix(2)
         return parts.compactMap(\.first).map(String.init).joined().uppercased()
+    }
+
+    private var linkedProviderSummary: String {
+        linkedIdentities
+            .map { $0.provider == .apple ? "Apple" : "Google" }
+            .joined(separator: " + ")
     }
 
     private func makeAccountAlert(_ alert: AccountAlert) -> Alert {
@@ -636,6 +752,49 @@ struct DastakAccountView: View {
     }
 }
 
+struct DastakAccountSurface: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    let accented: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        content
+            .background {
+                shape
+                    .fill(MarketplaceColors.surface(for: colorScheme))
+                    .overlay {
+                        if accented {
+                            LinearGradient(
+                                colors: [
+                                    MarketplaceColors.accent(for: colorScheme).opacity(0.10),
+                                    .clear,
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            .clipShape(shape)
+                        }
+                    }
+            }
+            .clipShape(shape)
+            .overlay {
+                shape.stroke(
+                    accented
+                        ? MarketplaceColors.accent(for: colorScheme).opacity(0.34)
+                        : MarketplaceColors.divider(for: colorScheme).opacity(0.82),
+                    lineWidth: 1
+                )
+            }
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.16 : 0.055), radius: 16, y: 7)
+    }
+}
+
+extension View {
+    func dastakAccountSurface(accented: Bool = false) -> some View {
+        modifier(DastakAccountSurface(accented: accented))
+    }
+}
+
 private struct DastakAccountExportFile: Identifiable {
     let id = UUID()
     let url: URL
@@ -649,10 +808,15 @@ private struct DastakAccountExportSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                 Image(systemName: "checkmark.shield.fill")
-                    .font(.title2)
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(MarketplaceColors.success.color)
+                    .frame(width: 54, height: 54)
+                    .background(
+                        MarketplaceColors.success.color.opacity(0.10),
+                        in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    )
                 Text("Your data is ready")
-                    .font(.title.bold())
+                    .font(MarketplaceTypography.instrumentSerif(size: 38, relativeTo: .largeTitle))
                 Text("Save or share this private JSON file using a destination you trust.")
                     .font(MarketplaceTypography.supporting)
                     .foregroundStyle(.secondary)
@@ -700,7 +864,7 @@ private struct DastakDeleteAccountSheet: View {
                             .tracking(1.4)
                             .foregroundStyle(MarketplaceColors.destructive.color)
                         Text("Delete your account?")
-                            .font(MarketplaceTypography.instrumentSerif(fixedSize: 38))
+                            .font(MarketplaceTypography.instrumentSerif(size: 40, relativeTo: .largeTitle))
                         Text(warning)
                             .font(MarketplaceTypography.supporting)
                             .foregroundStyle(.secondary)
@@ -720,7 +884,7 @@ private struct DastakDeleteAccountSheet: View {
                                 .autocorrectionDisabled()
                                 .padding(.horizontal, MarketplaceSpacing.compact)
                                 .frame(minHeight: 56)
-                                .marketplaceFlatSurface()
+                                .dastakAccountSurface()
                                 .accessibilityLabel("Type DELETE to confirm account deletion")
                         }
 
@@ -793,7 +957,7 @@ private struct DastakDeleteAccountSheet: View {
             }
         }
         .padding(MarketplaceSpacing.medium)
-        .marketplaceFlatSurface()
+        .dastakAccountSurface()
     }
 
     @MainActor
@@ -850,7 +1014,7 @@ struct DastakPrivacyAndDataView: View {
                         .tracking(1.4)
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     Text("Your data")
-                        .font(MarketplaceTypography.instrumentSerif(fixedSize: 36))
+                        .font(MarketplaceTypography.instrumentSerif(size: 40, relativeTo: .largeTitle))
                     Text("Clear controls and only the information Dastak needs to operate your account.")
                         .font(MarketplaceTypography.supporting)
                         .foregroundStyle(.secondary)
@@ -979,7 +1143,7 @@ struct DastakPrivacyAndDataView: View {
                 }
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
+            .dastakAccountSurface()
         }
     }
 
@@ -1049,8 +1213,16 @@ struct DastakProfileEditor: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                     VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                        Image(systemName: "person.text.rectangle")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            .frame(width: 48, height: 48)
+                            .background(
+                                MarketplaceColors.dastakAccent.color.opacity(0.10),
+                                in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            )
                         Text("Personal details")
-                            .font(.largeTitle.bold())
+                            .font(MarketplaceTypography.instrumentSerif(size: 40, relativeTo: .largeTitle))
                         Text(subtitle)
                             .font(MarketplaceTypography.supporting)
                             .foregroundStyle(.secondary)
@@ -1068,7 +1240,7 @@ struct DastakProfileEditor: View {
                             .focused($focusedField, equals: .name)
                             .padding(.horizontal, MarketplaceSpacing.compact)
                             .frame(minHeight: 56)
-                            .marketplaceFlatSurface()
+                            .dastakAccountSurface()
                             .accessibilityHint(nameValidationMessage ?? "Required, up to 80 characters")
                         if didAttemptSave, let nameValidationMessage {
                             Label(nameValidationMessage, systemImage: "exclamationmark.circle.fill")

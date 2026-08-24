@@ -27,7 +27,7 @@ struct DastakAddressBookView: View {
                     }
                 } else {
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                        LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
                             header
                             ForEach(model.savedAddresses) { address in
                                 addressRow(address)
@@ -94,7 +94,7 @@ struct DastakAddressBookView: View {
                 .tracking(1.2)
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
             Text("Where should we bring it?")
-                .font(MarketplaceTypography.instrumentSerif(fixedSize: 36))
+                .font(MarketplaceTypography.instrumentSerif(size: 40, relativeTo: .largeTitle))
             Text("Choose a saved address or add another. You can keep up to ten.")
                 .font(MarketplaceTypography.supporting)
                 .foregroundStyle(.secondary)
@@ -116,8 +116,8 @@ struct DastakAddressBookView: View {
                 Image(systemName: symbol(for: address.label))
                     .font(.headline)
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    .frame(width: 40, height: 40)
-                    .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .frame(width: 44, height: 44)
+                    .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(address.displayName).font(.headline).foregroundStyle(.primary)
@@ -125,6 +125,9 @@ struct DastakAddressBookView: View {
                             Label("Default", systemImage: "checkmark.circle.fill")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 4)
+                                .background(MarketplaceColors.dastakAccent.color.opacity(0.10), in: Capsule())
                         }
                     }
                     Text(address.displayAddress)
@@ -144,12 +147,12 @@ struct DastakAddressBookView: View {
                     .foregroundStyle(.tertiary)
                     .padding(.top, 5)
             }
-            .padding(MarketplaceSpacing.medium)
+            .padding(18)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isBusy)
-        .marketplaceFlatSurface()
+        .dastakAccountSurface(accented: selected)
         .contextMenu {
             Button { edit(address) } label: { Label("Edit", systemImage: "pencil") }
             Button(role: .destructive) { deletingAddress = address } label: { Label("Delete", systemImage: "trash") }

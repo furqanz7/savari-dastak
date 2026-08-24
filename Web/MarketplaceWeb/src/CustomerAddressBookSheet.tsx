@@ -1,6 +1,7 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useRef, useState, type MouseEvent } from "react";
 import { BriefcaseBusiness, Check, House, MapPin, MapPinned, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { CustomerDeliveryAddress } from "./customerAddresses";
+import { useModalDialog } from "./useModalDialog";
 
 type AddressContext = "checkout" | "account";
 
@@ -19,33 +20,29 @@ export function CustomerAddressBookSheet({
   onDelete: (address: CustomerDeliveryAddress) => Promise<void>;
 }) {
   const [deleting, setDeleting] = useState<CustomerDeliveryAddress>();
-
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || busy) return;
-      if (deleting) {
-        setDeleting(undefined);
-      } else {
-        onDismiss();
-      }
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [busy, deleting, onDismiss]);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const dialog = useModalDialog<HTMLElement>({
+    busy,
+    initialFocus: closeButton,
+    onDismiss: () => deleting ? setDeleting(undefined) : onDismiss(),
+  });
 
   const dismissFromBackdrop = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget && !busy) onDismiss();
+    if (event.target !== event.currentTarget || busy) return;
+    if (deleting) setDeleting(undefined);
+    else onDismiss();
   };
 
   return <div className="customer-sheet-backdrop" role="presentation" onMouseDown={dismissFromBackdrop}>
-    <section className="customer-sheet customer-address-book" role="dialog" aria-modal="true" aria-labelledby="address-book-title">
-      <header>
+    <section ref={dialog} className="customer-sheet customer-address-book" role="dialog" aria-modal="true" aria-labelledby="address-book-title" tabIndex={-1}>
+      <header className="account-sheet-heading">
+        <span className="account-dialog-mark" aria-hidden="true"><MapPinned size={21} /></span>
         <div>
           <p className="eyebrow">{context === "checkout" ? "Checkout" : "Account"}</p>
           <h2 id="address-book-title">Saved addresses</h2>
           <p>{context === "checkout" ? "Choose where this order should arrive." : "Keep up to ten delivery addresses ready."}</p>
         </div>
-        <button className="icon-button" type="button" onClick={onDismiss} disabled={busy} aria-label="Close saved addresses" title="Close"><X size={19} /></button>
+        <button ref={closeButton} className="icon-button" type="button" onClick={onDismiss} disabled={busy} aria-label="Close saved addresses" title="Close"><X size={19} /></button>
       </header>
 
       <div className="customer-address-book-list">
