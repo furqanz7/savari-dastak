@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(8);
+select plan(11);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -88,8 +88,17 @@ select is(
     'dastak_v1_api.admin_execution_trace(uuid,uuid)',
     'EXECUTE'
   ),
-  false,
-  'Authenticated clients cannot bypass the permission-checked public wrapper'
+  true,
+  'Authenticated public wrapper callers can reach the permission-checked internal trace'
+);
+select is(
+  has_function_privilege(
+    'authenticated',
+    'dastak_v1_api.admin_execution_orders(uuid,integer)',
+    'EXECUTE'
+  ),
+  true,
+  'Authenticated public wrapper callers can reach the permission-checked internal order list'
 );
 select is(
   has_function_privilege(
@@ -100,6 +109,43 @@ select is(
   true,
   'Authenticated Admin clients retain the public execution-trace entrypoint'
 );
+
+set local role authenticated;
+select lives_ok(
+  $$select public.dastak_v1_admin_execution_orders(10)$$,
+  'An explicitly granted Admin can invoke the public order-list wrapper'
+);
+reset role;
+
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at
+) values (
+  'cf000000-0000-4000-8000-000000000002',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'admin-projection-ungranted@example.test', '',
+  pg_catalog.now(), pg_catalog.now(), pg_catalog.now()
+);
+insert into public.accounts (id, display_name, phone_number) values (
+  'cf000000-0000-4000-8000-000000000002',
+  'Ungranted Projection Owner', '+919500000302'
+);
+insert into private.account_memberships (account_id, role, approved_at) values (
+  'cf000000-0000-4000-8000-000000000002', 'owner', pg_catalog.now()
+);
+select set_config(
+  'request.jwt.claim.sub',
+  'cf000000-0000-4000-8000-000000000002',
+  true
+);
+set local role authenticated;
+select throws_ok(
+  $$select public.dastak_v1_admin_execution_orders(10)$$,
+  '42501',
+  'platform permission required',
+  'An owner without an explicit V1 platform grant remains denied'
+);
+reset role;
 
 select * from finish();
 rollback;
