@@ -30,6 +30,7 @@ import { shouldPreserveAuthenticatedView } from "./auth-state";
 import { canCompleteDastakLaunch, dastakLaunchVideos, takeNextDastakLaunchVideo } from "./dastak-launch";
 import { readAppConfig } from "./config";
 import { PhoneNumberField } from "./PhoneNumberField";
+import { AppleLogo, GoogleLogo } from "./IdentityProviderLogos";
 
 const AdminDashboard = lazy(() => import("./AdminDashboard").then((module) => ({ default: module.AdminDashboard })));
 const DastakCustomerView = lazy(() => import("./DastakCustomerView").then((module) => ({ default: module.DastakCustomerView })));
@@ -310,7 +311,7 @@ function SignIn({ busy, signingInProvider, onSignIn }: {
       </div>
       <div className="auth-actions" aria-label="Sign in options" aria-busy={busy || undefined}>
         <button className="provider-button apple" type="button" disabled={busy} onClick={() => onSignIn("apple")}>
-          <span aria-hidden="true">&#63743;</span> {signingInProvider === "apple" ? "Opening Apple…" : "Continue with Apple"}
+          <AppleLogo /> {signingInProvider === "apple" ? "Opening Apple…" : "Continue with Apple"}
         </button>
         <button className="provider-button google" type="button" disabled={busy} onClick={() => onSignIn("google")}>
           <GoogleLogo /> {signingInProvider === "google" ? "Opening Google…" : "Continue with Google"}
@@ -415,17 +416,6 @@ function usePrefersReducedMotion() {
   }, []);
 
   return matches;
-}
-
-function GoogleLogo() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="google-logo">
-      <path fill="#4285F4" d="M21.35 12.2c0-.7-.06-1.37-.16-2.01H12v3.82h5.27c-.23 1.24-.96 2.29-2.04 2.99v2.49h3.3c1.93-1.77 3.04-4.38 3.04-7.29z" />
-      <path fill="#34A853" d="M12 22c2.7 0 4.97-.89 6.62-2.41l-3.3-2.49c-.92.62-2.1.99-3.32.99-2.56 0-4.73-1.73-5.51-4.06H3.07v2.55A9.99 9.99 0 0 0 12 22z" />
-      <path fill="#FBBC05" d="M6.49 13.99A5.99 5.99 0 0 1 6.18 12c0-.69.12-1.36.31-1.99V7.46H3.07A9.99 9.99 0 0 0 2 12c0 1.61.39 3.13 1.07 4.54l3.42-2.55z" />
-      <path fill="#EA4335" d="M12 5.99c1.47 0 2.79.51 3.83 1.52l2.87-2.87C16.96 2.99 14.69 2 12 2A9.99 9.99 0 0 0 3.07 7.46l3.42 2.55C7.27 7.72 9.44 5.99 12 5.99z" />
-    </svg>
-  );
 }
 
 function ProfileForm({ session, onComplete, onSignOut }: {

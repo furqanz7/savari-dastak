@@ -886,7 +886,7 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 .provider-button { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16px; }
 .provider-button.apple { background: #111; color: white; border-color: #111; }
-.provider-button.apple span { font-size: 22px; line-height: 1; }
+.apple-logo { width: 20px; height: 20px; flex: 0 0 auto; }
 .provider-button.google { background: #fff; border-color: #d7d0c7; color: #202722; }
 .google-logo { width: 18px; height: 18px; flex: 0 0 auto; }
 .primary-button { background: var(--primary-action); color: var(--primary-action-foreground); margin-top: 6px; }
@@ -920,7 +920,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .product-dastak .provider-button.apple {
   border-color: var(--text-primary);
   background: var(--text-primary);
-  color: var(--dastak-icon-background);
+  color: var(--primary-action-foreground);
 }
 .product-dastak .provider-button.google {
   border-color: var(--divider);
