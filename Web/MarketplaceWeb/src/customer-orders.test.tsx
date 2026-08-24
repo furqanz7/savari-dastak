@@ -7,6 +7,8 @@ import {
 import {
   isIssueEvidenceRequired,
   isV1OrderActive,
+  orderJourneyLabel,
+  orderJourneyStep,
   orderLineDetail,
   statusAssurance,
   statusMessage,
@@ -21,6 +23,9 @@ describe("customer V1 Orders experience", () => {
     expect(statusAssurance("DASTAK_FULFILMENT_FAILURE")).not.toContain("No completed payment");
     expect(isV1OrderActive("OUT_FOR_DELIVERY")).toBe(true);
     expect(isV1OrderActive("DASTAK_FULFILMENT_FAILURE")).toBe(false);
+    expect(orderJourneyStep("OUT_FOR_DELIVERY")).toBe(4);
+    expect(orderJourneyLabel("OUT_FOR_DELIVERY")).toBe("Stage 5 of 6 · On the way");
+    expect(orderJourneyStep("PAYMENT_EXPIRED")).toBeUndefined();
   });
 
   it("renders mixed-order identity in history without retail-only copy", () => {
@@ -36,6 +41,7 @@ describe("customer V1 Orders experience", () => {
 
     expect(markup).toContain("Dastak Cafe");
     expect(markup).toContain("Preparing your order");
+    expect(markup).toContain("Stage 3 of 6 · Preparing");
     expect(markup).toContain("Load earlier orders");
     expect(markup).not.toContain("Retail order");
   });
@@ -71,6 +77,7 @@ describe("customer V1 Orders experience", () => {
     expect(markup).toContain("A Customer · +919876543210");
     expect(markup).toContain("LIVE DELIVERY");
     expect(markup).toContain("725 m");
+    expect(markup).toContain("Stage 5 of 6 · On the way");
     expect(markup).toContain("Receipt");
     expect(markup).toContain("Timeline");
     expect(markup).not.toContain("Platform fee");

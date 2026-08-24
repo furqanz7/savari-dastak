@@ -109,42 +109,69 @@ struct DastakV1MatchingView: View {
     }
 
     private func statusCard(_ order: DastakV1OrderSnapshot) -> some View {
-        VStack(spacing: MarketplaceSpacing.medium) {
-            ZStack {
-                Circle()
-                    .fill(MarketplaceColors.dastakAccentSoft.color)
-                    .frame(width: 86, height: 86)
-                if isMatching(order.status) {
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(MarketplaceColors.dastakAccent.color)
-                } else {
-                    Image(systemName: DastakV1OrderPresentation.symbol(order.status))
-                        .font(.system(size: 34, weight: .semibold))
+        VStack(spacing: MarketplaceSpacing.large) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(DastakV1OrderPresentation.orderType(order.orderType).uppercased())
+                        .font(.caption2.weight(.bold))
+                        .tracking(1.2)
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text(order.displayOrderNumber)
+                        .font(.caption.monospaced().weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let date = DastakV1OrderPresentation.date(order.submittedAt ?? order.createdAt) {
+                    Text(date.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            VStack(spacing: MarketplaceSpacing.small) {
-                Text(DastakV1OrderPresentation.title(order.status))
-                    .font(MarketplaceTypography.instrumentSerif(fixedSize: 32))
-                    .multilineTextAlignment(.center)
-                Text(DastakV1OrderPresentation.message(order.status))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            HStack(alignment: .center, spacing: MarketplaceSpacing.medium) {
+                ZStack {
+                    Circle()
+                        .fill(MarketplaceColors.dastakAccentSoft.color)
+                        .frame(width: 76, height: 76)
+                    if isMatching(order.status) {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(MarketplaceColors.dastakAccent.color)
+                    } else {
+                        Image(systemName: DastakV1OrderPresentation.symbol(order.status))
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                    Text(DastakV1OrderPresentation.title(order.status))
+                        .font(MarketplaceTypography.instrumentSerif(size: 34, relativeTo: .title))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(DastakV1OrderPresentation.message(order.status))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+
+            DastakV1JourneyProgress(status: order.status)
 
             Label(
                 DastakV1OrderPresentation.assurance(order.status),
                 systemImage: assuranceSymbol(order.status)
             )
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, MarketplaceSpacing.compact)
+            .padding(.vertical, 10)
+            .background(MarketplaceColors.dastakAccentSoft.color, in: Capsule())
         }
         .frame(maxWidth: .infinity)
         .padding(MarketplaceSpacing.large)
         .marketplaceFlatSurface()
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -153,18 +180,32 @@ struct DastakV1MatchingView: View {
            delivery.verificationStatus == .active,
            code.range(of: #"^[0-9]{6}$"#, options: .regularExpression) != nil {
             VStack(spacing: MarketplaceSpacing.medium) {
-                VStack(spacing: 5) {
-                    Text("DELIVERY CODE")
-                        .font(.caption2.weight(.bold))
-                        .tracking(1.2)
+                HStack(spacing: MarketplaceSpacing.compact) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.title2)
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    Text(code)
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .tracking(5)
-                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("DELIVERY CODE")
+                            .font(.caption2.weight(.bold))
+                            .tracking(1.2)
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        Text("Share only after every package arrives")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
                 }
-                Text("Share this in-app code only when every package is with you. A trusted recipient may use it without a Dastak account.")
+
+                Text(code)
+                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .tracking(7)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, MarketplaceSpacing.compact)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                Text("A trusted recipient may use this in-app code without a Dastak account.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -174,8 +215,21 @@ struct DastakV1MatchingView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(MarketplaceSpacing.large)
-            .background(MarketplaceColors.dastakAccentSoft.color)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(
+                LinearGradient(
+                    colors: [
+                        MarketplaceColors.dastakAccentSoft.color,
+                        MarketplaceColors.dastakAccentSoft.color.opacity(0.46),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(MarketplaceColors.dastakAccent.color.opacity(0.28), lineWidth: 1)
+            }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Delivery code \(code). Share only after receiving every package.")
         } else if delivery.verificationStatus == .blocked {
@@ -307,7 +361,7 @@ struct DastakV1MatchingView: View {
         ) {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 let late = order.fulfilmentProgress?.runningLate == true || context.date > readyAt
-                HStack(spacing: MarketplaceSpacing.compact) {
+                HStack(alignment: .center, spacing: MarketplaceSpacing.compact) {
                     Image(systemName: late ? "clock.badge.exclamationmark" : "clock.fill")
                         .font(.title3)
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -317,20 +371,19 @@ struct DastakV1MatchingView: View {
                             in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                         )
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(late ? "Taking a little longer" : "Estimated ready")
+                        Text(late ? "Taking a little longer" : "Preparation estimate")
                             .font(.headline)
                         Text(late
-                             ? "Your order is still being prepared. Ready is always confirmed by the merchant."
-                             : "Around \(readyAt.formatted(date: .omitted, time: .shortened))")
+                             ? "Your order stays in preparation until it is genuinely ready."
+                             : "Expected around \(readyAt.formatted(date: .omitted, time: .shortened))")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if !late {
-                        Text(readyAt, style: .relative)
-                            .font(.caption.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    }
+                    Text(late ? "We’re watching" : preparationCountdown(readyAt, at: context.date))
+                        .font(.caption.weight(.bold).monospacedDigit())
+                        .foregroundStyle(late ? Color.secondary : MarketplaceColors.dastakAccent.color)
+                        .multilineTextAlignment(.trailing)
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -370,6 +423,13 @@ struct DastakV1MatchingView: View {
                 }
 
                 Map(initialPosition: .region(mapRegion(destination: destination, rider: rider))) {
+                    if let rider {
+                        MapPolyline(coordinates: [rider, destination])
+                            .stroke(
+                                MarketplaceColors.dastakAccent.color.opacity(0.84),
+                                style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [3, 7])
+                            )
+                    }
                     Marker(address.label ?? "Delivery address", coordinate: destination)
                         .tint(MarketplaceColors.dastakAccent.color)
                     if let rider {
@@ -384,8 +444,21 @@ struct DastakV1MatchingView: View {
                     }
                 }
                 .mapStyle(.standard(pointsOfInterest: .excludingAll, showsTraffic: false))
-                .frame(height: 220)
+                .frame(height: 250)
+                .id(delivery.riderLocationUpdatedAt ?? "delivery-destination")
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(alignment: .topLeading) {
+                    Label(
+                        rider == nil ? "Awaiting live location" : "Live location",
+                        systemImage: rider == nil ? "location.slash" : "dot.radiowaves.left.and.right"
+                    )
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(12)
+                }
                 .accessibilityLabel(rider == nil
                                     ? "Map showing the delivery address"
                                     : "Live map showing your delivery partner and delivery address")
@@ -803,6 +876,11 @@ struct DastakV1MatchingView: View {
     private func distanceLabel(_ meters: Int) -> String {
         if meters < 1_000 { return "\(meters) m away" }
         return String(format: "%.1f km away", Double(meters) / 1_000)
+    }
+
+    private func preparationCountdown(_ readyAt: Date, at now: Date) -> String {
+        let minutes = max(1, Int((readyAt.timeIntervalSince(now) / 60.0).rounded(.up)))
+        return minutes == 1 ? "About 1 min" : "About \(minutes) min"
     }
 
     private func receiptTotalLabel(_ order: DastakV1OrderSnapshot) -> String {

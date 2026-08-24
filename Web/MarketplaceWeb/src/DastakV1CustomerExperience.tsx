@@ -31,6 +31,9 @@ import {
   humanizeV1State,
   isIssueEvidenceRequired,
   isV1OrderActive,
+  orderJourneyLabel,
+  orderJourneyStep,
+  orderJourneySteps,
   orderKindLabel,
   orderLineDetail,
   statusAssurance,
@@ -739,20 +742,44 @@ export function OrdersSection({
   const visible = useMemo(() => orders.filter((order) =>
     scope === "all" || (scope === "active") === isV1OrderActive(order.status)
   ), [orders, scope]);
+  const activeCount = useMemo(
+    () => orders.reduce((count, order) => count + Number(isV1OrderActive(order.status)), 0),
+    [orders],
+  );
+  const pastCount = orders.length - activeCount;
 
   return <section className="v1-orders-page">
-    <header className="v1-orders-header"><div><p>YOUR ORDERS</p><h1>Dastak activity</h1><span>Food, retail and mixed orders—from matching through delivery and recovery.</span></div><button className="v1-orders-refresh" type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button></header>
+    <header className="v1-orders-header"><div><p>YOUR ORDERS</p><h1>Every Dastak,<br />in one place.</h1><span>Follow the complete journey—from securing every item to verified delivery.</span></div><button className="v1-orders-refresh" type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button></header>
+    <div className="v1-orders-overview" aria-label={`${activeCount} active and ${pastCount} past orders`}>
+      <span><b>{activeCount}</b> active</span><span><b>{pastCount}</b> past</span><em><i /> Live updates</em>
+    </div>
     <div className="v1-order-scopes" role="group" aria-label="Filter orders">
-      {(["active", "past", "all"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
+      {(["active", "past", "all"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => setScope(value)}><span>{value[0].toUpperCase() + value.slice(1)}</span><small>{value === "active" ? activeCount : value === "past" ? pastCount : orders.length}</small></button>)}
     </div>
     {error ? <div className="v1-orders-error" role="alert"><CircleAlert size={18} /><span>{error}</span><button type="button" onClick={onRefresh}>Try again</button></div> : null}
-    {loading && orders.length === 0 ? <div className="v1-orders-loading" role="status"><span /> Loading your orders</div> : visible.length ? <div className="v1-order-list">{visible.map((order) => <button type="button" key={order.id} onClick={() => onOpen(order)} aria-label={`Open ${order.displayOrderNumber}, ${statusTitle(order.status)}`}>
-      <span className={`v1-order-icon ${isV1OrderActive(order.status) ? "active" : "terminal"}`}><OrderStatusIcon status={order.status} size={21} /></span>
-      <span><strong>{statusTitle(order.status)}</strong><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)} · {order.lines.length} {order.lines.length === 1 ? "item" : "items"}</small><time dateTime={order.submittedAt ?? order.createdAt}>{formatOrderDate(order.submittedAt ?? order.createdAt)}</time></span>
-      <b>{formatV1Price(order.price.totalPaise)}</b><ChevronRight size={18} />
-    </button>)}</div> : <EmptyState title={scope === "active" ? "Nothing active" : scope === "past" ? "No past orders" : "No Dastak orders yet"} copy={scope === "active" ? "New and ongoing orders stay here until complete." : "Completed, cancelled and unavailable orders will appear here."} />}
+    {loading && orders.length === 0 ? <div className="v1-orders-loading" role="status"><span /> Loading your orders</div> : visible.length ? <div className="v1-order-list">{visible.map((order, index) => {
+      const active = isV1OrderActive(order.status);
+      const featured = active && index === 0;
+      return <button className={featured ? "featured" : undefined} type="button" key={order.id} onClick={() => onOpen(order)} aria-label={`Open ${order.displayOrderNumber}, ${statusTitle(order.status)}`}>
+        <span className={`v1-order-icon ${active ? "active" : "terminal"}`}><OrderStatusIcon status={order.status} size={featured ? 24 : 21} /></span>
+        <span className="v1-order-card-copy"><small className="v1-order-kicker">{featured ? "LIVE JOURNEY · " : ""}{order.restaurant?.name ?? orderKindLabel(order.orderType)}</small><strong>{statusTitle(order.status)}</strong><small>{order.lines.length} {order.lines.length === 1 ? "item" : "items"} · {order.displayOrderNumber}</small><time dateTime={order.submittedAt ?? order.createdAt}>{formatOrderDate(order.submittedAt ?? order.createdAt)}</time>{orderJourneyStep(order.status) !== undefined ? <OrderJourneyProgress status={order.status} compact /> : null}</span>
+        <span className="v1-order-card-trailing"><b>{formatV1Price(order.price.totalPaise)}</b><small>{active ? "View live order" : "View details"}</small></span><ChevronRight size={18} />
+      </button>;
+    })}</div> : <EmptyState title={scope === "active" ? "Nothing active" : scope === "past" ? "No past orders" : "No Dastak orders yet"} copy={scope === "active" ? "New and ongoing orders stay here until complete." : "Completed, cancelled and unavailable orders will appear here."} />}
     {canLoadMore ? <button className="secondary-button v1-load-more" type="button" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading earlier orders…" : "Load earlier orders"}</button> : null}
   </section>;
+}
+
+function OrderJourneyProgress({ status, compact = false }: {
+  status: V1Order["status"];
+  compact?: boolean;
+}) {
+  const current = orderJourneyStep(status);
+  if (current === undefined) return null;
+  return <div className={`v1-order-progress ${compact ? "compact" : ""}`} role="img" aria-label={orderJourneyLabel(status)}>
+    <div aria-hidden="true">{orderJourneySteps.map((step, index) => <i className={index <= current ? "complete" : undefined} key={step} />)}</div>
+    <small>{orderJourneyLabel(status)}</small>
+  </div>;
 }
 
 export function MatchingSheet({
@@ -820,11 +847,11 @@ export function MatchingSheet({
 
   return <div className="v1-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-matching-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-order-status-title">
     <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">Order status</h2><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)} · {formatOrderDate(order.submittedAt ?? order.createdAt)}</small></div><button type="button" onClick={onDismiss} aria-label="Close order status"><X size={19} /></button></header>
-    <div className={`v1-status-hero ${isFailureStatus(order.status) ? "failure" : ""}`}><span className={matching ? "matching" : ""}>{matching ? <i /> : <OrderStatusIcon status={order.status} size={34} />}</span><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p><small><ShieldCheck size={16} /> {statusAssurance(order.status)}</small></div>
+    <div className={`v1-status-hero ${isFailureStatus(order.status) ? "failure" : ""}`}><span className={matching ? "matching" : ""}>{matching ? <i /> : <OrderStatusIcon status={order.status} size={34} />}</span><div><small>{orderKindLabel(order.orderType)}</small><h3>{statusTitle(order.status)}</h3><p>{statusMessage(order.status)}</p></div><OrderJourneyProgress status={order.status} /><small className="v1-order-assurance"><ShieldCheck size={16} /> {statusAssurance(order.status)}</small></div>
 
-    {(order.status === "PAID" || order.status === "PREPARING") && readyAt ? <section className={`v1-order-eta ${runningLate ? "late" : ""}`} aria-label="Preparation estimate"><ClockAlert size={21} /><span><strong>{runningLate ? "Taking a little longer" : "Estimated ready"}</strong><small>{runningLate ? "Your order stays in preparation until the merchant confirms Ready." : `Around ${formatOrderTime(readyAt)}`}</small></span>{!runningLate ? <b>{relativeTime(readyAt, now)}</b> : null}</section> : null}
+    {(order.status === "PAID" || order.status === "PREPARING") && readyAt ? <section className={`v1-order-eta ${runningLate ? "late" : ""}`} aria-label="Preparation estimate"><ClockAlert size={21} /><span><strong>{runningLate ? "Taking a little longer" : "Preparation estimate"}</strong><small>{runningLate ? "Your order stays in preparation until it is genuinely ready." : `Expected around ${formatOrderTime(readyAt)}`}</small></span><b>{runningLate ? "We’re watching" : relativeTime(readyAt, now)}</b></section> : null}
 
-    {mapPoints.length ? <section className="v1-live-delivery"><header><div><p>LIVE DELIVERY</p><h3>{order.delivery?.riderLocation ? "Your rider is on the way" : "Waiting for a fresh rider location"}</h3></div>{order.delivery?.distanceToDestinationMeters !== undefined ? <strong>{formatDistance(order.delivery.distanceToDestinationMeters)}</strong> : null}</header><CustomerRouteMap points={mapPoints} />{order.delivery?.riderLocationUpdatedAt ? <small>Location updated {relativeTime(order.delivery.riderLocationUpdatedAt, now)}</small> : null}</section> : null}
+    {mapPoints.length ? <section className="v1-live-delivery"><header><div><p><i /> LIVE DELIVERY</p><h3>{order.delivery?.riderLocation ? "Your rider is on the way" : "Waiting for a fresh rider location"}</h3></div>{order.delivery?.distanceToDestinationMeters !== undefined ? <strong>{formatDistance(order.delivery.distanceToDestinationMeters)} away</strong> : null}</header><CustomerRouteMap points={mapPoints} />{order.delivery?.riderLocationUpdatedAt ? <small aria-live="polite">Location updated {relativeTime(order.delivery.riderLocationUpdatedAt, now)}</small> : null}</section> : null}
 
     {order.deliveryAddress ? <section className="v1-order-destination"><div><MapPin size={20} /><span><small>{order.deliveryAddress.label ?? "DELIVERY ADDRESS"}</small><strong>{orderAddress(order)}</strong></span></div>{order.recipient ? <div><UserRound size={20} /><span><small>RECIPIENT</small><strong>{order.recipient.name} · {order.recipient.phoneNumber}</strong></span></div> : null}{order.deliveryAddress.instructions ? <p><strong>Delivery note</strong>{order.deliveryAddress.instructions}</p> : null}</section> : null}
 
@@ -846,8 +873,9 @@ export function MatchingSheet({
     </div> : null}
     {order.payment?.latestAttempt?.status === "FAILED" ? <p className="v1-payment-retry" role="status">Your previous attempt failed. The same secured basket remains reserved—no rematching occurred.</p> : null}
     {order.status === "OUT_FOR_DELIVERY" && order.delivery?.deliveryCode ? <div className="v1-delivery-code" role="status">
-      <span><small>DELIVERY CODE</small><strong>{order.delivery.deliveryCode}</strong></span>
-      <p>Share this in-app code only when every package is with you. A trusted recipient may use it without a Dastak account.</p>
+      <header><ShieldCheck size={20} /><span><small>DELIVERY CODE</small><b>Share only after every package arrives</b></span></header>
+      <strong>{order.delivery.deliveryCode}</strong>
+      <p>A trusted recipient may use this in-app code without a Dastak account. No SMS code is used.</p>
     </div> : null}
     {order.status === "OUT_FOR_DELIVERY" && order.delivery?.verificationStatus === "BLOCKED" ? <p className="v1-payment-retry" role="status">Delivery verification needs Operations support. Your rider must keep every package secure.</p> : null}
     {order.support?.recovery.map((recovery) => <p className="v1-payment-retry" role="status" key={recovery.id}>{recovery.customerMessage}</p>)}

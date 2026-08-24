@@ -2,6 +2,15 @@ import Foundation
 import MarketplaceInfrastructure
 
 enum DastakV1OrderPresentation {
+    static let journeySteps = [
+        "Matching",
+        "Secured",
+        "Preparing",
+        "Pickup",
+        "On the way",
+        "Delivered",
+    ]
+
     static func isActive(_ status: DastakV1OrderStatus) -> Bool {
         DastakCustomerModel.isActiveV1Order(status)
     }
@@ -71,6 +80,23 @@ enum DastakV1OrderPresentation {
         case .fulfilmentFailure: "exclamationmark.shield.fill"
         case .created, .matching: "magnifyingglass"
         }
+    }
+
+    static func journeyStep(_ status: DastakV1OrderStatus) -> Int? {
+        switch status {
+        case .created, .matching: 0
+        case .fullySecured, .awaitingPayment: 1
+        case .paid, .preparing: 2
+        case .pickupInProgress: 3
+        case .outForDelivery: 4
+        case .delivered: 5
+        case .unavailable, .paymentExpired, .cancelledPrepayment, .fulfilmentFailure: nil
+        }
+    }
+
+    static func journeyLabel(_ status: DastakV1OrderStatus) -> String? {
+        guard let step = journeyStep(status) else { return nil }
+        return "Stage \(step + 1) of \(journeySteps.count) · \(journeySteps[step])"
     }
 
     static func orderType(_ value: String) -> String {

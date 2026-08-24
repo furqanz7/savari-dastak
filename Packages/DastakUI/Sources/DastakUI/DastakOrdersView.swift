@@ -14,25 +14,46 @@ struct DastakOrdersView: View {
             if (model.isLoadingOrders || model.isLoadingV1Orders || model.isLoadingParcels),
                model.orders.isEmpty,
                model.v1Orders.isEmpty, model.parcels.isEmpty {
-                ProgressView("Loading your orders")
+                DastakOrdersLoadingView()
             } else if model.orders.isEmpty, model.v1Orders.isEmpty, model.parcels.isEmpty {
-                if let failure = model.ordersAndParcelsRefreshFailure {
-                    DastakEmptyState(
-                        symbol: failure.symbol,
-                        title: failure.title,
-                        message: failure.message,
-                        actionTitle: failure.actionTitle,
-                        action: { Task { await model.refreshOrdersAndParcels() } }
-                    )
-                } else {
-                    DastakEmptyState(
-                        symbol: "clock",
-                        title: "No orders yet",
-                        message: "Your store orders and parcel deliveries will appear here."
-                    )
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                        DastakOrdersHero(activeCount: 0, pastCount: 0)
+                        if let failure = model.ordersAndParcelsRefreshFailure {
+                            DastakEmptyState(
+                                symbol: failure.symbol,
+                                title: failure.title,
+                                message: failure.message,
+                                actionTitle: failure.actionTitle,
+                                action: { Task { await model.refreshOrdersAndParcels() } }
+                            )
+                        } else {
+                            DastakEmptyState(
+                                symbol: "clock",
+                                title: "Your first journey starts here",
+                                message: "New orders will appear here from matching through verified delivery."
+                            )
+                        }
+                    }
+                    .padding(MarketplaceSpacing.large)
                 }
             } else {
                 List {
+                    Section {
+                        DastakOrdersHero(
+                            activeCount: activeOrderCount,
+                            pastCount: pastOrderCount
+                        )
+                        .listRowInsets(EdgeInsets(
+                            top: MarketplaceSpacing.medium,
+                            leading: MarketplaceSpacing.medium,
+                            bottom: MarketplaceSpacing.small,
+                            trailing: MarketplaceSpacing.medium
+                        ))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+
                     Section {
                         Picker("Order history", selection: $scope) {
                             ForEach(DastakOrderHistoryScope.allCases) { value in
@@ -40,6 +61,8 @@ struct DastakOrdersView: View {
                             }
                         }
                         .pickerStyle(.segmented)
+                        .padding(4)
+                        .background(.thinMaterial, in: Capsule())
                         .listRowInsets(EdgeInsets(
                             top: MarketplaceSpacing.small,
                             leading: MarketplaceSpacing.medium,
@@ -164,6 +187,16 @@ struct DastakOrdersView: View {
         model.v1Orders.filter { scope.includes(isActive: isActive($0.status)) }
     }
 
+    private var activeOrderCount: Int {
+        model.v1Orders.filter { isActive($0.status) }.count +
+            model.orders.filter { isActive($0.status) }.count +
+            model.parcels.filter { isActive($0.parcel.status) }.count
+    }
+
+    private var pastOrderCount: Int {
+        model.v1Orders.count + model.orders.count + model.parcels.count - activeOrderCount
+    }
+
     private var filteredOrders: [MerchantOrderSnapshot] {
         model.orders.filter { scope.includes(isActive: isActive($0.status)) }
     }
@@ -185,50 +218,232 @@ struct DastakOrdersView: View {
     }
 }
 
+private struct DastakOrdersLoadingView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                Text("YOUR ORDERS")
+                    .font(.caption.weight(.bold))
+                    .tracking(1.4)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Text("Every Dastak,\nin one place.")
+                    .font(MarketplaceTypography.instrumentSerif(size: 44, relativeTo: .largeTitle))
+                    .lineSpacing(-2)
+                Text("We’re bringing your latest order journey into view.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: MarketplaceSpacing.compact) {
+                ProgressView()
+                    .tint(MarketplaceColors.dastakAccent.color)
+                Text("Loading your orders")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(MarketplaceSpacing.large)
+            .marketplaceFlatSurface()
+        }
+        .padding(MarketplaceSpacing.large)
+    }
+}
+
+private struct DastakOrdersHero: View {
+    let activeCount: Int
+    let pastCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                Text("YOUR ORDERS")
+                    .font(.caption.weight(.bold))
+                    .tracking(1.4)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Text("Every Dastak,\nin one place.")
+                    .font(MarketplaceTypography.instrumentSerif(size: 44, relativeTo: .largeTitle))
+                    .lineSpacing(-2)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Follow the complete journey—from securing every item to verified delivery.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: MarketplaceSpacing.small) {
+                metric("\(activeCount)", label: "active")
+                metric("\(pastCount)", label: "past")
+                Spacer(minLength: 0)
+                Label("Live updates", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+        }
+        .padding(.vertical, MarketplaceSpacing.small)
+    }
+
+    private func metric(_ value: String, label: String) -> some View {
+        HStack(spacing: 5) {
+            Text(value)
+                .font(.subheadline.weight(.bold).monospacedDigit())
+                .foregroundStyle(.primary)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.thinMaterial, in: Capsule())
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct DastakV1OrderHistoryRow: View {
     let order: DastakV1OrderSnapshot
 
     var body: some View {
-        HStack(spacing: MarketplaceSpacing.compact) {
-            Image(systemName: DastakV1OrderPresentation.symbol(order.status))
-                .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                .frame(width: 42, height: 42)
-                .background(
-                    MarketplaceColors.dastakAccentSoft.color,
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                )
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
-                Text(summary)
-                    .font(.caption)
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            HStack(spacing: MarketplaceSpacing.compact) {
+                Text(order.restaurant?.name ?? DastakV1OrderPresentation.orderType(order.orderType))
+                    .font(.caption.weight(.bold))
+                    .tracking(0.7)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .lineLimit(1)
+                Spacer()
+                Text(order.displayOrderNumber)
+                    .font(.caption2.monospaced().weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            Spacer()
-            Text(DastakFormatting.money(order.price.total))
-                .font(.subheadline.weight(.semibold).monospacedDigit())
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+
+            HStack(alignment: .center, spacing: MarketplaceSpacing.compact) {
+                Image(systemName: DastakV1OrderPresentation.symbol(order.status))
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(width: 46, height: 46)
+                    .background(
+                        MarketplaceColors.dastakAccentSoft.color,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.headline)
+                    Text(DastakV1OrderPresentation.message(order.status))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: MarketplaceSpacing.small)
+                Text(DastakFormatting.money(order.price.total))
+                    .font(.subheadline.weight(.bold).monospacedDigit())
+            }
+
+            if DastakV1OrderPresentation.journeyStep(order.status) != nil {
+                DastakV1JourneyProgress(status: order.status, compact: true)
+            }
+
+            HStack {
+                if let date = DastakV1OrderPresentation.date(order.submittedAt ?? order.createdAt) {
+                    Label(
+                        date.formatted(date: .abbreviated, time: .shortened),
+                        systemImage: "calendar"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(DastakV1OrderPresentation.isActive(order.status) ? "View live order" : "View details")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Image(systemName: "arrow.up.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
         }
-        .padding(.vertical, MarketplaceSpacing.small)
+        .padding(MarketplaceSpacing.medium)
+        .dastakOrderSurface(active: DastakV1OrderPresentation.isActive(order.status))
+        .padding(.vertical, 3)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens order details")
     }
 
     private var title: String {
         DastakV1OrderPresentation.title(order.status)
     }
 
-    private var summary: String {
-        var parts = [
-            order.restaurant?.name ?? DastakV1OrderPresentation.orderType(order.orderType),
-            order.displayOrderNumber,
-            "\(order.lines.count) \(order.lines.count == 1 ? "item" : "items")",
-        ]
-        if let date = DastakV1OrderPresentation.date(order.submittedAt ?? order.createdAt) {
-            parts.append(date.formatted(date: .abbreviated, time: .shortened))
+}
+
+struct DastakV1JourneyProgress: View {
+    let status: DastakV1OrderStatus
+    var compact = false
+
+    var body: some View {
+        if let current = DastakV1OrderPresentation.journeyStep(status) {
+            VStack(alignment: .leading, spacing: compact ? 7 : 10) {
+                HStack(spacing: 5) {
+                    ForEach(DastakV1OrderPresentation.journeySteps.indices, id: \.self) { index in
+                        Capsule()
+                            .fill(index <= current
+                                  ? MarketplaceColors.dastakAccent.color
+                                  : Color.secondary.opacity(0.16))
+                            .frame(height: compact ? 4 : 5)
+                    }
+                }
+                if let label = DastakV1OrderPresentation.journeyLabel(status) {
+                    Text(label)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(DastakV1OrderPresentation.journeyLabel(status) ?? "Order progress")
         }
-        return parts.joined(separator: " · ")
+    }
+}
+
+private struct DastakOrderSurface: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    let active: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        content
+            .background {
+                shape
+                    .fill(MarketplaceColors.surface(for: colorScheme))
+                    .overlay {
+                        if active {
+                            LinearGradient(
+                                colors: [
+                                    MarketplaceColors.accent(for: colorScheme).opacity(0.11),
+                                    .clear,
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            .clipShape(shape)
+                        }
+                    }
+            }
+            .clipShape(shape)
+            .overlay {
+                shape.stroke(
+                    active
+                        ? MarketplaceColors.accent(for: colorScheme).opacity(0.30)
+                        : MarketplaceColors.divider(for: colorScheme).opacity(0.82),
+                    lineWidth: 1
+                )
+            }
+            .shadow(
+                color: .black.opacity(colorScheme == .dark ? 0.18 : 0.055),
+                radius: active ? 18 : 12,
+                y: active ? 8 : 5
+            )
+    }
+}
+
+private extension View {
+    func dastakOrderSurface(active: Bool = false) -> some View {
+        modifier(DastakOrderSurface(active: active))
     }
 }
 

@@ -42,6 +42,18 @@ final class DastakV1OrderPresentationTests: XCTestCase {
         XCTAssertFalse(DastakV1OrderPresentation.isActive(.delivered))
     }
 
+    func testJourneyProgressUsesCustomerVisibleStages() {
+        XCTAssertEqual(DastakV1OrderPresentation.journeyStep(.matching), 0)
+        XCTAssertEqual(DastakV1OrderPresentation.journeyStep(.preparing), 2)
+        XCTAssertEqual(DastakV1OrderPresentation.journeyStep(.outForDelivery), 4)
+        XCTAssertEqual(DastakV1OrderPresentation.journeyStep(.delivered), 5)
+        XCTAssertNil(DastakV1OrderPresentation.journeyStep(.paymentExpired))
+        XCTAssertEqual(
+            DastakV1OrderPresentation.journeyLabel(.outForDelivery),
+            "Stage 5 of 6 · On the way"
+        )
+    }
+
     func testRestaurantOptionsAndImmutableAddressAreHumanReadable() throws {
         let line = try JSONDecoder().decode(
             DastakV1OrderLine.self,

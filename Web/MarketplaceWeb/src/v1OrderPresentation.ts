@@ -2,6 +2,10 @@ import type { V1Order } from "./dastakV1";
 
 const matchingStatuses = new Set<V1Order["status"]>(["CREATED", "MATCHING"]);
 
+export const orderJourneySteps = [
+  "Matching", "Secured", "Preparing", "Pickup", "On the way", "Delivered",
+] as const;
+
 export function statusTitle(status: V1Order["status"]) {
   switch (status) {
     case "CREATED":
@@ -82,6 +86,23 @@ export function isV1OrderActive(status: V1Order["status"]) {
     "CANCELLED_PREPAYMENT",
     "DASTAK_FULFILMENT_FAILURE",
   ].includes(status);
+}
+
+export function orderJourneyStep(status: V1Order["status"]) {
+  if (status === "CREATED" || status === "MATCHING") return 0;
+  if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") return 1;
+  if (status === "PAID" || status === "PREPARING") return 2;
+  if (status === "PICKUP_IN_PROGRESS") return 3;
+  if (status === "OUT_FOR_DELIVERY") return 4;
+  if (status === "DELIVERED") return 5;
+  return undefined;
+}
+
+export function orderJourneyLabel(status: V1Order["status"]) {
+  const step = orderJourneyStep(status);
+  return step === undefined
+    ? undefined
+    : `Stage ${step + 1} of ${orderJourneySteps.length} · ${orderJourneySteps[step]}`;
 }
 
 export function orderKindLabel(orderType: string) {
