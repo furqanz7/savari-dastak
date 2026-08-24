@@ -2,6 +2,7 @@ import Combine
 import DastakDomain
 import Foundation
 import MarketplaceDesignSystem
+import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
 
@@ -40,6 +41,7 @@ public struct DastakCustomerRootView: View {
     private let accountSessionClient: any AccountSessionClient
     private let orderEvents: any OrderEventClient
     private let accountIDProvider: (@Sendable () async throws -> UUID)?
+    private let oauthReauthenticator: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)?
 
     public init(
         functions: any FunctionClient,
@@ -48,6 +50,7 @@ public struct DastakCustomerRootView: View {
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
         issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil,
         oauthIdentityLinker: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil,
+        oauthReauthenticator: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil,
         deliveryPartnerAccess: DeliveryPartnerAccess = .unavailable,
         isDeliveryPartnerAccessLoading: Bool = false,
         becomeDeliveryPartner: @escaping () -> Void = {}
@@ -68,6 +71,7 @@ public struct DastakCustomerRootView: View {
         accountSessionClient = SupabaseAccountSessionClient(functions: functions)
         self.orderEvents = orderEvents
         self.accountIDProvider = accountIDProvider
+        self.oauthReauthenticator = oauthReauthenticator
     }
 
     #if DEBUG
@@ -80,6 +84,7 @@ public struct DastakCustomerRootView: View {
         accountSessionClient = DastakPreviewAccountSessionClient()
         orderEvents = NoopOrderEventClient()
         accountIDProvider = nil
+        oauthReauthenticator = nil
     }
     #endif
 
@@ -143,7 +148,14 @@ public struct DastakCustomerRootView: View {
                     deleteAccount: {
                         try await model.deleteAccount()
                         await signOut()
-                    }
+                    },
+                    reauthenticate: { provider in
+                        guard let oauthReauthenticator else {
+                            throw MarketplaceAuthenticatedServicesError.authenticationRequired
+                        }
+                        try await oauthReauthenticator(provider)
+                    },
+                    exportAccount: { try await model.exportAccount() }
                 )
             }
             .tag(Tab.account)
@@ -162,6 +174,20 @@ public struct DastakCustomerRootView: View {
         }
         .task {
             guard !isPreview else { return }
+            do {
+                _ = try await accountSessionClient.snapshot(
+                    device: dastakAccountSessionDevice(applicationName: "Dastak"),
+                    idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
+                )
+            } catch FunctionClientError.authenticationRequired {
+                await signOut()
+                return
+            } catch let FunctionClientError.api(statusCode, _, _) where statusCode == 401 {
+                await signOut()
+                return
+            } catch {
+                // Account content can still load during a temporary session-registry outage.
+            }
             await model.bootstrap()
             let notificationState = await DastakNotificationPreferences.status()
             if notificationState != .notRequested {

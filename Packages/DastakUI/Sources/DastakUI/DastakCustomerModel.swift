@@ -270,6 +270,10 @@ final class DastakCustomerModel: ObservableObject {
         accountDeletionAttempt.complete(scope: preferenceScope)
     }
 
+    func exportAccount() async throws -> MarketplaceAccountExport {
+        try await accountProfileClient.exportAccount(idempotencyKey: makeKey())
+    }
+
     @discardableResult
     func refreshCustomerIdentities() async -> Bool {
         do {

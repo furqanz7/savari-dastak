@@ -19,6 +19,7 @@ Deno.serve((request) =>
     revokeOthers,
     endOthers,
     endCurrent,
+    revokeOne,
   })
 );
 
@@ -61,6 +62,14 @@ async function endCurrent(actor: Actor) {
   return callRpc("end_account_session", {
     p_account_id: actor.accountId,
     p_session_id: actor.sessionId,
+  });
+}
+
+async function revokeOne(actor: Actor, targetSessionId: string) {
+  return callRpc("revoke_account_session", {
+    p_account_id: actor.accountId,
+    p_current_session_id: actor.sessionId,
+    p_target_session_id: targetSessionId,
   });
 }
 

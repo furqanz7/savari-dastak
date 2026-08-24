@@ -74,16 +74,31 @@ public protocol AccountSessionClient: Sendable {
         idempotencyKey: IdempotencyKey
     ) async throws -> AccountSessionCollection
 
+    func revoke(
+        sessionID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> AccountSessionCollection
+
     func endCurrent(idempotencyKey: IdempotencyKey) async throws
 }
 
 public struct SupabaseAccountSessionClient: AccountSessionClient {
     private struct Request: Encodable, Sendable {
         let operation: String
+        let sessionID: UUID?
         let deviceName: String?
         let platform: String?
         let appName: String?
         let userAgent: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case operation
+            case sessionID = "sessionId"
+            case deviceName
+            case platform
+            case appName
+            case userAgent
+        }
     }
 
     private struct EndResponse: Decodable, Sendable {
@@ -110,11 +125,30 @@ public struct SupabaseAccountSessionClient: AccountSessionClient {
         try await invoke("signOutOthers", device: device, idempotencyKey: idempotencyKey)
     }
 
+    public func revoke(
+        sessionID: UUID,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> AccountSessionCollection {
+        try await functions.invoke(
+            "account-sessions",
+            request: Request(
+                operation: "revoke",
+                sessionID: sessionID,
+                deviceName: nil,
+                platform: nil,
+                appName: nil,
+                userAgent: nil
+            ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
     public func endCurrent(idempotencyKey: IdempotencyKey) async throws {
         let _: EndResponse = try await functions.invoke(
             "account-sessions",
             request: Request(
                 operation: "endCurrent",
+                sessionID: nil,
                 deviceName: nil,
                 platform: nil,
                 appName: nil,
@@ -133,6 +167,7 @@ public struct SupabaseAccountSessionClient: AccountSessionClient {
             "account-sessions",
             request: Request(
                 operation: operation,
+                sessionID: nil,
                 deviceName: device.deviceName,
                 platform: device.platform,
                 appName: device.appName,

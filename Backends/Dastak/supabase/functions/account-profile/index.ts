@@ -21,9 +21,18 @@ Deno.serve((request) =>
         p_target_provider: input.provider,
         p_idempotency_key: input.idempotencyKey,
       }),
+    exportAccount,
     deleteAccount,
   })
 );
+
+async function exportAccount(accountId: string) {
+  const { data, error } = await serviceRoleClient.rpc("export_customer_account_data", {
+    p_account_id: accountId,
+  });
+  if (error) throw error;
+  return data;
+}
 
 async function readProfile(accountId: string) {
   const { data, error } = await serviceRoleClient

@@ -12,6 +12,8 @@ private final class DastakAccountSessionsModel: ObservableObject {
     @Published private(set) var sessions: [AccountSession] = []
     @Published private(set) var isLoading = false
     @Published private(set) var isSigningOutOthers = false
+    @Published private(set) var revokingSessionID: UUID?
+    @Published private(set) var sessionExpired = false
     @Published var errorMessage: String?
 
     private let client: any AccountSessionClient
@@ -19,7 +21,7 @@ private final class DastakAccountSessionsModel: ObservableObject {
 
     init(client: any AccountSessionClient, applicationName: String) {
         self.client = client
-        device = Self.device(applicationName: applicationName)
+        device = dastakAccountSessionDevice(applicationName: applicationName)
     }
 
     var otherSessionCount: Int {
@@ -35,6 +37,8 @@ private final class DastakAccountSessionsModel: ObservableObject {
                 idempotencyKey: key()
             ).sessions
             errorMessage = nil
+        } catch where isAuthenticationFailure(error) {
+            sessionExpired = true
         } catch {
             errorMessage = "Your signed-in devices could not be loaded."
         }
@@ -50,8 +54,27 @@ private final class DastakAccountSessionsModel: ObservableObject {
                 idempotencyKey: key()
             ).sessions
             errorMessage = nil
+        } catch where isAuthenticationFailure(error) {
+            sessionExpired = true
         } catch {
             errorMessage = "Other devices could not be signed out."
+        }
+    }
+
+    func revoke(_ session: AccountSession) async {
+        guard !session.isCurrent, revokingSessionID == nil else { return }
+        revokingSessionID = session.sessionID
+        defer { revokingSessionID = nil }
+        do {
+            sessions = try await client.revoke(
+                sessionID: session.sessionID,
+                idempotencyKey: key()
+            ).sessions
+            errorMessage = nil
+        } catch where isAuthenticationFailure(error) {
+            sessionExpired = true
+        } catch {
+            errorMessage = "That device could not be signed out."
         }
     }
 
@@ -59,28 +82,30 @@ private final class DastakAccountSessionsModel: ObservableObject {
         IdempotencyKey(rawValue: UUID().uuidString)!
     }
 
-    private static func device(applicationName: String) -> AccountSessionDevice {
-        #if canImport(UIKit)
-        let device = UIDevice.current
-        return AccountSessionDevice(
-            deviceName: device.name.isEmpty ? device.model : device.name,
-            platform: "ios",
-            appName: applicationName,
-            userAgent: "Dastak iOS"
-        )
-        #else
-        return AccountSessionDevice(
-            deviceName: Host.current().localizedName ?? "Apple device",
-            platform: "ios",
-            appName: applicationName,
-            userAgent: "Dastak Apple app"
-        )
-        #endif
-    }
+}
+
+func dastakAccountSessionDevice(applicationName: String) -> AccountSessionDevice {
+    #if canImport(UIKit)
+    let device = UIDevice.current
+    return AccountSessionDevice(
+        deviceName: device.name.isEmpty ? device.model : device.name,
+        platform: "ios",
+        appName: applicationName,
+        userAgent: "Dastak iOS"
+    )
+    #else
+    return AccountSessionDevice(
+        deviceName: Host.current().localizedName ?? "Apple device",
+        platform: "ios",
+        appName: applicationName,
+        userAgent: "Dastak Apple app"
+    )
+    #endif
 }
 
 struct DastakAccountSessionsView: View {
     @StateObject private var model: DastakAccountSessionsModel
+    @Environment(\.marketplaceSignOut) private var signOut
 
     init(client: any AccountSessionClient, applicationName: String) {
         _model = StateObject(
@@ -108,6 +133,10 @@ struct DastakAccountSessionsView: View {
         .navigationTitle("Devices")
         .refreshable { await model.load() }
         .task { await model.load() }
+        .onChange(of: model.sessionExpired) { _, expired in
+            guard expired else { return }
+            Task { await signOut() }
+        }
         .marketplacePage()
     }
 
@@ -197,10 +226,24 @@ struct DastakAccountSessionsView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
                     .background(MarketplaceColors.success.color.opacity(0.12), in: Capsule())
+            } else {
+                Button {
+                    Task { await model.revoke(session) }
+                } label: {
+                    if model.revokingSessionID == session.sessionID {
+                        ProgressView()
+                    } else {
+                        Text("Remove")
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.bordered)
+                .tint(MarketplaceColors.destructive.color)
+                .disabled(model.revokingSessionID != nil || model.isSigningOutOthers)
+                .accessibilityLabel("Remove session on \(session.deviceName)")
             }
         }
         .frame(minHeight: 72)
-        .accessibilityElement(children: .combine)
     }
 
     private var securityNote: some View {
@@ -210,7 +253,7 @@ struct DastakAccountSessionsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("This device stays signed in")
                     .font(.subheadline.weight(.semibold))
-                Text("Other devices may take a short moment to return to sign-in after you remove their sessions.")
+                Text("Removed devices are blocked from Dastak requests and cannot refresh their sessions.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -262,6 +305,17 @@ struct DastakAccountSessionsView: View {
     }
 }
 
+private func isAuthenticationFailure(_ error: Error) -> Bool {
+    switch error {
+    case FunctionClientError.authenticationRequired:
+        true
+    case let FunctionClientError.api(statusCode, _, _):
+        statusCode == 401
+    default:
+        false
+    }
+}
+
 struct DastakPreviewAccountSessionClient: AccountSessionClient {
     func snapshot(
         device: AccountSessionDevice,
@@ -272,6 +326,13 @@ struct DastakPreviewAccountSessionClient: AccountSessionClient {
 
     func signOutOthers(
         device: AccountSessionDevice,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> AccountSessionCollection {
+        AccountSessionCollection(sessions: [])
+    }
+
+    func revoke(
+        sessionID: UUID,
         idempotencyKey: IdempotencyKey
     ) async throws -> AccountSessionCollection {
         AccountSessionCollection(sessions: [])

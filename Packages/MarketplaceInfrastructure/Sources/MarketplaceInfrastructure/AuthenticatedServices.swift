@@ -2,6 +2,7 @@ import Foundation
 
 public enum MarketplaceAuthenticatedServicesError: Error, Equatable, Sendable {
     case authenticationRequired
+    case identityMismatch
     case invalidObjectPath
 }
 
@@ -31,6 +32,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
     ) async throws -> Void
     private let checkoutCustomerProvider: @Sendable () async throws -> MarketplaceCheckoutCustomer?
     private let oauthIdentityLinker: @Sendable (MarketplaceOAuthProvider) async throws -> Void
+    private let oauthReauthenticator: @Sendable (MarketplaceOAuthProvider) async throws -> Void
 
     init(
         functions: any FunctionClient,
@@ -46,6 +48,9 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         checkoutCustomerProvider: @escaping @Sendable () async throws -> MarketplaceCheckoutCustomer? = { nil },
         oauthIdentityLinker: @escaping @Sendable (MarketplaceOAuthProvider) async throws -> Void = { _ in
             throw MarketplaceAuthenticatedServicesError.authenticationRequired
+        },
+        oauthReauthenticator: @escaping @Sendable (MarketplaceOAuthProvider) async throws -> Void = { _ in
+            throw MarketplaceAuthenticatedServicesError.authenticationRequired
         }
     ) {
         self.functions = functions
@@ -54,6 +59,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         self.objectUploader = objectUploader
         self.checkoutCustomerProvider = checkoutCustomerProvider
         self.oauthIdentityLinker = oauthIdentityLinker
+        self.oauthReauthenticator = oauthReauthenticator
     }
 
     public func accountID() async throws -> UUID {
@@ -66,6 +72,10 @@ public struct MarketplaceAuthenticatedServices: Sendable {
 
     public func linkOAuthIdentity(_ provider: MarketplaceOAuthProvider) async throws {
         try await oauthIdentityLinker(provider)
+    }
+
+    public func reauthenticateOAuthIdentity(_ provider: MarketplaceOAuthProvider) async throws {
+        try await oauthReauthenticator(provider)
     }
 
     public func uploadObject(

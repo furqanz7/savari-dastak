@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   accountDeletionIdempotencyKey,
+  accountProfileValidation,
+  clearPendingDeletionReauthentication,
   clearAccountDeletionIdempotencyKey,
   clearPendingIdentityLink,
   deleteAccount,
+  exportAccountData,
   beginCustomerIdentityLink,
   isValidAccountProfile,
   pendingIdentityLink,
+  pendingDeletionReauthentication,
   rememberPendingIdentityLink,
+  rememberPendingDeletionReauthentication,
   snapshotAccountProfile,
   snapshotCustomerIdentities,
   updateAccountProfile,
@@ -62,6 +67,18 @@ describe("account profile", () => {
     ))).rejects.toThrow("confirm account deletion");
   });
 
+  it("downloads the authenticated customer's privacy-safe export", async () => {
+    const result = await exportAccountData(auth, (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ operation: "export" });
+      return Promise.resolve(new Response(JSON.stringify({
+        filename: "dastak-account-test.json",
+        export: { formatVersion: 1, profile: { displayName: "Furqan" } },
+      }), { status: 200 }));
+    });
+    expect(result.filename).toBe("dastak-account-test.json");
+    expect(result.data).toMatchObject({ formatVersion: 1 });
+  });
+
   it("persists destructive retry identity and pending identity-link state", () => {
     const values = new Map<string, string>();
     const storage = {
@@ -79,6 +96,11 @@ describe("account profile", () => {
     expect(pendingIdentityLink(storage)).toBe("google");
     clearPendingIdentityLink(storage);
     expect(pendingIdentityLink(storage)).toBeUndefined();
+
+    rememberPendingDeletionReauthentication({ accountId: "account-id", provider: "apple" }, storage);
+    expect(pendingDeletionReauthentication(storage)).toEqual({ accountId: "account-id", provider: "apple" });
+    clearPendingDeletionReauthentication(storage);
+    expect(pendingDeletionReauthentication(storage)).toBeUndefined();
   });
 
   it("loads linked providers and starts an explicit link intent", async () => {
@@ -107,6 +129,10 @@ describe("account profile", () => {
     expect(isValidAccountProfile({ displayName: "F", phoneNumber: "9876543210" })).toBe(false);
     expect(isValidAccountProfile({ displayName: "F", phoneNumber: "+910000000000" })).toBe(false);
     expect(isValidAccountProfile({ displayName: "F".repeat(81), phoneNumber: "+919876543210" })).toBe(false);
+    expect(accountProfileValidation({ displayName: "", phoneNumber: "+910000000000" })).toEqual({
+      displayName: "Enter your full name.",
+      phoneNumber: "Enter a valid phone number with country code.",
+    });
   });
 
   it("preserves authentication errors for session recovery", async () => {

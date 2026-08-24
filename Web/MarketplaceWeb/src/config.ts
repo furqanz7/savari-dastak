@@ -25,6 +25,7 @@ export type AppConfig = {
     support: string;
   };
   webPushPublicKey?: string;
+  deliveryPartnerUrl?: string;
 };
 
 type PublicEnvironment = {
@@ -35,6 +36,7 @@ type PublicEnvironment = {
   VITE_DASTAK_TERMS_URL?: string;
   VITE_DASTAK_SUPPORT_URL?: string;
   VITE_DASTAK_WEB_PUSH_PUBLIC_KEY?: string;
+  VITE_DASTAK_DELIVERY_URL?: string;
 };
 
 const variants: Record<AppVariant, Omit<AppConfig, "supabaseUrl" | "supabasePublishableKey">> = {
@@ -117,7 +119,11 @@ function readCustomerLaunchConfiguration(environment: PublicEnvironment) {
   if (!/^[A-Za-z0-9_-]{80,100}$/.test(webPushPublicKey)) {
     throw new Error("VITE_DASTAK_WEB_PUSH_PUBLIC_KEY must be a VAPID public key.");
   }
-  return { legalLinks: { privacy, terms, support }, webPushPublicKey };
+  const deliveryPartnerUrl = requiredPublicUrl(
+    "VITE_DASTAK_DELIVERY_URL",
+    environment.VITE_DASTAK_DELIVERY_URL,
+  );
+  return { legalLinks: { privacy, terms, support }, webPushPublicKey, deliveryPartnerUrl };
 }
 
 function requiredPublicUrl(name: string, value: string | undefined) {

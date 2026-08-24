@@ -298,6 +298,9 @@ private struct DastakCustomerPartnerRoot: View {
                 oauthIdentityLinker: { provider in
                     try await services.linkOAuthIdentity(provider)
                 },
+                oauthReauthenticator: { provider in
+                    try await services.reauthenticateOAuthIdentity(provider)
+                },
                 deliveryPartnerAccess: model.rootState.deliveryPartnerAccess,
                 isDeliveryPartnerAccessLoading: !model.hasLoadedPartnerAccess || model.isRefreshing,
                 becomeDeliveryPartner: {

@@ -11,6 +11,7 @@ export type CustomerIdentity = {
 };
 
 const identityLinkStorageName = "dastak.identityLink.pendingProvider.v1";
+const deletionReauthenticationStorageName = "dastak.accountDeletion.reauthentication.v1";
 
 type AuthenticatedInput = {
   accessToken: string;
@@ -64,6 +65,18 @@ export async function deleteAccount(
   }
 }
 
+export async function exportAccountData(
+  input: AuthenticatedInput,
+  fetcher: typeof fetch = fetch,
+) {
+  const body = await callAccountProfile(input, { operation: "export" }, fetcher);
+  const record = body && typeof body === "object" ? body as Record<string, unknown> : undefined;
+  if (!record?.export || typeof record.filename !== "string" || !record.filename.endsWith(".json")) {
+    throw new Error("Dastak returned an invalid account export.");
+  }
+  return { filename: record.filename, data: record.export };
+}
+
 export async function snapshotCustomerIdentities(
   input: AuthenticatedInput,
   fetcher: typeof fetch = fetch,
@@ -90,8 +103,20 @@ export async function beginCustomerIdentityLink(
 }
 
 export function isValidAccountProfile(profile: AccountProfile) {
+  const errors = accountProfileValidation(profile);
+  return !errors.displayName && !errors.phoneNumber;
+}
+
+export function accountProfileValidation(profile: AccountProfile) {
   const name = profile.displayName.trim().replace(/\s+/g, " ");
-  return name.length >= 1 && name.length <= 80 && isValidDastakPhoneNumber(profile.phoneNumber);
+  return {
+    displayName: name.length < 1
+      ? "Enter your full name."
+      : name.length > 80 ? "Use 80 characters or fewer." : undefined,
+    phoneNumber: isValidDastakPhoneNumber(profile.phoneNumber)
+      ? undefined
+      : "Enter a valid phone number with country code.",
+  };
 }
 
 async function callAccountProfile(
@@ -174,6 +199,48 @@ export function clearPendingIdentityLink(
 ) {
   try {
     storage.removeItem(identityLinkStorageName);
+  } catch {
+    // Storage can be unavailable in private browsing.
+  }
+}
+
+export type PendingDeletionReauthentication = {
+  accountId: string;
+  provider: CustomerOAuthProvider;
+};
+
+export function rememberPendingDeletionReauthentication(
+  value: PendingDeletionReauthentication,
+  storage: Pick<Storage, "setItem"> = sessionStorage,
+) {
+  try {
+    storage.setItem(deletionReauthenticationStorageName, JSON.stringify(value));
+  } catch {
+    // The server still requires a recent OAuth authentication before deletion.
+  }
+}
+
+export function pendingDeletionReauthentication(
+  storage: Pick<Storage, "getItem"> = sessionStorage,
+): PendingDeletionReauthentication | undefined {
+  try {
+    const value: unknown = JSON.parse(storage.getItem(deletionReauthenticationStorageName) ?? "null");
+    if (!value || typeof value !== "object") return undefined;
+    const record = value as Record<string, unknown>;
+    return typeof record.accountId === "string" &&
+        (record.provider === "apple" || record.provider === "google")
+      ? { accountId: record.accountId, provider: record.provider }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function clearPendingDeletionReauthentication(
+  storage: Pick<Storage, "removeItem"> = sessionStorage,
+) {
+  try {
+    storage.removeItem(deletionReauthenticationStorageName);
   } catch {
     // Storage can be unavailable in private browsing.
   }

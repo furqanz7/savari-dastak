@@ -39,7 +39,18 @@ public protocol AccountProfileClient: Sendable {
         provider: MarketplaceOAuthProvider,
         idempotencyKey: IdempotencyKey
     ) async throws
+    func exportAccount(idempotencyKey: IdempotencyKey) async throws -> MarketplaceAccountExport
     func deleteAccount(idempotencyKey: IdempotencyKey) async throws
+}
+
+public struct MarketplaceAccountExport: Equatable, Sendable {
+    public let filename: String
+    public let data: Data
+
+    public init(filename: String, data: Data) {
+        self.filename = filename
+        self.data = data
+    }
 }
 
 public struct SupabaseAccountProfileClient: AccountProfileClient {
@@ -63,6 +74,11 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
 
     private struct IdentityLinkResponse: Decodable, Sendable {
         let provider: MarketplaceOAuthProvider
+    }
+
+    private struct ExportResponse: Decodable, Sendable {
+        let filename: String
+        let export: MarketplaceJSONValue
     }
 
     private let functions: any FunctionClient
@@ -106,6 +122,20 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
         guard response.deleted else { throw FunctionClientError.invalidResponse }
     }
 
+    public func exportAccount(idempotencyKey: IdempotencyKey) async throws -> MarketplaceAccountExport {
+        let response: ExportResponse = try await functions.invoke(
+            "account-profile",
+            request: Request(operation: "export", displayName: nil, phoneNumber: nil),
+            idempotencyKey: idempotencyKey
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return MarketplaceAccountExport(
+            filename: response.filename,
+            data: try encoder.encode(response.export)
+        )
+    }
+
     public func identitySnapshot(
         idempotencyKey: IdempotencyKey
     ) async throws -> [MarketplaceLinkedIdentity] {
@@ -131,5 +161,37 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
             idempotencyKey: idempotencyKey
         )
         guard response.provider == provider else { throw FunctionClientError.invalidResponse }
+    }
+}
+
+private enum MarketplaceJSONValue: Codable, Equatable, Sendable {
+    case object([String: MarketplaceJSONValue])
+    case array([MarketplaceJSONValue])
+    case string(String)
+    case number(Double)
+    case boolean(Bool)
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() { self = .null }
+        else if let value = try? container.decode(Bool.self) { self = .boolean(value) }
+        else if let value = try? container.decode(Double.self) { self = .number(value) }
+        else if let value = try? container.decode(String.self) { self = .string(value) }
+        else if let value = try? container.decode([String: MarketplaceJSONValue].self) { self = .object(value) }
+        else if let value = try? container.decode([MarketplaceJSONValue].self) { self = .array(value) }
+        else { throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid JSON value") }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case let .object(value): try container.encode(value)
+        case let .array(value): try container.encode(value)
+        case let .string(value): try container.encode(value)
+        case let .number(value): try container.encode(value)
+        case let .boolean(value): try container.encode(value)
+        case .null: try container.encodeNil()
+        }
     }
 }

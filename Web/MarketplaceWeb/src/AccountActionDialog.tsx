@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef } from "react";
+import { useId, useRef } from "react";
+import { useModalDialog } from "./useModalDialog";
 
 type Props = {
   action: "sign-out" | "delete-account";
@@ -14,14 +15,7 @@ export function AccountActionDialog({ action, busy = false, message, onConfirm, 
   const cancelButton = useRef<HTMLButtonElement>(null);
   const deleting = action === "delete-account";
 
-  useEffect(() => {
-    cancelButton.current?.focus();
-    const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onDismiss();
-    };
-    document.addEventListener("keydown", dismissOnEscape);
-    return () => document.removeEventListener("keydown", dismissOnEscape);
-  }, [busy, onDismiss]);
+  const dialog = useModalDialog<HTMLElement>({ busy, onDismiss, initialFocus: cancelButton });
 
   return <div
     className="customer-sheet-backdrop"
@@ -29,11 +23,13 @@ export function AccountActionDialog({ action, busy = false, message, onConfirm, 
     onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onDismiss(); }}
   >
     <section
+      ref={dialog}
       className="customer-sheet delete-account-sheet"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={messageId}
+      tabIndex={-1}
     >
       <header><div><p className="eyebrow">{deleting ? "Permanent action" : "Account"}</p><h2 id={titleId}>{deleting ? "Delete your account?" : "Sign out of Dastak?"}</h2></div></header>
       <p id={messageId}>{message}</p>

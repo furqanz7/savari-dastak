@@ -49,6 +49,16 @@ export function signOutOtherSessions(
   return sessionOperation(input, "signOutOthers", fetcher);
 }
 
+export async function revokeAccountSession(
+  input: AuthenticatedInput & { sessionId: string },
+  fetcher: Fetcher = fetch,
+) {
+  return parseCollection(await call(input, {
+    operation: "revoke",
+    sessionId: input.sessionId,
+  }, fetcher));
+}
+
 export async function endCurrentAccountSession(
   input: AuthenticatedInput,
   fetcher: Fetcher = fetch,

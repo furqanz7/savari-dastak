@@ -10,6 +10,7 @@ export type AccountProfileDependencies = {
   authenticateBearer: (bearerToken: string) => Promise<{
     accountId: string;
     accessToken: string;
+    oauthAuthenticatedAt?: number;
   }>;
   snapshotProfile: (accountId: string) => Promise<AccountProfile | null>;
   updateProfile: (accountId: string, profile: AccountProfile) => Promise<AccountProfile | null>;
@@ -19,11 +20,13 @@ export type AccountProfileDependencies = {
     provider: "apple" | "google";
     idempotencyKey: string;
   }) => Promise<unknown>;
+  exportAccount: (accountId: string) => Promise<unknown>;
   deleteAccount: (input: {
     accountId: string;
     accessToken: string;
     idempotencyKey: string;
   }) => Promise<void>;
+  now?: () => number;
 };
 
 type RequestBody =
@@ -31,7 +34,10 @@ type RequestBody =
   | { operation: "update"; displayName: string; phoneNumber: string }
   | { operation: "identitySnapshot" }
   | { operation: "beginIdentityLink"; provider: "apple" | "google" }
+  | { operation: "export" }
   | { operation: "delete" };
+
+const deletionRecentAuthenticationSeconds = 10 * 60;
 
 export async function handleAccountProfile(
   request: Request,
@@ -49,7 +55,7 @@ export async function handleAccountProfile(
     return authenticationRequired();
   }
 
-  let actor: { accountId: string; accessToken: string };
+  let actor: { accountId: string; accessToken: string; oauthAuthenticatedAt?: number };
   try {
     actor = await dependencies.authenticateBearer(authorization);
   } catch {
@@ -89,9 +95,26 @@ export async function handleAccountProfile(
           }),
         );
       }
+      case "export": {
+        const exported = await dependencies.exportAccount(actor.accountId);
+        return json({
+          export: exported,
+          filename: `dastak-account-${actor.accountId}.json`,
+        });
+      }
       case "delete": {
         const idempotencyKey = requiredIdempotencyKey(request);
         if (!idempotencyKey) return validationError("X-Idempotency-Key is required.");
+        if (
+          !recentOAuthAuthentication(actor.oauthAuthenticatedAt, dependencies.now?.() ?? Date.now())
+        ) {
+          return json({
+            error: {
+              code: "reauthentication_required",
+              message: "Verify with Apple or Google again before deleting your account.",
+            },
+          }, 428);
+        }
         await dependencies.deleteAccount({
           accountId: actor.accountId,
           accessToken: actor.accessToken,
@@ -131,7 +154,7 @@ async function readBody(request: Request): Promise<RequestBody | null> {
     const value = await request.json() as Record<string, unknown>;
     if (
       value.operation === "snapshot" || value.operation === "identitySnapshot" ||
-      value.operation === "delete"
+      value.operation === "delete" || value.operation === "export"
     ) {
       return { operation: value.operation };
     }
@@ -156,6 +179,12 @@ async function readBody(request: Request): Promise<RequestBody | null> {
     // The typed validation response below covers malformed JSON.
   }
   return null;
+}
+
+function recentOAuthAuthentication(timestamp: number | undefined, nowMilliseconds: number) {
+  if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) return false;
+  const age = nowMilliseconds / 1_000 - timestamp;
+  return age >= 0 && age <= deletionRecentAuthenticationSeconds;
 }
 
 function requiredIdempotencyKey(request: Request) {

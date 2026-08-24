@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { endCurrentAccountSession, getAccountSessions, signOutOtherSessions } from "./accountSessions";
+import {
+  endCurrentAccountSession,
+  getAccountSessions,
+  revokeAccountSession,
+  signOutOtherSessions,
+} from "./accountSessions";
 
 const auth = {
   supabaseUrl: "https://example.supabase.co",
@@ -48,5 +53,16 @@ describe("account sessions", () => {
       { operation: "signOutOthers", ...metadata },
       { operation: "endCurrent" },
     ]);
+  });
+
+  it("removes one chosen non-current session", async () => {
+    let body: unknown;
+    const otherSessionId = "22222222-2222-4222-8222-222222222222";
+    const result = await revokeAccountSession({ ...auth, sessionId: otherSessionId }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(new Response(JSON.stringify({ sessions: [session] }), { status: 200 }));
+    });
+    expect(body).toEqual({ operation: "revoke", sessionId: otherSessionId });
+    expect(result.sessions).toEqual([session]);
   });
 });

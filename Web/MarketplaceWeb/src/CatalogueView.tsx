@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleHelp,
   CreditCard,
+  Download,
   Hand,
   ImageOff,
   LocateFixed,
@@ -32,15 +33,22 @@ import {
 import { AccountProfileSheet } from "./AccountProfileSheet";
 import { AccountActionDialog } from "./AccountActionDialog";
 import { AccountSessionsSheet } from "./AccountSessionsSheet";
+import { DeleteAccountDialog } from "./DeleteAccountDialog";
+import { AppleLogo, GoogleLogo } from "./IdentityProviderLogos";
 import {
   AccountProfileRequestError,
   accountDeletionIdempotencyKey,
   beginCustomerIdentityLink,
   clearAccountDeletionIdempotencyKey,
+  clearPendingDeletionReauthentication,
   clearPendingIdentityLink,
   deleteAccount,
+  exportAccountData,
+  pendingDeletionReauthentication,
   pendingIdentityLink,
+  rememberPendingDeletionReauthentication,
   rememberPendingIdentityLink,
+  snapshotAccountProfile,
   snapshotCustomerIdentities,
   updateAccountProfile,
   type AccountProfile,
@@ -106,6 +114,7 @@ import type { DastakWebPushController } from "./useDastakWebPush";
 
 type Props = {
   accessToken: string;
+  accountId: string;
   client: SupabaseClient;
   displayName?: string;
   email?: string;
@@ -122,6 +131,7 @@ type Props = {
   onSignOut: () => void;
   legalLinks?: { privacy: string; terms: string; support: string };
   webPush?: DastakWebPushController;
+  deliveryPartnerUrl: string;
 };
 
 type SelectedLocation = { label: string; coordinates: CatalogueLocation };
@@ -168,6 +178,7 @@ type CatalogueState =
   | { phase: "error"; code: string; message: string };
 export function CatalogueView({
   accessToken,
+  accountId,
   client,
   displayName,
   email,
@@ -184,6 +195,7 @@ export function CatalogueView({
   onSignOut,
   legalLinks,
   webPush,
+  deliveryPartnerUrl,
 }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [initialDiscovery] = useState(savedCustomerDiscovery);
@@ -219,6 +231,11 @@ export function CatalogueView({
   const [identityMessageIsSuccess, setIdentityMessageIsSuccess] = useState(false);
   const [showSignOutConfirmation, setShowSignOutConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deletionReauthenticationRequired, setDeletionReauthenticationRequired] = useState(false);
+  const [deletionError, setDeletionError] = useState<string>();
+  const [deletionNotice, setDeletionNotice] = useState<string>();
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string>();
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [deliveryPartnerAccountState, setDeliveryPartnerAccountState] = useState<DeliveryPartnerAccountState>("loading");
   const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderSnapshot>();
@@ -234,6 +251,19 @@ export function CatalogueView({
   useEffect(() => {
     saveCustomerDiscovery(selectedLocation, discoveryRadiusKm);
   }, [selectedLocation, discoveryRadiusKm]);
+
+  useEffect(() => {
+    if (section !== "account") return;
+    let active = true;
+    void snapshotAccountProfile(auth)
+      .then((profile) => { if (active) setAccountProfile(profile); })
+      .catch((error) => {
+        if (!active) return;
+        if (error instanceof AccountProfileRequestError && error.status === 401) return onSignOut();
+        setProfileError("Your latest profile details could not be loaded. Try again.");
+      });
+    return () => { active = false; };
+  }, [auth, onSignOut, section]);
 
   useEffect(() => {
     if (section !== "account") return;
@@ -259,6 +289,18 @@ export function CatalogueView({
       .then((providers) => {
         if (!active) return;
         setCustomerIdentities(providers);
+        const pendingDeletion = pendingDeletionReauthentication();
+        if (pendingDeletion) {
+          clearPendingDeletionReauthentication();
+          if (pendingDeletion.accountId === accountId && providers.some((identity) => identity.provider === pendingDeletion.provider)) {
+            setDeletionReauthenticationRequired(false);
+            setDeletionError(undefined);
+            setDeletionNotice("Identity verified. Type DELETE again to finish securely.");
+            setShowDeleteConfirmation(true);
+          } else {
+            setProfileError("Account deletion was cancelled because a different Dastak identity signed in.");
+          }
+        }
         const pendingProvider = pendingIdentityLink();
         if (!pendingProvider) return;
         clearPendingIdentityLink();
@@ -276,7 +318,7 @@ export function CatalogueView({
       })
       .finally(() => { if (active) setIdentityLoading(false); });
     return () => { active = false; };
-  }, [auth, onSignOut, section]);
+  }, [accountId, auth, onSignOut, section]);
 
   const linkIdentity = async (provider: CustomerOAuthProvider) => {
     setIdentityLoading(true);
@@ -299,6 +341,53 @@ export function CatalogueView({
           : "The sign-in method could not be linked. Your existing account is unchanged.",
       );
       setIdentityLoading(false);
+    }
+  };
+
+  const reauthenticateForDeletion = async (provider: CustomerOAuthProvider) => {
+    setProfileBusy(true);
+    setDeletionError(undefined);
+    setDeletionNotice(undefined);
+    try {
+      rememberPendingDeletionReauthentication({ accountId, provider });
+      const { error } = await client.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/#/account`,
+          queryParams: { prompt: provider === "google" ? "select_account" : "login" },
+          scopes: provider === "apple" ? "name email" : undefined,
+        },
+      });
+      if (error) throw error;
+    } catch {
+      clearPendingDeletionReauthentication();
+      setDeletionError("Identity verification could not be completed. Your account is unchanged.");
+      setProfileBusy(false);
+    }
+  };
+
+  const downloadAccountData = async () => {
+    setExportBusy(true);
+    setExportMessage(undefined);
+    try {
+      const exported = await exportAccountData(auth);
+      const url = URL.createObjectURL(new Blob(
+        [JSON.stringify(exported.data, null, 2)],
+        { type: "application/json" },
+      ));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = exported.filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setExportMessage("Your Dastak data export was downloaded.");
+    } catch (error) {
+      if (error instanceof AccountProfileRequestError && error.status === 401) return onSignOut();
+      setExportMessage(orderMessage(error));
+    } finally {
+      setExportBusy(false);
     }
   };
 
@@ -621,7 +710,8 @@ export function CatalogueView({
 
   const confirmAccountDeletion = async () => {
     setProfileBusy(true);
-    setProfileError(undefined);
+    setDeletionError(undefined);
+    setDeletionNotice(undefined);
     try {
       await deleteAccount({ ...auth, idempotencyKey: accountDeletionKey.current });
       clearAccountDeletionIdempotencyKey();
@@ -631,8 +721,12 @@ export function CatalogueView({
         onSignOut();
         return;
       }
-      setProfileError(orderMessage(error));
-      setShowDeleteConfirmation(false);
+      if (error instanceof AccountProfileRequestError && error.code === "reauthentication_required") {
+        setDeletionReauthenticationRequired(true);
+        setDeletionError(error.message);
+      } else {
+        setDeletionError(orderMessage(error));
+      }
     } finally {
       setProfileBusy(false);
     }
@@ -1003,34 +1097,6 @@ export function CatalogueView({
             </div>
           </section>
 
-          <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">
-            <div className="customer-account-section-heading">
-              <h2 id="account-earn-title">{partnerAccountPresentation.sectionTitle}</h2>
-              {partnerAccountPresentation.status && (
-                <span className={`customer-partner-status ${partnerAccountPresentation.tone}`}>
-                  {partnerAccountPresentation.status}
-                </span>
-              )}
-            </div>
-            <a
-              className={`customer-partner-cta ${partnerAccountPresentation.tone}`}
-              href="https://dastak-delivery.vercel.app"
-              role="button"
-              aria-busy={deliveryPartnerAccountState === "loading" || undefined}
-            >
-              <span className="customer-account-icon"><Bike size={21} /></span>
-              <span>
-                <strong>{partnerAccountPresentation.title}</strong>
-                <small>{partnerAccountPresentation.detail}</small>
-              </span>
-              {deliveryPartnerAccountState === "loading"
-                ? <RefreshCw className="customer-partner-loading" size={18} />
-                : deliveryPartnerAccountState === "not_applied"
-                  ? <ArrowUpRight size={19} />
-                  : <ChevronRight size={19} />}
-            </a>
-          </section>
-
           <section className="customer-account-group" aria-labelledby="account-privacy-title">
             <h2 id="account-privacy-title">Privacy and account security</h2>
             <div className="customer-account-rows">
@@ -1042,8 +1108,11 @@ export function CatalogueView({
               {legalLinks?.terms && <a className="customer-account-row" href={legalLinks.terms} target="_blank" rel="noreferrer">
                 <ReceiptText size={20} /><span><strong>Terms of Service</strong><small>Customer ordering, payment, delivery, refund and account terms</small></span><ArrowUpRight size={18} />
               </a>}
+              <button className="customer-account-row" type="button" disabled={exportBusy} onClick={() => void downloadAccountData()}>
+                <Download size={20} /><span><strong>{exportBusy ? "Preparing your data…" : "Download your data"}</strong><small>A portable JSON copy of your profile, saved places, sessions, orders and issues</small>{exportMessage && <small className={exportMessage.includes("downloaded") ? "success-text" : "error-text"} role="status">{exportMessage}</small>}</span><ChevronRight size={18} />
+              </button>
               <button className="customer-account-row" type="button" onClick={() => setSessionsOpen(true)}>
-                <MonitorSmartphone size={20} /><span><strong>Devices and sessions</strong><small>Review sign-ins and sign out other devices</small></span><ChevronRight size={18} />
+                <MonitorSmartphone size={20} /><span><strong>Devices and sessions</strong><small>Review sign-ins or remove a specific device</small></span><ChevronRight size={18} />
               </button>
               <div className="customer-account-row customer-privacy-row">
                 <Link2 size={20} />
@@ -1069,6 +1138,7 @@ export function CatalogueView({
                       disabled={identityLoading}
                       onClick={() => void linkIdentity(provider)}
                     >
+                      {provider === "apple" ? <AppleLogo /> : <GoogleLogo />}
                       Add {provider === "apple" ? "Apple" : "Google"}
                     </button>
                   ))}
@@ -1077,10 +1147,38 @@ export function CatalogueView({
               <button className="customer-account-row" type="button" onClick={() => setShowSignOutConfirmation(true)}>
                 <LogOut size={20} /><span><strong>Sign out</strong><small>Keep this account and end this session</small></span><ChevronRight size={18} />
               </button>
-              <button className="customer-account-row destructive" type="button" onClick={() => setShowDeleteConfirmation(true)}>
+              <button className="customer-account-row destructive" type="button" onClick={() => { setDeletionError(undefined); setDeletionNotice(undefined); setDeletionReauthenticationRequired(false); setShowDeleteConfirmation(true); }}>
                 <Trash2 size={20} /><span><strong>Delete account</strong><small>Permanently remove your Dastak account</small></span><ChevronRight size={18} />
               </button>
             </div>
+          </section>
+
+          <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">
+            <div className="customer-account-section-heading">
+              <h2 id="account-earn-title">{partnerAccountPresentation.sectionTitle}</h2>
+              {partnerAccountPresentation.status && (
+                <span className={`customer-partner-status ${partnerAccountPresentation.tone}`}>
+                  {partnerAccountPresentation.status}
+                </span>
+              )}
+            </div>
+            <a
+              className={`customer-partner-cta ${partnerAccountPresentation.tone}`}
+              href={deliveryPartnerUrl}
+              role="button"
+              aria-busy={deliveryPartnerAccountState === "loading" || undefined}
+            >
+              <span className="customer-account-icon"><Bike size={21} /></span>
+              <span>
+                <strong>{partnerAccountPresentation.title}</strong>
+                <small>{partnerAccountPresentation.detail}</small>
+              </span>
+              {deliveryPartnerAccountState === "loading"
+                ? <RefreshCw className="customer-partner-loading" size={18} />
+                : deliveryPartnerAccountState === "not_applied"
+                  ? <ArrowUpRight size={19} />
+                  : <ChevronRight size={19} />}
+            </a>
           </section>
           {profileError && !profileEditorOpen && <p className="error-text" role="alert">{profileError}</p>}
         </section>
@@ -1131,12 +1229,16 @@ export function CatalogueView({
         onConfirm={onSignOut}
         onDismiss={() => setShowSignOutConfirmation(false)}
       />}
-      {showDeleteConfirmation && <AccountActionDialog
-        action="delete-account"
+      {showDeleteConfirmation && <DeleteAccountDialog
         busy={profileBusy}
-        message="This cannot be undone. Any active order will continue, but you will lose in-app tracking and support access. Completed order, payment and safety records may be retained without your identity where legally required."
+        error={deletionError}
+        identities={customerIdentities}
+        notice={deletionNotice}
+        reauthenticationRequired={deletionReauthenticationRequired}
+        warning="This cannot be undone. Any active order will continue, but you will lose in-app tracking and support access. Completed order, payment and safety records may be retained without your identity where legally required."
         onConfirm={() => void confirmAccountDeletion()}
-        onDismiss={() => setShowDeleteConfirmation(false)}
+        onReauthenticate={(provider) => void reauthenticateForDeletion(provider)}
+        onDismiss={() => { setShowDeleteConfirmation(false); setDeletionError(undefined); setDeletionNotice(undefined); setDeletionReauthenticationRequired(false); }}
       />}
       {cancellingOrder && <CancellationSheet
         title={merchantOrderPresentation(cancellingOrder.status, cancellingOrder.paymentState).primaryAction === "request_cancellation" ? "Request cancellation?" : "Cancel this order?"}

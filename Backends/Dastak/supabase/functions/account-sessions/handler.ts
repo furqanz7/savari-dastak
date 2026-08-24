@@ -16,6 +16,7 @@ type Dependencies = {
   revokeOthers: (accessToken: string) => Promise<void>;
   endOthers: (actor: Actor) => Promise<RpcResult>;
   endCurrent: (actor: Actor) => Promise<RpcResult>;
+  revokeOne: (actor: Actor, targetSessionId: string) => Promise<RpcResult>;
 };
 
 export async function handleAccountSessions(request: Request, dependencies: Dependencies) {
@@ -37,6 +38,14 @@ export async function handleAccountSessions(request: Request, dependencies: Depe
 
   if (body.operation === "endCurrent") {
     return runRpc(() => dependencies.endCurrent(actor), "This session could not be closed.");
+  }
+  if (body.operation === "revoke") {
+    const targetSessionId = uuid(body.sessionId);
+    if (!targetSessionId) return validationError();
+    return runRpc(
+      () => dependencies.revokeOne(actor, targetSessionId),
+      "That device could not be signed out.",
+    );
   }
 
   const metadata = normalizeMetadata(body);
@@ -83,6 +92,10 @@ function clean(value: unknown, maximum: number) {
   return normalized.length >= 1 && normalized.length <= maximum ? normalized : null;
 }
 
+function uuid(value: unknown) {
+  return typeof value === "string" && uuidPattern.test(value) ? value.toLowerCase() : null;
+}
+
 async function runRpc(operation: () => Promise<RpcResult>, fallback: string) {
   try {
     return rpcResponse(await operation());
@@ -106,3 +119,5 @@ function validationError() {
     error: { code: "validation_failed", message: "Valid device details are required." },
   }, 400);
 }
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

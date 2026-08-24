@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { CheckCircle2, Laptop, LogOut, RefreshCw, Smartphone, X } from "lucide-react";
 import {
   AccountSessionRequestError,
   getAccountSessions,
+  revokeAccountSession,
   signOutOtherSessions,
   webSessionMetadata,
   type AccountSession,
 } from "./accountSessions";
+import { useModalDialog } from "./useModalDialog";
 
 export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey, appName, onDismiss, onSessionExpired }: {
   accessToken: string;
@@ -21,7 +23,11 @@ export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey,
   const [sessions, setSessions] = useState<AccountSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [revokingSessionId, setRevokingSessionId] = useState<string>();
   const [error, setError] = useState<string>();
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const operationBusy = busy || !!revokingSessionId;
+  const dialog = useModalDialog<HTMLElement>({ busy: operationBusy, onDismiss, initialFocus: closeButton });
 
   const load = useCallback(async () => {
     setLoading(true); setError(undefined);
@@ -34,11 +40,6 @@ export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey,
   }, [auth, metadata, onSessionExpired]);
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy) onDismiss(); };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [busy, onDismiss]);
 
   const signOutOthers = async () => {
     setBusy(true); setError(undefined);
@@ -50,31 +51,43 @@ export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey,
     } finally { setBusy(false); }
   };
 
+  const removeSession = async (sessionId: string) => {
+    setRevokingSessionId(sessionId); setError(undefined);
+    try {
+      setSessions((await revokeAccountSession({ ...auth, sessionId })).sessions);
+    } catch (removeError) {
+      if (removeError instanceof AccountSessionRequestError && removeError.status === 401) return onSessionExpired();
+      setError(removeError instanceof Error ? removeError.message : "That device could not be signed out.");
+    } finally { setRevokingSessionId(undefined); }
+  };
+
   const dismissFromBackdrop = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget && !busy) onDismiss();
+    if (event.target === event.currentTarget && !operationBusy) onDismiss();
   };
   const otherCount = sessions.filter((session) => !session.isCurrent).length;
 
   return <div className="customer-sheet-backdrop" role="presentation" onMouseDown={dismissFromBackdrop}>
-    <section className="customer-sheet account-sessions-sheet" role="dialog" aria-modal="true" aria-labelledby="sessions-title">
-      <header><div><p className="eyebrow">Security</p><h2 id="sessions-title">Devices and sessions</h2><p>Review where your Dastak account is signed in.</p></div><button className="icon-button" type="button" onClick={onDismiss} disabled={busy} aria-label="Close sessions" title="Close"><X size={19} /></button></header>
+    <section ref={dialog} className="customer-sheet account-sessions-sheet" role="dialog" aria-modal="true" aria-labelledby="sessions-title" tabIndex={-1}>
+      <header><div><p className="eyebrow">Security</p><h2 id="sessions-title">Devices and sessions</h2><p>Review where your Dastak account is signed in.</p></div><button ref={closeButton} className="icon-button" type="button" onClick={onDismiss} disabled={operationBusy} aria-label="Close sessions" title="Close"><X size={19} /></button></header>
       {loading ? <div className="account-sessions-loading" role="status"><RefreshCw size={18} /> Checking devices…</div> : <div className="account-session-list">
-        {sessions.map((session) => <SessionRow key={session.sessionId} session={session} />)}
+        {sessions.map((session) => <SessionRow key={session.sessionId} session={session} busy={revokingSessionId === session.sessionId} disabled={operationBusy} onRemove={() => void removeSession(session.sessionId)} />)}
         {sessions.length === 0 && !error && <p className="account-sessions-empty">No active sessions were returned.</p>}
       </div>}
       {error && <div className="account-sessions-error" role="alert"><span>{error}</span><button type="button" onClick={() => void load()}>Try again</button></div>}
-      <div className="account-sessions-note"><CheckCircle2 size={18} /><p><strong>This device stays signed in.</strong><span>Signing out other devices revokes their refresh sessions. A device may remain active briefly until its current access token expires.</span></p></div>
-      <button className="secondary-button account-sessions-action" type="button" onClick={() => void signOutOthers()} disabled={busy || loading || otherCount === 0}><LogOut size={18} /> {busy ? "Signing out…" : otherCount === 0 ? "No other devices" : `Sign out ${otherCount} other ${otherCount === 1 ? "device" : "devices"}`}</button>
+      <div className="account-sessions-note"><CheckCircle2 size={18} /><p><strong>This device stays signed in.</strong><span>Removed devices are blocked from Dastak requests and cannot refresh their sessions.</span></p></div>
+      <button className="secondary-button account-sessions-action" type="button" onClick={() => void signOutOthers()} disabled={operationBusy || loading || otherCount === 0}><LogOut size={18} /> {busy ? "Signing out…" : otherCount === 0 ? "No other devices" : `Sign out ${otherCount} other ${otherCount === 1 ? "device" : "devices"}`}</button>
     </section>
   </div>;
 }
 
-function SessionRow({ session }: { session: AccountSession }) {
+function SessionRow({ session, busy, disabled, onRemove }: { session: AccountSession; busy: boolean; disabled: boolean; onRemove: () => void }) {
   const Icon = session.platform === "ios" ? Smartphone : Laptop;
   return <article className={session.isCurrent ? "current" : ""}>
     <span className="account-session-icon"><Icon size={19} /></span>
     <span><strong>{session.deviceName}</strong><small>{session.appName} · {relativeDate(session.lastSeenAt)}</small></span>
-    {session.isCurrent && <b>Current</b>}
+    {session.isCurrent
+      ? <b>Current</b>
+      : <button className="account-session-remove" type="button" disabled={disabled} onClick={onRemove}>{busy ? "Removing…" : "Remove"}</button>}
   </article>;
 }
 

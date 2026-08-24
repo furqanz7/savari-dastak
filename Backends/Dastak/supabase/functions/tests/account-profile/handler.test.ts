@@ -74,6 +74,13 @@ Deno.test("account profile deletes only the authenticated account", async () => 
   const response = await handleAccountProfile(
     request({ operation: "delete" }),
     dependencies({
+      authenticateBearer: () =>
+        Promise.resolve({
+          accountId,
+          accessToken: "session-token",
+          oauthAuthenticatedAt: 1_700_000_000,
+        }),
+      now: () => 1_700_000_100_000,
       deleteAccount: (value) => {
         deletion = value;
         return Promise.resolve();
@@ -87,6 +94,41 @@ Deno.test("account profile deletes only the authenticated account", async () => 
     idempotencyKey: "profile-request-key",
   });
   assertEquals(await response.json(), { deleted: true, deletionQueued: true });
+});
+
+Deno.test("account deletion requires a recent OAuth authentication", async () => {
+  for (const oauthAuthenticatedAt of [undefined, 1_699_999_000]) {
+    const response = await handleAccountProfile(
+      request({ operation: "delete" }),
+      dependencies({
+        authenticateBearer: () =>
+          Promise.resolve({
+            accountId,
+            accessToken: "session-token",
+            oauthAuthenticatedAt,
+          }),
+        now: () => 1_700_000_000_000,
+      }),
+    );
+    assertEquals(response.status, 428);
+    assertEquals((await response.json()).error.code, "reauthentication_required");
+  }
+});
+
+Deno.test("account profile exports only the authenticated account", async () => {
+  let exportedAccount = "";
+  const response = await handleAccountProfile(
+    request({ operation: "export" }),
+    dependencies({
+      exportAccount: (value) => {
+        exportedAccount = value;
+        return Promise.resolve({ formatVersion: 1, profile: { accountId: value } });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(exportedAccount, accountId);
+  assertEquals((await response.json()).filename, `dastak-account-${accountId}.json`);
 });
 
 Deno.test("account profile exposes and begins only explicit Apple or Google links", async () => {
@@ -146,11 +188,18 @@ function dependencies(
 ): AccountProfileDependencies {
   return {
     authenticateBearer: overrides.authenticateBearer ??
-      (() => Promise.resolve({ accountId, accessToken: "session-token" })),
+      (() =>
+        Promise.resolve({
+          accountId,
+          accessToken: "session-token",
+          oauthAuthenticatedAt: 1_700_000_000,
+        })),
     snapshotProfile: overrides.snapshotProfile ?? (() => Promise.resolve(profile)),
     updateProfile: overrides.updateProfile ?? ((_accountId, value) => Promise.resolve(value)),
     snapshotIdentities: overrides.snapshotIdentities ?? (() => Promise.resolve({ providers: [] })),
     beginIdentityLink: overrides.beginIdentityLink ?? (() => Promise.resolve({})),
+    exportAccount: overrides.exportAccount ?? (() => Promise.resolve({ formatVersion: 1 })),
     deleteAccount: overrides.deleteAccount ?? (() => Promise.resolve()),
+    now: overrides.now ?? (() => 1_700_000_100_000),
   };
 }

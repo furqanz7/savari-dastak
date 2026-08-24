@@ -705,6 +705,7 @@ function Ready({ access, email, session, onSignOut }: {
         publishableKey={config.supabasePublishableKey}
         legalLinks={config.legalLinks!}
         webPushPublicKey={config.webPushPublicKey!}
+        deliveryPartnerUrl={config.deliveryPartnerUrl!}
         onSignOut={onSignOut}
       />
     );

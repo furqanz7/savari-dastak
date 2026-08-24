@@ -387,6 +387,26 @@ extension SupabaseAuthenticationClient {
             )
         }
 
+        func reauthenticate(
+            provider: MarketplaceOAuthProvider,
+            redirectTo: URL
+        ) async throws {
+            let original = try await supabaseClient.auth.session
+            let refreshed = try await supabaseClient.auth.signInWithOAuth(
+                provider: provider == .apple ? .apple : .google,
+                redirectTo: redirectTo,
+                scopes: provider == .apple ? "name email" : nil,
+                queryParams: [("prompt", provider == .google ? "select_account" : "login")]
+            )
+            guard refreshed.user.id == original.user.id else {
+                _ = try? await supabaseClient.auth.setSession(
+                    accessToken: original.accessToken,
+                    refreshToken: original.refreshToken
+                )
+                throw MarketplaceAuthenticatedServicesError.identityMismatch
+            }
+        }
+
         func currentAccountID() async -> UUID? {
             do {
                 return try await supabaseClient.auth.session.user.id

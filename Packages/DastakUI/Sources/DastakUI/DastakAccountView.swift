@@ -10,13 +10,11 @@ import UIKit
 struct DastakAccountView: View {
     private enum AccountAlert: Identifiable {
         case signOut
-        case deleteAccount
         case error(String)
 
         var id: String {
             switch self {
             case .signOut: "sign-out"
-            case .deleteAccount: "delete-account"
             case .error: "error"
             }
         }
@@ -43,11 +41,15 @@ struct DastakAccountView: View {
     let linkIdentity: (MarketplaceOAuthProvider) -> Void
     let updateProfile: (String, String) async throws -> Void
     let deleteAccount: () async throws -> Void
+    let reauthenticate: (MarketplaceOAuthProvider) async throws -> Void
+    let exportAccount: () async throws -> MarketplaceAccountExport
 
     @Environment(\.marketplaceSignOut) private var signOut
     @State private var showingProfileEditor = false
+    @State private var showingDeleteAccount = false
+    @State private var accountExport: DastakAccountExportFile?
     @State private var accountAlert: AccountAlert?
-    @State private var isDeleting = false
+    @State private var isExporting = false
     @State private var notificationStatus: DastakNotificationPermissionState = .notRequested
     private let legalLinks = MarketplaceLegalLinks(bundle: .main)
 
@@ -61,9 +63,9 @@ struct DastakAccountView: View {
                 deliverySection
                 preferencesSection
                 identitySection
+                accountActions
                 supportSection
                 partnerOpportunity
-                accountActions
             }
             .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
             .padding(.horizontal, MarketplaceSpacing.medium)
@@ -76,6 +78,21 @@ struct DastakAccountView: View {
         .sheet(isPresented: $showingProfileEditor) {
             DastakProfileEditor(customer: customer, updateProfile: updateProfile)
                 .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingDeleteAccount) {
+            DastakDeleteAccountSheet(
+                warning: deletionWarning,
+                linkedIdentities: linkedIdentities,
+                deleteAccount: deleteAccount,
+                reauthenticate: reauthenticate
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $accountExport) { file in
+            DastakAccountExportSheet(file: file)
+                .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
         .alert(item: $accountAlert, content: makeAccountAlert)
@@ -173,7 +190,6 @@ struct DastakAccountView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(isDeliveryPartnerAccessLoading)
             .marketplaceFlatSurface()
             .accessibilityHint(location == nil ? "Add a saved delivery address" : "Manage your saved delivery addresses")
         }
@@ -278,7 +294,12 @@ struct DastakAccountView: View {
             VStack(spacing: 0) {
                 ForEach(MarketplaceOAuthProvider.allCases, id: \.self) { provider in
                     HStack(spacing: MarketplaceSpacing.compact) {
-                        accountIcon(provider == .apple ? "apple.logo" : "g.circle.fill")
+                        MarketplaceIdentityProviderMark(provider)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                MarketplaceColors.dastakAccentSoft.color,
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            )
                         VStack(alignment: .leading, spacing: 3) {
                             Text(provider == .apple ? "Apple" : "Google")
                                 .font(.headline)
@@ -522,6 +543,15 @@ struct DastakAccountView: View {
                     )
                 }
                 Divider().padding(.leading, 56)
+                Button { Task { await prepareAccountExport() } } label: {
+                    accountRow(
+                        title: isExporting ? "Preparing your data..." : "Download your data",
+                        value: "Profile, places, sessions, orders and issues",
+                        symbol: "arrow.down.doc"
+                    )
+                }
+                .disabled(isExporting)
+                Divider().padding(.leading, 56)
                 Button { accountAlert = .signOut } label: {
                     accountRow(
                         title: "Sign out",
@@ -530,15 +560,14 @@ struct DastakAccountView: View {
                     )
                 }
                 Divider().padding(.leading, 56)
-                Button(role: .destructive) { accountAlert = .deleteAccount } label: {
+                Button(role: .destructive) { showingDeleteAccount = true } label: {
                     accountRow(
-                        title: isDeleting ? "Deleting account..." : "Delete account",
+                        title: "Delete account",
                         value: "Permanently remove your Dastak account",
                         symbol: "trash",
                         isDestructive: true
                     )
                 }
-                .disabled(isDeleting)
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
             .marketplaceFlatSurface()
@@ -561,15 +590,6 @@ struct DastakAccountView: View {
                 primaryButton: .cancel(Text("Cancel")),
                 secondaryButton: .destructive(Text("Sign out")) {
                     Task { await endCurrentSessionAndSignOut() }
-                }
-            )
-        case .deleteAccount:
-            Alert(
-                title: Text("Delete your Dastak account?"),
-                message: Text(deletionWarning),
-                primaryButton: .cancel(Text("Cancel")),
-                secondaryButton: .destructive(Text("Delete account")) {
-                    Task { await performAccountDeletion() }
                 }
             )
         case let .error(message):
@@ -598,13 +618,218 @@ struct DastakAccountView: View {
     }
 
     @MainActor
-    private func performAccountDeletion() async {
-        isDeleting = true
-        defer { isDeleting = false }
+    private func prepareAccountExport() async {
+        isExporting = true
+        defer { isExporting = false }
+        do {
+            let exported = try await exportAccount()
+            let safeFilename = exported.filename
+                .replacingOccurrences(of: "/", with: "-")
+                .replacingOccurrences(of: "\\", with: "-")
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent(safeFilename.isEmpty ? "dastak-account.json" : safeFilename)
+            try exported.data.write(to: url, options: [.atomic])
+            accountExport = DastakAccountExportFile(url: url)
+        } catch {
+            accountAlert = .error("Your Dastak data could not be prepared. Please try again.")
+        }
+    }
+}
+
+private struct DastakAccountExportFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct DastakAccountExportSheet: View {
+    let file: DastakAccountExportFile
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.title2)
+                    .foregroundStyle(MarketplaceColors.success.color)
+                Text("Your data is ready")
+                    .font(.title.bold())
+                Text("Save or share this private JSON file using a destination you trust.")
+                    .font(MarketplaceTypography.supporting)
+                    .foregroundStyle(.secondary)
+                ShareLink(item: file.url) {
+                    Label("Save or share data", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 54)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(MarketplaceColors.dastakAccent.color)
+                Spacer(minLength: 0)
+            }
+            .padding(MarketplaceSpacing.large)
+            .marketplacePage()
+            .navigationTitle("Data export")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .onDisappear { try? FileManager.default.removeItem(at: file.url) }
+    }
+}
+
+private struct DastakDeleteAccountSheet: View {
+    let warning: String
+    let linkedIdentities: [MarketplaceLinkedIdentity]
+    let deleteAccount: () async throws -> Void
+    let reauthenticate: (MarketplaceOAuthProvider) async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmation = ""
+    @State private var isBusy = false
+    @State private var requiresReauthentication = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                        Text("PERMANENT ACTION")
+                            .font(.caption.weight(.bold))
+                            .tracking(1.4)
+                            .foregroundStyle(MarketplaceColors.destructive.color)
+                        Text("Delete your account?")
+                            .font(MarketplaceTypography.instrumentSerif(fixedSize: 38))
+                        Text(warning)
+                            .font(MarketplaceTypography.supporting)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if requiresReauthentication {
+                        verificationSection
+                    } else {
+                        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                            Text("Type DELETE to confirm")
+                                .font(.subheadline.weight(.semibold))
+                            TextField("DELETE", text: $confirmation)
+#if os(iOS)
+                                .textInputAutocapitalization(.characters)
+#endif
+                                .autocorrectionDisabled()
+                                .padding(.horizontal, MarketplaceSpacing.compact)
+                                .frame(minHeight: 56)
+                                .marketplaceFlatSurface()
+                                .accessibilityLabel("Type DELETE to confirm account deletion")
+                        }
+
+                        Button(role: .destructive) {
+                            Task { await requestDeletion() }
+                        } label: {
+                            HStack {
+                                Text(isBusy ? "Please wait..." : "Delete account")
+                                Spacer()
+                                if isBusy { ProgressView() }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: 52)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(MarketplaceColors.destructive.color)
+                        .disabled(!confirmed || isBusy)
+                    }
+
+                    if let errorMessage {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(MarketplaceColors.destructive.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel("Error: \(errorMessage)")
+                    }
+                }
+                .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+                .padding(MarketplaceSpacing.large)
+            }
+            .scrollIndicators(.hidden)
+            .marketplacePage()
+            .navigationTitle("Delete account")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Keep account") { dismiss() }.disabled(isBusy)
+                }
+            }
+        }
+    }
+
+    private var confirmed: Bool {
+        confirmation.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "DELETE"
+    }
+
+    private var verificationSection: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Text("Verify it’s you")
+                .font(.title3.weight(.semibold))
+            Text("Sign in again with a method already linked to this Dastak account.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(linkedIdentities, id: \.provider) { identity in
+                Button {
+                    Task { await verifyAndDelete(identity.provider) }
+                } label: {
+                    HStack(spacing: MarketplaceSpacing.compact) {
+                        MarketplaceIdentityProviderMark(identity.provider)
+                            .frame(width: 24, height: 24)
+                        Text("Continue with \(identity.provider == .apple ? "Apple" : "Google")")
+                        Spacer()
+                        if isBusy { ProgressView() }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 52)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isBusy)
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+    }
+
+    @MainActor
+    private func requestDeletion() async {
+        isBusy = true
+        errorMessage = nil
+        defer { isBusy = false }
         do {
             try await deleteAccount()
+        } catch let error as FunctionClientError {
+            if case let .api(_, code, message) = error, code == "reauthentication_required" {
+                requiresReauthentication = true
+                errorMessage = message
+            } else {
+                errorMessage = "Your account could not be deleted. Your account is unchanged."
+            }
         } catch {
-            accountAlert = .error("Your account could not be deleted. Please try again.")
+            errorMessage = "Your account could not be deleted. Your account is unchanged."
+        }
+    }
+
+    @MainActor
+    private func verifyAndDelete(_ provider: MarketplaceOAuthProvider) async {
+        isBusy = true
+        errorMessage = nil
+        defer { isBusy = false }
+        do {
+            try await reauthenticate(provider)
+            try await deleteAccount()
+        } catch MarketplaceAuthenticatedServicesError.identityMismatch {
+            errorMessage = "A different Dastak account signed in. Deletion was cancelled."
+        } catch let error as FunctionClientError {
+            if case let .api(_, _, message) = error { errorMessage = message }
+            else { errorMessage = "Identity verification could not be completed." }
+        } catch {
+            errorMessage = "Identity verification could not be completed. Your account is unchanged."
         }
     }
 }
@@ -802,6 +1027,7 @@ struct DastakProfileEditor: View {
     @State private var phoneNumber: String
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var didAttemptSave = false
     @FocusState private var focusedField: Field?
 
     init(
@@ -843,12 +1069,24 @@ struct DastakProfileEditor: View {
                             .padding(.horizontal, MarketplaceSpacing.compact)
                             .frame(minHeight: 56)
                             .marketplaceFlatSurface()
+                            .accessibilityHint(nameValidationMessage ?? "Required, up to 80 characters")
+                        if didAttemptSave, let nameValidationMessage {
+                            Label(nameValidationMessage, systemImage: "exclamationmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(MarketplaceColors.destructive.color)
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
                         Text("Phone number")
                             .font(.subheadline.weight(.semibold))
                         DastakPhoneNumberField(phoneNumber: $phoneNumber)
+                            .accessibilityHint(phoneValidationMessage ?? "Include the country code")
+                        if didAttemptSave, let phoneValidationMessage {
+                            Label(phoneValidationMessage, systemImage: "exclamationmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(MarketplaceColors.destructive.color)
+                        }
                         Label(
                             contactMessage,
                             systemImage: "lock.fill"
@@ -858,7 +1096,7 @@ struct DastakProfileEditor: View {
                         .fixedSize(horizontal: false, vertical: true)
                     }
 
-                if let errorMessage {
+                    if let errorMessage {
                         Text(errorMessage)
                             .font(.footnote)
                             .foregroundStyle(MarketplaceColors.destructive.color)
@@ -887,7 +1125,7 @@ struct DastakProfileEditor: View {
                         dismissKeyboard()
                         Task { await save() }
                     }
-                        .disabled(!isValid || isSaving)
+                        .disabled(isSaving)
                 }
 #if os(iOS)
                 ToolbarItemGroup(placement: .keyboard) {
@@ -901,10 +1139,21 @@ struct DastakProfileEditor: View {
     }
 
     private var isValid: Bool {
+        nameValidationMessage == nil && phoneValidationMessage == nil
+    }
+
+    private var nameValidationMessage: String? {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty { return "Enter your full name." }
+        if name.count > 80 { return "Use 80 characters or fewer." }
+        return nil
+    }
+
+    private var phoneValidationMessage: String? {
         let phone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (1...80).contains(name.count)
-            && DastakPhoneNumberValidator.isValidE164(phone)
+        return DastakPhoneNumberValidator.isValidE164(phone)
+            ? nil
+            : "Enter a valid phone number with country code."
     }
 
     @MainActor
@@ -922,6 +1171,8 @@ struct DastakProfileEditor: View {
 
     @MainActor
     private func save() async {
+        didAttemptSave = true
+        guard isValid else { return }
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }

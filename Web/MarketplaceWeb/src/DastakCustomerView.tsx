@@ -25,6 +25,7 @@ type Props = {
   publishableKey: string;
   legalLinks: { privacy: string; terms: string; support: string };
   webPushPublicKey: string;
+  deliveryPartnerUrl: string;
   onSignOut: () => void;
 };
 

@@ -74,6 +74,30 @@ Deno.test("account sessions can close the current registry entry without device 
   assertEquals(ended, actor.sessionId);
 });
 
+Deno.test("account sessions revokes only the requested non-current session", async () => {
+  const target = "33333333-3333-4333-8333-333333333333";
+  let revoked = "";
+  const response = await handleAccountSessions(
+    request({ operation: "revoke", sessionId: target }),
+    dependencies({
+      revokeOne: async (_actor, value) => {
+        revoked = value;
+        return ok({ sessions: [] });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(revoked, target);
+});
+
+Deno.test("account sessions rejects malformed revoke targets", async () => {
+  const response = await handleAccountSessions(
+    request({ operation: "revoke", sessionId: "not-a-session" }),
+    dependencies(),
+  );
+  assertEquals(response.status, 400);
+});
+
 Deno.test("account sessions rejects unrecognized metadata", async () => {
   const response = await handleAccountSessions(
     request({
@@ -103,6 +127,7 @@ function dependencies(overrides: Partial<Dependencies> = {}): Dependencies {
     revokeOthers: async () => undefined,
     endOthers: async () => ok({ ended: true }),
     endCurrent: async () => ok({ ended: true }),
+    revokeOne: async () => ok({ sessions: [] }),
     ...overrides,
   };
 }

@@ -147,6 +147,7 @@
 .account-session-list article > span:nth-child(2) { min-width: 0; display: grid; gap: 4px; }
 .account-session-list small { color: var(--text-secondary); }
 .account-session-list b { padding: 5px 7px; border-radius: 5px; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-size: 10px; text-transform: uppercase; }
+.account-session-remove { min-height: 36px; padding: 0 10px; border: 1px solid var(--divider); border-radius: 7px; color: var(--destructive); background: var(--surface); font-weight: 750; }
 .account-sessions-note { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; margin-top: 18px; padding: 14px; border: 1px solid var(--divider); border-radius: 8px; color: var(--success); background: color-mix(in srgb, var(--success) 7%, var(--surface-raised)); }
 .account-sessions-note p { display: grid; gap: 4px; margin: 0; color: var(--text-primary); }
 .account-sessions-note span { color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
@@ -160,9 +161,17 @@
 .account-profile-sheet > label > input { width: 100%; min-height: 50px; padding: 0 13px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); }
 .account-profile-sheet .phone-number-field { background: var(--surface-raised); }
 .account-profile-sheet > small { display: block; margin-top: 12px; color: var(--text-secondary); line-height: 1.45; }
+.account-profile-sheet > small.field-error { margin-top: 7px; color: var(--destructive); }
+.account-profile-sheet [aria-invalid="true"] { border-color: color-mix(in srgb, var(--destructive) 72%, var(--divider)); }
 .delete-account-sheet { display: grid; gap: 12px; }
 .delete-account-sheet > p { margin: 10px 0 12px; color: var(--text-secondary); line-height: 1.55; }
 .delete-account-sheet > button { width: 100%; min-height: 50px; }
+.delete-account-confirmation { display: grid; gap: 8px; color: var(--text-secondary); font-size: 13px; }
+.delete-account-confirmation input { width: 100%; min-height: 50px; padding: 0 13px; border: 1px solid var(--divider); border-radius: 8px; color: var(--text-primary); background: var(--surface-raised); font: inherit; letter-spacing: .08em; text-transform: uppercase; }
+.delete-account-reauthentication { display: grid; gap: 8px; padding: 15px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-raised); }
+.delete-account-reauthentication > p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.delete-account-reauthentication > div { display: grid; gap: 8px; margin-top: 4px; }
+.delete-account-reauthentication .provider-button { min-height: 48px; }
 
 .account-address-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; margin-top: 24px; padding: 18px 0; border-top: 1px solid var(--divider); border-bottom: 1px solid var(--divider); }
 .account-address-card > div { min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start; color: var(--dastak-accent); }
@@ -217,6 +226,8 @@ button.customer-account-row:not(:disabled):hover { color: var(--dastak-accent); 
 .customer-privacy-row > svg { margin-top: 2px; }
 .customer-identity-actions { display: flex !important; grid-auto-flow: column; gap: 7px !important; }
 .customer-identity-actions .secondary-button { min-height: 36px; padding: 0 11px; white-space: nowrap; font-size: 12px; }
+.customer-identity-actions .secondary-button { display: inline-flex; align-items: center; gap: 6px; }
+.customer-identity-actions svg { width: 15px; height: 15px; flex: 0 0 auto; }
 .customer-account-error { display: block; margin-top: 9px; }
 
 @media (max-width: 560px) {

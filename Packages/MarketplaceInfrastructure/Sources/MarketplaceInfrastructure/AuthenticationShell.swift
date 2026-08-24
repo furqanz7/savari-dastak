@@ -146,6 +146,12 @@ private final class AuthenticationShellModel: ObservableObject {
                     provider: provider,
                     redirectTo: try OAuthCallbackConfiguration(bundle: bundle).callbackURL()
                 )
+            },
+            oauthReauthenticator: { provider in
+                try await operations.reauthenticate(
+                    provider: provider,
+                    redirectTo: try OAuthCallbackConfiguration(bundle: bundle).callbackURL()
+                )
             }
         )
     }
