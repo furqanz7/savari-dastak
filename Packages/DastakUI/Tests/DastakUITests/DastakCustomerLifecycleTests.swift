@@ -14,15 +14,19 @@ final class DastakCustomerLifecycleTests: XCTestCase {
         XCTAssertTrue(DastakDiscoveredUPIApp.parse([]).isEmpty)
 
         let apps = DastakDiscoveredUPIApp.parse([
-            ["appPackage": "com.phonepe.PhonePe", "appName": "PhonePe"],
-            ["appPackage": "com.google.GPay", "appName": "Google Pay"],
-            ["appPackage": "com.google.GPay", "appName": "Duplicate must disappear"],
+            ["shortcode": "phonepe", "appName": "PhonePe", "uriScheme": "phonepe://pay"],
+            ["shortcode": "google_pay", "appName": "Google Pay", "uriScheme": "tez://upi/pay"],
+            ["shortcode": "google_pay", "appName": "Duplicate must disappear", "uriScheme": "tez://upi/pay"],
+            ["shortcode": "cred", "appName": "CRED", "uriScheme": "credpay://upi/pay"],
+            ["shortcode": "jupiter", "appName": "Jupiter", "uriScheme": "jupiter://upi/pay"],
             ["packageName": "com.example.supported", "displayName": "Another UPI app"],
         ])
 
-        XCTAssertEqual(apps.map(\.title), ["Google Pay", "PhonePe", "Another UPI app"])
-        XCTAssertEqual(Set(apps.map(\.packageName)).count, 3)
-        XCTAssertFalse(apps.contains(where: { $0.title == "CRED" || $0.title == "Paytm" }))
+        XCTAssertEqual(apps.map(\.title), ["Google Pay", "PhonePe", "CRED", "Another UPI app", "Jupiter"])
+        XCTAssertEqual(Set(apps.map(\.packageName)).count, 5)
+        XCTAssertEqual(apps.first?.packageName, "google_pay")
+        XCTAssertEqual(apps.first?.uriScheme, "tez://upi/pay")
+        XCTAssertFalse(apps.contains(where: { $0.title == "Paytm" }))
     }
 
     func testCustomerOnboardingNeverRequiresDeliveryAddress() {

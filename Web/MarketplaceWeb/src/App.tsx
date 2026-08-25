@@ -35,6 +35,7 @@ import {
   sanitizedAuthCallbackUrl,
 } from "./auth-callback";
 import { shouldPreserveAuthenticatedView } from "./auth-state";
+import { resolveAuthenticatedEmail } from "./authenticatedEmail";
 import { canCompleteDastakLaunch, dastakLaunchVideos, takeNextDastakLaunchVideo } from "./dastak-launch";
 import { readAppConfig } from "./config";
 import { PhoneNumberField } from "./PhoneNumberField";
@@ -235,7 +236,7 @@ export default function App() {
         {view.phase === "profile" && (
           <ProfileForm session={view.session} onComplete={() => evaluate(view.session)} onSignOut={signOut} />
         )}
-        {view.phase === "ready" && <Suspense fallback={<Loading />}><Ready access={view.access} email={view.session.user.email} session={view.session} onSignOut={signOut} /></Suspense>}
+        {view.phase === "ready" && <Suspense fallback={<Loading />}><Ready access={view.access} email={resolveAuthenticatedEmail(view.session.user)} session={view.session} onSignOut={signOut} /></Suspense>}
         {view.phase === "restricted" && (
           <Suspense fallback={<Loading />}><Restricted access={view.access} session={view.session} onSubmitted={() => evaluate(view.session)} onSignOut={signOut} /></Suspense>
         )}

@@ -51,7 +51,11 @@ public struct DastakDiscoveredUPIApp: Identifiable, Equatable, Sendable {
     }
 
     static func parse(_ values: [[AnyHashable: Any]]) -> [DastakDiscoveredUPIApp] {
-        let packageKeys = ["appPackage", "packageName", "upi_app_package_name", "package"]
+        // Razorpay Custom Checkout 2.2 returns `shortcode` (for example,
+        // `google_pay`, `phonepe`, or `cred`) as the value expected by
+        // `upi_app_package_name`. Older SDK builds used package-name keys, so
+        // retain those as compatibility fallbacks.
+        let packageKeys = ["shortcode", "appPackage", "packageName", "upi_app_package_name", "package"]
         let titleKeys = ["appName", "displayName", "name", "title"]
         let schemeKeys = ["uriScheme", "scheme"]
         var seen = Set<String>()
