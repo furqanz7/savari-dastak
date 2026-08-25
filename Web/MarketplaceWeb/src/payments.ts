@@ -27,7 +27,13 @@ export type RazorpayCustomCheckoutCompletion = {
 
 export type CustomCheckoutResult =
   | { status: "success"; completion: RazorpayCustomCheckoutCompletion }
-  | { status: "failed"; message: string };
+  | { status: "cancelled"; message: string }
+  | { status: "failed"; message: string }
+  | { status: "not_launched"; message: string };
+
+export type CustomCheckoutLifecycle = {
+  onLaunched?: () => void;
+};
 
 export type RazorpayMethodAvailability = {
   upi: boolean;
@@ -173,13 +179,14 @@ export async function openRazorpayCheckout(
   const methods = await discoverRazorpayMethods(session.keyId);
   if (!methods.upi) return "failed";
   const result = await launchRazorpayCustomUPI(session, customer, isMobileWeb() ? "intent" : "qr");
-  return result.status;
+  if (result.status === "success") return "success";
+  return result.status === "cancelled" ? "dismissed" : "failed";
 }
 
 type RazorpayCustomInstance = {
   once: (event: "ready", handler: (response: { methods?: Record<string, unknown> }) => void) => void;
-  on: (event: "payment.success" | "payment.error", handler: (response: unknown) => void) => void;
-  createPayment: (data: Record<string, unknown>) => void;
+  on: (event: "payment.success" | "payment.error" | "payment.cancel", handler: (response: unknown) => void) => void;
+  createPayment: (data: Record<string, unknown>) => unknown;
 };
 
 type RazorpayCustomConstructor = new (options: { key: string }) => RazorpayCustomInstance;
@@ -204,6 +211,7 @@ export async function launchRazorpayCustomUPI(
   session: CheckoutSession,
   customer: { name?: string; email?: string; phoneNumber?: string },
   flow: CustomUPIFlow,
+  lifecycle: CustomCheckoutLifecycle = {},
 ): Promise<CustomCheckoutResult> {
   const email = customer.email?.trim();
   const contact = customer.phoneNumber?.trim();
@@ -234,16 +242,18 @@ export async function launchRazorpayCustomUPI(
       const source = record(response);
       const error = record(source?.error);
       const reason = optionalText(error?.reason, 100)?.toLowerCase();
-      const description = optionalText(error?.description, 300);
-      finish({
-        status: "failed",
-        message: reason === "payment_cancelled" || reason === "user_cancelled"
-          ? "Payment was cancelled. Your secured basket remains reserved."
-          : description ?? "Payment could not be completed. Try again while your basket remains reserved.",
-      });
+      const description = optionalText(error?.description, 300)?.toLowerCase();
+      const cancelled = reason === "payment_cancelled" || reason === "user_cancelled" || description?.includes("cancel") === true;
+      finish(cancelled
+        ? { status: "cancelled", message: "Payment was cancelled. Your secured basket remains reserved." }
+        : { status: "failed", message: "Payment could not be completed. Try again while your basket remains reserved." });
     });
+    razorpay.on("payment.cancel", () => finish({
+      status: "cancelled",
+      message: "Payment was cancelled. Your secured basket remains reserved.",
+    }));
     try {
-      razorpay.createPayment({
+      const launchResult = razorpay.createPayment({
         amount: session.amountPaise,
         currency: session.currency,
         order_id: session.providerOrderId,
@@ -252,8 +262,13 @@ export async function launchRazorpayCustomUPI(
         method: "upi",
         "_[flow]": flow,
       });
+      if (launchResult === false) {
+        finish({ status: "not_launched", message: "The selected UPI app could not be opened. Choose it again to retry." });
+        return;
+      }
+      if (!completed) lifecycle.onLaunched?.();
     } catch {
-      finish({ status: "failed", message: "The selected UPI authorization could not be opened." });
+      finish({ status: "not_launched", message: "The selected UPI app could not be opened. Choose it again to retry." });
     }
   });
 }
@@ -284,11 +299,11 @@ async function loadRazorpayCustomCheckout(): Promise<RazorpayCustomConstructor> 
     };
     const failed = () => {
       script.remove();
-      reject(new PaymentRequestError("checkout_unavailable", "Razorpay Custom Checkout could not be loaded.", 0));
+      reject(new PaymentRequestError("checkout_unavailable", "Secure payment options could not be loaded.", 0));
     };
     if (present?.dataset.loaded === "true") {
       if (razorpayCustomConstructor()) resolve();
-      else reject(new PaymentRequestError("checkout_unavailable", "Razorpay Custom Checkout is unavailable.", 0));
+      else reject(new PaymentRequestError("checkout_unavailable", "Secure payment options are unavailable.", 0));
       return;
     }
     script.addEventListener("load", loaded, { once: true });
@@ -301,7 +316,7 @@ async function loadRazorpayCustomCheckout(): Promise<RazorpayCustomConstructor> 
     }
   });
   const loaded = razorpayCustomConstructor();
-  if (!loaded) throw new PaymentRequestError("checkout_unavailable", "Razorpay Custom Checkout is unavailable.", 0);
+  if (!loaded) throw new PaymentRequestError("checkout_unavailable", "Secure payment options are unavailable.", 0);
   return loaded;
 }
 

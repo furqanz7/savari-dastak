@@ -75,18 +75,22 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     if (!selected || !upiAvailable || state !== "ready") return;
     setError(undefined);
     setState("launching");
-    const authorization = launchRazorpayCustomUPI(session, customer, mobile ? "intent" : "qr");
-    setState("awaiting_return");
-    const result = await authorization;
-    if (result.status === "failed") {
-      setState(result.message.toLowerCase().includes("cancel") ? "cancelled" : "retryable");
+    const result = await launchRazorpayCustomUPI(
+      session,
+      customer,
+      mobile ? "intent" : "qr",
+      { onLaunched: () => setState("awaiting_return") },
+    );
+    if (result.status !== "success") {
+      if (result.status === "not_launched") setState("ready");
+      else setState(result.status === "cancelled" ? "cancelled" : "retryable");
       setError(result.message);
-      if (session.attemptId) {
+      if (session.attemptId && result.status !== "not_launched") {
         await reportV1CheckoutFailure({
           ...auth,
           orderId: session.orderId,
           paymentAttemptId: session.attemptId,
-          failureCode: result.message.toLowerCase().includes("cancel") ? "CHECKOUT_DISMISSED" : "CHECKOUT_FAILED",
+          failureCode: result.status === "cancelled" ? "CHECKOUT_DISMISSED" : "CHECKOUT_FAILED",
           idempotencyKey: crypto.randomUUID(),
         }).catch(() => undefined);
       }
@@ -95,7 +99,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
 
     if (!session.attemptId) {
       setState("reconciliation");
-      setError("Payment returned without a Dastak attempt reference. Operations reconciliation is required.");
+      setError("We're still checking your payment. No second charge will be attempted.");
       return;
     }
 
@@ -110,7 +114,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
       });
       if (completion.state === "RECONCILIATION_REQUIRED") {
         setState("reconciliation");
-        setError("Authorization returned after the reservation boundary. Dastak is reconciling or reversing it safely.");
+        setError("This is taking longer than usual. We'll confirm or safely reverse the payment.");
         return;
       }
       if (completion.state === "PAID") {
@@ -122,21 +126,19 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
       const providerState = await onProviderReturn();
       setState(providerState === "paid" ? "paid" : providerState === "expired" ? "reconciliation" : "awaiting_provider");
       if (providerState === "awaiting") {
-        setError("Authorization returned. Dastak is still waiting for Razorpay's captured-payment confirmation.");
+        setError("We're waiting for payment confirmation. This usually takes a few seconds.");
       } else if (providerState === "expired") {
-        setError("The reservation expired before capture confirmation. Dastak is reconciling or reversing the payment safely.");
+        setError("The reservation ended while confirmation was pending. We'll confirm or safely reverse the payment.");
       }
-    } catch (completionError) {
+    } catch {
       setState("reconciliation");
-      setError(completionError instanceof Error
-        ? completionError.message
-        : "Dastak could not verify the payment return. Provider reconciliation is still running.");
+      setError("We're still checking your payment. No second charge will be attempted.");
     }
   };
 
   const dismiss = async () => {
-    if (state === "launching" || state === "awaiting_return" || state === "processing") return;
-    if ((state === "ready" || state === "cancelled" || state === "retryable") && session.attemptId) {
+    if (state === "launching" || state === "processing") return;
+    if ((state === "ready" || state === "awaiting_return" || state === "cancelled" || state === "retryable") && session.attemptId) {
       await reportV1CheckoutFailure({
         ...auth,
         orderId: session.orderId,
@@ -148,7 +150,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     onDismiss();
   };
 
-  const busy = ["loading", "launching", "awaiting_return", "processing"].includes(state);
+  const busy = ["loading", "launching", "processing"].includes(state);
 
   return <main className="v1-payment-options-page">
     <header className="v1-payment-options-header">
@@ -160,14 +162,14 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     <section className="v1-payment-options-hero">
       <span>SECURED BASKET</span>
       <h2>Choose how to authorize</h2>
-      <p>Dastak fixes the amount and Razorpay order. Your UPI PIN stays inside your UPI app.</p>
+      <p>Your total is fixed securely. Your UPI PIN stays inside your UPI app.</p>
     </section>
 
     <PaymentStateCard state={state} mobile={mobile} error={error} />
 
     {state === "loading" ? <section className="v1-payment-method-loading" role="status">
       <span /><span /><span />
-      <p>Loading provider-supported methods…</p>
+      <p>Checking available payment methods…</p>
     </section> : null}
 
     {upiAvailable ? <>
@@ -181,7 +183,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
       </section>
       <section className="v1-payment-options-section">
         <header><span>ALL PAYMENT OPTIONS</span><small>UPI FIRST</small></header>
-        <div className="v1-payment-scope-note"><ShieldCheck size={21} /><span><strong>UPI</strong><small>{mobile ? "Other UPI apps remain available through the device authorization chooser." : "Desktop uses provider-supported dynamic QR; installed mobile apps are not falsely enumerated."}</small></span></div>
+        <div className="v1-payment-scope-note"><ShieldCheck size={21} /><span><strong>UPI</strong><small>{mobile ? "Choose from the UPI apps available on this device." : "Scan the secure QR with a UPI app on your phone."}</small></span></div>
         <div className="v1-payment-scope-note muted"><LockKeyhole size={21} /><span><strong>Cards and other methods</strong><small>Not enabled in this release. Dastak does not collect card credentials.</small></span></div>
       </section>
     </> : null}
@@ -209,16 +211,18 @@ function PaymentStateCard({ state, mobile, error }: { state: PaymentState; mobil
 
 function statePresentation(state: PaymentState, mobile: boolean, error?: string) {
   switch (state) {
-    case "loading": return { icon: RefreshCw, title: "Loading payment methods", detail: "Checking what Razorpay supports for this payment.", tone: "neutral" };
+    case "loading": return { icon: RefreshCw, title: "Loading payment methods", detail: "Checking the payment options available right now.", tone: "neutral" };
     case "launching": return { icon: Smartphone, title: mobile ? "Opening your UPI app" : "Creating secure QR", detail: "Only the selected authorization surface will open.", tone: "neutral" };
     case "awaiting_return": return { icon: Clock3, title: "Waiting for authorization", detail: mobile ? "Approve in your UPI app, then return to Dastak." : "Scan and approve the QR in your UPI app.", tone: "neutral" };
-    case "processing": return { icon: ShieldCheck, title: "Verifying payment return", detail: "Dastak is checking the provider order and signature.", tone: "neutral" };
-    case "awaiting_provider": return { icon: Clock3, title: "Awaiting provider confirmation", detail: error ?? "Authorization returned; payment.captured remains the paid authority.", tone: "warning" };
-    case "paid": return { icon: Check, title: "Payment confirmed", detail: "Razorpay confirmed capture. Your order can now prepare.", tone: "success" };
+    case "processing": return { icon: ShieldCheck, title: "Confirming your payment", detail: "We're securely checking the payment details.", tone: "neutral" };
+    case "awaiting_provider": return { icon: Clock3, title: "Confirming your payment", detail: error ?? "We're waiting for payment confirmation. This usually takes a few seconds.", tone: "warning" };
+    case "paid": return { icon: Check, title: "Payment confirmed", detail: "Your order is moving to preparation.", tone: "success" };
     case "cancelled": return { icon: CircleAlert, title: "Payment cancelled", detail: error ?? "Your basket remains reserved and can be retried.", tone: "warning" };
     case "expired": return { icon: Clock3, title: "Payment reservation expired", detail: "Reserved items are being released safely.", tone: "danger" };
-    case "reconciliation": return { icon: ShieldCheck, title: "Reconciliation required", detail: error ?? "Dastak is checking provider truth before changing the order.", tone: "warning" };
+    case "reconciliation": return { icon: ShieldCheck, title: "We're checking your payment", detail: error ?? "This is taking longer than usual. You can safely leave this screen.", tone: "warning" };
     case "retryable": return { icon: CircleAlert, title: "Payment needs attention", detail: error ?? "Try again while your basket remains reserved.", tone: "danger" };
-    case "ready": return { icon: Check, title: "UPI ready", detail: "Choose Continue to authorize.", tone: "success" };
+    case "ready": return error
+      ? { icon: CircleAlert, title: "UPI app didn't open", detail: error, tone: "warning" }
+      : { icon: Check, title: "UPI ready", detail: "Choose Continue to authorize.", tone: "success" };
   }
 }

@@ -228,9 +228,54 @@ describe("Dastak payments", () => {
     await expect(launchRazorpayCustomUPI(
       { ...checkout, entityType: "dastak_v1_order" }, customer, "intent",
     )).resolves.toEqual({
-      status: "failed",
+      status: "cancelled",
       message: "Payment was cancelled. Your secured basket remains reserved.",
     });
+  });
+
+  it("maps an explicit chooser close to cancellation and never fabricates confirmation from browser focus", async () => {
+    const custom = installCustomCheckout({ deferCompletion: true });
+    let launched = 0;
+    let settled = false;
+    const result = launchRazorpayCustomUPI(
+      { ...checkout, entityType: "dastak_v1_order" },
+      customer,
+      "intent",
+      { onLaunched: () => { launched += 1; } },
+    ).then((value) => {
+      settled = true;
+      return value;
+    });
+
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(launched).toBe(1);
+    expect(settled).toBe(false);
+
+    // Regaining browser focus is deliberately not a payment-success input.
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    custom.emit("payment.cancel", {});
+    await expect(result).resolves.toEqual({
+      status: "cancelled",
+      message: "Payment was cancelled. Your secured basket remains reserved.",
+    });
+  });
+
+  it("returns ready-safe not_launched when the UPI surface cannot open", async () => {
+    const custom = installCustomCheckout({ throwOnCreate: true });
+    let launched = false;
+    await expect(launchRazorpayCustomUPI(
+      { ...checkout, entityType: "dastak_v1_order" },
+      customer,
+      "intent",
+      { onLaunched: () => { launched = true; } },
+    )).resolves.toEqual({
+      status: "not_launched",
+      message: "The selected UPI app could not be opened. Choose it again to retry.",
+    });
+    expect(launched).toBe(false);
+    expect(custom.payload).toBeUndefined();
   });
 
   it("rejects missing OAuth contact data before invoking Razorpay", async () => {
@@ -278,19 +323,27 @@ function installCustomCheckout(input: {
   methods?: Record<string, unknown>;
   completion?: Record<string, unknown>;
   failure?: Record<string, unknown>;
+  deferCompletion?: boolean;
+  throwOnCreate?: boolean;
 }) {
-  const custom = { payload: undefined as Record<string, unknown> | undefined, opened: false };
+  const handlers = new Map<string, (response: unknown) => void>();
+  const custom = {
+    payload: undefined as Record<string, unknown> | undefined,
+    opened: false,
+    emit: (event: string, response: unknown) => handlers.get(event)?.(response),
+  };
   class RazorpayCustomMock {
-    private handlers = new Map<string, (response: unknown) => void>();
     once(_event: string, handler: (response: unknown) => void) {
       queueMicrotask(() => handler({ methods: input.methods ?? { upi: true } }));
     }
-    on(event: string, handler: (response: unknown) => void) { this.handlers.set(event, handler); }
+    on(event: string, handler: (response: unknown) => void) { handlers.set(event, handler); }
     createPayment(payload: Record<string, unknown>) {
+      if (input.throwOnCreate) throw new Error("launch failed");
       custom.payload = payload;
+      if (input.deferCompletion) return;
       queueMicrotask(() => {
-        if (input.failure) this.handlers.get("payment.error")?.(input.failure);
-        else this.handlers.get("payment.success")?.(input.completion);
+        if (input.failure) handlers.get("payment.error")?.(input.failure);
+        else handlers.get("payment.success")?.(input.completion);
       });
     }
   }

@@ -48,6 +48,11 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-DastakUPIDiscoveryProbe") {
+            Task { @MainActor in DastakRazorpayDiagnostics.runUPIDiscoveryProbe() }
+        }
+        #endif
         return true
     }
 

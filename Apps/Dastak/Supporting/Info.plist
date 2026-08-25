@@ -59,7 +59,13 @@
 		<string>shriramone</string>
 		<string>indusmobile</string>
 		<string>whatsapp</string>
+		<string>whatsapp-consumer</string>
 		<string>kotakbank</string>
+		<string>freecharge</string>
+		<string>postpe</string>
+		<string>super</string>
+		<string>lxme</string>
+		<string>scapia</string>
 	</array>
 	<key>MarketplaceProduct</key>
 	<string>$(MARKETPLACE_PRODUCT)</string>

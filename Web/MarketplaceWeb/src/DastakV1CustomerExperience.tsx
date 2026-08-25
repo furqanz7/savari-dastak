@@ -657,7 +657,7 @@ export function DastakV1CustomerExperience(props: Props) {
         void refreshSelectedOrder(selectedOrder.id).catch((requestError) => setOrderActionError(message(requestError)));
       }}
       onProviderReturn={async () => {
-        setPaymentMessage("Authorization returned. Waiting for Razorpay's captured-payment confirmation…");
+        setPaymentMessage("Confirming your payment. This usually takes a few seconds…");
         for (let attempt = 0; attempt < 8; attempt += 1) {
           const order = await refreshSelectedOrder(selectedOrder.id);
           if (order.status === "PAID" || order.status === "PREPARING") return "paid";

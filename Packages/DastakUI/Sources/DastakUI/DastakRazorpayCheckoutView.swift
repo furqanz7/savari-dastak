@@ -1,6 +1,7 @@
 import Foundation
 import MarketplaceDesignSystem
 import MarketplaceInfrastructure
+import OSLog
 import SwiftUI
 
 public struct DastakRazorpayCompletion: Equatable, Sendable {
@@ -51,11 +52,11 @@ public struct DastakDiscoveredUPIApp: Identifiable, Equatable, Sendable {
     }
 
     static func parse(_ values: [[AnyHashable: Any]]) -> [DastakDiscoveredUPIApp] {
-        // Razorpay Custom Checkout 2.2 returns `shortcode` (for example,
-        // `google_pay`, `phonepe`, or `cred`) as the value expected by
-        // `upi_app_package_name`. Older SDK builds used package-name keys, so
-        // retain those as compatibility fallbacks.
-        let packageKeys = ["shortcode", "appPackage", "packageName", "upi_app_package_name", "package"]
+        // Razorpay Custom Checkout 2.2 currently returns `appPackageName`
+        // (for example `google_pay`, `phonepe`, or `cred`) as the value
+        // expected by `upi_app_package_name`. Retain older SDK keys as
+        // compatibility fallbacks.
+        let packageKeys = ["appPackageName", "shortcode", "appPackage", "packageName", "upi_app_package_name", "package"]
         let titleKeys = ["appName", "displayName", "name", "title"]
         let schemeKeys = ["uriScheme", "scheme"]
         var seen = Set<String>()
@@ -111,7 +112,55 @@ import UIKit
 import WebKit
 
 private typealias CustomRazorpayCheckout = RazorpayCustom.RazorpayCheckout
-private typealias RazorpayUPIAppDiscovery = Razorpay.RazorpayCheckout
+
+@MainActor
+private enum DastakUPIDiscovery {
+    static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.dastak.app",
+        category: "UPIDiscovery"
+    )
+
+    // These are query permissions only. Availability is always taken from
+    // Razorpay's runtime discovery response; no app is fabricated from this list.
+    static let querySchemes = [
+        "tez", "phonepe", "paytmmp", "credpay", "mobikwik", "in.fampay.app",
+        "bhim", "amazonpay", "navi", "kiwi", "payzapp", "jupiter", "omnicard",
+        "icici", "popclubapp", "sbiyono", "myjio", "slice-upi", "bobupi",
+        "shriramone", "indusmobile", "whatsapp", "whatsapp-consumer",
+        "kotakbank", "freecharge", "postpe", "super", "lxme", "scapia"
+    ]
+
+    static func discover(_ completion: @escaping ([[AnyHashable: Any]]) -> Void) {
+        let queryResults = querySchemes.map { scheme in
+            let canOpen = URL(string: "\(scheme)://").map(UIApplication.shared.canOpenURL) ?? false
+            return "\(scheme)=\(canOpen)"
+        }.joined(separator: ",")
+
+        log("provider discovery called")
+        log("canOpenURL results: \(queryResults)")
+
+        CustomRazorpayCheckout.getAppsWhichSupportUpi { values in
+            Task { @MainActor in
+                let rawIdentifiers = values.compactMap { value in
+                    ["appPackageName", "shortcode", "appPackage", "packageName", "upi_app_package_name", "package"]
+                        .compactMap { value[$0] as? String }
+                        .first
+                }
+                let parsed = DastakDiscoveredUPIApp.parse(values)
+                log("provider apps returned: raw=\(values.count), parsed=\(parsed.count)")
+                log("provider identifiers returned: \(rawIdentifiers.joined(separator: ","))")
+                completion(values)
+            }
+        }
+    }
+
+    private static func log(_ message: String) {
+        logger.notice("\(message, privacy: .public)")
+        #if DEBUG
+        print("[DastakUPIDiscovery] \(message)")
+        #endif
+    }
+}
 
 @MainActor
 private enum DastakPaymentAuthorizationState: Equatable {
@@ -156,15 +205,16 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
             andDelegate: self,
             withPaymentWebView: webView
         )
+        DastakUPIDiscovery.logger.notice("Custom Checkout initialized before UPI discovery")
         discoverApps()
     }
 
     func discoverApps() {
         state = .loading
-        // Razorpay documents runtime UPI discovery on the unified entry point.
-        // The lower-level Custom module can return an empty list even when its
-        // supported apps are installed, so it must not be used for availability.
-        RazorpayUPIAppDiscovery.getAppsWhichSupportUpi { [weak self] values in
+        // Use the same Custom Checkout module that performs authorization. The
+        // host app grants URL-query permission; Razorpay remains the runtime
+        // source of truth for which installed apps it supports.
+        DastakUPIDiscovery.discover { [weak self] values in
             Task { @MainActor in
                 guard let self else { return }
                 self.apps = DastakDiscoveredUPIApp.parse(values)
@@ -286,6 +336,17 @@ public enum DastakRazorpayRedirection {
     }
 }
 
+public enum DastakRazorpayDiagnostics {
+    /// Debug-only physical-device probe. It calls the exact discovery path used
+    /// by the payment screen and emits only app identifiers/counts.
+    @MainActor
+    public static func runUPIDiscoveryProbe() {
+        #if DEBUG
+        DastakUPIDiscovery.discover { _ in }
+        #endif
+    }
+}
+
 private struct DastakPaymentWebViewHost: UIViewRepresentable {
     let webView: WKWebView
 
@@ -380,7 +441,7 @@ public struct DastakRazorpayCheckoutView: View {
         case .awaitingReturn:
             statusCard(symbol: "iphone.and.arrow.forward", title: "Waiting for authorization", detail: "Complete payment in the selected UPI app.", spins: false)
         case .processing:
-            statusCard(symbol: "checkmark.shield", title: "Payment processing", detail: "Dastak is waiting for secure provider confirmation.", spins: false)
+            statusCard(symbol: "checkmark.shield", title: "Confirming your payment", detail: "We're waiting for payment confirmation. This usually takes a few seconds.", spins: false)
         case let .failed(message):
             statusCard(symbol: "exclamationmark.triangle", title: "Payment needs attention", detail: message, spins: false)
         case .ready:
@@ -478,7 +539,7 @@ public struct DastakRazorpayCheckoutView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "lock.shield.fill")
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
-            Text("Amount and Razorpay order are fixed by Dastak. Payment is complete only after Razorpay confirms capture.")
+            Text("Your total is fixed securely. Dastak never sees your UPI PIN, and your order continues only after payment is confirmed.")
                 .font(.footnote)
                 .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
         }
@@ -509,6 +570,10 @@ public struct DastakRazorpayCheckoutView: View {
 #else
 public enum DastakRazorpayRedirection {
     @MainActor public static func handle(_ url: URL) -> Bool { false }
+}
+
+public enum DastakRazorpayDiagnostics {
+    @MainActor public static func runUPIDiscoveryProbe() {}
 }
 
 public struct DastakRazorpayCheckoutView: View {

@@ -315,7 +315,7 @@ public struct DastakCustomerRootView: View {
                                     model.clearCheckoutSession()
                                     showingCheckout = false
                                     selectedTab = .orders
-                                    model.v1OrderErrorMessage = "Dastak could not verify the payment return. No second charge will be attempted; provider reconciliation is still running."
+                                    model.v1OrderErrorMessage = "We're still checking your payment. No second charge will be attempted."
                                     showingV1Order = true
                                     return
                                 }
@@ -329,7 +329,7 @@ public struct DastakCustomerRootView: View {
                             isConfirmingPayment = false
                             if !confirmed {
                                 if session.entityType == .dastakV1Order {
-                                    model.v1OrderErrorMessage = "Authorization returned successfully. Dastak is waiting for Razorpay's captured-payment confirmation."
+                                    model.v1OrderErrorMessage = "We're waiting for payment confirmation. This usually takes a few seconds."
                                 } else {
                                     model.errorMessage = "Authorization returned successfully. We are waiting for secure payment confirmation."
                                 }

@@ -14,10 +14,10 @@ final class DastakCustomerLifecycleTests: XCTestCase {
         XCTAssertTrue(DastakDiscoveredUPIApp.parse([]).isEmpty)
 
         let apps = DastakDiscoveredUPIApp.parse([
-            ["shortcode": "phonepe", "appName": "PhonePe", "uriScheme": "phonepe://pay"],
-            ["shortcode": "google_pay", "appName": "Google Pay", "uriScheme": "tez://upi/pay"],
-            ["shortcode": "google_pay", "appName": "Duplicate must disappear", "uriScheme": "tez://upi/pay"],
-            ["shortcode": "cred", "appName": "CRED", "uriScheme": "credpay://upi/pay"],
+            ["appPackageName": "phonepe", "appName": "PhonePe", "appLogo": "https://cdn.razorpay.com/app/phonepe.png"],
+            ["appPackageName": "google_pay", "appName": "Google Pay", "appLogo": "https://cdn.razorpay.com/app/google_pay.png"],
+            ["appPackageName": "google_pay", "appName": "Duplicate must disappear"],
+            ["appPackageName": "cred", "appName": "CRED", "appLogo": "https://cdn.razorpay.com/app/cred.png"],
             ["shortcode": "jupiter", "appName": "Jupiter", "uriScheme": "jupiter://upi/pay"],
             ["packageName": "com.example.supported", "displayName": "Another UPI app"],
         ])
@@ -25,7 +25,7 @@ final class DastakCustomerLifecycleTests: XCTestCase {
         XCTAssertEqual(apps.map(\.title), ["Google Pay", "PhonePe", "CRED", "Another UPI app", "Jupiter"])
         XCTAssertEqual(Set(apps.map(\.packageName)).count, 5)
         XCTAssertEqual(apps.first?.packageName, "google_pay")
-        XCTAssertEqual(apps.first?.uriScheme, "tez://upi/pay")
+        XCTAssertNil(apps.first?.uriScheme)
         XCTAssertFalse(apps.contains(where: { $0.title == "Paytm" }))
     }
 
