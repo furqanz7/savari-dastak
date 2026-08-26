@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Check, CircleAlert, Clock3, LockKeyhole, QrCode, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import type { DastakV1Auth } from "./dastakV1";
 import { formatV1Price } from "./dastakV1";
 import {
@@ -9,6 +10,8 @@ import {
   launchRazorpayCustomUPI,
   reportV1CheckoutFailure,
   type CheckoutSession,
+  type CustomUPITarget,
+  type RazorpayMobileUPIApp,
 } from "./payments";
 
 type PaymentState =
@@ -37,8 +40,11 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
   const mobile = useMemo(() => isMobileWeb(), []);
   const [state, setState] = useState<PaymentState>("loading");
   const [upiAvailable, setUpiAvailable] = useState(false);
-  const [selected, setSelected] = useState(true);
+  const [mobileOptions, setMobileOptions] = useState<Array<{ id: RazorpayMobileUPIApp; label: string }>>([]);
+  const [selectedApp, setSelectedApp] = useState<RazorpayMobileUPIApp>();
+  const [qr, setQr] = useState<{ uri: string; expiresAt?: number }>();
   const [error, setError] = useState<string>();
+  const selected = mobile ? selectedApp !== undefined : true;
 
   const discover = useCallback(async () => {
     setState("loading");
@@ -46,9 +52,16 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     try {
       const methods = await discoverRazorpayMethods(session.keyId);
       setUpiAvailable(methods.upi);
+      setMobileOptions(methods.upiApps);
+      setSelectedApp((current) => methods.upiApps.some(({ id }) => id === current)
+        ? current
+        : methods.upiApps[0]?.id);
       if (!methods.upi) {
         setState("retryable");
         setError("UPI is not enabled for this payment. No unavailable method has been substituted.");
+      } else if (mobile && methods.upiApps.length === 0) {
+        setState("retryable");
+        setError("No supported UPI app is available in this browser. Install a supported app or try another device.");
       } else {
         setState("ready");
       }
@@ -56,7 +69,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
       setState("retryable");
       setError(discoveryError instanceof Error ? discoveryError.message : "Payment methods could not be loaded.");
     }
-  }, [session.keyId]);
+  }, [mobile, session.keyId]);
 
   useEffect(() => { void discover(); }, [discover, session.providerOrderId]);
 
@@ -73,13 +86,23 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
 
   const pay = async () => {
     if (!selected || !upiAvailable || state !== "ready") return;
+    const target: CustomUPITarget = mobile
+      ? { kind: "intent", app: selectedApp! }
+      : { kind: "qr" };
     setError(undefined);
+    setQr(undefined);
     setState("launching");
     const result = await launchRazorpayCustomUPI(
       session,
       customer,
-      mobile ? "intent" : "qr",
-      { onLaunched: () => setState("awaiting_return") },
+      target,
+      {
+        onLaunched: () => setState("awaiting_return"),
+        onQrCode: (nextQr) => {
+          setQr(nextQr);
+          setState("awaiting_return");
+        },
+      },
     );
     if (result.status !== "success") {
       if (result.status === "not_launched") setState("ready");
@@ -174,16 +197,32 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
 
     {upiAvailable ? <>
       <section className="v1-payment-options-section">
-        <header><span>RECOMMENDED</span><small>AVAILABLE NOW</small></header>
-        <button type="button" className={selected ? "v1-payment-option selected" : "v1-payment-option"} onClick={() => setSelected(true)} disabled={busy}>
-          <span className="v1-payment-option-icon">{mobile ? <Smartphone size={24} /> : <QrCode size={24} />}</span>
-          <span><strong>{mobile ? "Pay with a UPI app" : "UPI QR code"}</strong><small>{mobile ? "Choose an available UPI app during authorization" : "Scan with any supported UPI app"}</small></span>
+        <header><span>{mobile ? "CHOOSE A UPI APP" : "DYNAMIC UPI QR"}</span><small>{mobile ? "UPI INTENT" : "DESKTOP"}</small></header>
+        {mobile ? mobileOptions.map((option) => <button
+          key={option.id}
+          type="button"
+          className={selectedApp === option.id ? "v1-payment-option selected" : "v1-payment-option"}
+          onClick={() => setSelectedApp(option.id)}
+          disabled={busy}
+        >
+          <span className="v1-payment-option-icon"><Smartphone size={24} /></span>
+          <span><strong>{option.label}</strong><small>Open this app to authorize with UPI</small></span>
+          {selectedApp === option.id ? <span className="v1-payment-option-check"><Check size={17} /></span> : null}
+        </button>) : <button type="button" className="v1-payment-option selected" disabled={busy}>
+          <span className="v1-payment-option-icon"><QrCode size={24} /></span>
+          <span><strong>UPI QR code</strong><small>Generate a secure dynamic QR, then scan it with your phone</small></span>
           <span className="v1-payment-option-check"><Check size={17} /></span>
-        </button>
+        </button>}
       </section>
+      {qr ? <section className="v1-payment-qr" role="status">
+        <div className="v1-payment-qr-code" role="img" aria-label="Dynamic UPI QR code for this payment">
+          <QRCodeSVG value={qr.uri} size={220} level="M" marginSize={2} />
+        </div>
+        <span><strong>Scan to authorize</strong><small>Use any supported UPI app. Keep this Dastak page open.</small></span>
+      </section> : null}
       <section className="v1-payment-options-section">
         <header><span>ALL PAYMENT OPTIONS</span><small>UPI FIRST</small></header>
-        <div className="v1-payment-scope-note"><ShieldCheck size={21} /><span><strong>UPI</strong><small>{mobile ? "Choose from the UPI apps available on this device." : "Scan the secure QR with a UPI app on your phone."}</small></span></div>
+        <div className="v1-payment-scope-note"><ShieldCheck size={21} /><span><strong>UPI</strong><small>{mobile ? "Dastak opens the selected UPI app directly for authorization." : "Scan the secure dynamic QR with a UPI app on your phone."}</small></span></div>
         <div className="v1-payment-scope-note muted"><LockKeyhole size={21} /><span><strong>Cards and other methods</strong><small>Not enabled in this release. Dastak does not collect card credentials.</small></span></div>
       </section>
     </> : null}
@@ -193,7 +232,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     <footer className="v1-payment-options-footer">
       <span><small>TOTAL</small><strong>{formatV1Price(session.amountPaise)}</strong></span>
       <button className="primary-button" type="button" onClick={() => void pay()} disabled={!selected || !upiAvailable || state !== "ready"}>
-        {state === "launching" ? "Opening…" : state === "awaiting_return" ? "Awaiting authorization…" : state === "processing" ? "Processing…" : "Continue"}
+        {state === "launching" ? (mobile ? "Opening…" : "Creating QR…") : state === "awaiting_return" ? "Awaiting authorization…" : state === "processing" ? "Processing…" : "Continue"}
       </button>
     </footer>
   </main>;

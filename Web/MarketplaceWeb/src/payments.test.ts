@@ -5,6 +5,7 @@ import {
   createV1CheckoutSession,
   discoverRazorpayMethods,
   launchRazorpayCustomUPI,
+  mobileUPIOptions,
   processOrderRefund,
   processV1Refund,
   RAZORPAY_CUSTOM_CHECKOUT_SCRIPT,
@@ -149,14 +150,31 @@ describe("Dastak payments", () => {
   });
 
   it("discovers UPI availability from Razorpay ready rather than a static list", async () => {
-    installCustomCheckout({ methods: { upi: true } });
-    await expect(discoverRazorpayMethods(checkout.keyId)).resolves.toEqual({ upi: true });
+    installCustomCheckout({ methods: { upi: true }, upiApps: ["gpay", { app: "phonepe" }] });
+    await expect(discoverRazorpayMethods(
+      checkout.keyId,
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile",
+    )).resolves.toEqual({
+      upi: true,
+      upiApps: [
+        { id: "gpay", label: "Google Pay" },
+        { id: "phonepe", label: "PhonePe" },
+      ],
+    });
 
     installCustomCheckout({ methods: { upi: false } });
-    await expect(discoverRazorpayMethods(checkout.keyId)).resolves.toEqual({ upi: false });
+    await expect(discoverRazorpayMethods(checkout.keyId)).resolves.toEqual({ upi: false, upiApps: [] });
   });
 
-  it.each(["intent", "qr"] as const)("launches only the selected Custom Checkout UPI %s flow", async (flow) => {
+  it("does not present a mobile UPI app that Razorpay did not discover", async () => {
+    installCustomCheckout({ methods: { upi: true }, upiApps: ["gpay", "unsupported-app"] });
+    await expect(discoverRazorpayMethods(
+      checkout.keyId,
+      "Mozilla/5.0 (Linux; Android 15) Mobile",
+    )).resolves.toEqual({ upi: true, upiApps: [{ id: "gpay", label: "Google Pay" }] });
+  });
+
+  it("launches mobile UPI Intent for the explicitly selected supported app", async () => {
     const custom = installCustomCheckout({
       completion: {
         razorpay_order_id: checkout.providerOrderId,
@@ -167,9 +185,10 @@ describe("Dastak payments", () => {
     const result = await launchRazorpayCustomUPI(
       { ...checkout, entityType: "dastak_v1_order", attemptId: "8a000000-0000-4000-8000-000000000081" },
       customer,
-      flow,
+      { kind: "intent", app: "gpay" },
     );
 
+    expect(custom.constructorOptions).toEqual({ key: checkout.keyId });
     expect(custom.payload).toMatchObject({
       order_id: checkout.providerOrderId,
       amount: checkout.amountPaise,
@@ -177,8 +196,11 @@ describe("Dastak payments", () => {
       email: customer.email,
       contact: customer.phoneNumber,
       method: "upi",
-      "_[flow]": flow,
     });
+    expect(custom.createOptions).toEqual({ app: "gpay" });
+    expect(custom.payload).not.toHaveProperty("_[flow]");
+    expect(custom.payload).not.toHaveProperty("_[upiqr]");
+    expect(custom.payload).not.toHaveProperty("vpa");
     expect(result).toEqual({
       status: "success",
       completion: {
@@ -187,6 +209,55 @@ describe("Dastak payments", () => {
         razorpay_signature: "b".repeat(64),
       },
     });
+  });
+
+  it("launches desktop Dynamic QR without a Collect or Intent-app fallback", async () => {
+    const onQrCode = vi.fn();
+    const custom = installCustomCheckout({
+      qr: { qr_url: "upi://pay?pa=dastak%40razorpay&am=88.00&cu=INR", expires_on: 1_800_000_000 },
+      completion: {
+        razorpay_order_id: checkout.providerOrderId,
+        razorpay_payment_id: "pay_qr123",
+        razorpay_signature: "e".repeat(64),
+      },
+    });
+    const result = await launchRazorpayCustomUPI(
+      { ...checkout, entityType: "dastak_v1_order" },
+      customer,
+      { kind: "qr" },
+      { onQrCode },
+    );
+
+    expect(custom.constructorOptions).toEqual({ key: checkout.keyId });
+    expect(custom.payload).toMatchObject({
+      method: "upi",
+    });
+    expect(custom.createOptions).toEqual({ app: "any", flow: "qr" });
+    expect(custom.payload).not.toHaveProperty("_[flow]");
+    expect(custom.payload).not.toHaveProperty("_[upiqr]");
+    expect(custom.payload).not.toHaveProperty("vpa");
+    expect(onQrCode).toHaveBeenCalledWith({
+      uri: "upi://pay?pa=dastak%40razorpay&am=88.00&cu=INR",
+      expiresAt: 1_800_000_000,
+    });
+    expect(result.status).toBe("success");
+  });
+
+  it("exposes only documented mobile-Web UPI Intent targets", () => {
+    expect(mobileUPIOptions(
+      ["google_pay", "phonepe", "paytm", "any", "not-supported"],
+      "Mozilla/5.0 (Linux; Android 15) Mobile",
+    ).map(({ id }) => id))
+      .toEqual(["gpay", "phonepe", "paytm", "any"]);
+    expect(mobileUPIOptions(
+      { apps: ["gpay", "phonepe", "paytm", "any"] },
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+    ).map(({ id }) => id))
+      .toEqual(["gpay", "phonepe", "paytm"]);
+    expect(mobileUPIOptions(
+      ["gpay"],
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    )).toEqual([]);
   });
 
   it("rejects a provider completion replayed from another Razorpay order", async () => {
@@ -198,7 +269,7 @@ describe("Dastak payments", () => {
       },
     });
     await expect(launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" }, customer, "intent",
+      { ...checkout, entityType: "dastak_v1_order" }, customer, { kind: "intent", app: "gpay" },
     )).resolves.toMatchObject({ status: "failed" });
   });
 
@@ -210,7 +281,9 @@ describe("Dastak payments", () => {
         razorpay_signature: "d".repeat(64),
       },
     });
-    await launchRazorpayCustomUPI({ ...checkout, entityType: "dastak_v1_order" }, customer, "intent");
+    await launchRazorpayCustomUPI(
+      { ...checkout, entityType: "dastak_v1_order" }, customer, { kind: "intent", app: "gpay" },
+    );
     expect(RAZORPAY_CUSTOM_CHECKOUT_SCRIPT).toBe("https://checkout.razorpay.com/v1/razorpay.js");
     expect(custom.opened).toBe(false);
     expect(custom.payload?.method).toBe("upi");
@@ -226,7 +299,7 @@ describe("Dastak payments", () => {
       },
     });
     await expect(launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" }, customer, "intent",
+      { ...checkout, entityType: "dastak_v1_order" }, customer, { kind: "intent", app: "gpay" },
     )).resolves.toEqual({
       status: "cancelled",
       message: "Payment was cancelled. Your secured basket remains reserved.",
@@ -240,7 +313,7 @@ describe("Dastak payments", () => {
     const result = launchRazorpayCustomUPI(
       { ...checkout, entityType: "dastak_v1_order" },
       customer,
-      "intent",
+      { kind: "intent", app: "gpay" },
       { onLaunched: () => { launched += 1; } },
     ).then((value) => {
       settled = true;
@@ -268,7 +341,7 @@ describe("Dastak payments", () => {
     await expect(launchRazorpayCustomUPI(
       { ...checkout, entityType: "dastak_v1_order" },
       customer,
-      "intent",
+      { kind: "intent", app: "gpay" },
       { onLaunched: () => { launched = true; } },
     )).resolves.toEqual({
       status: "not_launched",
@@ -284,7 +357,7 @@ describe("Dastak payments", () => {
     await expect(launchRazorpayCustomUPI(
       { ...checkout, entityType: "dastak_v1_order" },
       { phoneNumber: customer.phoneNumber },
-      "intent",
+      { kind: "intent", app: "gpay" },
     )).resolves.toEqual({
       status: "failed",
       message: "Your signed-in email is unavailable. Sign out and sign in again before payment.",
@@ -294,7 +367,7 @@ describe("Dastak payments", () => {
     await expect(launchRazorpayCustomUPI(
       { ...checkout, entityType: "dastak_v1_order" },
       { email: customer.email },
-      "intent",
+      { kind: "intent", app: "gpay" },
     )).resolves.toEqual({
       status: "failed",
       message: "Add a delivery phone number to your Dastak profile before payment.",
@@ -321,27 +394,37 @@ describe("Dastak payments", () => {
 
 function installCustomCheckout(input: {
   methods?: Record<string, unknown>;
+  upiApps?: unknown;
   completion?: Record<string, unknown>;
   failure?: Record<string, unknown>;
+  qr?: Record<string, unknown>;
   deferCompletion?: boolean;
   throwOnCreate?: boolean;
 }) {
   const handlers = new Map<string, (response: unknown) => void>();
   const custom = {
     payload: undefined as Record<string, unknown> | undefined,
+    createOptions: undefined as Record<string, unknown> | undefined,
+    constructorOptions: undefined as Record<string, unknown> | undefined,
     opened: false,
     emit: (event: string, response: unknown) => handlers.get(event)?.(response),
   };
   class RazorpayCustomMock {
+    constructor(options: Record<string, unknown>) {
+      custom.constructorOptions = options;
+    }
     once(_event: string, handler: (response: unknown) => void) {
       queueMicrotask(() => handler({ methods: input.methods ?? { upi: true } }));
     }
+    getSupportedUpiIntentApps() { return Promise.resolve(input.upiApps ?? []); }
     on(event: string, handler: (response: unknown) => void) { handlers.set(event, handler); }
-    createPayment(payload: Record<string, unknown>) {
+    createPayment(payload: Record<string, unknown>, options?: Record<string, unknown>) {
       if (input.throwOnCreate) throw new Error("launch failed");
       custom.payload = payload;
+      custom.createOptions = options;
       if (input.deferCompletion) return;
       queueMicrotask(() => {
+        if (input.qr) handlers.get("payment.upi.qr")?.(input.qr);
         if (input.failure) handlers.get("payment.error")?.(input.failure);
         else handlers.get("payment.success")?.(input.completion);
       });

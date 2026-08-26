@@ -14,19 +14,21 @@ final class DastakCustomerLifecycleTests: XCTestCase {
         XCTAssertTrue(DastakDiscoveredUPIApp.parse([]).isEmpty)
 
         let apps = DastakDiscoveredUPIApp.parse([
-            ["appPackageName": "phonepe", "appName": "PhonePe", "appLogo": "https://cdn.razorpay.com/app/phonepe.png"],
-            ["appPackageName": "google_pay", "appName": "Google Pay", "appLogo": "https://cdn.razorpay.com/app/google_pay.png"],
-            ["appPackageName": "google_pay", "appName": "Duplicate must disappear"],
-            ["appPackageName": "cred", "appName": "CRED", "appLogo": "https://cdn.razorpay.com/app/cred.png"],
+            ["appPackageName": "com.phonepe.app", "shortcode": "phonepe", "appName": "PhonePe"],
+            ["appPackageName": "com.google.GPay", "shortcode": "google_pay", "appName": "Google Pay"],
+            ["appPackageName": "different.discovery.metadata", "shortcode": "google_pay", "appName": "Duplicate must disappear"],
+            ["appPackageName": "com.dreamplug.cred", "shortcode": "cred", "appName": "CRED"],
             ["shortcode": "jupiter", "appName": "Jupiter", "uriScheme": "jupiter://upi/pay"],
-            ["packageName": "com.example.supported", "displayName": "Another UPI app"],
+            ["upi_app_package_name": "another_upi", "displayName": "Another UPI app"],
+            ["packageName": "discovery-only-metadata", "displayName": "Must not be presented"],
         ])
 
         XCTAssertEqual(apps.map(\.title), ["Google Pay", "PhonePe", "CRED", "Another UPI app", "Jupiter"])
-        XCTAssertEqual(Set(apps.map(\.packageName)).count, 5)
-        XCTAssertEqual(apps.first?.packageName, "google_pay")
+        XCTAssertEqual(Set(apps.map(\.providerIdentifier)).count, 5)
+        XCTAssertEqual(apps.first?.providerIdentifier, "google_pay")
         XCTAssertNil(apps.first?.uriScheme)
         XCTAssertFalse(apps.contains(where: { $0.title == "Paytm" }))
+        XCTAssertFalse(apps.contains(where: { $0.title == "Must not be presented" }))
     }
 
     func testCustomerOnboardingNeverRequiresDeliveryAddress() {

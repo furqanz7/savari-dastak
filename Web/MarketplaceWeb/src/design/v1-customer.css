@@ -421,12 +421,18 @@
 .v1-payment-options-section > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 3px 10px; }
 .v1-payment-options-section > header small { color: var(--text-secondary); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
 .v1-payment-option { width: 100%; min-height: 82px; display: grid; grid-template-columns: 48px minmax(0, 1fr) 30px; align-items: center; gap: 13px; padding: 14px; border: 1px solid var(--divider); border-radius: 20px; color: var(--text-primary); background: var(--surface-raised); text-align: left; }
+.v1-payment-option + .v1-payment-option { margin-top: 10px; }
 .v1-payment-option.selected { border-color: color-mix(in srgb, var(--dastak-accent) 58%, var(--divider)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dastak-accent) 20%, transparent); }
 .v1-payment-option-icon, .v1-payment-option-check { display: grid; place-items: center; border-radius: 14px; color: var(--dastak-accent); background: var(--dastak-accent-soft); }
 .v1-payment-option-icon { width: 48px; height: 48px; }
 .v1-payment-option-check { width: 28px; height: 28px; border-radius: 50%; }
 .v1-payment-option > span:nth-child(2), .v1-payment-option small { display: block; }
 .v1-payment-option small { margin-top: 3px; color: var(--text-secondary); line-height: 1.35; }
+.v1-payment-qr { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); align-items: center; gap: 20px; margin-top: 16px; padding: 18px; border: 1px solid var(--divider); border-radius: 20px; background: var(--surface-raised); }
+.v1-payment-qr-code { width: 100%; aspect-ratio: 1; display: grid; place-items: center; padding: 8px; border-radius: 14px; background: #fff; overflow: hidden; }
+.v1-payment-qr-code svg { width: 100%; height: 100%; }
+.v1-payment-qr span, .v1-payment-qr small { display: block; }
+.v1-payment-qr small { margin-top: 5px; color: var(--text-secondary); line-height: 1.45; }
 .v1-payment-scope-note { min-height: 70px; display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 13px; padding: 13px 14px; border: 1px solid var(--divider); color: var(--text-primary); background: var(--surface-raised); }
 .v1-payment-scope-note:first-of-type { border-radius: 20px 20px 0 0; }
 .v1-payment-scope-note:last-of-type { margin-top: -1px; border-radius: 0 0 20px 20px; }
@@ -446,6 +452,7 @@
   .v1-payment-options-hero h2 { font-size: 44px; }
   .v1-payment-options-footer { min-height: 94px; grid-template-columns: minmax(90px, .7fr) minmax(170px, 1.5fr); gap: 12px; padding-right: 16px; padding-left: 16px; }
   .v1-payment-options-footer button { padding-right: 14px; padding-left: 14px; }
+  .v1-payment-qr { grid-template-columns: 132px minmax(0, 1fr); gap: 14px; padding: 14px; }
   .v1-wishlist-page, .v1-payments-page { padding-top: 24px; }
   .v1-feature-header h1 { font-family: inherit; font-size: 30px; font-weight: 800; }
   .v1-feature-header > button { min-width: 44px; padding: 0 11px; font-size: 0; }
