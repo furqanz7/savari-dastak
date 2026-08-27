@@ -14,10 +14,10 @@ final class DastakCustomerLifecycleTests: XCTestCase {
         XCTAssertTrue(DastakDiscoveredUPIApp.parse([]).isEmpty)
 
         let apps = DastakDiscoveredUPIApp.parse([
-            ["appPackageName": "com.phonepe.app", "shortcode": "phonepe", "appName": "PhonePe"],
-            ["appPackageName": "com.google.GPay", "shortcode": "google_pay", "appName": "Google Pay"],
-            ["appPackageName": "different.discovery.metadata", "shortcode": "google_pay", "appName": "Duplicate must disappear"],
-            ["appPackageName": "com.dreamplug.cred", "shortcode": "cred", "appName": "CRED"],
+            ["appPackageName": "phonepe", "appName": "PhonePe"],
+            ["appPackageName": "google_pay", "appName": "Google Pay"],
+            ["appPackageName": "google_pay", "appName": "Duplicate must disappear"],
+            ["appPackageName": "cred", "appName": "CRED"],
             ["shortcode": "jupiter", "appName": "Jupiter", "uriScheme": "jupiter://upi/pay"],
             ["upi_app_package_name": "another_upi", "displayName": "Another UPI app"],
             ["packageName": "discovery-only-metadata", "displayName": "Must not be presented"],
@@ -29,6 +29,33 @@ final class DastakCustomerLifecycleTests: XCTestCase {
         XCTAssertNil(apps.first?.uriScheme)
         XCTAssertFalse(apps.contains(where: { $0.title == "Paytm" }))
         XCTAssertFalse(apps.contains(where: { $0.title == "Must not be presented" }))
+    }
+
+    func testUPIIntentAuthorizationUsesOnlyRazorpaySupportedFields() {
+        let options = DastakUPIIntentRequest.options(
+            providerOrderID: "order_authoritative",
+            amountPaise: 7_500,
+            currency: "INR",
+            email: "customer@example.com",
+            phone: "+919999999999",
+            providerIdentifier: "cred"
+        )
+
+        XCTAssertNil(options["key"], "The public key belongs only in Custom Checkout initialization")
+        XCTAssertEqual(options["order_id"] as? String, "order_authoritative")
+        XCTAssertEqual(options["amount"] as? Int, 7_500)
+        XCTAssertEqual(options["currency"] as? String, "INR")
+        XCTAssertEqual(options["email"] as? String, "customer@example.com")
+        XCTAssertEqual(options["contact"] as? String, "+919999999999")
+        XCTAssertEqual(options["method"] as? String, "upi")
+        XCTAssertEqual(options["_[flow]"] as? String, "intent")
+        XCTAssertEqual(options["upi_app_package_name"] as? String, "cred")
+        XCTAssertEqual(options.count, 8)
+    }
+
+    func testTestModeNeverLaunchesAnExternalUPIIntent() {
+        XCTAssertFalse(DastakRazorpayRuntimePolicy.supportsExternalUPIIntent(.test))
+        XCTAssertTrue(DastakRazorpayRuntimePolicy.supportsExternalUPIIntent(.live))
     }
 
     func testCustomerOnboardingNeverRequiresDeliveryAddress() {

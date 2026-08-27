@@ -37,6 +37,7 @@ final class DastakCheckoutClientTests: XCTestCase {
 
         XCTAssertEqual(session.entityType, .dastakV1Order)
         XCTAssertEqual(session.attemptID, paymentAttemptID)
+        XCTAssertEqual(session.providerMode, .test)
         let recordedCall = await functions.lastCall()
         let call = try XCTUnwrap(recordedCall)
         let request = try JSONDecoder().decode(CapturedCheckoutRequest.self, from: call.body)
@@ -102,6 +103,18 @@ final class DastakCheckoutClientTests: XCTestCase {
         XCTAssertFalse(encoded.contains("amount"))
         XCTAssertFalse(encoded.contains("currency"))
     }
+
+    func testV1CheckoutRejectsMissingOrMismatchedProviderMode() throws {
+        let missingMode = """
+        {"orderId":"11111111-1111-4111-8111-111111111111","entityType":"dastak_v1_order","attemptId":"22222222-2222-4222-8222-222222222222","providerOrderId":"order_test123","keyId":"rzp_test_123","amountPaise":10000,"currency":"INR","receipt":"v1-test"}
+        """
+        XCTAssertThrowsError(try JSONDecoder().decode(DastakCheckoutSession.self, from: Data(missingMode.utf8)))
+
+        let mismatchedMode = """
+        {"orderId":"11111111-1111-4111-8111-111111111111","entityType":"dastak_v1_order","attemptId":"22222222-2222-4222-8222-222222222222","providerMode":"TEST","providerOrderId":"order_test123","keyId":"rzp_live_123","amountPaise":10000,"currency":"INR","receipt":"v1-test"}
+        """
+        XCTAssertThrowsError(try JSONDecoder().decode(DastakCheckoutSession.self, from: Data(mismatchedMode.utf8)))
+    }
 }
 
 private struct CapturedCheckoutRequest: Decodable {
@@ -159,7 +172,7 @@ private actor CheckoutRecordingFunctionClient: FunctionClient {
             """
         } else {
             let v1Fields = captured.entityType == .dastakV1Order
-                ? "\"entityType\":\"dastak_v1_order\",\"attemptId\":\"\(paymentAttemptID)\","
+                ? "\"entityType\":\"dastak_v1_order\",\"attemptId\":\"\(paymentAttemptID)\",\"providerMode\":\"TEST\","
                 : ""
             response = """
             {

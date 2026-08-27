@@ -52,11 +52,11 @@ public struct DastakDiscoveredUPIApp: Identifiable, Equatable, Sendable {
     }
 
     static func parse(_ values: [[AnyHashable: Any]]) -> [DastakDiscoveredUPIApp] {
-        // Custom Checkout 2.2 returns the provider invocation value as
-        // `shortcode`. The same object can also carry an OS package name;
-        // that package name is discovery metadata and is not interchangeable
-        // with Razorpay's `upi_app_package_name` request value.
-        let providerKeys = ["shortcode", "upi_app_package_name"]
+        // Custom Checkout 2.2 returns `appPackageName` on physical devices and
+        // expects that exact discovered value as `upi_app_package_name` when
+        // starting Intent. Older SDK responses used the other two keys, so keep
+        // them first while accepting the current SDK's runtime contract.
+        let providerKeys = ["shortcode", "upi_app_package_name", "appPackageName"]
         let titleKeys = ["appName", "displayName", "name", "title"]
         let schemeKeys = ["uriScheme", "scheme"]
         var seen = Set<String>()
@@ -112,6 +112,56 @@ public struct DastakDiscoveredUPIApp: Identifiable, Equatable, Sendable {
     }
 }
 
+enum DastakUPIIntentRequest {
+    static func options(
+        providerOrderID: String,
+        amountPaise: Int,
+        currency: String,
+        email: String,
+        phone: String,
+        providerIdentifier: String
+    ) -> [AnyHashable: Any] {
+        // The Razorpay key is supplied once when Custom Checkout is initialized.
+        // Sending it again to `authorize` is rejected as `extra_field_sent`
+        // before the selected UPI app can be launched.
+        [
+            "order_id": providerOrderID,
+            "amount": amountPaise,
+            "currency": currency,
+            "email": email,
+            "contact": phone,
+            "method": "upi",
+            "_[flow]": "intent",
+            "upi_app_package_name": providerIdentifier
+        ]
+    }
+}
+
+enum DastakRazorpayRuntimePolicy {
+    static func configuredMode(in bundle: Bundle = .main) -> DastakRazorpayPaymentMode? {
+        guard let raw = bundle.object(forInfoDictionaryKey: "DastakRazorpayPaymentMode") as? String else {
+            return nil
+        }
+        return DastakRazorpayPaymentMode(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
+    }
+
+    static func accepts(
+        session: DastakCheckoutSession,
+        configuredMode: DastakRazorpayPaymentMode?
+    ) -> Bool {
+        guard let configuredMode else { return false }
+        return configuredMode == session.providerMode
+            && ((session.providerMode == .test && session.keyID.hasPrefix("rzp_test_"))
+                || (session.providerMode == .live && session.keyID.hasPrefix("rzp_live_")))
+    }
+
+    // Razorpay documents mock UPI payments in Test Mode, while UPI Intent and
+    // Dynamic QR require Live Mode. Never send a Test order to a real UPI app.
+    static func supportsExternalUPIIntent(_ mode: DastakRazorpayPaymentMode) -> Bool {
+        mode == .live
+    }
+}
+
 #if canImport(Razorpay) && canImport(RazorpayCustom) && canImport(RazorpayCore) && canImport(UIKit)
 import Razorpay
 import RazorpayCore
@@ -132,8 +182,30 @@ private enum DastakUPIHandoffDiagnostics {
         logger.notice("\(message, privacy: .public)")
         #if DEBUG
         print("[DastakUPIHandoff] \(message)")
+        appendToPhysicalDeviceProbe(message)
         #endif
     }
+
+    #if DEBUG
+    private static func appendToPhysicalDeviceProbe(_ message: String) {
+        guard let documents = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first else { return }
+        let url = documents.appendingPathComponent("dastak-upi-handoff.log")
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "\(timestamp) \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: url.path),
+           let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+    #endif
 
     static func logError(code: Int32, response: [AnyHashable: Any]?) {
         let source = response?["error"] as? [AnyHashable: Any] ?? response
@@ -182,9 +254,9 @@ private enum DastakUPIDiscovery {
                 let discoveryIdentifiers = values.compactMap { value -> String? in
                     let invocation = (value["shortcode"] as? String)
                         ?? (value["upi_app_package_name"] as? String)
+                        ?? (value["appPackageName"] as? String)
                     let scheme = (value["uriScheme"] as? String)
                         ?? (value["scheme"] as? String)
-                        ?? (value["appPackageName"] as? String)
                     guard invocation != nil || scheme != nil else { return nil }
                     return "invoke=\(sanitized(invocation)) scheme=\(sanitized(scheme))"
                 }
@@ -208,6 +280,7 @@ private enum DastakUPIDiscovery {
         logger.notice("\(message, privacy: .public)")
         #if DEBUG
         print("[DastakUPIDiscovery] \(message)")
+        DastakUPIHandoffDiagnostics.log("discovery \(message)")
         #endif
     }
 }
@@ -219,6 +292,7 @@ private enum DastakPaymentAuthorizationState: Equatable {
     case launching
     case awaitingReturn
     case processing
+    case testModeUnavailable
     case failed(String)
 }
 
@@ -248,20 +322,45 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
         self.customerEmail = customerEmail
         self.customerPhone = customerPhone
         self.onResult = onResult
-        webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        webView = WKWebView(frame: UIScreen.main.bounds, configuration: WKWebViewConfiguration())
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
         super.init()
-        webView.navigationDelegate = self
-        webView.uiDelegate = self
+        guard DastakRazorpayRuntimePolicy.accepts(
+            session: session,
+            configuredMode: DastakRazorpayRuntimePolicy.configuredMode()
+        ) else {
+            state = .failed("Payment configuration does not match this build. Try again after updating Dastak.")
+            DastakUPIHandoffDiagnostics.log("provider mode rejected before SDK initialization")
+            return
+        }
+        guard DastakRazorpayRuntimePolicy.supportsExternalUPIIntent(session.providerMode) else {
+            state = .testModeUnavailable
+            DastakUPIHandoffDiagnostics.log("TEST mode active; external UPI Intent intentionally disabled")
+            return
+        }
         checkout = CustomRazorpayCheckout.initWithKey(
             session.keyID,
             andDelegate: self,
             withPaymentWebView: webView
         )
+        // Custom Checkout configures the supplied WebView during initialization.
+        // Install Dastak's forwarding delegates afterwards, matching Razorpay's
+        // integration sample, so generated UPI intent URLs reach our app launcher.
+        webView.navigationDelegate = self
+        webView.uiDelegate = self
+        DastakUPIHandoffDiagnostics.log("Custom Checkout WebView delegates installed after initialization")
         DastakUPIDiscovery.logger.notice("Custom Checkout initialized before UPI discovery")
         discoverApps()
     }
 
     func discoverApps() {
+        guard DastakRazorpayRuntimePolicy.supportsExternalUPIIntent(session.providerMode) else {
+            apps = []
+            state = .testModeUnavailable
+            return
+        }
         state = .loading
         // Use the same Custom Checkout module that performs authorization. The
         // host app grants URL-query permission; Razorpay remains the runtime
@@ -277,6 +376,10 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
 
     func authorize(with app: DastakDiscoveredUPIApp) {
         guard state == .ready else { return }
+        guard DastakRazorpayRuntimePolicy.supportsExternalUPIIntent(session.providerMode) else {
+            state = .testModeUnavailable
+            return
+        }
 
         let email = customerEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
         let phone = customerPhone?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -297,6 +400,9 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
 
         state = .launching
         DastakUPIHandoffDiagnostics.log("selected discovered provider identifier=\(app.providerIdentifier)")
+        DastakUPIHandoffDiagnostics.log(
+            "authorization WebView attached=\(webView.window != nil) width=\(Int(webView.bounds.width)) height=\(Int(webView.bounds.height))"
+        )
         if let scheme = app.uriScheme,
            let url = URL(string: scheme),
            let schemeName = url.scheme {
@@ -304,17 +410,14 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
                 "selected provider scheme=\(schemeName) can_open=\(UIApplication.shared.canOpenURL(url))"
             )
         }
-        var options: [AnyHashable: Any] = [
-            "key": session.keyID,
-            "order_id": session.providerOrderID,
-            "amount": session.amountPaise,
-            "currency": session.currency,
-            "method": "upi",
-            "_[flow]": "intent",
-            "upi_app_package_name": app.providerIdentifier
-        ]
-        options["email"] = email
-        options["contact"] = phone
+        let options = DastakUPIIntentRequest.options(
+            providerOrderID: session.providerOrderID,
+            amountPaise: session.amountPaise,
+            currency: session.currency,
+            email: email,
+            phone: phone,
+            providerIdentifier: app.providerIdentifier
+        )
         DastakUPIHandoffDiagnostics.log("payment initiation called flow=intent")
         checkout.authorize(options)
         DastakUPIHandoffDiagnostics.log("SDK initiation result=authorize_returned")
@@ -374,19 +477,27 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
         onResult(value)
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        logNavigation(stage: "did_start", url: webView.url)
+    }
+
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        logNavigation(stage: "did_commit", url: webView.url)
         checkout?.webView(webView, didCommit: navigation)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        logNavigation(stage: "did_finish", url: webView.url)
         checkout?.webView(webView, didFinish: navigation)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        logNavigationError(stage: "did_fail", error: error)
         checkout?.webView(webView, didFail: navigation, withError: error)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        logNavigationError(stage: "did_fail_provisional", error: error)
         checkout?.webView(webView, didFailProvisionalNavigation: navigation, withError: error)
     }
 
@@ -395,11 +506,19 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
     ) {
-        if let url = navigationAction.request.url,
-           isExternalApplicationURL(url) {
-            openExternalApplication(url)
-            decisionHandler(.cancel)
-            return
+        logNavigation(
+            stage: "decide_policy target_main=\(navigationAction.targetFrame?.isMainFrame == true)",
+            url: navigationAction.request.url
+        )
+        if let scheme = navigationAction.request.url?.scheme?.lowercased(),
+           !["http", "https", "about", "data", "blob"].contains(scheme) {
+            // Razorpay's Custom Checkout owns the selected-provider handoff.
+            // Forwarding the intent navigation lets the SDK validate and open
+            // the exact app returned by discovery; opening it ourselves loses
+            // Razorpay's authorization/callback state.
+            DastakUPIHandoffDiagnostics.log(
+                "external-app navigation delegated to Razorpay scheme=\(sanitizedURLComponent(scheme))"
+            )
         }
         guard let checkout else {
             decisionHandler(.allow)
@@ -408,51 +527,28 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
         checkout.webView(webView, decidePolicyFor: navigationAction, handler: decisionHandler)
     }
 
-    func webView(
-        _ webView: WKWebView,
-        createWebViewWith configuration: WKWebViewConfiguration,
-        for navigationAction: WKNavigationAction,
-        windowFeatures: WKWindowFeatures
-    ) -> WKWebView? {
-        // Some UPI providers emit the intent URL through a target=_blank/window.open
-        // navigation. Keep it in the retained payment WebView so the normal policy
-        // delegate can launch the discovered external application.
-        guard navigationAction.targetFrame == nil,
-              let url = navigationAction.request.url else { return nil }
-        if isExternalApplicationURL(url) {
-            openExternalApplication(url)
-        } else {
-            webView.load(navigationAction.request)
-        }
-        return nil
+    private func logNavigation(stage: String, url: URL?) {
+        let scheme = sanitizedURLComponent(url?.scheme)
+        let host = sanitizedURLComponent(url?.host)
+        DastakUPIHandoffDiagnostics.log("webview \(stage) scheme=\(scheme) host=\(host)")
     }
 
-    private func isExternalApplicationURL(_ url: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased() else { return false }
-        return !["http", "https", "about", "data", "blob"].contains(scheme)
+    private func logNavigationError(stage: String, error: Error) {
+        let nsError = error as NSError
+        let domain = sanitizedURLComponent(nsError.domain)
+        DastakUPIHandoffDiagnostics.log("webview \(stage) domain=\(domain) code=\(nsError.code)")
     }
 
-    private func openExternalApplication(_ url: URL) {
-        let scheme = url.scheme?.lowercased() ?? "unknown"
-        let canOpen = UIApplication.shared.canOpenURL(url)
-        DastakUPIHandoffDiagnostics.log(
-            "external-app launch requested scheme=\(scheme) canOpen=\(canOpen)"
+    private func sanitizedURLComponent(_ value: String?) -> String {
+        guard let value else { return "none" }
+        let clean = value.replacingOccurrences(
+            of: "[^A-Za-z0-9_.-]",
+            with: "",
+            options: .regularExpression
         )
-        guard canOpen else {
-            if !finished {
-                finish(.failed("The selected UPI app could not be opened. Choose it again or try another app."))
-            }
-            return
-        }
-        UIApplication.shared.open(url, options: [:]) { opened in
-            Task { @MainActor in
-                DastakUPIHandoffDiagnostics.log("external-app launch result=\(opened ? "opened" : "rejected")")
-                if !opened, !self.finished {
-                    self.finish(.failed("The selected UPI app could not be opened. Choose it again or try another app."))
-                }
-            }
-        }
+        return clean.isEmpty ? "none" : String(clean.prefix(100))
     }
+
 }
 
 public enum DastakRazorpayRedirection {
@@ -479,7 +575,11 @@ public enum DastakRazorpayDiagnostics {
 private struct DastakPaymentWebViewHost: UIViewRepresentable {
     let webView: WKWebView
 
-    func makeUIView(context: Context) -> WKWebView { webView }
+    func makeUIView(context: Context) -> WKWebView {
+        webView.isHidden = false
+        webView.alpha = 1
+        return webView
+    }
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
 
@@ -506,38 +606,44 @@ public struct DastakRazorpayCheckoutView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
-                    header
-                    statusContent
-                    if !controller.apps.isEmpty {
-                        appSection(title: "Recommended", apps: Array(controller.apps.prefix(3)))
-                        if controller.apps.count > 3 {
-                            appSection(title: "All UPI apps", apps: controller.apps)
+        ZStack {
+            // Razorpay Custom Checkout drives UPI Intent through the supplied
+            // WKWebView. Keep it full-size and attached to the window, exactly as
+            // the SDK sample does, while Dastak's opaque UI remains visually on top.
+            DastakPaymentWebViewHost(webView: controller.webView)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 26) {
+                        header
+                        statusContent
+                        if !controller.apps.isEmpty {
+                            appSection(title: "Recommended", apps: Array(controller.apps.prefix(3)))
+                            if controller.apps.count > 3 {
+                                appSection(title: "All UPI apps", apps: controller.apps)
+                            }
                         }
+                        unavailableMethods
+                        securityNote
                     }
-                    unavailableMethods
-                    securityNote
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
+                    .padding(.bottom, 124)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 124)
+                .background(DastakMatteBackground(style: .dark).ignoresSafeArea())
+                .safeAreaInset(edge: .bottom) { paymentBar }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { controller.cancel() }
+                            .foregroundStyle(MarketplaceColors.dastakText.color)
+                    }
+                }
             }
             .background(DastakMatteBackground(style: .dark).ignoresSafeArea())
-            .safeAreaInset(edge: .bottom) { paymentBar }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { controller.cancel() }
-                        .foregroundStyle(MarketplaceColors.dastakText.color)
-                }
-            }
-            .overlay(alignment: .topLeading) {
-                DastakPaymentWebViewHost(webView: controller.webView)
-                    .frame(width: 1, height: 1)
-                    .opacity(0.01)
-                    .accessibilityHidden(true)
-            }
         }
         .preferredColorScheme(.dark)
         .onChange(of: controller.apps) { _, apps in
@@ -571,6 +677,13 @@ public struct DastakRazorpayCheckoutView: View {
             statusCard(symbol: "iphone.and.arrow.forward", title: "Waiting for authorization", detail: "Complete payment in the selected UPI app.", spins: false)
         case .processing:
             statusCard(symbol: "checkmark.shield", title: "Confirming your payment", detail: "We're waiting for payment confirmation. This usually takes a few seconds.", spins: false)
+        case .testModeUnavailable:
+            statusCard(
+                symbol: "hammer.circle",
+                title: "Test payment rehearsal",
+                detail: "External UPI authorization is unavailable in this rehearsal build. Live payments remain disabled until Dastak explicitly returns to live mode.",
+                spins: false
+            )
         case let .failed(message):
             statusCard(symbol: "exclamationmark.triangle", title: "Payment needs attention", detail: message, spins: false)
         case .ready:

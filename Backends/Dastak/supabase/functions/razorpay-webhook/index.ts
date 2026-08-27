@@ -10,20 +10,26 @@ const serviceClient = createClient(
 );
 
 Deno.serve((request) => {
-  const webhookSecret = Deno.env.get("RAZORPAY_WEBHOOK_SECRET");
-  if (!webhookSecret) {
+  const liveWebhookSecret = Deno.env.get("RAZORPAY_WEBHOOK_SECRET");
+  const testWebhookSecret = Deno.env.get("RAZORPAY_TEST_WEBHOOK_SECRET");
+  if (!liveWebhookSecret || !testWebhookSecret || liveWebhookSecret === testWebhookSecret) {
     return json({
       error: {
         code: "provider_configuration_missing",
-        message: "Razorpay webhook is not configured.",
+        message: "Razorpay webhook modes are not configured independently.",
       },
     }, 503);
   }
-  return handleRazorpayWebhook(request, { webhookSecret, recordEvent });
+  return handleRazorpayWebhook(request, {
+    liveWebhookSecret,
+    testWebhookSecret,
+    recordEvent,
+  });
 });
 
 async function recordEvent(event: RazorpayWebhookEvent) {
   const parameters = {
+    p_provider_mode: event.providerMode,
     p_provider_event_id: event.providerEventId,
     p_event_type: event.eventType,
     p_provider_order_reference: event.providerOrderReference ?? null,
@@ -33,11 +39,13 @@ async function recordEvent(event: RazorpayWebhookEvent) {
     p_occurred_at: event.occurredAt,
     p_request_digest: event.requestDigest,
   };
-  const v1 = await rpc("dastak_v1_record_razorpay_event", parameters);
+  const v1 = await rpc("dastak_v1_record_razorpay_event_mode", parameters);
   if (v1.responseStatus !== 404) return v1;
-  const merchant = await rpc("record_razorpay_merchant_order_event", parameters);
+  if (event.providerMode === "TEST") return v1;
+  const { p_provider_mode: _providerMode, ...legacyParameters } = parameters;
+  const merchant = await rpc("record_razorpay_merchant_order_event", legacyParameters);
   if (merchant.responseStatus !== 404) return merchant;
-  return await rpc("record_razorpay_parcel_event", parameters);
+  return await rpc("record_razorpay_parcel_event", legacyParameters);
 }
 
 async function rpc(functionName: string, parameters: Record<string, unknown>) {

@@ -7,4 +7,5 @@ MARKETPLACE_SUPABASE_PUBLISHABLE_KEY = not-configured
 MARKETPLACE_PRIVACY_POLICY_URL = https:/$()/dastak-customer.vercel.app/privacy
 MARKETPLACE_TERMS_URL = https:/$()/dastak-customer.vercel.app/terms
 MARKETPLACE_SUPPORT_URL = https:/$()/dastak-customer.vercel.app/support
+DASTAK_RAZORPAY_PAYMENT_MODE = TEST
 #include? "Secrets.xcconfig"

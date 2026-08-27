@@ -7,10 +7,29 @@ public enum DastakCheckoutEntityType: String, Codable, Equatable, Sendable {
     case dastakV1Order = "dastak_v1_order"
 }
 
+public enum DastakRazorpayPaymentMode: String, Codable, Equatable, Sendable {
+    case test = "TEST"
+    case live = "LIVE"
+
+    fileprivate func accepts(keyID: String) -> Bool {
+        switch self {
+        case .test: keyID.hasPrefix("rzp_test_")
+        case .live: keyID.hasPrefix("rzp_live_")
+        }
+    }
+
+    fileprivate static func inferred(from keyID: String) -> Self? {
+        if keyID.hasPrefix("rzp_test_") { return .test }
+        if keyID.hasPrefix("rzp_live_") { return .live }
+        return nil
+    }
+}
+
 public struct DastakCheckoutSession: Codable, Equatable, Sendable {
     public let orderID: UUID
     public let entityType: DastakCheckoutEntityType
     public let attemptID: UUID?
+    public let providerMode: DastakRazorpayPaymentMode
     public let providerOrderID: String
     public let keyID: String
     public let amountPaise: Int
@@ -21,6 +40,7 @@ public struct DastakCheckoutSession: Codable, Equatable, Sendable {
         case orderID = "orderId"
         case entityType
         case attemptID = "attemptId"
+        case providerMode
         case providerOrderID = "providerOrderId"
         case keyID = "keyId"
         case amountPaise
@@ -37,6 +57,22 @@ public struct DastakCheckoutSession: Codable, Equatable, Sendable {
         attemptID = try container.decodeIfPresent(UUID.self, forKey: .attemptID)
         providerOrderID = try container.decode(String.self, forKey: .providerOrderID)
         keyID = try container.decode(String.self, forKey: .keyID)
+        let explicitMode = try container.decodeIfPresent(DastakRazorpayPaymentMode.self, forKey: .providerMode)
+        if entityType == .dastakV1Order, explicitMode == nil {
+            throw DecodingError.keyNotFound(
+                CodingKeys.providerMode,
+                .init(codingPath: decoder.codingPath, debugDescription: "V1 checkout response is missing provider mode")
+            )
+        }
+        guard let resolvedMode = explicitMode ?? DastakRazorpayPaymentMode.inferred(from: keyID),
+              resolvedMode.accepts(keyID: keyID) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .keyID,
+                in: container,
+                debugDescription: "Razorpay key and provider mode do not match"
+            )
+        }
+        providerMode = resolvedMode
         amountPaise = try container.decode(Int.self, forKey: .amountPaise)
         currency = try container.decode(String.self, forKey: .currency)
         receipt = try container.decode(String.self, forKey: .receipt)

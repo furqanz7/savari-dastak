@@ -1,10 +1,25 @@
 import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert";
-import { RazorpayApiError, RazorpayTestClient } from "../../_shared/razorpay.ts";
+import {
+  RazorpayApiError,
+  razorpayModeForEntity,
+  RazorpayTestClient,
+} from "../../_shared/razorpay.ts";
 
 Deno.test("Razorpay client accepts test and live credentials", () => {
-  new RazorpayTestClient("rzp_test_public", "test-secret");
-  new RazorpayTestClient("rzp_live_public", "live-secret");
-  assertThrows(() => new RazorpayTestClient("invalid_public", "live-secret"));
+  new RazorpayTestClient("rzp_test_public", "test-secret", "TEST");
+  new RazorpayTestClient("rzp_live_public", "live-secret", "LIVE");
+  assertThrows(() => new RazorpayTestClient("rzp_live_public", "live-secret", "TEST"));
+  assertThrows(() => new RazorpayTestClient("rzp_test_public", "test-secret", "LIVE"));
+  assertThrows(() => new RazorpayTestClient("invalid_public", "live-secret", "LIVE"));
+});
+
+Deno.test("Razorpay Test Mode cannot invoke dormant legacy payment paths", () => {
+  assertEquals(razorpayModeForEntity("TEST", "dastak_v1_order"), "TEST");
+  assertEquals(razorpayModeForEntity("LIVE", "dastak_v1_order"), "LIVE");
+  assertEquals(razorpayModeForEntity("LIVE", "merchant_order"), "LIVE");
+  assertEquals(razorpayModeForEntity("LIVE", "parcel"), "LIVE");
+  assertThrows(() => razorpayModeForEntity("TEST", "merchant_order"));
+  assertThrows(() => razorpayModeForEntity("TEST", "parcel"));
 });
 
 Deno.test("Razorpay order creation uses the server amount and recovers by receipt", async () => {
@@ -17,7 +32,7 @@ Deno.test("Razorpay order creation uses the server amount and recovers by receip
     if (requests.length === 1) return Promise.resolve(json({ entity: "collection", items: [] }));
     return Promise.resolve(json(order));
   };
-  const client = new RazorpayTestClient("rzp_test_public", "sandbox-secret", fetcher);
+  const client = new RazorpayTestClient("rzp_test_public", "sandbox-secret", "TEST", fetcher);
   const result = await client.resolveOrder({
     amountPaise: 8_800,
     currency: "INR",
@@ -32,7 +47,7 @@ Deno.test("Razorpay order creation uses the server amount and recovers by receip
     currency: "INR",
     receipt,
     partial_payment: false,
-    notes: { dastak_order_id: orderId },
+    notes: { dastak_order_id: orderId, dastak_provider_mode: "TEST" },
   });
 });
 
@@ -40,6 +55,7 @@ Deno.test("Razorpay recovery rejects an order with a different amount", async ()
   const client = new RazorpayTestClient(
     "rzp_test_public",
     "sandbox-secret",
+    "TEST",
     () => Promise.resolve(json({ entity: "collection", items: [{ ...order, amount: 8_801 }] })),
   );
 

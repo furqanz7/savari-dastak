@@ -10,12 +10,18 @@ export type CheckoutSession = {
   orderId: string;
   entityType: "merchant_order" | "parcel" | "dastak_v1_order";
   attemptId?: string;
+  providerMode: RazorpayPaymentMode;
   providerOrderId: string;
   keyId: string;
   amountPaise: number;
   currency: "INR";
   receipt: string;
 };
+
+export type RazorpayPaymentMode = "TEST" | "LIVE";
+
+export const RAZORPAY_TEST_UPI_LIMITATION_MESSAGE =
+  "External UPI authorization is unavailable in this rehearsal build. Live payments remain disabled until Dastak explicitly returns to live mode.";
 
 export type CheckoutResult = "success" | "failed" | "dismissed";
 
@@ -187,6 +193,8 @@ export async function openRazorpayCheckout(
   session: CheckoutSession,
   customer: { name?: string; email?: string; phoneNumber?: string },
 ): Promise<CheckoutResult> {
+  assertCheckoutProviderMode(session);
+  if (session.providerMode === "TEST") return "failed";
   const methods = await discoverRazorpayMethods(session.keyId);
   if (!methods.upi) return "failed";
   const target = isMobileWeb() ? defaultMobileUPITarget(methods) : { kind: "qr" as const };
@@ -256,22 +264,42 @@ export async function discoverRazorpayMethods(
   });
 }
 
-export async function launchRazorpayCustomUPI(
+export function launchRazorpayCustomUPI(
   session: CheckoutSession,
   customer: { name?: string; email?: string; phoneNumber?: string },
   target: CustomUPITarget,
   lifecycle: CustomCheckoutLifecycle = {},
 ): Promise<CustomCheckoutResult> {
+  try {
+    assertCheckoutProviderMode(session);
+  } catch (modeError) {
+    return Promise.resolve({
+      status: "failed",
+      message: modeError instanceof Error ? modeError.message : "Payment configuration does not match this build.",
+    });
+  }
+  if (session.providerMode === "TEST") {
+    return Promise.resolve({ status: "not_launched", message: RAZORPAY_TEST_UPI_LIMITATION_MESSAGE });
+  }
   const email = customer.email?.trim();
   const contact = customer.phoneNumber?.trim();
   if (!email) {
-    return { status: "failed", message: "Your signed-in email is unavailable. Sign out and sign in again before payment." };
+    return Promise.resolve({ status: "failed", message: "Your signed-in email is unavailable. Sign out and sign in again before payment." });
   }
   if (!contact) {
-    return { status: "failed", message: "Add a delivery phone number to your Dastak profile before payment." };
+    return Promise.resolve({ status: "failed", message: "Add a delivery phone number to your Dastak profile before payment." });
   }
-  const Razorpay = await loadRazorpayCustomCheckout();
-  return await new Promise((resolve) => {
+  // Method discovery loads razorpay.js before the customer can select a method.
+  // Do not await script work here: mobile browsers require createPayment to run
+  // synchronously in the original tap stack or they can block the UPI-app handoff.
+  const Razorpay = razorpayCustomConstructor();
+  if (!Razorpay) {
+    return Promise.resolve({
+      status: "not_launched",
+      message: "Secure payment options are still loading. Check again, then choose a UPI app.",
+    });
+  }
+  return new Promise((resolve) => {
     let completed = false;
     const finish = (value: CustomCheckoutResult) => {
       if (completed) return;
@@ -494,10 +522,18 @@ async function call(
 function parseCheckout(value: unknown, entityType: CheckoutSession["entityType"]): CheckoutSession {
   const source = record(value);
   const keyId = requiredText(source?.keyId, 100);
+  const explicitMode = source?.providerMode;
+  const inferredMode: RazorpayPaymentMode | undefined = keyId.startsWith("rzp_test_")
+    ? "TEST"
+    : keyId.startsWith("rzp_live_") ? "LIVE" : undefined;
+  const providerMode = explicitMode === "TEST" || explicitMode === "LIVE"
+    ? explicitMode
+    : entityType === "dastak_v1_order" ? undefined : inferredMode;
   const providerOrderId = requiredText(source?.providerOrderId, 200);
   const receipt = requiredText(source?.receipt, 40);
   const amountPaise = source?.amountPaise;
   if (
+    !providerMode || providerMode !== inferredMode ||
     !/^rzp_(test|live)_[A-Za-z0-9]+$/.test(keyId) || !/^order_[A-Za-z0-9]+$/.test(providerOrderId) ||
     typeof amountPaise !== "number" || !Number.isSafeInteger(amountPaise) ||
     amountPaise <= 0 || amountPaise > 100_000_000 || source?.currency !== "INR"
@@ -510,12 +546,38 @@ function parseCheckout(value: unknown, entityType: CheckoutSession["entityType"]
     orderId: requiredUUID(source?.orderId),
     entityType,
     attemptId,
+    providerMode,
     providerOrderId,
     keyId,
     amountPaise,
     currency: "INR",
     receipt,
   };
+}
+
+export function configuredRazorpayPaymentMode(
+  raw = import.meta.env.VITE_RAZORPAY_PAYMENT_MODE,
+): RazorpayPaymentMode | undefined {
+  const normalized = raw?.trim().toUpperCase();
+  return normalized === "TEST" || normalized === "LIVE" ? normalized : undefined;
+}
+
+export function assertCheckoutProviderMode(
+  session: CheckoutSession,
+  configuredMode = configuredRazorpayPaymentMode(),
+) {
+  const keyMode: RazorpayPaymentMode | undefined = session.keyId.startsWith("rzp_test_")
+    ? "TEST"
+    : session.keyId.startsWith("rzp_live_") ? "LIVE" : undefined;
+  if (!keyMode || keyMode !== session.providerMode) {
+    throw new PaymentRequestError("payment_mode_mismatch", "Payment configuration does not match this checkout.", 409);
+  }
+  if (configuredMode && configuredMode !== session.providerMode) {
+    throw new PaymentRequestError("payment_mode_mismatch", "Payment configuration does not match this build.", 409);
+  }
+  if (!configuredMode && import.meta.env.PROD) {
+    throw new PaymentRequestError("payment_mode_missing", "Payment mode is not configured for this build.", 503);
+  }
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

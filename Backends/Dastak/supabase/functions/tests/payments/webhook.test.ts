@@ -20,6 +20,7 @@ Deno.test("Razorpay webhook verifies raw-body signature and maps captured paymen
 
   assertEquals(response.status, 200);
   assertEquals(recorded?.providerEventId, "event-payment-1");
+  assertEquals(recorded?.providerMode, "TEST");
   assertEquals(recorded?.eventType, "payment_captured");
   assertEquals(recorded?.providerOrderReference, "order_test123");
   assertEquals(recorded?.providerPaymentReference, "pay_test123");
@@ -41,6 +42,29 @@ Deno.test("Razorpay webhook rejects a modified body with the old signature", asy
 
   assertEquals(response.status, 401);
   assertEquals((await response.json()).error.code, "invalid_webhook_signature");
+});
+
+Deno.test("Razorpay webhook keeps live and test signatures isolated", async () => {
+  const body = JSON.stringify(capturedFixture);
+  let recorded: RazorpayWebhookEvent | undefined;
+  const liveResponse = await handleRazorpayWebhook(
+    await signedRequest(body, "event-live-1", liveWebhookSecret),
+    dependencies({
+      recordEvent: (event) => {
+        recorded = event;
+        return Promise.resolve({ responseBody: { processed: true }, responseStatus: 200 });
+      },
+    }),
+  );
+  assertEquals(liveResponse.status, 200);
+  assertEquals(recorded?.providerMode, "LIVE");
+
+  const ambiguousResponse = await handleRazorpayWebhook(
+    await signedRequest(body, "event-ambiguous-1", testWebhookSecret),
+    dependencies({ liveWebhookSecret: testWebhookSecret }),
+  );
+  assertEquals(ambiguousResponse.status, 503);
+  assertEquals((await ambiguousResponse.json()).error.code, "provider_configuration_invalid");
 });
 
 Deno.test("Razorpay webhook maps processed refunds and ignores unsupported events", async () => {
@@ -69,7 +93,8 @@ Deno.test("Razorpay webhook maps processed refunds and ignores unsupported event
   assertEquals((await ignoredResponse.json()).processed, false);
 });
 
-const webhookSecret = "test-webhook-secret";
+const testWebhookSecret = "test-webhook-secret";
+const liveWebhookSecret = "live-webhook-secret";
 const capturedFixture = {
   entity: "event",
   event: "payment.captured",
@@ -111,16 +136,17 @@ function dependencies(
   overrides: Partial<RazorpayWebhookDependencies> = {},
 ): RazorpayWebhookDependencies {
   return {
-    webhookSecret,
+    liveWebhookSecret: overrides.liveWebhookSecret ?? liveWebhookSecret,
+    testWebhookSecret: overrides.testWebhookSecret ?? testWebhookSecret,
     recordEvent: overrides.recordEvent ??
       (() => Promise.resolve({ responseBody: { processed: true }, responseStatus: 200 })),
   };
 }
 
-async function signedRequest(body: string, eventId: string) {
+async function signedRequest(body: string, eventId: string, secret = testWebhookSecret) {
   const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(webhookSecret),
+    new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],

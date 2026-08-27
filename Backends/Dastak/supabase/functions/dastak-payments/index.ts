@@ -1,7 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyBearerUser } from "../_shared/auth.ts";
-import { RazorpayApiError, RazorpayTestClient } from "../_shared/razorpay.ts";
+import {
+  RazorpayApiError,
+  RazorpayClient,
+  razorpayModeForEntity,
+  type RazorpayPaymentMode,
+} from "../_shared/razorpay.ts";
 import {
   handleDastakPayments,
   type PaymentActionInput,
@@ -27,16 +32,25 @@ Deno.serve((request) =>
 
 async function completeCustomCheckout(input: PaymentCompletionInput) {
   try {
+    const paymentMode = razorpayPaymentMode();
     const context = completionContext(
       await rpcJson(
-        "dastak_v1_custom_checkout_completion_context",
+        "dastak_v1_custom_checkout_completion_context_mode",
         {
           p_account_id: input.accountId,
           p_order_id: input.orderId,
           p_attempt_id: input.attemptId,
+          p_provider_mode: paymentMode,
         },
       ),
     );
+    if (context.providerMode !== paymentMode) {
+      return completionRejected(
+        409,
+        "provider_mode_mismatch",
+        "The payment response belongs to a different provider environment.",
+      );
+    }
     if (context.providerOrderId !== input.providerOrderId) {
       return completionRejected(
         409,
@@ -46,7 +60,7 @@ async function completeCustomCheckout(input: PaymentCompletionInput) {
     }
     if (
       !await verifyRazorpayPaymentSignature(
-        requiredEnv("RAZORPAY_KEY_SECRET"),
+        razorpayCredentials(paymentMode).keySecret,
         context.providerOrderId,
         input.providerPaymentId,
         input.providerSignature,
@@ -60,7 +74,7 @@ async function completeCustomCheckout(input: PaymentCompletionInput) {
     }
 
     return {
-      responseBody: await rpcJson("dastak_v1_record_custom_checkout_completion", {
+      responseBody: await rpcJson("dastak_v1_record_custom_checkout_completion_mode", {
         p_account_id: input.accountId,
         p_order_id: input.orderId,
         p_attempt_id: input.attemptId,
@@ -69,6 +83,7 @@ async function completeCustomCheckout(input: PaymentCompletionInput) {
         p_signature_digest: await sha256Hex(input.providerSignature),
         p_request_digest: input.requestDigest,
         p_idempotency_key: input.idempotencyKey,
+        p_provider_mode: paymentMode,
       }),
       responseStatus: 202,
     };
@@ -94,12 +109,19 @@ async function reportPaymentFailure(
 }
 
 async function createCheckout(input: PaymentActionInput) {
+  let paymentMode: RazorpayPaymentMode;
+  try {
+    paymentMode = razorpayModeForEntity(razorpayPaymentMode(), input.entityType);
+  } catch (error) {
+    return providerError(error);
+  }
   const prepared = input.entityType === "dastak_v1_order"
     ? {
-      responseBody: await rpcJson("dastak_v1_prepare_razorpay_checkout", {
+      responseBody: await rpcJson("dastak_v1_prepare_razorpay_checkout_mode", {
         p_account_id: input.accountId,
         p_order_id: input.orderId,
         p_idempotency_key: input.idempotencyKey,
+        p_provider_mode: paymentMode,
       }),
       responseStatus: 200,
     }
@@ -120,7 +142,10 @@ async function createCheckout(input: PaymentActionInput) {
     if (input.entityType === "dastak_v1_order" && !details.attemptId) {
       throw new Error("Dastak V1 checkout is missing its payment attempt");
     }
-    const client = razorpayClient();
+    if (input.entityType === "dastak_v1_order" && details.providerMode !== paymentMode) {
+      throw new Error("Dastak V1 checkout provider mode mismatch");
+    }
+    const client = razorpayClient(paymentMode);
     const providerOrder = details.providerOrderId
       ? await client.fetchOrder(details.providerOrderId)
       : await client.resolveOrder({
@@ -137,12 +162,13 @@ async function createCheckout(input: PaymentActionInput) {
 
     const attached = input.entityType === "dastak_v1_order"
       ? {
-        responseBody: await rpcJson("dastak_v1_attach_razorpay_order", {
+        responseBody: await rpcJson("dastak_v1_attach_razorpay_order_mode", {
           p_account_id: input.accountId,
           p_attempt_id: details.attemptId,
           p_provider_order_reference: providerOrder.id,
           p_amount_paise: details.amountPaise,
           p_currency: details.currency,
+          p_provider_mode: paymentMode,
         }),
         responseStatus: 200,
       }
@@ -166,6 +192,7 @@ async function createCheckout(input: PaymentActionInput) {
         entityType: input.entityType,
         providerOrderId: providerOrder.id,
         keyId: client.keyId,
+        providerMode: paymentMode,
       },
       responseStatus: 200,
     };
@@ -182,12 +209,19 @@ async function createCheckout(input: PaymentActionInput) {
 }
 
 async function processRefund(input: PaymentActionInput) {
+  let paymentMode: RazorpayPaymentMode;
+  try {
+    paymentMode = razorpayModeForEntity(razorpayPaymentMode(), input.entityType);
+  } catch (error) {
+    return providerError(error);
+  }
   const prepared = input.entityType === "dastak_v1_order"
     ? {
-      responseBody: await rpcJson("dastak_v1_prepare_razorpay_refund", {
+      responseBody: await rpcJson("dastak_v1_prepare_razorpay_refund_mode", {
         p_account_id: input.accountId,
         p_refund_id: input.refundId,
         p_idempotency_key: input.idempotencyKey,
+        p_provider_mode: paymentMode,
       }),
       responseStatus: 200,
     }
@@ -204,13 +238,16 @@ async function processRefund(input: PaymentActionInput) {
 
   try {
     const details = refundDetails(prepared.responseBody);
+    if (input.entityType === "dastak_v1_order" && details.providerMode !== paymentMode) {
+      throw new Error("Dastak V1 refund provider mode mismatch");
+    }
     if (details.refundState === "processed") {
       return {
         responseBody: { orderId: details.orderId, refundState: "processed" },
         responseStatus: 200,
       };
     }
-    const client = razorpayClient();
+    const client = razorpayClient(paymentMode);
     const providerRefund = details.providerRefundId
       ? { id: details.providerRefundId, amount: details.amountPaise }
       : await client.resolveRefund({
@@ -224,11 +261,12 @@ async function processRefund(input: PaymentActionInput) {
 
     if (input.entityType === "dastak_v1_order") {
       return {
-        responseBody: await rpcJson("dastak_v1_attach_razorpay_refund", {
+        responseBody: await rpcJson("dastak_v1_attach_razorpay_refund_mode", {
           p_account_id: input.accountId,
           p_refund_id: input.refundId,
           p_provider_refund_reference: providerRefund.id,
           p_amount_paise: details.amountPaise,
+          p_provider_mode: paymentMode,
         }),
         responseStatus: 200,
       };
@@ -278,6 +316,7 @@ function checkoutDetails(value: unknown) {
     ? undefined
     : text(source?.providerOrderId, 200);
   const attemptId = source?.attemptId === undefined ? undefined : text(source.attemptId, 36);
+  const providerMode = paymentMode(source?.providerMode);
   if (!entityId || !receipt || !amountPaise || source?.currency !== "INR") {
     throw new Error("Invalid checkout details");
   }
@@ -288,6 +327,7 @@ function checkoutDetails(value: unknown) {
     receipt,
     providerOrderId,
     attemptId,
+    providerMode,
     currency: "INR" as const,
   };
 }
@@ -302,6 +342,7 @@ function refundDetails(value: unknown) {
   const amountPaise = money(source?.amountPaise);
   const receipt = text(source?.receipt, 40);
   const refundState = source?.refundState;
+  const providerMode = paymentMode(source?.providerMode);
   if (
     !orderId || !providerPaymentId || !amountPaise || !receipt || source?.currency !== "INR" ||
     (refundState !== "pending" && refundState !== "processed")
@@ -313,6 +354,7 @@ function refundDetails(value: unknown) {
     amountPaise,
     receipt,
     refundState,
+    providerMode,
     currency: "INR" as const,
   };
 }
@@ -324,15 +366,41 @@ function completionContext(value: unknown) {
   const attemptId = text(source?.attemptId, 36);
   const providerOrderId = text(source?.providerOrderId, 200);
   const amountPaise = money(source?.amountPaise);
+  const providerMode = paymentMode(source?.providerMode);
   if (
-    !orderId || !paymentId || !attemptId || !providerOrderId || !amountPaise ||
+    !orderId || !paymentId || !attemptId || !providerOrderId || !amountPaise || !providerMode ||
     !/^order_[A-Za-z0-9]+$/.test(providerOrderId) || source?.currency !== "INR"
   ) throw new Error("Invalid custom checkout completion context");
-  return { orderId, paymentId, attemptId, providerOrderId, amountPaise };
+  return { orderId, paymentId, attemptId, providerOrderId, amountPaise, providerMode };
 }
 
-function razorpayClient() {
-  return new RazorpayTestClient(requiredEnv("RAZORPAY_KEY_ID"), requiredEnv("RAZORPAY_KEY_SECRET"));
+function razorpayClient(mode: RazorpayPaymentMode) {
+  const credentials = razorpayCredentials(mode);
+  return new RazorpayClient(credentials.keyId, credentials.keySecret, mode);
+}
+
+function razorpayCredentials(mode: RazorpayPaymentMode) {
+  return mode === "TEST"
+    ? {
+      keyId: requiredEnv("RAZORPAY_TEST_KEY_ID"),
+      keySecret: requiredEnv("RAZORPAY_TEST_KEY_SECRET"),
+    }
+    : {
+      keyId: requiredEnv("RAZORPAY_KEY_ID"),
+      keySecret: requiredEnv("RAZORPAY_KEY_SECRET"),
+    };
+}
+
+function razorpayPaymentMode(): RazorpayPaymentMode {
+  const mode = Deno.env.get("RAZORPAY_PAYMENT_MODE");
+  if (mode !== "TEST" && mode !== "LIVE") {
+    throw new Error("RAZORPAY_PAYMENT_MODE must be TEST or LIVE");
+  }
+  return mode;
+}
+
+function paymentMode(value: unknown): RazorpayPaymentMode | undefined {
+  return value === "TEST" || value === "LIVE" ? value : undefined;
 }
 
 function providerError(error: unknown) {

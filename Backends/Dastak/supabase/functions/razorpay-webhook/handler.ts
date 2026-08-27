@@ -1,8 +1,10 @@
 import { json } from "../_shared/http.ts";
+import type { RazorpayPaymentMode } from "../_shared/razorpay.ts";
 
 type RpcResult = { responseBody: unknown; responseStatus: number };
 
 export type RazorpayWebhookEvent = {
+  providerMode: RazorpayPaymentMode;
   providerEventId: string;
   eventType: "payment_captured" | "refund_succeeded";
   providerOrderReference?: string;
@@ -14,7 +16,8 @@ export type RazorpayWebhookEvent = {
 };
 
 export type RazorpayWebhookDependencies = {
-  webhookSecret: string;
+  liveWebhookSecret: string;
+  testWebhookSecret: string;
   recordEvent: (event: RazorpayWebhookEvent) => Promise<RpcResult>;
 };
 
@@ -26,7 +29,11 @@ export async function handleRazorpayWebhook(
   const signature = request.headers.get("x-razorpay-signature") ?? "";
   const providerEventId = normalizedHeader(request.headers.get("x-razorpay-event-id"), 200);
   const rawBody = await request.text();
-  if (!providerEventId || !await validSignature(rawBody, signature, dependencies.webhookSecret)) {
+  const [validLiveSignature, validTestSignature] = await Promise.all([
+    validSignature(rawBody, signature, dependencies.liveWebhookSecret),
+    validSignature(rawBody, signature, dependencies.testWebhookSecret),
+  ]);
+  if (!providerEventId || (!validLiveSignature && !validTestSignature)) {
     return json({
       error: {
         code: "invalid_webhook_signature",
@@ -34,6 +41,15 @@ export async function handleRazorpayWebhook(
       },
     }, 401);
   }
+  if (validLiveSignature && validTestSignature) {
+    return json({
+      error: {
+        code: "provider_configuration_invalid",
+        message: "Razorpay webhook modes are not isolated.",
+      },
+    }, 503);
+  }
+  const providerMode: RazorpayPaymentMode = validTestSignature ? "TEST" : "LIVE";
 
   let payload: Record<string, unknown>;
   try {
@@ -49,7 +65,7 @@ export async function handleRazorpayWebhook(
     return json({ received: true, processed: false }, 200);
   }
 
-  const event = await parseEvent(payload, providerEventId, rawBody);
+  const event = await parseEvent(payload, providerMode, providerEventId, rawBody);
   if (!event) return validationError();
   try {
     const result = await dependencies.recordEvent(event);
@@ -63,6 +79,7 @@ export async function handleRazorpayWebhook(
 
 async function parseEvent(
   payload: Record<string, unknown>,
+  providerMode: RazorpayPaymentMode,
   providerEventId: string,
   rawBody: string,
 ): Promise<RazorpayWebhookEvent | undefined> {
@@ -84,6 +101,7 @@ async function parseEvent(
       payment?.currency !== "INR" || payment.status !== "captured" || payment.captured !== true
     ) return undefined;
     return {
+      providerMode,
       providerEventId,
       eventType: "payment_captured",
       providerOrderReference,
@@ -105,6 +123,7 @@ async function parseEvent(
     refund?.currency !== "INR" || refund.status !== "processed"
   ) return undefined;
   return {
+    providerMode,
     providerEventId,
     eventType: "refund_succeeded",
     providerOrderReference,

@@ -4,6 +4,8 @@ import { QRCodeSVG } from "qrcode.react";
 import type { DastakV1Auth } from "./dastakV1";
 import { formatV1Price } from "./dastakV1";
 import {
+  RAZORPAY_TEST_UPI_LIMITATION_MESSAGE,
+  assertCheckoutProviderMode,
   completeV1CustomCheckout,
   discoverRazorpayMethods,
   isMobileWeb,
@@ -16,6 +18,7 @@ import {
 
 type PaymentState =
   | "loading"
+  | "test_unavailable"
   | "ready"
   | "launching"
   | "awaiting_return"
@@ -50,6 +53,15 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     setState("loading");
     setError(undefined);
     try {
+      assertCheckoutProviderMode(session);
+      if (session.providerMode === "TEST") {
+        setUpiAvailable(false);
+        setMobileOptions([]);
+        setSelectedApp(undefined);
+        setState("test_unavailable");
+        setError(RAZORPAY_TEST_UPI_LIMITATION_MESSAGE);
+        return;
+      }
       const methods = await discoverRazorpayMethods(session.keyId);
       setUpiAvailable(methods.upi);
       setMobileOptions(methods.upiApps);
@@ -69,7 +81,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
       setState("retryable");
       setError(discoveryError instanceof Error ? discoveryError.message : "Payment methods could not be loaded.");
     }
-  }, [mobile, session.keyId]);
+  }, [mobile, session]);
 
   useEffect(() => { void discover(); }, [discover, session.providerOrderId]);
 
@@ -251,6 +263,7 @@ function PaymentStateCard({ state, mobile, error }: { state: PaymentState; mobil
 function statePresentation(state: PaymentState, mobile: boolean, error?: string) {
   switch (state) {
     case "loading": return { icon: RefreshCw, title: "Loading payment methods", detail: "Checking the payment options available right now.", tone: "neutral" };
+    case "test_unavailable": return { icon: ShieldCheck, title: "Test payment rehearsal", detail: error ?? RAZORPAY_TEST_UPI_LIMITATION_MESSAGE, tone: "warning" };
     case "launching": return { icon: Smartphone, title: mobile ? "Opening your UPI app" : "Creating secure QR", detail: "Only the selected authorization surface will open.", tone: "neutral" };
     case "awaiting_return": return { icon: Clock3, title: "Waiting for authorization", detail: mobile ? "Approve in your UPI app, then return to Dastak." : "Scan and approve the QR in your UPI app.", tone: "neutral" };
     case "processing": return { icon: ShieldCheck, title: "Confirming your payment", detail: "We're securely checking the payment details.", tone: "neutral" };

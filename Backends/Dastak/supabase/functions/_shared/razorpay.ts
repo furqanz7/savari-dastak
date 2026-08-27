@@ -1,5 +1,18 @@
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+export type RazorpayPaymentMode = "TEST" | "LIVE";
+
+export function razorpayModeForEntity(
+  configuredMode: RazorpayPaymentMode,
+  entityType: "dastak_v1_order" | "merchant_order" | "parcel",
+): RazorpayPaymentMode {
+  if (entityType === "dastak_v1_order") return configuredMode;
+  if (configuredMode !== "LIVE") {
+    throw new Error("Legacy payment paths are disabled while Razorpay Test Mode is active");
+  }
+  return "LIVE";
+}
+
 export type RazorpayOrder = {
   id: string;
   amount: number;
@@ -30,10 +43,15 @@ export class RazorpayClient {
   constructor(
     public readonly keyId: string,
     keySecret: string,
+    public readonly paymentMode: RazorpayPaymentMode,
     private readonly fetcher: Fetcher = fetch,
   ) {
     if (!/^rzp_(test|live)_[A-Za-z0-9]+$/.test(keyId) || keySecret.length < 8) {
       throw new Error("Valid Razorpay credentials are required");
+    }
+    const keyMode: RazorpayPaymentMode = keyId.startsWith("rzp_test_") ? "TEST" : "LIVE";
+    if (keyMode !== paymentMode) {
+      throw new Error("Razorpay credential mode does not match the configured payment mode");
     }
     this.authorization = `Basic ${btoa(`${keyId}:${keySecret}`)}`;
   }
@@ -55,7 +73,10 @@ export class RazorpayClient {
           currency: input.currency,
           receipt: input.receipt,
           partial_payment: false,
-          notes: { dastak_order_id: input.orderId },
+          notes: {
+            dastak_order_id: input.orderId,
+            dastak_provider_mode: this.paymentMode,
+          },
         }),
       }),
     );
@@ -88,7 +109,10 @@ export class RazorpayClient {
           body: JSON.stringify({
             amount: input.amountPaise,
             receipt: input.receipt,
-            notes: { dastak_order_id: input.orderId },
+            notes: {
+              dastak_order_id: input.orderId,
+              dastak_provider_mode: this.paymentMode,
+            },
           }),
         },
       ),

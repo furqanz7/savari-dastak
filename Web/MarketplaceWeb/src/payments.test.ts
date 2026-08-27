@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  assertCheckoutProviderMode,
   completeV1CustomCheckout,
   createCheckoutSession,
   createV1CheckoutSession,
@@ -9,6 +10,7 @@ import {
   processOrderRefund,
   processV1Refund,
   RAZORPAY_CUSTOM_CHECKOUT_SCRIPT,
+  RAZORPAY_TEST_UPI_LIMITATION_MESSAGE,
   reportV1CheckoutFailure,
 } from "./payments";
 
@@ -22,9 +24,16 @@ const checkout = {
   orderId,
   providerOrderId: "order_test123",
   keyId: "rzp_test_public",
+  providerMode: "TEST" as const,
   amountPaise: 8_800,
   currency: "INR" as const,
   receipt: "dst_8a000000000040008000000000000080",
+};
+const liveCheckout = {
+  ...checkout,
+  providerOrderId: "order_live123",
+  keyId: "rzp_live_public",
+  providerMode: "LIVE" as const,
 };
 const customer = {
   email: "customer@example.test",
@@ -51,8 +60,22 @@ describe("Dastak payments", () => {
   it("accepts provider-issued test and live publishable keys", async () => {
     await expect(createCheckoutSession(
       { ...auth, orderId, idempotencyKey: "checkout-2" },
-      () => Promise.resolve(new Response(JSON.stringify({ ...checkout, keyId: "rzp_live_public" }), { status: 200 })),
+      () => Promise.resolve(new Response(JSON.stringify(liveCheckout), { status: 200 })),
     )).resolves.toMatchObject({ keyId: "rzp_live_public", entityType: "merchant_order" });
+  });
+
+  it("requires explicit mode for V1 and rejects Test/Live mixing", async () => {
+    const attemptId = "8a000000-0000-4000-8000-000000000081";
+    await expect(createV1CheckoutSession(
+      { ...auth, orderId, idempotencyKey: "v1-missing-mode" },
+      () => Promise.resolve(Response.json({ ...checkout, providerMode: undefined, attemptId })),
+    )).rejects.toMatchObject({ code: "invalid_response" });
+    await expect(createV1CheckoutSession(
+      { ...auth, orderId, idempotencyKey: "v1-mixed-mode" },
+      () => Promise.resolve(Response.json({ ...checkout, providerMode: "LIVE", attemptId })),
+    )).rejects.toMatchObject({ code: "invalid_response" });
+    expect(() => assertCheckoutProviderMode({ ...checkout, entityType: "dastak_v1_order" }, "LIVE"))
+      .toThrowError("Payment configuration does not match this build.");
   });
 
   it("requests an eligible provider refund without accepting client amounts", async () => {
@@ -177,21 +200,21 @@ describe("Dastak payments", () => {
   it("launches mobile UPI Intent for the explicitly selected supported app", async () => {
     const custom = installCustomCheckout({
       completion: {
-        razorpay_order_id: checkout.providerOrderId,
+        razorpay_order_id: liveCheckout.providerOrderId,
         razorpay_payment_id: "pay_custom123",
         razorpay_signature: "b".repeat(64),
       },
     });
     const result = await launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order", attemptId: "8a000000-0000-4000-8000-000000000081" },
+      { ...liveCheckout, entityType: "dastak_v1_order", attemptId: "8a000000-0000-4000-8000-000000000081" },
       customer,
       { kind: "intent", app: "gpay" },
     );
 
-    expect(custom.constructorOptions).toEqual({ key: checkout.keyId });
+    expect(custom.constructorOptions).toEqual({ key: liveCheckout.keyId });
     expect(custom.payload).toMatchObject({
-      order_id: checkout.providerOrderId,
-      amount: checkout.amountPaise,
+      order_id: liveCheckout.providerOrderId,
+      amount: liveCheckout.amountPaise,
       currency: "INR",
       email: customer.email,
       contact: customer.phoneNumber,
@@ -204,7 +227,7 @@ describe("Dastak payments", () => {
     expect(result).toEqual({
       status: "success",
       completion: {
-        razorpay_order_id: checkout.providerOrderId,
+        razorpay_order_id: liveCheckout.providerOrderId,
         razorpay_payment_id: "pay_custom123",
         razorpay_signature: "b".repeat(64),
       },
@@ -216,19 +239,19 @@ describe("Dastak payments", () => {
     const custom = installCustomCheckout({
       qr: { qr_url: "upi://pay?pa=dastak%40razorpay&am=88.00&cu=INR", expires_on: 1_800_000_000 },
       completion: {
-        razorpay_order_id: checkout.providerOrderId,
+        razorpay_order_id: liveCheckout.providerOrderId,
         razorpay_payment_id: "pay_qr123",
         razorpay_signature: "e".repeat(64),
       },
     });
     const result = await launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" },
+      { ...liveCheckout, entityType: "dastak_v1_order" },
       customer,
       { kind: "qr" },
       { onQrCode },
     );
 
-    expect(custom.constructorOptions).toEqual({ key: checkout.keyId });
+    expect(custom.constructorOptions).toEqual({ key: liveCheckout.keyId });
     expect(custom.payload).toMatchObject({
       method: "upi",
     });
@@ -269,20 +292,20 @@ describe("Dastak payments", () => {
       },
     });
     await expect(launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" }, customer, { kind: "intent", app: "gpay" },
+      { ...liveCheckout, entityType: "dastak_v1_order" }, customer, { kind: "intent", app: "gpay" },
     )).resolves.toMatchObject({ status: "failed" });
   });
 
   it("uses razorpay.js Custom Checkout and never invokes Standard Checkout open", async () => {
     const custom = installCustomCheckout({
       completion: {
-        razorpay_order_id: checkout.providerOrderId,
+        razorpay_order_id: liveCheckout.providerOrderId,
         razorpay_payment_id: "pay_noopen123",
         razorpay_signature: "d".repeat(64),
       },
     });
     await launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" }, customer, { kind: "intent", app: "gpay" },
+      { ...liveCheckout, entityType: "dastak_v1_order" }, customer, { kind: "intent", app: "gpay" },
     );
     expect(RAZORPAY_CUSTOM_CHECKOUT_SCRIPT).toBe("https://checkout.razorpay.com/v1/razorpay.js");
     expect(custom.opened).toBe(false);
@@ -299,7 +322,7 @@ describe("Dastak payments", () => {
       },
     });
     await expect(launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" }, customer, { kind: "intent", app: "gpay" },
+      { ...liveCheckout, entityType: "dastak_v1_order" }, customer, { kind: "intent", app: "gpay" },
     )).resolves.toEqual({
       status: "cancelled",
       message: "Payment was cancelled. Your secured basket remains reserved.",
@@ -311,7 +334,7 @@ describe("Dastak payments", () => {
     let launched = 0;
     let settled = false;
     const result = launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" },
+      { ...liveCheckout, entityType: "dastak_v1_order" },
       customer,
       { kind: "intent", app: "gpay" },
       { onLaunched: () => { launched += 1; } },
@@ -320,6 +343,12 @@ describe("Dastak payments", () => {
       return value;
     });
 
+    // Mobile Safari permits the external UPI-app handoff only while the
+    // original user activation is still live. The provider launch therefore
+    // must happen synchronously, before even one microtask is yielded.
+    expect(custom.payload).toMatchObject({ method: "upi" });
+    expect(custom.createOptions).toEqual({ app: "gpay" });
+    expect(launched).toBe(1);
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(launched).toBe(1);
     expect(settled).toBe(false);
@@ -339,7 +368,7 @@ describe("Dastak payments", () => {
     const custom = installCustomCheckout({ throwOnCreate: true });
     let launched = false;
     await expect(launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" },
+      { ...liveCheckout, entityType: "dastak_v1_order" },
       customer,
       { kind: "intent", app: "gpay" },
       { onLaunched: () => { launched = true; } },
@@ -355,7 +384,7 @@ describe("Dastak payments", () => {
     const custom = installCustomCheckout({});
 
     await expect(launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" },
+      { ...liveCheckout, entityType: "dastak_v1_order" },
       { phoneNumber: customer.phoneNumber },
       { kind: "intent", app: "gpay" },
     )).resolves.toEqual({
@@ -365,13 +394,35 @@ describe("Dastak payments", () => {
     expect(custom.payload).toBeUndefined();
 
     await expect(launchRazorpayCustomUPI(
-      { ...checkout, entityType: "dastak_v1_order" },
+      { ...liveCheckout, entityType: "dastak_v1_order" },
       { email: customer.email },
       { kind: "intent", app: "gpay" },
     )).resolves.toEqual({
       status: "failed",
       message: "Add a delivery phone number to your Dastak profile before payment.",
     });
+    expect(custom.payload).toBeUndefined();
+  });
+
+  it("keeps real UPI Intent and Dynamic QR disabled for Test orders", async () => {
+    const custom = installCustomCheckout({});
+    await expect(launchRazorpayCustomUPI(
+      { ...checkout, entityType: "dastak_v1_order" },
+      customer,
+      { kind: "intent", app: "gpay" },
+    )).resolves.toEqual({
+      status: "not_launched",
+      message: RAZORPAY_TEST_UPI_LIMITATION_MESSAGE,
+    });
+    await expect(launchRazorpayCustomUPI(
+      { ...checkout, entityType: "dastak_v1_order" },
+      customer,
+      { kind: "qr" },
+    )).resolves.toEqual({
+      status: "not_launched",
+      message: RAZORPAY_TEST_UPI_LIMITATION_MESSAGE,
+    });
+    expect(custom.constructorOptions).toBeUndefined();
     expect(custom.payload).toBeUndefined();
   });
 
