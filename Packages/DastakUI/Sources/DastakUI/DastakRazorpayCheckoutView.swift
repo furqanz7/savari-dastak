@@ -308,6 +308,7 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
     private let session: DastakCheckoutSession
     private let customerEmail: String?
     private let customerPhone: String?
+    private let prepareTestRehearsal: @MainActor (DastakTestPaymentOutcome) async throws -> DastakTestPaymentRehearsal
     private let onResult: @MainActor (DastakRazorpayResult) -> Void
     private var checkout: CustomRazorpayCheckout?
     private var finished = false
@@ -316,11 +317,13 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
         session: DastakCheckoutSession,
         customerEmail: String?,
         customerPhone: String?,
+        prepareTestRehearsal: @escaping @MainActor (DastakTestPaymentOutcome) async throws -> DastakTestPaymentRehearsal,
         onResult: @escaping @MainActor (DastakRazorpayResult) -> Void
     ) {
         self.session = session
         self.customerEmail = customerEmail
         self.customerPhone = customerPhone
+        self.prepareTestRehearsal = prepareTestRehearsal
         self.onResult = onResult
         webView = WKWebView(frame: UIScreen.main.bounds, configuration: WKWebViewConfiguration())
         webView.isOpaque = false
@@ -335,11 +338,6 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
             DastakUPIHandoffDiagnostics.log("provider mode rejected before SDK initialization")
             return
         }
-        guard DastakRazorpayRuntimePolicy.supportsExternalUPIIntent(session.providerMode) else {
-            state = .testModeUnavailable
-            DastakUPIHandoffDiagnostics.log("TEST mode active; external UPI Intent intentionally disabled")
-            return
-        }
         checkout = CustomRazorpayCheckout.initWithKey(
             session.keyID,
             andDelegate: self,
@@ -351,6 +349,15 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
         webView.navigationDelegate = self
         webView.uiDelegate = self
         DastakUPIHandoffDiagnostics.log("Custom Checkout WebView delegates installed after initialization")
+        guard DastakRazorpayRuntimePolicy.supportsExternalUPIIntent(session.providerMode) else {
+            state = .testModeUnavailable
+            DastakUPIHandoffDiagnostics.log(
+                session.testRehearsalAvailable
+                    ? "TEST mode active; owner rehearsal available and external UPI Intent disabled"
+                    : "TEST mode active; external UPI Intent intentionally disabled"
+            )
+            return
+        }
         DastakUPIDiscovery.logger.notice("Custom Checkout initialized before UPI discovery")
         discoverApps()
     }
@@ -424,6 +431,63 @@ private final class DastakCustomCheckoutController: NSObject, ObservableObject,
         if !finished, state == .launching {
             state = .awaitingReturn
         }
+    }
+
+    func authorizeTestRehearsal(_ outcome: DastakTestPaymentOutcome) {
+        #if DEBUG
+        guard session.providerMode == .test,
+              session.testRehearsalAvailable,
+              state == .testModeUnavailable else { return }
+
+        let email = customerEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phone = customerPhone?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let email, !email.isEmpty else {
+            state = .failed("Your signed-in email is unavailable. Sign out and sign in again before rehearsal.")
+            return
+        }
+        guard let phone, !phone.isEmpty else {
+            state = .failed("Add a delivery phone number to your Dastak profile before rehearsal.")
+            return
+        }
+        guard let checkout, let attemptID = session.attemptID else {
+            state = .failed("Test payment rehearsal is temporarily unavailable.")
+            return
+        }
+
+        state = .launching
+        Task { @MainActor in
+            do {
+                let descriptor = try await prepareTestRehearsal(outcome)
+                guard descriptor.testRehearsal,
+                      descriptor.outcome == outcome,
+                      descriptor.orderID == session.orderID,
+                      descriptor.paymentAttemptID == attemptID,
+                      descriptor.providerMode == .test,
+                      descriptor.providerOrderID == session.providerOrderID,
+                      descriptor.amountPaise == session.amountPaise,
+                      descriptor.currency == session.currency,
+                      descriptor.testVPA == (outcome == .success ? "success@razorpay" : "failure@razorpay") else {
+                    state = .failed("The Test rehearsal did not match this secured payment attempt.")
+                    return
+                }
+
+                DastakUPIHandoffDiagnostics.log("owner TEST rehearsal initiation outcome=\(outcome.rawValue)")
+                checkout.authorize([
+                    "order_id": descriptor.providerOrderID,
+                    "amount": descriptor.amountPaise,
+                    "currency": descriptor.currency,
+                    "email": email,
+                    "contact": phone,
+                    "method": "upi",
+                    "vpa": descriptor.testVPA
+                ])
+                DastakUPIHandoffDiagnostics.log("owner TEST rehearsal SDK authorize returned")
+                if !finished, state == .launching { state = .awaitingReturn }
+            } catch {
+                state = .failed("Test payment rehearsal could not start. Try again while the basket remains reserved.")
+            }
+        }
+        #endif
     }
 
     func cancel() {
@@ -593,6 +657,7 @@ public struct DastakRazorpayCheckoutView: View {
         customerName: String?,
         customerEmail: String?,
         customerPhone: String?,
+        prepareTestRehearsal: @escaping @MainActor (DastakTestPaymentOutcome) async throws -> DastakTestPaymentRehearsal,
         onResult: @escaping @MainActor (DastakRazorpayResult) -> Void
     ) {
         self.session = session
@@ -601,6 +666,7 @@ public struct DastakRazorpayCheckoutView: View {
             session: session,
             customerEmail: customerEmail,
             customerPhone: customerPhone,
+            prepareTestRehearsal: prepareTestRehearsal,
             onResult: onResult
         ))
     }
@@ -621,6 +687,11 @@ public struct DastakRazorpayCheckoutView: View {
                     VStack(alignment: .leading, spacing: 26) {
                         header
                         statusContent
+                        #if DEBUG
+                        if session.providerMode == .test, session.testRehearsalAvailable {
+                            testRehearsalSection
+                        }
+                        #endif
                         if !controller.apps.isEmpty {
                             appSection(title: "Recommended", apps: Array(controller.apps.prefix(3)))
                             if controller.apps.count > 3 {
@@ -681,7 +752,9 @@ public struct DastakRazorpayCheckoutView: View {
             statusCard(
                 symbol: "hammer.circle",
                 title: "Test payment rehearsal",
-                detail: "External UPI authorization is unavailable in this rehearsal build. Live payments remain disabled until Dastak explicitly returns to live mode.",
+                detail: session.testRehearsalAvailable
+                    ? "Owner controls use Razorpay Test fixtures only. No real money or genuine UPI-app authorization occurs."
+                    : "External UPI authorization is unavailable in this rehearsal build. Live payments remain disabled until Dastak explicitly returns to live mode.",
                 spins: false
             )
         case let .failed(message):
@@ -696,6 +769,36 @@ public struct DastakRazorpayCheckoutView: View {
             }
         }
     }
+
+    #if DEBUG
+    private var testRehearsalSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("TEST PAYMENT REHEARSAL")
+                    .font(.caption.weight(.bold))
+                    .tracking(1.1)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Spacer()
+                Text("OWNER ONLY")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
+            }
+            Text("Exercise the genuine Razorpay Test provider and webhook lifecycle. This does not move real money or open a real UPI app.")
+                .font(.footnote)
+                .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
+            HStack(spacing: 12) {
+                Button("Simulate success") { controller.authorizeTestRehearsal(.success) }
+                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                Button("Simulate failure") { controller.authorizeTestRehearsal(.failure) }
+                    .buttonStyle(MarketplaceSecondaryButtonStyle())
+            }
+            .disabled(controller.state != .testModeUnavailable)
+        }
+        .padding(16)
+        .background(MarketplaceColors.dastakSurface.color)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+    #endif
 
     private func statusCard(symbol: String, title: String, detail: String, spins: Bool) -> some View {
         HStack(alignment: .top, spacing: 14) {
@@ -826,6 +929,7 @@ public struct DastakRazorpayCheckoutView: View {
         customerName: String?,
         customerEmail: String?,
         customerPhone: String?,
+        prepareTestRehearsal: @escaping @MainActor (DastakTestPaymentOutcome) async throws -> DastakTestPaymentRehearsal,
         onResult: @escaping @MainActor (DastakRazorpayResult) -> Void
     ) {
         self.onResult = onResult

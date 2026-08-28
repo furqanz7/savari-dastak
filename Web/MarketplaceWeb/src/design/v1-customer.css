@@ -417,6 +417,14 @@
 .v1-payment-method-loading span:nth-child(2) { width: 88%; }
 .v1-payment-method-loading span:nth-child(3) { width: 70%; }
 .v1-payment-method-loading p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12px; }
+.v1-payment-test-rehearsal { margin: 18px 0 4px; padding: 18px; border: 1px solid color-mix(in srgb, var(--dastak-accent) 58%, var(--divider)); border-radius: 20px; background: color-mix(in srgb, var(--dastak-accent-soft) 52%, var(--surface-raised)); }
+.v1-payment-test-rehearsal > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--dastak-accent); font-size: 10px; font-weight: 850; letter-spacing: .13em; }
+.v1-payment-test-rehearsal > header small { color: var(--text-secondary); font-size: 9px; }
+.v1-payment-test-rehearsal > p { margin: 10px 0 15px; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.v1-payment-test-rehearsal > div { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.v1-payment-test-rehearsal button { min-height: 48px; padding: 10px 14px; border: 1px solid var(--divider); border-radius: 15px; color: var(--text-primary); background: var(--surface-raised); font-weight: 780; }
+.v1-payment-test-rehearsal button:last-child { color: var(--destructive); }
+.v1-payment-test-rehearsal button:disabled { opacity: .48; }
 .v1-payment-options-section { margin-top: 22px; }
 .v1-payment-options-section > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 3px 10px; }
 .v1-payment-options-section > header small { color: var(--text-secondary); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
@@ -452,6 +460,7 @@
   .v1-payment-options-hero h2 { font-size: 44px; }
   .v1-payment-options-footer { min-height: 94px; grid-template-columns: minmax(90px, .7fr) minmax(170px, 1.5fr); gap: 12px; padding-right: 16px; padding-left: 16px; }
   .v1-payment-options-footer button { padding-right: 14px; padding-left: 14px; }
+  .v1-payment-test-rehearsal > div { grid-template-columns: 1fr; }
   .v1-payment-qr { grid-template-columns: 132px minmax(0, 1fr); gap: 14px; padding: 14px; }
   .v1-wishlist-page, .v1-payments-page { padding-top: 24px; }
   .v1-feature-header h1 { font-family: inherit; font-size: 30px; font-weight: 800; }

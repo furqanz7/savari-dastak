@@ -16,9 +16,24 @@ export type CheckoutSession = {
   amountPaise: number;
   currency: "INR";
   receipt: string;
+  testRehearsalAvailable: boolean;
 };
 
 export type RazorpayPaymentMode = "TEST" | "LIVE";
+
+export type RazorpayTestRehearsalOutcome = "SUCCESS" | "FAILURE";
+
+export type RazorpayTestRehearsalDescriptor = {
+  testRehearsal: true;
+  outcome: RazorpayTestRehearsalOutcome;
+  orderId: string;
+  paymentAttemptId: string;
+  providerMode: "TEST";
+  providerOrderId: string;
+  amountPaise: number;
+  currency: "INR";
+  testVpa: "success@razorpay" | "failure@razorpay";
+};
 
 export const RAZORPAY_TEST_UPI_LIMITATION_MESSAGE =
   "External UPI authorization is unavailable in this rehearsal build. Live payments remain disabled until Dastak explicitly returns to live mode.";
@@ -141,6 +156,46 @@ export async function completeV1CustomCheckout(
     providerPaymentId: requiredText(payload?.providerPaymentId, 200),
     state,
     duplicate: payload?.duplicate === true,
+  };
+}
+
+export async function prepareV1TestRehearsal(
+  input: AuthenticatedInput & {
+    orderId: string;
+    paymentAttemptId: string;
+    outcome: RazorpayTestRehearsalOutcome;
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+): Promise<RazorpayTestRehearsalDescriptor> {
+  const payload = record(await call(input, {
+    operation: "prepareTestRehearsal",
+    entityType: "dastak_v1_order",
+    orderId: input.orderId,
+    paymentAttemptId: input.paymentAttemptId,
+    testOutcome: input.outcome,
+  }, input.idempotencyKey, fetcher));
+  const outcome = payload?.outcome;
+  const testVpa = payload?.testVpa;
+  if (
+    payload?.testRehearsal !== true || payload?.providerMode !== "TEST" ||
+    (outcome !== "SUCCESS" && outcome !== "FAILURE") ||
+    (testVpa !== "success@razorpay" && testVpa !== "failure@razorpay") ||
+    (outcome === "SUCCESS" && testVpa !== "success@razorpay") ||
+    (outcome === "FAILURE" && testVpa !== "failure@razorpay")
+  ) invalid();
+  const amountPaise = payload?.amountPaise;
+  if (typeof amountPaise !== "number" || !Number.isSafeInteger(amountPaise) || amountPaise <= 0 || payload?.currency !== "INR") invalid();
+  return {
+    testRehearsal: true,
+    outcome,
+    orderId: requiredUUID(payload?.orderId),
+    paymentAttemptId: requiredUUID(payload?.paymentAttemptId),
+    providerMode: "TEST",
+    providerOrderId: requiredText(payload?.providerOrderId, 200),
+    amountPaise,
+    currency: "INR",
+    testVpa,
   };
 }
 
@@ -361,6 +416,96 @@ export function launchRazorpayCustomUPI(
   });
 }
 
+/**
+ * Owner-only TEST harness. The server mints the fixture descriptor after
+ * checking owner entitlement and the authoritative Dastak payment attempt.
+ * This deliberately never substitutes for the normal Customer payment path.
+ */
+export async function launchRazorpayTestUPI(
+  session: CheckoutSession,
+  customer: { name?: string; email?: string; phoneNumber?: string },
+  descriptor: RazorpayTestRehearsalDescriptor,
+): Promise<CustomCheckoutResult> {
+  try {
+    assertCheckoutProviderMode(session);
+    if (
+      session.providerMode !== "TEST" || !session.testRehearsalAvailable ||
+      descriptor.testRehearsal !== true || descriptor.providerMode !== "TEST" ||
+      descriptor.orderId !== session.orderId || descriptor.paymentAttemptId !== session.attemptId ||
+      descriptor.providerOrderId !== session.providerOrderId ||
+      descriptor.amountPaise !== session.amountPaise || descriptor.currency !== session.currency ||
+      (descriptor.outcome === "SUCCESS" && descriptor.testVpa !== "success@razorpay") ||
+      (descriptor.outcome === "FAILURE" && descriptor.testVpa !== "failure@razorpay")
+    ) {
+      throw new PaymentRequestError(
+        "test_rehearsal_mismatch",
+        "This Test rehearsal does not match the secured payment attempt.",
+        409,
+      );
+    }
+  } catch (modeError) {
+    return {
+      status: "failed",
+      message: modeError instanceof Error ? modeError.message : "Test payment rehearsal is unavailable.",
+    };
+  }
+
+  const email = customer.email?.trim();
+  const contact = customer.phoneNumber?.trim();
+  if (!email || !contact) {
+    return {
+      status: "failed",
+      message: "A signed-in email and delivery phone number are required for Test rehearsal.",
+    };
+  }
+  let Razorpay: RazorpayCustomConstructor;
+  try {
+    Razorpay = await loadRazorpayCustomCheckout();
+  } catch {
+    return { status: "not_launched", message: "Test payment tools could not be loaded." };
+  }
+
+  return await new Promise((resolve) => {
+    let completed = false;
+    const finish = (value: CustomCheckoutResult) => {
+      if (completed) return;
+      completed = true;
+      resolve(value);
+    };
+    const razorpay = new Razorpay({ key: session.keyId });
+    razorpay.on("payment.success", (response) => {
+      const completion = parseCustomCheckoutCompletion(response, session.providerOrderId);
+      finish(completion
+        ? { status: "success", completion }
+        : { status: "failed", message: "Test provider completion could not be verified." });
+    });
+    razorpay.on("payment.error", (response) => {
+      const source = record(response);
+      const error = record(source?.error);
+      const description = optionalText(error?.description, 300) ?? "The simulated Test payment failed as requested.";
+      finish({ status: "failed", message: description });
+    });
+    razorpay.on("payment.cancel", () => finish({
+      status: "cancelled",
+      message: "The Test rehearsal was cancelled. The secured basket remains reserved.",
+    }));
+    try {
+      const launched = razorpay.createPayment({
+        amount: session.amountPaise,
+        currency: session.currency,
+        order_id: session.providerOrderId,
+        email,
+        contact,
+        method: "upi",
+        vpa: descriptor.testVpa,
+      });
+      if (launched === false) finish({ status: "not_launched", message: "The Test provider did not start." });
+    } catch {
+      finish({ status: "not_launched", message: "The Test provider did not start." });
+    }
+  });
+}
+
 export function mobileUPIOptions(
   discoveredApps: unknown,
   userAgent = navigator.userAgent,
@@ -552,6 +697,7 @@ function parseCheckout(value: unknown, entityType: CheckoutSession["entityType"]
     amountPaise,
     currency: "INR",
     receipt,
+    testRehearsalAvailable: source?.testRehearsalAvailable === true,
   };
 }
 

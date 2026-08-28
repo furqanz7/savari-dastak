@@ -5,6 +5,7 @@ import {
   type PaymentActionInput,
   type PaymentCompletionInput,
   type PaymentFailureInput,
+  type PaymentTestRehearsalInput,
 } from "../../dastak-payments/handler.ts";
 import {
   constantTimeHexEqual,
@@ -242,6 +243,79 @@ Deno.test("Custom Checkout completion rejects malformed or non-V1 responses", as
   assertEquals(legacy.status, 400);
 });
 
+Deno.test("owner Test rehearsal uses only authenticated order, attempt, and closed outcome", async () => {
+  let recorded: PaymentTestRehearsalInput | undefined;
+  const response = await handleDastakPayments(
+    request(
+      {
+        operation: "prepareTestRehearsal",
+        entityType: "dastak_v1_order",
+        orderId,
+        paymentAttemptId: otherAccountId,
+        testOutcome: "SUCCESS",
+        accountId: otherAccountId,
+        amountPaise: 1,
+        razorpay_order_id: "order_client_supplied",
+        vpa: "attacker@example",
+      },
+      "Bearer owner-session",
+      "test-rehearsal-success",
+    ),
+    dependencies({
+      prepareTestRehearsal: (input) => {
+        recorded = input;
+        return Promise.resolve({
+          responseBody: { testRehearsal: true, outcome: "SUCCESS" },
+          responseStatus: 200,
+        });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.orderId, orderId);
+  assertEquals(recorded?.attemptId, otherAccountId);
+  assertEquals(recorded?.outcome, "SUCCESS");
+  assertEquals(recorded?.entityType, "dastak_v1_order");
+  assertEquals("amountPaise" in (recorded ?? {}), false);
+  assertEquals("providerOrderId" in (recorded ?? {}), false);
+  assertEquals("vpa" in (recorded ?? {}), false);
+});
+
+Deno.test("Test rehearsal rejects invalid outcomes and non-V1 entities", async () => {
+  const invalidOutcome = await handleDastakPayments(
+    request(
+      {
+        operation: "prepareTestRehearsal",
+        entityType: "dastak_v1_order",
+        orderId,
+        paymentAttemptId: otherAccountId,
+        testOutcome: "CAPTURED",
+      },
+      "Bearer owner-session",
+      "test-rehearsal-invalid",
+    ),
+    dependencies(),
+  );
+  const legacy = await handleDastakPayments(
+    request(
+      {
+        operation: "prepareTestRehearsal",
+        orderId,
+        paymentAttemptId: otherAccountId,
+        testOutcome: "FAILURE",
+      },
+      "Bearer owner-session",
+      "test-rehearsal-legacy",
+    ),
+    dependencies(),
+  );
+
+  assertEquals(invalidOutcome.status, 400);
+  assertEquals(legacy.status, 400);
+});
+
 Deno.test("Razorpay completion signature verification is HMAC-SHA256 and timing-safe", async () => {
   const secret = "test-secret";
   const signature = await hmacSHA256Hex(secret, "order_custom123|pay_custom456");
@@ -301,6 +375,12 @@ function dependencies(
         Promise.resolve({
           responseBody: { state: "AWAITING_PROVIDER_CONFIRMATION" },
           responseStatus: 202,
+        })),
+    prepareTestRehearsal: overrides.prepareTestRehearsal ??
+      (() =>
+        Promise.resolve({
+          responseBody: { testRehearsal: true, outcome: "SUCCESS" },
+          responseStatus: 200,
         })),
   };
 }

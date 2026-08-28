@@ -6,7 +6,9 @@ import {
   createV1CheckoutSession,
   discoverRazorpayMethods,
   launchRazorpayCustomUPI,
+  launchRazorpayTestUPI,
   mobileUPIOptions,
+  prepareV1TestRehearsal,
   processOrderRefund,
   processV1Refund,
   RAZORPAY_CUSTOM_CHECKOUT_SCRIPT,
@@ -28,12 +30,14 @@ const checkout = {
   amountPaise: 8_800,
   currency: "INR" as const,
   receipt: "dst_8a000000000040008000000000000080",
+  testRehearsalAvailable: true,
 };
 const liveCheckout = {
   ...checkout,
   providerOrderId: "order_live123",
   keyId: "rzp_live_public",
   providerMode: "LIVE" as const,
+  testRehearsalAvailable: false,
 };
 const customer = {
   email: "customer@example.test",
@@ -108,6 +112,41 @@ describe("Dastak payments", () => {
       orderId,
     });
     expect(result).toMatchObject({ entityType: "dastak_v1_order", attemptId });
+  });
+
+  it("requests a server-bound owner Test rehearsal without client-authored payment facts", async () => {
+    const paymentAttemptId = "8a000000-0000-4000-8000-000000000081";
+    let requestBody: Record<string, unknown> | undefined;
+    const descriptor = await prepareV1TestRehearsal({
+      ...auth,
+      orderId,
+      paymentAttemptId,
+      outcome: "SUCCESS",
+      idempotencyKey: "test-rehearsal-success",
+    }, (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Promise.resolve(Response.json({
+        testRehearsal: true,
+        outcome: "SUCCESS",
+        orderId,
+        paymentAttemptId,
+        providerMode: "TEST",
+        providerOrderId: checkout.providerOrderId,
+        amountPaise: checkout.amountPaise,
+        currency: "INR",
+        testVpa: "success@razorpay",
+      }));
+    });
+
+    expect(requestBody).toEqual({
+      operation: "prepareTestRehearsal",
+      entityType: "dastak_v1_order",
+      orderId,
+      paymentAttemptId,
+      testOutcome: "SUCCESS",
+    });
+    expect(JSON.stringify(requestBody)).not.toMatch(/amount|currency|providerOrder|vpa|key/i);
+    expect(descriptor.testVpa).toBe("success@razorpay");
   });
 
   it("reports a dismissed V1 attempt without releasing its reservation", async () => {
@@ -422,6 +461,94 @@ describe("Dastak payments", () => {
       status: "not_launched",
       message: RAZORPAY_TEST_UPI_LIMITATION_MESSAGE,
     });
+    expect(custom.constructorOptions).toBeUndefined();
+    expect(custom.payload).toBeUndefined();
+  });
+
+  it("uses the server-selected official fixture for the owner Test success path", async () => {
+    const paymentAttemptId = "8a000000-0000-4000-8000-000000000081";
+    const custom = installCustomCheckout({
+      completion: {
+        razorpay_order_id: checkout.providerOrderId,
+        razorpay_payment_id: "pay_test_success",
+        razorpay_signature: "f".repeat(64),
+      },
+    });
+    const result = await launchRazorpayTestUPI(
+      { ...checkout, entityType: "dastak_v1_order", attemptId: paymentAttemptId },
+      customer,
+      {
+        testRehearsal: true,
+        outcome: "SUCCESS",
+        orderId,
+        paymentAttemptId,
+        providerMode: "TEST",
+        providerOrderId: checkout.providerOrderId,
+        amountPaise: checkout.amountPaise,
+        currency: "INR",
+        testVpa: "success@razorpay",
+      },
+    );
+
+    expect(custom.payload).toEqual({
+      amount: checkout.amountPaise,
+      currency: "INR",
+      order_id: checkout.providerOrderId,
+      email: customer.email,
+      contact: customer.phoneNumber,
+      method: "upi",
+      vpa: "success@razorpay",
+    });
+    expect(custom.opened).toBe(false);
+    expect(result).toMatchObject({ status: "success" });
+  });
+
+  it("uses the failure fixture without changing the payment amount or order", async () => {
+    const paymentAttemptId = "8a000000-0000-4000-8000-000000000081";
+    const custom = installCustomCheckout({
+      failure: { error: { description: "Test payment failed" } },
+    });
+    const result = await launchRazorpayTestUPI(
+      { ...checkout, entityType: "dastak_v1_order", attemptId: paymentAttemptId },
+      customer,
+      {
+        testRehearsal: true,
+        outcome: "FAILURE",
+        orderId,
+        paymentAttemptId,
+        providerMode: "TEST",
+        providerOrderId: checkout.providerOrderId,
+        amountPaise: checkout.amountPaise,
+        currency: "INR",
+        testVpa: "failure@razorpay",
+      },
+    );
+
+    expect(custom.payload).toMatchObject({
+      order_id: checkout.providerOrderId,
+      amount: checkout.amountPaise,
+      vpa: "failure@razorpay",
+    });
+    expect(result).toEqual({ status: "failed", message: "Test payment failed" });
+  });
+
+  it("cannot invoke the owner Test harness with a Live checkout session", async () => {
+    const custom = installCustomCheckout({});
+    await expect(launchRazorpayTestUPI(
+      { ...liveCheckout, entityType: "dastak_v1_order", attemptId: "8a000000-0000-4000-8000-000000000081" },
+      customer,
+      {
+        testRehearsal: true,
+        outcome: "SUCCESS",
+        orderId,
+        paymentAttemptId: "8a000000-0000-4000-8000-000000000081",
+        providerMode: "TEST",
+        providerOrderId: checkout.providerOrderId,
+        amountPaise: checkout.amountPaise,
+        currency: "INR",
+        testVpa: "success@razorpay",
+      },
+    )).resolves.toMatchObject({ status: "failed" });
     expect(custom.constructorOptions).toBeUndefined();
     expect(custom.payload).toBeUndefined();
   });

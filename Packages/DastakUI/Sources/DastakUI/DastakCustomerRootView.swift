@@ -298,7 +298,10 @@ public struct DastakCustomerRootView: View {
                     session: session,
                     customerName: model.checkoutCustomer?.displayName,
                     customerEmail: model.checkoutCustomer?.email,
-                    customerPhone: model.checkoutCustomer?.phoneNumber
+                    customerPhone: model.checkoutCustomer?.phoneNumber,
+                    prepareTestRehearsal: { outcome in
+                        try await model.prepareV1TestRehearsal(session: session, outcome: outcome)
+                    }
                 ) { result in
                     switch result {
                     case let .succeeded(completion):

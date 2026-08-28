@@ -11,7 +11,9 @@ import {
   handleDastakPayments,
   type PaymentActionInput,
   type PaymentCompletionInput,
+  type PaymentTestRehearsalInput,
 } from "./handler.ts";
+import { prepareRazorpayTestRehearsal } from "./rehearsal.ts";
 import { sha256Hex, verifyRazorpayPaymentSignature } from "./verification.ts";
 
 const serviceClient = createClient(
@@ -27,8 +29,66 @@ Deno.serve((request) =>
     processRefund,
     reportPaymentFailure,
     completeCustomCheckout,
+    prepareTestRehearsal,
   })
 );
+
+async function prepareTestRehearsal(input: PaymentTestRehearsalInput) {
+  const configuredMode = razorpayPaymentMode();
+  if (configuredMode !== "TEST") {
+    return prepareRazorpayTestRehearsal(
+      configuredMode,
+      false,
+      {
+        orderId: input.orderId,
+        attemptId: input.attemptId,
+        providerOrderId: "order_disabled",
+        providerMode: configuredMode,
+        amountPaise: 1,
+        currency: "INR",
+      },
+      input.outcome,
+    );
+  }
+
+  try {
+    const owner = await isActiveOwner(input.accountId);
+    if (!owner) {
+      return prepareRazorpayTestRehearsal(
+        configuredMode,
+        false,
+        {
+          orderId: input.orderId,
+          attemptId: input.attemptId,
+          providerOrderId: "order_forbidden",
+          providerMode: configuredMode,
+          amountPaise: 1,
+          currency: "INR",
+        },
+        input.outcome,
+      );
+    }
+    const context = completionContext(
+      await rpcJson("dastak_v1_custom_checkout_completion_context_mode", {
+        p_account_id: input.accountId,
+        p_order_id: input.orderId,
+        p_attempt_id: input.attemptId,
+        p_provider_mode: configuredMode,
+      }),
+    );
+    return prepareRazorpayTestRehearsal(configuredMode, true, context, input.outcome);
+  } catch {
+    return {
+      responseBody: {
+        error: {
+          code: "test_rehearsal_unavailable",
+          message: "The current Test payment attempt is not eligible for rehearsal.",
+        },
+      },
+      responseStatus: 409,
+    };
+  }
+}
 
 async function completeCustomCheckout(input: PaymentCompletionInput) {
   try {
@@ -193,6 +253,8 @@ async function createCheckout(input: PaymentActionInput) {
         providerOrderId: providerOrder.id,
         keyId: client.keyId,
         providerMode: paymentMode,
+        testRehearsalAvailable: input.entityType === "dastak_v1_order" &&
+          paymentMode === "TEST" && await isActiveOwner(input.accountId).catch(() => false),
       },
       responseStatus: 200,
     };
@@ -307,6 +369,12 @@ async function rpcJson(functionName: string, parameters: Record<string, unknown>
   return value as Record<string, unknown>;
 }
 
+async function isActiveOwner(accountId: string) {
+  const { data, error } = await serviceClient.rpc("is_active_owner", { p_account_id: accountId });
+  if (error) throw error;
+  return data === true;
+}
+
 function checkoutDetails(value: unknown) {
   const source = record(value);
   const entityId = text(source?.entityId ?? source?.orderId, 36);
@@ -371,7 +439,15 @@ function completionContext(value: unknown) {
     !orderId || !paymentId || !attemptId || !providerOrderId || !amountPaise || !providerMode ||
     !/^order_[A-Za-z0-9]+$/.test(providerOrderId) || source?.currency !== "INR"
   ) throw new Error("Invalid custom checkout completion context");
-  return { orderId, paymentId, attemptId, providerOrderId, amountPaise, providerMode };
+  return {
+    orderId,
+    paymentId,
+    attemptId,
+    providerOrderId,
+    amountPaise,
+    providerMode,
+    currency: "INR" as const,
+  };
 }
 
 function razorpayClient(mode: RazorpayPaymentMode) {

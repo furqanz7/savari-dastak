@@ -10,10 +10,14 @@ import {
   discoverRazorpayMethods,
   isMobileWeb,
   launchRazorpayCustomUPI,
+  launchRazorpayTestUPI,
+  prepareV1TestRehearsal,
   reportV1CheckoutFailure,
   type CheckoutSession,
   type CustomUPITarget,
   type RazorpayMobileUPIApp,
+  type RazorpayCustomCheckoutCompletion,
+  type RazorpayTestRehearsalOutcome,
 } from "./payments";
 
 type PaymentState =
@@ -47,7 +51,9 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
   const [selectedApp, setSelectedApp] = useState<RazorpayMobileUPIApp>();
   const [qr, setQr] = useState<{ uri: string; expiresAt?: number }>();
   const [error, setError] = useState<string>();
+  const busy = ["loading", "launching", "processing"].includes(state);
   const selected = mobile ? selectedApp !== undefined : true;
+  const testRehearsalAvailable = session.providerMode === "TEST" && session.testRehearsalAvailable && Boolean(session.attemptId);
 
   const discover = useCallback(async () => {
     setState("loading");
@@ -96,42 +102,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     return () => window.clearTimeout(timer);
   }, [expiresAt]);
 
-  const pay = async () => {
-    if (!selected || !upiAvailable || state !== "ready") return;
-    const target: CustomUPITarget = mobile
-      ? { kind: "intent", app: selectedApp! }
-      : { kind: "qr" };
-    setError(undefined);
-    setQr(undefined);
-    setState("launching");
-    const result = await launchRazorpayCustomUPI(
-      session,
-      customer,
-      target,
-      {
-        onLaunched: () => setState("awaiting_return"),
-        onQrCode: (nextQr) => {
-          setQr(nextQr);
-          setState("awaiting_return");
-        },
-      },
-    );
-    if (result.status !== "success") {
-      if (result.status === "not_launched") setState("ready");
-      else setState(result.status === "cancelled" ? "cancelled" : "retryable");
-      setError(result.message);
-      if (session.attemptId && result.status !== "not_launched") {
-        await reportV1CheckoutFailure({
-          ...auth,
-          orderId: session.orderId,
-          paymentAttemptId: session.attemptId,
-          failureCode: result.status === "cancelled" ? "CHECKOUT_DISMISSED" : "CHECKOUT_FAILED",
-          idempotencyKey: crypto.randomUUID(),
-        }).catch(() => undefined);
-      }
-      return;
-    }
-
+  const finishProviderSuccess = async (completionData: RazorpayCustomCheckoutCompletion) => {
     if (!session.attemptId) {
       setState("reconciliation");
       setError("We're still checking your payment. No second charge will be attempted.");
@@ -144,7 +115,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
         ...auth,
         orderId: session.orderId,
         paymentAttemptId: session.attemptId,
-        completion: result.completion,
+        completion: completionData,
         idempotencyKey: crypto.randomUUID(),
       });
       if (completion.state === "RECONCILIATION_REQUIRED") {
@@ -171,6 +142,72 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     }
   };
 
+  const recordProviderFailure = async (status: "cancelled" | "failed" | "not_launched", message: string) => {
+    if (status === "not_launched") setState(session.providerMode === "TEST" ? "test_unavailable" : "ready");
+    else setState(status === "cancelled" ? "cancelled" : "retryable");
+    setError(message);
+    if (session.attemptId && status !== "not_launched") {
+      await reportV1CheckoutFailure({
+        ...auth,
+        orderId: session.orderId,
+        paymentAttemptId: session.attemptId,
+        failureCode: status === "cancelled" ? "CHECKOUT_DISMISSED" : "CHECKOUT_FAILED",
+        idempotencyKey: crypto.randomUUID(),
+      }).catch(() => undefined);
+    }
+  };
+
+  const pay = async () => {
+    if (!selected || !upiAvailable || state !== "ready") return;
+    const target: CustomUPITarget = mobile
+      ? { kind: "intent", app: selectedApp! }
+      : { kind: "qr" };
+    setError(undefined);
+    setQr(undefined);
+    setState("launching");
+    const result = await launchRazorpayCustomUPI(
+      session,
+      customer,
+      target,
+      {
+        onLaunched: () => setState("awaiting_return"),
+        onQrCode: (nextQr) => {
+          setQr(nextQr);
+          setState("awaiting_return");
+        },
+      },
+    );
+    if (result.status !== "success") {
+      await recordProviderFailure(result.status, result.message);
+      return;
+    }
+    await finishProviderSuccess(result.completion);
+  };
+
+  const runTestRehearsal = async (outcome: RazorpayTestRehearsalOutcome) => {
+    if (!testRehearsalAvailable || !session.attemptId || busy) return;
+    setError(undefined);
+    setState("processing");
+    try {
+      const descriptor = await prepareV1TestRehearsal({
+        ...auth,
+        orderId: session.orderId,
+        paymentAttemptId: session.attemptId,
+        outcome,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      const result = await launchRazorpayTestUPI(session, customer, descriptor);
+      if (result.status !== "success") {
+        await recordProviderFailure(result.status, result.message);
+        return;
+      }
+      await finishProviderSuccess(result.completion);
+    } catch (rehearsalError) {
+      setState("retryable");
+      setError(rehearsalError instanceof Error ? rehearsalError.message : "Test payment rehearsal could not start.");
+    }
+  };
+
   const dismiss = async () => {
     if (state === "launching" || state === "processing") return;
     if ((state === "ready" || state === "awaiting_return" || state === "cancelled" || state === "retryable") && session.attemptId) {
@@ -184,8 +221,6 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     }
     onDismiss();
   };
-
-  const busy = ["loading", "launching", "processing"].includes(state);
 
   return <main className="v1-payment-options-page">
     <header className="v1-payment-options-header">
@@ -205,6 +240,15 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
     {state === "loading" ? <section className="v1-payment-method-loading" role="status">
       <span /><span /><span />
       <p>Checking available payment methods…</p>
+    </section> : null}
+
+    {testRehearsalAvailable ? <section className="v1-payment-test-rehearsal" aria-label="Owner Test payment rehearsal">
+      <header><span>TEST PAYMENT REHEARSAL</span><small>OWNER ONLY</small></header>
+      <p>Creates a genuine Razorpay Test payment result for this secured basket. No real money or UPI-app authorization occurs.</p>
+      <div>
+        <button type="button" onClick={() => void runTestRehearsal("SUCCESS")} disabled={busy}>Simulate success</button>
+        <button type="button" onClick={() => void runTestRehearsal("FAILURE")} disabled={busy}>Simulate failure</button>
+      </div>
     </section> : null}
 
     {upiAvailable ? <>

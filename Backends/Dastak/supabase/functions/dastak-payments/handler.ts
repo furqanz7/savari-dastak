@@ -24,12 +24,18 @@ export type PaymentCompletionInput = PaymentActionInput & {
   providerSignature: string;
 };
 
+export type PaymentTestRehearsalInput = PaymentActionInput & {
+  attemptId: string;
+  outcome: "SUCCESS" | "FAILURE";
+};
+
 export type DastakPaymentDependencies = {
   authenticateBearer: AuthenticateBearer;
   createCheckout: (input: PaymentActionInput) => Promise<RpcResult>;
   processRefund: (input: PaymentActionInput) => Promise<RpcResult>;
   reportPaymentFailure: (input: PaymentFailureInput) => Promise<RpcResult>;
   completeCustomCheckout: (input: PaymentCompletionInput) => Promise<RpcResult>;
+  prepareTestRehearsal: (input: PaymentTestRehearsalInput) => Promise<RpcResult>;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -72,6 +78,7 @@ export async function handleDastakPayments(
   const providerOrderId = validProviderReference(body.razorpay_order_id, "order");
   const providerPaymentId = validProviderReference(body.razorpay_payment_id, "pay");
   const providerSignature = validSignature(body.razorpay_signature);
+  const testOutcome = validTestOutcome(body.testOutcome);
   const normalized = {
     operation: body.operation,
     entityType,
@@ -81,6 +88,7 @@ export async function handleDastakPayments(
     ...(providerOrderId ? { providerOrderId } : {}),
     ...(providerPaymentId ? { providerPaymentId } : {}),
     ...(providerSignature ? { providerSignature } : {}),
+    ...(testOutcome ? { testOutcome } : {}),
     ...(refundId ? { refundId } : {}),
   };
   const input: PaymentActionInput = {
@@ -125,6 +133,17 @@ export async function handleDastakPayments(
       });
       return json(result.responseBody, result.responseStatus);
     }
+    if (
+      body.operation === "prepareTestRehearsal" && entityType === "dastak_v1_order" &&
+      attemptId && testOutcome
+    ) {
+      const result = await dependencies.prepareTestRehearsal({
+        ...input,
+        attemptId,
+        outcome: testOutcome,
+      });
+      return json(result.responseBody, result.responseStatus);
+    }
     return validationError();
   } catch {
     return json({
@@ -165,6 +184,10 @@ function validSignature(value: unknown) {
   return typeof value === "string" && /^[0-9a-f]{64}$/i.test(value)
     ? value.toLowerCase()
     : undefined;
+}
+
+function validTestOutcome(value: unknown): "SUCCESS" | "FAILURE" | undefined {
+  return value === "SUCCESS" || value === "FAILURE" ? value : undefined;
 }
 
 function requiredIdempotencyKey(request: Request) {

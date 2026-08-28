@@ -38,12 +38,44 @@ final class DastakCheckoutClientTests: XCTestCase {
         XCTAssertEqual(session.entityType, .dastakV1Order)
         XCTAssertEqual(session.attemptID, paymentAttemptID)
         XCTAssertEqual(session.providerMode, .test)
+        XCTAssertTrue(session.testRehearsalAvailable)
         let recordedCall = await functions.lastCall()
         let call = try XCTUnwrap(recordedCall)
         let request = try JSONDecoder().decode(CapturedCheckoutRequest.self, from: call.body)
         XCTAssertEqual(request.operation, "createCheckout")
         XCTAssertEqual(request.entityType, .dastakV1Order)
         XCTAssertEqual(request.orderId, orderID)
+    }
+
+    func testOwnerTestRehearsalSendsOnlyAttemptIdentityAndOutcome() async throws {
+        let functions = CheckoutRecordingFunctionClient()
+        let client = SupabaseDastakCheckoutClient(functions: functions)
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "test-rehearsal-success"))
+        let orderID = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+
+        let rehearsal = try await client.prepareV1TestRehearsal(
+            orderID: orderID,
+            attemptID: paymentAttemptID,
+            outcome: .success,
+            idempotencyKey: key
+        )
+
+        XCTAssertTrue(rehearsal.testRehearsal)
+        XCTAssertEqual(rehearsal.outcome, .success)
+        XCTAssertEqual(rehearsal.providerMode, .test)
+        XCTAssertEqual(rehearsal.testVPA, "success@razorpay")
+        let recordedCall = await functions.lastCall()
+        let call = try XCTUnwrap(recordedCall)
+        let request = try JSONDecoder().decode(CapturedCheckoutRequest.self, from: call.body)
+        XCTAssertEqual(request.operation, "prepareTestRehearsal")
+        XCTAssertEqual(request.entityType, .dastakV1Order)
+        XCTAssertEqual(request.orderId, orderID)
+        XCTAssertEqual(request.paymentAttemptId, paymentAttemptID)
+        XCTAssertEqual(request.testOutcome, .success)
+        let encoded = String(decoding: call.body, as: UTF8.self)
+        XCTAssertFalse(encoded.contains("amount"))
+        XCTAssertFalse(encoded.contains("providerOrderId"))
+        XCTAssertFalse(encoded.contains("testVpa"))
     }
 
     func testV1CheckoutFailureIsBoundToAttemptAndIdempotencyKey() async throws {
@@ -127,12 +159,14 @@ private struct CapturedCheckoutRequest: Decodable {
     let razorpayOrderID: String?
     let razorpayPaymentID: String?
     let razorpaySignature: String?
+    let testOutcome: DastakTestPaymentOutcome?
 
     private enum CodingKeys: String, CodingKey {
         case operation, entityType, orderId, parcelId, paymentAttemptId, failureCode
         case razorpayOrderID = "razorpay_order_id"
         case razorpayPaymentID = "razorpay_payment_id"
         case razorpaySignature = "razorpay_signature"
+        case testOutcome
     }
 }
 
@@ -170,6 +204,20 @@ private actor CheckoutRecordingFunctionClient: FunctionClient {
               "duplicate":false
             }
             """
+        } else if captured.operation == "prepareTestRehearsal" {
+            response = """
+            {
+              "testRehearsal":true,
+              "outcome":"SUCCESS",
+              "orderId":"11111111-1111-4111-8111-111111111111",
+              "paymentAttemptId":"\(paymentAttemptID)",
+              "providerMode":"TEST",
+              "providerOrderId":"order_test123",
+              "amountPaise":10000,
+              "currency":"INR",
+              "testVpa":"success@razorpay"
+            }
+            """
         } else {
             let v1Fields = captured.entityType == .dastakV1Order
                 ? "\"entityType\":\"dastak_v1_order\",\"attemptId\":\"\(paymentAttemptID)\",\"providerMode\":\"TEST\","
@@ -183,6 +231,7 @@ private actor CheckoutRecordingFunctionClient: FunctionClient {
               "amountPaise":10000,
               "currency":"INR",
               "receipt":"parcel-11111111"
+              ,"testRehearsalAvailable":true
             }
             """
         }

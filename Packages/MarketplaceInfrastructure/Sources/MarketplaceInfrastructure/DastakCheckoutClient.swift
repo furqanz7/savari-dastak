@@ -35,6 +35,7 @@ public struct DastakCheckoutSession: Codable, Equatable, Sendable {
     public let amountPaise: Int
     public let currency: String
     public let receipt: String
+    public let testRehearsalAvailable: Bool
 
     private enum CodingKeys: String, CodingKey {
         case orderID = "orderId"
@@ -46,6 +47,7 @@ public struct DastakCheckoutSession: Codable, Equatable, Sendable {
         case amountPaise
         case currency
         case receipt
+        case testRehearsalAvailable
     }
 
     // Older deployed payment responses did not include entityType. Keep those
@@ -76,6 +78,34 @@ public struct DastakCheckoutSession: Codable, Equatable, Sendable {
         amountPaise = try container.decode(Int.self, forKey: .amountPaise)
         currency = try container.decode(String.self, forKey: .currency)
         receipt = try container.decode(String.self, forKey: .receipt)
+        testRehearsalAvailable = try container.decodeIfPresent(Bool.self, forKey: .testRehearsalAvailable) ?? false
+    }
+}
+
+public enum DastakTestPaymentOutcome: String, Codable, Equatable, Sendable {
+    case success = "SUCCESS"
+    case failure = "FAILURE"
+}
+
+public struct DastakTestPaymentRehearsal: Codable, Equatable, Sendable {
+    public let testRehearsal: Bool
+    public let outcome: DastakTestPaymentOutcome
+    public let orderID: UUID
+    public let paymentAttemptID: UUID
+    public let providerMode: DastakRazorpayPaymentMode
+    public let providerOrderID: String
+    public let amountPaise: Int
+    public let currency: String
+    public let testVPA: String
+
+    private enum CodingKeys: String, CodingKey {
+        case testRehearsal, outcome
+        case orderID = "orderId"
+        case paymentAttemptID = "paymentAttemptId"
+        case providerMode
+        case providerOrderID = "providerOrderId"
+        case amountPaise, currency
+        case testVPA = "testVpa"
     }
 }
 
@@ -163,6 +193,13 @@ public protocol DastakCheckoutClient: Sendable {
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakCustomCheckoutCompletionResult
 
+    func prepareV1TestRehearsal(
+        orderID: UUID,
+        attemptID: UUID,
+        outcome: DastakTestPaymentOutcome,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakTestPaymentRehearsal
+
     func processMerchantOrderRefund(
         orderID: UUID,
         idempotencyKey: IdempotencyKey
@@ -185,12 +222,14 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
         let razorpayOrderID: String?
         let razorpayPaymentID: String?
         let razorpaySignature: String?
+        let testOutcome: DastakTestPaymentOutcome?
 
         private enum CodingKeys: String, CodingKey {
             case operation, entityType, orderId, parcelId, paymentAttemptId, failureCode
             case razorpayOrderID = "razorpay_order_id"
             case razorpayPaymentID = "razorpay_payment_id"
             case razorpaySignature = "razorpay_signature"
+            case testOutcome
         }
     }
 
@@ -214,7 +253,8 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 failureCode: nil,
                 razorpayOrderID: nil,
                 razorpayPaymentID: nil,
-                razorpaySignature: nil
+                razorpaySignature: nil,
+                testOutcome: nil
             ),
             key: idempotencyKey
         )
@@ -234,7 +274,8 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 failureCode: nil,
                 razorpayOrderID: nil,
                 razorpayPaymentID: nil,
-                razorpaySignature: nil
+                razorpaySignature: nil,
+                testOutcome: nil
             ),
             key: idempotencyKey
         )
@@ -254,7 +295,8 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 failureCode: nil,
                 razorpayOrderID: nil,
                 razorpayPaymentID: nil,
-                razorpaySignature: nil
+                razorpaySignature: nil,
+                testOutcome: nil
             ),
             key: idempotencyKey
         )
@@ -276,7 +318,8 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 failureCode: failureCode,
                 razorpayOrderID: nil,
                 razorpayPaymentID: nil,
-                razorpaySignature: nil
+                razorpaySignature: nil,
+                testOutcome: nil
             ),
             key: idempotencyKey
         )
@@ -300,7 +343,31 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 failureCode: nil,
                 razorpayOrderID: providerOrderID,
                 razorpayPaymentID: providerPaymentID,
-                razorpaySignature: providerSignature
+                razorpaySignature: providerSignature,
+                testOutcome: nil
+            ),
+            key: idempotencyKey
+        )
+    }
+
+    public func prepareV1TestRehearsal(
+        orderID: UUID,
+        attemptID: UUID,
+        outcome: DastakTestPaymentOutcome,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakTestPaymentRehearsal {
+        try await invoke(
+            Request(
+                operation: "prepareTestRehearsal",
+                entityType: .dastakV1Order,
+                orderId: orderID,
+                parcelId: nil,
+                paymentAttemptId: attemptID,
+                failureCode: nil,
+                razorpayOrderID: nil,
+                razorpayPaymentID: nil,
+                razorpaySignature: nil,
+                testOutcome: outcome
             ),
             key: idempotencyKey
         )
@@ -320,7 +387,8 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 failureCode: nil,
                 razorpayOrderID: nil,
                 razorpayPaymentID: nil,
-                razorpaySignature: nil
+                razorpaySignature: nil,
+                testOutcome: nil
             ),
             key: idempotencyKey
         )
@@ -340,7 +408,8 @@ public struct SupabaseDastakCheckoutClient: DastakCheckoutClient {
                 failureCode: nil,
                 razorpayOrderID: nil,
                 razorpayPaymentID: nil,
-                razorpaySignature: nil
+                razorpaySignature: nil,
+                testOutcome: nil
             ),
             key: idempotencyKey
         )

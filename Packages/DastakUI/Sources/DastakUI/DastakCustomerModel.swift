@@ -1243,6 +1243,24 @@ final class DastakCustomerModel: ObservableObject {
         )
     }
 
+    func prepareV1TestRehearsal(
+        session: DastakCheckoutSession,
+        outcome: DastakTestPaymentOutcome
+    ) async throws -> DastakTestPaymentRehearsal {
+        guard session.entityType == .dastakV1Order,
+              session.providerMode == .test,
+              session.testRehearsalAvailable,
+              let attemptID = session.attemptID else {
+            throw FunctionClientError.invalidResponse
+        }
+        return try await checkoutClient.prepareV1TestRehearsal(
+            orderID: session.orderID,
+            attemptID: attemptID,
+            outcome: outcome,
+            idempotencyKey: makeKey()
+        )
+    }
+
     func retryPayment(for parcel: CustomerParcelDelivery) async {
         guard parcel.audience == .sender,
               parcel.parcel.paymentStatus == .pending || parcel.parcel.paymentStatus == .failed,
