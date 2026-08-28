@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(31);
+select plan(44);
 
 select has_table('dastak_v1', 'payment_client_completions',
   'verified Custom Checkout returns have an immutable record');
@@ -23,6 +23,27 @@ select is(has_function_privilege('service_role',
 select is(has_function_privilege('service_role',
   'public.dastak_v1_custom_checkout_completion_context_mode(uuid,uuid,uuid,text)',
   'EXECUTE'), true, 'the payment Edge Function can load mode-isolated completion context');
+select is(has_table_privilege('service_role',
+  'dastak_v1.payment_attempts', 'SELECT'), true,
+  'the payment Edge Function retains its existing read-only attempt inspection');
+select is(has_table_privilege('service_role',
+  'dastak_v1.payment_attempts', 'UPDATE'), false,
+  'the payment Edge Function has no direct payment-attempt write privilege');
+select is(proc.prosecdef, true,
+  pg_catalog.format('%s executes through the audited provider boundary', proc.proname))
+from pg_catalog.pg_proc proc
+join pg_catalog.pg_namespace namespace on namespace.oid = proc.pronamespace
+where namespace.nspname = 'public'
+  and proc.proname in (
+    'dastak_v1_prepare_razorpay_checkout_mode',
+    'dastak_v1_attach_razorpay_order_mode',
+    'dastak_v1_custom_checkout_completion_context_mode',
+    'dastak_v1_record_custom_checkout_completion_mode',
+    'dastak_v1_prepare_razorpay_refund_mode',
+    'dastak_v1_attach_razorpay_refund_mode',
+    'dastak_v1_record_razorpay_event_mode'
+  )
+order by proc.proname;
 select has_trigger('dastak_v1', 'payment_client_completions',
   'payment_client_completions_immutable', 'completion evidence is append-only');
 
@@ -128,6 +149,58 @@ select is(
   2::bigint,
   'an idempotent retry does not advance the payment-attempt version again'
 );
+
+set local role service_role;
+select is(
+  set_config(
+    'test.checkout_attempt_id',
+    public.dastak_v1_prepare_razorpay_checkout_mode(
+      '97000000-0000-4000-8000-000000000001',
+      '97000000-0000-4000-8000-000000000010',
+      'fresh-test-mode-snapshot',
+      'TEST'
+    ) ->> 'attemptId',
+    true
+  ) is not null,
+  true,
+  'service_role can prepare the mode-isolated Test checkout without table grants'
+);
+select is(
+  public.dastak_v1_attach_razorpay_order_mode(
+    '97000000-0000-4000-8000-000000000001',
+    current_setting('test.checkout_attempt_id')::uuid,
+    'order_serviceRoleTest123',
+    7500,
+    'INR',
+    'TEST'
+  ) ->> 'providerOrderId',
+  'order_serviceRoleTest123',
+  'service_role can attach the authoritative Test provider order through the wrapper'
+);
+select is(
+  public.dastak_v1_custom_checkout_completion_context_mode(
+    '97000000-0000-4000-8000-000000000001',
+    '97000000-0000-4000-8000-000000000010',
+    current_setting('test.checkout_attempt_id')::uuid,
+    'TEST'
+  ) ->> 'providerMode',
+  'TEST',
+  'service_role can load the mode-isolated completion context through the wrapper'
+);
+select is(
+  (
+    select result.response_body #>> '{error,code}'
+    from public.dastak_v1_record_razorpay_event_mode(
+      'evt_service_role_missing', 'payment_captured',
+      'order_missing_service_role', 'pay_missing_service_role', null, 7500,
+      now(), repeat('5', 64), 'TEST'
+    ) result
+  ),
+  'payment_not_found',
+  'service_role can execute the mode-isolated webhook boundary without table grants'
+);
+reset role;
+
 select throws_ok($$
   select public.dastak_v1_prepare_razorpay_checkout_mode(
     '97000000-0000-4000-8000-000000000001',
