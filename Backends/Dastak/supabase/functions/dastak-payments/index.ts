@@ -13,6 +13,7 @@ import {
   type PaymentCompletionInput,
   type PaymentTestRehearsalInput,
 } from "./handler.ts";
+import { checkoutPreparationDiagnostic, checkoutPreparationError } from "./preparation.ts";
 import { prepareRazorpayTestRehearsal } from "./rehearsal.ts";
 import { sha256Hex, verifyRazorpayPaymentSignature } from "./verification.ts";
 
@@ -175,17 +176,32 @@ async function createCheckout(input: PaymentActionInput) {
   } catch (error) {
     return providerError(error);
   }
-  const prepared = input.entityType === "dastak_v1_order"
-    ? {
-      responseBody: await rpcJson("dastak_v1_prepare_razorpay_checkout_mode", {
-        p_account_id: input.accountId,
-        p_order_id: input.orderId,
-        p_idempotency_key: input.idempotencyKey,
-        p_provider_mode: paymentMode,
-      }),
-      responseStatus: 200,
+  let prepared;
+  if (input.entityType === "dastak_v1_order") {
+    try {
+      prepared = {
+        responseBody: await rpcJson("dastak_v1_prepare_razorpay_checkout_mode", {
+          p_account_id: input.accountId,
+          p_order_id: input.orderId,
+          p_idempotency_key: input.idempotencyKey,
+          p_provider_mode: paymentMode,
+        }),
+        responseStatus: 200,
+      };
+    } catch (error) {
+      const includeTestDiagnostic = paymentMode === "TEST" &&
+        await isActiveOwner(input.accountId).catch(() => false);
+      if (paymentMode === "TEST") {
+        console.error(JSON.stringify({
+          event: "razorpay_test_checkout_prepare_error",
+          paymentMode,
+          ...checkoutPreparationDiagnostic(error),
+        }));
+      }
+      return checkoutPreparationError(error, includeTestDiagnostic);
     }
-    : await rpc(
+  } else {
+    prepared = await rpc(
       input.entityType === "parcel"
         ? "prepare_parcel_razorpay_checkout"
         : "prepare_merchant_order_razorpay_checkout",
@@ -194,6 +210,7 @@ async function createCheckout(input: PaymentActionInput) {
         [input.entityType === "parcel" ? "p_parcel_id" : "p_order_id"]: input.orderId,
       },
     );
+  }
   if (prepared.responseStatus !== 200) return prepared;
 
   let details: ReturnType<typeof checkoutDetails> | undefined;
