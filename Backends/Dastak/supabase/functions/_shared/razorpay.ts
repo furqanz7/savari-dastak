@@ -31,6 +31,7 @@ export type RazorpayRefund = {
 };
 
 export type RazorpayErrorCategory =
+  | "CONFIGURATION_INVALID"
   | "AUTHENTICATION_FAILED"
   | "ACCOUNT_NOT_ACTIVATED"
   | "REQUEST_REJECTED"
@@ -62,22 +63,29 @@ export class RazorpayApiError extends Error {
 }
 
 export class RazorpayClient {
+  public readonly keyId: string;
   private readonly authorization: string;
 
   constructor(
-    public readonly keyId: string,
+    keyId: string,
     keySecret: string,
     public readonly paymentMode: RazorpayPaymentMode,
     private readonly fetcher: Fetcher = fetch,
   ) {
-    if (!/^rzp_(test|live)_[A-Za-z0-9]+$/.test(keyId) || keySecret.length < 8) {
-      throw new Error("Valid Razorpay credentials are required");
+    const normalizedKeyId = keyId.trim();
+    const normalizedKeySecret = keySecret.trim();
+    if (!/^rzp_(test|live)_[A-Za-z0-9]+$/.test(normalizedKeyId)) {
+      throw configurationError("KEY_ID_FORMAT_INVALID");
     }
-    const keyMode: RazorpayPaymentMode = keyId.startsWith("rzp_test_") ? "TEST" : "LIVE";
+    if (normalizedKeySecret.length < 8) {
+      throw configurationError("KEY_SECRET_FORMAT_INVALID");
+    }
+    const keyMode: RazorpayPaymentMode = normalizedKeyId.startsWith("rzp_test_") ? "TEST" : "LIVE";
     if (keyMode !== paymentMode) {
-      throw new Error("Razorpay credential mode does not match the configured payment mode");
+      throw configurationError("KEY_MODE_MISMATCH");
     }
-    this.authorization = `Basic ${btoa(`${keyId}:${keySecret}`)}`;
+    this.keyId = normalizedKeyId;
+    this.authorization = `Basic ${btoa(`${normalizedKeyId}:${normalizedKeySecret}`)}`;
   }
 
   async resolveOrder(
@@ -196,6 +204,14 @@ export class RazorpayClient {
     }
     return payload;
   }
+}
+
+function configurationError(code: string) {
+  return new RazorpayApiError(503, {
+    category: "CONFIGURATION_INVALID",
+    httpStatus: 503,
+    code,
+  });
 }
 
 export { RazorpayClient as RazorpayTestClient };

@@ -531,6 +531,8 @@ function logRazorpayTestProviderError(error: unknown) {
 
 function razorpayTestDiagnosticMessage(category: string) {
   switch (category) {
+    case "CONFIGURATION_INVALID":
+      return "Razorpay Test credentials are structurally invalid or do not match Test mode. Install the regenerated Test key pair together.";
     case "AUTHENTICATION_FAILED":
       return "Razorpay Test rejected the installed Test key pair. Install a matching regenerated Test key ID and Test key secret.";
     case "ACCOUNT_NOT_ACTIVATED":

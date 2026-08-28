@@ -13,6 +13,47 @@ Deno.test("Razorpay client accepts test and live credentials", () => {
   assertThrows(() => new RazorpayTestClient("invalid_public", "live-secret", "LIVE"));
 });
 
+Deno.test("Razorpay client normalizes surrounding credential whitespace", async () => {
+  let authorization = "";
+  const client = new RazorpayTestClient(
+    "  rzp_test_public\n",
+    "  sandbox-secret\n",
+    "TEST",
+    (_input, init) => {
+      authorization = new Headers(init?.headers).get("authorization") ?? "";
+      return Promise.resolve(json({ entity: "collection", items: [order] }));
+    },
+  );
+
+  await client.resolveOrder({ amountPaise: 8_800, currency: "INR", receipt, orderId });
+
+  assertEquals(client.keyId, "rzp_test_public");
+  assertEquals(authorization, `Basic ${btoa("rzp_test_public:sandbox-secret")}`);
+});
+
+Deno.test("Razorpay credential diagnostics expose structure but never values", () => {
+  const invalidId = assertThrows(
+    () => new RazorpayTestClient("invalid_public", "sensitive-secret", "TEST"),
+    RazorpayApiError,
+  ) as RazorpayApiError;
+  assertEquals(invalidId.diagnostic, {
+    category: "CONFIGURATION_INVALID",
+    httpStatus: 503,
+    code: "KEY_ID_FORMAT_INVALID",
+  });
+
+  const mismatchedMode = assertThrows(
+    () => new RazorpayTestClient("rzp_live_public", "sensitive-secret", "TEST"),
+    RazorpayApiError,
+  ) as RazorpayApiError;
+  assertEquals(mismatchedMode.diagnostic, {
+    category: "CONFIGURATION_INVALID",
+    httpStatus: 503,
+    code: "KEY_MODE_MISMATCH",
+  });
+  assertEquals(JSON.stringify([invalidId, mismatchedMode]).includes("sensitive-secret"), false);
+});
+
 Deno.test("Razorpay Test Mode cannot invoke dormant legacy payment paths", () => {
   assertEquals(razorpayModeForEntity("TEST", "dastak_v1_order"), "TEST");
   assertEquals(razorpayModeForEntity("LIVE", "dastak_v1_order"), "LIVE");
