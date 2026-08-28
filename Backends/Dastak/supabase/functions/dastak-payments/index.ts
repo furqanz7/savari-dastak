@@ -266,7 +266,10 @@ async function createCheckout(input: PaymentActionInput) {
         p_failure_code: "PROVIDER_CHECKOUT_UNAVAILABLE",
       }).catch(() => undefined);
     }
-    return providerError(error);
+    if (paymentMode === "TEST") logRazorpayTestProviderError(error);
+    const includeTestDiagnostic = paymentMode === "TEST" &&
+      await isActiveOwner(input.accountId).catch(() => false);
+    return providerError(error, includeTestDiagnostic);
   }
 }
 
@@ -479,19 +482,53 @@ function paymentMode(value: unknown): RazorpayPaymentMode | undefined {
   return value === "TEST" || value === "LIVE" ? value : undefined;
 }
 
-function providerError(error: unknown) {
+function providerError(error: unknown, includeTestDiagnostic = false) {
   const status = error instanceof RazorpayApiError && error.status === 409 ? 409 : 503;
+  const diagnostic = error instanceof RazorpayApiError ? error.diagnostic : undefined;
   return {
     responseBody: {
       error: {
         code: status === 409 ? "provider_reference_conflict" : "payment_provider_unavailable",
-        message: status === 409
+        message: includeTestDiagnostic && diagnostic
+          ? razorpayTestDiagnosticMessage(diagnostic.category)
+          : status === 409
           ? "The payment provider returned conflicting order details."
           : "Razorpay checkout is not configured or is temporarily unavailable.",
+        ...(includeTestDiagnostic && diagnostic ? { testDiagnostic: diagnostic } : {}),
       },
     },
     responseStatus: status,
   };
+}
+
+function logRazorpayTestProviderError(error: unknown) {
+  const diagnostic = error instanceof RazorpayApiError
+    ? error.diagnostic
+    : { category: "UNKNOWN_PROVIDER_FAILURE", httpStatus: 503 };
+  console.error(JSON.stringify({
+    event: "razorpay_test_provider_error",
+    paymentMode: "TEST",
+    ...diagnostic,
+  }));
+}
+
+function razorpayTestDiagnosticMessage(category: string) {
+  switch (category) {
+    case "AUTHENTICATION_FAILED":
+      return "Razorpay Test rejected the installed Test key pair. Install a matching regenerated Test key ID and Test key secret.";
+    case "ACCOUNT_NOT_ACTIVATED":
+      return "Razorpay Test accepted authentication but this Test account is not enabled for the requested order operation.";
+    case "REQUEST_REJECTED":
+      return "Razorpay Test rejected the server-created order request. Review the Test provider diagnostic before retrying.";
+    case "NETWORK_FAILURE":
+      return "Dastak could not reach Razorpay Test. No provider payment was created; retry when connectivity is restored.";
+    case "INVALID_PROVIDER_RESPONSE":
+      return "Razorpay Test returned an invalid order response. No provider payment was created.";
+    case "REFERENCE_CONFLICT":
+      return "Razorpay Test returned conflicting order details for this payment attempt.";
+    default:
+      return "Razorpay Test could not create the provider order. No provider payment was created.";
+  }
 }
 
 function providerConflict() {

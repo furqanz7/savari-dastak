@@ -30,8 +30,32 @@ export type RazorpayRefund = {
   status: "pending" | "processed";
 };
 
+export type RazorpayErrorCategory =
+  | "AUTHENTICATION_FAILED"
+  | "ACCOUNT_NOT_ACTIVATED"
+  | "REQUEST_REJECTED"
+  | "NETWORK_FAILURE"
+  | "INVALID_PROVIDER_RESPONSE"
+  | "REFERENCE_CONFLICT"
+  | "UNKNOWN_PROVIDER_FAILURE";
+
+export type RazorpaySafeDiagnostic = {
+  category: RazorpayErrorCategory;
+  httpStatus: number;
+  code?: string;
+  source?: string;
+  step?: string;
+  reason?: string;
+};
+
 export class RazorpayApiError extends Error {
-  constructor(public readonly status: number) {
+  constructor(
+    public readonly status: number,
+    public readonly diagnostic: RazorpaySafeDiagnostic = {
+      category: status === 409 ? "REFERENCE_CONFLICT" : "UNKNOWN_PROVIDER_FAILURE",
+      httpStatus: status,
+    },
+  ) {
     super("Razorpay API request failed");
     this.name = "RazorpayApiError";
   }
@@ -152,10 +176,24 @@ export class RazorpayClient {
         },
       });
     } catch {
-      throw new RazorpayApiError(502);
+      throw new RazorpayApiError(502, {
+        category: "NETWORK_FAILURE",
+        httpStatus: 502,
+      });
     }
     const payload = await response.json().catch(() => undefined);
-    if (!response.ok || payload === undefined) throw new RazorpayApiError(response.status || 502);
+    if (!response.ok) {
+      throw new RazorpayApiError(
+        response.status || 502,
+        safeRazorpayDiagnostic(response.status || 502, payload),
+      );
+    }
+    if (payload === undefined) {
+      throw new RazorpayApiError(502, {
+        category: "INVALID_PROVIDER_RESPONSE",
+        httpStatus: 502,
+      });
+    }
     return payload;
   }
 }
@@ -225,4 +263,47 @@ function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined;
+}
+
+export function safeRazorpayDiagnostic(
+  status: number,
+  payload: unknown,
+): RazorpaySafeDiagnostic {
+  const error = record(record(payload)?.error);
+  const code = safeDiagnosticToken(error?.code);
+  const source = safeDiagnosticToken(error?.source);
+  const step = safeDiagnosticToken(error?.step);
+  const reason = safeDiagnosticToken(error?.reason);
+  const description = typeof error?.description === "string" ? error.description.toLowerCase() : "";
+  let category: RazorpayErrorCategory;
+  if (
+    status === 401 || status === 403 || code === "AUTHENTICATION_FAILED" ||
+    description.includes("authentication") || description.includes("authenticate") ||
+    description.includes("invalid key")
+  ) {
+    category = "AUTHENTICATION_FAILED";
+  } else if (
+    description.includes("not activated") || description.includes("not enabled") ||
+    reason === "ACCOUNT_NOT_ACTIVATED"
+  ) {
+    category = "ACCOUNT_NOT_ACTIVATED";
+  } else if (status >= 400 && status < 500) {
+    category = "REQUEST_REJECTED";
+  } else {
+    category = "UNKNOWN_PROVIDER_FAILURE";
+  }
+  return {
+    category,
+    httpStatus: status,
+    ...(code ? { code } : {}),
+    ...(source ? { source } : {}),
+    ...(step ? { step } : {}),
+    ...(reason ? { reason } : {}),
+  };
+}
+
+function safeDiagnosticToken(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toUpperCase().replace(/[^A-Z0-9_.-]+/g, "_");
+  return normalized.length >= 1 && normalized.length <= 80 ? normalized : undefined;
 }

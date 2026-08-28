@@ -65,6 +65,69 @@ Deno.test("Razorpay recovery rejects an order with a different amount", async ()
   );
 });
 
+Deno.test("Razorpay provider errors expose only an allowlisted authentication diagnostic", async () => {
+  const client = new RazorpayTestClient(
+    "rzp_test_public",
+    "sandbox-secret",
+    "TEST",
+    () =>
+      Promise.resolve(json({
+        error: {
+          code: "BAD_REQUEST_ERROR",
+          description: "Authentication failed: sensitive-provider-detail",
+          source: "business",
+          step: "payment_initiation",
+          reason: "invalid key",
+        },
+      }, 401)),
+  );
+
+  const caught = await assertRejects(
+    () => client.resolveOrder({ amountPaise: 8_800, currency: "INR", receipt, orderId }),
+    RazorpayApiError,
+  ) as RazorpayApiError;
+  assertEquals(caught.status, 401);
+  assertEquals(caught.diagnostic, {
+    category: "AUTHENTICATION_FAILED",
+    httpStatus: 401,
+    code: "BAD_REQUEST_ERROR",
+    source: "BUSINESS",
+    step: "PAYMENT_INITIATION",
+    reason: "INVALID_KEY",
+  });
+  assertEquals(caught.message, "Razorpay API request failed");
+  assertEquals(JSON.stringify(caught).includes("sensitive-provider-detail"), false);
+});
+
+Deno.test("Razorpay provider diagnostics classify network and malformed responses safely", async () => {
+  const offline = new RazorpayTestClient(
+    "rzp_test_public",
+    "sandbox-secret",
+    "TEST",
+    () => Promise.reject(new Error("network secret detail")),
+  );
+  const networkError = await assertRejects(
+    () => offline.resolveOrder({ amountPaise: 8_800, currency: "INR", receipt, orderId }),
+    RazorpayApiError,
+  ) as RazorpayApiError;
+  assertEquals(networkError.diagnostic, { category: "NETWORK_FAILURE", httpStatus: 502 });
+
+  const malformed = new RazorpayTestClient(
+    "rzp_test_public",
+    "sandbox-secret",
+    "TEST",
+    () => Promise.resolve(new Response("not-json", { status: 200 })),
+  );
+  const responseError = await assertRejects(
+    () => malformed.resolveOrder({ amountPaise: 8_800, currency: "INR", receipt, orderId }),
+    RazorpayApiError,
+  ) as RazorpayApiError;
+  assertEquals(responseError.diagnostic, {
+    category: "INVALID_PROVIDER_RESPONSE",
+    httpStatus: 502,
+  });
+});
+
 const orderId = "8a000000-0000-4000-8000-000000000080";
 const receipt = "dst_8a000000000040008000000000000080";
 const order = {
