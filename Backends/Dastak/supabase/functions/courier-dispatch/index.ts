@@ -8,6 +8,7 @@ import {
   handleCourierDispatch,
   type V1DeliveryMissionMutationInput,
   type V1FinalDeliveryMutationInput,
+  type V1LaunchCollectionInput,
   type V1ReturnMissionMutationInput,
   type V1RiderHeartbeatInput,
   type V1RiderOfferDeclineInput,
@@ -34,6 +35,7 @@ Deno.serve((request) =>
     heartbeatV1Mission,
     advanceV1Mission,
     advanceV1FinalDelivery,
+    recordV1LaunchCollection,
     advanceV1ReturnMission,
   })
 );
@@ -108,6 +110,24 @@ async function advanceV1FinalDelivery(input: V1FinalDeliveryMutationInput) {
   });
   if (error) throw error;
   return rpcResponse(data, "dastak_v1_advance_final_delivery");
+}
+
+async function recordV1LaunchCollection(input: V1LaunchCollectionInput) {
+  const { data, error } = await serviceClient.rpc(
+    "dastak_v1_record_launch_payment_collection",
+    {
+      p_account_id: input.accountId,
+      p_mission_id: input.missionId,
+      p_outcome: input.outcome,
+      p_method: input.method,
+      p_collection_reference: input.collectionReference,
+      p_failure_reason: input.failureReason,
+      p_expected_mission_version: input.expectedMissionVersion,
+      p_idempotency_key: input.idempotencyKey,
+    },
+  );
+  if (error) throw error;
+  return rpcResponse(data, "dastak_v1_record_launch_payment_collection");
 }
 
 async function advanceV1ReturnMission(input: V1ReturnMissionMutationInput) {

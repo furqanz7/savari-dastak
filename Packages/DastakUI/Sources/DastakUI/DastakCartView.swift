@@ -69,7 +69,7 @@ struct DastakCartView: View {
     private var securityPromise: some View {
         Label {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Matched before payment")
+                Text("Matched before confirmation")
                     .font(.subheadline.weight(.semibold))
                 Text("Dastak secures your complete basket first. You are not charged at submission.")
                     .font(.footnote)

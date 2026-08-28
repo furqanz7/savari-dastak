@@ -1184,21 +1184,24 @@ final class DastakCustomerModel: ObservableObject {
 
     func retryPayment(for order: DastakV1OrderSnapshot) async -> Bool {
         guard order.status == .awaitingPayment,
-              order.payment?.canAttempt == true,
+              order.launchPayment?.canCommit == true,
               !isCheckingOut else { return false }
         isCheckingOut = true
         defer { isCheckingOut = false }
         do {
-            checkoutSession = try await checkoutClient.createV1OrderCheckout(
-                orderID: order.id,
+            let committed = try await v1Client.commitLaunchPayment(
+                id: order.id,
+                expectedVersion: order.version,
                 idempotencyKey: makeKey()
             )
+            activeV1Order = committed
+            v1Orders = [committed] + v1Orders.filter { $0.id != committed.id }
             v1OrderErrorMessage = nil
             return true
         } catch {
             v1OrderErrorMessage = message(
                 for: error,
-                fallback: "Secure payment could not be started. Your reservation is unchanged."
+                fallback: "Your order could not be confirmed. The secured reservation is unchanged; try again before it expires."
             )
             return false
         }

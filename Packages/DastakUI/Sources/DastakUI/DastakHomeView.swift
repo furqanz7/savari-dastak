@@ -571,7 +571,7 @@ struct DastakRestaurantMenuView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Exact restaurant confirmation")
                                 .font(.subheadline.weight(.semibold))
-                            Text("Dastak never silently reroutes your food. Payment starts only after the whole basket is secured.")
+                            Text("Dastak never silently reroutes your food. Confirm only after the whole basket is secured, then pay the rider at delivery.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }

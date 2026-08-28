@@ -175,6 +175,28 @@ export type V1Order = {
       succeededAt?: string;
     };
   };
+  launchPayment?: {
+    optionLabel: "Pay via UPI/Cash on Delivery";
+    state:
+      | "READY_TO_CONFIRM"
+      | "PAYMENT_DUE_AT_DELIVERY"
+      | "COLLECTION_RETRY_NEEDED"
+      | "PAYMENT_COLLECTED"
+      | "RESERVATION_EXPIRED"
+      | "NOT_APPLICABLE";
+    amountPaise?: number;
+    currencyCode?: "INR";
+    securedAt?: string;
+    reservationExpiresAt?: string;
+    reservationSecondsRemaining: number;
+    reservationState: "ACTIVE" | "COMMITTED" | "EXPIRED";
+    committedAt?: string;
+    collectedAt?: string;
+    collectionMethod?: "CASH" | "UPI";
+    canCommit: boolean;
+    noChargeNow: boolean;
+    payAtDoorstep: true;
+  };
   delivery?: {
     state: "ON_THE_WAY" | "DELIVERED";
     verificationStatus: "ACTIVE" | "BLOCKED" | "CONSUMED" | "OVERRIDDEN";
@@ -430,6 +452,7 @@ export type V1AdminExecutionTrace = {
   plans: Record<string, unknown>[];
   capacity: Record<string, unknown>[];
   payment?: Record<string, unknown>;
+  launchPayment?: Record<string, unknown>;
   reconciliationCases: Record<string, unknown>[];
   preparation?: {
     riderMatchEligibility: Record<string, unknown>;
@@ -653,6 +676,22 @@ export async function cancelV1Order(
 ) {
   return parseV1Order(await invoke(input, "dastak-v1-orders", {
     operation: "cancel", orderId: requiredUuid(input.orderId), expectedVersion: input.expectedVersion,
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function commitV1LaunchPayment(
+  input: DastakV1Auth & {
+    orderId: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return parseV1Order(await invoke(input, "dastak-v1-orders", {
+    operation: "commitLaunchPayment",
+    orderId: requiredUuid(input.orderId),
+    expectedVersion: input.expectedVersion,
   }, input.idempotencyKey, fetcher));
 }
 
@@ -1107,6 +1146,9 @@ export async function getV1AdminExecutionTrace(
   const payment = source.payment === null || source.payment === undefined
     ? undefined
     : record(source.payment);
+  const launchPayment = source.launchPayment === null || source.launchPayment === undefined
+    ? undefined
+    : record(source.launchPayment);
   const preparation = source.preparation === null || source.preparation === undefined
     ? undefined
     : record(source.preparation);
@@ -1125,6 +1167,7 @@ export async function getV1AdminExecutionTrace(
     !Array.isArray(source.plans) || !Array.isArray(source.capacity) ||
     !Array.isArray(source.reconciliationCases) ||
     (source.payment !== null && source.payment !== undefined && !payment) ||
+    (source.launchPayment !== null && source.launchPayment !== undefined && !launchPayment) ||
     (source.preparation !== null && source.preparation !== undefined && !preparation) ||
     (source.delivery !== null && source.delivery !== undefined && !delivery) ||
     (source.restaurant !== null && source.restaurant !== undefined && !restaurant) ||
@@ -1167,6 +1210,7 @@ export async function getV1AdminExecutionTrace(
     plans: source.plans.map(requiredRecord),
     capacity: source.capacity.map(requiredRecord),
     payment,
+    launchPayment,
     reconciliationCases: source.reconciliationCases.map(requiredRecord),
     preparation: preparation ? {
       riderMatchEligibility: requiredRecord(preparation.riderMatchEligibility),
@@ -1594,6 +1638,9 @@ export function parseV1Order(value: unknown): V1Order {
     payment: source.payment === null || source.payment === undefined
       ? undefined
       : parseOrderPayment(source.payment),
+    launchPayment: source.launchPayment === null || source.launchPayment === undefined
+      ? undefined
+      : parseLaunchPayment(source.launchPayment),
     delivery: delivery ? parseOrderDelivery(delivery) : undefined,
     support: support ? parseOrderSupport(support) : undefined,
     restaurant: restaurant ? {
@@ -1757,6 +1804,44 @@ function parseOrderPayment(value: unknown): NonNullable<V1Order["payment"]> {
         succeededAt: optionalTimestamp(latest.succeededAt),
       }
       : undefined,
+  };
+}
+
+function parseLaunchPayment(value: unknown): NonNullable<V1Order["launchPayment"]> {
+  const source = requiredRecord(value);
+  const optionLabel = requiredText(source.optionLabel, 80);
+  if (optionLabel !== "Pay via UPI/Cash on Delivery") invalid("launch payment option");
+  const state = requiredText(source.state, 60);
+  if (!["READY_TO_CONFIRM", "PAYMENT_DUE_AT_DELIVERY", "COLLECTION_RETRY_NEEDED",
+    "PAYMENT_COLLECTED", "RESERVATION_EXPIRED", "NOT_APPLICABLE"].includes(state)) {
+    invalid("launch payment state");
+  }
+  const reservationState = requiredText(source.reservationState, 30);
+  if (!["ACTIVE", "COMMITTED", "EXPIRED"].includes(reservationState)) {
+    invalid("launch reservation state");
+  }
+  const collectionMethod = optionalText(source.collectionMethod, 10);
+  if (collectionMethod !== undefined && collectionMethod !== "CASH" && collectionMethod !== "UPI") {
+    invalid("launch collection method");
+  }
+  const payAtDoorstep = requiredBoolean(source.payAtDoorstep);
+  if (!payAtDoorstep) invalid("launch payment authority");
+  return {
+    optionLabel,
+    state: state as NonNullable<V1Order["launchPayment"]>["state"],
+    amountPaise: optionalInteger(source.amountPaise, 1),
+    currencyCode: source.currencyCode === null || source.currencyCode === undefined
+      ? undefined : currency(source.currencyCode),
+    securedAt: optionalTimestamp(source.securedAt),
+    reservationExpiresAt: optionalTimestamp(source.reservationExpiresAt),
+    reservationSecondsRemaining: requiredInteger(source.reservationSecondsRemaining, 0),
+    reservationState: reservationState as NonNullable<V1Order["launchPayment"]>["reservationState"],
+    committedAt: optionalTimestamp(source.committedAt),
+    collectedAt: optionalTimestamp(source.collectedAt),
+    collectionMethod: collectionMethod as NonNullable<V1Order["launchPayment"]>["collectionMethod"],
+    canCommit: requiredBoolean(source.canCommit),
+    noChargeNow: requiredBoolean(source.noChargeNow),
+    payAtDoorstep: true,
   };
 }
 

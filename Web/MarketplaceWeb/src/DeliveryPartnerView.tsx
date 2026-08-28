@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Bike, Camera, Check, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, WalletCards, X } from "lucide-react";
+import { Banknote, Bike, Camera, Check, CircleAlert, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, WalletCards, X } from "lucide-react";
 import {
   acceptV1DeliveryOffer,
   acceptDeliveryOffer,
@@ -14,6 +14,7 @@ import {
   getV1DeliveryDispatch,
   heartbeatV1DeliveryMission,
   publishDeliveryPartnerLocation,
+  recordV1LaunchCollection,
   setDeliveryPartnerAvailability,
   uploadV1DeliveryEvidence,
   uploadV1ReturnEvidence,
@@ -322,6 +323,40 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     }
   };
 
+  const runV1Collection = async (
+    mission: V1DeliveryMission,
+    input: {
+      outcome: "COLLECTED" | "FAILED";
+      method: "CASH" | "UPI";
+      collectionReference?: string;
+      failureReason?: string;
+    },
+  ) => {
+    const requestIdentity = `v1:collection:${mission.id}:${input.outcome}:${input.method}`;
+    const idempotencyKey = actionKeys.current.get(requestIdentity) ?? crypto.randomUUID();
+    actionKeys.current.set(requestIdentity, idempotencyKey);
+    setBusy(requestIdentity);
+    setError(undefined);
+    try {
+      const snapshot = await recordV1LaunchCollection({
+        ...auth,
+        missionId: mission.id,
+        expectedMissionVersion: mission.version,
+        idempotencyKey,
+        ...input,
+      });
+      actionKeys.current.delete(requestIdentity);
+      setV1Dispatch(snapshot);
+      setNotice(input.outcome === "COLLECTED"
+        ? "Payment collected and recorded. Complete the customer delivery verification."
+        : "Collection attempt recorded. Keep the order secure and retry before delivery.");
+    } catch (actionError) {
+      setError(message(actionError));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
   const runV1ReturnAction = async (
     mission: V1ReturnMission,
     operation: V1ReturnMissionOperation,
@@ -480,6 +515,8 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
                 void runV1MissionAction(v1Dispatch.currentMission!, operation, options)}
               onCaptureEvidence={(file) =>
                 void captureV1DeliveryEvidence(v1Dispatch.currentMission!, file)}
+              onCollection={(input) =>
+                void runV1Collection(v1Dispatch.currentMission!, input)}
             />
           )}
 
@@ -643,6 +680,7 @@ function CurrentV1Mission({
   busy,
   onAction,
   onCaptureEvidence,
+  onCollection,
 }: {
   mission: V1DeliveryMission;
   busy: boolean;
@@ -657,13 +695,28 @@ function CurrentV1Mission({
     },
   ) => void;
   onCaptureEvidence: (file: File) => void;
+  onCollection: (input: {
+    outcome: "COLLECTED" | "FAILED";
+    method: "CASH" | "UPI";
+    collectionReference?: string;
+    failureReason?: string;
+  }) => void;
 }) {
   const completed = mission.pickupStops.filter((stop) => stop.status === "COMPLETED").length;
   const [deliveryCode, setDeliveryCode] = useState("");
+  const [collectionMethod, setCollectionMethod] = useState<"CASH" | "UPI">("CASH");
+  const [collectionReference, setCollectionReference] = useState("");
+  const [collectionFailureReason, setCollectionFailureReason] = useState("");
+  const collection = mission.launchCollection;
+  const collectionSatisfied = !collection?.required || collection.state === "PAYMENT_COLLECTED";
   const finalStage = ["ALL_PACKAGES_PICKED_UP", "OUT_FOR_DELIVERY", "ARRIVED"].includes(
     mission.status,
   );
-  useEffect(() => setDeliveryCode(""), [mission.id, mission.status]);
+  useEffect(() => {
+    setDeliveryCode("");
+    setCollectionReference("");
+    setCollectionFailureReason("");
+  }, [mission.id, mission.status, collection?.state]);
   return (
     <section className="current-delivery v1-delivery-card" aria-label="Active Dastak order mission">
       <header>
@@ -736,7 +789,21 @@ function CurrentV1Mission({
               <MapPin size={18} /> I’ve arrived
             </button>
           )}
-          {mission.canCaptureDeliveryEvidence && !mission.finalVerification?.evidencePresent && (
+          {collection && collection.state !== "NOT_REQUIRED" && (
+            <section className={`v1-doorstep-collection ${collection.state === "COLLECTION_RETRY_NEEDED" ? "retry" : ""}`} aria-labelledby="doorstep-collection-title">
+              <header><span><Banknote size={21} /></span><div><small>AUTHORITATIVE AMOUNT DUE</small><h3 id="doorstep-collection-title">{formatPrice(collection.amountPaise ?? 0)}</h3></div><b>{collection.state === "PAYMENT_COLLECTED" ? "COLLECTED" : "PAY AT DELIVERY"}</b></header>
+              {collection.state === "PAYMENT_COLLECTED" ? <p className="delivery-notice" role="status"><Check size={18} /> Payment collected by {collection.lastMethod === "CASH" ? "cash" : "UPI"}. Delivery verification is unlocked.</p> : mission.status !== "ARRIVED" ? <p>Collection unlocks after you arrive at the customer. Never collect before complete package custody.</p> : <>
+                {collection.state === "COLLECTION_RETRY_NEEDED" ? <p className="order-error" role="status"><CircleAlert size={17} /> The last collection failed{collection.failureReason ? `: ${collection.failureReason}` : "."} Keep every package secure and retry.</p> : <p>Ask the recipient whether they are paying by cash or UPI, then record the actual result.</p>}
+                <div className="v1-collection-methods" role="group" aria-label="Actual payment method">
+                  {collection.methods.map((method) => <button type="button" key={method} aria-pressed={collectionMethod === method} disabled={busy} onClick={() => setCollectionMethod(method)}>{method === "CASH" ? <Banknote size={18} /> : <WalletCards size={18} />}{method === "CASH" ? "Cash" : "UPI"}</button>)}
+                </div>
+                {collectionMethod === "UPI" ? <label className="handoff-input">UPI reference (optional)<input value={collectionReference} maxLength={200} autoComplete="off" placeholder="Recipient reference" onChange={(event) => setCollectionReference(event.target.value)} /></label> : null}
+                <label className="handoff-input">If collection fails, add a reason<textarea value={collectionFailureReason} maxLength={500} rows={2} placeholder="For example, recipient could not complete payment" onChange={(event) => setCollectionFailureReason(event.target.value)} /></label>
+                <div className="v1-collection-actions"><button className="secondary-button" type="button" disabled={busy || collectionFailureReason.trim().length < 3 || !collection.canRecord} onClick={() => onCollection({ outcome: "FAILED", method: collectionMethod, collectionReference: collectionReference || undefined, failureReason: collectionFailureReason.trim() })}>Couldn’t collect</button><button className="primary-button" type="button" disabled={busy || !collection.canRecord} onClick={() => onCollection({ outcome: "COLLECTED", method: collectionMethod, collectionReference: collectionReference || undefined })}><Check size={18} /> Record collected</button></div>
+              </>}
+            </section>
+          )}
+          {mission.canCaptureDeliveryEvidence && collectionSatisfied && !mission.finalVerification?.evidencePresent && (
             <label className="v1-delivery-photo">
               <Camera size={20} />
               <span><strong>Capture package photo</strong><small>Required before customer handoff</small></span>
@@ -756,7 +823,7 @@ function CurrentV1Mission({
           {mission.finalVerification?.evidencePresent && (
             <p className="delivery-notice" role="status"><Check size={18} /> Package photo secured.</p>
           )}
-          {mission.canVerifyDelivery && (
+          {mission.canVerifyDelivery && collectionSatisfied && (
             <div className="v1-pickup-verification">
               <label className="handoff-input">
                 Customer delivery code
@@ -780,6 +847,9 @@ function CurrentV1Mission({
                 <PackageCheck size={18} /> Verify handoff
               </button>
             </div>
+          )}
+          {mission.status === "ARRIVED" && !collectionSatisfied && (
+            <p className="delivery-notice" role="status"><CircleAlert size={18} /> Record the doorstep collection before taking the delivery photo or asking for the customer code.</p>
           )}
           {mission.finalVerification?.status === "BLOCKED" && (
             <p className="order-error" role="alert">Normal code attempts are blocked. Keep the packages secure and report the problem to Operations.</p>

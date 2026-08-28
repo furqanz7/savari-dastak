@@ -84,6 +84,7 @@ function Trace({ trace, auth, onChanged }: {
   onChanged: () => void;
 }) {
   const paymentStatus = text(trace.payment, "status") ?? "NOT OPEN";
+  const launchStatus = text(trace.launchPayment, "collectionStatus");
   const paymentAttempts = array(trace.payment, "attempts").length;
   const providerEvents = array(trace.payment, "providerEvents").length;
   const preparation = trace.preparation;
@@ -96,7 +97,7 @@ function Trace({ trace, auth, onChanged }: {
       <TraceMetric icon={<Clock3 size={17} />} label="Attempts" value={String(trace.matchingAttempts.length)} />
       <TraceMetric icon={<Route size={17} />} label="Plans" value={String(trace.plans.length)} />
       <TraceMetric icon={<ShieldCheck size={17} />} label="Secured" value={trace.order.fullySecuredAt ? "YES" : "NO"} />
-      <TraceMetric icon={<WalletCards size={17} />} label="Payment" value={paymentStatus} />
+      <TraceMetric icon={<WalletCards size={17} />} label="Payment" value={launchStatus ?? paymentStatus} />
     </div>
     <TraceSection title="Wave 1 / Wave 2">
       {trace.matchingAttempts.length === 0 ? <p>Not started.</p> : trace.matchingAttempts.map((attempt, index) => <article key={text(attempt, "id") ?? index}><strong>{text(attempt, "wave") ?? "Attempt"} · {text(attempt, "status") ?? "UNKNOWN"}</strong><span>{array(attempt, "opportunities").length} opportunities · expires {formatOptional(text(attempt, "expiresAt"))}</span></article>)}
@@ -121,6 +122,7 @@ function Trace({ trace, auth, onChanged }: {
     <TraceSection title="Payment reservation">
       <p>{paymentStatus} · {paymentAttempts} attempts · {providerEvents} provider events{trace.payment ? ` · expires ${formatOptional(text(trace.payment, "expiresAt"))}` : ""}</p>
     </TraceSection>
+    {trace.launchPayment ? <LaunchPaymentTrace launchPayment={trace.launchPayment} /> : null}
     <TraceSection title="Preparation clocks">
       {!preparation || preparation.fulfilments.length === 0 ? <p>Payment-confirmed preparation has not started.</p> : preparation.fulfilments.map((fulfilment, index) => {
         const capacity = object(fulfilment, "capacity");
@@ -179,6 +181,19 @@ function Trace({ trace, auth, onChanged }: {
       <p>{trace.reconciliationCases.length === 0 ? "No reconciliation cases." : `${trace.reconciliationCases.length} case(s) require operator review.`}</p>
     </TraceSection>
   </>;
+}
+
+function LaunchPaymentTrace({ launchPayment }: { launchPayment: Record<string, unknown> }) {
+  const commitment = object(launchPayment, "commitment");
+  const attempts = array(launchPayment, "attempts").map(asRecord).filter(Boolean) as Record<string, unknown>[];
+  const platformFee = object(launchPayment, "platformFee");
+  return <TraceSection title="Launch payment commitment and collection">
+    {!commitment ? <p>No launch commitment. This may be a legitimate historical provider-payment order.</p> : <>
+      <article><strong>Pay via UPI/Cash on Delivery · {text(launchPayment, "collectionStatus")?.replaceAll("_", " ") ?? "DUE"}</strong><span>{formatV1Price(number(commitment, "amountPaise") ?? 0)} · committed {formatOptional(text(commitment, "committedAt"))} · reservation secured {formatOptional(text(commitment, "securedAt"))}<br />Immutable option {text(commitment, "optionCode") ?? "—"} · commitment version {number(commitment, "version") ?? 1}</span></article>
+      {attempts.length === 0 ? <p>No doorstep collection attempt recorded.</p> : attempts.map((attempt, index) => <article className={text(attempt, "outcome") === "FAILED" ? "running-late" : ""} key={text(attempt, "id") ?? index}><strong>{text(attempt, "outcome") ?? "ATTEMPT"} · {text(attempt, "method") ?? "—"}</strong><span>{formatOptional(text(attempt, "attemptedAt"))} · rider {shortId(text(attempt, "riderId"))} · mission {shortId(text(attempt, "missionId"))}{text(attempt, "reference") ? ` · reference ${text(attempt, "reference")}` : ""}{text(attempt, "reason") ? ` · ${text(attempt, "reason")}` : ""}</span></article>)}
+      {platformFee ? <article><strong>Dastak platform fee · {boolean(platformFee, "balanced") ? "BALANCED" : "REVIEW REQUIRED"}</strong><span>{formatV1Price(number(platformFee, "amountPaise") ?? 0)} · posted exactly once at collection {formatOptional(text(platformFee, "postedAt"))}</span></article> : <p>Platform fee not posted; it becomes due only after a successful doorstep collection.</p>}
+    </>}
+  </TraceSection>;
 }
 
 function ExceptionalHandoffAction({ trace, auth, onChanged }: {

@@ -183,6 +183,57 @@ Deno.test("V1 get and cancel accept only validated order identity", async () => 
   });
 });
 
+Deno.test("V1 launch payment commitment sends only order authority and optimistic state", async () => {
+  let recorded: unknown;
+  const response = await handleV1Orders(
+    request({
+      operation: "commitLaunchPayment",
+      orderId,
+      expectedVersion: 7,
+      amountPaise: 1,
+      currencyCode: "USD",
+      optionCode: "CLIENT_CONTROLLED",
+    }, "launch-commit-1"),
+    dependencies({
+      commitLaunchPayment: (input) => {
+        recorded = input;
+        return Promise.resolve({
+          ...orderSnapshot,
+          status: "PREPARING",
+          launchPayment: { state: "PAYMENT_DUE_AT_DELIVERY" },
+        });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    orderId,
+    idempotencyKey: "launch-commit-1",
+    expectedVersion: 7,
+  });
+});
+
+Deno.test("V1 launch payment commitment rejects missing idempotency and stale-shaped input", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    commitLaunchPayment: () => {
+      calls += 1;
+      return Promise.resolve(orderSnapshot);
+    },
+  });
+  const missingKey = await handleV1Orders(
+    request({ operation: "commitLaunchPayment", orderId, expectedVersion: 2 }),
+    deps,
+  );
+  const invalidVersion = await handleV1Orders(
+    request({ operation: "commitLaunchPayment", orderId, expectedVersion: 0 }, "launch-bad"),
+    deps,
+  );
+  assertEquals([missingKey.status, invalidVersion.status], [400, 400]);
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 merchant opportunities preserve scope, quantity, and optimistic state", async () => {
   let acceptInput: unknown;
   let declineInput: unknown;
@@ -784,6 +835,7 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
     listOrders: overrides.listOrders ?? (() => Promise.resolve({ orders: [], nextCursor: null })),
     getOrder: overrides.getOrder ?? (() => Promise.resolve(orderSnapshot)),
     cancelOrder: overrides.cancelOrder ?? (() => Promise.resolve(orderSnapshot)),
+    commitLaunchPayment: overrides.commitLaunchPayment ?? (() => Promise.resolve(orderSnapshot)),
     listMerchantOpportunities: overrides.listMerchantOpportunities ??
       (() => Promise.resolve({ opportunities: [] })),
     listRestaurantRequests: overrides.listRestaurantRequests ??

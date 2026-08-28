@@ -12,6 +12,7 @@ owner_id='99200000-0000-4000-8000-000000000002'
 merchant_a='99200000-0000-4000-8000-000000000003'
 merchant_b='99200000-0000-4000-8000-000000000004'
 merchant_c='99200000-0000-4000-8000-000000000005'
+other_customer_id='99200000-0000-4000-8000-000000000006'
 branch_a='99200000-0000-4000-8000-000000000021'
 branch_b='99200000-0000-4000-8000-000000000031'
 branch_c='99200000-0000-4000-8000-000000000041'
@@ -30,7 +31,9 @@ insert into auth.users (
 ('99200000-0000-4000-8000-000000000004', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'step2-race-b@example.test', '', now(), now(), now()),
 ('99200000-0000-4000-8000-000000000005', '00000000-0000-0000-0000-000000000000',
- 'authenticated', 'authenticated', 'step2-race-c@example.test', '', now(), now(), now())
+ 'authenticated', 'authenticated', 'step2-race-c@example.test', '', now(), now(), now()),
+('99200000-0000-4000-8000-000000000006', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'step2-race-other-customer@example.test', '', now(), now(), now())
 on conflict (id) do nothing;
 
 insert into public.accounts (id, display_name, phone_number) values
@@ -38,7 +41,8 @@ insert into public.accounts (id, display_name, phone_number) values
 ('99200000-0000-4000-8000-000000000002', 'Step Two Race Owner', '+919920000002'),
 ('99200000-0000-4000-8000-000000000003', 'Step Two Race Merchant A', '+919920000003'),
 ('99200000-0000-4000-8000-000000000004', 'Step Two Race Merchant B', '+919920000004'),
-('99200000-0000-4000-8000-000000000005', 'Step Two Race Merchant C', '+919920000005')
+('99200000-0000-4000-8000-000000000005', 'Step Two Race Merchant C', '+919920000005'),
+('99200000-0000-4000-8000-000000000006', 'Step Two Race Other Customer', '+919920000006')
 on conflict (id) do nothing;
 
 insert into private.account_memberships (account_id, role, approved_at) values
@@ -46,7 +50,8 @@ insert into private.account_memberships (account_id, role, approved_at) values
 ('99200000-0000-4000-8000-000000000002', 'owner', now()),
 ('99200000-0000-4000-8000-000000000003', 'merchant', now()),
 ('99200000-0000-4000-8000-000000000004', 'merchant', now()),
-('99200000-0000-4000-8000-000000000005', 'merchant', now())
+('99200000-0000-4000-8000-000000000005', 'merchant', now()),
+('99200000-0000-4000-8000-000000000006', 'customer', null)
 on conflict (account_id, role) do nothing;
 
 insert into public.service_zones (id, name, boundary, active) values (
@@ -175,7 +180,8 @@ from (values
   ('99200000-0000-4000-8000-000000000056'::uuid, 'matching.operational_reliability_bps', '9000'::jsonb),
   ('99200000-0000-4000-8000-000000000057'::uuid, 'delivery.transport_load_profiles', '[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]'::jsonb),
   ('99200000-0000-4000-8000-000000000058'::uuid, 'delivery.default_sku_logistics', '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}'::jsonb),
-  ('99200000-0000-4000-8000-000000000059'::uuid, 'merchant.reachability_stale_seconds', '300'::jsonb)
+  ('99200000-0000-4000-8000-000000000059'::uuid, 'merchant.reachability_stale_seconds', '300'::jsonb),
+  ('99200000-0000-4000-8000-000000000060'::uuid, 'settlement.merchant_commission_bps', '0'::jsonb)
 ) setting(id, key, value)
 where not exists (
   select 1 from dastak_v1.platform_settings existing
@@ -336,6 +342,20 @@ update dastak_v1.payments
 set reserved_at = now() - interval '4 minutes', expires_at = now() - interval '1 second'
 where order_id = :'order_id'::uuid;
 alter table dastak_v1.payments enable trigger payments_guard;
+SQL
+}
+
+commit_launch_payment() {
+  local actor_id="$1" order_id="$2" expected_version="$3" key="$4"
+  "${psql_base[@]}" -At -v actor_id="$actor_id" -v order_id="$order_id" \
+    -v expected_version="$expected_version" -v key="$key" <<'SQL'
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', :'actor_id', true);
+select public.dastak_v1_commit_launch_payment(
+  :'order_id'::uuid, :'expected_version'::bigint, :'key'
+) #>> '{launchPayment,state}';
+commit;
 SQL
 }
 
@@ -539,4 +559,118 @@ SQL
 )"
 [[ "$late_truth" == "1 1 1 1 2 0" ]] || { printf 'Payment expiry race invariant failed: %s\n' "$late_truth" >&2; exit 1; }
 
-printf 'Dastak V1 Wave 2, coordinator and payment concurrency races passed.\n'
+# Launch commitment is customer-owned, stale-safe, retryable and starts every
+# secured fulfilment exactly once without creating a provider attempt/event.
+launch_order="$(secure_wave1_order "launch-commit-$run_token")"
+launch_version="$("${psql_base[@]}" -At -v order_id="$launch_order" <<'SQL'
+select version from dastak_v1.orders where id=:'order_id'::uuid;
+SQL
+)"
+if commit_launch_payment "$other_customer_id" "$launch_order" "$launch_version" \
+  "launch-wrong-customer-$run_token" >"$work_dir/launch-wrong.out" 2>&1; then
+  printf 'Cross-customer launch commitment unexpectedly succeeded.\n' >&2; exit 1
+fi
+if commit_launch_payment "$customer_id" "$launch_order" "$((launch_version - 1))" \
+  "launch-stale-$run_token" >"$work_dir/launch-stale.out" 2>&1; then
+  printf 'Stale launch commitment unexpectedly succeeded.\n' >&2; exit 1
+fi
+matching_before="$("${psql_base[@]}" -At -v order_id="$launch_order" <<'SQL'
+select count(*) from dastak_v1.matching_attempts where order_id=:'order_id'::uuid;
+SQL
+)"
+commit_launch_payment "$customer_id" "$launch_order" "$launch_version" \
+  "launch-success-$run_token" >/dev/null
+prep_started="$("${psql_base[@]}" -At -v order_id="$launch_order" <<'SQL'
+select min(prep_started_at)::text from dastak_v1.fulfilments where order_id=:'order_id'::uuid;
+SQL
+)"
+commit_launch_payment "$customer_id" "$launch_order" "$launch_version" \
+  "launch-success-$run_token" >/dev/null
+commit_launch_payment "$customer_id" "$launch_order" "$launch_version" \
+  "launch-safe-duplicate-$run_token" >/dev/null
+launch_truth="$("${psql_base[@]}" -At -F ' ' -v order_id="$launch_order" \
+  -v customer_id="$customer_id" -v prep_started="$prep_started" \
+  -v matching_before="$matching_before" <<'SQL'
+select
+  (select count(*) from dastak_v1.launch_payment_commitments where order_id=:'order_id'::uuid),
+  (select count(*) from dastak_v1.orders where id=:'order_id'::uuid and status='PREPARING' and paid_at is null),
+  (select count(*) from dastak_v1.payments where order_id=:'order_id'::uuid and status='CANCELLED'),
+  (select count(*) from dastak_v1.fulfilments where order_id=:'order_id'::uuid and status='PREPARING' and prep_started_at=:'prep_started'::timestamptz),
+  (select count(*) from dastak_v1.order_lines where order_id=:'order_id'::uuid and status='FULFILLING'),
+  (select count(*) from dastak_v1.order_state_journal where order_id=:'order_id'::uuid and command_name='commitLaunchPayment'),
+  (select count(*) from dastak_v1.domain_events_outbox where aggregate_id=:'order_id'::uuid and event_type='LAUNCH_PAYMENT_COMMITTED'),
+  (select count(*) from dastak_v1.domain_events_outbox where payload->>'orderId'=:'order_id' and event_type='PREPARATION_STARTED'),
+  (select count(*) from dastak_v1.audit_events where resource_id=:'order_id'::uuid and action='LAUNCH_PAYMENT_COMMITTED'),
+  (select count(*) from dastak_v1.payment_attempts where order_id=:'order_id'::uuid),
+  (select count(*) from dastak_v1.payment_provider_events where order_id=:'order_id'::uuid),
+  (select count(*) from dastak_v1.matching_attempts where order_id=:'order_id'::uuid),
+  (select count(*) from dastak_v1.settlement_entries where order_id=:'order_id'::uuid and calculation_snapshot->>'commissionBps'='0'),
+  not (dastak_v1_api.order_json(:'order_id'::uuid, :'customer_id'::uuid) ? 'payment');
+SQL
+)"
+[[ "$launch_truth" == "1 1 1 1 2 1 1 2 1 0 0 $matching_before 2 t" ]] || {
+  printf 'Launch commitment invariant failed: %s\n' "$launch_truth" >&2; exit 1;
+}
+
+# A due reservation and commitment serialize; expiry wins without preparation.
+expiry_launch_order="$(secure_wave1_order "launch-expiry-$run_token")"
+expiry_launch_version="$("${psql_base[@]}" -At -v order_id="$expiry_launch_order" <<'SQL'
+select version from dastak_v1.orders where id=:'order_id'::uuid;
+SQL
+)"
+make_payment_due "$expiry_launch_order"
+commit_launch_payment "$customer_id" "$expiry_launch_order" "$expiry_launch_version" \
+  "launch-expired-$run_token" >"$work_dir/launch-expired.out" 2>&1 &
+expiry_commit_pid=$!
+"${psql_base[@]}" -At -v order_id="$expiry_launch_order" >"$work_dir/launch-expiry-worker.out" 2>&1 <<'SQL' &
+select dastak_v1_api.expire_payment_reservation(:'order_id'::uuid);
+SQL
+expiry_worker_pid=$!
+set +e
+wait "$expiry_commit_pid"; expiry_commit_exit=$?
+wait "$expiry_worker_pid"; expiry_worker_exit=$?
+set -e
+[[ "$expiry_commit_exit" -ne 0 && "$expiry_worker_exit" -eq 0 ]] || {
+  printf 'Launch commitment/expiry race exits: %s/%s\n' "$expiry_commit_exit" "$expiry_worker_exit" >&2; exit 1;
+}
+expiry_launch_truth="$("${psql_base[@]}" -At -F ' ' -v order_id="$expiry_launch_order" <<'SQL'
+select
+  (select count(*) from dastak_v1.orders where id=:'order_id'::uuid and status='PAYMENT_EXPIRED'),
+  (select count(*) from dastak_v1.launch_payment_commitments where order_id=:'order_id'::uuid),
+  (select count(*) from dastak_v1.fulfilments where order_id=:'order_id'::uuid and prep_started_at is not null);
+SQL
+)"
+[[ "$expiry_launch_truth" == "1 0 0" ]] || { printf 'Expiry race left launch truth: %s\n' "$expiry_launch_truth" >&2; exit 1; }
+
+# Cancellation and commitment contend on the same parent order. Exactly one
+# terminal decision survives, with no partial preparation or reservation loss.
+cancel_launch_order="$(secure_wave1_order "launch-cancel-$run_token")"
+cancel_launch_version="$("${psql_base[@]}" -At -v order_id="$cancel_launch_order" <<'SQL'
+select version from dastak_v1.orders where id=:'order_id'::uuid;
+SQL
+)"
+commit_launch_payment "$customer_id" "$cancel_launch_order" "$cancel_launch_version" \
+  "launch-cancel-commit-$run_token" >"$work_dir/launch-cancel-commit.out" 2>&1 &
+cancel_commit_pid=$!
+cancel_order "$cancel_launch_order" "launch-cancel-customer-$run_token" \
+  >"$work_dir/launch-cancel-customer.out" 2>&1 &
+cancel_customer_pid=$!
+set +e
+wait "$cancel_commit_pid"; cancel_commit_exit=$?
+wait "$cancel_customer_pid"; cancel_customer_exit=$?
+set -e
+cancel_launch_truth="$("${psql_base[@]}" -At -F ' ' -v order_id="$cancel_launch_order" <<'SQL'
+select status::text,
+  (select count(*) from dastak_v1.launch_payment_commitments where order_id=:'order_id'::uuid),
+  (select count(*) from dastak_v1.fulfilments where order_id=:'order_id'::uuid and status='PREPARING'),
+  (select count(*) from dastak_v1.payments where order_id=:'order_id'::uuid and status='RESERVED')
+from dastak_v1.orders where id=:'order_id'::uuid;
+SQL
+)"
+[[ "$cancel_commit_exit $cancel_customer_exit $cancel_launch_truth" == "0 1 PREPARING 1 1 0" \
+   || "$cancel_commit_exit $cancel_customer_exit $cancel_launch_truth" == "1 0 CANCELLED_PREPAYMENT 0 0 0" ]] || {
+  printf 'Launch commitment/cancellation race was inconsistent: %s %s %s\n' \
+    "$cancel_commit_exit" "$cancel_customer_exit" "$cancel_launch_truth" >&2; exit 1;
+}
+
+printf 'Dastak V1 Wave 2, provider payment and launch commitment races passed.\n'

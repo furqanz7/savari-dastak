@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  AlertTriangle, Camera, Check, Clock3, PackageCheck, RefreshCw, Timer, X,
+  AlertTriangle, Camera, Check, Clock3, PackageCheck, RefreshCw, ShieldCheck, Timer, X,
 } from "lucide-react";
 import {
   addV1FulfilmentReadyEvidence,
@@ -328,7 +328,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
 
   return <section className="v1-merchant-panel" aria-labelledby="v1-merchant-title">
     <header>
-      <div><p className="eyebrow">LIVE OPERATIONS</p><h2 id="v1-merchant-title">Current fulfilments</h2><span>Confirm exact items, then prepare every declared package after payment.</span></div>
+      <div><p className="eyebrow">LIVE OPERATIONS</p><h2 id="v1-merchant-title">Current fulfilments</h2><span>Confirm exact items, then prepare every declared package as soon as the customer confirms the order.</span></div>
       <button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={refreshing} aria-label="Refresh fulfilments"><RefreshCw size={18} /></button>
     </header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
@@ -339,7 +339,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
           <ul>{request.lines.map((line) => <li key={line.orderLineId}><span><strong>{line.quantity}× {line.name}</strong><small>{selectionSummary(line.selection)}</small></span><b>{formatPaise(line.unitPricePaise * line.quantity)}</b></li>)}</ul>
           {request.softThresholdWarning ? <p className="v1-reservation-state">{request.activeOrderCount} active orders exceeds the default soft threshold of {request.softActiveOrderThreshold}. You may still accept if the kitchen can handle it.</p> : null}
           <label className="v1-prep-choice"><span>Preparation promise</span><input type="number" min={1} max={240} value={restaurantPrepMinutes[request.id] ?? 15} onChange={(event) => setRestaurantPrepMinutes((current) => ({ ...current, [request.id]: Number(event.target.value) }))} /></label>
-          <p className="v1-reservation-state">Confirmation binds these exact menu selections before payment. Preparation starts only after payment.</p>
+          <p className="v1-reservation-state">Confirmation binds these exact menu selections. Preparation starts after the customer confirms; the rider collects payment at delivery.</p>
           <div className="v1-opportunity-actions"><button className="secondary-button" type="button" disabled={busyId === request.id} onClick={() => void respondRestaurant(request, "DECLINE")}><X size={17} /> Decline</button><button className="primary-button" type="button" disabled={busyId === request.id || (restaurantPrepMinutes[request.id] ?? 15) < 1} onClick={() => void respondRestaurant(request, "CONFIRM")}><Check size={17} /> {busyId === request.id ? "Confirming…" : "Confirm exact food"}</button></div>
         </article>)}
       </div> : null}
@@ -473,10 +473,11 @@ function FulfilmentCard(props: FulfilmentCardProps) {
     </header>
     <LineList lines={fulfilment.lines} />
     <div className="v1-preparation-times">
-      <span><small>Payment confirmed</small><strong>{formatOptionalTime(fulfilment.prepStartedAt)}</strong></span>
+      <span><small>Preparation started</small><strong>{formatOptionalTime(fulfilment.prepStartedAt)}</strong></span>
       <span><small>Promised Ready</small><strong>{formatOptionalTime(fulfilment.estimatedReadyAt)}</strong></span>
       <span><small>Actual Ready</small><strong>{formatOptionalTime(fulfilment.actualReadyAt)}</strong></span>
     </div>
+    <p className="v1-reservation-state"><ShieldCheck size={16} /> Order confirmed. The delivery partner will collect the authoritative total from the customer by UPI or cash at delivery.</p>
     {fulfilment.delivery ? <div className="v1-merchant-pickup-state">
       <span><small>Delivery partner</small><strong>{fulfilment.delivery.riderAssigned ? fulfilment.delivery.rider?.displayName ?? "Assigned" : "Finding rider"}</strong></span>
       <span><small>Pickup status</small><strong>{merchantPickupLabel(fulfilment.delivery.stopStatus, fulfilment.delivery.riderArrivedAt)}</strong></span>

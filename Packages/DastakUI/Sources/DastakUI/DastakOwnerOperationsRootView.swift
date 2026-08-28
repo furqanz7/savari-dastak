@@ -6,6 +6,8 @@ import SwiftUI
 @MainActor
 private final class DastakOwnerOperationsModel: ObservableObject {
     @Published private(set) var snapshot: OwnerOrderOperationsSnapshot?
+    @Published private(set) var v1Orders: [DastakV1AdminOrder] = []
+    @Published private(set) var v1Trace: DastakV1AdminExecutionTrace?
     @Published private(set) var isLoading = true
     @Published private(set) var isRefreshing = false
     @Published private(set) var busyIdentity: String?
@@ -15,12 +17,14 @@ private final class DastakOwnerOperationsModel: ObservableObject {
     private let operationsClient: any OwnerOrderOperationsClient
     private let merchantClient: any MerchantOrderClient
     private let checkoutClient: any DastakCheckoutClient
+    private let v1Client: any DastakV1AdminClient
     private var actionKeys: [String: IdempotencyKey] = [:]
 
     init(services: MarketplaceAuthenticatedServices) {
         operationsClient = SupabaseOwnerOrderOperationsClient(functions: services.functions)
         merchantClient = SupabaseMerchantOrderClient(functions: services.functions)
         checkoutClient = SupabaseDastakCheckoutClient(functions: services.functions)
+        v1Client = SupabaseDastakV1AdminClient(functions: services.functions)
     }
 
     var isBusy: Bool { busyIdentity != nil }
@@ -35,10 +39,32 @@ private final class DastakOwnerOperationsModel: ObservableObject {
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            snapshot = try await operationsClient.snapshot(limit: 100, idempotencyKey: key())
+            async let operations = operationsClient.snapshot(limit: 100, idempotencyKey: key())
+            async let currentOrders = v1Client.orders(limit: 50, idempotencyKey: key())
+            let loaded = try await (operations, currentOrders)
+            snapshot = loaded.0
+            v1Orders = loaded.1
+            let selectedID = v1Trace.map(\.order.id).flatMap { current in
+                loaded.1.contains(where: { $0.id == current }) ? current : nil
+            } ?? loaded.1.first?.id
+            if let selectedID {
+                v1Trace = try await v1Client.trace(orderID: selectedID, idempotencyKey: key())
+            } else {
+                v1Trace = nil
+            }
             errorMessage = nil
         } catch {
             errorMessage = message(for: error, fallback: "Marketplace operations could not be refreshed.")
+        }
+    }
+
+    func selectV1Order(_ orderID: UUID) async {
+        guard !isBusy else { return }
+        do {
+            v1Trace = try await v1Client.trace(orderID: orderID, idempotencyKey: key())
+            errorMessage = nil
+        } catch {
+            errorMessage = message(for: error, fallback: "The launch-payment trace could not be loaded.")
         }
     }
 
@@ -223,6 +249,7 @@ private struct DastakOwnerOperationsView: View {
                             .frame(maxWidth: .infinity, minHeight: 240)
                     } else if let snapshot = model.snapshot {
                         summary(snapshot.summary)
+                        launchPaymentTrace
                         exceptions(snapshot.exceptions)
                     } else {
                         unavailable
@@ -271,6 +298,110 @@ private struct DastakOwnerOperationsView: View {
             metric("Locked codes", value: summary.lockedHandoffs, icon: "lock.trianglebadge.exclamationmark")
             metric("Stalled", value: summary.stalledOrders, icon: "clock.badge.exclamationmark")
         }
+    }
+
+    @ViewBuilder
+    private var launchPaymentTrace: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("LAUNCH PAYMENT")
+                        .font(.caption2.bold())
+                        .tracking(1.1)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text("Commitment and doorstep collection")
+                        .font(.title2.bold())
+                }
+                Spacer()
+                Image(systemName: "indianrupeesign.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+
+            if model.v1Orders.isEmpty {
+                Text("No current-generation order trace is available.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker(
+                    "Order",
+                    selection: Binding(
+                        get: { model.v1Trace?.order.id ?? model.v1Orders[0].id },
+                        set: { orderID in Task { await model.selectV1Order(orderID) } }
+                    )
+                ) {
+                    ForEach(model.v1Orders) { order in
+                        Text("\(order.displayOrderNumber) · \(order.status.replacingOccurrences(of: "_", with: " "))")
+                            .tag(order.id)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                if let trace = model.v1Trace,
+                   let launch = trace.launchPayment {
+                    if let commitment = launch.commitment {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Pay via UPI/Cash on Delivery")
+                                .font(.headline)
+                            Text("\(DastakFormatting.money(Money(paise: commitment.amountPaise))) · \(launch.collectionStatus.replacingOccurrences(of: "_", with: " "))")
+                                .font(.subheadline.weight(.semibold))
+                            Text("Committed \(adminTime(commitment.committedAt)) · reservation secured \(adminTime(commitment.securedAt))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(MarketplaceSpacing.medium)
+                        .background(MarketplaceColors.dastakAccentSoft.color)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    } else {
+                        Text("No launch commitment; this may be a historical provider-paid order.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(launch.attempts) { attempt in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\(attempt.outcome) · \(attempt.method)")
+                                .font(.subheadline.bold())
+                            Text("\(adminTime(attempt.attemptedAt)) · rider \(short(attempt.riderID)) · mission \(short(attempt.missionID))")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                            if let reason = attempt.reason {
+                                Text(reason).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(MarketplaceSpacing.compact)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .marketplaceFlatSurface()
+                    }
+
+                    if let fee = launch.platformFee {
+                        Label(
+                            "2% platform fee \(DastakFormatting.money(Money(paise: fee.amountPaise))) · \(fee.balanced ? "balanced" : "review required") · \(adminTime(fee.postedAt))",
+                            systemImage: fee.balanced ? "checkmark.shield.fill" : "exclamationmark.triangle.fill"
+                        )
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(fee.balanced ? MarketplaceColors.success.color : MarketplaceColors.warning.color)
+                    } else if launch.commitment != nil {
+                        Text("Platform fee posts exactly once only after successful collection.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+    }
+
+    private func short(_ id: UUID) -> String {
+        String(id.uuidString.prefix(8)).uppercased()
+    }
+
+    private func adminTime(_ value: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+        return date?.formatted(date: .abbreviated, time: .shortened) ?? "Unavailable"
     }
 
     private func metric(_ title: String, value: Int, icon: String) -> some View {

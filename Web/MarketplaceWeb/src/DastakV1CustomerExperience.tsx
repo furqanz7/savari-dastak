@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowRight, Ban, Check, ChevronRight, CircleAlert, ClockAlert, Copy, Download,
-  CreditCard, Heart, LockKeyhole, MapPin, Minus, PackageCheck, PackageX, Plus,
+  Heart, LockKeyhole, MapPin, Minus, PackageCheck, PackageX, Plus,
   ReceiptText, RefreshCw, RotateCcw, Search, ShieldCheck, ShoppingBag, Sparkles,
-  UserRound, WalletCards, X,
+  UserRound, X,
 } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
 import { CustomerAddressBookSheet } from "./CustomerAddressBookSheet";
@@ -21,7 +21,7 @@ import {
   type CustomerWishlistItemKind,
 } from "./customerWishlist";
 import {
-  cancelV1Order, formatV1Price, getV1Catalogue, getV1Order, getV1Orders,
+  cancelV1Order, commitV1LaunchPayment, formatV1Price, getV1Catalogue, getV1Order, getV1Orders,
   getV1Restaurants, reportV1CustomerIssue, submitV1Order, uploadV1CustomerIssueEvidence,
   type DastakV1Auth, type V1CatalogueCategory, type V1CatalogueSku, type V1Order,
   type V1OrderCursor, type V1RestaurantMenu, type V1RestaurantMenuItem,
@@ -30,11 +30,6 @@ import {
   CustomerRouteMap, CustomerTimeline, type CustomerMapPoint,
 } from "./CustomerDeliveryDetails";
 import { useModalDialog } from "./useModalDialog";
-import {
-  createV1CheckoutSession,
-  type CheckoutSession,
-} from "./payments";
-import { DastakPaymentOptions } from "./DastakPaymentOptions";
 import {
   canReorderV1Order,
   customerPhoneNumber,
@@ -115,7 +110,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const [error, setError] = useState<string>();
   const [orderActionError, setOrderActionError] = useState<string>();
   const [paymentMessage, setPaymentMessage] = useState<string>();
-  const [paymentSession, setPaymentSession] = useState<CheckoutSession>();
+  const [showingLaunchPayment, setShowingLaunchPayment] = useState(false);
   const [ordersError, setOrdersError] = useState<string>();
   const [liveOrderError, setLiveOrderError] = useState<string>();
   const [showingCart, setShowingCart] = useState(false);
@@ -548,24 +543,11 @@ export function DastakV1CustomerExperience(props: Props) {
     return order;
   }, [auth]);
 
-  const payOrder = async () => {
-    if (!selectedOrder || selectedOrder.status !== "AWAITING_PAYMENT" || !selectedOrder.payment?.canAttempt || busy) {
-      return;
-    }
-    setBusy(true);
-    setOrderActionError(undefined);
-    setPaymentMessage(undefined);
-    try {
-      const session = await createV1CheckoutSession({
-        ...auth,
-        orderId: selectedOrder.id,
-        idempotencyKey: crypto.randomUUID(),
-      });
-      setPaymentSession(session);
-    } catch (paymentError) {
-      setOrderActionError(message(paymentError));
-    } finally {
-      setBusy(false);
+  const payOrder = () => {
+    if (selectedOrder?.status === "AWAITING_PAYMENT" && selectedOrder.launchPayment?.canCommit) {
+      setOrderActionError(undefined);
+      setPaymentMessage(undefined);
+      setShowingLaunchPayment(true);
     }
   };
 
@@ -646,25 +628,19 @@ export function DastakV1CustomerExperience(props: Props) {
     return <div className="v1-loading" role="status"><span /> Opening Dastak catalogue</div>;
   }
 
-  if (paymentSession && selectedOrder) {
-    return <DastakPaymentOptions
+  if (showingLaunchPayment && selectedOrder) {
+    return <LaunchPaymentScreen
       auth={auth}
-      session={paymentSession}
-      customer={{ name: props.displayName, email: props.email, phoneNumber: props.phoneNumber }}
-      expiresAt={selectedOrder.payment?.expiresAt}
+      order={selectedOrder}
       onDismiss={() => {
-        setPaymentSession(undefined);
+        setShowingLaunchPayment(false);
         void refreshSelectedOrder(selectedOrder.id).catch((requestError) => setOrderActionError(message(requestError)));
       }}
-      onProviderReturn={async () => {
-        setPaymentMessage("Confirming your payment. This usually takes a few seconds…");
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-          const order = await refreshSelectedOrder(selectedOrder.id);
-          if (order.status === "PAID" || order.status === "PREPARING") return "paid";
-          if (order.status === "PAYMENT_EXPIRED") return "expired";
-          await new Promise((resolve) => window.setTimeout(resolve, 1_500));
-        }
-        return "awaiting";
+      onCommitted={(order) => {
+        setSelectedOrder(order);
+        setOrders((current) => mergeV1Orders([order], current));
+        setShowingLaunchPayment(false);
+        setPaymentMessage("Order confirmed. Your basket is now being prepared; pay your delivery partner at the doorstep.");
       }}
     />;
   }
@@ -854,7 +830,7 @@ function CartSheet({ lines, foodLines, subtotal, address, busy, onDismiss, onAdd
 }) {
   return <div className="v1-overlay" role="presentation"><section className="v1-sheet v1-cart-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-cart-title">
     <header><div><p>DASTAK V1</p><h2 id="v1-cart-title">Your basket</h2></div><button type="button" onClick={onDismiss} aria-label="Close basket"><X size={19} /></button></header>
-    <div className="v1-security-note"><ShieldCheck size={20} /><span><strong>Matched before payment</strong><small>Dastak secures the complete basket first. Submission does not charge you.</small></span></div>
+    <div className="v1-security-note"><ShieldCheck size={20} /><span><strong>Matched before confirmation</strong><small>Dastak secures the complete basket first. You pay the delivery partner later by UPI or cash.</small></span></div>
     <div className="v1-cart-lines">
       {foodLines.length ? <p className="v1-cart-group">{foodLines[0].restaurantName}</p> : null}
       {foodLines.map((line) => <article key={line.key}><div><strong>{line.item.name}</strong><small>{line.optionNames.join(" · ") || "Restaurant item"}</small><b>{formatV1Price(line.unitPricePaise * line.quantity)}</b></div><div className="v1-quantity"><button type="button" onClick={() => onDecrementFood(line.key)} aria-label={`Remove one ${line.item.name}`}><Minus size={16} /></button><span>{line.quantity}</span><button type="button" onClick={() => onAddFood(line.key)} disabled={line.quantity >= 99} aria-label={`Add one ${line.item.name}`}><Plus size={16} /></button></div></article>)}
@@ -962,33 +938,80 @@ function WishlistSection({
   </section>;
 }
 
+function LaunchPaymentScreen({ auth, order, onDismiss, onCommitted }: {
+  auth: DastakV1Auth;
+  order: V1Order;
+  onDismiss: () => void;
+  onCommitted: (order: V1Order) => void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  const [state, setState] = useState<"ready" | "confirming" | "committed" | "failure">("ready");
+  const [error, setError] = useState<string>();
+  const key = useRef(crypto.randomUUID());
+  const expiry = order.launchPayment?.reservationExpiresAt ?? order.payment?.expiresAt;
+  const secondsRemaining = expiry ? Math.max(0, Math.ceil((Date.parse(expiry) - now) / 1_000)) : 0;
+  const expired = order.launchPayment?.reservationState === "EXPIRED" || secondsRemaining === 0;
+
+  useEffect(() => {
+    if (!expiry || expired) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [expired, expiry]);
+
+  const confirm = async () => {
+    if (expired || state === "confirming") return;
+    setState("confirming");
+    setError(undefined);
+    try {
+      const committed = await commitV1LaunchPayment({
+        ...auth,
+        orderId: order.id,
+        expectedVersion: order.version,
+        idempotencyKey: key.current,
+      });
+      setState("committed");
+      window.setTimeout(() => onCommitted(committed), 450);
+    } catch (requestError) {
+      key.current = crypto.randomUUID();
+      setState("failure");
+      setError(message(requestError));
+    }
+  };
+
+  return <main className="v1-launch-payment-page">
+    <section className="v1-launch-payment-card" aria-labelledby="launch-payment-title">
+      <header><button type="button" onClick={onDismiss} disabled={state === "confirming"} aria-label="Back to order"><X size={19} /></button><div><p>SECURED CHECKOUT</p><h1 id="launch-payment-title">Confirm your order</h1></div></header>
+      <div className="v1-launch-payment-total"><span><small>AUTHORITATIVE TOTAL</small><strong>{formatV1Price(order.launchPayment?.amountPaise ?? order.price.totalPaise)}</strong></span><ShieldCheck size={27} /></div>
+      <section className="v1-launch-payment-reservation" aria-live="polite"><PackageCheck size={21} /><span><strong>{expired ? "Reservation expired" : "Your full basket is secured"}</strong><small>{expired ? "Return to the order to refresh its current state." : `${formatDuration(secondsRemaining)} remaining to confirm`}</small></span></section>
+      <section className="v1-launch-payment-address"><MapPin size={20} /><span><small>DELIVER TO</small><strong>{orderAddress(order)}</strong></span></section>
+      <section className="v1-launch-payment-option" aria-label="Selected payment option"><span aria-hidden="true"><Check size={18} /></span><div><strong>Pay via UPI/Cash on Delivery</strong><small>Pay the delivery partner at your doorstep by UPI or cash. No charge now.</small></div></section>
+      <div className="v1-launch-payment-assurance"><LockKeyhole size={18} /><span>Dastak will confirm the full secured basket and begin preparation immediately.</span></div>
+      {state === "committed" ? <p className="v1-launch-payment-success" role="status"><Check size={18} /> Order confirmed. Opening your Preparing journey…</p> : null}
+      {error ? <div className="v1-launch-payment-error" role="alert"><CircleAlert size={18} /><span>{error}</span></div> : null}
+      {expired ? <button className="secondary-button" type="button" onClick={onDismiss}>Refresh order</button> : <button className="primary-button" type="button" disabled={state === "confirming" || state === "committed"} onClick={() => void confirm()}>{state === "confirming" ? "Confirming order…" : state === "failure" ? "Try confirming again" : "Confirm order"}<ArrowRight size={18} /></button>}
+    </section>
+  </main>;
+}
+
 function PaymentsSection({ orders, loading, onRefresh, onOpen }: {
   orders: V1Order[];
   loading: boolean;
   onRefresh: () => void;
   onOpen: (order: V1Order) => void;
 }) {
-  const paid = orders.filter((order) => Boolean(order.paidAt));
+  const paid = orders.filter((order) => order.launchPayment?.state === "PAYMENT_COLLECTED" || Boolean(order.paidAt));
   return <section className="v1-payments-page">
     <header className="v1-feature-header">
-      <div><p>PAYMENTS</p><h1>Secure at checkout</h1><span>Payment opens only after every required item in your basket is secured.</span></div>
+      <div><p>PAYMENTS</p><h1>Pay at your doorstep</h1><span>Confirm after Dastak secures your full basket. Pay the delivery partner by UPI or cash—there is no charge now.</span></div>
       <button type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button>
     </header>
-    <section className="v1-payment-security"><LockKeyhole size={26} /><div><strong>Razorpay-secured payment</strong><span>Dastak never stores your UPI PIN or bank credentials. Razorpay processes only the payment method you choose in Dastak.</span></div></section>
-    <section className="v1-payment-methods"><header><h2>Ways to pay</h2><span>AT CHECKOUT</span></header>
-      <div><PaymentMethod label="UPI apps & UPI ID" icon={<ArrowRight />} /><PaymentMethod label="Credit & debit cards" icon={<CreditCard />} /><PaymentMethod label="Net banking" icon={<ReceiptText />} /><PaymentMethod label="Supported wallets / Pay Later" icon={<WalletCards />} /></div>
-      <p>Availability depends on Razorpay, your bank and your account at payment time.</p>
-    </section>
+    <section className="v1-payment-security"><LockKeyhole size={26} /><div><strong>Pay via UPI/Cash on Delivery</strong><span>Your delivery partner records the exact amount as collected before delivery is completed.</span></div></section>
     <section className="v1-payment-activity"><header><h2>Recent payment activity</h2><span>{paid.length}</span></header>
       {loading && !paid.length ? <div className="v1-inline-loading" role="status"><span /> Loading payments</div>
-        : !paid.length ? <EmptyState title="No confirmed payments yet" copy="Paid orders will appear here with their immutable total." />
-          : <div>{paid.slice(0, 20).map((order) => <button type="button" key={order.id} onClick={() => onOpen(order)}><span className="v1-payment-status"><ShieldCheck size={18} /></span><span><strong>{order.displayOrderNumber}</strong><small>{order.paidAt ? formatOrderDate(order.paidAt) : "Confirmed"}</small></span><b>{formatV1Price(order.price.totalPaise)}</b><ChevronRight size={17} /></button>)}</div>}
+        : !paid.length ? <EmptyState title="No collected payments yet" copy="Completed doorstep collections will appear here with their confirmed total." />
+          : <div>{paid.slice(0, 20).map((order) => <button type="button" key={order.id} onClick={() => onOpen(order)}><span className="v1-payment-status"><ShieldCheck size={18} /></span><span><strong>{order.displayOrderNumber}</strong><small>{order.launchPayment?.collectedAt ? `Collected ${formatOrderDate(order.launchPayment.collectedAt)}` : order.paidAt ? formatOrderDate(order.paidAt) : "Collected"}</small></span><b>{formatV1Price(order.price.totalPaise)}</b><ChevronRight size={17} /></button>)}</div>}
     </section>
   </section>;
-}
-
-function PaymentMethod({ label, icon }: { label: string; icon: React.ReactNode }) {
-  return <div><span>{icon}</span><strong>{label}</strong><small>AT CHECKOUT</small></div>;
 }
 
 type OrderScope = "active" | "past";
@@ -1084,6 +1107,9 @@ export function MatchingSheet({
   const dialog = useModalDialog<HTMLElement>({ busy, onDismiss });
   const matching = matchingStatuses.has(order.status);
   const paid = Boolean(order.paidAt);
+  const launchPayment = order.launchPayment;
+  const launchCollectionSatisfied = !launchPayment || launchPayment.state === "NOT_APPLICABLE" ||
+    launchPayment.state === "PAYMENT_COLLECTED";
   const currentTimelineItem = activeTimelineItem(order.status);
   const [now, setNow] = useState(() => Date.now());
   const [reportingIssue, setReportingIssue] = useState(false);
@@ -1102,10 +1128,11 @@ export function MatchingSheet({
     return () => window.clearInterval(timer);
   }, [order.status]);
   useEffect(() => { setConfirmingCancellation(false); }, [order.id, order.status]);
-  const paymentSeconds = order.payment
-    ? Math.max(0, Math.ceil((Date.parse(order.payment.expiresAt) - now) / 1_000))
+  const paymentExpiry = launchPayment?.reservationExpiresAt ?? order.payment?.expiresAt;
+  const paymentSeconds = paymentExpiry
+    ? Math.max(0, Math.ceil((Date.parse(paymentExpiry) - now) / 1_000))
     : 0;
-  const paymentReady = order.status === "AWAITING_PAYMENT" && order.payment?.canAttempt && paymentSeconds > 0;
+  const paymentReady = order.status === "AWAITING_PAYMENT" && launchPayment?.canCommit && paymentSeconds > 0;
   const evidenceRequired = isIssueEvidenceRequired(issueCategory);
   const readyAt = order.fulfilmentProgress?.estimatedReadyAt;
   const runningLate = Boolean(order.fulfilmentProgress?.runningLate ||
@@ -1143,23 +1170,26 @@ export function MatchingSheet({
 
     <section className="v1-order-receipt" aria-label={paid ? "Bill summary" : "Order summary"}><header><h3><ReceiptText size={19} /> {paid ? "Bill summary" : "Order summary"}</h3>{paid ? <button type="button" onClick={() => downloadReceipt(order)}><Download size={16} /> Download receipt</button> : null}</header><ReceiptRow label="Items" amount={order.price.subtotalPaise} />{order.price.deliveryFeePaise ? <ReceiptRow label="Delivery" amount={order.price.deliveryFeePaise} /> : null}{order.price.platformFeePaise ? <ReceiptRow label="Dastak platform fee" amount={order.price.platformFeePaise} /> : null}{order.price.taxPaise ? <ReceiptRow label="Taxes" amount={order.price.taxPaise} /> : null}{order.price.discountPaise ? <ReceiptRow label="Discount" amount={-order.price.discountPaise} /> : null}<ReceiptRow label={orderTotalLabel(order)} amount={order.price.totalPaise} total /></section>
 
-    <section className="v1-order-facts" aria-label="Order details"><h3>Order details</h3><div><span><small>ORDER NUMBER</small><strong>{order.displayOrderNumber}</strong></span><button type="button" onClick={() => void copyText(order.displayOrderNumber)} aria-label={`Copy order number ${order.displayOrderNumber}`}><Copy size={16} /> Copy</button></div><div><span><small>PAYMENT</small><strong>{order.paidAt ? "Paid online via Razorpay" : "Not yet confirmed"}</strong></span></div><div><span><small>ORDER PLACED</small><strong>{formatOrderDate(order.submittedAt ?? order.createdAt)}</strong></span></div>{order.paidAt ? <div><span><small>PAYMENT CONFIRMED</small><strong>{formatOrderDate(order.paidAt)}</strong></span></div> : null}{order.deliveredAt ?? order.delivery?.deliveredAt ? <div><span><small>DELIVERED</small><strong>{formatOrderDate(order.deliveredAt ?? order.delivery!.deliveredAt!)}</strong></span></div> : null}</section>
+    <section className="v1-order-facts" aria-label="Order details"><h3>Order details</h3><div><span><small>ORDER NUMBER</small><strong>{order.displayOrderNumber}</strong></span><button type="button" onClick={() => void copyText(order.displayOrderNumber)} aria-label={`Copy order number ${order.displayOrderNumber}`}><Copy size={16} /> Copy</button></div><div><span><small>PAYMENT</small><strong>{customerPaymentLabel(order)}</strong></span></div><div><span><small>ORDER PLACED</small><strong>{formatOrderDate(order.submittedAt ?? order.createdAt)}</strong></span></div>{launchPayment?.committedAt ? <div><span><small>ORDER CONFIRMED</small><strong>{formatOrderDate(launchPayment.committedAt)}</strong></span></div> : null}{launchPayment?.collectedAt ? <div><span><small>PAYMENT COLLECTED</small><strong>{formatOrderDate(launchPayment.collectedAt)}</strong></span></div> : !launchPayment && order.paidAt ? <div><span><small>PAYMENT CONFIRMED</small><strong>{formatOrderDate(order.paidAt)}</strong></span></div> : null}{order.deliveredAt ?? order.delivery?.deliveredAt ? <div><span><small>DELIVERED</small><strong>{formatOrderDate(order.deliveredAt ?? order.delivery!.deliveredAt!)}</strong></span></div> : null}</section>
 
     <CustomerTimeline items={[
       { label: "Order placed", value: order.submittedAt ?? order.createdAt },
       { label: "Basket secured", value: order.fullySecuredAt },
-      { label: "Payment confirmed", value: order.paidAt },
+      { label: "Order confirmed", value: launchPayment?.committedAt },
+      { label: "Payment collected", value: launchPayment?.collectedAt ?? (!launchPayment ? order.paidAt : undefined) },
       { label: "Out for delivery", value: order.delivery?.outForDeliveryAt },
       { label: "Delivered", value: order.deliveredAt ?? order.delivery?.deliveredAt },
       ...(currentTimelineItem ? [currentTimelineItem] : []),
     ]} />
 
-    {order.status === "AWAITING_PAYMENT" && order.payment ? <div className="v1-payment-window">
-      <span><strong>Reserved for payment</strong><small>{paymentSeconds > 0 ? `${formatDuration(paymentSeconds)} remaining` : "Reservation ending"}</small></span>
-      <strong>{formatV1Price(order.payment.amountPaise)}</strong>
+    {order.status === "AWAITING_PAYMENT" && launchPayment ? <div className="v1-payment-window">
+      <span><strong>Full basket secured</strong><small>{paymentSeconds > 0 ? `${formatDuration(paymentSeconds)} to confirm · no charge now` : "Reservation ending"}</small></span>
+      <strong>{formatV1Price(launchPayment.amountPaise ?? order.price.totalPaise)}</strong>
     </div> : null}
-    {order.payment?.latestAttempt?.status === "FAILED" ? <p className="v1-payment-retry" role="status">Your previous attempt failed. The same secured basket remains reserved—no rematching occurred.</p> : null}
-    {order.status === "OUT_FOR_DELIVERY" && order.delivery?.deliveryCode ? <div className="v1-delivery-code" role="status">
+    {order.status === "OUT_FOR_DELIVERY" && launchPayment?.state === "PAYMENT_DUE_AT_DELIVERY" ? <p className="v1-payment-message" role="status"><strong>Payment due at delivery.</strong> Pay your delivery partner {formatV1Price(launchPayment.amountPaise ?? order.price.totalPaise)} by UPI or cash.</p> : null}
+    {order.status === "OUT_FOR_DELIVERY" && launchPayment?.state === "COLLECTION_RETRY_NEEDED" ? <p className="v1-payment-retry" role="status">Payment was not confirmed. Your delivery partner can safely retry the doorstep collection before delivery.</p> : null}
+    {launchPayment?.state === "PAYMENT_COLLECTED" ? <p className="v1-payment-message" role="status"><strong>Payment collected.</strong> {launchPayment.collectionMethod ? `${launchPayment.collectionMethod === "CASH" ? "Cash" : "UPI"} recorded` : "Collection recorded"} at the doorstep.</p> : null}
+    {order.status === "OUT_FOR_DELIVERY" && order.delivery?.deliveryCode && launchCollectionSatisfied ? <div className="v1-delivery-code" role="status">
       <header><ShieldCheck size={20} /><span><small>DELIVERY CODE</small><b>Share only after every package arrives</b></span></header>
       <strong>{order.delivery.deliveryCode}</strong>
       <p>A trusted recipient may use this in-app code without a Dastak account. No SMS code is used.</p>
@@ -1198,8 +1228,8 @@ export function MatchingSheet({
     {paymentMessage ? <p className="v1-payment-message" role="status">{paymentMessage}</p> : null}
     {liveError ? <div className="v1-live-error" role="status"><CircleAlert size={17} /><span>Live updates paused: {liveError}</span><button type="button" onClick={onRefresh}>Refresh now</button></div> : null}
     {error ? <p className="order-error" role="alert">{error}</p> : null}
-    {paymentReady ? <button className="primary-button v1-pay" type="button" disabled={busy} onClick={onPay}>{busy ? "Opening secure payment…" : `Pay ${formatV1Price(order.payment?.amountPaise ?? order.price.totalPaise)}`}<ArrowRight size={18} /></button> : null}
-    {cancellableStatuses.has(order.status) ? confirmingCancellation ? <div className="v1-cancel-confirm" role="alert"><strong>Cancel this order?</strong><p>Reserved items will be released. This action is available only before payment.</p><div><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmingCancellation(false)}>Keep order</button><button className="danger-button" type="button" disabled={busy} onClick={onCancel}>{busy ? "Cancelling…" : "Cancel order"}</button></div></div> : <button className="v1-cancel" type="button" disabled={busy} onClick={() => setConfirmingCancellation(true)}><Ban size={17} /> Cancel order</button> : null}
+    {paymentReady ? <button className="primary-button v1-pay" type="button" disabled={busy} onClick={onPay}>Confirm Pay via UPI/Cash on Delivery<ArrowRight size={18} /></button> : null}
+    {cancellableStatuses.has(order.status) ? confirmingCancellation ? <div className="v1-cancel-confirm" role="alert"><strong>Cancel this order?</strong><p>Reserved items will be released. Cancellation is available only before you confirm the order.</p><div><button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmingCancellation(false)}>Keep order</button><button className="danger-button" type="button" disabled={busy} onClick={onCancel}>{busy ? "Cancelling…" : "Cancel order"}</button></div></div> : <button className="v1-cancel" type="button" disabled={busy} onClick={() => setConfirmingCancellation(true)}><Ban size={17} /> Cancel order</button> : null}
     {canReorderV1Order(order.status) ? <button className="primary-button v1-reorder" type="button" disabled={busy} onClick={onReorder}><RotateCcw size={17} /> Order again</button> : null}
   </section></div>;
 }
@@ -1264,7 +1294,11 @@ function receiptText(order: V1Order) {
   ];
   if (order.price.discountPaise) lines.push(`Discount: −${formatV1Price(order.price.discountPaise)}`);
   lines.push(`Total: ${formatV1Price(order.price.totalPaise)}`);
-  if (order.paidAt) lines.push(`Paid online via Razorpay: ${formatOrderDate(order.paidAt)}`);
+  if (order.launchPayment?.collectedAt) {
+    lines.push(`Payment collected at delivery${order.launchPayment.collectionMethod ? ` by ${order.launchPayment.collectionMethod}` : ""}: ${formatOrderDate(order.launchPayment.collectedAt)}`);
+  } else if (order.paidAt) {
+    lines.push(`Payment confirmed: ${formatOrderDate(order.paidAt)}`);
+  }
   if (order.deliveryAddress) lines.push(`Delivered to: ${orderAddress(order)}`);
   return lines.join("\n");
 }
@@ -1326,8 +1360,22 @@ function orderAddress(order: V1Order) {
 
 function orderTotalLabel(order: V1Order) {
   if (order.paidAt) return "Total paid";
-  if (["FULLY_SECURED", "AWAITING_PAYMENT"].includes(order.status)) return "Amount to pay";
+  if (order.launchPayment?.committedAt) return "Due at delivery";
+  if (["FULLY_SECURED", "AWAITING_PAYMENT"].includes(order.status)) return "Order total";
   return "Current basket total";
+}
+
+function customerPaymentLabel(order: V1Order) {
+  const launch = order.launchPayment;
+  if (!launch) return order.paidAt ? "Payment confirmed" : "Not yet confirmed";
+  if (launch.state === "PAYMENT_COLLECTED") {
+    return `Collected at delivery${launch.collectionMethod ? ` · ${launch.collectionMethod === "CASH" ? "Cash" : "UPI"}` : ""}`;
+  }
+  if (launch.state === "COLLECTION_RETRY_NEEDED") return "Collection needs a safe retry";
+  if (launch.state === "PAYMENT_DUE_AT_DELIVERY") return "Due at delivery · UPI or cash";
+  if (launch.state === "READY_TO_CONFIRM") return "Confirm now · no charge now";
+  if (launch.state === "RESERVATION_EXPIRED") return "Reservation expired";
+  return order.paidAt ? "Payment confirmed" : "Not applicable";
 }
 
 function activeTimelineItem(status: V1Order["status"]) {
@@ -1335,7 +1383,7 @@ function activeTimelineItem(status: V1Order["status"]) {
     return { label: "Finding every item", statusText: "In progress" };
   }
   if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") {
-    return { label: "Ready for payment", statusText: "Action needed" };
+    return { label: "Ready to confirm", statusText: "Action needed" };
   }
   if (status === "PAID" || status === "PREPARING") {
     return { label: "Preparing your order", statusText: "In progress" };

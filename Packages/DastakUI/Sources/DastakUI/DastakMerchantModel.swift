@@ -52,6 +52,7 @@ struct DastakMerchantProductDraft: Identifiable {
 @MainActor
 final class DastakMerchantModel: ObservableObject {
     @Published private(set) var orders: [MerchantOrderSnapshot] = []
+    @Published private(set) var v1Fulfilments: [DastakV1MerchantFulfilment] = []
     @Published private(set) var catalogue: CatalogueSnapshot?
     @Published private(set) var earnings: DastakEarningsSnapshot?
     @Published private(set) var isLoading = true
@@ -65,6 +66,7 @@ final class DastakMerchantModel: ObservableObject {
     private let catalogueClient: any CatalogueClient
     private let checkoutClient: any DastakCheckoutClient
     private let earningsClient: any DastakEarningsClient
+    private let v1Client: any DastakV1MerchantClient
     private var actionKeys: [String: IdempotencyKey] = [:]
     private var ordersRefreshInFlight = false
     private var ordersRefreshQueued = false
@@ -74,13 +76,15 @@ final class DastakMerchantModel: ObservableObject {
         orderClient: any MerchantOrderClient,
         catalogueClient: any CatalogueClient,
         checkoutClient: any DastakCheckoutClient,
-        earningsClient: any DastakEarningsClient
+        earningsClient: any DastakEarningsClient,
+        v1Client: any DastakV1MerchantClient
     ) {
         self.services = services
         self.orderClient = orderClient
         self.catalogueClient = catalogueClient
         self.checkoutClient = checkoutClient
         self.earningsClient = earningsClient
+        self.v1Client = v1Client
     }
 
     convenience init(services: MarketplaceAuthenticatedServices) {
@@ -89,7 +93,8 @@ final class DastakMerchantModel: ObservableObject {
             orderClient: SupabaseMerchantOrderClient(functions: services.functions),
             catalogueClient: SupabaseCatalogueClient(functions: services.functions),
             checkoutClient: SupabaseDastakCheckoutClient(functions: services.functions),
-            earningsClient: SupabaseDastakEarningsClient(functions: services.functions)
+            earningsClient: SupabaseDastakEarningsClient(functions: services.functions),
+            v1Client: SupabaseDastakV1MerchantClient(functions: services.functions)
         )
     }
 
@@ -137,10 +142,12 @@ final class DastakMerchantModel: ObservableObject {
             async let orders = orderClient.merchantSnapshot(idempotencyKey: makeKey())
             async let catalogue = catalogueClient.merchantSnapshot(idempotencyKey: makeKey())
             async let earnings = earningsClient.merchantSnapshot(idempotencyKey: makeKey())
-            let result = try await (orders, catalogue, earnings)
+            async let v1 = v1Client.fulfilments(limit: 50, idempotencyKey: makeKey())
+            let result = try await (orders, catalogue, earnings, v1)
             self.orders = Self.sorted(result.0.orders)
             self.catalogue = result.1
             self.earnings = result.2
+            v1Fulfilments = result.3
             errorMessage = nil
         } catch {
             errorMessage = message(for: error, fallback: "Merchant information could not be refreshed.")
@@ -156,13 +163,86 @@ final class DastakMerchantModel: ObservableObject {
         while ordersRefreshQueued, !Task.isCancelled {
             ordersRefreshQueued = false
             do {
-                orders = Self.sorted(
-                    try await orderClient.merchantSnapshot(idempotencyKey: makeKey()).orders
-                )
+                async let legacy = orderClient.merchantSnapshot(idempotencyKey: makeKey())
+                async let current = v1Client.fulfilments(limit: 50, idempotencyKey: makeKey())
+                let result = try await (legacy, current)
+                orders = Self.sorted(result.0.orders)
+                v1Fulfilments = result.1
                 errorMessage = nil
             } catch {
                 errorMessage = message(for: error, fallback: "Orders could not be refreshed.")
             }
+        }
+    }
+
+    func declareV1Packages(_ fulfilment: DastakV1MerchantFulfilment, count: Int) async {
+        await performV1(identity: "packages:\(fulfilment.id):\(count)") {
+            try await self.v1Client.declarePackages(
+                fulfilmentID: fulfilment.id,
+                packageCount: count,
+                expectedVersion: fulfilment.version,
+                idempotencyKey: self.actionKey(for: "packages:\(fulfilment.id):\(count)")
+            )
+        }
+    }
+
+    func addV1ReadyEvidence(
+        _ fulfilment: DastakV1MerchantFulfilment,
+        data: Data,
+        contentType: String,
+        fileExtension: String
+    ) async {
+        guard !data.isEmpty, data.count <= 10 * 1_024 * 1_024 else {
+            errorMessage = "Choose a clear Ready photo up to 10 MB."
+            return
+        }
+        let identity = "evidence:\(fulfilment.id):\(data.count)"
+        await performV1(identity: identity) {
+            let accountID = try await self.services.accountID()
+            let path = "merchant-ready/\(accountID.uuidString.lowercased())/\(UUID().uuidString.lowercased()).\(fileExtension)"
+            try await self.services.uploadObject(
+                bucket: "dastak-evidence",
+                path: path,
+                data: data,
+                contentType: contentType
+            )
+            return try await self.v1Client.addEvidence(
+                fulfilmentID: fulfilment.id,
+                objectPath: path,
+                expectedVersion: fulfilment.version,
+                idempotencyKey: self.actionKey(for: identity)
+            )
+        }
+    }
+
+    func markV1Ready(_ fulfilment: DastakV1MerchantFulfilment) async {
+        let identity = "ready:\(fulfilment.id):\(fulfilment.version)"
+        await performV1(identity: identity) {
+            try await self.v1Client.markReady(
+                fulfilmentID: fulfilment.id,
+                expectedVersion: fulfilment.version,
+                idempotencyKey: self.actionKey(for: identity)
+            )
+        }
+    }
+
+    private func performV1(
+        identity: String,
+        operation: () async throws -> DastakV1MerchantFulfilment
+    ) async {
+        guard !isBusy else { return }
+        busyIdentity = identity
+        defer { busyIdentity = nil }
+        do {
+            let updated = try await operation()
+            v1Fulfilments = [updated] + v1Fulfilments.filter { $0.id != updated.id }
+            actionKeys[identity] = nil
+            errorMessage = nil
+            notice = updated.status == "READY"
+                ? "Ready recorded. The delivery partner can now complete pickup."
+                : "Preparation evidence saved."
+        } catch {
+            errorMessage = message(for: error, fallback: "The fulfilment could not be updated.")
         }
     }
 

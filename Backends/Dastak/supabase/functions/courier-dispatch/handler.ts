@@ -67,6 +67,17 @@ export type V1FinalDeliveryMutationInput = {
   requestDigest: string;
 };
 
+export type V1LaunchCollectionInput = {
+  accountId: string;
+  missionId: string;
+  outcome: "COLLECTED" | "FAILED";
+  method: "CASH" | "UPI";
+  collectionReference: string | null;
+  failureReason: string | null;
+  expectedMissionVersion: number;
+  idempotencyKey: string;
+};
+
 export type V1ReturnMissionAction =
   | "ARRIVE_CUSTOMER"
   | "ADD_RETURN_EVIDENCE"
@@ -113,6 +124,7 @@ export type CourierDispatchDependencies = {
   heartbeatV1Mission: (input: V1RiderHeartbeatInput) => Promise<unknown>;
   advanceV1Mission: (input: V1DeliveryMissionMutationInput) => Promise<RpcResult>;
   advanceV1FinalDelivery: (input: V1FinalDeliveryMutationInput) => Promise<RpcResult>;
+  recordV1LaunchCollection: (input: V1LaunchCollectionInput) => Promise<RpcResult>;
   advanceV1ReturnMission: (input: V1ReturnMissionMutationInput) => Promise<RpcResult>;
 };
 
@@ -249,6 +261,13 @@ export async function handleCourierDispatch(
           "VERIFY_DELIVERY",
           dependencies.advanceV1FinalDelivery,
         );
+      case "v1RecordLaunchCollection":
+        return await v1LaunchCollectionMutation(
+          request,
+          body,
+          actor.accountId,
+          dependencies.recordV1LaunchCollection,
+        );
       case "v1ReturnArriveAtCustomer":
         return await v1ReturnMissionMutation(
           request,
@@ -350,6 +369,40 @@ export async function handleCourierDispatch(
   } catch {
     return internalError();
   }
+}
+
+async function v1LaunchCollectionMutation(
+  request: Request,
+  body: Record<string, unknown>,
+  accountId: string,
+  dependency: (input: V1LaunchCollectionInput) => Promise<RpcResult>,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const missionId = validUUID(body.missionId);
+  const outcome = body.outcome === "COLLECTED" || body.outcome === "FAILED"
+    ? body.outcome
+    : undefined;
+  const method = body.method === "CASH" || body.method === "UPI" ? body.method : undefined;
+  const collectionReference = normalizeOptionalText(body.collectionReference, 200);
+  const failureReason = normalizeOptionalText(body.failureReason, 500);
+  const expectedMissionVersion = validPositiveInteger(body.expectedMissionVersion);
+  if (
+    !idempotencyKey || !missionId || !outcome || !method || !expectedMissionVersion ||
+    collectionReference === undefined || failureReason === undefined ||
+    (outcome === "COLLECTED" && failureReason !== null) ||
+    (failureReason !== null && failureReason.length < 3)
+  ) return validationError();
+  const result = await dependency({
+    accountId,
+    missionId,
+    outcome,
+    method,
+    collectionReference,
+    failureReason: outcome === "FAILED" ? failureReason : null,
+    expectedMissionVersion,
+    idempotencyKey,
+  });
+  return json(result.responseBody, result.responseStatus);
 }
 
 async function v1FinalDeliveryMutation(

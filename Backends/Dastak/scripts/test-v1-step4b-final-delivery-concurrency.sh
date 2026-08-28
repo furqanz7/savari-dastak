@@ -146,11 +146,11 @@ insert into dastak_v1.skus (
 
 insert into dastak_v1.orders (
   id, display_order_number, customer_id, order_type, status,
-  submitted_at, paid_at, version
+  submitted_at, fully_secured_at, payment_expires_at, paid_at, version
 ) values
-('99500000-0000-4000-8000-000000000100','DV1-STEP4B-NORMAL','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',now()-interval '20 minutes',8),
-('99500000-0000-4000-8000-000000000101','DV1-STEP4B-MISSING','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',now()-interval '20 minutes',8),
-('99500000-0000-4000-8000-000000000102','DV1-STEP4B-OVERRIDE','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',now()-interval '20 minutes',8)
+('99500000-0000-4000-8000-000000000100','DV1-STEP4B-NORMAL','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',null,null,now()-interval '20 minutes',8),
+('99500000-0000-4000-8000-000000000101','DV1-STEP4B-MISSING','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',now()-interval '22 minutes',now()+interval '1 hour',null,8),
+('99500000-0000-4000-8000-000000000102','DV1-STEP4B-OVERRIDE','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',now()-interval '22 minutes',now()+interval '1 hour',null,8)
 on conflict (id) do nothing;
 insert into dastak_v1.order_context_snapshots (
   order_id, delivery_address, recipient, snapshot_hash
@@ -164,8 +164,25 @@ insert into dastak_v1.order_price_snapshots (
 ) values
 ('99500000-0000-4000-8000-000000000100','FINAL',900,900),
 ('99500000-0000-4000-8000-000000000101','FINAL',900,900),
-('99500000-0000-4000-8000-000000000102','FINAL',900,900)
+('99500000-0000-4000-8000-000000000101','FULLY_SECURED',900,900),
+('99500000-0000-4000-8000-000000000102','FINAL',900,900),
+('99500000-0000-4000-8000-000000000102','FULLY_SECURED',900,900)
 on conflict (order_id,snapshot_kind) do nothing;
+insert into dastak_v1.payments (
+  id, order_id, customer_id, status, amount_paise, currency_code,
+  reserved_at, expires_at, succeeded_at, cancelled_at, provider_payment_reference
+) values
+('99500000-0000-4000-8000-000000000310','99500000-0000-4000-8000-000000000100','99500000-0000-4000-8000-000000000002','SUCCEEDED',900,'INR',now()-interval '22 minutes',now()-interval '17 minutes',now()-interval '20 minutes',null,'pay_Step4bNormal'),
+('99500000-0000-4000-8000-000000000311','99500000-0000-4000-8000-000000000101','99500000-0000-4000-8000-000000000002','CANCELLED',900,'INR',now()-interval '22 minutes',now()+interval '1 hour',null,now()-interval '20 minutes',null),
+('99500000-0000-4000-8000-000000000312','99500000-0000-4000-8000-000000000102','99500000-0000-4000-8000-000000000002','CANCELLED',900,'INR',now()-interval '22 minutes',now()+interval '1 hour',null,now()-interval '20 minutes',null)
+on conflict (id) do nothing;
+insert into dastak_v1.launch_payment_commitments (
+  id, order_id, customer_id, retired_payment_id, amount_paise,
+  currency_code, secured_at, reservation_expires_at, committed_at
+) values
+('99500000-0000-4000-8000-000000000320','99500000-0000-4000-8000-000000000101','99500000-0000-4000-8000-000000000002','99500000-0000-4000-8000-000000000311',900,'INR',now()-interval '22 minutes',now()+interval '1 hour',now()-interval '20 minutes'),
+('99500000-0000-4000-8000-000000000321','99500000-0000-4000-8000-000000000102','99500000-0000-4000-8000-000000000002','99500000-0000-4000-8000-000000000312',900,'INR',now()-interval '22 minutes',now()+interval '1 hour',now()-interval '20 minutes')
+on conflict (id) do nothing;
 insert into dastak_v1.order_lines (
   id, order_id, line_type, sku_id, product_name_snapshot,
   pack_size_snapshot, quantity, unit_price_paise, status
@@ -269,6 +286,21 @@ call_final() {
     )"
 }
 
+record_collection() {
+  local rider="$1" mission="$2" outcome="$3" method="$4" reference="$5"
+  local reason="$6" version="$7" key="$8"
+  local reference_sql='null' reason_sql='null'
+  if [[ -n "$reference" ]]; then reference_sql="'$reference'::text"; fi
+  if [[ -n "$reason" ]]; then reason_sql="'$reason'::text"; fi
+  "${psql_base[@]}" -At -F '|' -c "
+    set role service_role;
+    select response_status,coalesce(response_body->'error'->>'code','OK')
+    from public.dastak_v1_record_launch_payment_collection(
+      '$rider'::uuid,'$mission'::uuid,'$outcome','$method',
+      $reference_sql,$reason_sql,$version,'$key'
+    )"
+}
+
 actor_override() {
   local actor="$1" mission="$2" evidence="$3" reason="$4" version="$5" key="$6"
   "${psql_base[@]}" -At -c "
@@ -287,6 +319,88 @@ pre_handoff="$("${psql_base[@]}" -Atc "select count(*) from dastak_v1.verificati
 
 missing_result="$(call_final "$wrong_rider_id" "$mission_missing" START_FINAL_DELIVERY '' '' "missing-$run_token" missing)"
 [[ "$missing_result" == "409|final_delivery_incomplete_custody" ]] || { printf 'missing package did not block final delivery: %s\n' "$missing_result" >&2; exit 1; }
+
+# The launch-payment fixture is now placed into complete rider custody. Before
+# final-delivery start, both an unassigned rider and premature collection fail.
+if record_collection "$rider_id" "$mission_missing" COLLECTED CASH '' '' 5 \
+  "cash-wrong-rider-$run_token" >"$work_dir/cash-wrong.out" 2>"$work_dir/cash-wrong.err"; then
+  printf 'unassigned rider unexpectedly recorded launch collection\n' >&2; exit 1
+fi
+if record_collection "$wrong_rider_id" "$mission_missing" COLLECTED CASH '' '' 5 \
+  "cash-too-early-$run_token" >"$work_dir/cash-early.out" 2>"$work_dir/cash-early.err"; then
+  printf 'collection before final-delivery stage unexpectedly succeeded\n' >&2; exit 1
+fi
+"${psql_base[@]}" -c "
+  alter table dastak_v1.packages disable trigger packages_guard;
+  alter table dastak_v1.packages disable trigger packages_enforce_final_transport_before_pickup;
+  update dastak_v1.packages
+  set status='PICKED_UP',current_custody_owner_type='RIDER',
+      current_custody_owner_id='$wrong_rider_id'::uuid,
+      picked_up_at=now()-interval '4 minutes',version=version+1
+  where id='99500000-0000-4000-8000-000000000152'::uuid;
+  alter table dastak_v1.packages enable trigger packages_enforce_final_transport_before_pickup;
+  alter table dastak_v1.packages enable trigger packages_guard;" >/dev/null
+cash_start="$(call_final "$wrong_rider_id" "$mission_missing" START_FINAL_DELIVERY '' '' "cash-start-$run_token" cash-start)"
+cash_arrive="$(call_final "$wrong_rider_id" "$mission_missing" ARRIVE_CUSTOMER '' '' "cash-arrive-$run_token" cash-arrive)"
+[[ "$cash_start $cash_arrive" == "200|OK 200|OK" ]] || { printf 'cash mission setup failed: %s %s\n' "$cash_start" "$cash_arrive" >&2; exit 1; }
+cash_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.delivery_missions where id='$mission_missing'::uuid")"
+cash_failure="$(record_collection "$wrong_rider_id" "$mission_missing" FAILED CASH '' \
+  'Customer requested another collection attempt.' "$cash_version" "cash-failed-$run_token")"
+[[ "$cash_failure" == "200|OK" ]] || { printf 'retryable CASH failure was not recorded: %s\n' "$cash_failure" >&2; exit 1; }
+cash_code="$("${psql_base[@]}" -Atc "select private.dastak_v1_handoff_code(id,handoff_type,code_version) from dastak_v1.verification_handoffs where order_id='$order_missing'::uuid and handoff_type='RIDER_TO_CUSTOMER'")"
+cash_path="rider-delivery/$wrong_rider_id/99500000-0000-4000-8000-000000000403.jpg"
+"${psql_base[@]}" -c "insert into storage.objects(bucket_id,name,owner,owner_id,metadata) values('dastak-evidence','$cash_path','$wrong_rider_id'::uuid,'$wrong_rider_id','{\"mimetype\":\"image/jpeg\",\"size\":2048}')" >/dev/null
+cash_photo="$(call_final "$wrong_rider_id" "$mission_missing" ADD_DELIVERY_EVIDENCE "$cash_path" '' "cash-photo-$run_token" cash-photo)"
+[[ "$cash_photo" == "200|OK" ]] || { printf 'cash delivery evidence failed: %s\n' "$cash_photo" >&2; exit 1; }
+set +e
+call_final "$wrong_rider_id" "$mission_missing" VERIFY_DELIVERY '' "$cash_code" \
+  "cash-before-collection-$run_token" cash-before-collection \
+  >"$work_dir/cash-before.out" 2>"$work_dir/cash-before.err"
+cash_before_exit=$?
+set -e
+[[ "$cash_before_exit" -ne 0 ]] && grep -q 'LAUNCH_PAYMENT_COLLECTION_REQUIRED' "$work_dir/cash-before.err" || {
+  printf 'final delivery was not structurally blocked before collection\n' >&2; exit 1;
+}
+
+# Two successful attempts and final verification contend on the same mission.
+# Exactly one immutable collection truth and one financial posting may survive.
+record_collection "$wrong_rider_id" "$mission_missing" COLLECTED CASH 'cash-at-doorstep' '' \
+  "$cash_version" "cash-success-a-$run_token" >"$work_dir/cash-collect-a.out" 2>"$work_dir/cash-collect-a.err" &
+cash_collect_a_pid=$!
+record_collection "$wrong_rider_id" "$mission_missing" COLLECTED CASH 'cash-at-doorstep' '' \
+  "$cash_version" "cash-success-b-$run_token" >"$work_dir/cash-collect-b.out" 2>"$work_dir/cash-collect-b.err" &
+cash_collect_b_pid=$!
+call_final "$wrong_rider_id" "$mission_missing" VERIFY_DELIVERY '' "$cash_code" \
+  "cash-race-verify-$run_token" cash-race-verify >"$work_dir/cash-race-verify.out" 2>"$work_dir/cash-race-verify.err" &
+cash_verify_pid=$!
+set +e
+wait "$cash_collect_a_pid"; cash_collect_a_exit=$?
+wait "$cash_collect_b_pid"; cash_collect_b_exit=$?
+wait "$cash_verify_pid"; cash_verify_exit=$?
+set -e
+[[ "$cash_collect_a_exit" -eq 0 && "$cash_collect_b_exit" -eq 0 ]] || {
+  cat "$work_dir/cash-collect-a.err" "$work_dir/cash-collect-b.err" >&2; exit 1;
+}
+cash_delivered="$("${psql_base[@]}" -Atc "select count(*) from dastak_v1.orders where id='$order_missing'::uuid and status='DELIVERED'")"
+if [[ "$cash_delivered" != "1" ]]; then
+  cash_retry="$(call_final "$wrong_rider_id" "$mission_missing" VERIFY_DELIVERY '' "$cash_code" "cash-final-retry-$run_token" cash-final-retry)"
+  [[ "$cash_retry" == "200|OK" ]] || { printf 'delivery retry after collection failed: %s\n' "$cash_retry" >&2; exit 1; }
+fi
+cash_replay="$(record_collection "$wrong_rider_id" "$mission_missing" COLLECTED CASH 'cash-at-doorstep' '' "$cash_version" "cash-success-a-$run_token")"
+[[ "$cash_replay" == "200|OK" ]] || { printf 'collection idempotency replay failed: %s\n' "$cash_replay" >&2; exit 1; }
+cash_truth="$("${psql_base[@]}" -At -F ' ' -c "
+select
+  (select count(*) from dastak_v1.orders where id='$order_missing'::uuid and status='DELIVERED' and paid_at is not null),
+  (select count(*) from dastak_v1.launch_payment_collection_attempts where order_id='$order_missing'::uuid and outcome='FAILED'),
+  (select count(*) from dastak_v1.launch_payment_collection_attempts where order_id='$order_missing'::uuid and outcome='COLLECTED' and method='CASH'),
+  (select count(*) from dastak_v1.order_price_snapshots where order_id='$order_missing'::uuid and snapshot_kind='PAID' and total_paise=900 and calculation_details->>'providerInvoked'='false'),
+  (select count(*) from dastak_v1.payments where order_id='$order_missing'::uuid and status='CANCELLED'),
+  (select count(*) from dastak_v1.payment_provider_events where order_id='$order_missing'::uuid),
+  (select count(*) from dastak_v1.financial_journal_transactions transaction where transaction.order_id='$order_missing'::uuid and transaction.transaction_type='PLATFORM_FEE_RECOGNITION' and transaction.amount_paise=18),
+  (select count(*) from dastak_v1.financial_journal_transactions transaction where transaction.order_id='$order_missing'::uuid and transaction.transaction_type='PLATFORM_FEE_RECOGNITION' and (select coalesce(sum(line.amount_paise) filter (where line.direction='DEBIT'),0)=18 and coalesce(sum(line.amount_paise) filter (where line.direction='CREDIT'),0)=18 and count(*)=2 from dastak_v1.financial_journal_lines line where line.transaction_id=transaction.id)),
+  (select count(*) from dastak_v1.domain_events_outbox where aggregate_id='$order_missing'::uuid and event_type='LAUNCH_PAYMENT_COLLECTED'),
+  (select count(*) from dastak_v1.audit_events where metadata->>'orderId'='$order_missing' and action='LAUNCH_PAYMENT_COLLECTED')")"
+[[ "$cash_truth" == "1 1 1 1 1 0 1 1 1 1" ]] || { printf 'CASH collection/delivery/fee truth failed: %s\n' "$cash_truth" >&2; exit 1; }
 
 start_result="$(call_final "$rider_id" "$mission_normal" START_FINAL_DELIVERY '' '' "start-normal-$run_token" start-normal)"
 [[ "$start_result" == "200|OK" ]] || { printf 'normal final delivery did not start: %s\n' "$start_result" >&2; exit 1; }
@@ -341,6 +455,10 @@ recipient_account_count="$("${psql_base[@]}" -Atc "select count(*) from public.a
 start_override="$(call_final "$override_rider_id" "$mission_override" START_FINAL_DELIVERY '' '' "start-override-$run_token" start-override)"
 arrive_override="$(call_final "$override_rider_id" "$mission_override" ARRIVE_CUSTOMER '' '' "arrive-override-$run_token" arrive-override)"
 [[ "$start_override $arrive_override" == "200|OK 200|OK" ]] || { printf 'override mission setup failed: %s %s\n' "$start_override" "$arrive_override" >&2; exit 1; }
+upi_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.delivery_missions where id='$mission_override'::uuid")"
+upi_collection="$(record_collection "$override_rider_id" "$mission_override" COLLECTED UPI \
+  'upi-doorstep-confirmed' '' "$upi_version" "upi-success-$run_token")"
+[[ "$upi_collection" == "200|OK" ]] || { printf 'UPI doorstep collection failed: %s\n' "$upi_collection" >&2; exit 1; }
 override_path="rider-delivery/$override_rider_id/99500000-0000-4000-8000-000000000402.jpg"
 "${psql_base[@]}" -c "insert into storage.objects(bucket_id,name,owner,owner_id,metadata) values('dastak-evidence','$override_path','$override_rider_id'::uuid,'$override_rider_id','{\"mimetype\":\"image/jpeg\",\"size\":2048}')" >/dev/null
 override_photo="$(call_final "$override_rider_id" "$mission_override" ADD_DELIVERY_EVIDENCE "$override_path" '' "photo-override-$run_token" photo-override)"
@@ -366,7 +484,10 @@ select
   (select count(*) from dastak_v1.orders where id='$order_override'::uuid and status='DELIVERED'),
   (select count(*) from dastak_v1.packages where order_id='$order_override'::uuid and status='DELIVERED' and current_custody_owner_type='CUSTOMER'),
   (select count(*) from dastak_v1.audit_events where resource_id='$order_override'::uuid and action='DELIVERY_HANDOFF_OVERRIDDEN'),
-  (select count(*) from dastak_v1.financial_journal_transactions where order_id='$order_override'::uuid and transaction_type='RIDER_ROYALTY_EARNING')")"
-[[ "$override_truth" == "1 1 1 2 1 0" ]] || { printf 'authorized OVERRIDDEN truth or Rider Royalty eligibility failed: %s\n' "$override_truth" >&2; exit 1; }
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id='$order_override'::uuid and transaction_type='RIDER_ROYALTY_EARNING'),
+  (select count(*) from dastak_v1.launch_payment_collection_attempts where order_id='$order_override'::uuid and outcome='COLLECTED' and method='UPI'),
+  (select count(*) from dastak_v1.order_price_snapshots where order_id='$order_override'::uuid and snapshot_kind='PAID' and total_paise=900),
+  (select count(*) from dastak_v1.financial_journal_transactions where order_id='$order_override'::uuid and transaction_type='PLATFORM_FEE_RECOGNITION' and amount_paise=18)")"
+[[ "$override_truth" == "1 1 1 2 1 0 1 1 1" ]] || { printf 'authorized OVERRIDDEN/UPI collection truth failed: %s\n' "$override_truth" >&2; exit 1; }
 
-printf 'Dastak V1 final-delivery evidence, verification, override and custody races passed.\n'
+printf 'Dastak V1 provider/launch CASH+UPI collection, final-delivery and custody races passed.\n'

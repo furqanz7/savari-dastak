@@ -3,7 +3,7 @@ import type { V1Order } from "./dastakV1";
 const matchingStatuses = new Set<V1Order["status"]>(["CREATED", "MATCHING"]);
 
 export const orderJourneySteps = [
-  "Finding items", "Ready for payment", "Preparing", "Picking up", "On the way", "Delivered",
+  "Finding items", "Ready to confirm", "Preparing", "Picking up", "On the way", "Delivered",
 ] as const;
 
 export function statusTitle(status: V1Order["status"]) {
@@ -39,10 +39,10 @@ export function statusMessage(status: V1Order["status"]) {
     return "We’re checking availability for every exact item in your basket. You’ll pay only after everything is secured.";
   }
   if (status === "FULLY_SECURED" || status === "AWAITING_PAYMENT") {
-    return "Every item is reserved. Payment is requested before preparation begins.";
+    return "Every item is reserved. Confirm now, then pay your delivery partner by UPI or cash.";
   }
   if (status === "PAID" || status === "PREPARING") {
-    return "Payment is confirmed and your complete order is being prepared.";
+    return "Your order is confirmed and your complete basket is being prepared.";
   }
   if (status === "PICKUP_IN_PROGRESS") {
     return "Your delivery partner is collecting your complete order.";
@@ -57,17 +57,17 @@ export function statusMessage(status: V1Order["status"]) {
     return "Dastak could not secure the complete basket. You were not charged.";
   }
   if (status === "CANCELLED_PREPAYMENT") {
-    return "This order was cancelled before payment.";
+    return "This order was cancelled before confirmation.";
   }
   if (status === "PAYMENT_EXPIRED") {
-    return "The reservation ended before payment completed. Reserved items were released.";
+    return "The reservation ended before the order was confirmed. Reserved items were released.";
   }
   return "Dastak is protecting your payment and coordinating recovery. Follow the updates below.";
 }
 
 export function statusAssurance(status: V1Order["status"]) {
   if (["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT"].includes(status)) {
-    return "No charge until the complete basket is secured";
+    return "No charge now; pay at the doorstep after confirmation";
   }
   if (["PAID", "PREPARING", "PICKUP_IN_PROGRESS", "OUT_FOR_DELIVERY", "DELIVERED"].includes(status)) {
     return "Secure package custody is tracked by Dastak";

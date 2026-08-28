@@ -1,7 +1,9 @@
 import MarketplaceDesignSystem
 import MarketplaceFoundation
 import MarketplaceInfrastructure
+import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct DastakDeliveryPartnerWorkspaceView: View {
     @StateObject private var model: DastakDeliveryPartnerModel
@@ -126,10 +128,45 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 DastakEarningsCard(earnings: earnings, title: "Earnings")
             }
             availability
+            if let mission = model.v1Dispatch?.currentMission {
+                DastakV1MissionCard(
+                    mission: mission,
+                    busy: model.isBusy,
+                    advance: { operation, stopID, packageCount, code, reason in
+                        Task {
+                            await model.advanceV1Mission(
+                                operation,
+                                mission: mission,
+                                stopID: stopID,
+                                packageCount: packageCount,
+                                verificationCode: code,
+                                reason: reason
+                            )
+                        }
+                    },
+                    recordCollection: { outcome, method, reference, reason in
+                        Task {
+                            await model.recordV1Collection(
+                                mission: mission,
+                                outcome: outcome,
+                                method: method,
+                                reference: reference,
+                                failureReason: reason
+                            )
+                        }
+                    },
+                    captureEvidence: { item in
+                        Task { await captureV1Evidence(item, mission: mission) }
+                    }
+                )
+            }
             if let currentJob = model.courierDispatch?.currentJob { courierJob(currentJob) }
             if let currentJob = model.parcelDispatch?.currentJob { parcelJob(currentJob) }
             if let offer = model.courierDispatch?.offer { courierOffer(offer) }
             if let offer = model.parcelDispatch?.offer { parcelOffer(offer) }
+            if let offer = model.v1Dispatch?.offer, model.v1Dispatch?.currentMission == nil {
+                v1Offer(offer)
+            }
             if hasNoAssignment {
                 DastakEmptyState(
                     symbol: model.isOnline ? "dot.radiowaves.left.and.right" : "power",
@@ -219,6 +256,8 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             && model.courierDispatch?.currentJob == nil
             && model.parcelDispatch?.offer == nil
             && model.parcelDispatch?.currentJob == nil
+            && model.v1Dispatch?.offer == nil
+            && model.v1Dispatch?.currentMission == nil
     }
 
     private func changeAvailability(_ online: Bool) {
@@ -270,6 +309,54 @@ struct DastakDeliveryPartnerWorkspaceView: View {
         )
     }
 
+    private func v1Offer(_ offer: DastakV1RiderOffer) -> some View {
+        DastakPartnerOfferCard(
+            title: "Dastak · \(offer.pickupCount) pickup\(offer.pickupCount == 1 ? "" : "s")",
+            subtitle: offer.displayOrderNumber,
+            symbol: "shippingbox.and.arrow.backward",
+            payout: nil,
+            distanceMeters: offer.distanceMeters,
+            respondBy: offer.respondBy,
+            itemSummary: "Collect the complete secured order before final delivery.",
+            busy: model.isBusy,
+            accept: { Task { await model.respondToV1Offer(offer, accept: true) } },
+            decline: { Task { await model.respondToV1Offer(offer, accept: false) } }
+        )
+    }
+
+    private func captureV1Evidence(
+        _ item: PhotosPickerItem,
+        mission: DastakV1DeliveryMissionSnapshot
+    ) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  !data.isEmpty, data.count <= 10 * 1_024 * 1_024
+            else {
+                model.errorMessage = "Choose a clear package photo up to 10 MB."
+                return
+            }
+            let supported = item.supportedContentTypes
+            let type: UTType = supported.contains(.png) ? .png :
+                supported.contains(.heic) ? .heic : .jpeg
+            let ext = type == .png ? "png" : type == .heic ? "heic" : "jpg"
+            let accountID = try await services.accountID()
+            let path = "rider-delivery/\(accountID.uuidString.lowercased())/\(UUID().uuidString.lowercased()).\(ext)"
+            try await services.uploadObject(
+                bucket: "dastak-evidence",
+                path: path,
+                data: data,
+                contentType: type.preferredMIMEType ?? "image/jpeg"
+            )
+            await model.advanceV1Mission(
+                "v1AddDeliveryEvidence",
+                mission: mission,
+                objectPath: path
+            )
+        } catch {
+            model.errorMessage = "The package photo could not be secured. Try again before handoff."
+        }
+    }
+
     private func courierJob(_ assignment: CourierAssignment) -> some View {
         DastakCourierJobView(
             assignment: assignment,
@@ -293,6 +380,320 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 await model.perform(action, assignment: assignment, verificationCode: code)
                 handoffCode = ""
             }
+        }
+    }
+}
+
+private struct DastakV1MissionCard: View {
+    let mission: DastakV1DeliveryMissionSnapshot
+    let busy: Bool
+    let advance: (String, UUID?, Int?, String?, String?) -> Void
+    let recordCollection: (
+        DastakV1CollectionOutcome,
+        DastakV1CollectionMethod,
+        String?,
+        String?
+    ) -> Void
+    let captureEvidence: (PhotosPickerItem) -> Void
+    @State private var pickupCodes: [UUID: String] = [:]
+    @State private var packageCounts: [UUID: Int] = [:]
+    @State private var deliveryCode = ""
+    @State private var collectionMethod = DastakV1CollectionMethod.cash
+    @State private var collectionReference = ""
+    @State private var failureReason = ""
+    @State private var evidenceItem: PhotosPickerItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            DastakPartnerJobHeader(
+                title: "Active Dastak mission",
+                status: missionStatus,
+                payout: nil
+            )
+            Text(mission.displayOrderNumber)
+                .font(.caption.monospaced().weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            if mission.status == .assigned {
+                Button("Start pickups") {
+                    advance("v1StartPickups", nil, nil, nil, nil)
+                }
+                .buttonStyle(MarketplacePrimaryButtonStyle())
+                .disabled(busy)
+            }
+
+            if !finalStage {
+                ForEach(mission.pickupStops) { stop in
+                    pickupStop(stop)
+                }
+            }
+
+            if finalStage, let destination = mission.customerDestination {
+                DastakPartnerStop(
+                    title: "Customer destination",
+                    name: destination.recipient?.name ?? "Recipient",
+                    address: destination.address.displayLine,
+                    symbol: "mappin.and.ellipse"
+                )
+                DastakMapRouteButton(
+                    point: GeoPoint(
+                        latitude: destination.address.latitude,
+                        longitude: destination.address.longitude
+                    ),
+                    label: "Open customer route"
+                )
+
+                if mission.canStartFinalDelivery {
+                    Button("Start final delivery") {
+                        advance("v1StartFinalDelivery", nil, nil, nil, nil)
+                    }
+                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                    .disabled(busy)
+                }
+                if mission.canArriveCustomer {
+                    Button("I’ve arrived") {
+                        advance("v1ArriveAtCustomer", nil, nil, nil, nil)
+                    }
+                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                    .disabled(busy)
+                }
+
+                if let collection = mission.launchCollection,
+                   collection.state != .notRequired {
+                    collectionCard(collection)
+                }
+
+                if collectionSatisfied,
+                   mission.canCaptureDeliveryEvidence,
+                   mission.finalVerification?.evidencePresent != true {
+                    PhotosPicker(selection: $evidenceItem, matching: .images) {
+                        Label("Capture package handoff photo", systemImage: "camera.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(MarketplaceSecondaryButtonStyle())
+                    .disabled(busy)
+                    .onChange(of: evidenceItem) { _, item in
+                        guard let item else { return }
+                        captureEvidence(item)
+                        evidenceItem = nil
+                    }
+                }
+                if mission.finalVerification?.evidencePresent == true {
+                    Label("Package photo secured", systemImage: "checkmark.circle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(MarketplaceColors.success.color)
+                }
+
+                if collectionSatisfied, mission.canVerifyDelivery {
+                    DastakHandoffCodeField(
+                        title: "Customer delivery code",
+                        length: 6,
+                        code: $deliveryCode
+                    )
+                    Button("Verify delivery") {
+                        advance("v1VerifyDelivery", nil, nil, deliveryCode, nil)
+                    }
+                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                    .disabled(busy || deliveryCode.count != 6)
+                } else if mission.status == .arrived, !collectionSatisfied {
+                    Label(
+                        "Record the doorstep collection before the photo and customer delivery code.",
+                        systemImage: "lock.fill"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            if mission.canCancelBeforePickup {
+                Button("Release mission before pickup", role: .destructive) {
+                    advance(
+                        "v1CancelBeforePickup",
+                        nil,
+                        nil,
+                        nil,
+                        "Rider cannot continue before pickup"
+                    )
+                }
+                .buttonStyle(MarketplaceSecondaryButtonStyle())
+                .disabled(busy)
+            }
+            if mission.mustUseDeliveryRecovery {
+                Label(
+                    "Keep every package secure and contact Operations for recovery.",
+                    systemImage: "exclamationmark.shield.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(MarketplaceColors.warning.color)
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+        .onChange(of: mission.status) { _, _ in
+            deliveryCode = ""
+            collectionReference = ""
+            failureReason = ""
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var finalStage: Bool {
+        [.allPackagesPickedUp, .outForDelivery, .arrived, .deliveryRecovery]
+            .contains(mission.status)
+    }
+
+    private var collectionSatisfied: Bool {
+        guard let collection = mission.launchCollection else { return true }
+        return !collection.required || collection.state == .collected
+    }
+
+    private var missionStatus: String {
+        switch mission.status {
+        case .assigned: "Assigned"
+        case .enRouteToPickups: "Heading to pickups"
+        case .pickupInProgress: "Collecting packages"
+        case .allPackagesPickedUp: "All packages in custody"
+        case .outForDelivery: "On the way"
+        case .arrived: "At the customer"
+        case .deliveryRecovery: "Delivery recovery"
+        }
+    }
+
+    @ViewBuilder
+    private func pickupStop(_ stop: DastakV1MissionPickupStop) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            DastakPartnerStop(
+                title: "Pickup \(stop.sequence) of \(mission.pickupCount)",
+                name: stop.branch.displayName,
+                address: stop.branch.address,
+                symbol: stop.status == .completed ? "checkmark.circle.fill" : "storefront"
+            )
+            if stop.status == .pending, mission.status != .assigned {
+                Button("I’ve arrived") {
+                    advance("v1ArriveAtPickup", stop.id, nil, nil, nil)
+                }
+                .buttonStyle(MarketplaceSecondaryButtonStyle())
+                .disabled(busy)
+            }
+            if stop.status == .arrived {
+                Stepper(
+                    "Packages accounted: \(packageCounts[stop.id] ?? stop.packageCount ?? 1)",
+                    value: Binding(
+                        get: { packageCounts[stop.id] ?? stop.packageCount ?? 1 },
+                        set: { packageCounts[stop.id] = $0 }
+                    ),
+                    in: 1...1_000
+                )
+                DastakHandoffCodeField(
+                    title: "Merchant pickup code",
+                    length: 6,
+                    code: Binding(
+                        get: { pickupCodes[stop.id] ?? "" },
+                        set: { pickupCodes[stop.id] = $0 }
+                    )
+                )
+                Button("Verify pickup") {
+                    advance(
+                        "v1VerifyPickup",
+                        stop.id,
+                        packageCounts[stop.id] ?? stop.packageCount ?? 1,
+                        pickupCodes[stop.id],
+                        nil
+                    )
+                }
+                .buttonStyle(MarketplacePrimaryButtonStyle())
+                .disabled(busy || pickupCodes[stop.id]?.count != 6)
+            }
+        }
+        .padding(MarketplaceSpacing.compact)
+        .background(MarketplaceColors.dastakAccentSoft.color.opacity(0.45))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func collectionCard(_ collection: DastakV1LaunchCollection) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("AUTHORITATIVE AMOUNT DUE")
+                        .font(.caption2.bold())
+                        .tracking(1)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text(DastakFormatting.money(collection.amount ?? Money(paise: 0)))
+                        .font(.title2.bold().monospacedDigit())
+                }
+                Spacer()
+                Text(collection.state == .collected ? "COLLECTED" : "PAY AT DELIVERY")
+                    .font(.caption2.bold())
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+            if collection.state == .collected {
+                let method = collection.lastMethod.map { $0 == .cash ? "cash" : "UPI" }
+                Label(
+                    "Payment collected\(method.map { " by \($0)" } ?? ""). Delivery verification is unlocked.",
+                    systemImage: "checkmark.seal.fill"
+                )
+                .font(.footnote)
+                .foregroundStyle(MarketplaceColors.success.color)
+            } else if mission.status != .arrived {
+                Text("Collection unlocks after arrival with complete package custody.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                if collection.state == .retryNeeded {
+                    Label(
+                        collection.failureReason.map { "Last attempt failed: \($0)" } ??
+                            "The last attempt failed. Retry before delivery.",
+                        systemImage: "arrow.clockwise.circle.fill"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(MarketplaceColors.warning.color)
+                }
+                Picker("Actual payment method", selection: $collectionMethod) {
+                    ForEach(collection.methods, id: \.self) { method in
+                        Text(method == .cash ? "Cash" : "UPI").tag(method)
+                    }
+                }
+                .pickerStyle(.segmented)
+                if collectionMethod == .upi {
+                    TextField("UPI reference (optional)", text: $collectionReference)
+                        .textFieldStyle(.roundedBorder)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                }
+                TextField("Reason if collection fails", text: $failureReason, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(2...4)
+                HStack(spacing: MarketplaceSpacing.compact) {
+                    Button("Couldn’t collect") {
+                        recordCollection(
+                            .failed,
+                            collectionMethod,
+                            collectionReference.isEmpty ? nil : collectionReference,
+                            failureReason.isEmpty ? nil : failureReason
+                        )
+                    }
+                    .buttonStyle(MarketplaceSecondaryButtonStyle())
+                    .disabled(busy || failureReason.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
+                    Button("Record collected") {
+                        recordCollection(
+                            .collected,
+                            collectionMethod,
+                            collectionReference.isEmpty ? nil : collectionReference,
+                            nil
+                        )
+                    }
+                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                    .disabled(busy || !collection.canRecord)
+                }
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .background(MarketplaceColors.dastakAccentSoft.color)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(MarketplaceColors.dastakAccent.color.opacity(0.35), lineWidth: 1)
         }
     }
 }
@@ -323,7 +724,7 @@ private struct DastakPartnerOfferCard: View {
     let title: String
     let subtitle: String
     let symbol: String
-    let payout: Int
+    let payout: Int?
     let distanceMeters: Double
     let respondBy: String
     let itemSummary: String
@@ -363,12 +764,14 @@ private struct DastakPartnerOfferCard: View {
             }
 
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("You earn")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(DastakFormatting.money(.init(paise: payout)))
-                        .font(.title2.bold().monospacedDigit())
+                if let payout {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("You earn")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(DastakFormatting.money(.init(paise: payout)))
+                            .font(.title2.bold().monospacedDigit())
+                    }
                 }
                 Spacer()
                 Label(
@@ -589,7 +992,7 @@ private struct DastakParcelJobView: View {
 private struct DastakPartnerJobHeader: View {
     let title: String
     let status: String
-    let payout: Int
+    let payout: Int?
 
     var body: some View {
         HStack(alignment: .top) {
@@ -601,12 +1004,14 @@ private struct DastakPartnerJobHeader: View {
                     .font(MarketplaceTypography.sectionTitle)
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("Earnings")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(DastakFormatting.money(.init(paise: payout)))
-                    .font(.headline.monospacedDigit())
+            if let payout {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Earnings")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(DastakFormatting.money(.init(paise: payout)))
+                        .font(.headline.monospacedDigit())
+                }
             }
         }
     }

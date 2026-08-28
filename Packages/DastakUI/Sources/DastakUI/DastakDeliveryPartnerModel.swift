@@ -26,6 +26,7 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     @Published private(set) var partner: DeliveryPartnerSnapshot?
     @Published private(set) var courierDispatch: CourierDispatchSnapshot?
     @Published private(set) var parcelDispatch: ParcelPartnerSnapshot?
+    @Published private(set) var v1Dispatch: DastakV1DeliveryDispatchSnapshot?
     @Published private(set) var earnings: DastakEarningsSnapshot?
     @Published private(set) var isLoading = true
     @Published private(set) var isRefreshing = false
@@ -36,6 +37,7 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     private let partnerClient: any DeliveryPartnerClient
     private let courierClient: any CourierDispatchClient
     private let parcelClient: any ParcelDeliveryClient
+    private let v1Client: any DastakV1DeliveryClient
     private let earningsClient: any DastakEarningsClient
     private var actionKeys: [String: IdempotencyKey] = [:]
     private var refreshQueued = false
@@ -45,11 +47,13 @@ final class DastakDeliveryPartnerModel: ObservableObject {
         partnerClient: any DeliveryPartnerClient,
         courierClient: any CourierDispatchClient,
         parcelClient: any ParcelDeliveryClient,
+        v1Client: any DastakV1DeliveryClient,
         earningsClient: any DastakEarningsClient
     ) {
         self.partnerClient = partnerClient
         self.courierClient = courierClient
         self.parcelClient = parcelClient
+        self.v1Client = v1Client
         self.earningsClient = earningsClient
     }
 
@@ -58,6 +62,7 @@ final class DastakDeliveryPartnerModel: ObservableObject {
             partnerClient: SupabaseDeliveryPartnerClient(functions: functions),
             courierClient: SupabaseCourierDispatchClient(functions: functions),
             parcelClient: SupabaseParcelDeliveryClient(functions: functions),
+            v1Client: SupabaseDastakV1DeliveryClient(functions: functions),
             earningsClient: SupabaseDastakEarningsClient(functions: functions)
         )
     }
@@ -67,7 +72,8 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     }
 
     var hasActiveJob: Bool {
-        courierDispatch?.currentJob != nil || parcelDispatch?.currentJob != nil
+        courierDispatch?.currentJob != nil || parcelDispatch?.currentJob != nil ||
+            v1Dispatch?.currentMission != nil
     }
 
     var isBusy: Bool {
@@ -91,12 +97,14 @@ final class DastakDeliveryPartnerModel: ObservableObject {
                 async let partnerSnapshot = partnerClient.selfSnapshot(idempotencyKey: makeKey())
                 async let courierSnapshot = courierClient.partnerSnapshot(idempotencyKey: makeKey())
                 async let parcelSnapshot = parcelClient.partnerSnapshot(idempotencyKey: makeKey())
+                async let v1Snapshot = v1Client.snapshot(idempotencyKey: makeKey())
                 async let earningsSnapshot = earningsClient.deliveryPartnerSnapshot(idempotencyKey: makeKey())
-                let snapshots = try await (partnerSnapshot, courierSnapshot, parcelSnapshot, earningsSnapshot)
+                let snapshots = try await (partnerSnapshot, courierSnapshot, parcelSnapshot, v1Snapshot, earningsSnapshot)
                 partner = snapshots.0
                 courierDispatch = snapshots.1
                 parcelDispatch = snapshots.2
-                earnings = snapshots.3
+                v1Dispatch = snapshots.3
+                earnings = snapshots.4
                 errorMessage = nil
             } catch {
                 errorMessage = message(for: error, fallback: "The delivery queue could not be refreshed.")
@@ -214,6 +222,100 @@ final class DastakDeliveryPartnerModel: ObservableObject {
             await refresh()
         } catch {
             errorMessage = message(for: error, fallback: "The delivery could not be updated.")
+        }
+    }
+
+    func respondToV1Offer(_ offer: DastakV1RiderOffer, accept: Bool) async {
+        let identity = "v1-offer:\(accept):\(offer.id)"
+        guard busyOperation == nil else { return }
+        busyOperation = identity
+        let key = actionKey(for: identity)
+        defer { busyOperation = nil }
+        do {
+            v1Dispatch = accept
+                ? try await v1Client.accept(offerID: offer.id, idempotencyKey: key)
+                : try await v1Client.decline(
+                    offerID: offer.id,
+                    reason: "Partner declined",
+                    idempotencyKey: key
+                )
+            actionKeys[identity] = nil
+            errorMessage = nil
+            if accept { noticeMessage = "Mission assigned. Collect every declared package." }
+        } catch {
+            errorMessage = message(for: error, fallback: "The Dastak mission offer could not be updated.")
+        }
+    }
+
+    func advanceV1Mission(
+        _ operation: String,
+        mission: DastakV1DeliveryMissionSnapshot,
+        stopID: UUID? = nil,
+        packageCount: Int? = nil,
+        verificationCode: String? = nil,
+        objectPath: String? = nil,
+        reason: String? = nil
+    ) async {
+        let identity = ["v1", operation, mission.id.uuidString, stopID?.uuidString ?? "", verificationCode ?? ""]
+            .joined(separator: ":")
+        guard busyOperation == nil else { return }
+        busyOperation = identity
+        let key = actionKey(for: identity)
+        defer { busyOperation = nil }
+        do {
+            v1Dispatch = try await v1Client.advance(
+                operation: operation,
+                missionID: mission.id,
+                stopID: stopID,
+                accountedPackageCount: packageCount,
+                verificationCode: verificationCode,
+                objectPath: objectPath,
+                reason: reason,
+                idempotencyKey: key
+            )
+            actionKeys[identity] = nil
+            errorMessage = nil
+            if operation == "v1VerifyPickup" {
+                noticeMessage = "Pickup verified. The declared packages are now in your custody."
+            } else if operation == "v1VerifyDelivery" {
+                noticeMessage = "Delivery verified and completed."
+            }
+        } catch {
+            errorMessage = message(for: error, fallback: "The Dastak mission could not be updated.")
+        }
+    }
+
+    func recordV1Collection(
+        mission: DastakV1DeliveryMissionSnapshot,
+        outcome: DastakV1CollectionOutcome,
+        method: DastakV1CollectionMethod,
+        reference: String?,
+        failureReason: String?
+    ) async {
+        let identity = "v1-collection:\(mission.id):\(outcome.rawValue):\(method.rawValue)"
+        guard busyOperation == nil else { return }
+        busyOperation = identity
+        let key = actionKey(for: identity)
+        defer { busyOperation = nil }
+        do {
+            let normalizedReference = reference?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedFailureReason = failureReason?.trimmingCharacters(in: .whitespacesAndNewlines)
+            v1Dispatch = try await v1Client.recordCollection(
+                missionID: mission.id,
+                outcome: outcome,
+                method: method,
+                reference: normalizedReference?.isEmpty == false ? normalizedReference : nil,
+                failureReason: normalizedFailureReason?.isEmpty == false ? normalizedFailureReason : nil,
+                expectedMissionVersion: mission.version,
+                idempotencyKey: key
+            )
+            actionKeys[identity] = nil
+            errorMessage = nil
+            noticeMessage = outcome == .collected
+                ? "Payment collected. Complete the customer delivery verification."
+                : "Failed collection recorded. Keep the packages secure and retry before delivery."
+        } catch {
+            errorMessage = message(for: error, fallback: "The doorstep collection result could not be recorded.")
         }
     }
 

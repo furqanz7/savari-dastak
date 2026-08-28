@@ -264,6 +264,31 @@
 .v1-payment-window > span { display: grid; gap: 3px; }
 .v1-payment-window small { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .v1-payment-window > strong { color: var(--dastak-accent); font-variant-numeric: tabular-nums; }
+.v1-launch-payment-page { min-height: 100dvh; display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); color: var(--text-primary); background-color: var(--dastak-background); background-image: var(--dastak-matte-noise); background-size: 180px 180px; }
+.v1-launch-payment-card { width: min(620px, 100%); display: grid; gap: 18px; padding: clamp(20px, 4vw, 34px); border: 1px solid var(--glass-border); border-radius: clamp(24px, 4vw, 34px); background: color-mix(in srgb, var(--surface-raised) 94%, transparent); box-shadow: 0 28px 80px rgb(24 18 12 / .18); backdrop-filter: blur(24px); }
+.v1-launch-payment-card > header { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 14px; }
+.v1-launch-payment-card > header button { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--divider); border-radius: 50%; color: var(--text-primary); background: var(--surface); }
+.v1-launch-payment-card > header p, .v1-launch-payment-total small, .v1-launch-payment-address small { margin: 0; color: var(--dastak-accent); font-size: 10px; font-weight: 850; letter-spacing: .1em; }
+.v1-launch-payment-card > header h1 { margin: 4px 0 0; font-family: var(--font-dastak-wordmark); font-size: clamp(34px, 7vw, 48px); font-weight: 400; line-height: 1; }
+.v1-launch-payment-total { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; border-radius: 22px; color: #f7f0e6; background-color: #17130f; background-image: var(--dastak-matte-noise); }
+.v1-launch-payment-total span { display: grid; gap: 5px; }
+.v1-launch-payment-total strong { font-size: clamp(29px, 7vw, 42px); font-variant-numeric: tabular-nums; }
+.v1-launch-payment-total svg { color: var(--dastak-accent); }
+.v1-launch-payment-reservation, .v1-launch-payment-address { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--divider); border-radius: 16px; background: var(--surface); }
+.v1-launch-payment-reservation > svg, .v1-launch-payment-address > svg { color: var(--dastak-accent); }
+.v1-launch-payment-reservation span, .v1-launch-payment-address span { min-width: 0; display: grid; gap: 3px; }
+.v1-launch-payment-reservation small, .v1-launch-payment-address strong { overflow-wrap: anywhere; color: var(--text-secondary); line-height: 1.4; }
+.v1-launch-payment-option { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 13px; padding: 18px; border: 2px solid color-mix(in srgb, var(--dastak-accent) 58%, var(--divider)); border-radius: 19px; background: var(--dastak-accent-soft); }
+.v1-launch-payment-option > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: var(--primary-action-foreground); background: var(--dastak-accent); }
+.v1-launch-payment-option div { display: grid; gap: 5px; }
+.v1-launch-payment-option strong { font-size: 17px; }
+.v1-launch-payment-option small, .v1-launch-payment-assurance { color: var(--text-secondary); line-height: 1.5; }
+.v1-launch-payment-assurance { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.v1-launch-payment-assurance svg { flex: 0 0 auto; color: var(--dastak-accent); }
+.v1-launch-payment-card > .primary-button, .v1-launch-payment-card > .secondary-button { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.v1-launch-payment-error, .v1-launch-payment-success { display: flex; align-items: center; gap: 9px; margin: 0; padding: 12px 14px; border-radius: 13px; line-height: 1.4; }
+.v1-launch-payment-error { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, var(--surface)); }
+.v1-launch-payment-success { color: var(--dastak-accent); background: var(--dastak-accent-soft); }
 .v1-payment-retry, .v1-payment-message { margin: 12px 0 0; padding: 11px 13px; border-radius: 11px; color: var(--text-secondary); background: var(--surface-muted); font-size: 13px; line-height: 1.45; }
 .v1-delivery-code { display: grid; gap: 13px; margin-top: 16px; padding: 18px; border: 1px solid color-mix(in srgb, var(--dastak-accent) 42%, var(--divider)); border-radius: 20px; background: linear-gradient(135deg, var(--dastak-accent-soft), color-mix(in srgb, var(--surface-raised) 86%, var(--dastak-accent-soft))); box-shadow: 0 13px 34px rgb(37 28 18 / .06); }
 .v1-delivery-code > header { display: flex; align-items: center; gap: 10px; color: var(--dastak-accent); }

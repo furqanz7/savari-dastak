@@ -146,6 +146,20 @@ export type V1DeliveryMission = {
     capturedAt: string;
     packageCount: number;
   }>;
+  launchCollection?: {
+    required: boolean;
+    state: "NOT_REQUIRED" | "PAYMENT_DUE_AT_DELIVERY" |
+      "COLLECTION_RETRY_NEEDED" | "PAYMENT_COLLECTED";
+    amountPaise?: number;
+    currencyCode?: "INR";
+    methods: Array<"CASH" | "UPI">;
+    canRecord: boolean;
+    lastOutcome?: "COLLECTED" | "FAILED";
+    lastMethod?: "CASH" | "UPI";
+    failureReason?: string;
+    attemptedAt?: string;
+    collectedAt?: string;
+  };
   canStartFinalDelivery: boolean;
   canArriveCustomer: boolean;
   canCaptureDeliveryEvidence: boolean;
@@ -546,6 +560,35 @@ export async function advanceV1DeliveryMission(
   }, fetcher);
 }
 
+export async function recordV1LaunchCollection(
+  input: AuthenticatedInput & {
+    missionId: string;
+    outcome: "COLLECTED" | "FAILED";
+    method: "CASH" | "UPI";
+    collectionReference?: string;
+    failureReason?: string;
+    expectedMissionVersion: number;
+    idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  if (!uuidPattern.test(input.missionId) || !Number.isSafeInteger(input.expectedMissionVersion) ||
+    input.expectedMissionVersion < 1 ||
+    (input.outcome === "FAILED" && input.failureReason !== undefined &&
+      input.failureReason.trim().length < 3)) {
+    throw validationError("Refresh the mission and record a valid collection result.");
+  }
+  return v1DispatchMutation(input, {
+    operation: "v1RecordLaunchCollection",
+    missionId: input.missionId,
+    outcome: input.outcome,
+    method: input.method,
+    collectionReference: input.collectionReference?.trim() || null,
+    failureReason: input.outcome === "FAILED" ? input.failureReason?.trim() || null : null,
+    expectedMissionVersion: input.expectedMissionVersion,
+  }, fetcher);
+}
+
 export type V1ReturnMissionOperation =
   | "v1ReturnArriveAtCustomer"
   | "v1AddReturnEvidence"
@@ -878,6 +921,9 @@ function v1Mission(value: unknown): V1DeliveryMission {
       ? null
       : v1FinalVerification(source.finalVerification),
     deliveryEvidence: requiredArray(source.deliveryEvidence).map(v1DeliveryEvidence),
+    launchCollection: source.launchCollection === null || source.launchCollection === undefined
+      ? undefined
+      : v1LaunchCollection(source.launchCollection),
     canStartFinalDelivery: requiredBoolean(source.canStartFinalDelivery),
     canArriveCustomer: requiredBoolean(source.canArriveCustomer),
     canCaptureDeliveryEvidence: requiredBoolean(source.canCaptureDeliveryEvidence),
@@ -891,6 +937,40 @@ function v1Mission(value: unknown): V1DeliveryMission {
       escalatedAt: nullableTimestamp(riderSafety.escalatedAt),
       escalationReason: nullableText(riderSafety.escalationReason, 500),
     },
+  };
+}
+
+function v1LaunchCollection(value: unknown): NonNullable<V1DeliveryMission["launchCollection"]> {
+  const source = record(value);
+  const states = ["NOT_REQUIRED", "PAYMENT_DUE_AT_DELIVERY", "COLLECTION_RETRY_NEEDED",
+    "PAYMENT_COLLECTED"] as const;
+  const state = source?.state;
+  const methods = requiredArray(source?.methods).map((method) => {
+    if (method !== "CASH" && method !== "UPI") invalid();
+    return method;
+  });
+  const lastOutcome = nullableText(source?.lastOutcome, 20) ?? undefined;
+  const lastMethod = nullableText(source?.lastMethod, 10) ?? undefined;
+  if (!source || !states.includes(state as typeof states[number]) ||
+    (lastOutcome !== undefined && lastOutcome !== "COLLECTED" && lastOutcome !== "FAILED") ||
+    (lastMethod !== undefined && lastMethod !== "CASH" && lastMethod !== "UPI")) invalid();
+  const currencyCode = nullableText(source.currencyCode, 3) ?? undefined;
+  if (currencyCode !== undefined && currencyCode !== "INR") invalid();
+  return {
+    required: requiredBoolean(source.required),
+    state: state as NonNullable<V1DeliveryMission["launchCollection"]>["state"],
+    amountPaise: source.amountPaise === null || source.amountPaise === undefined
+      ? undefined : positiveInteger(source.amountPaise),
+    currencyCode,
+    methods,
+    canRecord: requiredBoolean(source.canRecord),
+    lastOutcome: lastOutcome as NonNullable<V1DeliveryMission["launchCollection"]>["lastOutcome"],
+    lastMethod: lastMethod as NonNullable<V1DeliveryMission["launchCollection"]>["lastMethod"],
+    failureReason: nullableText(source.failureReason, 500) ?? undefined,
+    attemptedAt: source.attemptedAt === null || source.attemptedAt === undefined
+      ? undefined : timestamp(source.attemptedAt),
+    collectedAt: source.collectedAt === null || source.collectedAt === undefined
+      ? undefined : timestamp(source.collectedAt),
   };
 }
 

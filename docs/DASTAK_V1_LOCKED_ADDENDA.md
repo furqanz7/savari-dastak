@@ -71,3 +71,15 @@ This section overrides only any earlier implication that hosted Supabase Edge Fu
 - The gateway must use a dedicated static Elastic IP that is actually allowlisted in RazorpayX before Live mode or `RAZORPAYX_LIVE_EGRESS_ALLOWLIST_CONFIRMED=true` is permitted.
 - RazorpayX payout webhooks continue to terminate at the authenticated Supabase webhook and remain the authoritative asynchronous confirmation/reconciliation path.
 - No direct live Supabase → RazorpayX fallback or bypass is permitted. Test-mode Contact/Fund Account support may remain direct; live destination provisioning must use an explicitly authorized fixed-egress/operations process.
+
+## Newest launch-payment authority: UPI/Cash on Delivery
+
+This section is the newest authority for the launch customer-payment path and overrides conflicting prepaid-only, Razorpay checkout, provider-page, or no-COD wording. Historical provider payments and dormant future integration code remain preserved.
+
+- The customer sees exactly one immutable option: **Pay via UPI/Cash on Delivery**. Confirming it never opens Razorpay, a UPI app, a provider page, or a provider modal and creates no fabricated provider success.
+- The authenticated customer commits once, server-side, against the authoritative secured order, amount, currency, active reservation, and order version. The complete basket immediately enters preparation, with transactional journal, audit, notification, and outbox records. A failed command may be retried during the same valid reservation without rematching.
+- The assigned rider collects the authoritative total at the doorstep using the recipient's actual choice of `CASH` or `UPI`. Collection attempts are append-only, audited, idempotent, retryable, and restricted to complete Rider custody at the final-delivery stage.
+- Normal final-delivery verification is blocked until launch collection is `COLLECTED`. A legitimate historical/provider `SUCCEEDED` payment remains compatible. A failed collection keeps the mission and custody recoverable.
+- The immutable paid snapshot and `paid_at` truth begin only at successful doorstep collection. Dastak's 2% platform fee is posted exactly once then through balanced append-only accounting; merchant commission remains 0 bps. Merchant Royalty at verified Merchant → Rider handoff and Rider Royalty at verified delivery are unchanged.
+- Customer cancellation is no longer normally available after commitment starts preparation. Merchant copy says order confirmed/preparing and that the rider collects at delivery; customer copy says payment due/collected at delivery.
+- Online payment integration is deferred and must stay dormant, not deleted. RazorpayX is not activated by this launch-payment override, and no live payment or payout operation is authorized here.

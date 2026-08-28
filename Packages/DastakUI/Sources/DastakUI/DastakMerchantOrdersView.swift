@@ -1,7 +1,9 @@
 import MarketplaceDesignSystem
 import MarketplaceFoundation
 import MarketplaceInfrastructure
+import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct DastakMerchantOrdersView: View {
     @ObservedObject var model: DastakMerchantModel
@@ -22,10 +24,13 @@ struct DastakMerchantOrdersView: View {
                             DastakEarningsCard(earnings: earnings, title: "Earnings")
                         }
                         summary
+                        v1OrderSection
                         orderSection(
                             title: "Active orders",
                             orders: model.activeOrders,
-                            emptyMessage: "New paid orders will appear here."
+                            emptyMessage: model.v1Fulfilments.isEmpty
+                                ? "Confirmed orders will appear here."
+                                : "Your current Dastak orders are shown above."
                         )
                         if !model.recentOrders.isEmpty {
                             orderSection(
@@ -79,17 +84,18 @@ struct DastakMerchantOrdersView: View {
     private var summary: some View {
         HStack(spacing: 0) {
             summaryItem(
-                value: model.activeOrders.count,
+                value: model.activeOrders.count + activeV1Fulfilments.count,
                 label: "Active"
             )
             Divider().frame(height: 42)
             summaryItem(
-                value: model.activeOrders.filter { $0.status == .paid }.count,
-                label: "New"
+                value: activeV1Fulfilments.filter { $0.status == "PREPARING" }.count,
+                label: "Preparing"
             )
             Divider().frame(height: 42)
             summaryItem(
-                value: model.activeOrders.filter { $0.status == .ready }.count,
+                value: model.activeOrders.filter { $0.status == .ready }.count
+                    + activeV1Fulfilments.filter { $0.status == "READY" }.count,
                 label: "Ready"
             )
         }
@@ -106,6 +112,54 @@ struct DastakMerchantOrdersView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var activeV1Fulfilments: [DastakV1MerchantFulfilment] {
+        model.v1Fulfilments.filter {
+            ["PREPARING", "READY", "PICKED_UP"].contains($0.status)
+        }
+    }
+
+    @ViewBuilder
+    private var v1OrderSection: some View {
+        if !activeV1Fulfilments.isEmpty {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                HStack {
+                    Text("Confirmed Dastak orders")
+                        .font(MarketplaceTypography.sectionTitle)
+                    Text(activeV1Fulfilments.count.formatted())
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, MarketplaceSpacing.small)
+                        .frame(minHeight: 26)
+                        .background(.thinMaterial, in: Capsule())
+                }
+
+                ForEach(activeV1Fulfilments) { fulfilment in
+                    DastakV1MerchantFulfilmentCard(
+                        fulfilment: fulfilment,
+                        busy: model.busyIdentity?.contains(fulfilment.id.uuidString) == true,
+                        declarePackages: { count in
+                            Task { await model.declareV1Packages(fulfilment, count: count) }
+                        },
+                        captureEvidence: { data, contentType, fileExtension in
+                            Task {
+                                await model.addV1ReadyEvidence(
+                                    fulfilment,
+                                    data: data,
+                                    contentType: contentType,
+                                    fileExtension: fileExtension
+                                )
+                            }
+                        },
+                        markReady: {
+                            Task { await model.markV1Ready(fulfilment) }
+                        },
+                        reportError: { model.errorMessage = $0 }
+                    )
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -149,6 +203,198 @@ struct DastakMerchantOrdersView: View {
                 }
             }
         }
+    }
+}
+
+private struct DastakV1MerchantFulfilmentCard: View {
+    let fulfilment: DastakV1MerchantFulfilment
+    let busy: Bool
+    let declarePackages: (Int) -> Void
+    let captureEvidence: (Data, String, String) -> Void
+    let markReady: () -> Void
+    let reportError: (String) -> Void
+    @State private var packageCount = 1
+    @State private var evidenceItem: PhotosPickerItem?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                Image(systemName: "bag.fill")
+                    .font(.title3)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(width: 40, height: 40)
+                    .background(MarketplaceColors.dastakAccentSoft.color)
+                    .clipShape(RoundedRectangle(
+                        cornerRadius: MarketplaceMetrics.compactCornerRadius,
+                        style: .continuous
+                    ))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(fulfilment.displayOrderNumber)
+                        .font(.headline)
+                    Text(fulfilment.branch.displayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                DastakStatusPill(text: statusLabel, emphasis: fulfilment.status != "PICKED_UP")
+            }
+
+            Label(
+                "Order confirmed. Prepare the full secured basket now.",
+                systemImage: "checkmark.seal.fill"
+            )
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(MarketplaceColors.success.color)
+
+            Text("The delivery partner will collect payment from the customer at the doorstep. No payment action is needed here.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: MarketplaceSpacing.small) {
+                ForEach(fulfilment.lines) { line in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("\(line.quantity) ×")
+                            .font(.subheadline.bold().monospacedDigit())
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        Text(line.name)
+                            .font(.subheadline)
+                        Spacer()
+                    }
+                }
+            }
+            .padding(.vertical, MarketplaceSpacing.compact)
+            .overlay(alignment: .top) { Divider() }
+            .overlay(alignment: .bottom) { Divider() }
+
+            if fulfilment.status == "PREPARING" {
+                prepProgress
+                preparationActions
+            } else if fulfilment.status == "READY" {
+                Label(
+                    "Ready for the assigned delivery partner",
+                    systemImage: "shippingbox.fill"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(MarketplaceColors.success.color)
+            } else if fulfilment.status == "PICKED_UP" {
+                Label(
+                    "Packages handed to the delivery partner",
+                    systemImage: "figure.walk.motion"
+                )
+                .font(.subheadline.weight(.semibold))
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+        .onAppear { packageCount = max(fulfilment.packageCount ?? 1, 1) }
+        .onChange(of: fulfilment.packageCount) { _, count in
+            packageCount = max(count ?? 1, 1)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var prepProgress: some View {
+        HStack {
+            Label(
+                fulfilment.runningLate ? "Preparation needs attention" : "Preparing",
+                systemImage: fulfilment.runningLate ? "clock.badge.exclamationmark" : "clock"
+            )
+            .foregroundStyle(
+                fulfilment.runningLate
+                    ? MarketplaceColors.warning.color
+                    : MarketplaceColors.dastakAccent.color
+            )
+            Spacer()
+            Text(prepTimeLabel)
+                .font(.subheadline.bold().monospacedDigit())
+        }
+        .font(.subheadline.weight(.semibold))
+    }
+
+    private var preparationActions: some View {
+        VStack(spacing: MarketplaceSpacing.compact) {
+            if fulfilment.canDeclarePackages {
+                Stepper(value: $packageCount, in: 1 ... 20) {
+                    Text("\(packageCount) sealed package\(packageCount == 1 ? "" : "s")")
+                        .font(.subheadline.weight(.semibold))
+                }
+                Button(fulfilment.packageCount == nil ? "Confirm packages" : "Update packages") {
+                    declarePackages(packageCount)
+                }
+                .buttonStyle(MarketplaceSecondaryButtonStyle())
+                .disabled(busy)
+            }
+
+            if fulfilment.canAddEvidence {
+                PhotosPicker(selection: $evidenceItem, matching: .images) {
+                    Label(
+                        fulfilment.evidence.isEmpty ? "Add Ready photo" : "Replace Ready photo",
+                        systemImage: "camera.fill"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(MarketplaceSecondaryButtonStyle())
+                .disabled(busy)
+                .onChange(of: evidenceItem) { _, item in
+                    guard let item else { return }
+                    Task { await loadEvidence(item) }
+                }
+            }
+
+            if !fulfilment.evidence.isEmpty {
+                Label("Ready photo secured", systemImage: "checkmark.circle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(MarketplaceColors.success.color)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if fulfilment.canMarkReady {
+                Button("Mark order Ready") { markReady() }
+                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                    .disabled(busy)
+            } else {
+                Label(
+                    "Confirm package count and add a Ready photo to continue.",
+                    systemImage: "info.circle"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func loadEvidence(_ item: PhotosPickerItem) async {
+        defer { evidenceItem = nil }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  !data.isEmpty, data.count <= 10 * 1_024 * 1_024
+            else {
+                reportError("Choose a clear Ready photo up to 10 MB.")
+                return
+            }
+            let types = item.supportedContentTypes
+            let type: UTType = types.contains(.png) ? .png :
+                types.contains(.heic) ? .heic : .jpeg
+            let fileExtension = type == .png ? "png" : type == .heic ? "heic" : "jpg"
+            captureEvidence(data, type.preferredMIMEType ?? "image/jpeg", fileExtension)
+        } catch {
+            reportError("The Ready photo could not be opened. Choose another photo.")
+        }
+    }
+
+    private var statusLabel: String {
+        switch fulfilment.status {
+        case "PREPARING": "Preparing"
+        case "READY": "Ready"
+        case "PICKED_UP": "Picked up"
+        default: fulfilment.status.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    private var prepTimeLabel: String {
+        if fulfilment.runningLate { return "Due now" }
+        let minutes = max(Int(ceil(Double(fulfilment.secondsRemaining) / 60)), 0)
+        return minutes == 1 ? "1 min left" : "\(minutes) min left"
     }
 }
 

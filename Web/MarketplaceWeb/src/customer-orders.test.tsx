@@ -62,6 +62,20 @@ describe("customer V1 Orders experience", () => {
     const order = orderFixture();
     order.status = "OUT_FOR_DELIVERY";
     order.customerState = "ON_THE_WAY";
+    order.launchPayment = {
+      optionLabel: "Pay via UPI/Cash on Delivery",
+      state: "PAYMENT_COLLECTED",
+      amountPaise: 25500,
+      currencyCode: "INR",
+      reservationSecondsRemaining: 0,
+      reservationState: "COMMITTED",
+      committedAt: "2026-08-24T09:08:00Z",
+      collectedAt: "2026-08-24T09:22:00Z",
+      collectionMethod: "UPI",
+      canCommit: false,
+      noChargeNow: true,
+      payAtDoorstep: true,
+    };
     order.delivery = {
       state: "ON_THE_WAY",
       verificationStatus: "ACTIVE",
@@ -95,7 +109,8 @@ describe("customer V1 Orders experience", () => {
     expect(markup).toContain("Bill summary");
     expect(markup).toContain("Timeline");
     expect(markup).toContain("Dastak platform fee");
-    expect(markup).toContain("Paid online via Razorpay");
+    expect(markup).toContain("Collected at delivery · UPI");
+    expect(markup).not.toContain("Razorpay");
     expect(markup).toContain("Download receipt");
     expect(markup).not.toMatch(/retail merchant|pickup route/i);
   });

@@ -4,7 +4,7 @@ import MarketplaceInfrastructure
 enum DastakV1OrderPresentation {
     static let journeySteps = [
         "Finding items",
-        "Ready for payment",
+        "Ready to confirm",
         "Preparing",
         "Picking up",
         "On the way",
@@ -35,9 +35,9 @@ enum DastakV1OrderPresentation {
         case .created, .matching:
             "We’re checking availability for every exact item in your basket. You’ll pay only after everything is secured."
         case .fullySecured, .awaitingPayment:
-            "Every item is reserved. Payment is requested before preparation begins."
+            "Every item is reserved. Confirm now, then pay your delivery partner by UPI or cash."
         case .paid, .preparing:
-            "Payment is confirmed and your complete order is being prepared."
+            "Your order is confirmed and your complete basket is being prepared."
         case .pickupInProgress:
             "Your delivery partner is collecting your complete order."
         case .outForDelivery:
@@ -47,9 +47,9 @@ enum DastakV1OrderPresentation {
         case .unavailable:
             "Dastak could not secure the complete basket. You were not charged."
         case .paymentExpired:
-            "The reservation ended before payment completed. Reserved items were released."
+            "The reservation ended before the order was confirmed. Reserved items were released."
         case .cancelledPrepayment:
-            "This order was cancelled before payment."
+            "This order was cancelled before confirmation."
         case .fulfilmentFailure:
             "Dastak is protecting your payment and coordinating recovery. Follow the updates below."
         }
@@ -58,7 +58,7 @@ enum DastakV1OrderPresentation {
     static func assurance(_ status: DastakV1OrderStatus) -> String {
         switch status {
         case .created, .matching, .fullySecured, .awaitingPayment:
-            "No charge until the complete basket is secured"
+            "No charge now; pay at the doorstep after confirmation"
         case .paid, .preparing, .pickupInProgress, .outForDelivery, .delivered:
             "Secure package custody is tracked by Dastak"
         case .unavailable, .paymentExpired, .cancelledPrepayment:

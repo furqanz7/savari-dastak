@@ -348,6 +348,45 @@ public struct DastakV1PaymentReservation: Codable, Equatable, Sendable {
     public var amount: Money { Money(paise: amountPaise) }
 }
 
+public enum DastakV1LaunchPaymentState: String, Codable, Equatable, Sendable {
+    case readyToConfirm = "READY_TO_CONFIRM"
+    case paymentDueAtDelivery = "PAYMENT_DUE_AT_DELIVERY"
+    case collectionRetryNeeded = "COLLECTION_RETRY_NEEDED"
+    case paymentCollected = "PAYMENT_COLLECTED"
+    case reservationExpired = "RESERVATION_EXPIRED"
+    case notApplicable = "NOT_APPLICABLE"
+}
+
+public enum DastakV1LaunchReservationState: String, Codable, Equatable, Sendable {
+    case active = "ACTIVE"
+    case committed = "COMMITTED"
+    case expired = "EXPIRED"
+}
+
+public enum DastakV1LaunchCollectionMethod: String, Codable, Equatable, Sendable {
+    case cash = "CASH"
+    case upi = "UPI"
+}
+
+public struct DastakV1LaunchPayment: Codable, Equatable, Sendable {
+    public let optionLabel: String
+    public let state: DastakV1LaunchPaymentState
+    public let amountPaise: Int?
+    public let currencyCode: String?
+    public let securedAt: String?
+    public let reservationExpiresAt: String?
+    public let reservationSecondsRemaining: Int
+    public let reservationState: DastakV1LaunchReservationState
+    public let committedAt: String?
+    public let collectedAt: String?
+    public let collectionMethod: DastakV1LaunchCollectionMethod?
+    public let canCommit: Bool
+    public let noChargeNow: Bool
+    public let payAtDoorstep: Bool
+
+    public var amount: Money? { amountPaise.map { Money(paise: $0) } }
+}
+
 public enum DastakV1DeliveryVerificationStatus: String, Codable, Equatable, Sendable {
     case active = "ACTIVE"
     case blocked = "BLOCKED"
@@ -563,6 +602,7 @@ public struct DastakV1OrderSnapshot: Codable, Equatable, Identifiable, Sendable 
     public let customerState: String?
     public let fulfilmentProgress: DastakV1FulfilmentProgress?
     public let payment: DastakV1PaymentReservation?
+    public let launchPayment: DastakV1LaunchPayment?
     public let delivery: DastakV1DeliveryProgress?
     public let support: DastakV1OrderSupport?
     public let deliveryAddress: DastakV1DeliveryAddressInput?
@@ -632,6 +672,12 @@ public protocol DastakV1CustomerClient: Sendable {
     ) async throws -> DastakV1OrderSnapshot
 
     func cancel(
+        id: UUID,
+        expectedVersion: Int,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1OrderSnapshot
+
+    func commitLaunchPayment(
         id: UUID,
         expectedVersion: Int,
         idempotencyKey: IdempotencyKey
@@ -791,6 +837,25 @@ public struct SupabaseDastakV1CustomerClient: DastakV1CustomerClient {
         return try await invokeOrder(
             OrderRequest(
                 operation: "cancel",
+                expectedVersion: expectedVersion,
+                order: nil,
+                orderId: id,
+                limit: nil,
+                cursor: nil
+            ),
+            key: idempotencyKey
+        )
+    }
+
+    public func commitLaunchPayment(
+        id: UUID,
+        expectedVersion: Int,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1OrderSnapshot {
+        precondition(expectedVersion > 0)
+        return try await invokeOrder(
+            OrderRequest(
+                operation: "commitLaunchPayment",
                 expectedVersion: expectedVersion,
                 order: nil,
                 orderId: id,

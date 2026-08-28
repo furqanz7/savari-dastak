@@ -23,6 +23,12 @@ export type V1OrderDependencies = {
     idempotencyKey: string;
     expectedVersion: number;
   }) => Promise<unknown>;
+  commitLaunchPayment: (input: {
+    accessToken: string;
+    orderId: string;
+    idempotencyKey: string;
+    expectedVersion: number;
+  }) => Promise<unknown>;
   listMerchantOpportunities: (input: {
     accessToken: string;
     limit: number;
@@ -275,6 +281,20 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
         if (!orderId || !idempotencyKey || !expectedVersion) return validationError();
         return json(
           await dependencies.cancelOrder({
+            accessToken: actor.accessToken,
+            orderId,
+            idempotencyKey,
+            expectedVersion,
+          }),
+        );
+      }
+      case "commitLaunchPayment": {
+        const orderId = requiredUUID(body.orderId);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        if (!orderId || !idempotencyKey || !expectedVersion) return validationError();
+        return json(
+          await dependencies.commitLaunchPayment({
             accessToken: actor.accessToken,
             orderId,
             idempotencyKey,

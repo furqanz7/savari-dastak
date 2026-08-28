@@ -28,6 +28,12 @@ Deno.serve((request) =>
         p_idempotency_key: input.idempotencyKey,
         p_expected_version: input.expectedVersion,
       }),
+    commitLaunchPayment: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_commit_launch_payment", {
+        p_order_id: input.orderId,
+        p_expected_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     listMerchantOpportunities: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_list_merchant_opportunities", {
         p_limit: input.limit,

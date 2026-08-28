@@ -1,8 +1,8 @@
 - Authoritative spec paths: `docs/DASTAK_V1_CODEX_MASTER_HANDOFF.md`, then newer overrides in `docs/DASTAK_V1_LOCKED_ADDENDA.md`
 - Authoritative branch: `codex/dastak-v1-launch`
-- Last checkpoint: fixed-egress RazorpayX payout-gateway patch at branch HEAD
+- Last checkpoint: `c9a19a784b4e90fcad9467ed1c6231ee637d3d9d`, followed by the locally verified launch-payment checkpoint represented by this file's commit
 - Completed V1 capabilities: full Retail, Restaurant/Cafe and mixed-order lifecycle through recovery; OAuth identity; canonical Merchant controls; transport/custody safety; append-only Royalty/platform-fee accounting; RazorpayX-backed bank/UPI withdrawals through a signed fixed-egress boundary; RBAC; durable notifications; invariant monitoring; and launch Web/iOS gates
-- Current launch target: Customer iOS + Customer Web with founder-operated Merchant Web, Delivery Web and Admin Web
-- Deferred surfaces: Android, Merchant iOS, Delivery iOS, Admin iOS
-- Next implementation batch: deploy and allowlist the AWS fixed-egress gateway, configure its Supabase URL/secret and live destination references, then resume the paused production activation sequence
-- Deployment status: production remains at 55 migrations; four dormant V1 functions are deployed; this gateway patch is local-only and not pushed, merged, or deployed
+- Current launch target: the single server-authoritative **Pay via UPI/Cash on Delivery** option across Customer, Merchant, Delivery Partner and Admin Web/iOS surfaces; provider checkout remains dormant
+- Native scope: Customer, Merchant and Admin schemes plus the existing Delivery Partner experience housed in the Customer app; Android remains deferred
+- Next controlled step: owner review and an explicitly authorized production promotion/configuration/UAT sequence; no deployment is authorized by this checkpoint
+- Deployment status: no launch-payment migration, function, web app, iOS app, payment, payout, secret, or fixed-egress change has been pushed or applied to production

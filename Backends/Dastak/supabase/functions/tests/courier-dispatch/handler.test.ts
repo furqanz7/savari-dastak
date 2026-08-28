@@ -282,6 +282,92 @@ Deno.test("V1 final-delivery actions bind the rider, evidence path, and six-digi
   }
 });
 
+Deno.test("V1 doorstep collection binds rider and excludes client amount authority", async () => {
+  const recorded: Record<string, unknown>[] = [];
+  const deps = dependencies({
+    recordV1LaunchCollection: (input) => {
+      recorded.push(input);
+      return Promise.resolve({
+        responseBody: { currentMission: { id: missionId } },
+        responseStatus: 200,
+      });
+    },
+  });
+  for (
+    const payload of [
+      {
+        outcome: "FAILED",
+        method: "UPI",
+        failureReason: "Recipient bank could not complete the transfer.",
+        collectionReference: null,
+      },
+      {
+        outcome: "COLLECTED",
+        method: "CASH",
+        failureReason: null,
+        collectionReference: "cash-at-door",
+      },
+    ] as const
+  ) {
+    const response = await handleCourierDispatch(
+      request({
+        body: {
+          operation: "v1RecordLaunchCollection",
+          missionId,
+          expectedMissionVersion: 9,
+          amountPaise: 1,
+          currencyCode: "USD",
+          riderId: assignmentId,
+          ...payload,
+        },
+        idempotencyKey: `collection-${payload.outcome.toLowerCase()}`,
+      }),
+      deps,
+    );
+    assertEquals(response.status, 200);
+  }
+  assertEquals(recorded[0], {
+    accountId,
+    missionId,
+    outcome: "FAILED",
+    method: "UPI",
+    collectionReference: null,
+    failureReason: "Recipient bank could not complete the transfer.",
+    expectedMissionVersion: 9,
+    idempotencyKey: "collection-failed",
+  });
+  assertEquals(recorded[1].accountId, accountId);
+  assertEquals(recorded.every((input) => !("amountPaise" in input)), true);
+  assertEquals(recorded.every((input) => !("currencyCode" in input)), true);
+  assertEquals(recorded.every((input) => !("riderId" in input)), true);
+});
+
+Deno.test("V1 doorstep collection rejects malformed outcomes before RPC", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    recordV1LaunchCollection: () => {
+      calls += 1;
+      return Promise.resolve({ responseBody: {}, responseStatus: 200 });
+    },
+  });
+  for (
+    const body of [
+      { outcome: "SUCCEEDED", method: "CASH", expectedMissionVersion: 1 },
+      { outcome: "COLLECTED", method: "CARD", expectedMissionVersion: 1 },
+      { outcome: "COLLECTED", method: "UPI", failureReason: "failed", expectedMissionVersion: 1 },
+      { outcome: "FAILED", method: "UPI", failureReason: "x", expectedMissionVersion: 1 },
+      { outcome: "FAILED", method: "UPI", expectedMissionVersion: 0 },
+    ]
+  ) {
+    const response = await handleCourierDispatch(
+      request({ body: { operation: "v1RecordLaunchCollection", missionId, ...body } }),
+      deps,
+    );
+    assertEquals(response.status, 400);
+  }
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 reverse-custody actions bind the rider, immutable evidence path, stops and codes", async () => {
   const recorded: Record<string, unknown>[] = [];
   const evidenceId = "66666666-6666-4666-8666-666666666666";
@@ -527,6 +613,8 @@ function dependencies(
     advanceV1Mission: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     advanceV1FinalDelivery: () =>
+      Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
+    recordV1LaunchCollection: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     advanceV1ReturnMission: () =>
       Promise.resolve({ responseBody: { returnStatus: "CUSTOMER_PICKUP" }, responseStatus: 200 }),
