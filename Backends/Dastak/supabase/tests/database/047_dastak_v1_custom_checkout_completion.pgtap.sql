@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(27);
+select plan(31);
 
 select has_table('dastak_v1', 'payment_client_completions',
   'verified Custom Checkout returns have an immutable record');
@@ -92,6 +92,42 @@ insert into dastak_v1.payment_attempts (
 select is((select provider_mode from dastak_v1.payment_attempts where id =
   '97000000-0000-4000-8000-000000000030'), 'TEST',
   'the payment attempt snapshots TEST mode before provider authorization');
+select is(
+  public.dastak_v1_prepare_razorpay_checkout_mode(
+    '97000000-0000-4000-8000-000000000001',
+    '97000000-0000-4000-8000-000000000010',
+    'fresh-test-mode-snapshot',
+    'TEST'
+  ) ->> 'providerMode',
+  'TEST',
+  'a fresh checkout attempt snapshots Test mode without violating its version guard'
+);
+select is(
+  (select attempt.version
+   from dastak_v1.payment_attempts attempt
+   where attempt.idempotency_key = 'fresh-test-mode-snapshot'),
+  2::bigint,
+  'the initial provider-mode snapshot increments the payment-attempt version once'
+);
+select is(
+  public.dastak_v1_prepare_razorpay_checkout_mode(
+    '97000000-0000-4000-8000-000000000001',
+    '97000000-0000-4000-8000-000000000010',
+    'fresh-test-mode-snapshot',
+    'TEST'
+  ) ->> 'attemptId',
+  (select attempt.id::text
+   from dastak_v1.payment_attempts attempt
+   where attempt.idempotency_key = 'fresh-test-mode-snapshot'),
+  'an idempotent retry returns the same mode-tagged payment attempt'
+);
+select is(
+  (select attempt.version
+   from dastak_v1.payment_attempts attempt
+   where attempt.idempotency_key = 'fresh-test-mode-snapshot'),
+  2::bigint,
+  'an idempotent retry does not advance the payment-attempt version again'
+);
 select throws_ok($$
   select public.dastak_v1_prepare_razorpay_checkout_mode(
     '97000000-0000-4000-8000-000000000001',
