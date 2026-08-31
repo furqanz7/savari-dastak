@@ -935,3 +935,38 @@ for each row execute function dastak_v1.guard_immutable_superadmin_grant();
 
 comment on table dastak_v1.admin_role_assignments is
   'Fixed Dastak Admin slots: immutable Superadmin slot 0 and replaceable Executive Admin slots 1 and 2.';
+
+-- A cleaned deployment may contain exactly the founder account that is to
+-- become the permanent Superadmin. Bootstrap that unambiguous account during
+-- rollout; never guess when multiple active verified accounts exist. Empty
+-- development databases remain bootstrappable later through the private DBA
+-- function above.
+do $$
+declare
+  v_account_id uuid;
+  v_account_count bigint;
+begin
+  select pg_catalog.count(*)
+  into v_account_count
+  from public.accounts account
+  join auth.users auth_user on auth_user.id = account.id
+  where account.account_state = 'ACTIVE'
+    and auth_user.email is not null
+    and auth_user.email_confirmed_at is not null;
+
+  if v_account_count > 1 then
+    raise exception using
+      errcode = 'P0003',
+      message = 'Superadmin bootstrap requires one unambiguous active verified account.';
+  elsif v_account_count = 1 then
+    select account.id into strict v_account_id
+    from public.accounts account
+    join auth.users auth_user on auth_user.id = account.id
+    where account.account_state = 'ACTIVE'
+      and auth_user.email is not null
+      and auth_user.email_confirmed_at is not null;
+
+    perform dastak_v1_api.bootstrap_superadmin(v_account_id);
+  end if;
+end;
+$$;
