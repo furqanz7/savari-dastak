@@ -57,6 +57,7 @@ export function MerchantOrdersView({
           email={email}
           phoneNumber={phoneNumber}
           roleName="Merchant"
+          persona="MERCHANT"
           supabaseUrl={supabaseUrl}
           publishableKey={publishableKey}
           onOpenWorkspace={() => setSection("catalogue")}

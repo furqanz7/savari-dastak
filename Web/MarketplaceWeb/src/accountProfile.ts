@@ -4,6 +4,7 @@ export type AccountProfile = {
 };
 
 export type CustomerOAuthProvider = "apple" | "google";
+export type DastakPersona = "CUSTOMER" | "MERCHANT" | "DELIVERY";
 export type CustomerIdentity = {
   provider: CustomerOAuthProvider;
   linkKind: "ORIGIN" | "EXPLICIT";
@@ -51,12 +52,12 @@ export async function updateAccountProfile(
 }
 
 export async function deleteAccount(
-  input: AuthenticatedInput & { idempotencyKey?: string },
+  input: AuthenticatedInput & { persona: DastakPersona; idempotencyKey?: string },
   fetcher: typeof fetch = fetch,
 ) {
   const body = await callAccountProfile(
     input,
-    { operation: "delete" },
+    { operation: "delete", persona: input.persona },
     fetcher,
     input.idempotencyKey,
   );
@@ -150,12 +151,16 @@ async function callAccountProfile(
 
 const deletionKeyStorageName = "dastak.accountDeletion.idempotencyKey.v1";
 
-export function accountDeletionIdempotencyKey(storage: Pick<Storage, "getItem" | "setItem"> = localStorage) {
+export function accountDeletionIdempotencyKey(
+  persona: DastakPersona = "CUSTOMER",
+  storage: Pick<Storage, "getItem" | "setItem"> = localStorage,
+) {
   const created = crypto.randomUUID();
   try {
-    const existing = storage.getItem(deletionKeyStorageName)?.trim();
+    const key = `${deletionKeyStorageName}.${persona}`;
+    const existing = storage.getItem(key)?.trim();
     if (existing) return existing;
-    storage.setItem(deletionKeyStorageName, created);
+    storage.setItem(key, created);
   } catch {
     // A stable in-memory caller key still protects private-browsing sessions.
   }
@@ -163,10 +168,11 @@ export function accountDeletionIdempotencyKey(storage: Pick<Storage, "getItem" |
 }
 
 export function clearAccountDeletionIdempotencyKey(
+  persona: DastakPersona = "CUSTOMER",
   storage: Pick<Storage, "removeItem"> = localStorage,
 ) {
   try {
-    storage.removeItem(deletionKeyStorageName);
+    storage.removeItem(`${deletionKeyStorageName}.${persona}`);
   } catch {
     // Storage can be unavailable in private browsing.
   }

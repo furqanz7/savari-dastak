@@ -1,5 +1,9 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert";
-import { dastakOAuthProviders, oauthAuthenticationTimestamp } from "../../_shared/auth.ts";
+import {
+  canonicalAuthPhone,
+  dastakOAuthProviders,
+  oauthAuthenticationTimestamp,
+} from "../../_shared/auth.ts";
 
 Deno.test("Dastak bearer identity accepts Apple, Google and explicitly linked pairs", () => {
   assertEquals(dastakOAuthProviders({ identities: [{ provider: "apple" }] }), ["apple"]);
@@ -7,6 +11,10 @@ Deno.test("Dastak bearer identity accepts Apple, Google and explicitly linked pa
   assertEquals(
     dastakOAuthProviders({ identities: [{ provider: "google" }, { provider: "apple" }] }),
     ["apple", "google"],
+  );
+  assertEquals(
+    dastakOAuthProviders({ identities: [{ provider: "google" }, { provider: "phone" }] }),
+    ["google"],
   );
 });
 
@@ -34,6 +42,13 @@ Deno.test("Dastak bearer identity reads the most recent OAuth authentication tim
     oauthAuthenticationTimestamp(jwt({ amr: [{ method: "password", timestamp: 1 }] })),
     undefined,
   );
+});
+
+Deno.test("Supabase Auth phone values are normalized to E.164", () => {
+  assertEquals(canonicalAuthPhone("919876543210"), "+919876543210");
+  assertEquals(canonicalAuthPhone("+919876543210"), "+919876543210");
+  assertEquals(canonicalAuthPhone("invalid"), undefined);
+  assertEquals(canonicalAuthPhone(null), undefined);
 });
 
 function jwt(payload: unknown) {

@@ -80,7 +80,16 @@ public protocol AccountProfileClient: Sendable {
         idempotencyKey: IdempotencyKey
     ) async throws
     func exportAccount(idempotencyKey: IdempotencyKey) async throws -> MarketplaceAccountExport
-    func deleteAccount(idempotencyKey: IdempotencyKey) async throws
+    func deleteAccount(
+        persona: MarketplaceDastakPersona,
+        idempotencyKey: IdempotencyKey
+    ) async throws
+}
+
+public enum MarketplaceDastakPersona: String, Codable, Equatable, Sendable {
+    case customer = "CUSTOMER"
+    case merchant = "MERCHANT"
+    case delivery = "DELIVERY"
 }
 
 public struct MarketplaceAccountExport: Equatable, Sendable {
@@ -98,6 +107,7 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
         let operation: String
         let displayName: String?
         let phoneNumber: String?
+        let persona: MarketplaceDastakPersona?
     }
 
     private struct ProfileResponse: Decodable, Sendable {
@@ -130,7 +140,7 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
     public func snapshot(idempotencyKey: IdempotencyKey) async throws -> MarketplaceAccountProfile {
         let response: ProfileResponse = try await functions.invoke(
             "account-profile",
-            request: Request(operation: "snapshot", displayName: nil, phoneNumber: nil),
+            request: Request(operation: "snapshot", displayName: nil, phoneNumber: nil, persona: nil),
             idempotencyKey: idempotencyKey
         )
         return response.profile
@@ -146,17 +156,26 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
             request: Request(
                 operation: "update",
                 displayName: displayName,
-                phoneNumber: phoneNumber
+                phoneNumber: phoneNumber,
+                persona: nil
             ),
             idempotencyKey: idempotencyKey
         )
         return response.profile
     }
 
-    public func deleteAccount(idempotencyKey: IdempotencyKey) async throws {
+    public func deleteAccount(
+        persona: MarketplaceDastakPersona,
+        idempotencyKey: IdempotencyKey
+    ) async throws {
         let response: DeleteResponse = try await functions.invoke(
             "account-profile",
-            request: Request(operation: "delete", displayName: nil, phoneNumber: nil),
+            request: Request(
+                operation: "delete",
+                displayName: nil,
+                phoneNumber: nil,
+                persona: persona
+            ),
             idempotencyKey: idempotencyKey
         )
         guard response.deleted else { throw FunctionClientError.invalidResponse }
@@ -165,7 +184,7 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
     public func exportAccount(idempotencyKey: IdempotencyKey) async throws -> MarketplaceAccountExport {
         let response: ExportResponse = try await functions.invoke(
             "account-profile",
-            request: Request(operation: "export", displayName: nil, phoneNumber: nil),
+            request: Request(operation: "export", displayName: nil, phoneNumber: nil, persona: nil),
             idempotencyKey: idempotencyKey
         )
         let encoder = JSONEncoder()
@@ -181,7 +200,7 @@ public struct SupabaseAccountProfileClient: AccountProfileClient {
     ) async throws -> [MarketplaceLinkedIdentity] {
         let response: IdentitySnapshotResponse = try await functions.invoke(
             "account-profile",
-            request: Request(operation: "identitySnapshot", displayName: nil, phoneNumber: nil),
+            request: Request(operation: "identitySnapshot", displayName: nil, phoneNumber: nil, persona: nil),
             idempotencyKey: idempotencyKey
         )
         return response.providers

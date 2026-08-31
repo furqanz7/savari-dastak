@@ -167,7 +167,11 @@
 .account-dialog-mark.destructive { color: var(--destructive); border-color: color-mix(in srgb, var(--destructive) 18%, transparent); background: color-mix(in srgb, var(--destructive) 10%, transparent); }
 .account-profile-sheet > label { display: grid; gap: 8px; margin-top: 22px; color: var(--text-secondary); font-size: 13px; font-weight: 700; }
 .account-profile-sheet > .phone-field-group { margin-top: 20px; }
-.account-profile-sheet > .phone-field-group > label { color: var(--text-secondary); font-size: 13px; }
+.account-profile-sheet > .phone-field-group > span { color: var(--text-secondary); font-size: 13px; font-weight: 700; }
+.account-verified-phone { display: flex; align-items: center; min-height: 56px; padding: 0 15px; border: 1px solid var(--divider); border-radius: 16px; color: var(--text-primary); background: var(--surface-raised); font-variant-numeric: tabular-nums; }
+.profile-verification-heading { align-items: center; display: flex; justify-content: space-between; gap: 1rem; }
+.profile-verification-heading button { appearance: none; background: transparent; border: 0; color: var(--accent, #b08d57); cursor: pointer; font: inherit; font-size: .82rem; font-weight: 700; padding: .4rem 0; }
+.profile-verification-heading button:disabled { cursor: default; opacity: .5; }
 .account-profile-sheet > label > input { width: 100%; min-height: 56px; padding: 0 15px; border: 1px solid var(--divider); border-radius: 16px; outline: 0; color: var(--text-primary); background: var(--surface-raised); transition: border-color 150ms ease, box-shadow 150ms ease; }
 .account-profile-sheet > label > input:focus { border-color: var(--dastak-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dastak-accent) 13%, transparent); }
 .account-profile-sheet .phone-number-field { min-height: 56px; border-radius: 16px; background: var(--surface-raised); }

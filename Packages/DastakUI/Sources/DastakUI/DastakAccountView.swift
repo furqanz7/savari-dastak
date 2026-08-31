@@ -810,8 +810,8 @@ struct DastakAccountView: View {
                 Divider().padding(.leading, 64)
                 Button(role: .destructive) { showingDeleteAccount = true } label: {
                     accountRow(
-                        title: "Delete account",
-                        value: "Permanently remove your Dastak account",
+                        title: "Delete Customer",
+                        value: "Remove only your Customer profile and access",
                         symbol: "trash",
                         isDestructive: true
                     )
@@ -856,11 +856,11 @@ struct DastakAccountView: View {
     }
 
     private var deletionWarning: String {
-        let history = "Completed order and financial records may be retained without your identity where legally required."
+        let isolation = "Your Merchant, Delivery Partner and Admin access are not changed. You can recover Customer later with the same verified identity."
         guard hasActiveOrders else {
-            return "This permanently deletes your account and signs you out. \(history)"
+            return "This removes only your Customer profile and signs this app out. \(isolation)"
         }
-        return "You have an active order. It will continue, but deleting now removes your access to tracking and in-app support. This permanently signs you out. \(history)"
+        return "Finish or cancel your active Customer order before deleting this profile. \(isolation)"
     }
 
     @MainActor
@@ -1001,7 +1001,7 @@ private struct DastakDeleteAccountSheet: View {
                             .font(.caption.weight(.bold))
                             .tracking(1.4)
                             .foregroundStyle(MarketplaceColors.destructive.color)
-                        Text("Delete your account?")
+                        Text("Delete Customer?")
                             .font(MarketplaceTypography.instrumentSerif(size: 40, relativeTo: .largeTitle))
                         Text(warning)
                             .font(MarketplaceTypography.supporting)
@@ -1023,7 +1023,7 @@ private struct DastakDeleteAccountSheet: View {
                                 .padding(.horizontal, MarketplaceSpacing.compact)
                                 .frame(minHeight: 56)
                                 .dastakAccountSurface()
-                                .accessibilityLabel("Type DELETE to confirm account deletion")
+                                .accessibilityLabel("Type DELETE to confirm Customer profile deletion")
                         }
 
                         Button(role: .destructive) {
@@ -1031,7 +1031,7 @@ private struct DastakDeleteAccountSheet: View {
                         } label: {
                             ZStack {
                                 Label(
-                                    isBusy ? "Deleting account…" : "Permanently delete account",
+                                    isBusy ? "Deleting Customer…" : "Delete Customer",
                                     systemImage: "trash.fill"
                                 )
                                 if isBusy {
@@ -1045,7 +1045,7 @@ private struct DastakDeleteAccountSheet: View {
                         }
                         .buttonStyle(DastakDestructiveActionButtonStyle())
                         .disabled(!confirmed || isBusy)
-                        .accessibilityHint("Permanently deletes this account after identity verification.")
+                        .accessibilityHint("Deletes only the Customer profile after identity verification.")
 
                         Label("This cannot be undone.", systemImage: "exclamationmark.shield.fill")
                             .font(.footnote.weight(.semibold))
@@ -1066,10 +1066,10 @@ private struct DastakDeleteAccountSheet: View {
             }
             .scrollIndicators(.hidden)
             .marketplacePage()
-            .navigationTitle("Delete account")
+            .navigationTitle("Delete Customer")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Keep account") { dismiss() }.disabled(isBusy)
+                    Button("Keep Customer") { dismiss() }.disabled(isBusy)
                 }
             }
         }
@@ -1083,7 +1083,7 @@ private struct DastakDeleteAccountSheet: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             Text("Verify it’s you")
                 .font(.title3.weight(.semibold))
-            Text("Sign in again with a method already linked to this Dastak account.")
+            Text("Sign in again with a method already linked to this Dastak identity.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1117,14 +1117,20 @@ private struct DastakDeleteAccountSheet: View {
         do {
             try await deleteAccount()
         } catch let error as FunctionClientError {
-            if case let .api(_, code, message) = error, code == "reauthentication_required" {
-                requiresReauthentication = true
-                errorMessage = message
+            if case let .api(_, code, message) = error {
+                if code == "reauthentication_required" {
+                    requiresReauthentication = true
+                    errorMessage = message
+                } else if code == "persona_deletion_blocked" {
+                    errorMessage = message
+                } else {
+                    errorMessage = "Customer could not be deleted. Your profiles are unchanged."
+                }
             } else {
-                errorMessage = "Your account could not be deleted. Your account is unchanged."
+                errorMessage = "Customer could not be deleted. Your profiles are unchanged."
             }
         } catch {
-            errorMessage = "Your account could not be deleted. Your account is unchanged."
+            errorMessage = "Customer could not be deleted. Your profiles are unchanged."
         }
     }
 
@@ -1375,7 +1381,7 @@ struct DastakProfileEditor: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var displayName: String
-    @State private var phoneNumber: String
+    private let phoneNumber: String
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var didAttemptSave = false
@@ -1392,7 +1398,7 @@ struct DastakProfileEditor: View {
         self.contactMessage = contactMessage
         self.updateProfile = updateProfile
         _displayName = State(initialValue: customer?.displayName ?? "")
-        _phoneNumber = State(initialValue: customer?.phoneNumber ?? "+91")
+        phoneNumber = customer?.phoneNumber ?? "Not available"
     }
 
     var body: some View {
@@ -1437,15 +1443,20 @@ struct DastakProfileEditor: View {
                     }
 
                     VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                        Text("Phone number")
+                        Text("Verified phone number")
                             .font(.subheadline.weight(.semibold))
-                        DastakPhoneNumberField(phoneNumber: $phoneNumber)
-                            .accessibilityHint(phoneValidationMessage ?? "Include the country code")
-                        if didAttemptSave, let phoneValidationMessage {
-                            Label(phoneValidationMessage, systemImage: "exclamationmark.circle.fill")
-                                .font(.footnote)
-                                .foregroundStyle(MarketplaceColors.destructive.color)
+                        HStack(spacing: MarketplaceSpacing.small) {
+                            Image(systemName: "checkmark.shield.fill")
+                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            Text(phoneNumber)
+                                .font(.body.monospacedDigit())
+                                .textSelection(.enabled)
+                            Spacer()
                         }
+                        .padding(.horizontal, MarketplaceSpacing.compact)
+                        .frame(minHeight: 56)
+                        .dastakAccountSurface()
+                        .accessibilityLabel("Verified phone number \(phoneNumber)")
                         Label(
                             contactMessage,
                             systemImage: "lock.fill"
@@ -1498,7 +1509,7 @@ struct DastakProfileEditor: View {
     }
 
     private var isValid: Bool {
-        nameValidationMessage == nil && phoneValidationMessage == nil
+        nameValidationMessage == nil
     }
 
     private var nameValidationMessage: String? {
@@ -1506,13 +1517,6 @@ struct DastakProfileEditor: View {
         if name.isEmpty { return "Enter your full name." }
         if name.count > 80 { return "Use 80 characters or fewer." }
         return nil
-    }
-
-    private var phoneValidationMessage: String? {
-        let phone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        return DastakPhoneNumberValidator.isValidE164(phone)
-            ? nil
-            : "Enter a valid phone number with country code."
     }
 
     @MainActor

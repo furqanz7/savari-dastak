@@ -19,8 +19,8 @@ Deno.test("customer onboarding completion remains additive and history safe", ()
   assertNotMatch(migration, /delete\s+from\s+public\.accounts/i);
 });
 
-Deno.test("account deletion cannot depend on the requesting browser remaining connected", () => {
-  assertMatch(profileIndex, /prepare_customer_account_deletion/);
+Deno.test("persona deletion is server-owned and does not delete the canonical Auth user", () => {
+  assertMatch(profileIndex, /prepare_dastak_persona_deletion/);
   assertNotMatch(profileIndex, /auth\.admin\.deleteUser/);
   assertMatch(workerIndex, /auth\.admin\.deleteUser/);
   assertMatch(workerIndex, /complete_customer_account_deletion/);

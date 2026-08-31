@@ -5,6 +5,8 @@ export async function verifyBearerUser(bearerToken: string) {
   return {
     accountId: session.accountId,
     oauthProviders: session.oauthProviders,
+    email: session.email,
+    verifiedPhoneNumber: session.verifiedPhoneNumber,
   };
 }
 
@@ -44,7 +46,17 @@ export async function verifyBearerSession(bearerToken: string) {
     accessToken: token,
     oauthProviders,
     oauthAuthenticatedAt: oauthAuthenticationTimestamp(token),
+    email: data.user.email,
+    verifiedPhoneNumber: data.user.phone_confirmed_at
+      ? canonicalAuthPhone(data.user.phone)
+      : undefined,
   };
+}
+
+export function canonicalAuthPhone(value?: string | null) {
+  if (!value) return undefined;
+  const normalized = value.startsWith("+") ? value : `+${value}`;
+  return /^\+[1-9][0-9]{7,14}$/.test(normalized) ? normalized : undefined;
 }
 
 export function dastakOAuthProviders(user: {
@@ -52,20 +64,25 @@ export function dastakOAuthProviders(user: {
   identities?: Array<{ provider?: string }> | null;
 }) {
   if (user.is_anonymous) throw new Error("Anonymous Dastak sessions are forbidden.");
-  const providers = [
+  const identityProviders = [
     ...new Set(
       (user.identities ?? []).map((identity) => identity.provider).filter(
         (provider): provider is string => typeof provider === "string",
       ),
     ),
   ].sort();
+  const providers = identityProviders.filter(
+    (provider): provider is "apple" | "google" => provider === "apple" || provider === "google",
+  );
   if (
     providers.length < 1 ||
-    providers.some((provider) => provider !== "apple" && provider !== "google")
+    identityProviders.some((provider) =>
+      provider !== "apple" && provider !== "google" && provider !== "phone"
+    )
   ) {
     throw new Error("Dastak requires an Apple or Google OAuth identity.");
   }
-  return providers as Array<"apple" | "google">;
+  return providers;
 }
 
 export function oauthAuthenticationTimestamp(token: string) {

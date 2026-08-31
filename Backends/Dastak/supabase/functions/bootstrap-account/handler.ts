@@ -6,12 +6,17 @@ export type AuthenticateBearer = (
 ) => Promise<{
   accountId: string;
   oauthProviders?: Array<"apple" | "google">;
+  email?: string;
+  verifiedPhoneNumber?: string;
 }>;
 
 export type BootstrapAccountInput = {
   accountId: string;
+  application: DastakApplication;
   displayName: string;
   phoneNumber: string;
+  verifiedPhoneNumber: string;
+  email: string;
   idempotencyKey: string;
   requestDigest: string;
 };
@@ -29,9 +34,13 @@ type Dependencies = {
 };
 
 type NormalizedBootstrapBody = {
+  application: DastakApplication;
   displayName: string;
   phoneNumber: string;
 };
+
+export type DastakApplication = "customer" | "merchant" | "delivery" | "admin";
+const applications = new Set<DastakApplication>(["customer", "merchant", "delivery", "admin"]);
 
 export async function handleBootstrapAccount(
   request: Request,
@@ -56,6 +65,8 @@ export async function handleBootstrapAccount(
   let user: {
     accountId: string;
     oauthProviders?: Array<"apple" | "google">;
+    email?: string;
+    verifiedPhoneNumber?: string;
   };
   try {
     user = await dependencies.authenticateBearer(authorization);
@@ -83,6 +94,15 @@ export async function handleBootstrapAccount(
     );
   }
 
+  if (!user.email) {
+    return json({
+      error: {
+        code: "verified_email_required",
+        message: "A verified Apple or Google email is required.",
+      },
+    }, 403);
+  }
+
   const idempotencyKey = request.headers.get("X-Idempotency-Key")?.trim() ?? "";
   if (!idempotencyKey) {
     return validationError("X-Idempotency-Key is required.");
@@ -98,11 +118,23 @@ export async function handleBootstrapAccount(
     return normalized.response;
   }
 
+  if (user.verifiedPhoneNumber !== normalized.value.phoneNumber) {
+    return json({
+      error: {
+        code: "phone_verification_required",
+        message: "Verify this phone number before continuing.",
+      },
+    }, 409);
+  }
+
   try {
     const result = await dependencies.bootstrapAccount({
       accountId: user.accountId,
+      application: normalized.value.application,
       displayName: normalized.value.displayName,
       phoneNumber: normalized.value.phoneNumber,
+      verifiedPhoneNumber: user.verifiedPhoneNumber,
+      email: user.email,
       idempotencyKey,
       requestDigest: await canonicalBootstrapDigest(normalized.value),
     });
@@ -126,6 +158,7 @@ export async function canonicalBootstrapDigest(
 ) {
   const bytes = new TextEncoder().encode(
     JSON.stringify({
+      application: body.application,
       displayName: body.displayName,
       phoneNumber: body.phoneNumber,
     }),
@@ -154,6 +187,11 @@ function normalizeBody(value: unknown):
 
   const displayName = "displayName" in value ? value.displayName : undefined;
   const phoneNumber = "phoneNumber" in value ? value.phoneNumber : undefined;
+  const application = "application" in value ? value.application : undefined;
+
+  if (typeof application !== "string" || !applications.has(application as DastakApplication)) {
+    return { ok: false, response: validationError("A supported Dastak application is required.") };
+  }
 
   if (typeof displayName !== "string") {
     return { ok: false, response: validationError("displayName is required.") };
@@ -176,6 +214,7 @@ function normalizeBody(value: unknown):
   return {
     ok: true,
     value: {
+      application: application as DastakApplication,
       displayName: normalizedName,
       phoneNumber: normalizedPhone,
     },

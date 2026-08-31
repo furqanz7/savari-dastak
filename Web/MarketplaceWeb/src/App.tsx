@@ -21,6 +21,7 @@ import {
 import { createClient, type Provider, type Session } from "@supabase/supabase-js";
 import {
   completeProfile,
+  DastakProfileSubmissionError,
   isValidProfile,
   mustSignOutDeniedAdmin,
   ProfileSubmissionAttempt,
@@ -541,9 +542,12 @@ function ProfileForm({ session, onComplete, onSignOut }: {
     return normalized.length <= 80 ? normalized : "";
   }, [session.user.user_metadata]);
   const [displayName, setDisplayName] = useState(suggestedName);
-  const [phoneNumber, setPhoneNumber] = useState("+91");
+  const [phoneNumber, setPhoneNumber] = useState(() => canonicalSessionPhone(session.user.phone) ?? "+91");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [identityRecoveryComplete, setIdentityRecoveryComplete] = useState(false);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [touched, setTouched] = useState({ name: false, phone: false });
   const submissionAttempt = useRef(new ProfileSubmissionAttempt());
@@ -554,8 +558,18 @@ function ProfileForm({ session, onComplete, onSignOut }: {
     ? "Apple"
     : session.user.app_metadata.provider === "google" ? "Google" : "your identity provider";
 
+  const changePhoneNumber = () => {
+    setVerificationSent(false);
+    setVerificationCode("");
+    setError(undefined);
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (identityRecoveryComplete) {
+      onSignOut();
+      return;
+    }
     if (!valid) {
       setTouched({ name: true, phone: true });
       return;
@@ -563,10 +577,34 @@ function ProfileForm({ session, onComplete, onSignOut }: {
     setBusy(true);
     setError(undefined);
     try {
+      let verifiedSession = session;
+      const phoneAlreadyVerified = canonicalSessionPhone(session.user.phone) === phoneNumber &&
+        Boolean(session.user.phone_confirmed_at);
+      if (!phoneAlreadyVerified && !verificationSent) {
+        const { error: verificationError } = await supabase.auth.updateUser({ phone: phoneNumber });
+        if (verificationError) throw verificationError;
+        setVerificationSent(true);
+        setBusy(false);
+        return;
+      }
+      if (!phoneAlreadyVerified) {
+        if (!/^\d{6}$/.test(verificationCode.trim())) {
+          throw new Error("Enter the 6-digit verification code sent to your phone.");
+        }
+        const verified = await supabase.auth.verifyOtp({
+          phone: phoneNumber,
+          token: verificationCode.trim(),
+          type: "phone_change",
+        });
+        if (verified.error) throw verified.error;
+        const refreshed = verified.data.session ?? (await supabase.auth.getSession()).data.session;
+        if (!refreshed) throw new Error("Phone verification completed, but the session could not be refreshed.");
+        verifiedSession = refreshed;
+      }
       const profile = { displayName, phoneNumber };
       await completeProfile(
         supabase,
-        session,
+        verifiedSession,
         config,
         profile,
         submissionAttempt.current.keyFor(profile),
@@ -574,7 +612,15 @@ function ProfileForm({ session, onComplete, onSignOut }: {
       submissionAttempt.current.reset();
       onComplete();
     } catch (submitError) {
-      setError(errorMessage(submitError));
+      if (
+        submitError instanceof DastakProfileSubmissionError &&
+        submitError.code === "identity_reauthentication_required"
+      ) {
+        setIdentityRecoveryComplete(true);
+        setError("Your Dastak account is recovered. Continue to sign in with your updated email.");
+      } else {
+        setError(errorMessage(submitError));
+      }
       setBusy(false);
     }
   };
@@ -609,18 +655,35 @@ function ProfileForm({ session, onComplete, onSignOut }: {
         onChange={setPhoneNumber}
         id="profile-phone"
         required
-        disabled={busy}
+        disabled={busy || verificationSent}
         invalid={touched.phone && Boolean(validation.phone)}
         describedBy="phone-hint phone-error"
         onBlur={() => setTouched((current) => ({ ...current, phone: true }))}
       />
     </div>
     <small id="phone-hint">{isCustomerProfile ? <>
-      <LockKeyhole size={13} aria-hidden="true" /> Used only when an active delivery requires contact—not for sign-in.
-    </> : "Used only when an active delivery requires contact. It is not used to sign in."}</small>
+      <LockKeyhole size={13} aria-hidden="true" /> Verified once to protect your identity and used when an active delivery requires contact.
+    </> : "Verified once to protect your identity and used when an active delivery requires contact."}</small>
     <small id="phone-error" className="field-error" aria-live="polite">
       {touched.phone ? validation.phone ?? "" : ""}
     </small>
+    {verificationSent && <label>
+      <span className="profile-verification-heading">
+        Verification code
+        <button type="button" disabled={busy} onClick={changePhoneNumber}>Change number</button>
+      </span>
+      <input
+        autoComplete="one-time-code"
+        inputMode="numeric"
+        pattern="[0-9]{6}"
+        maxLength={6}
+        value={verificationCode}
+        disabled={busy}
+        placeholder="6-digit code"
+        onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ""))}
+      />
+      <small>Sent to {phoneNumber}.</small>
+    </label>}
     {error && <p className="error-text profile-submit-error" role="alert">{error}</p>}
     <button
       className={`primary-button${isCustomerProfile ? " profile-continue-button" : ""}`}
@@ -629,7 +692,9 @@ function ProfileForm({ session, onComplete, onSignOut }: {
       type="submit"
     >
       {busy ? "Saving your details…" : <>
-        Save and continue
+        {identityRecoveryComplete
+          ? "Continue to sign in"
+          : verificationSent ? "Verify and continue" : "Save and continue"}
         {isCustomerProfile && <ArrowRight size={18} aria-hidden="true" />}
       </>}
     </button>
@@ -889,6 +954,12 @@ function Loading() {
     </div>;
   }
   return <div className="loading" role="status"><span /> Checking account</div>;
+}
+
+function canonicalSessionPhone(value?: string) {
+  if (!value) return undefined;
+  const normalized = value.startsWith("+") ? value : `+${value}`;
+  return /^\+[1-9][0-9]{7,14}$/.test(normalized) ? normalized : undefined;
 }
 
 function errorMessage(error: unknown) {

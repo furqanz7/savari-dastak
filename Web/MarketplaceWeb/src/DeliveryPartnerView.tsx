@@ -455,6 +455,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         email={email}
         phoneNumber={phoneNumber}
         roleName="Delivery Partner"
+        persona="DELIVERY"
         deliveryPartner={partner}
         deliveryPartnerLoading={loading}
         deliveryPartnerError={partner ? undefined : error}

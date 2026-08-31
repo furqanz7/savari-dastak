@@ -369,6 +369,9 @@ private struct AuthenticationRouteView: View {
     @State private var phoneNumber = ""
     @State private var appleNonce: String?
     @State private var errorMessage: String?
+    @State private var phoneVerificationCode = ""
+    @State private var phoneVerificationSent = false
+    @State private var identityRecoveryComplete = false
     @State private var restored = false
     @State private var showsSignOutConfirmation = false
     @State private var signingInProvider: SignInProvider?
@@ -1041,7 +1044,7 @@ private struct AuthenticationRouteView: View {
             TextField("Display name", text: $displayName)
                 .textFieldStyle(.roundedBorder)
             phoneNumberField
-            Text("Profile contact only. Not used for sign-in, recovery, or payments.")
+            Text("Verified as your unique account contact. It is not used for payments.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button(coordinator.isProfileSubmissionInFlight ? "Completing profile" : "Complete profile") {
@@ -1102,6 +1105,7 @@ private struct AuthenticationRouteView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                 DastakPhoneNumberField(phoneNumber: $phoneNumber)
+                    .disabled(phoneVerificationSent)
 
                 if dastakPhoneHasUserInput, !DastakPhoneNumberValidator.isValidE164(phoneNumber) {
                     Label("Enter a complete phone number.", systemImage: "exclamationmark.circle.fill")
@@ -1114,9 +1118,41 @@ private struct AuthenticationRouteView: View {
                 }
             }
 
+            if phoneVerificationSent {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Verification code")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                    TextField("6-digit code", text: $phoneVerificationCode)
+#if os(iOS)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+#endif
+                        .textFieldStyle(DastakTextFieldStyle())
+                        .onChange(of: phoneVerificationCode) { value in
+                            let digits = value.filter(\.isNumber)
+                            phoneVerificationCode = String(digits.prefix(6))
+                        }
+                    Text("Sent to \(phoneNumber).")
+                        .font(.caption)
+                        .foregroundStyle(dastakSecondaryText)
+                    Button("Change number") {
+                        phoneVerificationSent = false
+                        phoneVerificationCode = ""
+                        errorMessage = nil
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(dastakAccent)
+                    .buttonStyle(.plain)
+                }
+            }
+
             Button {
                 dismissKeyboard()
-                Task { await completeProfile() }
+                Task {
+                    if identityRecoveryComplete { await signOut() }
+                    else { await completeProfile() }
+                }
             } label: {
                 HStack(spacing: 9) {
                     if coordinator.isProfileSubmissionInFlight {
@@ -1124,7 +1160,11 @@ private struct AuthenticationRouteView: View {
                             .tint(Color(red: 33 / 255, green: 19 / 255, blue: 14 / 255))
                             .accessibilityHidden(true)
                     }
-                    Text(coordinator.isProfileSubmissionInFlight ? "Saving your details…" : "Save and continue")
+                    Text(coordinator.isProfileSubmissionInFlight
+                        ? "Saving your details…"
+                        : identityRecoveryComplete
+                            ? "Continue to sign in"
+                            : phoneVerificationSent ? "Verify and continue" : "Save and continue")
                     if !coordinator.isProfileSubmissionInFlight {
                         Image(systemName: "arrow.right")
                             .font(.subheadline.weight(.bold))
@@ -1182,21 +1222,53 @@ private struct AuthenticationRouteView: View {
                     .textFieldStyle(DastakTextFieldStyle())
 #endif
             }
-
             VStack(alignment: .leading, spacing: 8) {
                 Text("Phone number")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                 DastakPhoneNumberField(phoneNumber: $phoneNumber)
+                    .disabled(phoneVerificationSent)
                 Label(dastakPhonePrivacyText, systemImage: "lock.fill")
                     .font(.caption)
                     .foregroundStyle(dastakSecondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button(coordinator.isProfileSubmissionInFlight ? "Completing profile" : "Continue") {
+            if phoneVerificationSent {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Verification code")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                    TextField("6-digit code", text: $phoneVerificationCode)
+#if os(iOS)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+#endif
+                        .textFieldStyle(DastakTextFieldStyle())
+                        .onChange(of: phoneVerificationCode) { value in
+                            phoneVerificationCode = String(value.filter(\.isNumber).prefix(6))
+                        }
+                    Button("Change number") {
+                        phoneVerificationSent = false
+                        phoneVerificationCode = ""
+                        errorMessage = nil
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(dastakAccent)
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Button(coordinator.isProfileSubmissionInFlight
+                ? "Completing profile"
+                : identityRecoveryComplete
+                    ? "Continue to sign in"
+                    : phoneVerificationSent ? "Verify and continue" : "Continue") {
                 dismissKeyboard()
-                Task { await completeProfile() }
+                Task {
+                    if identityRecoveryComplete { await signOut() }
+                    else { await completeProfile() }
+                }
             }
             .buttonStyle(DastakPrimaryButtonStyle())
             .disabled(
@@ -1411,13 +1483,31 @@ private struct AuthenticationRouteView: View {
     private func completeProfile() async {
         do {
             errorMessage = nil
+            if !phoneVerificationSent {
+                try await coordinator.requestPhoneVerification(phoneNumber: phoneNumber)
+                phoneVerificationSent = true
+                return
+            }
+            guard phoneVerificationCode.count == 6 else {
+                errorMessage = "Enter the 6-digit verification code sent to your phone."
+                return
+            }
+            try await coordinator.verifyPhone(
+                phoneNumber: phoneNumber,
+                code: phoneVerificationCode
+            )
             try await coordinator.completeProfile(
                 displayName: displayName,
                 phoneNumber: phoneNumber
             )
         } catch {
-            errorMessage = coordinator.profileSubmissionError?.profileSubmissionMessage
-                ?? "Profile completion failed."
+            if coordinator.profileSubmissionError?.requiresIdentityReauthentication == true {
+                identityRecoveryComplete = true
+                errorMessage = "Your Dastak account is recovered. Continue to sign in with your updated email."
+            } else {
+                errorMessage = coordinator.profileSubmissionError?.profileSubmissionMessage
+                    ?? "Profile completion failed."
+            }
         }
     }
 
@@ -1425,6 +1515,9 @@ private struct AuthenticationRouteView: View {
     private func signOut() async {
         do {
             errorMessage = nil
+            identityRecoveryComplete = false
+            phoneVerificationSent = false
+            phoneVerificationCode = ""
             try await coordinator.signOut()
         } catch {
             errorMessage = "Sign out failed."
@@ -1455,6 +1548,7 @@ private struct AuthenticationRouteView: View {
         switch requiredAccess {
         case .dastakCustomer: "Customer"
         case .dastakMerchant: "Merchant"
+        case .dastakDelivery: "Delivery Partner"
         case .dastakAdmin: "Admin"
         case .profileOnly: applicationName
         }
@@ -1466,6 +1560,8 @@ private struct AuthenticationRouteView: View {
             "Add the contact details used for your deliveries."
         case .dastakMerchant:
             "Add the contact details used for your store and orders."
+        case .dastakDelivery:
+            "Add the contact details used for delivery work."
         case .dastakAdmin:
             "Add the contact details for this owner account."
         case .profileOnly:
@@ -1476,11 +1572,13 @@ private struct AuthenticationRouteView: View {
     private var dastakPhonePrivacyText: String {
         switch requiredAccess {
         case .dastakCustomer:
-            "Not used to sign in. Shared only when an active delivery needs contact."
+            "Verified as your unique Dastak contact and shared only when an active delivery needs contact."
         case .dastakMerchant:
-            "Not used to sign in. Shared only when an active order needs contact."
+            "Verified once to protect your identity and shared only when an active order needs contact."
+        case .dastakDelivery:
+            "Verified once to protect your identity and shared only for active delivery work."
         case .dastakAdmin, .profileOnly:
-            "Not used to sign in, recover your account, or confirm payments."
+            "Verified once to protect your identity and used only for account contact."
         }
     }
 

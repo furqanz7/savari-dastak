@@ -27,6 +27,7 @@ struct AccountBootstrapResult: Decodable, Equatable, Sendable {
 }
 
 struct AccountBootstrapRequest: Encodable, Sendable {
+    let application: String
     let displayName: String
     let phoneNumber: String
 }

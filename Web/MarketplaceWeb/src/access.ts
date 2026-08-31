@@ -85,6 +85,7 @@ export async function completeProfile(
   let response: Awaited<ReturnType<typeof callFunction>>;
   try {
     response = await callFunction(session, config, "bootstrap-account", {
+      application: dastakApplication(config.role),
       displayName: normalizeName(profile.displayName),
       phoneNumber: profile.phoneNumber.trim(),
     }, { "X-Idempotency-Key": idempotencyKey });
@@ -98,7 +99,14 @@ export async function completeProfile(
   if (failure.code === "account_already_exists" && await confirmsProfileExists(client, session, config)) {
     return;
   }
-  throw new Error(failure.message);
+  throw new DastakProfileSubmissionError(failure.message, failure.code);
+}
+
+export class DastakProfileSubmissionError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+    this.name = "DastakProfileSubmissionError";
+  }
 }
 
 export function isValidProfile(profile: AccountProfile) {
@@ -200,6 +208,18 @@ async function resolveDastakAccess(
 ) {
   const { role } = config;
   if (role === "delivery") {
+    const routeResponse = await callFunction(session, config, "resolve-app-access", {
+      application: "delivery",
+    });
+    if (isAuthenticationRequiredResponse(routeResponse.status)) {
+      return { state: "signed_out" } satisfies AccessResult;
+    }
+    if (!routeResponse.ok) {
+      throw new Error(readErrorMessage(routeResponse.body, "Delivery access could not be verified."));
+    }
+    const route = mapDastakRoute((routeResponse.body as { route?: unknown }).route);
+    if (route.state === "needs_profile") return route;
+
     const response = await callFunction(session, config, "delivery-partners", { operation: "selfSnapshot" });
     if (isAuthenticationRequiredResponse(response.status)) {
       return { state: "signed_out" } satisfies AccessResult;
@@ -228,6 +248,15 @@ async function resolveDastakAccess(
     result.profile = profile;
   }
   return result;
+}
+
+function dastakApplication(role: AppConfig["role"]) {
+  switch (role) {
+    case "merchant": return "merchant";
+    case "delivery": return "delivery";
+    case "admin": return "admin";
+    default: return "customer";
+  }
 }
 
 async function resolveDastakProfile(session: Session, config: AppConfig) {

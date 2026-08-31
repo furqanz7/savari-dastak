@@ -58,11 +58,12 @@ describe("account profile", () => {
   });
 
   it("deletes only after server confirmation", async () => {
-    await expect(deleteAccount({ ...auth, idempotencyKey: "stable-delete-key" }, (_input, init) => {
+    await expect(deleteAccount({ ...auth, persona: "MERCHANT", idempotencyKey: "stable-delete-key" }, (_input, init) => {
       expect(new Headers(init?.headers).get("X-Idempotency-Key")).toBe("stable-delete-key");
+      expect(JSON.parse(String(init?.body))).toEqual({ operation: "delete", persona: "MERCHANT" });
       return Promise.resolve(new Response(JSON.stringify({ deleted: true }), { status: 200 }));
     })).resolves.toBeUndefined();
-    await expect(deleteAccount(auth, () => Promise.resolve(
+    await expect(deleteAccount({ ...auth, persona: "CUSTOMER" }, () => Promise.resolve(
       new Response(JSON.stringify({ deleted: false }), { status: 200 }),
     ))).rejects.toThrow("confirm account deletion");
   });
@@ -87,10 +88,11 @@ describe("account profile", () => {
       removeItem: (key: string) => { values.delete(key); },
     };
 
-    const deletionKey = accountDeletionIdempotencyKey(storage);
-    expect(accountDeletionIdempotencyKey(storage)).toBe(deletionKey);
-    clearAccountDeletionIdempotencyKey(storage);
-    expect(accountDeletionIdempotencyKey(storage)).not.toBe(deletionKey);
+    const deletionKey = accountDeletionIdempotencyKey("CUSTOMER", storage);
+    expect(accountDeletionIdempotencyKey("CUSTOMER", storage)).toBe(deletionKey);
+    expect(accountDeletionIdempotencyKey("MERCHANT", storage)).not.toBe(deletionKey);
+    clearAccountDeletionIdempotencyKey("CUSTOMER", storage);
+    expect(accountDeletionIdempotencyKey("CUSTOMER", storage)).not.toBe(deletionKey);
 
     rememberPendingIdentityLink("google", storage);
     expect(pendingIdentityLink(storage)).toBe("google");

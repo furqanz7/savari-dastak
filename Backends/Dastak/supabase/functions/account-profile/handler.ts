@@ -11,9 +11,14 @@ export type AccountProfileDependencies = {
     accountId: string;
     accessToken: string;
     oauthAuthenticatedAt?: number;
+    verifiedPhoneNumber?: string;
   }>;
   snapshotProfile: (accountId: string) => Promise<AccountProfile | null>;
-  updateProfile: (accountId: string, profile: AccountProfile) => Promise<AccountProfile | null>;
+  updateProfile: (
+    accountId: string,
+    profile: AccountProfile,
+    verifiedPhoneNumber?: string,
+  ) => Promise<AccountProfile | null>;
   snapshotIdentities: (accessToken: string) => Promise<unknown>;
   beginIdentityLink: (input: {
     accessToken: string;
@@ -25,7 +30,8 @@ export type AccountProfileDependencies = {
     accountId: string;
     accessToken: string;
     idempotencyKey: string;
-  }) => Promise<void>;
+    persona: DastakPersona;
+  }) => Promise<{ alreadyDeleted?: boolean; identityRecoveryEligible?: boolean }>;
   now?: () => number;
 };
 
@@ -35,7 +41,9 @@ type RequestBody =
   | { operation: "identitySnapshot" }
   | { operation: "beginIdentityLink"; provider: "apple" | "google" }
   | { operation: "export" }
-  | { operation: "delete" };
+  | { operation: "delete"; persona: DastakPersona };
+
+export type DastakPersona = "CUSTOMER" | "MERCHANT" | "DELIVERY";
 
 const deletionRecentAuthenticationSeconds = 10 * 60;
 
@@ -55,7 +63,12 @@ export async function handleAccountProfile(
     return authenticationRequired();
   }
 
-  let actor: { accountId: string; accessToken: string; oauthAuthenticatedAt?: number };
+  let actor: {
+    accountId: string;
+    accessToken: string;
+    oauthAuthenticatedAt?: number;
+    verifiedPhoneNumber?: string;
+  };
   try {
     actor = await dependencies.authenticateBearer(authorization);
   } catch {
@@ -79,7 +92,19 @@ export async function handleAccountProfile(
       case "update": {
         const profile = normalizeProfile(body.displayName, body.phoneNumber);
         if (profile instanceof Response) return profile;
-        const updated = await dependencies.updateProfile(actor.accountId, profile);
+        if (actor.verifiedPhoneNumber !== profile.phoneNumber) {
+          return json({
+            error: {
+              code: "phone_verification_required",
+              message: "Verify the new phone number before saving it.",
+            },
+          }, 409);
+        }
+        const updated = await dependencies.updateProfile(
+          actor.accountId,
+          profile,
+          actor.verifiedPhoneNumber,
+        );
         return updated ? json({ profile: updated }) : profileRequired();
       }
       case "identitySnapshot":
@@ -115,15 +140,24 @@ export async function handleAccountProfile(
             },
           }, 428);
         }
-        await dependencies.deleteAccount({
+        const result = await dependencies.deleteAccount({
           accountId: actor.accountId,
           accessToken: actor.accessToken,
           idempotencyKey,
+          persona: body.persona,
         });
-        return json({ deleted: true, deletionQueued: true });
+        return json({
+          deleted: true,
+          persona: body.persona,
+          alreadyDeleted: result.alreadyDeleted === true,
+        });
       }
     }
-  } catch {
+  } catch (error) {
+    const message = safeOperationConflict(error);
+    if (message) {
+      return json({ error: { code: "persona_deletion_blocked", message } }, 409);
+    }
     return json(
       { error: { code: "internal_error", message: "The account request could not be completed." } },
       500,
@@ -154,9 +188,16 @@ async function readBody(request: Request): Promise<RequestBody | null> {
     const value = await request.json() as Record<string, unknown>;
     if (
       value.operation === "snapshot" || value.operation === "identitySnapshot" ||
-      value.operation === "delete" || value.operation === "export"
+      value.operation === "export"
     ) {
       return { operation: value.operation };
+    }
+    if (
+      value.operation === "delete" &&
+      (value.persona === "CUSTOMER" || value.persona === "MERCHANT" ||
+        value.persona === "DELIVERY")
+    ) {
+      return { operation: value.operation, persona: value.persona };
     }
     if (
       value.operation === "beginIdentityLink" &&
@@ -179,6 +220,20 @@ async function readBody(request: Request): Promise<RequestBody | null> {
     // The typed validation response below covers malformed JSON.
   }
   return null;
+}
+
+function safeOperationConflict(error: unknown) {
+  const message = error && typeof error === "object" && "message" in error &&
+      typeof error.message === "string"
+    ? error.message
+    : "";
+  return [
+      "Complete or cancel active customer orders before deleting Customer.",
+      "Complete active merchant fulfilments before deleting Merchant.",
+      "Complete or release the active delivery before deleting Delivery Partner.",
+    ].includes(message)
+    ? message
+    : undefined;
 }
 
 function recentOAuthAuthentication(timestamp: number | undefined, nowMilliseconds: number) {

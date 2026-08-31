@@ -32,6 +32,7 @@ import {
   snapshotAccountProfile,
   updateAccountProfile,
   type AccountProfile,
+  type DastakPersona,
 } from "./accountProfile";
 import {
   deliveryPartnerVerificationState,
@@ -46,6 +47,7 @@ type Props = {
   email?: string;
   phoneNumber?: string;
   roleName: string;
+  persona?: DastakPersona;
   accessLabel?: string;
   supabaseUrl: string;
   publishableKey: string;
@@ -62,6 +64,7 @@ type AccountDetail = "access" | "notifications" | "privacy";
 
 export function RoleAccountView({
   accessToken, displayName, email, phoneNumber, roleName, accessLabel = "Active",
+  persona,
   supabaseUrl, publishableKey, allowsAccountDeletion = true, deliveryPartner,
   deliveryPartnerLoading = false, deliveryPartnerError, onRefreshPartner,
   onOpenWorkspace, onSignOut,
@@ -80,7 +83,7 @@ export function RoleAccountView({
   const [detail, setDetail] = useState<AccountDetail>();
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const accountDeletionKey = useRef(accountDeletionIdempotencyKey());
+  const accountDeletionKey = useRef(accountDeletionIdempotencyKey(persona ?? "CUSTOMER"));
   const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -117,8 +120,9 @@ export function RoleAccountView({
   const remove = async () => {
     setBusy(true); setError(undefined);
     try {
-      await deleteAccount({ ...auth, idempotencyKey: accountDeletionKey.current });
-      clearAccountDeletionIdempotencyKey();
+      if (!persona) throw new Error("This app cannot delete a persona.");
+      await deleteAccount({ ...auth, persona, idempotencyKey: accountDeletionKey.current });
+      clearAccountDeletionIdempotencyKey(persona);
       onSignOut();
     } catch (deleteError) {
       setError(message(deleteError, "Your account could not be deleted."));
@@ -224,9 +228,9 @@ export function RoleAccountView({
           <span><strong>Sign out</strong><small>End this session on this device</small></span>
           <ChevronRight size={18} />
         </button>
-        {allowsAccountDeletion && <button type="button" className="role-account-row destructive" onClick={() => setConfirmingDelete(true)}>
+        {allowsAccountDeletion && persona && <button type="button" className="role-account-row destructive" onClick={() => setConfirmingDelete(true)}>
           <span className="role-row-icon"><Trash2 size={19} /></span>
-          <span><strong>Delete account</strong><small>Permanently remove your Dastak account</small></span>
+          <span><strong>Delete {roleName}</strong><small>Remove only this {roleName.toLowerCase()} profile</small></span>
           <ChevronRight size={18} />
         </button>}
       </div>
@@ -261,7 +265,8 @@ export function RoleAccountView({
     {confirmingDelete && <AccountActionDialog
       action="delete-account"
       busy={busy}
-      message="Your role access is removed and retained records are detached from your identity. This cannot be undone."
+      deleteLabel={roleName}
+      message={`Only your ${roleName} profile and access will be removed. Your other Dastak profiles stay available, and you can recover this profile later with the same verified identity.`}
       onConfirm={() => void remove()}
       onDismiss={() => setConfirmingDelete(false)}
     />}

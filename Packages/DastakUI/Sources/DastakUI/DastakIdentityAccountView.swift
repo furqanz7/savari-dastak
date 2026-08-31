@@ -15,12 +15,18 @@ private final class DastakIdentityAccountModel: ObservableObject {
     private let profileClient: any AccountProfileClient
     private let deliveryPartnerClient: any DeliveryPartnerClient
     private let loadsDeliveryPartner: Bool
+    private let persona: MarketplaceDastakPersona?
 
     init(services: MarketplaceAuthenticatedServices, roleName: String) {
         self.services = services
         profileClient = SupabaseAccountProfileClient(functions: services.functions)
         deliveryPartnerClient = SupabaseDeliveryPartnerClient(functions: services.functions)
         loadsDeliveryPartner = roleName == "Delivery Partner"
+        persona = switch roleName {
+        case "Merchant": .merchant
+        case "Delivery Partner": .delivery
+        default: nil
+        }
     }
 
     func load() async {
@@ -62,12 +68,17 @@ private final class DastakIdentityAccountModel: ObservableObject {
     func deleteAccount() async throws {
         isDeleting = true
         defer { isDeleting = false }
-        try await profileClient.deleteAccount(idempotencyKey: key())
+        guard let persona else { throw DastakIdentityAccountError.deletionUnavailable }
+        try await profileClient.deleteAccount(persona: persona, idempotencyKey: key())
     }
 
     private func key() -> IdempotencyKey {
         IdempotencyKey(rawValue: UUID().uuidString)!
     }
+}
+
+private enum DastakIdentityAccountError: Error {
+    case deletionUnavailable
 }
 
 public struct DastakIdentityAccountView: View {
@@ -530,8 +541,8 @@ public struct DastakIdentityAccountView: View {
                     Divider().padding(.leading, 56)
                     Button(role: .destructive) { accountAlert = .deleteAccount } label: {
                         row(
-                            title: model.isDeleting ? "Deleting account..." : "Delete account",
-                            value: "Permanently remove your Dastak account",
+                            title: model.isDeleting ? "Deleting \(roleName)..." : "Delete \(roleName)",
+                            value: "Remove only this \(roleName.lowercased()) profile and access",
                             symbol: "trash",
                             showsDisclosure: true,
                             isDestructive: true
@@ -754,10 +765,10 @@ public struct DastakIdentityAccountView: View {
             )
         case .deleteAccount:
             Alert(
-                title: Text("Delete your Dastak account?"),
-                message: Text("This permanently removes your access and signs you out. Records that must be retained are detached from your identity."),
+                title: Text("Delete \(roleName)?"),
+                message: Text("Only this \(roleName.lowercased()) profile is removed. Your other Dastak profiles stay available, and this profile can be recovered later."),
                 primaryButton: .cancel(Text("Cancel")),
-                secondaryButton: .destructive(Text("Delete account")) {
+                secondaryButton: .destructive(Text("Delete \(roleName)")) {
                     Task { await deleteAccount() }
                 }
             )
@@ -777,8 +788,15 @@ public struct DastakIdentityAccountView: View {
         do {
             try await model.deleteAccount()
             await signOut()
+        } catch let error as FunctionClientError {
+            if case let .api(_, code, message) = error,
+               code == "persona_deletion_blocked" || code == "reauthentication_required" {
+                model.errorMessage = message
+            } else {
+                model.errorMessage = "Your \(roleName) profile could not be deleted. Other profiles are unchanged."
+            }
         } catch {
-            model.errorMessage = "Your account could not be deleted. Please try again."
+            model.errorMessage = "Your \(roleName) profile could not be deleted. Other profiles are unchanged."
         }
     }
 }

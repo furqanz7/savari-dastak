@@ -51,6 +51,15 @@ Deno.test("account profile normalizes updates", async () => {
   assertEquals(updated, profile);
 });
 
+Deno.test("account profile rejects an unverified phone replacement", async () => {
+  const response = await handleAccountProfile(
+    request({ operation: "update", displayName: "Test User", phoneNumber: "+14155552671" }),
+    dependencies(),
+  );
+  assertEquals(response.status, 409);
+  assertEquals((await response.json()).error.code, "phone_verification_required");
+});
+
 Deno.test("account profile rejects an invalid phone number", async () => {
   const response = await handleAccountProfile(
     request({ operation: "update", displayName: "Test User", phoneNumber: "9876543210" }),
@@ -70,9 +79,14 @@ Deno.test("account profile rejects a nationally invalid E.164 phone number", asy
 });
 
 Deno.test("account profile deletes only the authenticated account", async () => {
-  let deletion: { accountId: string; accessToken: string; idempotencyKey: string } | undefined;
+  let deletion: {
+    accountId: string;
+    accessToken: string;
+    idempotencyKey: string;
+    persona: "CUSTOMER" | "MERCHANT" | "DELIVERY";
+  } | undefined;
   const response = await handleAccountProfile(
-    request({ operation: "delete" }),
+    request({ operation: "delete", persona: "MERCHANT" }),
     dependencies({
       authenticateBearer: () =>
         Promise.resolve({
@@ -83,7 +97,7 @@ Deno.test("account profile deletes only the authenticated account", async () => 
       now: () => 1_700_000_100_000,
       deleteAccount: (value) => {
         deletion = value;
-        return Promise.resolve();
+        return Promise.resolve({ alreadyDeleted: false });
       },
     }),
   );
@@ -92,14 +106,19 @@ Deno.test("account profile deletes only the authenticated account", async () => 
     accountId,
     accessToken: "session-token",
     idempotencyKey: "profile-request-key",
+    persona: "MERCHANT",
   });
-  assertEquals(await response.json(), { deleted: true, deletionQueued: true });
+  assertEquals(await response.json(), {
+    deleted: true,
+    persona: "MERCHANT",
+    alreadyDeleted: false,
+  });
 });
 
 Deno.test("account deletion requires a recent OAuth authentication", async () => {
   for (const oauthAuthenticatedAt of [undefined, 1_699_999_000]) {
     const response = await handleAccountProfile(
-      request({ operation: "delete" }),
+      request({ operation: "delete", persona: "CUSTOMER" }),
       dependencies({
         authenticateBearer: () =>
           Promise.resolve({
@@ -112,6 +131,19 @@ Deno.test("account deletion requires a recent OAuth authentication", async () =>
     );
     assertEquals(response.status, 428);
     assertEquals((await response.json()).error.code, "reauthentication_required");
+  }
+});
+
+Deno.test("account deletion requires an explicit supported persona", async () => {
+  for (
+    const body of [
+      { operation: "delete" },
+      { operation: "delete", persona: "ADMIN" },
+    ]
+  ) {
+    const response = await handleAccountProfile(request(body), dependencies());
+    assertEquals(response.status, 400);
+    assertEquals((await response.json()).error.code, "validation_failed");
   }
 });
 
@@ -193,13 +225,14 @@ function dependencies(
           accountId,
           accessToken: "session-token",
           oauthAuthenticatedAt: 1_700_000_000,
+          verifiedPhoneNumber: profile.phoneNumber,
         })),
     snapshotProfile: overrides.snapshotProfile ?? (() => Promise.resolve(profile)),
     updateProfile: overrides.updateProfile ?? ((_accountId, value) => Promise.resolve(value)),
     snapshotIdentities: overrides.snapshotIdentities ?? (() => Promise.resolve({ providers: [] })),
     beginIdentityLink: overrides.beginIdentityLink ?? (() => Promise.resolve({})),
     exportAccount: overrides.exportAccount ?? (() => Promise.resolve({ formatVersion: 1 })),
-    deleteAccount: overrides.deleteAccount ?? (() => Promise.resolve()),
+    deleteAccount: overrides.deleteAccount ?? (() => Promise.resolve({ alreadyDeleted: false })),
     now: overrides.now ?? (() => 1_700_000_100_000),
   };
 }

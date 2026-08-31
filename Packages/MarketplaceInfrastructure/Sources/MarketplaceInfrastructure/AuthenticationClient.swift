@@ -18,6 +18,7 @@ public enum MarketplaceApplicationAccess: String, Codable, Equatable, Sendable {
     case profileOnly = "profile_only"
     case dastakCustomer = "customer"
     case dastakMerchant = "merchant"
+    case dastakDelivery = "delivery"
     case dastakAdmin = "admin"
 }
 
@@ -27,6 +28,8 @@ public protocol AuthenticationClient: Sendable {
     func signInWithGoogle(redirectTo: URL) async throws
     func suggestedDisplayName() async -> String?
     func restoreAccount() async throws -> AccountRoute
+    func requestPhoneVerification(phoneNumber: String) async throws
+    func verifyPhone(phoneNumber: String, code: String) async throws
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,
@@ -162,9 +165,12 @@ protocol SupabaseAuthenticationOperations: Sendable {
     func currentAccountID() async -> UUID?
     func accountProfileID(for accountID: UUID) async throws -> UUID?
     func resolveAppAccess(for requiredAccess: MarketplaceApplicationAccess) async throws -> AccountRoute
+    func requestPhoneVerification(phoneNumber: String) async throws
+    func verifyPhone(phoneNumber: String, code: String) async throws
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,
+        application: MarketplaceApplicationAccess,
         key: IdempotencyKey
     ) async throws -> AccountBootstrapResult
     func signOut() async throws
@@ -245,6 +251,7 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
             result = try await operations.bootstrapAccount(
                 displayName: displayName,
                 phoneNumber: validatedPhoneNumber,
+                application: requiredAccess,
                 key: key
             )
         } catch let error as AuthenticationClientError {
@@ -264,9 +271,22 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
         } catch {
             throw AuthenticationClientError.bootstrapAmbiguousFailure
         }
-        guard result.phoneState == .unverified else {
+        guard result.phoneState == .verified else {
             throw AuthenticationClientError.unexpectedPhoneVerificationState
         }
+    }
+
+    public func requestPhoneVerification(phoneNumber: String) async throws {
+        try await operations.requestPhoneVerification(
+            phoneNumber: try E164PhoneNumber(phoneNumber).rawValue
+        )
+    }
+
+    public func verifyPhone(phoneNumber: String, code: String) async throws {
+        try await operations.verifyPhone(
+            phoneNumber: try E164PhoneNumber(phoneNumber).rawValue,
+            code: code
+        )
     }
 
     public func signOut() async throws {
@@ -497,6 +517,7 @@ extension SupabaseAuthenticationClient {
         func bootstrapAccount(
             displayName: String,
             phoneNumber: String,
+            application: MarketplaceApplicationAccess,
             key: IdempotencyKey
         ) async throws -> AccountBootstrapResult {
             try await supabaseClient.functions.invoke(
@@ -504,6 +525,7 @@ extension SupabaseAuthenticationClient {
                 options: FunctionInvokeOptions(
                     headers: ["X-Idempotency-Key": key.rawValue],
                     body: AccountBootstrapRequest(
+                        application: application == .profileOnly ? "customer" : application.rawValue,
                         displayName: displayName,
                         phoneNumber: phoneNumber
                     )
@@ -513,6 +535,18 @@ extension SupabaseAuthenticationClient {
 
         func signOut() async throws {
             try await supabaseClient.auth.signOut(scope: .local)
+        }
+
+        func requestPhoneVerification(phoneNumber: String) async throws {
+            try await supabaseClient.auth.update(user: UserAttributes(phone: phoneNumber))
+        }
+
+        func verifyPhone(phoneNumber: String, code: String) async throws {
+            _ = try await supabaseClient.auth.verifyOTP(
+                phone: phoneNumber,
+                token: code,
+                type: .phoneChange
+            )
         }
     }
 }

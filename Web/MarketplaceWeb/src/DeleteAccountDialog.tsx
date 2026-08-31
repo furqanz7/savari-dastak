@@ -40,11 +40,11 @@ export function DeleteAccountDialog({
     if (event.target === event.currentTarget && !busy) onDismiss();
   }}>
     <section ref={dialog} className="customer-sheet delete-account-sheet" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId} tabIndex={-1}>
-      <header className="account-sheet-heading"><span className="account-dialog-mark destructive" aria-hidden="true"><ShieldAlert size={21} /></span><div><p className="eyebrow">Permanent action</p><h2 id={titleId}>Delete your account?</h2></div></header>
+      <header className="account-sheet-heading"><span className="account-dialog-mark destructive" aria-hidden="true"><ShieldAlert size={21} /></span><div><p className="eyebrow">Customer profile</p><h2 id={titleId}>Delete Customer?</h2></div></header>
       <p id={messageId}>{warning}</p>
       {!reauthenticationRequired && <label className="delete-account-confirmation">
         <span>Type <strong>DELETE</strong> to confirm</span>
-        <input autoComplete="off" value={confirmation} disabled={busy} onChange={(event) => setConfirmation(event.target.value)} aria-label="Type DELETE to confirm account deletion" />
+        <input autoComplete="off" value={confirmation} disabled={busy} onChange={(event) => setConfirmation(event.target.value)} aria-label="Type DELETE to confirm Customer profile deletion" />
       </label>}
       {reauthenticationRequired && <div className="delete-account-reauthentication">
         <strong>Verify it’s you</strong>
@@ -58,8 +58,8 @@ export function DeleteAccountDialog({
       </div>}
       {error && <p className="order-error" role="alert">{error}</p>}
       {notice && <p className="success-text" role="status">{notice}</p>}
-      {!reauthenticationRequired && <button className="danger-button" type="button" disabled={busy || !confirmed} onClick={onConfirm}>{busy ? "Please wait…" : "Delete account"}</button>}
-      <button ref={cancelButton} className="secondary-button" type="button" disabled={busy} onClick={onDismiss}>Keep account</button>
+      {!reauthenticationRequired && <button className="danger-button" type="button" disabled={busy || !confirmed} onClick={onConfirm}>{busy ? "Please wait…" : "Delete Customer"}</button>}
+      <button ref={cancelButton} className="secondary-button" type="button" disabled={busy} onClick={onDismiss}>Keep Customer</button>
     </section>
   </div>;
 }

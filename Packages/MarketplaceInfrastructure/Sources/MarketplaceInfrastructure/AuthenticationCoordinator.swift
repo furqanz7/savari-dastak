@@ -189,6 +189,14 @@ public final class AuthenticationCoordinator: ObservableObject {
         pendingProfileSubmission = nil
     }
 
+    public func requestPhoneVerification(phoneNumber: String) async throws {
+        try await client.requestPhoneVerification(phoneNumber: phoneNumber)
+    }
+
+    public func verifyPhone(phoneNumber: String, code: String) async throws {
+        try await client.verifyPhone(phoneNumber: phoneNumber, code: code)
+    }
+
     public func signOut() async throws {
         try await client.signOut()
         pendingProfileSubmission = nil
@@ -225,6 +233,11 @@ private extension AccountRoute {
 }
 
 extension AuthenticationClientError {
+    var requiresIdentityReauthentication: Bool {
+        guard case let .bootstrapRejected(_, code, _) = self else { return false }
+        return code == "identity_reauthentication_required"
+    }
+
     var profileSubmissionMessage: String {
         switch self {
         case .bootstrapAmbiguousFailure:

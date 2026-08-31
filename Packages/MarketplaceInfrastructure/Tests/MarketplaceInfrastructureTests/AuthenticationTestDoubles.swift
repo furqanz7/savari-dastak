@@ -19,6 +19,8 @@ actor FakeAuthenticationClient: AuthenticationClient {
     }
     func restoreAccount() async throws -> AccountRoute { restoredRoute }
     func suggestedDisplayName() async -> String? { suggestedName }
+    func requestPhoneVerification(phoneNumber: String) async throws {}
+    func verifyPhone(phoneNumber: String, code: String) async throws {}
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,
@@ -44,6 +46,7 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
     struct BootstrapRequest: Equatable {
         let displayName: String
         let phoneNumber: String
+        let application: MarketplaceApplicationAccess
         let key: IdempotencyKey
     }
 
@@ -66,7 +69,7 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
         accountAccessRoute: AccountRoute = .active,
         bootstrapResult: AccountBootstrapResult = AccountBootstrapResult(
             accountID: UUID(),
-            phoneState: .unverified
+            phoneState: .verified
         ),
         bootstrapError: BootstrapError? = nil
     ) {
@@ -106,11 +109,13 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,
+        application: MarketplaceApplicationAccess,
         key: IdempotencyKey
     ) async throws -> AccountBootstrapResult {
         bootstrapRequest = BootstrapRequest(
             displayName: displayName,
             phoneNumber: phoneNumber,
+            application: application,
             key: key
         )
         if let bootstrapError {
@@ -122,6 +127,9 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
     func signOut() async throws {
         signOutCallCount += 1
     }
+
+    func requestPhoneVerification(phoneNumber: String) async throws {}
+    func verifyPhone(phoneNumber: String, code: String) async throws {}
 
     func recordedAppleCredentials() -> AppleCredentials? {
         appleCredentials

@@ -782,8 +782,8 @@ export function CatalogueView({
     setDeletionError(undefined);
     setDeletionNotice(undefined);
     try {
-      await deleteAccount({ ...auth, idempotencyKey: accountDeletionKey.current });
-      clearAccountDeletionIdempotencyKey();
+      await deleteAccount({ ...auth, persona: "CUSTOMER", idempotencyKey: accountDeletionKey.current });
+      clearAccountDeletionIdempotencyKey("CUSTOMER");
       onSignOut();
     } catch (error) {
       if (error instanceof AccountProfileRequestError && error.status === 401) {
@@ -1234,7 +1234,7 @@ export function CatalogueView({
                 <LogOut size={20} /><span><strong>Sign out</strong><small>Keep this account and end this session</small></span><ChevronRight size={18} />
               </button>
               <button className="customer-account-row destructive" type="button" onClick={() => { setDeletionError(undefined); setDeletionNotice(undefined); setDeletionReauthenticationRequired(false); setShowDeleteConfirmation(true); }}>
-                <Trash2 size={20} /><span><strong>Delete account</strong><small>Permanently remove your Dastak account</small></span><ChevronRight size={18} />
+                <Trash2 size={20} /><span><strong>Delete Customer</strong><small>Remove only your Customer profile and access</small></span><ChevronRight size={18} />
               </button>
             </div>
           </section>

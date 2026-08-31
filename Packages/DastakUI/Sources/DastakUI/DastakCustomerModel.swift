@@ -345,7 +345,7 @@ final class DastakCustomerModel: ObservableObject {
 
     func deleteAccount() async throws {
         let key = accountDeletionAttempt.key(scope: preferenceScope)
-        try await accountProfileClient.deleteAccount(idempotencyKey: key)
+        try await accountProfileClient.deleteAccount(persona: .customer, idempotencyKey: key)
         accountDeletionAttempt.complete(scope: preferenceScope)
     }
 

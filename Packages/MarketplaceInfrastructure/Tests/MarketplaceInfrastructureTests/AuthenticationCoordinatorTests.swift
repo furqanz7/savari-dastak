@@ -277,6 +277,8 @@ private actor RecoverableRestoreAuthenticationClient: AuthenticationClient {
     func signInWithApple(identityToken: String, nonce: String) async throws {}
     func signInWithGoogle(idToken: String) async throws {}
     func signInWithGoogle(redirectTo: URL) async throws {}
+    func requestPhoneVerification(phoneNumber: String) async throws {}
+    func verifyPhone(phoneNumber: String, code: String) async throws {}
 
     func restoreAccount() async throws -> AccountRoute {
         restoreCount += 1
@@ -326,6 +328,8 @@ private actor ProfileSubmissionAuthenticationClient: AuthenticationClient {
     func signInWithApple(identityToken: String, nonce: String) async throws {}
     func signInWithGoogle(idToken: String) async throws {}
     func signInWithGoogle(redirectTo: URL) async throws {}
+    func requestPhoneVerification(phoneNumber: String) async throws {}
+    func verifyPhone(phoneNumber: String, code: String) async throws {}
 
     func restoreAccount() async throws -> AccountRoute {
         restoreCalls += 1

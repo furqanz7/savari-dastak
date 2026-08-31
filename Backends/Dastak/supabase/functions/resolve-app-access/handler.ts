@@ -1,7 +1,7 @@
 import { corsPreflight, json } from "../_shared/http.ts";
 import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
-export type DastakApplication = "customer" | "merchant" | "admin";
+export type DastakApplication = "customer" | "merchant" | "delivery" | "admin";
 
 export type AppAccessRoute =
   | "needs_profile"
@@ -27,6 +27,7 @@ type Dependencies = {
 const applications = new Set<DastakApplication>([
   "customer",
   "merchant",
+  "delivery",
   "admin",
 ]);
 

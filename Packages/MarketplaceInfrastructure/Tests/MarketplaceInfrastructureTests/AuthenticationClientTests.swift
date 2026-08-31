@@ -174,6 +174,7 @@ final class AuthenticationClientTests: XCTestCase {
         let result = try await operations.bootstrapAccount(
             displayName: "Test User",
             phoneNumber: "+919876543210",
+            application: .dastakMerchant,
             key: key
         )
 
@@ -188,7 +189,7 @@ final class AuthenticationClientTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Idempotency-Key"), key.rawValue)
         XCTAssertEqual(
             try JSONDecoder().decode(CapturedBootstrapRequest.self, from: try capturedRequestBody(request)),
-            .init(displayName: "Test User", phoneNumber: "+919876543210")
+            .init(application: "merchant", displayName: "Test User", phoneNumber: "+919876543210")
         )
     }
 
@@ -262,7 +263,7 @@ final class AuthenticationClientTests: XCTestCase {
 
     func testBootstrapMapsTransportFailureToAmbiguousFailure() async throws {
         let operations = RecordingAuthenticationOperations(bootstrapError: .transport)
-        let client = SupabaseAuthenticationClient(operations: operations)
+        let client = SupabaseAuthenticationClient(operations: operations, requiredAccess: .dastakMerchant)
         let key = try XCTUnwrap(IdempotencyKey(rawValue: "bootstrap-ambiguous"))
 
         do {
@@ -295,7 +296,7 @@ final class AuthenticationClientTests: XCTestCase {
 
     func testBootstrapForwardsRequiredProfileAndIdempotencyKey() async throws {
         let operations = RecordingAuthenticationOperations()
-        let client = SupabaseAuthenticationClient(operations: operations)
+        let client = SupabaseAuthenticationClient(operations: operations, requiredAccess: .dastakMerchant)
         let key = try XCTUnwrap(IdempotencyKey(rawValue: "bootstrap-123"))
 
         try await client.bootstrapAccount(
@@ -310,20 +311,21 @@ final class AuthenticationClientTests: XCTestCase {
             .init(
                 displayName: "Test User",
                 phoneNumber: "+919876543210",
+                application: .dastakMerchant,
                 key: key
             )
         )
     }
 
-    func testBootstrapRejectsResponseThatClaimsPhoneIsVerified() async throws {
+    func testBootstrapRejectsResponseWithoutVerifiedPhoneProof() async throws {
         let operations = RecordingAuthenticationOperations(
             bootstrapResult: AccountBootstrapResult(
                 accountID: UUID(),
-                phoneState: .verified
+                phoneState: .unverified
             )
         )
         let client = SupabaseAuthenticationClient(operations: operations)
-        let key = try XCTUnwrap(IdempotencyKey(rawValue: "bootstrap-verified"))
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "bootstrap-unverified"))
 
         do {
             try await client.bootstrapAccount(
@@ -331,7 +333,7 @@ final class AuthenticationClientTests: XCTestCase {
                 phoneNumber: "+919876543210",
                 key: key
             )
-            XCTFail("Expected the unverified-phone contract to fail closed")
+            XCTFail("Expected missing verified-phone proof to fail closed")
         } catch let error as AuthenticationClientError {
             XCTAssertEqual(error, .unexpectedPhoneVerificationState)
         }
@@ -621,6 +623,7 @@ final class AuthenticationClientTests: XCTestCase {
 }
 
 private struct CapturedBootstrapRequest: Decodable, Equatable {
+    let application: String
     let displayName: String
     let phoneNumber: String
 }
