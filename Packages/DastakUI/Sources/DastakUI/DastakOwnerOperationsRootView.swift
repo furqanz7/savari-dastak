@@ -8,6 +8,7 @@ private final class DastakOwnerOperationsModel: ObservableObject {
     @Published private(set) var snapshot: OwnerOrderOperationsSnapshot?
     @Published private(set) var v1Orders: [DastakV1AdminOrder] = []
     @Published private(set) var v1Trace: DastakV1AdminExecutionTrace?
+    @Published private(set) var adminAccess: DastakAdminAccessSnapshot?
     @Published private(set) var isLoading = true
     @Published private(set) var isRefreshing = false
     @Published private(set) var busyIdentity: String?
@@ -41,9 +42,11 @@ private final class DastakOwnerOperationsModel: ObservableObject {
         do {
             async let operations = operationsClient.snapshot(limit: 100, idempotencyKey: key())
             async let currentOrders = v1Client.orders(limit: 50, idempotencyKey: key())
-            let loaded = try await (operations, currentOrders)
+            async let currentAdminAccess = v1Client.access(idempotencyKey: key())
+            let loaded = try await (operations, currentOrders, currentAdminAccess)
             snapshot = loaded.0
             v1Orders = loaded.1
+            adminAccess = loaded.2
             let selectedID = v1Trace.map(\.order.id).flatMap { current in
                 loaded.1.contains(where: { $0.id == current }) ? current : nil
             } ?? loaded.1.first?.id
@@ -142,6 +145,27 @@ private final class DastakOwnerOperationsModel: ObservableObject {
         if !succeeded { notice = nil }
     }
 
+    func setExecutiveAdmin(_ slot: DastakAdminSlot, email: String?) async {
+        let normalized = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let assignment = normalized?.isEmpty == false ? normalized : nil
+        _ = await perform(
+            identity: "admin-access:\(slot.slot):\(assignment ?? "clear"):\(slot.version)",
+            success: assignment == nil
+                ? "Executive Admin access removed."
+                : "Executive Admin access saved."
+        ) { key in
+            _ = try await self.v1Client.setExecutiveAdmin(
+                slot: slot.slot,
+                email: assignment,
+                expectedVersion: slot.version,
+                reason: assignment == nil
+                    ? "Cleared from protected Dastak Admin access settings."
+                    : "Updated from protected Dastak Admin access settings.",
+                idempotencyKey: key
+            )
+        }
+    }
+
     private func perform(
         identity: String,
         success: String,
@@ -160,7 +184,7 @@ private final class DastakOwnerOperationsModel: ObservableObject {
             await refresh()
             return true
         } catch {
-            errorMessage = message(for: error, fallback: "The owner action could not be completed.")
+            errorMessage = message(for: error, fallback: "The Admin action could not be completed.")
             return false
         }
     }
@@ -171,13 +195,13 @@ private final class DastakOwnerOperationsModel: ObservableObject {
 
     private func message(for error: Error, fallback: String) -> String {
         if case let FunctionClientError.api(_, _, message) = error { return message }
-        if case FunctionClientError.authenticationRequired = error { return "Your owner session has expired. Sign in again." }
+        if case FunctionClientError.authenticationRequired = error { return "Your Admin session has expired. Sign in again." }
         return fallback
     }
 }
 
 public struct DastakOwnerOperationsRootView: View {
-    private enum Tab: Hashable { case operations, account }
+    private enum Tab: Hashable { case operations, access, account }
 
     private let services: MarketplaceAuthenticatedServices
     @StateObject private var model: DastakOwnerOperationsModel
@@ -195,9 +219,15 @@ public struct DastakOwnerOperationsRootView: View {
                 .tabItem { Label("Operations", systemImage: "exclamationmark.shield") }
                 .tag(Tab.operations)
 
+            if model.adminAccess?.canManageAdmins == true {
+                DastakAdminAccessView(model: model)
+                    .tabItem { Label("Access", systemImage: "person.2.badge.gearshape") }
+                    .tag(Tab.access)
+            }
+
             DastakIdentityAccountView(
-                roleName: "Owner",
-                accessLabel: "Full access",
+                roleName: model.adminAccess?.role.displayName ?? "Admin",
+                accessLabel: "Full operations access",
                 allowsAccountDeletion: false,
                 openWorkspace: { tab = .operations },
                 services: services
@@ -228,6 +258,201 @@ public struct DastakOwnerOperationsRootView: View {
             Button("OK", role: .cancel) { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "")
+        }
+    }
+}
+
+private struct DastakAdminAccessView: View {
+    @ObservedObject var model: DastakOwnerOperationsModel
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                        Text("SUPERADMIN CONTROL")
+                            .font(.caption.weight(.bold))
+                            .tracking(1.3)
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        Text("Admin access")
+                            .font(.largeTitle.bold())
+                        Text("One permanent Superadmin and two replaceable Executive Admin seats.")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let access = model.adminAccess {
+                        if let superadmin = access.slots.first(where: { $0.role == .superadmin }) {
+                            adminSeat(
+                                title: "Superadmin",
+                                email: superadmin.email ?? "",
+                                detail: "Permanent · cannot be changed or removed",
+                                symbol: "lock.shield.fill"
+                            )
+                        }
+
+                        ForEach(access.slots.filter { $0.role == .executiveAdmin }) { slot in
+                            DastakExecutiveAdminSeat(
+                                slot: slot,
+                                isBusy: model.isBusy,
+                                onSave: { email in
+                                    await model.setExecutiveAdmin(slot, email: email)
+                                },
+                                onClear: {
+                                    await model.setExecutiveAdmin(slot, email: nil)
+                                }
+                            )
+                        }
+                    } else {
+                        ProgressView("Loading Admin access")
+                            .frame(maxWidth: .infinity, minHeight: 220)
+                    }
+
+                    Text("Executive Admins can use every current operations feature. Only the permanent Superadmin can change Admin access.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+                .padding(MarketplaceSpacing.large)
+                .frame(maxWidth: .infinity)
+            }
+            .background(Color.black.opacity(0.015))
+            .navigationTitle("Access")
+            .refreshable { await model.refresh() }
+        }
+    }
+
+    private func adminSeat(
+        title: String,
+        email: String,
+        detail: String,
+        symbol: String
+    ) -> some View {
+        HStack(spacing: MarketplaceSpacing.medium) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 44, height: 44)
+                .background(MarketplaceColors.dastakIconBackground.color)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                Text(email).font(.subheadline).textSelection(.enabled)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Label("Active", systemImage: "checkmark.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+                .labelStyle(.titleAndIcon)
+        }
+        .padding(MarketplaceSpacing.medium)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct DastakExecutiveAdminSeat: View {
+    let slot: DastakAdminSlot
+    let isBusy: Bool
+    let onSave: (String) async -> Void
+    let onClear: () async -> Void
+
+    @State private var email: String
+    @State private var confirmsRemoval = false
+
+    init(
+        slot: DastakAdminSlot,
+        isBusy: Bool,
+        onSave: @escaping (String) async -> Void,
+        onClear: @escaping () async -> Void
+    ) {
+        self.slot = slot
+        self.isBusy = isBusy
+        self.onSave = onSave
+        self.onClear = onClear
+        _email = State(initialValue: slot.email ?? "")
+    }
+
+    private var normalizedEmail: String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var validEmail: Bool {
+        let parts = normalizedEmail.split(separator: "@", omittingEmptySubsequences: false)
+        return parts.count == 2 && !parts[0].isEmpty && parts[1].contains(".")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            HStack(spacing: MarketplaceSpacing.medium) {
+                Image(systemName: "person.badge.key.fill")
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    .frame(width: 40, height: 40)
+                    .background(MarketplaceColors.dastakIconBackground.color)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Executive Admin \(slot.slot)").font(.headline)
+                    Text(slot.email == nil ? "Empty seat" : slot.linked
+                        ? "Active account"
+                        : "Reserved · activates after this email signs in")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                if slot.email != nil {
+                    Label(
+                        slot.linked ? "Active" : "Pending",
+                        systemImage: slot.linked ? "checkmark.circle.fill" : "clock.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(slot.linked ? .green : MarketplaceColors.dastakAccent.color)
+                    .labelStyle(.titleAndIcon)
+                }
+            }
+
+            TextField("name@example.com", text: $email)
+#if os(iOS)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.emailAddress)
+                .textContentType(.emailAddress)
+#endif
+                .padding(.horizontal, 13)
+                .frame(minHeight: 48)
+                .background(Color.primary.opacity(0.045))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .disabled(isBusy)
+                .accessibilityLabel("Executive Admin \(slot.slot) email")
+
+            Button(slot.email == nil ? "Assign Executive Admin" : "Save change") {
+                Task { await onSave(normalizedEmail) }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(MarketplaceColors.dastakAccent.color)
+            .disabled(isBusy || !validEmail || normalizedEmail == slot.email)
+
+            if slot.email != nil {
+                Button("Remove Executive Admin", role: .destructive) {
+                    confirmsRemoval = true
+                }
+                .disabled(isBusy)
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .background(Color.primary.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onChange(of: slot) { _, updated in email = updated.email ?? "" }
+        .confirmationDialog(
+            "Remove Executive Admin?",
+            isPresented: $confirmsRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Remove access", role: .destructive) { Task { await onClear() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This email will immediately lose Dastak Admin access.")
         }
     }
 }
@@ -431,7 +656,7 @@ private struct DastakOwnerOperationsView: View {
             ContentUnavailableView(
                 "Operations are clear",
                 systemImage: "checkmark.shield",
-                description: Text("No support, refund, handoff or lifecycle exception needs owner action.")
+                description: Text("No support, refund, handoff or lifecycle exception needs Admin action.")
             )
             .frame(maxWidth: .infinity, minHeight: 240)
         } else {

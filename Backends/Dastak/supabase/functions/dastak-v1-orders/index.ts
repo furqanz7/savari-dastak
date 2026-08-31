@@ -116,6 +116,15 @@ Deno.serve((request) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_execution_trace", {
         p_order_id: input.orderId,
       }),
+    getAdminAccess: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_admin_access_snapshot", {}),
+    setExecutiveAdmin: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_set_executive_admin", {
+        p_slot: input.slot,
+        p_email: input.email,
+        p_expected_version: input.expectedVersion,
+        p_reason: input.reason,
+      }),
     getAdminSystemHealth: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_system_health", {}),
     getAdminOperationalSafety: (input) =>

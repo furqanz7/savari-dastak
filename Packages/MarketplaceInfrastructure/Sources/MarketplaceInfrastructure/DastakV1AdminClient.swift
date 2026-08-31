@@ -73,9 +73,44 @@ public struct DastakV1AdminExecutionTrace: Codable, Equatable, Sendable {
     public let launchPayment: DastakV1AdminLaunchPayment?
 }
 
+public enum DastakAdminRole: String, Codable, Equatable, Sendable {
+    case superadmin = "SUPERADMIN"
+    case executiveAdmin = "EXECUTIVE_ADMIN"
+
+    public var displayName: String {
+        switch self {
+        case .superadmin: "Superadmin"
+        case .executiveAdmin: "Executive Admin"
+        }
+    }
+}
+
+public struct DastakAdminSlot: Codable, Equatable, Identifiable, Sendable {
+    public var id: Int { slot }
+    public let slot: Int
+    public let role: DastakAdminRole
+    public let email: String?
+    public let linked: Bool
+    public let version: Int
+}
+
+public struct DastakAdminAccessSnapshot: Codable, Equatable, Sendable {
+    public let role: DastakAdminRole
+    public let canManageAdmins: Bool
+    public let slots: [DastakAdminSlot]
+}
+
 public protocol DastakV1AdminClient: Sendable {
     func orders(limit: Int, idempotencyKey: IdempotencyKey) async throws -> [DastakV1AdminOrder]
     func trace(orderID: UUID, idempotencyKey: IdempotencyKey) async throws -> DastakV1AdminExecutionTrace
+    func access(idempotencyKey: IdempotencyKey) async throws -> DastakAdminAccessSnapshot
+    func setExecutiveAdmin(
+        slot: Int,
+        email: String?,
+        expectedVersion: Int,
+        reason: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakAdminSlot
 }
 
 public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
@@ -83,6 +118,10 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
         let operation: String
         let limit: Int?
         let orderId: UUID?
+        let slot: Int?
+        let email: String?
+        let expectedVersion: Int?
+        let reason: String?
     }
 
     private struct OrderCollection: Decodable, Sendable {
@@ -102,7 +141,15 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
         precondition((1...100).contains(limit))
         let collection: OrderCollection = try await functions.invoke(
             "dastak-v1-orders",
-            request: Request(operation: "adminExecutionOrders", limit: limit, orderId: nil),
+            request: Request(
+                operation: "adminExecutionOrders",
+                limit: limit,
+                orderId: nil,
+                slot: nil,
+                email: nil,
+                expectedVersion: nil,
+                reason: nil
+            ),
             idempotencyKey: idempotencyKey
         )
         return collection.orders
@@ -114,7 +161,57 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
     ) async throws -> DastakV1AdminExecutionTrace {
         try await functions.invoke(
             "dastak-v1-orders",
-            request: Request(operation: "adminExecutionTrace", limit: nil, orderId: orderID),
+            request: Request(
+                operation: "adminExecutionTrace",
+                limit: nil,
+                orderId: orderID,
+                slot: nil,
+                email: nil,
+                expectedVersion: nil,
+                reason: nil
+            ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func access(
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakAdminAccessSnapshot {
+        try await functions.invoke(
+            "dastak-v1-orders",
+            request: Request(
+                operation: "adminAccess",
+                limit: nil,
+                orderId: nil,
+                slot: nil,
+                email: nil,
+                expectedVersion: nil,
+                reason: nil
+            ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func setExecutiveAdmin(
+        slot: Int,
+        email: String?,
+        expectedVersion: Int,
+        reason: String,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakAdminSlot {
+        precondition((1...2).contains(slot))
+        precondition(expectedVersion > 0)
+        return try await functions.invoke(
+            "dastak-v1-orders",
+            request: Request(
+                operation: "setExecutiveAdmin",
+                limit: nil,
+                orderId: nil,
+                slot: slot,
+                email: email,
+                expectedVersion: expectedVersion,
+                reason: reason
+            ),
             idempotencyKey: idempotencyKey
         )
     }

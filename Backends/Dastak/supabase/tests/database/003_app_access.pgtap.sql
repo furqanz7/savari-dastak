@@ -134,8 +134,8 @@ values ('33333333-3333-4333-8333-333333333333', 'owner');
 
 select is(
   (select route from public.resolve_app_access('33333333-3333-4333-8333-333333333333', 'admin')),
-  'pending_approval',
-  'unapproved owner remains pending'
+  'access_denied',
+  'an unassigned owner cannot enter Dastak Admin'
 );
 
 update private.account_memberships
@@ -145,8 +145,8 @@ where account_id = '33333333-3333-4333-8333-333333333333'
 
 select is(
   (select route from public.resolve_app_access('33333333-3333-4333-8333-333333333333', 'admin')),
-  'active',
-  'approved owner enters Dastak Admin'
+  'access_denied',
+  'an approved owner still needs an explicit Admin slot'
 );
 
 select is(

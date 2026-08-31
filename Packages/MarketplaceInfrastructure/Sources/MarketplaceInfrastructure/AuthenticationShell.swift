@@ -400,6 +400,12 @@ private struct AuthenticationRouteView: View {
                 phoneNumber = "+91"
             }
         }
+        .task(id: coordinator.route) {
+            guard requiredAccess == .dastakAdmin, coordinator.route == .accessDenied else {
+                return
+            }
+            await signOut()
+        }
         .confirmationDialog(
             "Sign out of Dastak?",
             isPresented: $showsSignOutConfirmation,

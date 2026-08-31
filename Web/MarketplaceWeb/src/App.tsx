@@ -22,6 +22,7 @@ import { createClient, type Provider, type Session } from "@supabase/supabase-js
 import {
   completeProfile,
   isValidProfile,
+  mustSignOutDeniedAdmin,
   ProfileSubmissionAttempt,
   profileValidation,
   resolveAccess,
@@ -119,7 +120,15 @@ export default function App() {
         setView({ phase: "signed_out" });
       } else if (access.state === "needs_profile") setView({ phase: "profile", session });
       else if (access.state === "active") setView({ phase: "ready", session, access });
-      else setView({ phase: "restricted", session, access });
+      else if (mustSignOutDeniedAdmin(access, config.role)) {
+        knownUserId.current = undefined;
+        await supabase.auth.signOut({ scope: "local" });
+        setView({
+          phase: "error",
+          kind: "sign_in",
+          message: "This email is not assigned to Dastak Admin.",
+        });
+      } else setView({ phase: "restricted", session, access });
     } catch (error) {
       setView({ phase: "error", session, kind: "connection", message: errorMessage(error) });
     }

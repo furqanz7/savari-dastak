@@ -4,6 +4,7 @@ import {
   mapDastakRoute,
   mapDeliverySnapshot,
   mapSavariAccess,
+  mustSignOutDeniedAdmin,
   ProfileSubmissionAttempt,
 } from "./access";
 
@@ -42,6 +43,14 @@ describe("Dastak role isolation", () => {
     expect(mapDeliverySnapshot({ onboardingState: "not_applied" }).state).toBe("denied");
     expect(mapDeliverySnapshot({ onboardingState: "pending" }).state).toBe("pending");
     expect(mapDeliverySnapshot({ onboardingState: "approved" }).state).toBe("active");
+  });
+
+  it("removes denied Admin sessions while preserving an assigned profile setup", () => {
+    expect(mustSignOutDeniedAdmin({ state: "denied" }, "admin")).toBe(true);
+    expect(mustSignOutDeniedAdmin({ state: "pending" }, "admin")).toBe(true);
+    expect(mustSignOutDeniedAdmin({ state: "needs_profile" }, "admin")).toBe(false);
+    expect(mustSignOutDeniedAdmin({ state: "active" }, "admin")).toBe(false);
+    expect(mustSignOutDeniedAdmin({ state: "denied" }, "merchant")).toBe(false);
   });
 
   it("recognizes a revoked server session", async () => {

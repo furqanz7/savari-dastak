@@ -101,6 +101,14 @@ export type V1OrderDependencies = {
     accessToken: string;
     orderId: string;
   }) => Promise<unknown>;
+  getAdminAccess: (input: { accessToken: string }) => Promise<unknown>;
+  setExecutiveAdmin: (input: {
+    accessToken: string;
+    slot: 1 | 2;
+    email: string | null;
+    expectedVersion: number;
+    reason: string;
+  }) => Promise<unknown>;
   getAdminSystemHealth: (input: { accessToken: string }) => Promise<unknown>;
   getAdminOperationalSafety: (input: { accessToken: string }) => Promise<unknown>;
   manageRiderEscalation: (input: {
@@ -514,6 +522,28 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           await dependencies.getAdminExecutionTrace({
             accessToken: actor.accessToken,
             orderId,
+          }),
+        );
+      }
+      case "adminAccess":
+        return json(await dependencies.getAdminAccess({ accessToken: actor.accessToken }));
+      case "setExecutiveAdmin": {
+        const slot = body.slot === 1 || body.slot === 2 ? body.slot : undefined;
+        const email = body.email === null || body.email === undefined
+          ? null
+          : requiredText(body.email, 320);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const reason = requiredText(body.reason, 500);
+        if (
+          !slot || email === undefined || !expectedVersion || !reason || reason.length < 3
+        ) return validationError();
+        return json(
+          await dependencies.setExecutiveAdmin({
+            accessToken: actor.accessToken,
+            slot,
+            email,
+            expectedVersion,
+            reason,
           }),
         );
       }

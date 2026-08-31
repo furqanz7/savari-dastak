@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { RoleAccountView } from "./RoleAccountView";
+import { AdminAccessPanel } from "./AdminAccessPanel";
 import { AdminCataloguePanel } from "./AdminCataloguePanel";
 import {
   getAdminOrders,
@@ -44,7 +45,9 @@ import { AdminSystemHealthPanel } from "./AdminSystemHealthPanel";
 import { AdminOperationalSafetyPanel } from "./AdminOperationalSafetyPanel";
 import { AdminRoyaltyPayoutPanel } from "./AdminRoyaltyPayoutPanel";
 import {
+  getV1AdminAccess,
   getV1AdminExecutionOrders,
+  type V1AdminAccess,
   type V1AdminExecutionOrder,
 } from "./dastakV1";
 
@@ -73,6 +76,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [v1Orders, setV1Orders] = useState<V1AdminExecutionOrder[]>([]);
   const [operations, setOperations] = useState<OwnerOperationsSnapshot>();
+  const [adminAccess, setAdminAccess] = useState<V1AdminAccess>();
   const [tab, setTab] = useState<"approvals" | "exceptions" | "orders" | "payouts" | "safety" | "health" | "catalogue" | "legacy" | "account">("approvals");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
@@ -83,19 +87,21 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
   const refresh = useCallback(async (showProgress = false) => {
     if (showProgress) setBusy("refresh");
     try {
-      const [merchantApplications, partnerApplications, recentOrders, v1ExecutionOrders, ownerOperations] = await Promise.all([
+      const [merchantApplications, partnerApplications, recentOrders, v1ExecutionOrders, ownerOperations, currentAdminAccess] = await Promise.all([
         getMerchantApplications(auth),
         getPartnerApplications(auth),
         // Legacy history is diagnostic only and must never take V1 launch control offline.
         getAdminOrders({ ...auth, limit: 50 }).catch(() => []),
         getV1AdminExecutionOrders({ ...auth, limit: 50 }),
         getOwnerOperations({ ...auth, limit: 50 }),
+        getV1AdminAccess(auth),
       ]);
       setMerchants(merchantApplications.filter((application) => application.status === "pending"));
       setPartners(partnerApplications.filter((application) => application.status === "pending"));
       setOrders(recentOrders);
       setV1Orders(v1ExecutionOrders);
       setOperations(ownerOperations);
+      setAdminAccess(currentAdminAccess);
       setError(undefined);
     } catch (refreshError) {
       setError(message(refreshError));
@@ -250,7 +256,9 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     <div className="admin-shell">
       <header className="admin-heading">
         <div>
-          <p className="eyebrow">{displayName ? `Owner: ${displayName}` : "Owner workspace"}</p>
+          <p className="eyebrow">{displayName
+            ? `${adminRoleLabel(adminAccess?.role)}: ${displayName}`
+            : `${adminRoleLabel(adminAccess?.role)} workspace`}</p>
           <h1>Dastak operations</h1>
           <p>Approvals and recent marketplace activity.</p>
         </div>
@@ -281,18 +289,23 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
         <button type="button" role="tab" aria-selected={tab === "account"} className={tab === "account" ? "selected" : ""} onClick={() => setTab("account")}><UserRound size={17} /> Account</button>
       </div>
 
-      {tab === "catalogue" ? <AdminCataloguePanel auth={auth} /> : tab === "orders" ? <AdminV1ExecutionPanel auth={auth} /> : tab === "payouts" ? <AdminRoyaltyPayoutPanel auth={auth} /> : tab === "safety" ? <AdminOperationalSafetyPanel auth={auth} /> : tab === "health" ? <AdminSystemHealthPanel auth={auth} /> : tab === "account" ? <RoleAccountView
-        accessToken={accessToken}
-        displayName={displayName}
-        email={email}
-        phoneNumber={phoneNumber}
-        roleName="Owner"
-        accessLabel="Full access"
-        supabaseUrl={supabaseUrl}
-        publishableKey={publishableKey}
-        allowsAccountDeletion={false}
-        onSignOut={onSignOut}
-      /> : loading ? <div className="catalogue-loading" role="status"><span /> Loading operations</div> : tab === "approvals" ? (
+      {tab === "catalogue" ? <AdminCataloguePanel auth={auth} /> : tab === "orders" ? <AdminV1ExecutionPanel auth={auth} /> : tab === "payouts" ? <AdminRoyaltyPayoutPanel auth={auth} /> : tab === "safety" ? <AdminOperationalSafetyPanel auth={auth} /> : tab === "health" ? <AdminSystemHealthPanel auth={auth} /> : tab === "account" ? <div className="admin-account-workspace">
+        <RoleAccountView
+          accessToken={accessToken}
+          displayName={displayName}
+          email={email}
+          phoneNumber={phoneNumber}
+          roleName={adminRoleLabel(adminAccess?.role)}
+          accessLabel="Full operations access"
+          supabaseUrl={supabaseUrl}
+          publishableKey={publishableKey}
+          allowsAccountDeletion={false}
+          onSignOut={onSignOut}
+        />
+        {adminAccess?.canManageAdmins && (
+          <AdminAccessPanel auth={auth} access={adminAccess} onChange={setAdminAccess} />
+        )}
+      </div> : loading ? <div className="catalogue-loading" role="status"><span /> Loading operations</div> : tab === "approvals" ? (
         <div className="admin-approvals" role="tabpanel">
           <ApprovalSection title="Merchant applications" count={merchants.length} empty="No merchant applications waiting.">
             {merchants.map((application) => (
@@ -356,6 +369,10 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
       )}
     </div>
   );
+}
+
+function adminRoleLabel(role?: V1AdminAccess["role"]) {
+  return role === "SUPERADMIN" ? "Superadmin" : role === "EXECUTIVE_ADMIN" ? "Executive Admin" : "Admin";
 }
 
 function ExceptionsPanel({ operations, busy, onResolve, onReset, onReconcile, onReviewRefund }: {

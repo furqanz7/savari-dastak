@@ -4,6 +4,7 @@ import {
   addV1FulfilmentReadyEvidence,
   authorizeV1ExceptionalDeliveryHandoff,
   declareV1FulfilmentPackages,
+  getV1AdminAccess,
   getV1AdminExecutionTrace,
   getV1AdminSystemHealth,
   getV1AdminOperationalSafety,
@@ -27,6 +28,7 @@ import {
   respondToV1MerchantOpportunity,
   submitV1Order,
   setV1OperationalPause,
+  setV1ExecutiveAdmin,
   updateV1AdminSku,
   updateV1MerchantBranchState,
   updateV1MerchantSkuSelection,
@@ -404,6 +406,54 @@ describe("Dastak V1 web contract", () => {
     expect(result.payment?.status).toBe("RESERVED");
     expect(result.preparation?.fulfilments).toEqual([]);
     expect(result.delivery?.mission?.status).toBe("ASSIGNED");
+  });
+
+  it("loads fixed Admin slots and submits only an Executive email assignment", async () => {
+    const bodies: unknown[] = [];
+    const access = await getV1AdminAccess(auth, async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({
+        role: "SUPERADMIN",
+        canManageAdmins: true,
+        slots: [
+          { slot: 0, role: "SUPERADMIN", email: "super@example.com", linked: true, version: 1 },
+          { slot: 1, role: "EXECUTIVE_ADMIN", email: null, linked: false, version: 1 },
+          { slot: 2, role: "EXECUTIVE_ADMIN", email: "pending@example.com", linked: false, version: 3 },
+        ],
+      });
+    });
+    const assigned = await setV1ExecutiveAdmin({
+      ...auth,
+      slot: 1,
+      email: "  Executive@Example.com ",
+      expectedVersion: 1,
+      reason: "Updated from protected Admin access settings.",
+    }, async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({
+        slot: 1,
+        role: "EXECUTIVE_ADMIN",
+        email: "executive@example.com",
+        linked: true,
+        version: 2,
+      });
+    });
+    expect(access).toMatchObject({
+      role: "SUPERADMIN",
+      canManageAdmins: true,
+      slots: [{ slot: 0 }, { slot: 1 }, { slot: 2, linked: false }],
+    });
+    expect(assigned).toMatchObject({ slot: 1, email: "executive@example.com", linked: true });
+    expect(bodies).toEqual([
+      { operation: "adminAccess" },
+      {
+        operation: "setExecutiveAdmin",
+        slot: 1,
+        email: "executive@example.com",
+        expectedVersion: 1,
+        reason: "Updated from protected Admin access settings.",
+      },
+    ]);
   });
 
   it("decodes the audited minimum system health projection", async () => {

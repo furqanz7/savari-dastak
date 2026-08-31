@@ -234,6 +234,72 @@ Deno.test("V1 launch payment commitment rejects missing idempotency and stale-sh
   assertEquals(calls, 0);
 });
 
+Deno.test("V1 Admin access snapshot and Executive assignment forward only validated authority", async () => {
+  const recorded: Record<string, unknown> = {};
+  const deps = dependencies({
+    getAdminAccess: (input) => {
+      recorded.snapshot = input;
+      return Promise.resolve({ role: "SUPERADMIN", canManageAdmins: true, slots: [] });
+    },
+    setExecutiveAdmin: (input) => {
+      recorded.assignment = input;
+      return Promise.resolve({ slot: 1, role: "EXECUTIVE_ADMIN", version: 2 });
+    },
+  });
+  const snapshot = await handleV1Orders(request({ operation: "adminAccess" }), deps);
+  const assignment = await handleV1Orders(
+    request({
+      operation: "setExecutiveAdmin",
+      slot: 1,
+      email: "  executive@example.com  ",
+      expectedVersion: 1,
+      reason: "  Assign Executive Admin from the protected workspace.  ",
+      accountId: "client-cannot-select-account",
+    }),
+    deps,
+  );
+  assertEquals([snapshot.status, assignment.status], [200, 200]);
+  assertEquals(recorded.snapshot, { accessToken: actor.accessToken });
+  assertEquals(recorded.assignment, {
+    accessToken: actor.accessToken,
+    slot: 1,
+    email: "executive@example.com",
+    expectedVersion: 1,
+    reason: "Assign Executive Admin from the protected workspace.",
+  });
+});
+
+Deno.test("V1 Executive assignment rejects extra slots and malformed email shape", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    setExecutiveAdmin: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
+  const extraSlot = await handleV1Orders(
+    request({
+      operation: "setExecutiveAdmin",
+      slot: 3,
+      email: "third@example.com",
+      expectedVersion: 1,
+      reason: "Invalid third slot",
+    }),
+    deps,
+  );
+  const malformed = await handleV1Orders(
+    request({
+      operation: "setExecutiveAdmin",
+      slot: 1,
+      email: { address: "not-client-authority" },
+      expectedVersion: 1,
+      reason: "Invalid email shape",
+    }),
+    deps,
+  );
+  assertEquals([extraSlot.status, malformed.status, calls], [400, 400, 0]);
+});
+
 Deno.test("V1 merchant opportunities preserve scope, quantity, and optimistic state", async () => {
   let acceptInput: unknown;
   let declineInput: unknown;
@@ -860,6 +926,8 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
       (() => Promise.resolve({ orders: [] })),
     getAdminExecutionTrace: overrides.getAdminExecutionTrace ??
       (() => Promise.resolve({})),
+    getAdminAccess: overrides.getAdminAccess ?? (() => Promise.resolve({})),
+    setExecutiveAdmin: overrides.setExecutiveAdmin ?? (() => Promise.resolve({})),
     getAdminSystemHealth: overrides.getAdminSystemHealth ?? (() => Promise.resolve({})),
     getAdminOperationalSafety: overrides.getAdminOperationalSafety ?? (() => Promise.resolve({})),
     manageRiderEscalation: overrides.manageRiderEscalation ?? (() => Promise.resolve({})),

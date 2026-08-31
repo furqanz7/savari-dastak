@@ -601,6 +601,22 @@ export type V1AdminSnapshot = {
   }>;
 };
 
+export type V1AdminRole = "SUPERADMIN" | "EXECUTIVE_ADMIN";
+
+export type V1AdminSlot = {
+  slot: 0 | 1 | 2;
+  role: V1AdminRole;
+  email?: string;
+  linked: boolean;
+  version: number;
+};
+
+export type V1AdminAccess = {
+  role: V1AdminRole;
+  canManageAdmins: boolean;
+  slots: V1AdminSlot[];
+};
+
 export class DastakV1RequestError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) {
     super(message);
@@ -698,6 +714,34 @@ export async function commitV1LaunchPayment(
 export async function getV1AdminCatalogue(input: DastakV1Auth & { signal?: AbortSignal }, fetcher: Fetcher = fetch) {
   return parseV1AdminSnapshot(await invoke(input, "dastak-v1-catalogue", {
     operation: "adminSnapshot", skuLimit: 1000,
+  }, undefined, fetcher));
+}
+
+export async function getV1AdminAccess(
+  input: DastakV1Auth & { signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminAccess> {
+  return parseAdminAccess(await invoke(input, "dastak-v1-orders", {
+    operation: "adminAccess",
+  }, undefined, fetcher));
+}
+
+export async function setV1ExecutiveAdmin(
+  input: DastakV1Auth & {
+    slot: 1 | 2;
+    email?: string;
+    expectedVersion: number;
+    reason: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminSlot> {
+  return parseAdminSlot(await invoke(input, "dastak-v1-orders", {
+    operation: "setExecutiveAdmin",
+    slot: input.slot,
+    email: input.email?.trim().toLowerCase() || null,
+    expectedVersion: input.expectedVersion,
+    reason: input.reason,
   }, undefined, fetcher));
 }
 
@@ -2409,6 +2453,44 @@ function parseAdminSku(value: unknown): V1AdminSku {
     taxRateBps: requiredInteger(source.taxRateBps, 0), status, selectionCount: requiredInteger(source.selectionCount, 0),
     version: requiredInteger(source.version, 1), updatedAt: requiredTimestamp(source.updatedAt),
   };
+}
+
+function parseAdminAccess(value: unknown): V1AdminAccess {
+  const source = requiredRecord(value);
+  const role = adminRole(source.role);
+  const slots = requiredArray(source.slots).map(parseAdminSlot);
+  if (
+    (role === "SUPERADMIN" && slots.length !== 3) ||
+    (role === "EXECUTIVE_ADMIN" && slots.length !== 0) ||
+    slots.some((slot, index) => slot.slot !== index) ||
+    (role === "SUPERADMIN" && !requiredBoolean(source.canManageAdmins)) ||
+    (role === "EXECUTIVE_ADMIN" && requiredBoolean(source.canManageAdmins))
+  ) invalid("Admin access response");
+  return { role, canManageAdmins: role === "SUPERADMIN", slots };
+}
+
+function parseAdminSlot(value: unknown): V1AdminSlot {
+  const source = requiredRecord(value);
+  const slot = requiredInteger(source.slot, 0);
+  const role = adminRole(source.role);
+  const email = optionalText(source.email, 320);
+  const linked = requiredBoolean(source.linked);
+  if (
+    slot > 2 || (slot === 0) !== (role === "SUPERADMIN") ||
+    (linked && !email) || (slot === 0 && (!linked || !email))
+  ) invalid("Admin slot");
+  return {
+    slot: slot as 0 | 1 | 2,
+    role,
+    email,
+    linked,
+    version: requiredInteger(source.version, 1),
+  };
+}
+
+function adminRole(value: unknown): V1AdminRole {
+  if (value === "SUPERADMIN" || value === "EXECUTIVE_ADMIN") return value;
+  return invalid("Admin role");
 }
 
 function parseConfiguration(value: unknown) {

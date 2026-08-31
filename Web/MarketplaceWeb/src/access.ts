@@ -163,6 +163,11 @@ export function isAuthenticationRequiredResponse(status: number) {
   return status === 401;
 }
 
+export function mustSignOutDeniedAdmin(access: AccessResult, role: AppConfig["role"]) {
+  return role === "admin" && access.state !== "active" &&
+    access.state !== "needs_profile" && access.state !== "signed_out";
+}
+
 async function resolveSavariAccess(
   client: SupabaseClient,
   userId: string,
