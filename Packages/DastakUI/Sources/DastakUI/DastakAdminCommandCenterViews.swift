@@ -696,8 +696,8 @@ private struct AdminSKUEditor: View {
     init(sku: DastakAdminCatalogueSKU, model: DastakOwnerOperationsModel) {
         self.sku = sku
         self.model = model
-        _listPrice = State(initialValue: String(format: "%.2f", Double(sku.listPricePaise) / 100))
-        _sellingPrice = State(initialValue: String(format: "%.2f", Double(sku.sellingPricePaise) / 100))
+        _listPrice = State(initialValue: sku.listPricePaise.map { String(format: "%.2f", Double($0) / 100) } ?? "")
+        _sellingPrice = State(initialValue: sku.sellingPricePaise.map { String(format: "%.2f", Double($0) / 100) } ?? "")
         _status = State(initialValue: sku.status)
     }
 
@@ -714,6 +714,11 @@ private struct AdminSKUEditor: View {
 #if os(iOS)
                         .keyboardType(.decimalPad)
 #endif
+                    if sku.listPricePaise == nil || sku.sellingPricePaise == nil {
+                        Text("Pricing has not been set for this Draft SKU. Enter both amounts before saving.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Picker("Visibility", selection: $status) {
                         Text("Draft").tag("DRAFT")
                         Text("Active").tag("ACTIVE").disabled(!sku.activationReady && sku.status != "ACTIVE")
@@ -770,7 +775,33 @@ private struct MoreRow: View { let title: String; let detail: String; let symbol
 private struct AdminStateCard: View { let title: String; let detail: String; let symbol: String; let attention: Bool; var body: some View { HStack(spacing: MarketplaceSpacing.medium) { Image(systemName: symbol).font(.title2).foregroundStyle(attention ? MarketplaceColors.warning.color : MarketplaceColors.success.color); VStack(alignment: .leading, spacing: 4) { Text(title).font(.headline); Text(detail).font(.subheadline).foregroundStyle(.secondary) }; Spacer() }.padding(MarketplaceSpacing.medium).marketplaceFlatSurface() } }
 private struct AdminPersonRow: View { let person: DastakAdminNetworkPerson; var body: some View { HStack(spacing: 12) { Text(initials(person.displayName)).font(.caption.bold()).frame(width: 40, height: 40).background(MarketplaceColors.dastakIconBackground.color, in: Circle()); VStack(alignment: .leading, spacing: 3) { Text(person.displayName).font(.headline); Text(person.email ?? person.phoneNumber).font(.caption).foregroundStyle(.secondary); Text(person.personas.map { $0.persona.rawValue.capitalized }.joined(separator: " · ")).font(.caption2).foregroundStyle(MarketplaceColors.dastakAccent.color) } } } }
 private struct AdminPersonDetail: View { let person: DastakAdminNetworkPerson; var body: some View { List { Section("Identity") { LabeledContent("Name", value: person.displayName); LabeledContent("Email", value: person.email ?? "Not available"); LabeledContent("Verified phone", value: person.phoneNumber); LabeledContent("Account", value: person.accountState.capitalized); if let role = person.adminRole { LabeledContent("Admin role", value: role.displayName) } }; Section("Customer") { LabeledContent("Orders", value: "\(person.customer.orderCount)"); LabeledContent("Active orders", value: "\(person.customer.activeOrderCount)") }; if let merchant = person.merchant { Section("Merchant") { LabeledContent("Application", value: merchant.applicationStatus.capitalized); LabeledContent("Business", value: merchant.organizationName ?? merchant.businessName); LabeledContent("Branches", value: "\(merchant.branchCount)") } }; if let delivery = person.delivery { Section("Delivery Partner") { LabeledContent("Application", value: delivery.applicationStatus.capitalized); LabeledContent("Method", value: delivery.deliveryMethod.capitalized); LabeledContent("Availability", value: delivery.availability?.capitalized ?? "Not active"); LabeledContent("Active missions", value: "\(delivery.activeMissionCount)") } } }.navigationTitle(person.displayName) } }
-private struct AdminSKURow: View { let sku: DastakAdminCatalogueSKU; var body: some View { HStack(spacing: 12) { Image(systemName: sku.primaryImage == nil ? "photo.badge.exclamationmark" : "photo.fill").foregroundStyle(sku.primaryImage == nil ? MarketplaceColors.warning.color : MarketplaceColors.success.color).frame(width: 42, height: 42).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12)); VStack(alignment: .leading, spacing: 3) { Text(sku.name).font(.headline).lineLimit(2); Text([sku.brandName, sku.packSize].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary); Text("\(DastakFormatting.money(Money(paise: sku.sellingPricePaise))) · \(sku.status.capitalized) · \(sku.qaStatus.replacingOccurrences(of: "_", with: " ").capitalized)").font(.caption2.weight(.semibold)).foregroundStyle(MarketplaceColors.dastakAccent.color) }; Spacer() } } }
+private struct AdminSKURow: View {
+    let sku: DastakAdminCatalogueSKU
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: sku.primaryImage == nil ? "photo.badge.exclamationmark" : "photo.fill")
+                .foregroundStyle(sku.primaryImage == nil ? MarketplaceColors.warning.color : MarketplaceColors.success.color)
+                .frame(width: 42, height: 42)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(sku.name).font(.headline).lineLimit(2)
+                Text([sku.brandName, sku.packSize].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("\(priceLabel) · \(sku.status.capitalized) · \(sku.qaStatus.replacingOccurrences(of: "_", with: " ").capitalized)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+            Spacer()
+        }
+    }
+
+    private var priceLabel: String {
+        guard let sellingPricePaise = sku.sellingPricePaise else { return "Pricing not set" }
+        return DastakFormatting.money(Money(paise: sellingPricePaise))
+    }
+}
 
 private func initials(_ value: String) -> String { value.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased() }
 private func adminDate(_ value: String) -> String { ISO8601DateFormatter().date(from: value)?.formatted(date: .abbreviated, time: .shortened) ?? "just now" }

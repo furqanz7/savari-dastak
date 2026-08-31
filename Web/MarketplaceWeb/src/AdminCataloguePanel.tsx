@@ -128,17 +128,19 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
 }
 
 function SkuEditor({ sku, disabled, onSave }: { sku: V1AdminCataloguePageSku; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void> }) {
-  const [listPrice, setListPrice] = useState((sku.listPricePaise / 100).toFixed(2));
-  const [sellingPrice, setSellingPrice] = useState((sku.sellingPricePaise / 100).toFixed(2));
+  const [listPrice, setListPrice] = useState(sku.listPricePaise === undefined ? "" : (sku.listPricePaise / 100).toFixed(2));
+  const [sellingPrice, setSellingPrice] = useState(sku.sellingPricePaise === undefined ? "" : (sku.sellingPricePaise / 100).toFixed(2));
   const [status, setStatus] = useState(sku.status);
-  const changed = Math.round(Number(listPrice) * 100) !== sku.listPricePaise || Math.round(Number(sellingPrice) * 100) !== sku.sellingPricePaise || status !== sku.status;
-  const valid = Number.isFinite(Number(listPrice)) && Number.isFinite(Number(sellingPrice)) && Number(sellingPrice) >= 0 && Number(sellingPrice) <= Number(listPrice);
+  const listPricePaise = priceInPaise(listPrice);
+  const sellingPricePaise = priceInPaise(sellingPrice);
+  const changed = listPricePaise !== sku.listPricePaise || sellingPricePaise !== sku.sellingPricePaise || status !== sku.status;
+  const valid = listPricePaise !== undefined && sellingPricePaise !== undefined && sellingPricePaise <= listPricePaise;
   const activatingWithoutEvidence = status === "ACTIVE" && sku.status !== "ACTIVE" && !sku.activationReady;
   const canSave = valid && changed && !activatingWithoutEvidence;
-  return <form onSubmit={(event) => { event.preventDefault(); if (canSave) void onSave(sku, { listPricePaise: Math.round(Number(listPrice) * 100), sellingPricePaise: Math.round(Number(sellingPrice) * 100), status }); }}>
+  return <form onSubmit={(event) => { event.preventDefault(); if (canSave) void onSave(sku, { listPricePaise, sellingPricePaise, status }); }}>
     <div className="admin-sku-identity"><span className={`admin-sku-image ${sku.primaryImage ? "ready" : "missing"}`}><ImageIcon size={20} /></span><span><strong>{sku.name}</strong><small>{sku.brandName ? `${sku.brandName} · ` : ""}{sku.packSize} · v{sku.version}</small><em>{sku.imageCount} images · {sku.identifierCount} identifiers · {sku.aliasCount} aliases</em></span></div>
-    <label><span>MRP (₹)</span><input inputMode="decimal" value={listPrice} onChange={(event) => setListPrice(event.target.value)} aria-label={`${sku.name} MRP`} /></label>
-    <label><span>Selling (₹)</span><input inputMode="decimal" value={sellingPrice} onChange={(event) => setSellingPrice(event.target.value)} aria-label={`${sku.name} selling price`} /></label>
+    <label><span>MRP (₹)</span><input inputMode="decimal" value={listPrice} onChange={(event) => setListPrice(event.target.value)} placeholder="Not set" aria-label={`${sku.name} MRP`} /></label>
+    <label><span>Selling (₹)</span><input inputMode="decimal" value={sellingPrice} onChange={(event) => setSellingPrice(event.target.value)} placeholder="Not set" aria-label={`${sku.name} selling price`} /></label>
     <label><span>Visibility</span><select value={status} onChange={(event) => setStatus(event.target.value as V1AdminCataloguePageSku["status"])} aria-label={`${sku.name} visibility`}><option value="DRAFT">Draft</option><option value="ACTIVE" disabled={!sku.activationReady && sku.status !== "ACTIVE"}>Active</option><option value="INACTIVE">Inactive</option></select></label>
     <span className={`v1-admin-status ${sku.activationReady ? "active" : "inactive"}`}><b>{sku.qaStatus.replaceAll("_", " ")}</b><small>{sku.activationReady ? "Ready to activate" : blockerSummary(sku.activationBlockers)}</small></span>
     <button className="secondary-button" type="submit" disabled={disabled || !canSave}>Save</button>
@@ -148,6 +150,12 @@ function SkuEditor({ sku, disabled, onSave }: { sku: V1AdminCataloguePageSku; di
 function Select({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode }) { return <label><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}>{children}</select><ChevronDown size={14} /></label>; }
 function Summary({ label, value }: { label: string; value: number }) { return <div><strong>{value.toLocaleString("en-IN")}</strong><span>{label}</span></div>; }
 function displayValue(value: unknown) { if (value === null) return "Not set"; if (typeof value === "object") return JSON.stringify(value); return String(value); }
+function priceInPaise(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return undefined;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : undefined;
+}
 function message(error: unknown) { return error instanceof Error ? error.message : "The catalogue operation could not be completed."; }
 function blockerSummary(blockers: string[]) {
   if (blockers.length === 0) return "Complete required catalogue evidence";

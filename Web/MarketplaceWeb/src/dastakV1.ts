@@ -578,7 +578,9 @@ export type V1RestaurantRequest = {
   fulfilmentId?: string;
 };
 
-export type V1AdminSku = V1CatalogueSku & {
+export type V1AdminSku = Omit<V1CatalogueSku, "listPricePaise" | "sellingPricePaise"> & {
+  listPricePaise?: number;
+  sellingPricePaise?: number;
   brandId?: string;
   taxRateBps: number;
   status: "DRAFT" | "ACTIVE" | "INACTIVE";
@@ -2623,10 +2625,30 @@ function parseAdminBrand(value: unknown) {
 function parseAdminSku(value: unknown): V1AdminSku {
   const source = record(value);
   if (!source) invalid("admin SKU");
+  const logistics = requiredRecord(source.logisticsAttributes);
+  const listPricePaise = optionalInteger(source.listPricePaise, 0);
+  const sellingPricePaise = optionalInteger(source.sellingPricePaise, 0);
+  if (listPricePaise !== undefined && sellingPricePaise !== undefined && sellingPricePaise > listPricePaise) {
+    invalid("Admin SKU price");
+  }
   const status = requiredText(source.status, 20);
   if (status !== "DRAFT" && status !== "ACTIVE" && status !== "INACTIVE") invalid("SKU status");
   return {
-    ...parseSku({ ...source, brand: null }),
+    id: requiredUuid(source.id),
+    categoryId: requiredUuid(source.categoryId),
+    subcategoryId: requiredUuid(source.subcategoryId),
+    brand: undefined,
+    name: requiredText(source.name, 160),
+    slug: requiredText(source.slug, 160),
+    variant: optionalText(source.variant, 160),
+    packSize: requiredText(source.packSize, 80),
+    description: optionalText(source.description, 1000),
+    imageKey: optionalText(source.imageKey, 500),
+    barcode: optionalText(source.barcode, 64),
+    listPricePaise,
+    sellingPricePaise,
+    currencyCode: currency(source.currencyCode),
+    logisticsAttributes: logistics,
     brandId: source.brandId === null || source.brandId === undefined ? undefined : requiredUuid(source.brandId),
     taxRateBps: requiredInteger(source.taxRateBps, 0), status, selectionCount: requiredInteger(source.selectionCount, 0),
     version: requiredInteger(source.version, 1), updatedAt: requiredTimestamp(source.updatedAt),

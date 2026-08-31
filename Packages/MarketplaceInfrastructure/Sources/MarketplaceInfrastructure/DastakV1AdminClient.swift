@@ -229,8 +229,8 @@ public struct DastakAdminCatalogueSKU: Codable, Equatable, Identifiable, Sendabl
     public let name: String
     public let brandName: String?
     public let packSize: String
-    public let listPricePaise: Int
-    public let sellingPricePaise: Int
+    public let listPricePaise: Int?
+    public let sellingPricePaise: Int?
     public let currencyCode: String
     public let status: String
     public let qaStatus: String

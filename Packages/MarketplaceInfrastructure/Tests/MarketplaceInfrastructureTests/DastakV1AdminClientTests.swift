@@ -94,6 +94,9 @@ final class DastakV1AdminClientTests: XCTestCase {
         XCTAssertEqual(page.skus.first?.activationReady, true)
         XCTAssertEqual(page.skus.first?.activationBlockers, [])
         XCTAssertEqual(page.skus.first?.primaryImage?.rightsStatus, "CLEARED")
+        XCTAssertNil(page.skus.last?.listPricePaise)
+        XCTAssertNil(page.skus.last?.sellingPricePaise)
+        XCTAssertEqual(page.skus.last?.activationBlockers, ["DASTAK_PRICING_REQUIRED"])
         var request = try await requestBody(functions, expectedName: "dastak-v1-catalogue")
         XCTAssertEqual(request["operation"] as? String, "adminCataloguePage")
         XCTAssertEqual(request["status"] as? String, "ACTIVE")
@@ -282,6 +285,11 @@ private let adminCataloguePageJSON = #"""
     "activationReady":true,"activationBlockers":[],"imageCount":1,"aliasCount":2,"identifierCount":1,
     "primaryImage":{"id":"88888888-8888-4888-8888-888888888888","imageKey":"catalogue/atta-primary.webp","status":"VERIFIED","rightsStatus":"CLEARED","sourceType":"ADMIN_UPLOAD"},
     "version":4,"updatedAt":"2026-08-31T12:00:00Z"
+  },{
+    "id":"99999999-9999-4999-8999-999999999999","name":"Unpriced Draft","brandName":null,"packSize":"1 pack",
+    "listPricePaise":null,"sellingPricePaise":null,"currencyCode":"INR","status":"DRAFT","qaStatus":"NEEDS_REVIEW",
+    "activationReady":false,"activationBlockers":["DASTAK_PRICING_REQUIRED"],"imageCount":0,"aliasCount":0,"identifierCount":0,
+    "primaryImage":null,"version":1,"updatedAt":"2026-08-31T12:00:00Z"
   }],"hasMore":false,"nextCursor":null
 }
 """#.data(using: .utf8)!
