@@ -132,21 +132,37 @@ insert into dastak_v1.restaurant_menu_options (
  '99700000-0000-4000-8000-000000000021','Extra spicy',500,'ACTIVE',
  '99700000-0000-4000-8000-000000000003','99700000-0000-4000-8000-000000000003');
 
-insert into dastak_v1.categories (id,name,slug,status,created_by) values
-('99700000-0000-4000-8000-000000000050','Retail','restaurant-test-retail','ACTIVE',
+insert into dastak_v1.category_types (id,name,slug,status,created_by) values
+('99700000-0000-4000-8000-000000000049','Restaurant Retail','restaurant-retail','ACTIVE',
+ '99700000-0000-4000-8000-000000000002');
+insert into dastak_v1.categories (id,category_type_id,name,slug,status,created_by) values
+('99700000-0000-4000-8000-000000000050','99700000-0000-4000-8000-000000000049',
+ 'Retail','restaurant-test-retail','ACTIVE',
  '99700000-0000-4000-8000-000000000002');
 insert into dastak_v1.subcategories (id,category_id,name,slug,status,created_by) values
 ('99700000-0000-4000-8000-000000000051','99700000-0000-4000-8000-000000000050',
  'Essentials','restaurant-test-essentials','ACTIVE','99700000-0000-4000-8000-000000000002');
 insert into dastak_v1.skus (
   id,subcategory_id,canonical_name,slug,pack_size,list_price_paise,selling_price_paise,
-  logistics_attributes,status,created_by
+  logistics_attributes,status,qa_status,qa_verified_at,qa_verified_by,created_by
 ) values (
   '99700000-0000-4000-8000-000000000052','99700000-0000-4000-8000-000000000051',
   'Water','restaurant-test-water','1 L',2500,2000,
   '{"weightGrams":1000,"lengthMillimetres":300,"widthMillimetres":90,"heightMillimetres":90}',
-  'ACTIVE','99700000-0000-4000-8000-000000000002'
+  'DRAFT','VERIFIED',now(),'99700000-0000-4000-8000-000000000002',
+  '99700000-0000-4000-8000-000000000002'
 );
+insert into dastak_v1.sku_images (
+  id,sku_id,image_key,role,source_type,status,verified_by,verified_at,
+  rights_status,rights_reference,rights_verified_by,rights_verified_at
+) values (
+  '99700000-0000-4000-8000-000000000053','99700000-0000-4000-8000-000000000052',
+  'test/restaurant-water-primary.webp','PRIMARY','OTHER','VERIFIED',
+  '99700000-0000-4000-8000-000000000002',now(),
+  'CLEARED','PGTAP fixture','99700000-0000-4000-8000-000000000002',now()
+);
+update dastak_v1.skus set status='ACTIVE'
+where id='99700000-0000-4000-8000-000000000052';
 insert into dastak_v1.merchant_sku_selections (branch_id,sku_id,state,selected_by) values
 ('99700000-0000-4000-8000-000000000031','99700000-0000-4000-8000-000000000052',
  'SELECTED','99700000-0000-4000-8000-000000000003');

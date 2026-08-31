@@ -210,21 +210,57 @@ insert into dastak_v1.merchant_permission_grants (
   '10000000-0000-4000-8000-000000000002', 'a5400000-0000-4000-8000-000000000001',
   'a5000000-0000-4000-8000-000000000003', 'Merchant canonical control test fixture.'
 );
-insert into dastak_v1.categories (id, name, slug, status, created_by)
-values ('a5600000-0000-4000-8000-000000000001', 'Groceries', 'control-groceries', 'ACTIVE', 'a5000000-0000-4000-8000-000000000003');
+insert into dastak_v1.category_types (id, name, slug, status, created_by)
+values ('a5f00000-0000-4000-8000-000000000001', 'Control Retail', 'control-retail', 'ACTIVE', 'a5000000-0000-4000-8000-000000000003');
+insert into dastak_v1.categories (id, category_type_id, name, slug, status, created_by)
+values ('a5600000-0000-4000-8000-000000000001', 'a5f00000-0000-4000-8000-000000000001', 'Groceries', 'control-groceries', 'ACTIVE', 'a5000000-0000-4000-8000-000000000003');
 insert into dastak_v1.subcategories (id, category_id, name, slug, status, created_by)
 values ('a5700000-0000-4000-8000-000000000001', 'a5600000-0000-4000-8000-000000000001', 'Daily', 'control-daily', 'ACTIVE', 'a5000000-0000-4000-8000-000000000003');
 insert into dastak_v1.skus (
   id, subcategory_id, canonical_name, slug, pack_size,
-  list_price_paise, selling_price_paise, status, created_by
+  list_price_paise, selling_price_paise, status,
+  qa_status, qa_verified_at, qa_verified_by, created_by
 ) values (
   'a5800000-0000-4000-8000-000000000001', 'a5700000-0000-4000-8000-000000000001',
-  'Canonical Milk', 'control-canonical-milk', '1 litre', 7000, 6500, 'ACTIVE',
+  'Canonical Milk', 'control-canonical-milk', '1 litre', 7000, 6500, 'DRAFT',
+  'VERIFIED', now(), 'a5000000-0000-4000-8000-000000000003',
   'a5000000-0000-4000-8000-000000000003'
 ), (
   'a5800000-0000-4000-8000-000000000002', 'a5700000-0000-4000-8000-000000000001',
-  'Canonical Bread', 'control-canonical-bread', '400 g', 5000, 4500, 'ACTIVE',
+  'Canonical Bread', 'control-canonical-bread', '400 g', 5000, 4500, 'DRAFT',
+  'VERIFIED', now(), 'a5000000-0000-4000-8000-000000000003',
   'a5000000-0000-4000-8000-000000000003'
+);
+
+insert into dastak_v1.sku_images (
+  id, sku_id, image_key, role, source_type, status,
+  verified_by, verified_at, rights_status, rights_reference,
+  rights_verified_by, rights_verified_at
+) values
+(
+  'a5f00000-0000-4000-8000-000000000002',
+  'a5800000-0000-4000-8000-000000000001',
+  'test/control-canonical-milk-primary.webp',
+  'PRIMARY', 'OTHER', 'VERIFIED',
+  'a5000000-0000-4000-8000-000000000003', now(),
+  'CLEARED', 'PGTAP fixture',
+  'a5000000-0000-4000-8000-000000000003', now()
+),
+(
+  'a5f00000-0000-4000-8000-000000000003',
+  'a5800000-0000-4000-8000-000000000002',
+  'test/control-canonical-bread-primary.webp',
+  'PRIMARY', 'OTHER', 'VERIFIED',
+  'a5000000-0000-4000-8000-000000000003', now(),
+  'CLEARED', 'PGTAP fixture',
+  'a5000000-0000-4000-8000-000000000003', now()
+);
+
+update dastak_v1.skus
+set status = 'ACTIVE'
+where id in (
+  'a5800000-0000-4000-8000-000000000001',
+  'a5800000-0000-4000-8000-000000000002'
 );
 
 set local role authenticated;

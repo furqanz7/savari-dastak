@@ -113,20 +113,20 @@ select public.dastak_v1_import_catalogue(
     "categories":[{
       "slug":"groceries",
       "name":"Groceries",
-      "status":"ACTIVE",
+      "status":"DRAFT",
       "sortOrder":1
     }],
     "subcategories":[{
       "categorySlug":"groceries",
       "slug":"dairy",
       "name":"Dairy",
-      "status":"ACTIVE",
+      "status":"DRAFT",
       "sortOrder":1
     }],
     "brands":[{
       "slug":"dastak-daily",
       "name":"Dastak Daily",
-      "status":"ACTIVE"
+      "status":"DRAFT"
     }],
     "skus":[{
       "categorySlug":"groceries",
@@ -148,7 +148,7 @@ select public.dastak_v1_import_catalogue(
         "fragile":false,
         "bulky":false
       },
-      "status":"ACTIVE"
+      "status":"DRAFT"
     }]
   }'::jsonb
 ) as body;
@@ -163,16 +163,16 @@ select is(
     select public.dastak_v1_import_catalogue(
       'tap-catalogue-import-1',
       '{
-        "categories":[{"slug":"groceries","name":"Groceries","status":"ACTIVE","sortOrder":1}],
-        "subcategories":[{"categorySlug":"groceries","slug":"dairy","name":"Dairy","status":"ACTIVE","sortOrder":1}],
-        "brands":[{"slug":"dastak-daily","name":"Dastak Daily","status":"ACTIVE"}],
+        "categories":[{"slug":"groceries","name":"Groceries","status":"DRAFT","sortOrder":1}],
+        "subcategories":[{"categorySlug":"groceries","slug":"dairy","name":"Dairy","status":"DRAFT","sortOrder":1}],
+        "brands":[{"slug":"dastak-daily","name":"Dastak Daily","status":"DRAFT"}],
         "skus":[{
           "categorySlug":"groceries","subcategorySlug":"dairy","brandSlug":"dastak-daily",
           "slug":"whole-milk-1-litre","canonicalName":"Whole Milk","variant":"Full cream",
           "packSize":"1 litre","description":"Fresh full-cream milk","barcode":"8901000000001",
           "listPricePaise":7200,"sellingPricePaise":6900,"currencyCode":"INR","taxRateBps":0,
           "logisticsAttributes":{"weightGrams":1030,"temperatureClass":"CHILLED","fragile":false,"bulky":false},
-          "status":"ACTIVE"
+          "status":"DRAFT"
         }]
       }'::jsonb
     ) ->> 'importId'
@@ -180,6 +180,66 @@ select is(
   (select body ->> 'importId' from tap_catalogue_import),
   'catalogue import replay returns the original result'
 );
+
+-- Imported products enter the governed DRAFT workflow. Catalogue activation
+-- requires explicit taxonomy, QA, and cleared primary-image evidence.
+reset role;
+
+insert into dastak_v1.category_types (
+  id, name, slug, status, created_by
+) values (
+  '97000000-0000-4000-8000-000000000010',
+  'Catalogue Test Type', 'catalogue-test-type', 'ACTIVE',
+  '97000000-0000-4000-8000-000000000001'
+);
+
+update dastak_v1.categories
+set category_type_id = '97000000-0000-4000-8000-000000000010',
+    status = 'ACTIVE'
+where slug = 'groceries';
+
+update dastak_v1.subcategories
+set status = 'ACTIVE'
+where slug = 'dairy'
+  and category_id = (
+    select id from dastak_v1.categories where slug = 'groceries'
+  );
+
+update dastak_v1.brands
+set status = 'ACTIVE'
+where slug = 'dastak-daily';
+
+update dastak_v1.skus
+set qa_status = 'VERIFIED',
+    qa_verified_at = now(),
+    qa_verified_by = '97000000-0000-4000-8000-000000000001'
+where slug = 'whole-milk-1-litre';
+
+insert into dastak_v1.sku_images (
+  id, sku_id, image_key, role, source_type, status,
+  verified_by, verified_at, rights_status, rights_reference,
+  rights_verified_by, rights_verified_at
+)
+select
+  '97000000-0000-4000-8000-000000000011', id,
+  'test/whole-milk-primary.webp', 'PRIMARY', 'OTHER', 'VERIFIED',
+  '97000000-0000-4000-8000-000000000001', now(),
+  'CLEARED', 'PGTAP fixture',
+  '97000000-0000-4000-8000-000000000001', now()
+from dastak_v1.skus
+where slug = 'whole-milk-1-litre';
+
+update dastak_v1.skus
+set status = 'ACTIVE'
+where slug = 'whole-milk-1-litre';
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '97000000-0000-4000-8000-000000000001',
+  true
+);
+
 create temp table tap_admin_catalogue on commit drop as
 select public.dastak_v1_admin_catalogue_snapshot(1000) as body;
 create temp table tap_admin_catalogue_sku on commit drop as

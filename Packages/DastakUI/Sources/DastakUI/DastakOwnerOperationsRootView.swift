@@ -4,11 +4,23 @@ import MarketplaceInfrastructure
 import SwiftUI
 
 @MainActor
-private final class DastakOwnerOperationsModel: ObservableObject {
+final class DastakOwnerOperationsModel: ObservableObject {
     @Published private(set) var snapshot: OwnerOrderOperationsSnapshot?
     @Published private(set) var v1Orders: [DastakV1AdminOrder] = []
     @Published private(set) var v1Trace: DastakV1AdminExecutionTrace?
     @Published private(set) var adminAccess: DastakAdminAccessSnapshot?
+    @Published private(set) var commandCenter: DastakAdminCommandCenter?
+    @Published private(set) var systemHealth: DastakAdminSystemHealth?
+    @Published private(set) var operationalSafety: DastakAdminOperationalSafety?
+    @Published private(set) var royaltyPayouts: [DastakAdminRoyaltyPayout] = []
+    @Published private(set) var merchantApplications: [MerchantApplication] = []
+    @Published private(set) var deliveryApplications: [DeliveryPartnerApplication] = []
+    @Published private(set) var networkPeople: [DastakAdminNetworkPerson] = []
+    @Published private(set) var networkHasMore = false
+    @Published private(set) var catalogueSKUs: [DastakAdminCatalogueSKU] = []
+    @Published private(set) var catalogueHasMore = false
+    @Published private(set) var isLoadingNetwork = false
+    @Published private(set) var isLoadingCatalogue = false
     @Published private(set) var isLoading = true
     @Published private(set) var isRefreshing = false
     @Published private(set) var busyIdentity: String?
@@ -19,6 +31,10 @@ private final class DastakOwnerOperationsModel: ObservableObject {
     private let merchantClient: any MerchantOrderClient
     private let checkoutClient: any DastakCheckoutClient
     private let v1Client: any DastakV1AdminClient
+    private let merchantApplicationClient: any MerchantApplicationClient
+    private let deliveryApplicationClient: any DeliveryPartnerClient
+    private var networkCursor: DastakAdminNetworkCursor?
+    private var catalogueCursor: DastakAdminCatalogueCursor?
     private var actionKeys: [String: IdempotencyKey] = [:]
 
     init(services: MarketplaceAuthenticatedServices) {
@@ -26,6 +42,8 @@ private final class DastakOwnerOperationsModel: ObservableObject {
         merchantClient = SupabaseMerchantOrderClient(functions: services.functions)
         checkoutClient = SupabaseDastakCheckoutClient(functions: services.functions)
         v1Client = SupabaseDastakV1AdminClient(functions: services.functions)
+        merchantApplicationClient = SupabaseMerchantApplicationClient(functions: services.functions)
+        deliveryApplicationClient = SupabaseDeliveryPartnerClient(functions: services.functions)
     }
 
     var isBusy: Bool { busyIdentity != nil }
@@ -39,26 +57,45 @@ private final class DastakOwnerOperationsModel: ObservableObject {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        do {
-            async let operations = operationsClient.snapshot(limit: 100, idempotencyKey: key())
-            async let currentOrders = v1Client.orders(limit: 50, idempotencyKey: key())
-            async let currentAdminAccess = v1Client.access(idempotencyKey: key())
-            let loaded = try await (operations, currentOrders, currentAdminAccess)
-            snapshot = loaded.0
-            v1Orders = loaded.1
-            adminAccess = loaded.2
+        async let operations = try? operationsClient.snapshot(limit: 100, idempotencyKey: key())
+        async let currentOrders = try? v1Client.orders(limit: 50, idempotencyKey: key())
+        async let currentAdminAccess = try? v1Client.access(idempotencyKey: key())
+        async let currentCommandCenter = try? v1Client.commandCenter(idempotencyKey: key())
+        async let currentHealth = try? v1Client.systemHealth(idempotencyKey: key())
+        async let currentSafety = try? v1Client.operationalSafety(idempotencyKey: key())
+        async let currentPayouts = try? v1Client.royaltyPayouts(limit: 100, idempotencyKey: key())
+        async let currentMerchants = try? merchantApplicationClient.listPending(idempotencyKey: key())
+        async let currentDeliveryPartners = try? deliveryApplicationClient.listPending(idempotencyKey: key())
+        let loaded = await (
+            operations, currentOrders, currentAdminAccess, currentCommandCenter,
+            currentMerchants, currentDeliveryPartners, currentHealth, currentSafety, currentPayouts
+        )
+        if let value = loaded.0 { snapshot = value }
+        if let value = loaded.1 { v1Orders = value }
+        if let value = loaded.2 { adminAccess = value }
+        if let value = loaded.3 { commandCenter = value }
+        if let value = loaded.4 { merchantApplications = value }
+        if let value = loaded.5 { deliveryApplications = value }
+        if let value = loaded.6 { systemHealth = value }
+        if let value = loaded.7 { operationalSafety = value }
+        if let value = loaded.8 { royaltyPayouts = value }
+
+        if let orders = loaded.1 {
             let selectedID = v1Trace.map(\.order.id).flatMap { current in
-                loaded.1.contains(where: { $0.id == current }) ? current : nil
-            } ?? loaded.1.first?.id
+                orders.contains(where: { $0.id == current }) ? current : nil
+            } ?? orders.first?.id
             if let selectedID {
-                v1Trace = try await v1Client.trace(orderID: selectedID, idempotencyKey: key())
+                v1Trace = try? await v1Client.trace(orderID: selectedID, idempotencyKey: key())
             } else {
                 v1Trace = nil
             }
-            errorMessage = nil
-        } catch {
-            errorMessage = message(for: error, fallback: "Marketplace operations could not be refreshed.")
         }
+        let successes = [loaded.0 != nil, loaded.1 != nil, loaded.2 != nil, loaded.3 != nil,
+                         loaded.4 != nil, loaded.5 != nil, loaded.6 != nil, loaded.7 != nil,
+                         loaded.8 != nil].filter { $0 }.count
+        errorMessage = successes == 0
+            ? "Marketplace operations could not be refreshed."
+            : successes < 9 ? "Some live signals are temporarily unavailable. Available workspaces remain usable." : nil
     }
 
     func selectV1Order(_ orderID: UUID) async {
@@ -166,6 +203,175 @@ private final class DastakOwnerOperationsModel: ObservableObject {
         }
     }
 
+    func reviewMerchant(_ application: MerchantApplication, approve: Bool, reason: String?) async -> Bool {
+        await perform(
+            identity: "merchant:\(application.applicationID):\(approve):\(reason ?? "")",
+            success: approve ? "Merchant approved." : "Merchant application declined."
+        ) { key in
+            _ = try await self.merchantApplicationClient.review(
+                applicationID: application.applicationID,
+                decision: approve ? .approve : .reject,
+                reason: reason,
+                idempotencyKey: key
+            )
+        }
+    }
+
+    func reviewDelivery(_ application: DeliveryPartnerApplication, approve: Bool, reason: String?) async -> Bool {
+        await perform(
+            identity: "delivery:\(application.applicationID):\(approve):\(reason ?? "")",
+            success: approve ? "Delivery Partner approved." : "Delivery Partner application declined."
+        ) { key in
+            _ = try await self.deliveryApplicationClient.review(
+                applicationID: application.applicationID,
+                decision: approve ? .approve : .reject,
+                reason: reason,
+                idempotencyKey: key
+            )
+        }
+    }
+
+    func evidenceURL(objectPath: String) async -> URL? {
+        guard !isBusy else { return nil }
+        busyIdentity = "evidence:\(objectPath)"
+        defer { busyIdentity = nil }
+        do {
+            let download = try await v1Client.evidenceDownloadURL(
+                objectPath: objectPath,
+                idempotencyKey: key()
+            )
+            guard let url = URL(string: download.signedURL), url.scheme == "https", url.host != nil else {
+                throw URLError(.badURL)
+            }
+            errorMessage = nil
+            return url
+        } catch {
+            errorMessage = message(for: error, fallback: "This private evidence could not be opened. Try again.")
+            return nil
+        }
+    }
+
+    func setOperationalPause(
+        scope: DastakAdminOperationalPauseScope,
+        targetID: UUID,
+        active: Bool,
+        reason: String,
+        expectedVersion: Int
+    ) async -> Bool {
+        await perform(
+            identity: "pause:\(scope.rawValue):\(targetID):\(active):\(expectedVersion):\(reason)",
+            success: active ? "New work paused for the selected scope." : "New work resumed for the selected scope."
+        ) { key in
+            _ = try await self.v1Client.setOperationalPause(
+                scope: scope,
+                targetID: targetID,
+                active: active,
+                reason: reason,
+                expectedVersion: expectedVersion,
+                idempotencyKey: key
+            )
+        }
+    }
+
+    func manageRiderEscalation(
+        _ escalation: DastakAdminOperationalSafety.RiderEscalation,
+        action: String,
+        reason: String
+    ) async -> Bool {
+        await perform(
+            identity: "rider-escalation:\(escalation.missionID):\(action):\(escalation.version):\(reason)",
+            success: action == "RELEASE_REMATCH"
+                ? "Rider released and matching restarted."
+                : "Delivery recovery started with custody protected."
+        ) { key in
+            _ = try await self.v1Client.manageRiderEscalation(
+                missionID: escalation.missionID,
+                action: action,
+                reason: reason,
+                expectedVersion: escalation.version,
+                idempotencyKey: key
+            )
+        }
+    }
+
+    func loadNetwork(
+        query: String = "",
+        persona: DastakAdminPersona? = nil,
+        state: DastakAdminPersonaState? = nil,
+        append: Bool = false
+    ) async {
+        guard !isLoadingNetwork else { return }
+        isLoadingNetwork = true
+        defer { isLoadingNetwork = false }
+        do {
+            let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            let page = try await v1Client.networkPage(
+                query: normalizedQuery.isEmpty ? nil : normalizedQuery,
+                persona: persona,
+                state: state,
+                limit: 40,
+                cursor: append ? networkCursor : nil,
+                idempotencyKey: key()
+            )
+            networkPeople = append ? networkPeople + page.people : page.people
+            networkCursor = page.nextCursor
+            networkHasMore = page.hasMore
+            errorMessage = nil
+        } catch {
+            errorMessage = message(for: error, fallback: "The marketplace network could not be loaded.")
+        }
+    }
+
+    func loadCatalogue(
+        query: String = "",
+        status: String? = nil,
+        qaStatus: String? = nil,
+        append: Bool = false
+    ) async {
+        guard !isLoadingCatalogue else { return }
+        isLoadingCatalogue = true
+        defer { isLoadingCatalogue = false }
+        do {
+            let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            let page = try await v1Client.cataloguePage(
+                query: normalizedQuery.isEmpty ? nil : normalizedQuery,
+                status: status,
+                qaStatus: qaStatus,
+                limit: 40,
+                cursor: append ? catalogueCursor : nil,
+                idempotencyKey: key()
+            )
+            catalogueSKUs = append ? catalogueSKUs + page.skus : page.skus
+            catalogueCursor = page.nextCursor
+            catalogueHasMore = page.hasMore
+            errorMessage = nil
+        } catch {
+            errorMessage = message(for: error, fallback: "The master catalogue could not be loaded.")
+        }
+    }
+
+    func updateCatalogueSKU(
+        _ sku: DastakAdminCatalogueSKU,
+        listPricePaise: Int,
+        sellingPricePaise: Int,
+        status: String
+    ) async -> Bool {
+        await perform(
+            identity: "sku:\(sku.id):\(sku.version):\(listPricePaise):\(sellingPricePaise):\(status)",
+            success: "Catalogue SKU updated."
+        ) { key in
+            _ = try await self.v1Client.updateCatalogueSKU(
+                id: sku.id,
+                expectedVersion: sku.version,
+                listPricePaise: listPricePaise,
+                sellingPricePaise: sellingPricePaise,
+                status: status,
+                idempotencyKey: key
+            )
+            await self.loadCatalogue()
+        }
+    }
+
     private func perform(
         identity: String,
         success: String,
@@ -201,11 +407,11 @@ private final class DastakOwnerOperationsModel: ObservableObject {
 }
 
 public struct DastakOwnerOperationsRootView: View {
-    private enum Tab: Hashable { case operations, access, account }
+    private enum Tab: Hashable { case overview, approvals, operations, network, more }
 
     private let services: MarketplaceAuthenticatedServices
     @StateObject private var model: DastakOwnerOperationsModel
-    @State private var tab: Tab = .operations
+    @State private var tab: Tab = .overview
     @Environment(\.scenePhase) private var scenePhase
 
     public init(services: MarketplaceAuthenticatedServices) {
@@ -215,25 +421,26 @@ public struct DastakOwnerOperationsRootView: View {
 
     public var body: some View {
         TabView(selection: $tab) {
+            DastakAdminOverviewView(model: model)
+                .tabItem { Label("Overview", systemImage: "rectangle.grid.2x2") }
+                .tag(Tab.overview)
+
+            DastakAdminApprovalsView(model: model)
+                .tabItem { Label("Approvals", systemImage: "checkmark.shield") }
+                .badge(model.merchantApplications.count + model.deliveryApplications.count)
+                .tag(Tab.approvals)
+
             DastakOwnerOperationsView(model: model)
-                .tabItem { Label("Operations", systemImage: "exclamationmark.shield") }
+                .tabItem { Label("Orders", systemImage: "shippingbox.and.arrow.backward") }
                 .tag(Tab.operations)
 
-            if model.adminAccess?.canManageAdmins == true {
-                DastakAdminAccessView(model: model)
-                    .tabItem { Label("Access", systemImage: "person.2.badge.gearshape") }
-                    .tag(Tab.access)
-            }
+            DastakAdminNetworkView(model: model)
+                .tabItem { Label("Network", systemImage: "person.3") }
+                .tag(Tab.network)
 
-            DastakIdentityAccountView(
-                roleName: model.adminAccess?.role.displayName ?? "Admin",
-                accessLabel: "Full operations access",
-                allowsAccountDeletion: false,
-                openWorkspace: { tab = .operations },
-                services: services
-            )
-            .tabItem { Label("Account", systemImage: "person") }
-            .tag(Tab.account)
+            DastakAdminMoreView(model: model, services: services)
+                .tabItem { Label("More", systemImage: "square.grid.2x2") }
+                .tag(Tab.more)
         }
         .tint(MarketplaceColors.dastakAccent.color)
         .task { await model.bootstrap() }
@@ -259,10 +466,31 @@ public struct DastakOwnerOperationsRootView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+        .overlay(alignment: .top) {
+            if let notice = model.notice {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(MarketplaceColors.success.color)
+                    Text(notice).font(.subheadline.weight(.medium))
+                    Spacer(minLength: 4)
+                    Button { model.notice = nil } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Dismiss confirmation")
+                }
+                .padding(.horizontal, MarketplaceSpacing.medium)
+                .frame(minHeight: 52)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: .black.opacity(0.14), radius: 18, y: 7)
+                .padding(.horizontal, MarketplaceSpacing.medium)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: model.notice)
     }
 }
 
-private struct DastakAdminAccessView: View {
+struct DastakAdminAccessView: View {
     @ObservedObject var model: DastakOwnerOperationsModel
 
     var body: some View {
@@ -457,7 +685,7 @@ private struct DastakExecutiveAdminSeat: View {
     }
 }
 
-private struct DastakOwnerOperationsView: View {
+struct DastakOwnerOperationsView: View {
     @ObservedObject var model: DastakOwnerOperationsModel
     @State private var selectedException: OwnerOrderException?
 
@@ -466,9 +694,6 @@ private struct DastakOwnerOperationsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                     header
-                    if let notice = model.notice {
-                        noticeView(notice)
-                    }
                     if model.isLoading, model.snapshot == nil {
                         ProgressView("Loading operations")
                             .frame(maxWidth: .infinity, minHeight: 240)
@@ -690,18 +915,6 @@ private struct DastakOwnerOperationsView: View {
         }
         .padding(MarketplaceSpacing.medium)
         .contentShape(Rectangle())
-        .marketplaceFlatSurface()
-    }
-
-    private func noticeView(_ text: String) -> some View {
-        HStack {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(MarketplaceColors.success.color)
-            Text(text).font(.subheadline)
-            Spacer()
-            Button { model.notice = nil } label: { Image(systemName: "xmark") }
-                .accessibilityLabel("Dismiss")
-        }
-        .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
     }
 

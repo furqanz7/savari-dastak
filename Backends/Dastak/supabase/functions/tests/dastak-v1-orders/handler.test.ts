@@ -145,10 +145,16 @@ Deno.test("V1 customer order list rejects malformed cursors and limits", async (
     },
   });
   const cursor = await handleV1Orders(
-    request({ operation: "list", cursor: { createdAt: "not-a-date", orderId } }),
+    request({
+      operation: "list",
+      cursor: { createdAt: "not-a-date", orderId },
+    }),
     deps,
   );
-  const limit = await handleV1Orders(request({ operation: "list", limit: 101 }), deps);
+  const limit = await handleV1Orders(
+    request({ operation: "list", limit: 101 }),
+    deps,
+  );
   assertEquals(cursor.status, 400);
   assertEquals(limit.status, 400);
   assertEquals(calls, 0);
@@ -164,10 +170,16 @@ Deno.test("V1 get and cancel accept only validated order identity", async () => 
     },
     cancelOrder: (input) => {
       cancelInput = input;
-      return Promise.resolve({ ...orderSnapshot, status: "CANCELLED_PREPAYMENT" });
+      return Promise.resolve({
+        ...orderSnapshot,
+        status: "CANCELLED_PREPAYMENT",
+      });
     },
   });
-  const getResponse = await handleV1Orders(request({ operation: "get", orderId }), deps);
+  const getResponse = await handleV1Orders(
+    request({ operation: "get", orderId }),
+    deps,
+  );
   const cancelResponse = await handleV1Orders(
     request({ operation: "cancel", orderId, expectedVersion: 2 }, "cancel-1"),
     deps,
@@ -227,7 +239,10 @@ Deno.test("V1 launch payment commitment rejects missing idempotency and stale-sh
     deps,
   );
   const invalidVersion = await handleV1Orders(
-    request({ operation: "commitLaunchPayment", orderId, expectedVersion: 0 }, "launch-bad"),
+    request(
+      { operation: "commitLaunchPayment", orderId, expectedVersion: 0 },
+      "launch-bad",
+    ),
     deps,
   );
   assertEquals([missingKey.status, invalidVersion.status], [400, 400]);
@@ -239,14 +254,21 @@ Deno.test("V1 Admin access snapshot and Executive assignment forward only valida
   const deps = dependencies({
     getAdminAccess: (input) => {
       recorded.snapshot = input;
-      return Promise.resolve({ role: "SUPERADMIN", canManageAdmins: true, slots: [] });
+      return Promise.resolve({
+        role: "SUPERADMIN",
+        canManageAdmins: true,
+        slots: [],
+      });
     },
     setExecutiveAdmin: (input) => {
       recorded.assignment = input;
       return Promise.resolve({ slot: 1, role: "EXECUTIVE_ADMIN", version: 2 });
     },
   });
-  const snapshot = await handleV1Orders(request({ operation: "adminAccess" }), deps);
+  const snapshot = await handleV1Orders(
+    request({ operation: "adminAccess" }),
+    deps,
+  );
   const assignment = await handleV1Orders(
     request({
       operation: "setExecutiveAdmin",
@@ -267,6 +289,93 @@ Deno.test("V1 Admin access snapshot and Executive assignment forward only valida
     expectedVersion: 1,
     reason: "Assign Executive Admin from the protected workspace.",
   });
+});
+
+Deno.test("V1 Admin command center and connected network preserve authenticated filters and cursors", async () => {
+  const recorded: Record<string, unknown> = {};
+  const deps = dependencies({
+    getAdminCommandCenter: (input) => {
+      recorded.commandCenter = input;
+      return Promise.resolve({ actionQueue: {}, commerce: {} });
+    },
+    getAdminNetworkPage: (input) => {
+      recorded.network = input;
+      return Promise.resolve({ people: [], hasMore: false, nextCursor: null });
+    },
+  });
+  const commandCenter = await handleV1Orders(
+    request({
+      operation: "adminCommandCenter",
+      accountId: "client-cannot-select-account",
+    }),
+    deps,
+  );
+  const network = await handleV1Orders(
+    request({
+      operation: "adminNetworkPage",
+      query: "  Furqan   Khan  ",
+      persona: "MERCHANT",
+      state: "ACTIVE",
+      limit: 40,
+      cursor: { updatedAt: "2026-08-31T12:34:56.000Z", accountId: orderId },
+      rawEvidence: true,
+    }),
+    deps,
+  );
+
+  assertEquals([commandCenter.status, network.status], [200, 200]);
+  assertEquals(recorded.commandCenter, { accessToken: actor.accessToken });
+  assertEquals(recorded.network, {
+    accessToken: actor.accessToken,
+    query: "Furqan Khan",
+    persona: "MERCHANT",
+    state: "ACTIVE",
+    limit: 40,
+    afterUpdatedAt: "2026-08-31T12:34:56.000Z",
+    afterAccountId: orderId,
+  });
+});
+
+Deno.test("V1 Admin connected network rejects unsupported filters and incomplete cursors", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    getAdminNetworkPage: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
+  const persona = await handleV1Orders(
+    request({ operation: "adminNetworkPage", persona: "OWNER" }),
+    deps,
+  );
+  const state = await handleV1Orders(
+    request({ operation: "adminNetworkPage", state: "SUSPENDED" }),
+    deps,
+  );
+  const cursor = await handleV1Orders(
+    request({
+      operation: "adminNetworkPage",
+      cursor: { updatedAt: "2026-08-31T12:34:56.000Z" },
+    }),
+    deps,
+  );
+  const limit = await handleV1Orders(
+    request({ operation: "adminNetworkPage", limit: 101 }),
+    deps,
+  );
+  assertEquals([
+    persona.status,
+    state.status,
+    cursor.status,
+    limit.status,
+    calls,
+  ], [
+    400,
+    400,
+    400,
+    400,
+    0,
+  ]);
 });
 
 Deno.test("V1 Executive assignment rejects extra slots and malformed email shape", async () => {
@@ -373,8 +482,14 @@ Deno.test("V1 execution trace is a permission-checked authenticated RPC surface"
     request({ operation: "adminExecutionOrders", limit: 25 }),
     deps,
   );
-  const trace = await handleV1Orders(request({ operation: "adminExecutionTrace", orderId }), deps);
-  const health = await handleV1Orders(request({ operation: "adminSystemHealth" }), deps);
+  const trace = await handleV1Orders(
+    request({ operation: "adminExecutionTrace", orderId }),
+    deps,
+  );
+  const health = await handleV1Orders(
+    request({ operation: "adminSystemHealth" }),
+    deps,
+  );
   assertEquals(list.status, 200);
   assertEquals(trace.status, 200);
   assertEquals(health.status, 200);
@@ -563,7 +678,10 @@ Deno.test("V1 merchant preparation commands preserve package, evidence, version,
       return Promise.resolve({ id: orderId, status: "READY", version: 7 });
     },
   });
-  const list = await handleV1Orders(request({ operation: "merchantFulfilments", limit: 30 }), deps);
+  const list = await handleV1Orders(
+    request({ operation: "merchantFulfilments", limit: 30 }),
+    deps,
+  );
   const packages = await handleV1Orders(
     request({
       operation: "declareFulfilmentPackages",
@@ -601,7 +719,13 @@ Deno.test("V1 merchant preparation commands preserve package, evidence, version,
     deps,
   );
 
-  assertEquals([list.status, packages.status, evidence.status, ready.status, problem.status], [
+  assertEquals([
+    list.status,
+    packages.status,
+    evidence.status,
+    ready.status,
+    problem.status,
+  ], [
     200,
     200,
     200,
@@ -683,7 +807,11 @@ Deno.test("V1 merchant preparation rejects invalid package, evidence, and proble
     }, "bad-problem"),
     deps,
   );
-  assertEquals([packages.status, evidence.status, problem.status], [400, 400, 400]);
+  assertEquals([packages.status, evidence.status, problem.status], [
+    400,
+    400,
+    400,
+  ]);
   assertEquals(calls, 0);
 });
 
@@ -758,7 +886,12 @@ Deno.test("V1 launch-failure commands preserve exact identity, evidence and opti
     deps,
   );
 
-  assertEquals([recovery.status, issue.status, decision.status, deliveryRecovery.status], [
+  assertEquals([
+    recovery.status,
+    issue.status,
+    decision.status,
+    deliveryRecovery.status,
+  ], [
     200,
     201,
     200,
@@ -855,7 +988,11 @@ Deno.test("V1 refund and settlement controls reject malformed financial input be
     }, "bad-recovery"),
     deps,
   );
-  assertEquals([badRefund.status, badSettlement.status, badRecovery.status], [400, 400, 400]);
+  assertEquals([badRefund.status, badSettlement.status, badRecovery.status], [
+    400,
+    400,
+    400,
+  ]);
   assertEquals(calls, 0);
 });
 
@@ -894,14 +1031,21 @@ const actor = {
 };
 const orderSnapshot = { id: orderId, status: "MATCHING", version: 2 };
 
-function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDependencies {
+function dependencies(
+  overrides: Partial<V1OrderDependencies> = {},
+): V1OrderDependencies {
   return {
-    authenticateBearer: overrides.authenticateBearer ?? (() => Promise.resolve(actor)),
-    submitOrder: overrides.submitOrder ?? (() => Promise.resolve(orderSnapshot)),
-    listOrders: overrides.listOrders ?? (() => Promise.resolve({ orders: [], nextCursor: null })),
+    authenticateBearer: overrides.authenticateBearer ??
+      (() => Promise.resolve(actor)),
+    submitOrder: overrides.submitOrder ??
+      (() => Promise.resolve(orderSnapshot)),
+    listOrders: overrides.listOrders ??
+      (() => Promise.resolve({ orders: [], nextCursor: null })),
     getOrder: overrides.getOrder ?? (() => Promise.resolve(orderSnapshot)),
-    cancelOrder: overrides.cancelOrder ?? (() => Promise.resolve(orderSnapshot)),
-    commitLaunchPayment: overrides.commitLaunchPayment ?? (() => Promise.resolve(orderSnapshot)),
+    cancelOrder: overrides.cancelOrder ??
+      (() => Promise.resolve(orderSnapshot)),
+    commitLaunchPayment: overrides.commitLaunchPayment ??
+      (() => Promise.resolve(orderSnapshot)),
     listMerchantOpportunities: overrides.listMerchantOpportunities ??
       (() => Promise.resolve({ opportunities: [] })),
     listRestaurantRequests: overrides.listRestaurantRequests ??
@@ -927,34 +1071,57 @@ function dependencies(overrides: Partial<V1OrderDependencies> = {}): V1OrderDepe
     getAdminExecutionTrace: overrides.getAdminExecutionTrace ??
       (() => Promise.resolve({})),
     getAdminAccess: overrides.getAdminAccess ?? (() => Promise.resolve({})),
-    setExecutiveAdmin: overrides.setExecutiveAdmin ?? (() => Promise.resolve({})),
-    getAdminSystemHealth: overrides.getAdminSystemHealth ?? (() => Promise.resolve({})),
-    getAdminOperationalSafety: overrides.getAdminOperationalSafety ?? (() => Promise.resolve({})),
-    manageRiderEscalation: overrides.manageRiderEscalation ?? (() => Promise.resolve({})),
-    setOperationalPause: overrides.setOperationalPause ?? (() => Promise.resolve({})),
+    getAdminCommandCenter: overrides.getAdminCommandCenter ??
+      (() => Promise.resolve({})),
+    getAdminNetworkPage: overrides.getAdminNetworkPage ??
+      (() => Promise.resolve({})),
+    setExecutiveAdmin: overrides.setExecutiveAdmin ??
+      (() => Promise.resolve({})),
+    getAdminSystemHealth: overrides.getAdminSystemHealth ??
+      (() => Promise.resolve({})),
+    getAdminOperationalSafety: overrides.getAdminOperationalSafety ??
+      (() => Promise.resolve({})),
+    manageRiderEscalation: overrides.manageRiderEscalation ??
+      (() => Promise.resolve({})),
+    setOperationalPause: overrides.setOperationalPause ??
+      (() => Promise.resolve({})),
     authorizeExceptionalDeliveryHandoff: overrides.authorizeExceptionalDeliveryHandoff ??
       (() => Promise.resolve({})),
-    reportExactSkuFailure: overrides.reportExactSkuFailure ?? (() => Promise.resolve({})),
+    reportExactSkuFailure: overrides.reportExactSkuFailure ??
+      (() => Promise.resolve({})),
     createExactSkuRecoveryOffer: overrides.createExactSkuRecoveryOffer ??
       (() => Promise.resolve({})),
     respondExactSkuRecoveryOffer: overrides.respondExactSkuRecoveryOffer ??
       (() => Promise.resolve({})),
-    failExactSkuRecovery: overrides.failExactSkuRecovery ?? (() => Promise.resolve({})),
-    reportCustomerIssue: overrides.reportCustomerIssue ?? (() => Promise.resolve({})),
-    decideCustomerIssue: overrides.decideCustomerIssue ?? (() => Promise.resolve({})),
-    assignReturnRider: overrides.assignReturnRider ?? (() => Promise.resolve({})),
-    manageDeliveryRecovery: overrides.manageDeliveryRecovery ?? (() => Promise.resolve({})),
+    failExactSkuRecovery: overrides.failExactSkuRecovery ??
+      (() => Promise.resolve({})),
+    reportCustomerIssue: overrides.reportCustomerIssue ??
+      (() => Promise.resolve({})),
+    decideCustomerIssue: overrides.decideCustomerIssue ??
+      (() => Promise.resolve({})),
+    assignReturnRider: overrides.assignReturnRider ??
+      (() => Promise.resolve({})),
+    manageDeliveryRecovery: overrides.manageDeliveryRecovery ??
+      (() => Promise.resolve({})),
     finalizeSettlementCalculation: overrides.finalizeSettlementCalculation ??
       (() => Promise.resolve({})),
     settleEntry: overrides.settleEntry ?? (() => Promise.resolve({})),
   };
 }
 
-function request(payload: unknown, idempotencyKey?: string, authorization = "Bearer session") {
+function request(
+  payload: unknown,
+  idempotencyKey?: string,
+  authorization = "Bearer session",
+) {
   const headers = new Headers({ "content-type": "application/json" });
   if (authorization) headers.set("authorization", authorization);
   if (idempotencyKey) headers.set("X-Idempotency-Key", idempotencyKey);
-  return new Request(url, { method: "POST", headers, body: JSON.stringify(payload) });
+  return new Request(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
 }
 
 async function body(response: Response) {

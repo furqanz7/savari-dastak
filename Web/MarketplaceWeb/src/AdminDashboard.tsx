@@ -7,11 +7,14 @@ import {
   Database,
   ExternalLink,
   FileText,
+  LayoutDashboard,
   PackageSearch,
   RefreshCw,
   RotateCcw,
+  ShieldCheck,
   Store,
   UserRound,
+  UsersRound,
   WalletCards,
   X,
 } from "lucide-react";
@@ -44,11 +47,13 @@ import { AdminV1ExecutionPanel } from "./AdminV1ExecutionPanel";
 import { AdminSystemHealthPanel } from "./AdminSystemHealthPanel";
 import { AdminOperationalSafetyPanel } from "./AdminOperationalSafetyPanel";
 import { AdminRoyaltyPayoutPanel } from "./AdminRoyaltyPayoutPanel";
+import { AdminOverviewPanel } from "./AdminOverviewPanel";
+import { AdminNetworkPanel } from "./AdminNetworkPanel";
 import {
   getV1AdminAccess,
-  getV1AdminExecutionOrders,
+  getV1AdminCommandCenter,
   type V1AdminAccess,
-  type V1AdminExecutionOrder,
+  type V1AdminCommandCenter,
 } from "./dastakV1";
 
 type Props = {
@@ -61,57 +66,73 @@ type Props = {
   onSignOut: () => void;
 };
 
-const V1_FINAL_STATUSES = new Set([
-  "DELIVERED",
-  "UNAVAILABLE",
-  "PAYMENT_EXPIRED",
-  "CANCELLED_PREPAYMENT",
-  "DASTAK_FULFILMENT_FAILURE",
-]);
+type AdminTab =
+  | "overview" | "approvals" | "exceptions" | "orders" | "network"
+  | "catalogue" | "safety" | "finance" | "health" | "access"
+  | "legacy" | "account";
 
 export function AdminDashboard({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey, onSignOut }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [merchants, setMerchants] = useState<MerchantAdminApplication[]>([]);
   const [partners, setPartners] = useState<PartnerAdminApplication[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
-  const [v1Orders, setV1Orders] = useState<V1AdminExecutionOrder[]>([]);
   const [operations, setOperations] = useState<OwnerOperationsSnapshot>();
   const [adminAccess, setAdminAccess] = useState<V1AdminAccess>();
-  const [tab, setTab] = useState<"approvals" | "exceptions" | "orders" | "payouts" | "safety" | "health" | "catalogue" | "legacy" | "account">("approvals");
+  const [commandCenter, setCommandCenter] = useState<V1AdminCommandCenter>();
+  const [tab, setTab] = useState<AdminTab>("overview");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const reviewKeys = useRef(new Map<string, string>());
+  const refreshInFlight = useRef(false);
 
   const refresh = useCallback(async (showProgress = false) => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     if (showProgress) setBusy("refresh");
     try {
-      const [merchantApplications, partnerApplications, recentOrders, v1ExecutionOrders, ownerOperations, currentAdminAccess] = await Promise.all([
+      const results = await Promise.allSettled([
         getMerchantApplications(auth),
         getPartnerApplications(auth),
         // Legacy history is diagnostic only and must never take V1 launch control offline.
         getAdminOrders({ ...auth, limit: 50 }).catch(() => []),
-        getV1AdminExecutionOrders({ ...auth, limit: 50 }),
         getOwnerOperations({ ...auth, limit: 50 }),
         getV1AdminAccess(auth),
+        getV1AdminCommandCenter(auth),
       ]);
-      setMerchants(merchantApplications.filter((application) => application.status === "pending"));
-      setPartners(partnerApplications.filter((application) => application.status === "pending"));
-      setOrders(recentOrders);
-      setV1Orders(v1ExecutionOrders);
-      setOperations(ownerOperations);
-      setAdminAccess(currentAdminAccess);
-      setError(undefined);
-    } catch (refreshError) {
-      setError(message(refreshError));
-    } finally {
+      const [merchantResult, partnerResult, legacyResult, operationsResult, accessResult, commandResult] = results;
+      if (merchantResult.status === "fulfilled") setMerchants(merchantResult.value.filter((application) => application.status === "pending"));
+      if (partnerResult.status === "fulfilled") setPartners(partnerResult.value.filter((application) => application.status === "pending"));
+      if (legacyResult.status === "fulfilled") setOrders(legacyResult.value);
+      if (operationsResult.status === "fulfilled") setOperations(operationsResult.value);
+      if (accessResult.status === "fulfilled") setAdminAccess(accessResult.value);
+      if (commandResult.status === "fulfilled") setCommandCenter(commandResult.value);
+      const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+      setError(failures.length === results.length
+        ? message(failures[0].reason)
+        : failures.length > 0
+        ? "Some live signals could not be refreshed. Available workspaces remain usable."
+        : undefined);
       setLoading(false);
+    } finally {
+      refreshInFlight.current = false;
       if (showProgress) setBusy(undefined);
     }
   }, [auth]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    const interval = window.setInterval(refreshWhenVisible, 30_000);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refresh]);
 
   const review = async (kind: "merchant" | "partner", applicationId: string, decision: ReviewDecision, reason?: string) => {
     const identity = `${kind}:${applicationId}:${decision}:${reason ?? ""}`;
@@ -250,125 +271,102 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     }
   };
 
-  const activeOrders = v1Orders.filter((order) => !V1_FINAL_STATUSES.has(order.status)).length;
+  const mainNavigation: Array<{ id: AdminTab; label: string; icon: ReactNode; badge?: number }> = [
+    { id: "overview", label: "Overview", icon: <LayoutDashboard size={18} /> },
+    { id: "approvals", label: "Approvals", icon: <ShieldCheck size={18} />, badge: merchants.length + partners.length },
+    { id: "orders", label: "Live orders", icon: <PackageSearch size={18} /> },
+    { id: "network", label: "Network", icon: <UsersRound size={18} /> },
+    { id: "catalogue", label: "Catalogue", icon: <Database size={18} /> },
+    { id: "exceptions", label: "Exceptions", icon: <CircleAlert size={18} />, badge: operations?.summary.totalExceptions },
+  ];
+  const controlNavigation: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
+    { id: "safety", label: "Safety controls", icon: <CircleAlert size={18} /> },
+    { id: "finance", label: "Finance & Royalty", icon: <WalletCards size={18} /> },
+    { id: "health", label: "System health", icon: <Activity size={18} /> },
+    { id: "legacy", label: "Legacy history", icon: <FileText size={18} /> },
+    ...(adminAccess?.canManageAdmins ? [{ id: "access" as AdminTab, label: "Admin access", icon: <ShieldCheck size={18} /> }] : []),
+    { id: "account", label: "My account", icon: <UserRound size={18} /> },
+  ];
+  const mobilePrimaryNavigation = mainNavigation.filter((item) => item.id !== "catalogue");
+  const mobileWorkspaceNavigation = [
+    ...mainNavigation.filter((item) => item.id === "catalogue"),
+    ...controlNavigation,
+  ];
 
-  return (
-    <div className="admin-shell">
-      <header className="admin-heading">
-        <div>
-          <p className="eyebrow">{displayName
-            ? `${adminRoleLabel(adminAccess?.role)}: ${displayName}`
-            : `${adminRoleLabel(adminAccess?.role)} workspace`}</p>
-          <h1>Dastak operations</h1>
-          <p>Approvals and recent marketplace activity.</p>
+  return <div className="admin-console">
+    <aside className="admin-sidebar" aria-label="Admin navigation">
+      <header><span>D</span><div><strong>Dastak</strong><small>Admin control</small></div></header>
+      <p>OPERATIONS</p>
+      <AdminNavigation items={mainNavigation} selected={tab} onSelect={setTab} />
+      <p>CONTROL & GOVERNANCE</p>
+      <AdminNavigation items={controlNavigation} selected={tab} onSelect={setTab} />
+      <footer><span>{initials(displayName ?? "Admin")}</span><div><strong>{displayName ?? "Dastak Admin"}</strong><small>{adminRoleLabel(adminAccess?.role)}</small></div></footer>
+    </aside>
+
+    <main className="admin-shell">
+      <header className="admin-heading"><div><p className="eyebrow">{adminRoleLabel(adminAccess?.role).toUpperCase()} WORKSPACE</p><h1>{tabTitle(tab)}</h1><p>{tabDescription(tab)}</p></div><button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={busy === "refresh"} aria-label="Refresh Admin workspace"><RefreshCw size={19} /></button></header>
+      <nav className="admin-secondary-mobile" aria-label="More Admin workspaces"><AdminNavigation items={mobileWorkspaceNavigation} selected={tab} onSelect={setTab} /></nav>
+      {error ? <p className="order-error" role="alert">{error}</p> : null}
+      {notice ? <div className="admin-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div> : null}
+
+      {tab === "overview" ? <AdminOverviewPanel snapshot={commandCenter} loading={loading} onNavigate={setTab} />
+        : tab === "network" ? <AdminNetworkPanel auth={auth} />
+        : tab === "catalogue" ? <AdminCataloguePanel auth={auth} />
+        : tab === "orders" ? <AdminV1ExecutionPanel auth={auth} />
+        : tab === "finance" ? <AdminRoyaltyPayoutPanel auth={auth} />
+        : tab === "safety" ? <AdminOperationalSafetyPanel auth={auth} />
+        : tab === "health" ? <AdminSystemHealthPanel auth={auth} />
+        : tab === "access" && adminAccess?.canManageAdmins ? <AdminAccessPanel auth={auth} access={adminAccess} onChange={setAdminAccess} />
+        : tab === "account" ? <RoleAccountView accessToken={accessToken} displayName={displayName} email={email} phoneNumber={phoneNumber} roleName={adminRoleLabel(adminAccess?.role)} accessLabel="Full operations access" supabaseUrl={supabaseUrl} publishableKey={publishableKey} allowsAccountDeletion={false} onSignOut={onSignOut} />
+        : loading ? <div className="catalogue-loading" role="status"><span /> Loading operations</div>
+        : tab === "approvals" ? <div className="admin-approvals" role="tabpanel">
+          <ApprovalSection title="Merchant applications" count={merchants.length} empty="No merchant applications waiting.">{merchants.map((application) => <ReviewCard key={application.applicationId} icon={<Store size={20} />} title={application.businessName} subtitle={application.businessAddress} facts={[`Account ${shortId(application.accountId)}`]} evidence={[{ label: "View business evidence", path: application.evidenceObjectPath }]} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("merchant", application.applicationId, decision, reason)} />)}</ApprovalSection>
+          <ApprovalSection title="Delivery Partner applications" count={partners.length} empty="No Delivery Partner applications waiting.">{partners.map((application) => <ReviewCard key={application.applicationId} icon={<Bike size={20} />} title={application.displayName} subtitle={application.phoneNumber} facts={[methodLabel(application.deliveryMethod), ...(application.vehicleRegistrationNumber ? [`${application.vehicleRegistrationNumber} · ${application.vehicleMakeModel}`] : []), `Submitted ${formatDate(application.submittedAt)}`]} evidence={[{ label: "View identity proof", path: application.identityEvidenceObjectPath }, ...(application.vehicleEvidenceObjectPath ? [{ label: "View vehicle RC", path: application.vehicleEvidenceObjectPath }] : [])]} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("partner", application.applicationId, decision, reason)} />)}</ApprovalSection>
         </div>
-        <button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={Boolean(busy)} aria-label="Refresh admin data" title="Refresh admin data">
-          <RefreshCw size={19} />
-        </button>
-      </header>
+        : tab === "legacy" ? <OrdersPanel orders={orders} busy={Boolean(busy)} onReview={reviewRefund} onRefund={retryRefund} />
+        : <ExceptionsPanel operations={operations} busy={Boolean(busy)} onResolve={resolveSupport} onReset={resetHandoff} onReconcile={reconcile} onReviewRefund={() => setTab("legacy")} />}
+    </main>
 
-      {error && <p className="order-error" role="alert">{error}</p>}
-      {notice && <div className="admin-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div>}
+    <nav className="admin-mobile-navigation" aria-label="Primary Admin navigation"><AdminNavigation items={mobilePrimaryNavigation} selected={tab} onSelect={setTab} /></nav>
+  </div>;
+}
 
-      <section className="admin-summary" aria-label="Operations summary">
-        <Summary label="Merchant reviews" value={merchants.length} icon={<Store size={19} />} />
-        <Summary label="Partner reviews" value={partners.length} icon={<Bike size={19} />} />
-        <Summary label="Active V1 orders" value={activeOrders} icon={<PackageSearch size={19} />} />
-        <Summary label="Exceptions" value={operations?.summary.totalExceptions ?? 0} icon={<CircleAlert size={19} />} />
-      </section>
+function AdminNavigation({ items, selected, onSelect }: {
+  items: Array<{ id: AdminTab; label: string; icon: ReactNode; badge?: number }>;
+  selected: AdminTab;
+  onSelect: (tab: AdminTab) => void;
+}) {
+  return <>{items.map((item) => <button type="button" key={item.id} className={selected === item.id ? "selected" : ""} aria-current={selected === item.id ? "page" : undefined} onClick={() => onSelect(item.id)}>{item.icon}<span>{item.label}</span>{item.badge ? <b>{item.badge}</b> : null}</button>)}</>;
+}
 
-      <div className="admin-tabs" role="tablist" aria-label="Admin views">
-        <button type="button" role="tab" aria-selected={tab === "approvals"} className={tab === "approvals" ? "selected" : ""} onClick={() => setTab("approvals")}>Approvals</button>
-        <button type="button" role="tab" aria-selected={tab === "exceptions"} className={tab === "exceptions" ? "selected" : ""} onClick={() => setTab("exceptions")}>Exceptions {operations?.summary.totalExceptions ? `(${operations.summary.totalExceptions})` : ""}</button>
-        <button type="button" role="tab" aria-selected={tab === "orders"} className={tab === "orders" ? "selected" : ""} onClick={() => setTab("orders")}>Orders</button>
-        <button type="button" role="tab" aria-selected={tab === "payouts"} className={tab === "payouts" ? "selected" : ""} onClick={() => setTab("payouts")}><WalletCards size={17} /> Royalty payouts</button>
-        <button type="button" role="tab" aria-selected={tab === "safety"} className={tab === "safety" ? "selected" : ""} onClick={() => setTab("safety")}><CircleAlert size={17} /> Safety</button>
-        <button type="button" role="tab" aria-selected={tab === "health"} className={tab === "health" ? "selected" : ""} onClick={() => setTab("health")}><Activity size={17} /> Health</button>
-        <button type="button" role="tab" aria-selected={tab === "catalogue"} className={tab === "catalogue" ? "selected" : ""} onClick={() => setTab("catalogue")}><Database size={17} /> Catalogue</button>
-        <button type="button" role="tab" aria-selected={tab === "legacy"} className={tab === "legacy" ? "selected" : ""} onClick={() => setTab("legacy")}><FileText size={17} /> Legacy history</button>
-        <button type="button" role="tab" aria-selected={tab === "account"} className={tab === "account" ? "selected" : ""} onClick={() => setTab("account")}><UserRound size={17} /> Account</button>
-      </div>
+function tabTitle(tab: AdminTab) {
+  return ({
+    overview: "Command center", approvals: "Application approvals", exceptions: "Exception desk",
+    orders: "Live order control", network: "Marketplace network", catalogue: "Master catalogue",
+    safety: "Safety controls", finance: "Finance & Royalty", health: "System health",
+    access: "Admin access", legacy: "Historical orders", account: "My account",
+  } satisfies Record<AdminTab, string>)[tab];
+}
 
-      {tab === "catalogue" ? <AdminCataloguePanel auth={auth} /> : tab === "orders" ? <AdminV1ExecutionPanel auth={auth} /> : tab === "payouts" ? <AdminRoyaltyPayoutPanel auth={auth} /> : tab === "safety" ? <AdminOperationalSafetyPanel auth={auth} /> : tab === "health" ? <AdminSystemHealthPanel auth={auth} /> : tab === "account" ? <div className="admin-account-workspace">
-        <RoleAccountView
-          accessToken={accessToken}
-          displayName={displayName}
-          email={email}
-          phoneNumber={phoneNumber}
-          roleName={adminRoleLabel(adminAccess?.role)}
-          accessLabel="Full operations access"
-          supabaseUrl={supabaseUrl}
-          publishableKey={publishableKey}
-          allowsAccountDeletion={false}
-          onSignOut={onSignOut}
-        />
-        {adminAccess?.canManageAdmins && (
-          <AdminAccessPanel auth={auth} access={adminAccess} onChange={setAdminAccess} />
-        )}
-      </div> : loading ? <div className="catalogue-loading" role="status"><span /> Loading operations</div> : tab === "approvals" ? (
-        <div className="admin-approvals" role="tabpanel">
-          <ApprovalSection title="Merchant applications" count={merchants.length} empty="No merchant applications waiting.">
-            {merchants.map((application) => (
-              <ReviewCard
-                key={application.applicationId}
-                icon={<Store size={20} />}
-                title={application.businessName}
-                subtitle={application.businessAddress}
-                facts={[`Account ${shortId(application.accountId)}`]}
-                evidence={[{ label: "View business evidence", path: application.evidenceObjectPath }]}
-                busy={Boolean(busy)}
-                onEvidence={openEvidence}
-                onReview={(decision, reason) => review("merchant", application.applicationId, decision, reason)}
-              />
-            ))}
-          </ApprovalSection>
+function tabDescription(tab: AdminTab) {
+  return ({
+    overview: "A connected, real-time view of the Dastak marketplace.",
+    approvals: "Review Merchant and Delivery Partner evidence with a complete audit trail.",
+    exceptions: "Resolve customer support, refunds, secure handoffs and stalled lifecycles.",
+    orders: "Inspect matching, preparation, custody, collection, delivery and financial truth.",
+    network: "Understand every identity and its independently onboarded personas.",
+    catalogue: "Control exact SKUs, evidence, QA readiness, pricing and visibility.",
+    safety: "Manage scoped pauses and rider recovery without weakening custody.",
+    finance: "Review earned Royalty and controlled payout readiness.",
+    health: "Monitor invariants, outbox delivery and reconciliation queues.",
+    access: "Protect one permanent Superadmin and two replaceable Executive Admin seats.",
+    legacy: "Read-only oversight for the pre-V1 order lifecycle.",
+    account: "Profile, security, sessions and sign-out controls.",
+  } satisfies Record<AdminTab, string>)[tab];
+}
 
-          <ApprovalSection title="Delivery-partner applications" count={partners.length} empty="No delivery-partner applications waiting.">
-            {partners.map((application) => (
-              <ReviewCard
-                key={application.applicationId}
-                icon={<Bike size={20} />}
-                title={application.displayName}
-                subtitle={application.phoneNumber}
-                facts={[
-                  methodLabel(application.deliveryMethod),
-                  ...(application.vehicleRegistrationNumber
-                    ? [`${application.vehicleRegistrationNumber} · ${application.vehicleMakeModel}`]
-                    : []),
-                  `Submitted ${formatDate(application.submittedAt)}`,
-                ]}
-                evidence={[
-                  { label: "View identity proof", path: application.identityEvidenceObjectPath },
-                  ...(application.vehicleEvidenceObjectPath
-                    ? [{ label: "View vehicle RC", path: application.vehicleEvidenceObjectPath }]
-                    : []),
-                ]}
-                busy={Boolean(busy)}
-                onEvidence={openEvidence}
-                onReview={(decision, reason) => review("partner", application.applicationId, decision, reason)}
-              />
-            ))}
-          </ApprovalSection>
-        </div>
-      ) : tab === "legacy" ? (
-        <OrdersPanel
-          orders={orders}
-          busy={Boolean(busy)}
-          onReview={reviewRefund}
-          onRefund={retryRefund}
-        />
-      ) : (
-        <ExceptionsPanel
-          operations={operations}
-          busy={Boolean(busy)}
-          onResolve={resolveSupport}
-          onReset={resetHandoff}
-          onReconcile={reconcile}
-          onReviewRefund={() => setTab("legacy")}
-        />
-      )}
-    </div>
-  );
+function initials(value: string) {
+  return value.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
 function adminRoleLabel(role?: V1AdminAccess["role"]) {
@@ -444,10 +442,6 @@ function ExceptionCard({ exception, busy, onResolve, onReset, onReviewRefund, on
       {exception.kind === "stalled_order" && <button className="secondary-button" type="button" disabled={busy} onClick={() => void onReconcile()}><RotateCcw size={17} /> Recover lifecycle</button>}
     </article>
   );
-}
-
-function Summary({ label, value, icon }: { label: string; value: number; icon: ReactNode }) {
-  return <div><span>{icon}</span><p><small>{label}</small><strong>{value}</strong></p></div>;
 }
 
 function ApprovalSection({ title, count, empty, children }: { title: string; count: number; empty: string; children: ReactNode }) {

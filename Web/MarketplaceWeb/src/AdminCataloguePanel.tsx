@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Check, CircleAlert, Database, RefreshCw, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Check, ChevronDown, CircleAlert, Database, Image as ImageIcon, RefreshCw, Search, Settings2, Tags, Upload } from "lucide-react";
 import {
-  formatV1Price, getV1AdminCatalogue, importV1AdminCatalogue, updateV1AdminSku,
-  type DastakV1Auth, type V1AdminSku, type V1AdminSnapshot,
+  getV1AdminCatalogue, getV1AdminCataloguePage, importV1AdminCatalogue, updateV1AdminSku,
+  type DastakV1Auth, type V1AdminCataloguePageSku, type V1AdminSnapshot,
 } from "./dastakV1";
 
 const importTemplate = `{
-  "categories": [{ "slug": "grocery", "name": "Grocery", "status": "ACTIVE", "sortOrder": 10 }],
-  "subcategories": [{ "categorySlug": "grocery", "slug": "staples", "name": "Staples", "status": "ACTIVE", "sortOrder": 10 }],
-  "brands": [{ "slug": "example-brand", "name": "Example Brand", "status": "ACTIVE" }],
+  "categories": [],
+  "subcategories": [],
+  "brands": [{ "slug": "example-brand", "name": "Example Brand", "status": "DRAFT" }],
   "skus": [{
-    "categorySlug": "grocery", "subcategorySlug": "staples", "brandSlug": "example-brand",
+    "categorySlug": "rice", "subcategorySlug": "ponni-rice", "brandSlug": "example-brand",
     "slug": "example-rice-1kg", "canonicalName": "Example Rice", "packSize": "1 kg",
     "listPricePaise": 10000, "sellingPricePaise": 9500, "currencyCode": "INR",
     "taxRateBps": 0, "status": "DRAFT", "logisticsAttributes": { "weightGrams": 1000 }
@@ -19,114 +19,149 @@ const importTemplate = `{
 
 export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   const [snapshot, setSnapshot] = useState<V1AdminSnapshot>();
+  const [skus, setSkus] = useState<V1AdminCataloguePageSku[]>([]);
+  const [cursor, setCursor] = useState<{ name: string; skuId: string }>();
+  const [hasMore, setHasMore] = useState(false);
+  const [query, setQuery] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [status, setStatus] = useState("");
+  const [qaStatus, setQaStatus] = useState("");
   const [source, setSource] = useState(importTemplate);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const importKeys = useRef(new Map<string, string>());
 
-  const refresh = useCallback(async () => {
+  const filters = useMemo(() => ({
+    query: query.trim(),
+    categoryId: categoryId || undefined,
+    status: status ? status as V1AdminCataloguePageSku["status"] : undefined,
+    qaStatus: qaStatus ? qaStatus as V1AdminCataloguePageSku["qaStatus"] : undefined,
+  }), [categoryId, qaStatus, query, status]);
+
+  const loadMetadata = useCallback(async () => setSnapshot(await getV1AdminCatalogue(auth)), [auth]);
+  const loadPage = useCallback(async (append: boolean, signal?: AbortSignal) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     try {
-      setSnapshot(await getV1AdminCatalogue(auth));
+      const page = await getV1AdminCataloguePage({ ...auth, ...filters, limit: 50, cursor: append ? cursor : undefined, signal });
+      setSkus((current) => append ? [...current, ...page.skus] : page.skus);
+      setCursor(page.nextCursor);
+      setHasMore(page.hasMore);
       setError(undefined);
-    } catch (refreshError) {
-      setError(message(refreshError));
+    } catch (loadError) {
+      if (loadError instanceof DOMException && loadError.name === "AbortError") return;
+      setError(message(loadError));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [auth]);
+  }, [auth, cursor, filters]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void loadMetadata().catch((loadError) => setError(message(loadError))); }, [loadMetadata]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => void loadPage(false, controller.signal), 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+    // Cursor changes only while appending and must not restart page one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth, filters]);
+
+  const refresh = async () => {
+    setBusy(true);
+    try { await Promise.all([loadMetadata(), loadPage(false)]); setError(undefined); }
+    catch (refreshError) { setError(message(refreshError)); }
+    finally { setBusy(false); }
+  };
 
   const runImport = async (event: FormEvent) => {
     event.preventDefault();
     let catalogue: unknown;
-    try { catalogue = JSON.parse(source); }
-    catch { setError("Import must be valid JSON."); return; }
-    if (!catalogue || typeof catalogue !== "object" || Array.isArray(catalogue)) {
-      setError("Import must be one catalogue object.");
-      return;
-    }
+    try { catalogue = JSON.parse(source); } catch { setError("Import must be valid JSON."); return; }
+    if (!catalogue || typeof catalogue !== "object" || Array.isArray(catalogue)) { setError("Import must be one catalogue object."); return; }
     const fingerprint = source.trim();
     const idempotencyKey = importKeys.current.get(fingerprint) ?? crypto.randomUUID();
     importKeys.current.set(fingerprint, idempotencyKey);
-    setBusy(true);
-    setError(undefined);
+    setBusy(true); setError(undefined);
     try {
       await importV1AdminCatalogue({ ...auth, catalogue: catalogue as Record<string, unknown>, idempotencyKey });
       importKeys.current.delete(fingerprint);
       setNotice("Catalogue import committed atomically and recorded in audit history.");
       await refresh();
-    } catch (importError) {
-      setError(message(importError));
-    } finally {
-      setBusy(false);
-    }
+    } catch (importError) { setError(message(importError)); }
+    finally { setBusy(false); }
   };
 
-  const updateSku = async (sku: V1AdminSku, patch: Record<string, unknown>) => {
-    setBusy(true);
-    setError(undefined);
+  const updateSku = async (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => {
+    setBusy(true); setError(undefined);
     try {
-      await updateV1AdminSku({
-        ...auth, skuId: sku.id, expectedVersion: sku.version, patch, idempotencyKey: crypto.randomUUID(),
-      });
-      setNotice(`${sku.name} updated with optimistic version protection.`);
-      await refresh();
-    } catch (updateError) {
-      setError(message(updateError));
-    } finally {
-      setBusy(false);
-    }
+      await updateV1AdminSku({ ...auth, skuId: sku.id, expectedVersion: sku.version, patch, idempotencyKey: crypto.randomUUID() });
+      setNotice(`${sku.name} was updated with version protection.`);
+      await loadPage(false);
+    } catch (updateError) { setError(message(updateError)); }
+    finally { setBusy(false); }
   };
-
-  if (loading) return <div className="catalogue-loading" role="status"><span /> Loading canonical catalogue</div>;
 
   return <section className="admin-section v1-admin-catalogue" role="tabpanel">
-    <header><div><h2>Canonical catalogue</h2><p>Customer-visible categories, exact SKUs, standardized prices and launch configuration.</p></div><button className="secondary-button" type="button" onClick={() => void refresh()} disabled={busy}><RefreshCw size={17} /> Refresh</button></header>
+    <header className="admin-section-heading"><div><p className="eyebrow">MASTER CATALOGUE</p><h2>Exact-SKU catalogue control</h2><p>Search every canonical SKU, inspect activation readiness and make version-safe changes.</p></div><button className="icon-button" type="button" onClick={() => void refresh()} disabled={busy} aria-label="Refresh catalogue"><RefreshCw size={18} /></button></header>
     {error ? <p className="order-error" role="alert"><CircleAlert size={16} /> {error}</p> : null}
     {notice ? <p className="v1-admin-notice" role="status"><Check size={17} /> {notice}</p> : null}
-
-    {snapshot && <>
-      <div className="v1-admin-summary">
-        <Summary label="Categories" value={snapshot.categories.length} />
-        <Summary label="Subcategories" value={snapshot.subcategories.length} />
-        <Summary label="Canonical SKUs" value={snapshot.skuCount} />
-        <Summary label="Retail branches" value={snapshot.branches.length} />
+    {snapshot ? <>
+      <div className="v1-admin-summary"><Summary label="Categories" value={snapshot.categories.length} /><Summary label="Subcategories" value={snapshot.subcategories.length} /><Summary label="Canonical SKUs" value={snapshot.skuCount} /><Summary label="Retail branches" value={snapshot.branches.length} /></div>
+      <section className="v1-admin-config"><header><Settings2 size={20} /><div><h3>Launch configuration</h3><p>Effective settings and validation state for the customer catalogue.</p></div></header><div>{snapshot.configuration.map((setting) => <article key={setting.key} className={!setting.valid || (setting.required && !setting.explicit) ? "attention" : ""}><code>{setting.key}</code><strong>{displayValue(setting.value)}</strong><span>{setting.explicit ? "Explicit" : "Default"} · {setting.valid ? "Valid" : "Invalid"}</span></article>)}</div></section>
+    </> : null}
+    <section className="v1-admin-skus">
+      <header><Tags size={20} /><div><h3>SKU library</h3><p>Only QA-ready exact products with valid pricing and imagery can be activated.</p></div></header>
+      <div className="admin-catalogue-toolbar">
+        <label className="admin-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search SKU, brand, alias or category" aria-label="Search catalogue" /></label>
+        <Select label="Category" value={categoryId} onChange={setCategoryId}><option value="">All categories</option>{snapshot?.categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</Select>
+        <Select label="Visibility" value={status} onChange={setStatus}><option value="">Any status</option><option value="ACTIVE">Active</option><option value="DRAFT">Draft</option><option value="INACTIVE">Inactive</option></Select>
+        <Select label="QA" value={qaStatus} onChange={setQaStatus}><option value="">Any QA state</option><option value="VERIFIED">Verified</option><option value="NEEDS_REVIEW">Needs review</option><option value="PENDING">Pending</option><option value="REJECTED">Rejected</option></Select>
       </div>
-
-      <section className="v1-admin-config"><header><Database size={20} /><div><h3>Launch configuration</h3><p>Read-only effective V1 settings for this batch.</p></div></header><div>{snapshot.configuration.map((setting) => <article key={setting.key} className={!setting.valid || (setting.required && !setting.explicit) ? "attention" : ""}><code>{setting.key}</code><strong>{displayValue(setting.value)}</strong><span>{setting.explicit ? "Explicit" : "Default"} · {setting.valid ? "Valid" : "Invalid"}</span></article>)}</div></section>
-
-      <section className="v1-admin-import"><header><Upload size={20} /><div><h3>Atomic catalogue import</h3><p>Upsert categories, subcategories, brands and SKUs by stable slug. Review JSON before submitting.</p></div></header><form onSubmit={runImport}><label htmlFor="v1-catalogue-import">Catalogue JSON</label><textarea id="v1-catalogue-import" value={source} onChange={(event) => setSource(event.target.value)} rows={16} spellCheck={false} disabled={busy} /><button className="primary-button" type="submit" disabled={busy}>{busy ? "Importing…" : "Validate and import"}</button></form></section>
-
-      <section className="v1-admin-skus"><header><div><h3>SKU activation and price visibility</h3><p>{snapshot.truncated ? `Showing the first ${snapshot.skus.length} of ${snapshot.skuCount} SKUs.` : `${snapshot.skuCount} SKUs loaded.`} Merchant selection counts are operational visibility only.</p></div></header>
-        <div className="v1-admin-sku-list">{snapshot.skus.map((sku) => <SkuEditor key={`${sku.id}:${sku.version}`} sku={sku} disabled={busy} onSave={updateSku} />)}</div>
-      </section>
-    </>}
+      {loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : <div className="v1-admin-sku-list">{skus.map((sku) => <SkuEditor key={`${sku.id}:${sku.version}`} sku={sku} disabled={busy} onSave={updateSku} />)}</div>}
+      {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadPage(true)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 SKUs"}</button> : null}
+    </section>
+    <details className="v1-admin-import"><summary><Upload size={18} /><span><strong>Advanced atomic import</strong><small>Imports enter Draft and require taxonomy, QA, price and cleared imagery before activation</small></span><ChevronDown size={17} /></summary><form onSubmit={runImport}><label htmlFor="v1-catalogue-import">Catalogue JSON</label><textarea id="v1-catalogue-import" value={source} onChange={(event) => setSource(event.target.value)} rows={16} spellCheck={false} disabled={busy} /><p className="field-help">Use approved taxonomy slugs. A successful import does not make a product customer-visible.</p><button className="primary-button" type="submit" disabled={busy}>{busy ? "Importing…" : "Validate and import as Draft"}</button></form></details>
   </section>;
 }
 
-function SkuEditor({ sku, disabled, onSave }: { sku: V1AdminSku; disabled: boolean; onSave: (sku: V1AdminSku, patch: Record<string, unknown>) => Promise<void> }) {
+function SkuEditor({ sku, disabled, onSave }: { sku: V1AdminCataloguePageSku; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void> }) {
   const [listPrice, setListPrice] = useState((sku.listPricePaise / 100).toFixed(2));
   const [sellingPrice, setSellingPrice] = useState((sku.sellingPricePaise / 100).toFixed(2));
   const [status, setStatus] = useState(sku.status);
   const changed = Math.round(Number(listPrice) * 100) !== sku.listPricePaise || Math.round(Number(sellingPrice) * 100) !== sku.sellingPricePaise || status !== sku.status;
   const valid = Number.isFinite(Number(listPrice)) && Number.isFinite(Number(sellingPrice)) && Number(sellingPrice) >= 0 && Number(sellingPrice) <= Number(listPrice);
-  return <form onSubmit={(event) => {
-    event.preventDefault();
-    if (!valid || !changed) return;
-    void onSave(sku, { listPricePaise: Math.round(Number(listPrice) * 100), sellingPricePaise: Math.round(Number(sellingPrice) * 100), status });
-  }}>
-    <div><strong>{sku.name}</strong><small>{sku.packSize} · {sku.selectionCount} merchant selections · v{sku.version}</small></div>
+  const activatingWithoutEvidence = status === "ACTIVE" && sku.status !== "ACTIVE" && !sku.activationReady;
+  const canSave = valid && changed && !activatingWithoutEvidence;
+  return <form onSubmit={(event) => { event.preventDefault(); if (canSave) void onSave(sku, { listPricePaise: Math.round(Number(listPrice) * 100), sellingPricePaise: Math.round(Number(sellingPrice) * 100), status }); }}>
+    <div className="admin-sku-identity"><span className={`admin-sku-image ${sku.primaryImage ? "ready" : "missing"}`}><ImageIcon size={20} /></span><span><strong>{sku.name}</strong><small>{sku.brandName ? `${sku.brandName} · ` : ""}{sku.packSize} · v{sku.version}</small><em>{sku.imageCount} images · {sku.identifierCount} identifiers · {sku.aliasCount} aliases</em></span></div>
     <label><span>MRP (₹)</span><input inputMode="decimal" value={listPrice} onChange={(event) => setListPrice(event.target.value)} aria-label={`${sku.name} MRP`} /></label>
     <label><span>Selling (₹)</span><input inputMode="decimal" value={sellingPrice} onChange={(event) => setSellingPrice(event.target.value)} aria-label={`${sku.name} selling price`} /></label>
-    <label><span>Visibility</span><select value={status} onChange={(event) => setStatus(event.target.value as V1AdminSku["status"])} aria-label={`${sku.name} visibility`}><option value="DRAFT">Draft</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></label>
-    <span className={`v1-admin-status ${status.toLowerCase()}`}>{status}<small>{formatV1Price(sku.sellingPricePaise)}</small></span>
-    <button className="secondary-button" type="submit" disabled={disabled || !changed || !valid}>Save</button>
+    <label><span>Visibility</span><select value={status} onChange={(event) => setStatus(event.target.value as V1AdminCataloguePageSku["status"])} aria-label={`${sku.name} visibility`}><option value="DRAFT">Draft</option><option value="ACTIVE" disabled={!sku.activationReady && sku.status !== "ACTIVE"}>Active</option><option value="INACTIVE">Inactive</option></select></label>
+    <span className={`v1-admin-status ${sku.activationReady ? "active" : "inactive"}`}><b>{sku.qaStatus.replaceAll("_", " ")}</b><small>{sku.activationReady ? "Ready to activate" : blockerSummary(sku.activationBlockers)}</small></span>
+    <button className="secondary-button" type="submit" disabled={disabled || !canSave}>Save</button>
   </form>;
 }
 
-function Summary({ label, value }: { label: string; value: number }) { return <div><strong>{value}</strong><span>{label}</span></div>; }
-function displayValue(value: unknown) { return typeof value === "string" ? value : JSON.stringify(value); }
-function message(error: unknown) { return error instanceof Error ? error.message : "Catalogue operation failed."; }
+function Select({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode }) { return <label><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}>{children}</select><ChevronDown size={14} /></label>; }
+function Summary({ label, value }: { label: string; value: number }) { return <div><strong>{value.toLocaleString("en-IN")}</strong><span>{label}</span></div>; }
+function displayValue(value: unknown) { if (value === null) return "Not set"; if (typeof value === "object") return JSON.stringify(value); return String(value); }
+function message(error: unknown) { return error instanceof Error ? error.message : "The catalogue operation could not be completed."; }
+function blockerSummary(blockers: string[]) {
+  if (blockers.length === 0) return "Complete required catalogue evidence";
+  const labels: Record<string, string> = {
+    QA_VERIFIED_REQUIRED: "Complete QA verification",
+    DASTAK_PRICING_REQUIRED: "Set Dastak pricing",
+    CATEGORY_TYPE_ACTIVE_REQUIRED: "Assign an active department",
+    CATEGORY_ACTIVE_REQUIRED: "Activate its category",
+    SUBCATEGORY_ACTIVE_REQUIRED: "Activate its subcategory",
+    BRAND_ACTIVE_REQUIRED: "Activate its brand",
+    SOURCE_PROVENANCE_REQUIRED: "Add source provenance",
+    PRIMARY_IMAGE_REQUIRED: "Add a primary image",
+    PRIMARY_IMAGE_VERIFICATION_REQUIRED: "Verify its primary image",
+    IMAGE_RIGHTS_CLEARANCE_REQUIRED: "Clear image usage rights",
+  };
+  return blockers.map((blocker) => labels[blocker] ?? blocker.replaceAll("_", " ").toLowerCase()).join(" · ");
+}

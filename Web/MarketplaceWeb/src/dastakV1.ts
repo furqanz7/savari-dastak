@@ -617,6 +617,127 @@ export type V1AdminAccess = {
   slots: V1AdminSlot[];
 };
 
+export type V1AdminCommandCenter = {
+  observedAt: string;
+  actionQueue: {
+    merchantApplications: number;
+    deliveryApplications: number;
+    openIncidents: number;
+    riderEscalations: number;
+    activePauses: number;
+  };
+  identities: {
+    activeAccounts: number;
+    customers: number;
+    merchants: number;
+    deliveryPartners: number;
+    deletedPersonas: number;
+    recoveryEligiblePhones: number;
+  };
+  commerce: {
+    activeOrders: number;
+    awaitingPayment: number;
+    preparingFulfilments: number;
+    readyFulfilments: number;
+    activeMissions: number;
+    deliveredToday: number;
+  };
+  network: {
+    activeOrganizations: number;
+    activeBranches: number;
+    onlineRiders: number;
+    assignedRiders: number;
+  };
+  catalogue: {
+    total: number;
+    active: number;
+    draft: number;
+    needsReview: number;
+    missingPrimaryImage: number;
+  };
+};
+
+export type V1AdminPersona = "CUSTOMER" | "MERCHANT" | "DELIVERY" | "ADMIN";
+export type V1AdminPersonaState = "ACTIVE" | "DELETED";
+
+export type V1AdminNetworkPerson = {
+  id: string;
+  displayName: string;
+  email?: string;
+  phoneNumber: string;
+  phoneVerified: boolean;
+  accountState: string;
+  adminRole?: V1AdminRole;
+  createdAt: string;
+  updatedAt: string;
+  lastSignInAt?: string;
+  personas: Array<{
+    persona: Exclude<V1AdminPersona, "ADMIN">;
+    state: V1AdminPersonaState;
+    activatedAt: string;
+    deletedAt?: string;
+    version: number;
+  }>;
+  customer: { orderCount: number; activeOrderCount: number };
+  merchant?: {
+    applicationStatus: string;
+    businessName: string;
+    submittedAt: string;
+    reviewedAt?: string;
+    organizationName?: string;
+    organizationStatus?: string;
+    branchCount: number;
+  };
+  delivery?: {
+    applicationStatus: string;
+    deliveryMethod: string;
+    submittedAt: string;
+    reviewedAt?: string;
+    availability?: string;
+    lastSeenAt?: string;
+    activeMissionCount: number;
+  };
+};
+
+export type V1AdminNetworkPage = {
+  people: V1AdminNetworkPerson[];
+  hasMore: boolean;
+  nextCursor?: { updatedAt: string; accountId: string };
+};
+
+export type V1AdminCataloguePageSku = V1AdminSku & {
+  categoryTypeId?: string;
+  brandName?: string;
+  qaStatus: "PENDING" | "NEEDS_REVIEW" | "VERIFIED" | "REJECTED";
+  activationReady: boolean;
+  activationBlockers: string[];
+  imageCount: number;
+  aliasCount: number;
+  identifierCount: number;
+  primaryImage?: {
+    id: string;
+    imageKey: string;
+    status: string;
+    rightsStatus: string;
+    sourceType: string;
+  };
+  quantityValue?: number;
+  quantityUnit?: string;
+  packCount?: number;
+  manufacturerName?: string;
+  countryOfOriginCode?: string;
+  hsnCode?: string;
+  dietType: string;
+  shelfLifeDays?: number;
+  attributes: Record<string, unknown>;
+};
+
+export type V1AdminCataloguePage = {
+  skus: V1AdminCataloguePageSku[];
+  hasMore: boolean;
+  nextCursor?: { name: string; skuId: string };
+};
+
 export class DastakV1RequestError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) {
     super(message);
@@ -723,6 +844,63 @@ export async function getV1AdminAccess(
 ): Promise<V1AdminAccess> {
   return parseAdminAccess(await invoke(input, "dastak-v1-orders", {
     operation: "adminAccess",
+  }, undefined, fetcher));
+}
+
+export async function getV1AdminCommandCenter(
+  input: DastakV1Auth & { signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminCommandCenter> {
+  return parseAdminCommandCenter(await invoke(input, "dastak-v1-orders", {
+    operation: "adminCommandCenter",
+  }, undefined, fetcher));
+}
+
+export async function getV1AdminNetworkPage(
+  input: DastakV1Auth & {
+    query?: string;
+    persona?: V1AdminPersona;
+    state?: V1AdminPersonaState;
+    limit?: number;
+    cursor?: { updatedAt: string; accountId: string };
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminNetworkPage> {
+  return parseAdminNetworkPage(await invoke(input, "dastak-v1-orders", {
+    operation: "adminNetworkPage",
+    query: input.query?.trim() || null,
+    persona: input.persona ?? null,
+    state: input.state ?? null,
+    limit: input.limit ?? 50,
+    cursor: input.cursor ?? null,
+  }, undefined, fetcher));
+}
+
+export async function getV1AdminCataloguePage(
+  input: DastakV1Auth & {
+    query?: string;
+    categoryTypeId?: string;
+    categoryId?: string;
+    subcategoryId?: string;
+    status?: V1AdminSku["status"];
+    qaStatus?: V1AdminCataloguePageSku["qaStatus"];
+    limit?: number;
+    cursor?: { name: string; skuId: string };
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminCataloguePage> {
+  return parseAdminCataloguePage(await invoke(input, "dastak-v1-catalogue", {
+    operation: "adminCataloguePage",
+    query: input.query?.trim() || null,
+    categoryTypeId: input.categoryTypeId ?? null,
+    categoryId: input.categoryId ?? null,
+    subcategoryId: input.subcategoryId ?? null,
+    status: input.status ?? null,
+    qaStatus: input.qaStatus ?? null,
+    limit: input.limit ?? 50,
+    cursor: input.cursor ?? null,
   }, undefined, fetcher));
 }
 
@@ -2452,6 +2630,195 @@ function parseAdminSku(value: unknown): V1AdminSku {
     brandId: source.brandId === null || source.brandId === undefined ? undefined : requiredUuid(source.brandId),
     taxRateBps: requiredInteger(source.taxRateBps, 0), status, selectionCount: requiredInteger(source.selectionCount, 0),
     version: requiredInteger(source.version, 1), updatedAt: requiredTimestamp(source.updatedAt),
+  };
+}
+
+export function parseAdminCommandCenter(value: unknown): V1AdminCommandCenter {
+  const source = requiredRecord(value);
+  const actionQueue = requiredRecord(source.actionQueue);
+  const identities = requiredRecord(source.identities);
+  const commerce = requiredRecord(source.commerce);
+  const network = requiredRecord(source.network);
+  const catalogue = requiredRecord(source.catalogue);
+  return {
+    observedAt: requiredTimestamp(source.observedAt),
+    actionQueue: {
+      merchantApplications: requiredInteger(actionQueue.merchantApplications, 0),
+      deliveryApplications: requiredInteger(actionQueue.deliveryApplications, 0),
+      openIncidents: requiredInteger(actionQueue.openIncidents, 0),
+      riderEscalations: requiredInteger(actionQueue.riderEscalations, 0),
+      activePauses: requiredInteger(actionQueue.activePauses, 0),
+    },
+    identities: {
+      activeAccounts: requiredInteger(identities.activeAccounts, 0),
+      customers: requiredInteger(identities.customers, 0),
+      merchants: requiredInteger(identities.merchants, 0),
+      deliveryPartners: requiredInteger(identities.deliveryPartners, 0),
+      deletedPersonas: requiredInteger(identities.deletedPersonas, 0),
+      recoveryEligiblePhones: requiredInteger(identities.recoveryEligiblePhones, 0),
+    },
+    commerce: {
+      activeOrders: requiredInteger(commerce.activeOrders, 0),
+      awaitingPayment: requiredInteger(commerce.awaitingPayment, 0),
+      preparingFulfilments: requiredInteger(commerce.preparingFulfilments, 0),
+      readyFulfilments: requiredInteger(commerce.readyFulfilments, 0),
+      activeMissions: requiredInteger(commerce.activeMissions, 0),
+      deliveredToday: requiredInteger(commerce.deliveredToday, 0),
+    },
+    network: {
+      activeOrganizations: requiredInteger(network.activeOrganizations, 0),
+      activeBranches: requiredInteger(network.activeBranches, 0),
+      onlineRiders: requiredInteger(network.onlineRiders, 0),
+      assignedRiders: requiredInteger(network.assignedRiders, 0),
+    },
+    catalogue: {
+      total: requiredInteger(catalogue.total, 0),
+      active: requiredInteger(catalogue.active, 0),
+      draft: requiredInteger(catalogue.draft, 0),
+      needsReview: requiredInteger(catalogue.needsReview, 0),
+      missingPrimaryImage: requiredInteger(catalogue.missingPrimaryImage, 0),
+    },
+  };
+}
+
+export function parseAdminNetworkPage(value: unknown): V1AdminNetworkPage {
+  const source = requiredRecord(value);
+  const cursor = source.nextCursor === null || source.nextCursor === undefined
+    ? undefined : requiredRecord(source.nextCursor);
+  return {
+    people: requiredArray(source.people).map(parseAdminNetworkPerson),
+    hasMore: requiredBoolean(source.hasMore),
+    nextCursor: cursor ? {
+      updatedAt: requiredTimestamp(cursor.updatedAt),
+      accountId: requiredUuid(cursor.accountId),
+    } : undefined,
+  };
+}
+
+function parseAdminNetworkPerson(value: unknown): V1AdminNetworkPerson {
+  const source = requiredRecord(value);
+  const customer = requiredRecord(source.customer);
+  return {
+    id: requiredUuid(source.id),
+    displayName: requiredText(source.displayName, 80),
+    email: optionalText(source.email, 320),
+    phoneNumber: requiredText(source.phoneNumber, 32),
+    phoneVerified: requiredBoolean(source.phoneVerified),
+    accountState: requiredText(source.accountState, 40),
+    adminRole: source.adminRole === null || source.adminRole === undefined
+      ? undefined : adminRole(source.adminRole),
+    createdAt: requiredTimestamp(source.createdAt),
+    updatedAt: requiredTimestamp(source.updatedAt),
+    lastSignInAt: source.lastSignInAt === null || source.lastSignInAt === undefined
+      ? undefined : requiredTimestamp(source.lastSignInAt),
+    personas: requiredArray(source.personas).map((entry) => {
+      const persona = requiredRecord(entry);
+      const personaName = requiredText(persona.persona, 20);
+      const state = requiredText(persona.state, 20);
+      if (!["CUSTOMER", "MERCHANT", "DELIVERY"].includes(personaName) ||
+        !["ACTIVE", "DELETED"].includes(state)) invalid("Admin persona");
+      return {
+        persona: personaName as Exclude<V1AdminPersona, "ADMIN">,
+        state: state as V1AdminPersonaState,
+        activatedAt: requiredTimestamp(persona.activatedAt),
+        deletedAt: persona.deletedAt === null || persona.deletedAt === undefined
+          ? undefined : requiredTimestamp(persona.deletedAt),
+        version: requiredInteger(persona.version, 1),
+      };
+    }),
+    customer: {
+      orderCount: requiredInteger(customer.orderCount, 0),
+      activeOrderCount: requiredInteger(customer.activeOrderCount, 0),
+    },
+    merchant: source.merchant === null || source.merchant === undefined
+      ? undefined : parseAdminMerchantIdentity(source.merchant),
+    delivery: source.delivery === null || source.delivery === undefined
+      ? undefined : parseAdminDeliveryIdentity(source.delivery),
+  };
+}
+
+function parseAdminMerchantIdentity(value: unknown): NonNullable<V1AdminNetworkPerson["merchant"]> {
+  const source = requiredRecord(value);
+  return {
+    applicationStatus: requiredText(source.applicationStatus, 40),
+    businessName: requiredText(source.businessName, 160),
+    submittedAt: requiredTimestamp(source.submittedAt),
+    reviewedAt: source.reviewedAt === null || source.reviewedAt === undefined
+      ? undefined : requiredTimestamp(source.reviewedAt),
+    organizationName: optionalText(source.organizationName, 160),
+    organizationStatus: optionalText(source.organizationStatus, 40),
+    branchCount: requiredInteger(source.branchCount, 0),
+  };
+}
+
+function parseAdminDeliveryIdentity(value: unknown): NonNullable<V1AdminNetworkPerson["delivery"]> {
+  const source = requiredRecord(value);
+  return {
+    applicationStatus: requiredText(source.applicationStatus, 40),
+    deliveryMethod: requiredText(source.deliveryMethod, 40),
+    submittedAt: requiredTimestamp(source.submittedAt),
+    reviewedAt: source.reviewedAt === null || source.reviewedAt === undefined
+      ? undefined : requiredTimestamp(source.reviewedAt),
+    availability: optionalText(source.availability, 40),
+    lastSeenAt: source.lastSeenAt === null || source.lastSeenAt === undefined
+      ? undefined : requiredTimestamp(source.lastSeenAt),
+    activeMissionCount: requiredInteger(source.activeMissionCount, 0),
+  };
+}
+
+export function parseAdminCataloguePage(value: unknown): V1AdminCataloguePage {
+  const source = requiredRecord(value);
+  const cursor = source.nextCursor === null || source.nextCursor === undefined
+    ? undefined : requiredRecord(source.nextCursor);
+  return {
+    skus: requiredArray(source.skus).map(parseAdminCataloguePageSku),
+    hasMore: requiredBoolean(source.hasMore),
+    nextCursor: cursor ? {
+      name: requiredText(cursor.name, 160),
+      skuId: requiredUuid(cursor.skuId),
+    } : undefined,
+  };
+}
+
+function parseAdminCataloguePageSku(value: unknown): V1AdminCataloguePageSku {
+  const source = requiredRecord(value);
+  const qaStatus = requiredText(source.qaStatus, 30);
+  if (!["PENDING", "NEEDS_REVIEW", "VERIFIED", "REJECTED"].includes(qaStatus)) {
+    invalid("Admin SKU QA status");
+  }
+  const primary = source.primaryImage === null || source.primaryImage === undefined
+    ? undefined : requiredRecord(source.primaryImage);
+  return {
+    ...parseAdminSku(value),
+    categoryTypeId: source.categoryTypeId === null || source.categoryTypeId === undefined
+      ? undefined : requiredUuid(source.categoryTypeId),
+    brandName: optionalText(source.brandName, 160),
+    qaStatus: qaStatus as V1AdminCataloguePageSku["qaStatus"],
+    activationReady: requiredBoolean(source.activationReady),
+    activationBlockers: requiredArray(source.activationBlockers)
+      .map((blocker) => requiredText(blocker, 120)),
+    imageCount: requiredInteger(source.imageCount, 0),
+    aliasCount: requiredInteger(source.aliasCount, 0),
+    identifierCount: requiredInteger(source.identifierCount, 0),
+    primaryImage: primary ? {
+      id: requiredUuid(primary.id),
+      imageKey: requiredText(primary.imageKey, 500),
+      status: requiredText(primary.status, 30),
+      rightsStatus: requiredText(primary.rightsStatus, 30),
+      sourceType: requiredText(primary.sourceType, 60),
+    } : undefined,
+    quantityValue: source.quantityValue === null || source.quantityValue === undefined
+      ? undefined : requiredFiniteNumber(source.quantityValue),
+    quantityUnit: optionalText(source.quantityUnit, 40),
+    packCount: source.packCount === null || source.packCount === undefined
+      ? undefined : requiredInteger(source.packCount, 1),
+    manufacturerName: optionalText(source.manufacturerName, 200),
+    countryOfOriginCode: optionalText(source.countryOfOriginCode, 2),
+    hsnCode: optionalText(source.hsnCode, 8),
+    dietType: requiredText(source.dietType, 20),
+    shelfLifeDays: source.shelfLifeDays === null || source.shelfLifeDays === undefined
+      ? undefined : requiredInteger(source.shelfLifeDays, 1),
+    attributes: requiredRecord(source.attributes),
   };
 }
 

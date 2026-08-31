@@ -102,8 +102,19 @@ insert into public.service_zones (id, name, boundary, active) values (
   true
 );
 
-insert into dastak_v1.categories (id, name, slug, status, created_by) values (
+insert into dastak_v1.category_types (
+  id, name, slug, status, created_by
+) values (
+  '97000000-0000-4000-8000-000000000009',
+  'Wave One Type', 'wave-one-type', 'ACTIVE',
+  '97000000-0000-4000-8000-000000000002'
+);
+
+insert into dastak_v1.categories (
+  id, category_type_id, name, slug, status, created_by
+) values (
   '97000000-0000-4000-8000-000000000011',
+  '97000000-0000-4000-8000-000000000009',
   'Wave One Category',
   'wave-one-category',
   'ACTIVE',
@@ -121,7 +132,8 @@ insert into dastak_v1.subcategories (
 );
 insert into dastak_v1.skus (
   id, subcategory_id, canonical_name, slug, pack_size,
-  list_price_paise, selling_price_paise, status, created_by
+  list_price_paise, selling_price_paise, status,
+  qa_status, qa_verified_at, qa_verified_by, created_by
 ) values (
   '97000000-0000-4000-8000-000000000013',
   '97000000-0000-4000-8000-000000000012',
@@ -130,9 +142,29 @@ insert into dastak_v1.skus (
   '1 unit',
   1200,
   1000,
-  'ACTIVE',
+  'DRAFT',
+  'VERIFIED', now(),
+  '97000000-0000-4000-8000-000000000002',
   '97000000-0000-4000-8000-000000000002'
 );
+
+insert into dastak_v1.sku_images (
+  id, sku_id, image_key, role, source_type, status,
+  verified_by, verified_at, rights_status, rights_reference,
+  rights_verified_by, rights_verified_at
+) values (
+  '97000000-0000-4000-8000-000000000014',
+  '97000000-0000-4000-8000-000000000013',
+  'test/wave-one-product-primary.webp',
+  'PRIMARY', 'OTHER', 'VERIFIED',
+  '97000000-0000-4000-8000-000000000002', now(),
+  'CLEARED', 'PGTAP fixture',
+  '97000000-0000-4000-8000-000000000002', now()
+);
+
+update dastak_v1.skus
+set status = 'ACTIVE'
+where id = '97000000-0000-4000-8000-000000000013';
 
 insert into dastak_v1.merchant_organizations (
   id, legal_name, display_name, merchant_type, status, created_by

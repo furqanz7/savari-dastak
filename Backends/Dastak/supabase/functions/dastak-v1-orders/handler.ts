@@ -16,7 +16,9 @@ export type V1OrderDependencies = {
     beforeCreatedAt: string | null;
     beforeOrderId: string | null;
   }) => Promise<unknown>;
-  getOrder: (input: { accessToken: string; orderId: string }) => Promise<unknown>;
+  getOrder: (
+    input: { accessToken: string; orderId: string },
+  ) => Promise<unknown>;
   cancelOrder: (input: {
     accessToken: string;
     orderId: string;
@@ -102,6 +104,16 @@ export type V1OrderDependencies = {
     orderId: string;
   }) => Promise<unknown>;
   getAdminAccess: (input: { accessToken: string }) => Promise<unknown>;
+  getAdminCommandCenter: (input: { accessToken: string }) => Promise<unknown>;
+  getAdminNetworkPage: (input: {
+    accessToken: string;
+    query: string | null;
+    persona: "CUSTOMER" | "MERCHANT" | "DELIVERY" | "ADMIN" | null;
+    state: "ACTIVE" | "DELETED" | null;
+    limit: number;
+    afterUpdatedAt: string | null;
+    afterAccountId: string | null;
+  }) => Promise<unknown>;
   setExecutiveAdmin: (input: {
     accessToken: string;
     slot: 1 | 2;
@@ -110,7 +122,9 @@ export type V1OrderDependencies = {
     reason: string;
   }) => Promise<unknown>;
   getAdminSystemHealth: (input: { accessToken: string }) => Promise<unknown>;
-  getAdminOperationalSafety: (input: { accessToken: string }) => Promise<unknown>;
+  getAdminOperationalSafety: (
+    input: { accessToken: string },
+  ) => Promise<unknown>;
   manageRiderEscalation: (input: {
     accessToken: string;
     missionId: string;
@@ -121,7 +135,12 @@ export type V1OrderDependencies = {
   }) => Promise<unknown>;
   setOperationalPause: (input: {
     accessToken: string;
-    scope: "ZONE_RETAIL" | "ZONE_FOOD" | "ZONE_MIXED" | "MERCHANT_BRANCH" | "RIDER_ASSIGNMENTS";
+    scope:
+      | "ZONE_RETAIL"
+      | "ZONE_FOOD"
+      | "ZONE_MIXED"
+      | "MERCHANT_BRANCH"
+      | "RIDER_ASSIGNMENTS";
     targetId: string;
     active: boolean;
     reason: string;
@@ -222,7 +241,10 @@ export type V1OrderDependencies = {
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export async function handleV1Orders(request: Request, dependencies: V1OrderDependencies) {
+export async function handleV1Orders(
+  request: Request,
+  dependencies: V1OrderDependencies,
+) {
   const preflight = corsPreflight(request);
   if (preflight) return preflight;
 
@@ -244,7 +266,9 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
         const idempotencyKey = requiredIdempotencyKey(request);
         const expectedVersion = integer(body.expectedVersion, 0, 0);
         const order = record(body.order);
-        if (!idempotencyKey || expectedVersion === undefined || !order) return validationError();
+        if (!idempotencyKey || expectedVersion === undefined || !order) {
+          return validationError();
+        }
         const result = await dependencies.submitOrder({
           accessToken: actor.accessToken,
           idempotencyKey,
@@ -255,7 +279,10 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       }
       case "list": {
         const parsedLimit = integer(body.limit, 1, 100);
-        if (body.limit !== null && body.limit !== undefined && parsedLimit === undefined) {
+        if (
+          body.limit !== null && body.limit !== undefined &&
+          parsedLimit === undefined
+        ) {
           return validationError();
         }
         const limit = parsedLimit ?? 20;
@@ -265,7 +292,8 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           : null;
         const beforeOrderId = cursor ? requiredUUID(cursor.orderId) ?? null : null;
         if (
-          (body.cursor !== null && body.cursor !== undefined && cursor === undefined) ||
+          (body.cursor !== null && body.cursor !== undefined &&
+            cursor === undefined) ||
           (cursor !== undefined && (!beforeCreatedAt || !beforeOrderId))
         ) return validationError();
         return json(
@@ -280,13 +308,24 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "get": {
         const orderId = requiredUUID(body.orderId);
         if (!orderId) return validationError();
-        return json(await dependencies.getOrder({ accessToken: actor.accessToken, orderId }));
+        return json(
+          await dependencies.getOrder({
+            accessToken: actor.accessToken,
+            orderId,
+          }),
+        );
       }
       case "cancel": {
         const orderId = requiredUUID(body.orderId);
         const idempotencyKey = requiredIdempotencyKey(request);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
-        if (!orderId || !idempotencyKey || !expectedVersion) return validationError();
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
+        if (!orderId || !idempotencyKey || !expectedVersion) {
+          return validationError();
+        }
         return json(
           await dependencies.cancelOrder({
             accessToken: actor.accessToken,
@@ -299,8 +338,14 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "commitLaunchPayment": {
         const orderId = requiredUUID(body.orderId);
         const idempotencyKey = requiredIdempotencyKey(request);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
-        if (!orderId || !idempotencyKey || !expectedVersion) return validationError();
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
+        if (!orderId || !idempotencyKey || !expectedVersion) {
+          return validationError();
+        }
         return json(
           await dependencies.commitLaunchPayment({
             accessToken: actor.accessToken,
@@ -343,7 +388,11 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
         const response = body.response === "CONFIRM" || body.response === "DECLINE"
           ? body.response
           : undefined;
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const promisedPrepMinutes = body.promisedPrepMinutes === null ||
             body.promisedPrepMinutes === undefined
           ? null
@@ -375,11 +424,20 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "acceptMerchantOpportunity": {
         const opportunityId = requiredUUID(body.opportunityId);
         const requestScope = merchantRequestScope(body.requestScope);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
-        const promisedPrepMinutes = integer(body.promisedPrepMinutes, 1, 24 * 60);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
+        const promisedPrepMinutes = integer(
+          body.promisedPrepMinutes,
+          1,
+          24 * 60,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
-          !opportunityId || !requestScope || !expectedVersion || !promisedPrepMinutes ||
+          !opportunityId || !requestScope || !expectedVersion ||
+          !promisedPrepMinutes ||
           !idempotencyKey
         ) {
           return validationError();
@@ -398,9 +456,15 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "declineMerchantOpportunity": {
         const opportunityId = requiredUUID(body.opportunityId);
         const requestScope = merchantRequestScope(body.requestScope);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
-        if (!opportunityId || !requestScope || !expectedVersion || !idempotencyKey) {
+        if (
+          !opportunityId || !requestScope || !expectedVersion || !idempotencyKey
+        ) {
           return validationError();
         }
         return json(
@@ -429,9 +493,15 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "declareFulfilmentPackages": {
         const fulfilmentId = requiredUUID(body.fulfilmentId);
         const packageCount = integer(body.packageCount, 1, 1000);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
-        if (!fulfilmentId || !packageCount || !expectedVersion || !idempotencyKey) {
+        if (
+          !fulfilmentId || !packageCount || !expectedVersion || !idempotencyKey
+        ) {
           return validationError();
         }
         return json(
@@ -450,11 +520,16 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           ? null
           : requiredUUID(body.packageId);
         const objectPath = requiredText(body.objectPath, 500);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
           !fulfilmentId || !objectPath || !expectedVersion || !idempotencyKey ||
-          (body.packageId !== null && body.packageId !== undefined && !parsedPackageId)
+          (body.packageId !== null && body.packageId !== undefined &&
+            !parsedPackageId)
         ) return validationError();
         const packageId = parsedPackageId ?? null;
         return json(
@@ -470,9 +545,15 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       }
       case "markFulfilmentReady": {
         const fulfilmentId = requiredUUID(body.fulfilmentId);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
-        if (!fulfilmentId || !expectedVersion || !idempotencyKey) return validationError();
+        if (!fulfilmentId || !expectedVersion || !idempotencyKey) {
+          return validationError();
+        }
         return json(
           await dependencies.markFulfilmentReady({
             accessToken: actor.accessToken,
@@ -485,10 +566,15 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "reportFulfilmentProblem": {
         const fulfilmentId = requiredUUID(body.fulfilmentId);
         const reason = requiredText(body.reason, 500);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
-          !fulfilmentId || !reason || reason.length < 3 || !expectedVersion || !idempotencyKey
+          !fulfilmentId || !reason || reason.length < 3 || !expectedVersion ||
+          !idempotencyKey
         ) return validationError();
         return json(
           await dependencies.reportFulfilmentProblem({
@@ -526,16 +612,71 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
         );
       }
       case "adminAccess":
-        return json(await dependencies.getAdminAccess({ accessToken: actor.accessToken }));
+        return json(
+          await dependencies.getAdminAccess({ accessToken: actor.accessToken }),
+        );
+      case "adminCommandCenter":
+        return json(
+          await dependencies.getAdminCommandCenter({
+            accessToken: actor.accessToken,
+          }),
+        );
+      case "adminNetworkPage": {
+        const query = body.query === null || body.query === undefined
+          ? null
+          : requiredText(body.query, 80);
+        const persona = body.persona === null || body.persona === undefined
+          ? null
+          : ["CUSTOMER", "MERCHANT", "DELIVERY", "ADMIN"].includes(
+              String(body.persona),
+            )
+          ? body.persona as "CUSTOMER" | "MERCHANT" | "DELIVERY" | "ADMIN"
+          : undefined;
+        const state = body.state === null || body.state === undefined
+          ? null
+          : body.state === "ACTIVE" || body.state === "DELETED"
+          ? body.state
+          : undefined;
+        const parsedLimit = integer(body.limit, 1, 100);
+        const cursor = record(body.cursor);
+        const afterUpdatedAt = cursor && validTimestamp(cursor.updatedAt)
+          ? cursor.updatedAt as string
+          : null;
+        const afterAccountId = cursor ? requiredUUID(cursor.accountId) ?? null : null;
+        if (
+          query === undefined || persona === undefined || state === undefined ||
+          (body.limit !== null && body.limit !== undefined &&
+            parsedLimit === undefined) ||
+          (body.cursor !== null && body.cursor !== undefined &&
+            cursor === undefined) ||
+          (cursor !== undefined && (!afterUpdatedAt || !afterAccountId))
+        ) return validationError();
+        return json(
+          await dependencies.getAdminNetworkPage({
+            accessToken: actor.accessToken,
+            query,
+            persona,
+            state,
+            limit: parsedLimit ?? 50,
+            afterUpdatedAt,
+            afterAccountId,
+          }),
+        );
+      }
       case "setExecutiveAdmin": {
         const slot = body.slot === 1 || body.slot === 2 ? body.slot : undefined;
         const email = body.email === null || body.email === undefined
           ? null
           : requiredText(body.email, 320);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const reason = requiredText(body.reason, 500);
         if (
-          !slot || email === undefined || !expectedVersion || !reason || reason.length < 3
+          !slot || email === undefined || !expectedVersion || !reason ||
+          reason.length < 3
         ) return validationError();
         return json(
           await dependencies.setExecutiveAdmin({
@@ -549,11 +690,15 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       }
       case "adminSystemHealth":
         return json(
-          await dependencies.getAdminSystemHealth({ accessToken: actor.accessToken }),
+          await dependencies.getAdminSystemHealth({
+            accessToken: actor.accessToken,
+          }),
         );
       case "adminOperationalSafety":
         return json(
-          await dependencies.getAdminOperationalSafety({ accessToken: actor.accessToken }),
+          await dependencies.getAdminOperationalSafety({
+            accessToken: actor.accessToken,
+          }),
         );
       case "manageRiderEscalation": {
         const missionId = requiredUUID(body.missionId);
@@ -562,7 +707,11 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           ? body.action
           : undefined;
         const reason = requiredText(body.reason, 500);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
           !missionId || !action || !reason || reason.length < 10 ||
@@ -584,7 +733,11 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
         const targetId = requiredUUID(body.targetId);
         const active = typeof body.active === "boolean" ? body.active : undefined;
         const reason = requiredText(body.reason, 500);
-        const expectedVersion = integer(body.expectedVersion, 0, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          0,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
           !scope || !targetId || active === undefined || !reason ||
@@ -631,7 +784,11 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
         const fulfilmentId = requiredUUID(body.fulfilmentId);
         const orderLineId = requiredUUID(body.orderLineId);
         const reason = requiredText(body.reason, 500);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
           !fulfilmentId || !orderLineId || !reason || reason.length < 3 ||
@@ -651,9 +808,15 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "createExactSkuRecoveryOffer": {
         const recoveryCaseId = requiredUUID(body.recoveryCaseId);
         const branchId = requiredUUID(body.branchId);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
-        if (!recoveryCaseId || !branchId || !expectedVersion || !idempotencyKey) {
+        if (
+          !recoveryCaseId || !branchId || !expectedVersion || !idempotencyKey
+        ) {
           return validationError();
         }
         return json(
@@ -674,7 +837,11 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
         const promisedPrepMinutes = response === "ACCEPT"
           ? integer(body.promisedPrepMinutes, 1, 24 * 60) ?? null
           : null;
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
           !recoveryOpportunityId || !response ||
@@ -695,7 +862,11 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "failExactSkuRecovery": {
         const recoveryCaseId = requiredUUID(body.recoveryCaseId);
         const reason = requiredText(body.reason, 500);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
           !recoveryCaseId || !reason || reason.length < 3 ||
@@ -728,7 +899,8 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
         if (
           !orderId || !category || !description || description.length < 3 ||
           !idempotencyKey ||
-          ((body.orderLineId !== null && body.orderLineId !== undefined) && !orderLineId) ||
+          ((body.orderLineId !== null && body.orderLineId !== undefined) &&
+            !orderLineId) ||
           ((body.objectPath === null || body.objectPath === undefined) !==
             (body.contentType === null || body.contentType === undefined)) ||
           (body.objectPath !== null && body.objectPath !== undefined &&
@@ -758,16 +930,22 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           ? null
           : integer(body.returnPackageCount, 1, 1000) ?? null;
         const reason = requiredText(body.reason, 500);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
           !issueId || !decision || !reason || reason.length < 3 ||
           !expectedVersion || !idempotencyKey ||
-          (body.refundAmountPaise !== null && body.refundAmountPaise !== undefined &&
+          (body.refundAmountPaise !== null &&
+            body.refundAmountPaise !== undefined &&
             refundAmountPaise === undefined) ||
           (body.faultSource !== null && body.faultSource !== undefined &&
             faultSource === undefined) ||
-          (body.returnPackageCount !== null && body.returnPackageCount !== undefined &&
+          (body.returnPackageCount !== null &&
+            body.returnPackageCount !== undefined &&
             !returnPackageCount)
         ) return validationError();
         return json(
@@ -787,9 +965,15 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "assignReturnRider": {
         const returnMissionId = requiredUUID(body.returnMissionId);
         const riderId = requiredUUID(body.riderId);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
-        if (!returnMissionId || !riderId || !expectedVersion || !idempotencyKey) {
+        if (
+          !returnMissionId || !riderId || !expectedVersion || !idempotencyKey
+        ) {
           return validationError();
         }
         return json(
@@ -812,14 +996,21 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
           ? null
           : record(body.correctedAddress) ?? null;
         const reason = requiredText(body.reason, 500);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
-          !recoveryCaseId || !action || !faultSource || !reason || reason.length < 10 ||
+          !recoveryCaseId || !action || !faultSource || !reason ||
+          reason.length < 10 ||
           !expectedVersion || !idempotencyKey ||
-          (body.refundAmountPaise !== null && body.refundAmountPaise !== undefined &&
+          (body.refundAmountPaise !== null &&
+            body.refundAmountPaise !== undefined &&
             refundAmountPaise === undefined) ||
-          (body.correctedAddress !== null && body.correctedAddress !== undefined &&
+          (body.correctedAddress !== null &&
+            body.correctedAddress !== undefined &&
             !correctedAddress) ||
           (action === "RETURN_TO_ORIGIN" && correctedAddress !== null) ||
           (action === "RESUME_DELIVERY" && refundAmountPaise !== null) ||
@@ -841,7 +1032,11 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       }
       case "finalizeSettlementCalculation": {
         const settlementEntryId = requiredUUID(body.settlementEntryId);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (!settlementEntryId || !expectedVersion || !idempotencyKey) {
           return validationError();
@@ -858,7 +1053,11 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
       case "settleEntry": {
         const settlementEntryId = requiredUUID(body.settlementEntryId);
         const settlementReference = requiredText(body.settlementReference, 200);
-        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const expectedVersion = integer(
+          body.expectedVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
         const idempotencyKey = requiredIdempotencyKey(request);
         if (
           !settlementEntryId || !settlementReference || !expectedVersion ||
@@ -882,7 +1081,9 @@ export async function handleV1Orders(request: Request, dependencies: V1OrderDepe
   }
 }
 
-async function parseBody(request: Request): Promise<Record<string, unknown> | undefined> {
+async function parseBody(
+  request: Request,
+): Promise<Record<string, unknown> | undefined> {
   try {
     const source = await request.text();
     if (source.length === 0 || source.length > 250_000) return undefined;
@@ -903,7 +1104,8 @@ function requiredText(value: unknown, maximum: number) {
 }
 
 function validTimestamp(value: unknown) {
-  return typeof value === "string" && value.length <= 40 && Number.isFinite(Date.parse(value));
+  return typeof value === "string" && value.length <= 40 &&
+    Number.isFinite(Date.parse(value));
 }
 
 function operationalPauseScope(value: unknown) {
@@ -914,7 +1116,12 @@ function operationalPauseScope(value: unknown) {
       "MERCHANT_BRANCH",
       "RIDER_ASSIGNMENTS",
     ].includes(value)
-    ? value as "ZONE_RETAIL" | "ZONE_FOOD" | "ZONE_MIXED" | "MERCHANT_BRANCH" | "RIDER_ASSIGNMENTS"
+    ? value as
+      | "ZONE_RETAIL"
+      | "ZONE_FOOD"
+      | "ZONE_MIXED"
+      | "MERCHANT_BRANCH"
+      | "RIDER_ASSIGNMENTS"
     : undefined;
 }
 
@@ -940,7 +1147,8 @@ function issueCategory(value: unknown) {
 }
 
 function issueContentType(value: unknown) {
-  return value === "image/jpeg" || value === "image/png" || value === "image/heic"
+  return value === "image/jpeg" || value === "image/png" ||
+      value === "image/heic"
     ? value
     : undefined;
 }
@@ -995,7 +1203,8 @@ function nullableMoney(value: unknown) {
 
 function integer(value: unknown, minimum: number, maximum: number) {
   if (value === null || value === undefined) return undefined;
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum &&
+  return typeof value === "number" && Number.isSafeInteger(value) &&
+      value >= minimum &&
       value <= maximum
     ? value
     : undefined;
@@ -1014,22 +1223,36 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function authenticationRequired() {
   return json({
-    error: { code: "authentication_required", message: "A valid bearer token is required." },
+    error: {
+      code: "authentication_required",
+      message: "A valid bearer token is required.",
+    },
   }, 401);
 }
 
 function validationError() {
   return json(
-    { error: { code: "validation_failed", message: "The order request is invalid." } },
+    {
+      error: {
+        code: "validation_failed",
+        message: "The order request is invalid.",
+      },
+    },
     400,
   );
 }
 
 function requestFailure(error: unknown) {
   if (error instanceof V1RequestError) {
-    return json({ error: { code: error.code, message: error.message } }, error.status);
+    return json(
+      { error: { code: error.code, message: error.message } },
+      error.status,
+    );
   }
   return json({
-    error: { code: "internal_error", message: "The order request could not be processed." },
+    error: {
+      code: "internal_error",
+      message: "The order request could not be processed.",
+    },
   }, 500);
 }

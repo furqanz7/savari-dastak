@@ -23,7 +23,9 @@ Deno.test("V1 catalogue serves CORS preflight before authentication", async () =
 Deno.test("V1 catalogue authenticates before request validation", async () => {
   const response = await handleV1Catalogue(
     request({ operation: "unknown" }, "Bearer invalid"),
-    dependencies({ authenticateBearer: () => Promise.reject(new Error("invalid")) }),
+    dependencies({
+      authenticateBearer: () => Promise.reject(new Error("invalid")),
+    }),
   );
   assertEquals(response.status, 401);
   assertEquals((await body(response)).error.code, "authentication_required");
@@ -101,7 +103,11 @@ Deno.test("V1 Restaurant discovery and merchant menu commands preserve authentic
       entityType: "ITEM",
       entityId: skuId,
       expectedVersion: 3,
-      payload: { categoryId: subcategoryId, name: "Masala Dosa", basePricePaise: 8000 },
+      payload: {
+        categoryId: subcategoryId,
+        name: "Masala Dosa",
+        basePricePaise: 8000,
+      },
     }, "restaurant-menu-1"),
     dependencies({
       upsertRestaurantMenuEntity: (input) => {
@@ -123,7 +129,11 @@ Deno.test("V1 Restaurant discovery and merchant menu commands preserve authentic
     entityType: "ITEM",
     entityId: skuId,
     expectedVersion: 3,
-    payload: { categoryId: subcategoryId, name: "Masala Dosa", basePricePaise: 8000 },
+    payload: {
+      categoryId: subcategoryId,
+      name: "Masala Dosa",
+      basePricePaise: 8000,
+    },
     idempotencyKey: "restaurant-menu-1",
   });
 });
@@ -167,7 +177,11 @@ Deno.test("V1 catalogue import requires idempotency and forwards opaque catalogu
   );
   assertEquals(missingKey.status, 400);
   assertEquals(response.status, 200);
-  assertEquals(recorded, { accessToken: actor.accessToken, idempotencyKey: "import-1", catalogue });
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    idempotencyKey: "import-1",
+    catalogue,
+  });
 });
 
 Deno.test("V1 SKU update validates optimistic version and idempotency", async () => {
@@ -196,12 +210,89 @@ Deno.test("V1 SKU update validates optimistic version and idempotency", async ()
   });
 });
 
+Deno.test("V1 Admin catalogue page preserves safe filters and a complete cursor", async () => {
+  let recorded: unknown;
+  const response = await handleV1Catalogue(
+    request({
+      operation: "adminCataloguePage",
+      query: "  Aashirvaad   Atta  ",
+      categoryTypeId,
+      categoryId,
+      subcategoryId,
+      status: "active",
+      qaStatus: "needs_review",
+      limit: 80,
+      cursor: { name: "Whole Wheat Flour", skuId },
+      sourcePayload: { private: true },
+    }),
+    dependencies({
+      adminPage: (input) => {
+        recorded = input;
+        return Promise.resolve({ skus: [], hasMore: false, nextCursor: null });
+      },
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    query: "Aashirvaad Atta",
+    categoryTypeId,
+    categoryId,
+    subcategoryId,
+    status: "ACTIVE",
+    qaStatus: "NEEDS_REVIEW",
+    limit: 80,
+    afterName: "Whole Wheat Flour",
+    afterSkuId: skuId,
+  });
+});
+
+Deno.test("V1 Admin catalogue page rejects malformed filters before database access", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    adminPage: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
+  const status = await handleV1Catalogue(
+    request({ operation: "adminCataloguePage", status: "DELETED" }),
+    deps,
+  );
+  const qa = await handleV1Catalogue(
+    request({ operation: "adminCataloguePage", qaStatus: "SKIPPED" }),
+    deps,
+  );
+  const cursor = await handleV1Catalogue(
+    request({ operation: "adminCataloguePage", cursor: { name: "Milk" } }),
+    deps,
+  );
+  const limit = await handleV1Catalogue(
+    request({ operation: "adminCataloguePage", limit: 251 }),
+    deps,
+  );
+  assertEquals([status.status, qa.status, cursor.status, limit.status, calls], [
+    400,
+    400,
+    400,
+    400,
+    0,
+  ]);
+});
+
 Deno.test("V1 merchant catalogue exposes canonical selection and branch controls", async () => {
   let selection: unknown;
   let operation: unknown;
   const merchantSnapshot = await handleV1Catalogue(
-    request({ operation: "merchantSnapshot", branchId: categoryId, limit: 500 }),
-    dependencies({ merchantSnapshot: (input) => Promise.resolve({ recorded: input }) }),
+    request({
+      operation: "merchantSnapshot",
+      branchId: categoryId,
+      limit: 500,
+    }),
+    dependencies({
+      merchantSnapshot: (input) => Promise.resolve({ recorded: input }),
+    }),
   );
   assertEquals((await body(merchantSnapshot)).recorded, {
     accessToken: actor.accessToken,
@@ -266,20 +357,29 @@ Deno.test("V1 catalogue exposes safe database conflict errors", async () => {
     dependencies({
       adminSnapshot: () =>
         Promise.reject(
-          new V1RequestError(403, "access_denied", "This account cannot perform that action."),
+          new V1RequestError(
+            403,
+            "access_denied",
+            "This account cannot perform that action.",
+          ),
         ),
     }),
   );
   assertEquals(response.status, 403);
   assertEquals(await body(response), {
-    error: { code: "access_denied", message: "This account cannot perform that action." },
+    error: {
+      code: "access_denied",
+      message: "This account cannot perform that action.",
+    },
   });
 });
 
 Deno.test("V1 catalogue hides unexpected dependency details", async () => {
   const response = await handleV1Catalogue(
     request({ operation: "adminSnapshot" }),
-    dependencies({ adminSnapshot: () => Promise.reject(new Error("private table leaked")) }),
+    dependencies({
+      adminSnapshot: () => Promise.reject(new Error("private table leaked")),
+    }),
   );
   assertEquals(response.status, 500);
   assertEquals(
@@ -289,6 +389,7 @@ Deno.test("V1 catalogue hides unexpected dependency details", async () => {
 });
 
 const url = "http://localhost/functions/v1/dastak-v1-catalogue";
+const categoryTypeId = "00000000-0000-4000-8000-000000000001";
 const categoryId = "11111111-1111-4111-8111-111111111111";
 const subcategoryId = "22222222-2222-4222-8222-222222222222";
 const skuId = "33333333-3333-4333-8333-333333333333";
@@ -297,22 +398,34 @@ const actor = {
   accountId: "55555555-5555-4555-8555-555555555555",
   accessToken: "verified-access-token",
 };
-const snapshot = { categories: [], subcategories: [], skus: [], nextCursor: null };
+const snapshot = {
+  categories: [],
+  subcategories: [],
+  skus: [],
+  nextCursor: null,
+};
 
 function dependencies(
   overrides: Partial<V1CatalogueDependencies> = {},
 ): V1CatalogueDependencies {
   return {
-    authenticateBearer: overrides.authenticateBearer ?? (() => Promise.resolve(actor)),
-    customerCatalogue: overrides.customerCatalogue ?? (() => Promise.resolve(snapshot)),
+    authenticateBearer: overrides.authenticateBearer ??
+      (() => Promise.resolve(actor)),
+    customerCatalogue: overrides.customerCatalogue ??
+      (() => Promise.resolve(snapshot)),
     customerRestaurants: overrides.customerRestaurants ??
       (() => Promise.resolve({ restaurants: [] })),
     adminSnapshot: overrides.adminSnapshot ?? (() => Promise.resolve(snapshot)),
-    merchantSnapshot: overrides.merchantSnapshot ?? (() => Promise.resolve(snapshot)),
-    merchantRestaurantMenu: overrides.merchantRestaurantMenu ?? (() => Promise.resolve({})),
+    adminPage: overrides.adminPage ??
+      (() => Promise.resolve({ skus: [], hasMore: false })),
+    merchantSnapshot: overrides.merchantSnapshot ??
+      (() => Promise.resolve(snapshot)),
+    merchantRestaurantMenu: overrides.merchantRestaurantMenu ??
+      (() => Promise.resolve({})),
     importCatalogue: overrides.importCatalogue ?? (() => Promise.resolve({})),
     updateSku: overrides.updateSku ?? (() => Promise.resolve({})),
-    updateMerchantSelection: overrides.updateMerchantSelection ?? (() => Promise.resolve({})),
+    updateMerchantSelection: overrides.updateMerchantSelection ??
+      (() => Promise.resolve({})),
     updateBranchOperationalState: overrides.updateBranchOperationalState ??
       (() => Promise.resolve({})),
     upsertRestaurantMenuEntity: overrides.upsertRestaurantMenuEntity ??
@@ -320,10 +433,21 @@ function dependencies(
   };
 }
 
-function request(payload: unknown, idempotencyKey?: string, authorization = "Bearer session") {
-  const headers = new Headers({ "content-type": "application/json", authorization });
+function request(
+  payload: unknown,
+  idempotencyKey?: string,
+  authorization = "Bearer session",
+) {
+  const headers = new Headers({
+    "content-type": "application/json",
+    authorization,
+  });
   if (idempotencyKey) headers.set("X-Idempotency-Key", idempotencyKey);
-  return new Request(url, { method: "POST", headers, body: JSON.stringify(payload) });
+  return new Request(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
 }
 
 async function body(response: Response) {

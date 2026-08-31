@@ -173,10 +173,21 @@ insert into dastak_v1.platform_permission_grants (
   'Batch 1 explicit platform administration fixture.'
 );
 
-insert into dastak_v1.categories (
+insert into dastak_v1.category_types (
   id, name, slug, status, created_by
 ) values (
+  '98000000-0000-4000-8000-000000000009',
+  'Batch One Type',
+  'batch-one-type',
+  'ACTIVE',
+  '98000000-0000-4000-8000-000000000003'
+);
+
+insert into dastak_v1.categories (
+  id, category_type_id, name, slug, status, created_by
+) values (
   '98000000-0000-4000-8000-000000000010',
+  '98000000-0000-4000-8000-000000000009',
   'Batch One Category',
   'batch-one-category',
   'ACTIVE',
@@ -196,7 +207,8 @@ insert into dastak_v1.subcategories (
 
 insert into dastak_v1.skus (
   id, subcategory_id, canonical_name, slug, pack_size,
-  list_price_paise, selling_price_paise, status, created_by
+  list_price_paise, selling_price_paise, status,
+  qa_status, qa_verified_at, qa_verified_by, created_by
 ) values (
   '98000000-0000-4000-8000-000000000012',
   '98000000-0000-4000-8000-000000000011',
@@ -205,9 +217,30 @@ insert into dastak_v1.skus (
   '1 unit',
   1000,
   900,
-  'ACTIVE',
+  'DRAFT',
+  'VERIFIED',
+  now(),
+  '98000000-0000-4000-8000-000000000003',
   '98000000-0000-4000-8000-000000000003'
 );
+
+insert into dastak_v1.sku_images (
+  id, sku_id, image_key, role, source_type, status,
+  verified_by, verified_at, rights_status, rights_reference,
+  rights_verified_by, rights_verified_at
+) values (
+  '98000000-0000-4000-8000-000000000014',
+  '98000000-0000-4000-8000-000000000012',
+  'test/batch-one-product-primary.webp',
+  'PRIMARY', 'OTHER', 'VERIFIED',
+  '98000000-0000-4000-8000-000000000003', now(),
+  'CLEARED', 'PGTAP fixture',
+  '98000000-0000-4000-8000-000000000003', now()
+);
+
+update dastak_v1.skus
+set status = 'ACTIVE'
+where id = '98000000-0000-4000-8000-000000000012';
 
 insert into dastak_v1.merchant_organizations (
   id, legal_name, display_name, merchant_type, status, created_by

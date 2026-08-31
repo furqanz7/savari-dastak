@@ -18,7 +18,21 @@ export type V1CatalogueDependencies = {
     query: string | null;
     limit: number;
   }) => Promise<unknown>;
-  adminSnapshot: (input: { accessToken: string; skuLimit: number }) => Promise<unknown>;
+  adminSnapshot: (
+    input: { accessToken: string; skuLimit: number },
+  ) => Promise<unknown>;
+  adminPage: (input: {
+    accessToken: string;
+    query: string | null;
+    categoryTypeId: string | null;
+    categoryId: string | null;
+    subcategoryId: string | null;
+    status: string | null;
+    qaStatus: string | null;
+    limit: number;
+    afterName: string | null;
+    afterSkuId: string | null;
+  }) => Promise<unknown>;
   merchantSnapshot: (input: {
     accessToken: string;
     branchId: string | null;
@@ -98,7 +112,8 @@ export async function handleV1Catalogue(
         const parsedLimit = optionalInteger(body.limit, 1, 100);
         if (
           query === undefined ||
-          (body.limit !== null && body.limit !== undefined && parsedLimit === undefined)
+          (body.limit !== null && body.limit !== undefined &&
+            parsedLimit === undefined)
         ) {
           return validationError();
         }
@@ -112,7 +127,10 @@ export async function handleV1Catalogue(
       }
       case "adminSnapshot": {
         const parsedLimit = optionalInteger(body.skuLimit, 1, 1000);
-        if (body.skuLimit !== null && body.skuLimit !== undefined && parsedLimit === undefined) {
+        if (
+          body.skuLimit !== null && body.skuLimit !== undefined &&
+          parsedLimit === undefined
+        ) {
           return validationError();
         }
         const skuLimit = parsedLimit ?? 1000;
@@ -122,12 +140,15 @@ export async function handleV1Catalogue(
         });
         return json(result);
       }
+      case "adminCataloguePage":
+        return await adminCataloguePage(body, actor, dependencies);
       case "merchantSnapshot": {
         const branchId = optionalUUID(body.branchId);
         const parsedLimit = optionalInteger(body.limit, 1, 1000);
         if (
           branchId === undefined ||
-          (body.limit !== null && body.limit !== undefined && parsedLimit === undefined)
+          (body.limit !== null && body.limit !== undefined &&
+            parsedLimit === undefined)
         ) {
           return validationError();
         }
@@ -163,17 +184,79 @@ export async function handleV1Catalogue(
       case "updateSku":
         return await updateSku(request, body, actor, dependencies);
       case "updateMerchantSelection":
-        return await updateMerchantSelection(request, body, actor, dependencies);
+        return await updateMerchantSelection(
+          request,
+          body,
+          actor,
+          dependencies,
+        );
       case "updateBranchOperationalState":
-        return await updateBranchOperationalState(request, body, actor, dependencies);
+        return await updateBranchOperationalState(
+          request,
+          body,
+          actor,
+          dependencies,
+        );
       case "upsertRestaurantMenuEntity":
-        return await upsertRestaurantMenuEntity(request, body, actor, dependencies);
+        return await upsertRestaurantMenuEntity(
+          request,
+          body,
+          actor,
+          dependencies,
+        );
       default:
         return validationError();
     }
   } catch (error) {
     return requestFailure(error);
   }
+}
+
+async function adminCataloguePage(
+  body: Record<string, unknown>,
+  actor: V1Actor,
+  dependencies: V1CatalogueDependencies,
+) {
+  const query = optionalText(body.query, 80);
+  const categoryTypeId = optionalUUID(body.categoryTypeId);
+  const categoryId = optionalUUID(body.categoryId);
+  const subcategoryId = optionalUUID(body.subcategoryId);
+  const status = optionalChoice(body.status, ["DRAFT", "ACTIVE", "INACTIVE"]);
+  const qaStatus = optionalChoice(body.qaStatus, [
+    "PENDING",
+    "NEEDS_REVIEW",
+    "VERIFIED",
+    "REJECTED",
+  ]);
+  const parsedLimit = optionalInteger(body.limit, 1, 250);
+  const cursor = record(body.cursor);
+  const afterName = cursor ? optionalText(cursor.name, 160) : null;
+  const afterSkuId = cursor ? optionalUUID(cursor.skuId) : null;
+  if (
+    query === undefined || categoryTypeId === undefined ||
+    categoryId === undefined ||
+    subcategoryId === undefined || status === undefined ||
+    qaStatus === undefined ||
+    (body.limit !== null && body.limit !== undefined &&
+      parsedLimit === undefined) ||
+    (body.cursor !== null && body.cursor !== undefined &&
+      cursor === undefined) ||
+    (cursor !== undefined && (!afterName || !afterSkuId))
+  ) return validationError();
+  return json(
+    await dependencies.adminPage({
+      accessToken: actor.accessToken,
+      query,
+      categoryTypeId,
+      categoryId,
+      subcategoryId,
+      status,
+      qaStatus,
+      limit: parsedLimit ?? 100,
+      afterName: afterName ?? null,
+      afterSkuId: afterSkuId ?? null,
+    }),
+  );
 }
 
 async function upsertRestaurantMenuEntity(
@@ -185,7 +268,11 @@ async function upsertRestaurantMenuEntity(
   const idempotencyKey = requiredIdempotencyKey(request);
   const branchId = requiredUUID(body.branchId);
   const entityId = optionalUUID(body.entityId);
-  const expectedVersion = optionalInteger(body.expectedVersion, 0, Number.MAX_SAFE_INTEGER);
+  const expectedVersion = optionalInteger(
+    body.expectedVersion,
+    0,
+    Number.MAX_SAFE_INTEGER,
+  );
   const payload = record(body.payload);
   const entityType = body.entityType;
   if (
@@ -217,7 +304,11 @@ async function updateMerchantSelection(
   const idempotencyKey = requiredIdempotencyKey(request);
   const branchId = requiredUUID(body.branchId);
   const skuId = requiredUUID(body.skuId);
-  const expectedVersion = optionalInteger(body.expectedVersion, 0, Number.MAX_SAFE_INTEGER);
+  const expectedVersion = optionalInteger(
+    body.expectedVersion,
+    0,
+    Number.MAX_SAFE_INTEGER,
+  );
   if (
     !idempotencyKey || !branchId || !skuId || expectedVersion === undefined ||
     typeof body.selected !== "boolean"
@@ -242,10 +333,15 @@ async function updateBranchOperationalState(
 ) {
   const idempotencyKey = requiredIdempotencyKey(request);
   const branchId = requiredUUID(body.branchId);
-  const expectedVersion = optionalInteger(body.expectedVersion, 0, Number.MAX_SAFE_INTEGER);
+  const expectedVersion = optionalInteger(
+    body.expectedVersion,
+    0,
+    Number.MAX_SAFE_INTEGER,
+  );
   if (
     !idempotencyKey || !branchId || expectedVersion === undefined ||
-    typeof body.isOpen !== "boolean" || typeof body.acceptingOrders !== "boolean"
+    typeof body.isOpen !== "boolean" ||
+    typeof body.acceptingOrders !== "boolean"
   ) {
     return validationError();
   }
@@ -275,9 +371,12 @@ async function customerCatalogue(
   const afterName = cursor ? optionalText(cursor.name, 160) : null;
   const afterSkuId = cursor ? optionalUUID(cursor.skuId) : null;
   if (
-    query === undefined || categoryId === undefined || subcategoryId === undefined ||
-    (body.limit !== null && body.limit !== undefined && parsedLimit === undefined) ||
-    (body.cursor !== null && body.cursor !== undefined && cursor === undefined) ||
+    query === undefined || categoryId === undefined ||
+    subcategoryId === undefined ||
+    (body.limit !== null && body.limit !== undefined &&
+      parsedLimit === undefined) ||
+    (body.cursor !== null && body.cursor !== undefined &&
+      cursor === undefined) ||
     (cursor !== undefined && (!afterName || !afterSkuId))
   ) {
     return validationError();
@@ -302,9 +401,16 @@ async function updateSku(
 ) {
   const idempotencyKey = requiredIdempotencyKey(request);
   const skuId = requiredUUID(body.skuId);
-  const expectedVersion = optionalInteger(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+  const expectedVersion = optionalInteger(
+    body.expectedVersion,
+    1,
+    Number.MAX_SAFE_INTEGER,
+  );
   const patch = record(body.patch);
-  if (!idempotencyKey || !skuId || !expectedVersion || !patch || Object.keys(patch).length === 0) {
+  if (
+    !idempotencyKey || !skuId || !expectedVersion || !patch ||
+    Object.keys(patch).length === 0
+  ) {
     return validationError();
   }
   const result = await dependencies.updateSku({
@@ -317,7 +423,9 @@ async function updateSku(
   return json(result);
 }
 
-async function parseBody(request: Request): Promise<Record<string, unknown> | undefined> {
+async function parseBody(
+  request: Request,
+): Promise<Record<string, unknown> | undefined> {
   try {
     const source = await request.text();
     if (source.length === 0 || source.length > 2_000_000) return undefined;
@@ -327,11 +435,24 @@ async function parseBody(request: Request): Promise<Record<string, unknown> | un
   }
 }
 
-function optionalText(value: unknown, maximum: number): string | null | undefined {
+function optionalText(
+  value: unknown,
+  maximum: number,
+): string | null | undefined {
   if (value === null || value === undefined) return null;
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length >= 1 && normalized.length <= maximum ? normalized : undefined;
+}
+
+function optionalChoice(
+  value: unknown,
+  choices: readonly string[],
+): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toUpperCase();
+  return choices.includes(normalized) ? normalized : undefined;
 }
 
 function requiredUUID(value: unknown) {
@@ -345,7 +466,8 @@ function optionalUUID(value: unknown): string | null | undefined {
 
 function optionalInteger(value: unknown, minimum: number, maximum: number) {
   if (value === null || value === undefined) return undefined;
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum &&
+  return typeof value === "number" && Number.isSafeInteger(value) &&
+      value >= minimum &&
       value <= maximum
     ? value
     : undefined;
@@ -364,21 +486,33 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function authenticationRequired() {
   return json({
-    error: { code: "authentication_required", message: "A valid bearer token is required." },
+    error: {
+      code: "authentication_required",
+      message: "A valid bearer token is required.",
+    },
   }, 401);
 }
 
 function validationError() {
   return json({
-    error: { code: "validation_failed", message: "The catalogue request is invalid." },
+    error: {
+      code: "validation_failed",
+      message: "The catalogue request is invalid.",
+    },
   }, 400);
 }
 
 function requestFailure(error: unknown) {
   if (error instanceof V1RequestError) {
-    return json({ error: { code: error.code, message: error.message } }, error.status);
+    return json(
+      { error: { code: error.code, message: error.message } },
+      error.status,
+    );
   }
   return json({
-    error: { code: "internal_error", message: "The catalogue request could not be processed." },
+    error: {
+      code: "internal_error",
+      message: "The catalogue request could not be processed.",
+    },
   }, 500);
 }

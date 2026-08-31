@@ -5,7 +5,10 @@ import {
   authorizeV1ExceptionalDeliveryHandoff,
   declareV1FulfilmentPackages,
   getV1AdminAccess,
+  getV1AdminCataloguePage,
+  getV1AdminCommandCenter,
   getV1AdminExecutionTrace,
+  getV1AdminNetworkPage,
   getV1AdminSystemHealth,
   getV1AdminOperationalSafety,
   getV1Catalogue,
@@ -41,6 +44,7 @@ const auth = {
   accessToken: "customer-token",
 };
 const categoryId = "11111111-1111-4111-8111-111111111111";
+const accountId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const subcategoryId = "22222222-2222-4222-8222-222222222222";
 const skuId = "33333333-3333-4333-8333-333333333333";
 const orderId = "44444444-4444-4444-8444-444444444444";
@@ -454,6 +458,155 @@ describe("Dastak V1 web contract", () => {
         reason: "Updated from protected Admin access settings.",
       },
     ]);
+  });
+
+  it("loads the cross-system Admin command center and connected identity directory", async () => {
+    const bodies: unknown[] = [];
+    const commandCenter = await getV1AdminCommandCenter(auth, async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({
+        observedAt: "2026-08-31T12:34:56Z",
+        actionQueue: { merchantApplications: 2, deliveryApplications: 1, openIncidents: 0, riderEscalations: 1, activePauses: 0 },
+        identities: { activeAccounts: 10, customers: 8, merchants: 3, deliveryPartners: 4, deletedPersonas: 1, recoveryEligiblePhones: 1 },
+        commerce: { activeOrders: 7, awaitingPayment: 1, preparingFulfilments: 2, readyFulfilments: 1, activeMissions: 3, deliveredToday: 5 },
+        network: { activeOrganizations: 3, activeBranches: 4, onlineRiders: 2, assignedRiders: 1 },
+        catalogue: { total: 3637, active: 3000, draft: 637, needsReview: 20, missingPrimaryImage: 12 },
+      });
+    });
+    const network = await getV1AdminNetworkPage({
+      ...auth,
+      query: "  Furqan  ",
+      persona: "MERCHANT",
+      state: "ACTIVE",
+      limit: 40,
+      cursor: { updatedAt: "2026-08-31T12:00:00Z", accountId },
+    }, async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({
+        people: [{
+          id: accountId,
+          displayName: "Furqan",
+          email: "furqan@example.com",
+          phoneNumber: "+919000000000",
+          phoneVerified: true,
+          accountState: "ACTIVE",
+          adminRole: "EXECUTIVE_ADMIN",
+          createdAt: "2026-08-01T10:00:00Z",
+          updatedAt: "2026-08-31T12:00:00Z",
+          lastSignInAt: "2026-08-31T11:00:00Z",
+          personas: [{ persona: "MERCHANT", state: "ACTIVE", activatedAt: "2026-08-02T10:00:00Z", deletedAt: null, version: 1 }],
+          customer: { orderCount: 4, activeOrderCount: 1 },
+          merchant: { applicationStatus: "approved", businessName: "Dastak Store", submittedAt: "2026-08-02T10:00:00Z", reviewedAt: "2026-08-03T10:00:00Z", organizationName: "Dastak Store", organizationStatus: "ACTIVE", branchCount: 2 },
+          delivery: null,
+        }],
+        hasMore: true,
+        nextCursor: { updatedAt: "2026-08-31T12:00:00Z", accountId },
+      });
+    });
+
+    expect(commandCenter.actionQueue).toMatchObject({ merchantApplications: 2, deliveryApplications: 1 });
+    expect(commandCenter.catalogue.total).toBe(3637);
+    expect(network.people[0]).toMatchObject({
+      displayName: "Furqan",
+      adminRole: "EXECUTIVE_ADMIN",
+      merchant: { businessName: "Dastak Store", branchCount: 2 },
+    });
+    expect(bodies).toEqual([
+      { operation: "adminCommandCenter" },
+      {
+        operation: "adminNetworkPage",
+        query: "Furqan",
+        persona: "MERCHANT",
+        state: "ACTIVE",
+        limit: 40,
+        cursor: { updatedAt: "2026-08-31T12:00:00Z", accountId },
+      },
+    ]);
+  });
+
+  it("loads the paginated exact-SKU Admin catalogue without raw import data", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const catalogue = await getV1AdminCataloguePage({
+      ...auth,
+      query: "  Whole Wheat  ",
+      status: "ACTIVE",
+      qaStatus: "VERIFIED",
+      limit: 50,
+    }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        skus: [{
+          id: skuId,
+          categoryTypeId: packageId,
+          categoryId,
+          subcategoryId,
+          brandId: null,
+          brandName: "Dastak",
+          name: "Whole Wheat Atta",
+          slug: "whole-wheat-atta",
+          variant: null,
+          packSize: "1 kg",
+          description: "Whole wheat flour",
+          imageKey: "catalogue/atta.webp",
+          barcode: null,
+          listPricePaise: 8000,
+          sellingPricePaise: 7500,
+          currencyCode: "INR",
+          logisticsAttributes: {},
+          taxRateBps: 0,
+          status: "ACTIVE",
+          selectionCount: 2,
+          version: 4,
+          updatedAt: "2026-08-31T12:00:00Z",
+          qaStatus: "VERIFIED",
+          activationReady: true,
+          activationBlockers: [],
+          imageCount: 1,
+          aliasCount: 2,
+          identifierCount: 1,
+          primaryImage: {
+            id: "88888888-8888-4888-8888-888888888888",
+            imageKey: "catalogue/atta-primary.webp",
+            status: "VERIFIED",
+            rightsStatus: "CLEARED",
+            sourceType: "ADMIN_UPLOAD",
+          },
+          quantityValue: 1,
+          quantityUnit: "kg",
+          packCount: 1,
+          manufacturerName: "Dastak Foods",
+          countryOfOriginCode: "IN",
+          hsnCode: "11010000",
+          dietType: "VEGETARIAN",
+          shelfLifeDays: 180,
+          attributes: {},
+        }],
+        hasMore: false,
+        nextCursor: null,
+      });
+    });
+
+    expect(requestBody).toEqual({
+      operation: "adminCataloguePage",
+      query: "Whole Wheat",
+      categoryTypeId: null,
+      categoryId: null,
+      subcategoryId: null,
+      status: "ACTIVE",
+      qaStatus: "VERIFIED",
+      limit: 50,
+      cursor: null,
+    });
+    expect(catalogue.skus[0]).toMatchObject({
+      name: "Whole Wheat Atta",
+      sellingPricePaise: 7500,
+      qaStatus: "VERIFIED",
+      activationReady: true,
+      activationBlockers: [],
+      identifierCount: 1,
+      primaryImage: { rightsStatus: "CLEARED" },
+    });
+    expect(catalogue.skus[0]).not.toHaveProperty("sourcePayload");
   });
 
   it("decodes the audited minimum system health projection", async () => {

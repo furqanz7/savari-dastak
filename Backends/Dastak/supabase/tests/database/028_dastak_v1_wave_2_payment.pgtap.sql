@@ -83,8 +83,19 @@ insert into public.service_zones (id, name, boundary, active) values (
   true
 );
 
-insert into dastak_v1.categories (id, name, slug, status, created_by) values (
+insert into dastak_v1.category_types (
+  id, name, slug, status, created_by
+) values (
+  '98000000-0000-4000-8000-000000000009',
+  'Step Two Type', 'step-two-type', 'ACTIVE',
+  '98000000-0000-4000-8000-000000000002'
+);
+
+insert into dastak_v1.categories (
+  id, category_type_id, name, slug, status, created_by
+) values (
   '98000000-0000-4000-8000-000000000011',
+  '98000000-0000-4000-8000-000000000009',
   'Step Two Category', 'step-two-category', 'ACTIVE',
   '98000000-0000-4000-8000-000000000002'
 );
@@ -99,21 +110,56 @@ insert into dastak_v1.subcategories (
 insert into dastak_v1.skus (
   id, subcategory_id, canonical_name, slug, pack_size,
   list_price_paise, selling_price_paise, logistics_attributes,
-  status, created_by
+  status, qa_status, qa_verified_at, qa_verified_by, created_by
 ) values
 (
   '98000000-0000-4000-8000-000000000013',
   '98000000-0000-4000-8000-000000000012',
   'Step Two Product A', 'step-two-product-a', '1 unit', 1200, 1000,
   '{"weightGrams":400,"lengthMillimetres":150,"widthMillimetres":100,"heightMillimetres":80,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}',
-  'ACTIVE', '98000000-0000-4000-8000-000000000002'
+  'DRAFT', 'VERIFIED', now(),
+  '98000000-0000-4000-8000-000000000002',
+  '98000000-0000-4000-8000-000000000002'
 ),
 (
   '98000000-0000-4000-8000-000000000014',
   '98000000-0000-4000-8000-000000000012',
   'Step Two Product B', 'step-two-product-b', '1 unit', 2200, 2000,
   '{"weightGrams":600,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":90,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}',
-  'ACTIVE', '98000000-0000-4000-8000-000000000002'
+  'DRAFT', 'VERIFIED', now(),
+  '98000000-0000-4000-8000-000000000002',
+  '98000000-0000-4000-8000-000000000002'
+);
+
+insert into dastak_v1.sku_images (
+  id, sku_id, image_key, role, source_type, status,
+  verified_by, verified_at, rights_status, rights_reference,
+  rights_verified_by, rights_verified_at
+) values
+(
+  '98000000-0000-4000-8000-000000000015',
+  '98000000-0000-4000-8000-000000000013',
+  'test/step-two-product-a-primary.webp',
+  'PRIMARY', 'OTHER', 'VERIFIED',
+  '98000000-0000-4000-8000-000000000002', now(),
+  'CLEARED', 'PGTAP fixture',
+  '98000000-0000-4000-8000-000000000002', now()
+),
+(
+  '98000000-0000-4000-8000-000000000016',
+  '98000000-0000-4000-8000-000000000014',
+  'test/step-two-product-b-primary.webp',
+  'PRIMARY', 'OTHER', 'VERIFIED',
+  '98000000-0000-4000-8000-000000000002', now(),
+  'CLEARED', 'PGTAP fixture',
+  '98000000-0000-4000-8000-000000000002', now()
+);
+
+update dastak_v1.skus
+set status = 'ACTIVE'
+where id in (
+  '98000000-0000-4000-8000-000000000013',
+  '98000000-0000-4000-8000-000000000014'
 );
 
 insert into dastak_v1.merchant_organizations (
