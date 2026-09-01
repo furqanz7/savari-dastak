@@ -109,10 +109,13 @@ private final class AuthenticationShellModel: ObservableObject {
                 requiredAccess: requiredAccess
             )
         )
+        let accessTokenBroker = MarketplaceAccessTokenBroker {
+            try await operations.currentAccessToken()
+        }
         let functionClient = SupabaseFunctionClient(
             configuration: configuration,
             accessTokenProvider: {
-                try await operations.currentAccessToken()
+                try await accessTokenBroker.accessToken()
             }
         )
         services = MarketplaceAuthenticatedServices(
@@ -120,7 +123,7 @@ private final class AuthenticationShellModel: ObservableObject {
             orderEvents: SupabaseOrderEventClient(
                 configuration: configuration,
                 accessTokenProvider: {
-                    try await operations.currentAccessToken()
+                    try await accessTokenBroker.accessToken()
                 }
             ),
             accountIDProvider: {

@@ -11,6 +11,18 @@ struct DastakAdminOverviewView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                     commandHero
+                    if !model.workspaceIssues.isEmpty {
+                        DastakAdminRefreshSummaryCard(
+                            issues: model.workspaceIssues,
+                            isRefreshing: model.isRefreshing
+                        ) {
+                            Task {
+                                for issue in model.workspaceIssues {
+                                    await model.retry(issue.workspace)
+                                }
+                            }
+                        }
+                    }
                     if let snapshot = model.commandCenter {
                         metrics(snapshot)
                         actionQueue(snapshot)
@@ -122,14 +134,24 @@ struct DastakAdminApprovalsView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                     AdminPageIntro(eyebrow: "GOVERNED ONBOARDING", title: "Application approvals", detail: "Review each business and identity submission before a persona becomes operational.")
-                    approvalGroup("Merchant applications", count: model.merchantApplications.count) {
+                    workspaceIssue(.merchantApprovals)
+                    workspaceIssue(.deliveryApprovals)
+                    approvalGroup(
+                        "Merchant applications",
+                        count: model.merchantApplications.count,
+                        workspace: .merchantApprovals
+                    ) {
                         ForEach(model.merchantApplications, id: \.applicationID) { application in
                             Button { selected = .merchant(application) } label: {
                                 AdminApprovalRow(title: application.businessName, detail: application.businessAddress, symbol: "storefront")
                             }.buttonStyle(.plain)
                         }
                     }
-                    approvalGroup("Delivery Partner applications", count: model.deliveryApplications.count) {
+                    approvalGroup(
+                        "Delivery Partner applications",
+                        count: model.deliveryApplications.count,
+                        workspace: .deliveryApprovals
+                    ) {
                         ForEach(model.deliveryApplications, id: \.applicationID) { application in
                             Button { selected = .delivery(application) } label: {
                                 AdminApprovalRow(title: application.displayName, detail: "\(application.deliveryMethod.rawValue.capitalized) · \(application.phoneNumber)", symbol: "bicycle")
@@ -152,15 +174,34 @@ struct DastakAdminApprovalsView: View {
         }
     }
 
+    @ViewBuilder
+    private func workspaceIssue(_ workspace: DastakAdminWorkspace) -> some View {
+        if let issue = model.issue(for: workspace) {
+            DastakAdminWorkspaceIssueCard(
+                issue: issue,
+                lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: workspace),
+                isRefreshing: model.isRefreshing
+            ) { Task { await model.retry(workspace) } }
+        }
+    }
+
     private func approvalGroup<Content: View>(
         _ title: String,
         count: Int,
+        workspace: DastakAdminWorkspace,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             HStack { Text(title).font(.title3.bold()); Spacer(); Text("\(count)").font(.caption.bold()).padding(.horizontal, 9).padding(.vertical, 5).background(MarketplaceColors.dastakAccentSoft.color, in: Capsule()) }
             if count == 0 {
-                Label("No applications waiting", systemImage: "checkmark.circle.fill")
+                Label(
+                    model.issue(for: workspace) != nil && model.lastSuccessfulRefresh(for: workspace) == nil
+                        ? "Application count is not available yet"
+                        : "No applications waiting",
+                    systemImage: model.issue(for: workspace) != nil && model.lastSuccessfulRefresh(for: workspace) == nil
+                        ? "wifi.exclamationmark"
+                        : "checkmark.circle.fill"
+                )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 100)
@@ -193,9 +234,21 @@ struct DastakAdminNetworkView: View {
                         Text("Deleted / recoverable").tag(DastakAdminPersonaState?.some(.deleted))
                     }
                 }
+                if let issue = model.issue(for: .network) {
+                    Section {
+                        DastakAdminWorkspaceIssueCard(
+                            issue: issue,
+                            lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: .network),
+                            isRefreshing: model.isLoadingNetwork
+                        ) { Task { await load() } }
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
                 if model.isLoadingNetwork, model.networkPeople.isEmpty {
                     HStack { Spacer(); ProgressView("Connecting identities"); Spacer() }.listRowBackground(Color.clear)
-                } else if model.networkPeople.isEmpty {
+                } else if model.networkPeople.isEmpty,
+                          model.issue(for: .network) == nil || model.lastSuccessfulRefresh(for: .network) != nil {
                     ContentUnavailableView.search(text: query)
                 } else {
                     Section("Connected identities") {
@@ -285,9 +338,21 @@ private struct DastakAdminCatalogueView: View {
                     Text("Rejected").tag(String?.some("REJECTED"))
                 }
             }
+            if let issue = model.issue(for: .catalogue) {
+                Section {
+                    DastakAdminWorkspaceIssueCard(
+                        issue: issue,
+                        lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: .catalogue),
+                        isRefreshing: model.isLoadingCatalogue
+                    ) { Task { await load() } }
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            }
             if model.isLoadingCatalogue, model.catalogueSKUs.isEmpty {
                 HStack { Spacer(); ProgressView("Loading exact SKUs"); Spacer() }.listRowBackground(Color.clear)
-            } else if model.catalogueSKUs.isEmpty {
+            } else if model.catalogueSKUs.isEmpty,
+                      model.issue(for: .catalogue) == nil || model.lastSuccessfulRefresh(for: .catalogue) != nil {
                 ContentUnavailableView.search(text: query)
             } else {
                 Section("Exact SKU library") {
@@ -331,6 +396,7 @@ private struct DastakAdminGovernanceView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                 AdminPageIntro(eyebrow: "CONTROL & GOVERNANCE", title: "Safety and system health", detail: "Live operational controls stay permission-bound and every intervention remains audited.")
+                workspaceIssue(.systemHealth)
                 if let health = model.systemHealth {
                     AdminStateCard(
                         title: health.healthy ? "All monitored invariants are healthy" : "System health needs attention",
@@ -360,10 +426,11 @@ private struct DastakAdminGovernanceView: View {
                             }
                         }
                     }
-                } else {
+                } else if model.issue(for: .systemHealth) == nil {
                     ProgressView("Loading system health").frame(maxWidth: .infinity, minHeight: 120)
                 }
 
+                workspaceIssue(.operationalSafety)
                 if let safety = model.operationalSafety {
                     HStack {
                         AdminSectionHeader(eyebrow: "OPERATIONAL SAFETY", title: "Protected controls")
@@ -460,6 +527,17 @@ private struct DastakAdminGovernanceView: View {
             content()
         }
     }
+
+    @ViewBuilder
+    private func workspaceIssue(_ workspace: DastakAdminWorkspace) -> some View {
+        if let issue = model.issue(for: workspace) {
+            DastakAdminWorkspaceIssueCard(
+                issue: issue,
+                lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: workspace),
+                isRefreshing: model.isRefreshing
+            ) { Task { await model.retry(workspace) } }
+        }
+    }
 }
 
 private struct DastakAdminFinanceView: View {
@@ -469,6 +547,20 @@ private struct DastakAdminFinanceView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                 AdminPageIntro(eyebrow: "FINANCIAL OPERATIONS", title: "Collection, fee & Royalty", detail: "Doorstep collection and journal truth remain separated from provider-paid history.")
+                if let issue = model.issue(for: .liveOrders) {
+                    DastakAdminWorkspaceIssueCard(
+                        issue: issue,
+                        lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: .liveOrders),
+                        isRefreshing: model.isRefreshing
+                    ) { Task { await model.retry(.liveOrders) } }
+                }
+                if let issue = model.issue(for: .royaltyPayouts) {
+                    DastakAdminWorkspaceIssueCard(
+                        issue: issue,
+                        lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: .royaltyPayouts),
+                        isRefreshing: model.isRefreshing
+                    ) { Task { await model.retry(.royaltyPayouts) } }
+                }
                 if let launch = model.v1Trace?.launchPayment {
                     AdminStateCard(title: "Collection \(launch.collectionStatus.replacingOccurrences(of: "_", with: " ").capitalized)", detail: "\(launch.attempts.count) recorded collection attempts", symbol: "indianrupeesign.circle", attention: launch.collectionStatus != "COLLECTED")
                     if let fee = launch.platformFee {
@@ -484,7 +576,8 @@ private struct DastakAdminFinanceView: View {
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
                     AdminSectionHeader(eyebrow: "ROYALTY PAYOUTS", title: "Withdrawal reconciliation")
-                    if model.royaltyPayouts.isEmpty {
+                    if model.royaltyPayouts.isEmpty,
+                       model.issue(for: .royaltyPayouts) == nil || model.lastSuccessfulRefresh(for: .royaltyPayouts) != nil {
                         ContentUnavailableView("No Royalty withdrawals", systemImage: "wallet.pass", description: Text("Payout requests will appear here with provider and reconciliation state."))
                             .frame(maxWidth: .infinity, minHeight: 150).marketplaceFlatSurface()
                     } else {

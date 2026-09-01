@@ -674,6 +674,23 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 .admin-notice > svg { color: var(--success); }
 .admin-notice button { padding: 8px; border: 0; background: transparent; color: var(--text-secondary); }
+.admin-feed-status {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0 0;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--divider));
+  border-radius: var(--radius-compact);
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+}
+.admin-feed-status > header { display: flex; align-items: flex-start; gap: 11px; }
+.admin-feed-status > header > span { width: 36px; height: 36px; flex: 0 0 auto; display: grid; place-items: center; color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, var(--surface)); }
+.admin-feed-status > header p { margin: 3px 0 0; color: var(--text-secondary); font-size: 14px; }
+.admin-feed-status ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.admin-feed-status li { min-width: 0; display: grid; gap: 7px; padding: 11px 12px; border: 1px solid var(--divider); background: var(--surface); }
+.admin-feed-status li div { min-width: 0; display: grid; gap: 3px; }
+.admin-feed-status li span, .admin-feed-status li small { color: var(--text-secondary); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.admin-feed-status > button { min-height: 42px; width: fit-content; margin: 0 0 0 auto; display: inline-flex; align-items: center; gap: 7px; }
 .admin-exceptions > header { justify-content: space-between; align-items: flex-start; }
 .admin-exceptions > header p { margin: 5px 0 0; color: var(--text-secondary); }
 .admin-exceptions > header button { min-height: 42px; margin: 0; display: inline-flex; align-items: center; gap: 7px; }

@@ -4,6 +4,41 @@ import XCTest
 @testable import MarketplaceInfrastructure
 
 final class AuthenticatedServicesTests: XCTestCase {
+    func testAccessTokenBrokerCoalescesConcurrentSessionReads() async throws {
+        let loader = AccessTokenLoader()
+        let broker = MarketplaceAccessTokenBroker {
+            try await loader.load()
+        }
+
+        async let first = broker.accessToken()
+        async let second = broker.accessToken()
+        async let third = broker.accessToken()
+
+        let tokens = try await [first, second, third]
+        XCTAssertEqual(tokens, ["coalesced-token", "coalesced-token", "coalesced-token"])
+        let coalescedCallCount = await loader.calls()
+        XCTAssertEqual(coalescedCallCount, 1)
+    }
+
+    func testAccessTokenBrokerRecoversAfterLoaderFailure() async throws {
+        let loader = AccessTokenLoader(failsFirstCall: true)
+        let broker = MarketplaceAccessTokenBroker {
+            try await loader.load()
+        }
+
+        do {
+            _ = try await broker.accessToken()
+            XCTFail("Expected the first token load to fail.")
+        } catch {
+            XCTAssertEqual(error as? AccessTokenLoaderError, .unavailable)
+        }
+
+        let token = try await broker.accessToken()
+        XCTAssertEqual(token, "coalesced-token")
+        let recoveredCallCount = await loader.calls()
+        XCTAssertEqual(recoveredCallCount, 2)
+    }
+
     func testAccountIDAndUploadForwardAuthenticatedValues() async throws {
         let accountID = UUID(uuidString: "4B90C9BA-95C7-4C5F-B4D3-B8D9A6576BA1")!
         let recorder = UploadRecorder()
@@ -89,6 +124,32 @@ final class AuthenticatedServicesTests: XCTestCase {
         let adminAccess = try await services.resolveAppAccess(.dastakAdmin)
         XCTAssertEqual(merchantAccess, .active)
         XCTAssertEqual(adminAccess, .accessDenied)
+    }
+}
+
+private enum AccessTokenLoaderError: Error, Equatable {
+    case unavailable
+}
+
+private actor AccessTokenLoader {
+    private var callCount = 0
+    private let failsFirstCall: Bool
+
+    init(failsFirstCall: Bool = false) {
+        self.failsFirstCall = failsFirstCall
+    }
+
+    func load() async throws -> String? {
+        callCount += 1
+        try await Task.sleep(for: .milliseconds(20))
+        if failsFirstCall, callCount == 1 {
+            throw AccessTokenLoaderError.unavailable
+        }
+        return "coalesced-token"
+    }
+
+    func calls() -> Int {
+        callCount
     }
 }
 

@@ -1,5 +1,34 @@
 import Foundation
 
+actor MarketplaceAccessTokenBroker {
+    typealias Loader = @Sendable () async throws -> String?
+
+    private let loader: Loader
+    private var inFlight: Task<String?, Error>?
+
+    init(loader: @escaping Loader) {
+        self.loader = loader
+    }
+
+    func accessToken() async throws -> String? {
+        if let inFlight {
+            return try await inFlight.value
+        }
+
+        let loader = loader
+        let task = Task { try await loader() }
+        inFlight = task
+        do {
+            let token = try await task.value
+            inFlight = nil
+            return token
+        } catch {
+            inFlight = nil
+            throw error
+        }
+    }
+}
+
 public enum MarketplaceAuthenticatedServicesError: Error, Equatable, Sendable {
     case authenticationRequired
     case identityMismatch

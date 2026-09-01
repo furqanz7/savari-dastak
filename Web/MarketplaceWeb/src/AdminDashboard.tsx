@@ -71,6 +71,39 @@ type AdminTab =
   | "catalogue" | "safety" | "finance" | "health" | "access"
   | "legacy" | "account";
 
+type AdminBootstrapFeed =
+  | "merchantApprovals"
+  | "deliveryApprovals"
+  | "legacyHistory"
+  | "operations"
+  | "adminAccess"
+  | "commandCenter";
+
+type AdminFeedIssue = {
+  feed: AdminBootstrapFeed;
+  label: string;
+  message: string;
+  failedAt: string;
+};
+
+const adminFeedLabels: Record<AdminBootstrapFeed, string> = {
+  merchantApprovals: "Merchant approvals",
+  deliveryApprovals: "Delivery approvals",
+  legacyHistory: "Legacy history",
+  operations: "Exception desk",
+  adminAccess: "Admin access",
+  commandCenter: "Command center",
+};
+
+const adminBootstrapFeeds: AdminBootstrapFeed[] = [
+  "merchantApprovals",
+  "deliveryApprovals",
+  "legacyHistory",
+  "operations",
+  "adminAccess",
+  "commandCenter",
+];
+
 export function AdminDashboard({ accessToken, displayName, email, phoneNumber, supabaseUrl, publishableKey, onSignOut }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [merchants, setMerchants] = useState<MerchantAdminApplication[]>([]);
@@ -82,7 +115,9 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
   const [tab, setTab] = useState<AdminTab>("overview");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
-  const [error, setError] = useState<string>();
+  const [actionError, setActionError] = useState<string>();
+  const [feedIssues, setFeedIssues] = useState<Partial<Record<AdminBootstrapFeed, AdminFeedIssue>>>({});
+  const [feedUpdatedAt, setFeedUpdatedAt] = useState<Partial<Record<AdminBootstrapFeed, string>>>({});
   const [notice, setNotice] = useState<string>();
   const reviewKeys = useRef(new Map<string, string>());
   const refreshInFlight = useRef(false);
@@ -95,8 +130,8 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
       const results = await Promise.allSettled([
         getMerchantApplications(auth),
         getPartnerApplications(auth),
-        // Legacy history is diagnostic only and must never take V1 launch control offline.
-        getAdminOrders({ ...auth, limit: 50 }).catch(() => []),
+        // Legacy history is diagnostic only and its failure remains isolated.
+        getAdminOrders({ ...auth, limit: 50 }),
         getOwnerOperations({ ...auth, limit: 50 }),
         getV1AdminAccess(auth),
         getV1AdminCommandCenter(auth),
@@ -108,12 +143,28 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
       if (operationsResult.status === "fulfilled") setOperations(operationsResult.value);
       if (accessResult.status === "fulfilled") setAdminAccess(accessResult.value);
       if (commandResult.status === "fulfilled") setCommandCenter(commandResult.value);
-      const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-      setError(failures.length === results.length
-        ? message(failures[0].reason)
-        : failures.length > 0
-        ? "Some live signals could not be refreshed. Available workspaces remain usable."
-        : undefined);
+      const observedAt = new Date().toISOString();
+      setFeedIssues((current) => {
+        const next = { ...current };
+        results.forEach((result, index) => {
+          const feed = adminBootstrapFeeds[index];
+          if (result.status === "fulfilled") delete next[feed];
+          else next[feed] = {
+            feed,
+            label: adminFeedLabels[feed],
+            message: feedFailureMessage(feed, result.reason),
+            failedAt: observedAt,
+          };
+        });
+        return next;
+      });
+      setFeedUpdatedAt((current) => {
+        const next = { ...current };
+        results.forEach((result, index) => {
+          if (result.status === "fulfilled") next[adminBootstrapFeeds[index]] = observedAt;
+        });
+        return next;
+      });
       setLoading(false);
     } finally {
       refreshInFlight.current = false;
@@ -139,7 +190,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
     reviewKeys.current.set(identity, idempotencyKey);
     setBusy(identity);
-    setError(undefined);
+    setActionError(undefined);
     try {
       const input = { ...auth, applicationId, decision, reason, idempotencyKey };
       if (kind === "merchant") await reviewMerchantApplication(input);
@@ -147,7 +198,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
       reviewKeys.current.delete(identity);
       await refresh();
     } catch (reviewError) {
-      setError(message(reviewError));
+      setActionError(message(reviewError));
       throw reviewError;
     } finally {
       setBusy(undefined);
@@ -156,12 +207,12 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
 
   const openEvidence = async (objectPath: string) => {
     setBusy(`evidence:${objectPath}`);
-    setError(undefined);
+    setActionError(undefined);
     try {
       const signedUrl = await getEvidenceUrl({ ...auth, objectPath });
       window.location.assign(signedUrl);
     } catch (evidenceError) {
-      setError(message(evidenceError));
+      setActionError(message(evidenceError));
     } finally {
       setBusy(undefined);
     }
@@ -177,7 +228,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
     reviewKeys.current.set(identity, idempotencyKey);
     setBusy(identity);
-    setError(undefined);
+    setActionError(undefined);
     try {
       const updated = await reviewOrderRefund({
         ...auth, orderId: order.orderId, outcome, faultSource, reason, idempotencyKey,
@@ -190,7 +241,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
         await refresh();
       }
     } catch (reviewError) {
-      setError(message(reviewError));
+      setActionError(message(reviewError));
     } finally {
       setBusy(undefined);
     }
@@ -198,12 +249,12 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
 
   const retryRefund = async (order: AdminOrder) => {
     setBusy(`process-refund:${order.orderId}`);
-    setError(undefined);
+    setActionError(undefined);
     try {
       await processOrderRefund({ ...auth, orderId: order.orderId, idempotencyKey: crypto.randomUUID() });
       await refresh();
     } catch (refundError) {
-      setError(message(refundError));
+      setActionError(message(refundError));
     } finally {
       setBusy(undefined);
     }
@@ -214,14 +265,14 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
     reviewKeys.current.set(identity, idempotencyKey);
     setBusy(identity);
-    setError(undefined);
+    setActionError(undefined);
     try {
       await resolveOwnerSupportCase({ ...auth, caseId: exception.entityId, resolution, idempotencyKey });
       reviewKeys.current.delete(identity);
       setNotice("Support case resolved and recorded.");
       await refresh();
     } catch (supportError) {
-      setError(message(supportError));
+      setActionError(message(supportError));
       throw supportError;
     } finally {
       setBusy(undefined);
@@ -234,7 +285,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
     reviewKeys.current.set(identity, idempotencyKey);
     setBusy(identity);
-    setError(undefined);
+    setActionError(undefined);
     try {
       await resetOwnerHandoff({
         ...auth,
@@ -248,7 +299,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
       setNotice("Handoff code unlocked and securely regenerated.");
       await refresh();
     } catch (handoffError) {
-      setError(message(handoffError));
+      setActionError(message(handoffError));
       throw handoffError;
     } finally {
       setBusy(undefined);
@@ -257,7 +308,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
 
   const reconcile = async () => {
     setBusy("reconcile");
-    setError(undefined);
+    setActionError(undefined);
     try {
       const result = await reconcileOwnerOrders(auth);
       const recovered = result.merchantOrdersRecovered + result.parcelsRecovered;
@@ -265,7 +316,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
       setNotice(`Recovery complete: ${recovered} records repaired, ${offers} offers created.`);
       await refresh();
     } catch (reconcileError) {
-      setError(message(reconcileError));
+      setActionError(message(reconcileError));
     } finally {
       setBusy(undefined);
     }
@@ -284,7 +335,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     { id: "finance", label: "Finance & Royalty", icon: <WalletCards size={18} /> },
     { id: "health", label: "System health", icon: <Activity size={18} /> },
     { id: "legacy", label: "Legacy history", icon: <FileText size={18} /> },
-    ...(adminAccess?.canManageAdmins ? [{ id: "access" as AdminTab, label: "Admin access", icon: <ShieldCheck size={18} /> }] : []),
+    { id: "access", label: "Admin access", icon: <ShieldCheck size={18} /> },
     { id: "account", label: "My account", icon: <UserRound size={18} /> },
   ];
   const mobilePrimaryNavigation = mainNavigation.filter((item) => item.id !== "catalogue");
@@ -306,7 +357,8 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     <main className="admin-shell">
       <header className="admin-heading"><div><p className="eyebrow">{adminRoleLabel(adminAccess?.role).toUpperCase()} WORKSPACE</p><h1>{tabTitle(tab)}</h1><p>{tabDescription(tab)}</p></div><button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={busy === "refresh"} aria-label="Refresh Admin workspace"><RefreshCw size={19} /></button></header>
       <nav className="admin-secondary-mobile" aria-label="More Admin workspaces"><AdminNavigation items={mobileWorkspaceNavigation} selected={tab} onSelect={setTab} /></nav>
-      {error ? <p className="order-error" role="alert">{error}</p> : null}
+      <AdminFeedStatus issues={feedIssues} updatedAt={feedUpdatedAt} busy={busy === "refresh"} onRetry={() => void refresh(true)} />
+      {actionError ? <p className="order-error" role="alert">{actionError}</p> : null}
       {notice ? <div className="admin-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div> : null}
 
       {tab === "overview" ? <AdminOverviewPanel snapshot={commandCenter} loading={loading} onNavigate={setTab} />
@@ -316,15 +368,17 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
         : tab === "finance" ? <AdminRoyaltyPayoutPanel auth={auth} />
         : tab === "safety" ? <AdminOperationalSafetyPanel auth={auth} />
         : tab === "health" ? <AdminSystemHealthPanel auth={auth} />
-        : tab === "access" && adminAccess?.canManageAdmins ? <AdminAccessPanel auth={auth} access={adminAccess} onChange={setAdminAccess} />
+        : tab === "access" ? adminAccess?.canManageAdmins
+          ? <AdminAccessPanel auth={auth} access={adminAccess} onChange={setAdminAccess} />
+          : <section className="admin-section" role="tabpanel"><h2>Admin access</h2><p className="admin-empty">{adminAccess ? "Only the permanent Superadmin can assign Executive Admin seats." : "Admin access settings are not available yet. Use the workspace retry above."}</p></section>
         : tab === "account" ? <RoleAccountView accessToken={accessToken} displayName={displayName} email={email} phoneNumber={phoneNumber} roleName={adminRoleLabel(adminAccess?.role)} accessLabel="Full operations access" supabaseUrl={supabaseUrl} publishableKey={publishableKey} allowsAccountDeletion={false} onSignOut={onSignOut} />
         : loading ? <div className="catalogue-loading" role="status"><span /> Loading operations</div>
         : tab === "approvals" ? <div className="admin-approvals" role="tabpanel">
-          <ApprovalSection title="Merchant applications" count={merchants.length} empty="No merchant applications waiting.">{merchants.map((application) => <ReviewCard key={application.applicationId} icon={<Store size={20} />} title={application.businessName} subtitle={application.businessAddress} facts={[`Account ${shortId(application.accountId)}`]} evidence={[{ label: "View business evidence", path: application.evidenceObjectPath }]} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("merchant", application.applicationId, decision, reason)} />)}</ApprovalSection>
-          <ApprovalSection title="Delivery Partner applications" count={partners.length} empty="No Delivery Partner applications waiting.">{partners.map((application) => <ReviewCard key={application.applicationId} icon={<Bike size={20} />} title={application.displayName} subtitle={application.phoneNumber} facts={[methodLabel(application.deliveryMethod), ...(application.vehicleRegistrationNumber ? [`${application.vehicleRegistrationNumber} · ${application.vehicleMakeModel}`] : []), `Submitted ${formatDate(application.submittedAt)}`]} evidence={[{ label: "View identity proof", path: application.identityEvidenceObjectPath }, ...(application.vehicleEvidenceObjectPath ? [{ label: "View vehicle RC", path: application.vehicleEvidenceObjectPath }] : [])]} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("partner", application.applicationId, decision, reason)} />)}</ApprovalSection>
+          <ApprovalSection title="Merchant applications" count={merchants.length} empty={feedIssues.merchantApprovals && !feedUpdatedAt.merchantApprovals ? "Merchant application count is not available yet." : "No merchant applications waiting."}>{merchants.map((application) => <ReviewCard key={application.applicationId} icon={<Store size={20} />} title={application.businessName} subtitle={application.businessAddress} facts={[`Account ${shortId(application.accountId)}`]} evidence={[{ label: "View business evidence", path: application.evidenceObjectPath }]} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("merchant", application.applicationId, decision, reason)} />)}</ApprovalSection>
+          <ApprovalSection title="Delivery Partner applications" count={partners.length} empty={feedIssues.deliveryApprovals && !feedUpdatedAt.deliveryApprovals ? "Delivery application count is not available yet." : "No Delivery Partner applications waiting."}>{partners.map((application) => <ReviewCard key={application.applicationId} icon={<Bike size={20} />} title={application.displayName} subtitle={application.phoneNumber} facts={[methodLabel(application.deliveryMethod), ...(application.vehicleRegistrationNumber ? [`${application.vehicleRegistrationNumber} · ${application.vehicleMakeModel}`] : []), `Submitted ${formatDate(application.submittedAt)}`]} evidence={[{ label: "View identity proof", path: application.identityEvidenceObjectPath }, ...(application.vehicleEvidenceObjectPath ? [{ label: "View vehicle RC", path: application.vehicleEvidenceObjectPath }] : [])]} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("partner", application.applicationId, decision, reason)} />)}</ApprovalSection>
         </div>
-        : tab === "legacy" ? <OrdersPanel orders={orders} busy={Boolean(busy)} onReview={reviewRefund} onRefund={retryRefund} />
-        : <ExceptionsPanel operations={operations} busy={Boolean(busy)} onResolve={resolveSupport} onReset={resetHandoff} onReconcile={reconcile} onReviewRefund={() => setTab("legacy")} />}
+        : tab === "legacy" ? <OrdersPanel orders={orders} available={!feedIssues.legacyHistory || Boolean(feedUpdatedAt.legacyHistory)} busy={Boolean(busy)} onReview={reviewRefund} onRefund={retryRefund} />
+        : <ExceptionsPanel operations={operations} available={!feedIssues.operations || Boolean(feedUpdatedAt.operations)} busy={Boolean(busy)} onResolve={resolveSupport} onReset={resetHandoff} onReconcile={reconcile} onReviewRefund={() => setTab("legacy")} />}
     </main>
 
     <nav className="admin-mobile-navigation" aria-label="Primary Admin navigation"><AdminNavigation items={mobilePrimaryNavigation} selected={tab} onSelect={setTab} /></nav>
@@ -337,6 +391,23 @@ function AdminNavigation({ items, selected, onSelect }: {
   onSelect: (tab: AdminTab) => void;
 }) {
   return <>{items.map((item) => <button type="button" key={item.id} className={selected === item.id ? "selected" : ""} aria-current={selected === item.id ? "page" : undefined} onClick={() => onSelect(item.id)}>{item.icon}<span>{item.label}</span>{item.badge ? <b>{item.badge}</b> : null}</button>)}</>;
+}
+
+function AdminFeedStatus({ issues, updatedAt, busy, onRetry }: {
+  issues: Partial<Record<AdminBootstrapFeed, AdminFeedIssue>>;
+  updatedAt: Partial<Record<AdminBootstrapFeed, string>>;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  const activeIssues = adminBootstrapFeeds
+    .map((feed) => issues[feed])
+    .filter((issue): issue is AdminFeedIssue => Boolean(issue));
+  if (activeIssues.length === 0) return null;
+  return <section className="admin-feed-status" aria-label="Workspace refresh status">
+    <header><span><RefreshCw size={18} /></span><div><strong>Some workspaces need a refresh</strong><p>Current successful data remains visible. Each unavailable feed is identified below.</p></div></header>
+    <ul>{activeIssues.map((issue) => <li key={issue.feed}><div><strong>{issue.label}</strong><span>{issue.message}</span></div><small>{formatFeedUpdatedAt(updatedAt[issue.feed])}</small></li>)}</ul>
+    <button className="secondary-button" type="button" disabled={busy} onClick={onRetry}><RefreshCw size={16} /> Retry unavailable workspaces</button>
+  </section>;
 }
 
 function tabTitle(tab: AdminTab) {
@@ -373,8 +444,9 @@ function adminRoleLabel(role?: V1AdminAccess["role"]) {
   return role === "SUPERADMIN" ? "Superadmin" : role === "EXECUTIVE_ADMIN" ? "Executive Admin" : "Admin";
 }
 
-function ExceptionsPanel({ operations, busy, onResolve, onReset, onReconcile, onReviewRefund }: {
+function ExceptionsPanel({ operations, available, busy, onResolve, onReset, onReconcile, onReviewRefund }: {
   operations?: OwnerOperationsSnapshot;
+  available: boolean;
   busy: boolean;
   onResolve: (exception: OwnerOrderException, resolution: string) => Promise<void>;
   onReset: (exception: OwnerOrderException, reason: string) => Promise<void>;
@@ -388,7 +460,7 @@ function ExceptionsPanel({ operations, busy, onResolve, onReset, onReconcile, on
         <div><h2>Exceptions</h2><p>Support, locked handoffs, refunds and stalled deliveries.</p></div>
         <button className="secondary-button" type="button" disabled={busy} onClick={() => void onReconcile()}><RotateCcw size={17} /> Run recovery</button>
       </header>
-      {exceptions.length === 0 ? <p className="admin-empty">No marketplace exceptions need attention.</p> : (
+      {exceptions.length === 0 ? <p className="admin-empty">{available ? "No marketplace exceptions need attention." : "Exception data is not available yet."}</p> : (
         <div className="exception-list">
           {exceptions.map((exception) => (
             <ExceptionCard
@@ -507,8 +579,9 @@ function ReviewCard({ icon, title, subtitle, facts, evidence, busy, onEvidence, 
   );
 }
 
-function OrdersPanel({ orders, busy, onReview, onRefund }: {
+function OrdersPanel({ orders, available, busy, onReview, onRefund }: {
   orders: AdminOrder[];
+  available: boolean;
   busy: boolean;
   onReview: (
     order: AdminOrder,
@@ -521,7 +594,7 @@ function OrdersPanel({ orders, busy, onReview, onRefund }: {
   return (
     <section className="admin-section admin-orders" role="tabpanel">
       <header><h2>Recent orders</h2><span>{orders.length}</span></header>
-      {orders.length === 0 ? <p className="admin-empty">No orders yet.</p> : (
+      {orders.length === 0 ? <p className="admin-empty">{available ? "No historical orders yet." : "Historical order data is not available yet."}</p> : (
         <div className="admin-order-table" role="table" aria-label="Recent orders">
           <div className="admin-order-header" role="row"><span>Order</span><span>Store</span><span>Status</span><span>Payment</span><span>Total</span></div>
           {orders.map((order) => (
@@ -604,8 +677,25 @@ function shortId(value: string) { return `#${value.slice(0, 8).toUpperCase()}`; 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
+function formatFeedUpdatedAt(value?: string) {
+  return value ? `Last updated ${formatDate(value)}` : "No successful response yet";
+}
 function methodLabel(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
 function paymentLabel(value: AdminOrder["paymentState"]) {
   return value.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+function feedFailureMessage(feed: AdminBootstrapFeed, error: unknown) {
+  const raw = message(error);
+  if (/\b(401|unauthorized|authentication|session|jwt)\b/i.test(raw)) {
+    return "Your Admin session needs to be refreshed. Reopen the app or sign in again.";
+  }
+  return ({
+    merchantApprovals: "Merchant applications could not be refreshed.",
+    deliveryApprovals: "Delivery Partner applications could not be refreshed.",
+    legacyHistory: "Read-only historical orders could not be refreshed.",
+    operations: "Support, refunds and recovery signals could not be refreshed.",
+    adminAccess: "Protected Admin access settings could not be refreshed.",
+    commandCenter: "Command center metrics could not be refreshed.",
+  } satisfies Record<AdminBootstrapFeed, string>)[feed];
 }
 function message(error: unknown) { return error instanceof Error ? error.message : "Dastak Admin is unavailable."; }

@@ -55,6 +55,11 @@ describe("finished Admin command center", () => {
     expect(dashboard).toContain('item.id === "catalogue"');
     expect(dashboard).not.toContain("mainNavigation.slice(0, 5)");
     expect(dashboard).toContain("Promise.allSettled");
+    expect(dashboard).toContain("AdminFeedStatus");
+    expect(dashboard).toContain("feedUpdatedAt");
+    expect(dashboard).toContain("actionError");
+    expect(dashboard).not.toContain("Some live signals could not be refreshed");
+    expect(dashboard).not.toContain("getAdminOrders({ ...auth, limit: 50 }).catch");
     expect(dashboard).toContain("visibilitychange");
     expect(dashboard).toContain("30_000");
     expect(styles).toContain("grid-template-columns: 232px minmax(0, 1fr)");
@@ -63,5 +68,6 @@ describe("finished Admin command center", () => {
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
     expect(styles).toContain("env(safe-area-inset-bottom)");
     expect(styles).toContain(":focus-visible");
+    expect(readFileSync(new URL("./styles.css", import.meta.url), "utf8")).toContain(".admin-feed-status");
   });
 });
