@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { ApplicationProgress } from "./ApplicationProgress";
+import { userFacingError } from "./userFacingError";
 import {
   DeliveryRequestError,
   getDeliveryPartnerSnapshot,
@@ -98,7 +99,7 @@ export function DeliveryPartnerApplicationForm({
         onSessionExpired();
         return;
       }
-      setError(loadError instanceof Error ? loadError.message : "The application could not be loaded.");
+      setError(userFacingError(loadError, "The application could not be loaded."));
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -142,7 +143,7 @@ export function DeliveryPartnerApplicationForm({
       });
       onSubmitted();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "The application could not be submitted.");
+      setError(userFacingError(submitError, "The application could not be submitted."));
       setBusy(false);
     }
   };

@@ -18,6 +18,7 @@ import {
 } from "./dastakV1";
 import { processV1Refund } from "./payments";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { userFacingError } from "./userFacingError";
 
 export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   const [orders, setOrders] = useState<V1AdminExecutionOrder[]>([]);
@@ -540,7 +541,7 @@ function shortId(value?: string) {
   return value ? value.slice(0, 8).toUpperCase() : "—";
 }
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "The V1 execution trace is unavailable.";
+  return userFacingError(error, "The V1 execution trace is unavailable.");
 }
 function uuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);

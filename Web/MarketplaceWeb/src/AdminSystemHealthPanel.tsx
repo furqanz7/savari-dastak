@@ -6,6 +6,7 @@ import {
   type V1SystemHealth,
 } from "./dastakV1";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { userFacingError } from "./userFacingError";
 
 export function AdminSystemHealthPanel({ auth }: { auth: DastakV1Auth }) {
   const [health, setHealth] = useState<V1SystemHealth>();
@@ -93,5 +94,5 @@ function formatTime(value: string) {
 }
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "System health is unavailable.";
+  return userFacingError(error, "System health is unavailable.");
 }

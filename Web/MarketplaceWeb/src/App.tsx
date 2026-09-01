@@ -11,6 +11,7 @@ import {
 } from "react";
 import {
   ArrowRight,
+  CircleAlert,
   BadgeCheck,
   LockKeyhole,
   LogOut,
@@ -42,6 +43,7 @@ import { canCompleteDastakLaunch, dastakLaunchVideos, takeNextDastakLaunchVideo 
 import { readAppConfig } from "./config";
 import { PhoneNumberField } from "./PhoneNumberField";
 import { AppleLogo, GoogleLogo } from "./IdentityProviderLogos";
+import { phoneVerificationError, readableErrorMessage, userFacingError } from "./userFacingError";
 
 const AdminDashboard = lazy(() => import("./AdminDashboard").then((module) => ({ default: module.AdminDashboard })));
 const DastakCustomerView = lazy(() => import("./DastakCustomerView").then((module) => ({ default: module.DastakCustomerView })));
@@ -582,7 +584,11 @@ function ProfileForm({ session, onComplete, onSignOut }: {
         Boolean(session.user.phone_confirmed_at);
       if (!phoneAlreadyVerified && !verificationSent) {
         const { error: verificationError } = await supabase.auth.updateUser({ phone: phoneNumber });
-        if (verificationError) throw verificationError;
+        if (verificationError) {
+          setError(phoneVerificationError(verificationError, "send"));
+          setBusy(false);
+          return;
+        }
         setVerificationSent(true);
         setBusy(false);
         return;
@@ -596,7 +602,11 @@ function ProfileForm({ session, onComplete, onSignOut }: {
           token: verificationCode.trim(),
           type: "phone_change",
         });
-        if (verified.error) throw verified.error;
+        if (verified.error) {
+          setError(phoneVerificationError(verified.error, "verify"));
+          setBusy(false);
+          return;
+        }
         const refreshed = verified.data.session ?? (await supabase.auth.getSession()).data.session;
         if (!refreshed) throw new Error("Phone verification completed, but the session could not be refreshed.");
         verifiedSession = refreshed;
@@ -684,7 +694,10 @@ function ProfileForm({ session, onComplete, onSignOut }: {
       />
       <small>Sent to {phoneNumber}.</small>
     </label>}
-    {error && <p className="error-text profile-submit-error" role="alert">{error}</p>}
+    {error && <div className="error-text profile-submit-error" role="alert">
+      <CircleAlert size={18} aria-hidden="true" />
+      <span><strong>We couldn’t continue</strong><small>{error}</small></span>
+    </div>}
     <button
       className={`primary-button${isCustomerProfile ? " profile-continue-button" : ""}`}
       disabled={busy || (isCustomerProfile && !valid)}
@@ -963,12 +976,12 @@ function canonicalSessionPhone(value?: string) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Something went wrong.";
+  return userFacingError(error, "Something went wrong. Please try again.");
 }
 
 function providerSignInFailure(provider: Provider, error: unknown) {
   const providerName = provider === "apple" ? "Apple" : "Google";
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  const message = readableErrorMessage(error)?.toLowerCase() ?? "";
   if (message.includes("cancel") || message.includes("denied")) {
     return `${providerName} sign-in was cancelled. No account changes were made.`;
   }

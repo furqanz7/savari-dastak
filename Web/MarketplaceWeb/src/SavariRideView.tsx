@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Bike, CarFront, LocateFixed, MapPin, Navigation, Phone, RefreshCw, Search, ShieldCheck, X } from "lucide-react";
+import { userFacingError } from "./userFacingError";
 import {
   cancelRide,
   formatDistance,
@@ -294,5 +295,5 @@ function ActiveRide({ ride, busy, error, onCancel, onReset }: {
 }
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "Something went wrong.";
+  return userFacingError(error, "Something went wrong. Please try again.");
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ImagePlus, LocateFixed, PackagePlus, Pencil, Plus, RefreshCw, Save, Store, X } from "lucide-react";
+import { userFacingError } from "./userFacingError";
 import {
   catalogueImageUrl,
   formatPrice,
@@ -377,7 +378,7 @@ export function MerchantCatalogueView({
 }
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "The catalogue could not be updated.";
+  return userFacingError(error, "The catalogue could not be updated.");
 }
 
 function productPricePaise(value: string) {

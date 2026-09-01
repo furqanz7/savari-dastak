@@ -3,6 +3,7 @@ import { ArrowLeft, Check, CircleAlert, Clock3, LockKeyhole, QrCode, RefreshCw, 
 import { QRCodeSVG } from "qrcode.react";
 import type { DastakV1Auth } from "./dastakV1";
 import { formatV1Price } from "./dastakV1";
+import { userFacingError } from "./userFacingError";
 import {
   RAZORPAY_TEST_UPI_LIMITATION_MESSAGE,
   assertCheckoutProviderMode,
@@ -85,7 +86,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
       }
     } catch (discoveryError) {
       setState("retryable");
-      setError(discoveryError instanceof Error ? discoveryError.message : "Payment methods could not be loaded.");
+      setError(userFacingError(discoveryError, "Payment methods could not be loaded."));
     }
   }, [mobile, session]);
 
@@ -204,7 +205,7 @@ export function DastakPaymentOptions({ auth, session, customer, expiresAt, onDis
       await finishProviderSuccess(result.completion);
     } catch (rehearsalError) {
       setState("retryable");
-      setError(rehearsalError instanceof Error ? rehearsalError.message : "Test payment rehearsal could not start.");
+      setError(userFacingError(rehearsalError, "Test payment rehearsal could not start."));
     }
   };
 

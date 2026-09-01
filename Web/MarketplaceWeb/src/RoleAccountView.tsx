@@ -24,6 +24,7 @@ import {
 import { AccountProfileSheet } from "./AccountProfileSheet";
 import { AccountActionDialog } from "./AccountActionDialog";
 import { AccountSessionsSheet } from "./AccountSessionsSheet";
+import { userFacingError } from "./userFacingError";
 import {
   AccountProfileRequestError,
   accountDeletionIdempotencyKey,
@@ -439,7 +440,7 @@ function methodIcon(method?: DeliveryMethod | null) {
   return <ShieldCheck size={18} />;
 }
 
-function message(error: unknown, fallback: string) { return error instanceof Error ? error.message : fallback; }
+function message(error: unknown, fallback: string) { return userFacingError(error, fallback); }
 
 function roleAccountCopy(roleName: string) {
   if (roleName === "Merchant") return {

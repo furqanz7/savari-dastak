@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, CirclePause, RefreshCw, Search, ShieldCheck, Store } from "lucide-react";
 import { formatPrice } from "./catalogue";
+import { userFacingError } from "./userFacingError";
 import {
   getV1MerchantCanonicalCatalogue,
   updateV1MerchantBranchState,
@@ -129,5 +130,5 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
 }
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "The merchant control could not be completed.";
+  return userFacingError(error, "The merchant control could not be completed.");
 }

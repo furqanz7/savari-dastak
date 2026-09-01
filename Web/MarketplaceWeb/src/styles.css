@@ -1741,11 +1741,20 @@ button:disabled { cursor: wait; opacity: .55; }
 .dastak-customer-profile-card > small svg { flex: 0 0 auto; margin-top: 1px; color: var(--dastak-accent); }
 .dastak-customer-profile-card .field-error { color: #d68c76; }
 .profile-submit-error {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
   margin: 0;
-  padding: 12px;
+  padding: 13px 14px;
+  border: 1px solid rgb(214 140 118 / 24%);
   border-radius: 12px;
   background: rgb(166 90 69 / 12%);
 }
+.profile-submit-error > svg { margin-top: 2px; flex: 0 0 auto; }
+.profile-submit-error > span { min-width: 0; display: grid; gap: 3px; }
+.profile-submit-error strong { color: #f0ddd6; font-size: 13px; line-height: 1.3; }
+.profile-submit-error small { color: #d9aaa0; font-size: 12px; line-height: 1.45; }
 .profile-continue-button {
   width: 100%;
   min-height: 56px;

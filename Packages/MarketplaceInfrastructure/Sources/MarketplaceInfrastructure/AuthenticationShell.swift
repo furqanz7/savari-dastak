@@ -1484,21 +1484,30 @@ private struct AuthenticationRouteView: View {
 
     @MainActor
     private func completeProfile() async {
-        do {
-            errorMessage = nil
-            if !phoneVerificationSent {
+        errorMessage = nil
+        if !phoneVerificationSent {
+            do {
                 try await coordinator.requestPhoneVerification(phoneNumber: phoneNumber)
                 phoneVerificationSent = true
-                return
+            } catch {
+                errorMessage = "Phone verification is temporarily unavailable. Dastak could not send a code right now."
             }
-            guard phoneVerificationCode.count == 6 else {
-                errorMessage = "Enter the 6-digit verification code sent to your phone."
-                return
-            }
+            return
+        }
+        guard phoneVerificationCode.count == 6 else {
+            errorMessage = "Enter the 6-digit verification code sent to your phone."
+            return
+        }
+        do {
             try await coordinator.verifyPhone(
                 phoneNumber: phoneNumber,
                 code: phoneVerificationCode
             )
+        } catch {
+            errorMessage = "That verification code is incorrect or expired. Check the code and try again."
+            return
+        }
+        do {
             try await coordinator.completeProfile(
                 displayName: displayName,
                 phoneNumber: phoneNumber

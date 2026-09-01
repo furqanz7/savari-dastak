@@ -1,6 +1,7 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { LocateFixed, MapPin, Search } from "lucide-react";
 import { reverseGeocodeLocation, searchLocations, type LocationSearchResult } from "./location-search";
+import { userFacingError } from "./userFacingError";
 
 export type SelectedPlace = { address: string; latitude: number; longitude: number };
 
@@ -24,7 +25,7 @@ export function LocationSearchField({ label, value, onChange, disabled }: {
     setBusy(true);
     setError(undefined);
     try { setResults(await searchLocations(query)); }
-    catch (searchError) { setError(searchError instanceof Error ? searchError.message : "Location search failed."); }
+    catch (searchError) { setError(userFacingError(searchError, "Location search failed.")); }
     finally { setBusy(false); }
   };
 

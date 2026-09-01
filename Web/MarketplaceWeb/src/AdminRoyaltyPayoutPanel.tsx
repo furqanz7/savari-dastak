@@ -3,6 +3,7 @@ import { WalletCards } from "lucide-react";
 import { formatPrice } from "./catalogue";
 import { getAdminRoyaltyPayouts, type AdminRoyaltyPayout } from "./earnings";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { userFacingError } from "./userFacingError";
 
 type Auth = { accessToken: string; supabaseUrl: string; publishableKey: string };
 
@@ -102,5 +103,5 @@ function shortId(value: string) {
 }
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "Royalty payouts are unavailable.";
+  return userFacingError(error, "Royalty payouts are unavailable.");
 }

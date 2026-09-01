@@ -24,6 +24,7 @@ import {
 } from "./dastakV1";
 import { catalogueImageUrl } from "./catalogue";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { userFacingError } from "./userFacingError";
 
 const importTemplate = `{
   "categories": [],
@@ -250,7 +251,7 @@ function priceInPaise(value: string) {
   const amount = Number(normalized);
   return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : undefined;
 }
-function message(error: unknown) { return error instanceof Error ? error.message : "The catalogue operation could not be completed."; }
+function message(error: unknown) { return userFacingError(error, "The catalogue operation could not be completed."); }
 function label(value: string) { return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (character) => character.toUpperCase()); }
 function formatPaise(value?: number) { return value === undefined ? "Not set" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value / 100); }
 function formatDate(value: string) { return new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }); }

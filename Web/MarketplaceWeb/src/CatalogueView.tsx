@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readableErrorMessage } from "./userFacingError";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -409,7 +410,7 @@ export function CatalogueView({
       if (error) throw error;
     } catch (error) {
       clearPendingIdentityLink();
-      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      const message = readableErrorMessage(error)?.toLowerCase() ?? "";
       setIdentityMessage(
         message.includes("already") || message.includes("linked") || message.includes("identity")
           ? "That sign-in belongs to another Dastak account or is already linked. Sign in to that account or contact support; Dastak never merges by email or phone."

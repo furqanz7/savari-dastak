@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Landmark, RefreshCw, WalletCards } from "lucide-react";
 import { formatPrice } from "./catalogue";
+import { userFacingError } from "./userFacingError";
 import {
   getRoyalty,
   registerRoyaltyPayoutDestination,
@@ -512,5 +513,5 @@ function shortId(value: string) {
 }
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "Royalty is unavailable.";
+  return userFacingError(error, "Royalty is unavailable.");
 }

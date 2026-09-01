@@ -43,6 +43,7 @@ import {
 import { RoleAccountView } from "./RoleAccountView";
 import { RoyaltyPanel } from "./RoyaltyPanel";
 import { RefreshQueue, useOrderRealtime } from "./orderRealtime";
+import { userFacingError } from "./userFacingError";
 
 type Props = {
   accessToken: string;
@@ -1202,5 +1203,5 @@ function availabilityMessage(availableUntil?: string | null) {
   return `Available until ${time} · Auto-offline after 15 minutes`;
 }
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "The delivery service is unavailable right now.";
+  return userFacingError(error, "The delivery service is unavailable right now.");
 }

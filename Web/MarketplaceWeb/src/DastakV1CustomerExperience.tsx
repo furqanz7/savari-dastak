@@ -30,6 +30,7 @@ import {
   CustomerRouteMap, CustomerTimeline, type CustomerMapPoint,
 } from "./CustomerDeliveryDetails";
 import { useModalDialog } from "./useModalDialog";
+import { userFacingError } from "./userFacingError";
 import {
   canReorderV1Order,
   customerPhoneNumber,
@@ -1438,4 +1439,4 @@ function saveCart(accountId: string, cart: Cart) {
   try { localStorage.setItem(cartKey(accountId), JSON.stringify({ version: 1, quantities: cart })); } catch { /* Private storage may be unavailable. */ }
 }
 function cartKey(accountId: string) { return `dastak:v1-cart:${accountId}`; }
-function message(error: unknown) { return error instanceof Error ? error.message : "Dastak could not complete this request."; }
+function message(error: unknown) { return userFacingError(error, "Dastak could not complete this request."); }

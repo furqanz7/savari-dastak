@@ -20,6 +20,7 @@ import { customerDataIssue, type CustomerDataIssue } from "./customerDataState";
 import { CancellationSheet, CustomerRouteMap, CustomerSupportSheet, CustomerTimeline } from "./CustomerDeliveryDetails";
 import { parcelPaymentStateLabel, parcelPresentation } from "./customerLifecycle";
 import { RefreshQueue } from "./orderRealtime";
+import { userFacingError } from "./userFacingError";
 
 type Props = {
   accessToken: string;
@@ -389,4 +390,4 @@ function isFinal(parcel: ParcelDelivery) { return parcel.status === "delivered" 
 function formatDistance(meters: number) { return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`; }
 function formatDuration(seconds: number) { const minutes = Math.max(1, Math.round(seconds / 60)); return `${minutes} min`; }
 function delay(milliseconds: number) { return new Promise((resolve) => window.setTimeout(resolve, milliseconds)); }
-function message(error: unknown) { return error instanceof Error ? error.message : "The parcel request could not be completed."; }
+function message(error: unknown) { return userFacingError(error, "The parcel request could not be completed."); }

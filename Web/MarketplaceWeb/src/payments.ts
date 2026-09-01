@@ -1,3 +1,5 @@
+import { userFacingError } from "./userFacingError";
+
 type AuthenticatedInput = {
   supabaseUrl: string;
   publishableKey: string;
@@ -330,7 +332,7 @@ export function launchRazorpayCustomUPI(
   } catch (modeError) {
     return Promise.resolve({
       status: "failed",
-      message: modeError instanceof Error ? modeError.message : "Payment configuration does not match this build.",
+      message: userFacingError(modeError, "Payment configuration does not match this build."),
     });
   }
   if (session.providerMode === "TEST") {
@@ -446,7 +448,7 @@ export async function launchRazorpayTestUPI(
   } catch (modeError) {
     return {
       status: "failed",
-      message: modeError instanceof Error ? modeError.message : "Test payment rehearsal is unavailable.",
+      message: userFacingError(modeError, "Test payment rehearsal is unavailable."),
     };
   }
 

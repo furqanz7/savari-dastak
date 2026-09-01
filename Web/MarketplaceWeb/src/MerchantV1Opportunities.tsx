@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { userFacingError } from "./userFacingError";
 import {
   AlertTriangle, Camera, Check, Clock3, PackageCheck, RefreshCw, ShieldCheck, Timer, X,
 } from "lucide-react";
@@ -547,7 +548,7 @@ function formatOptionalTime(value?: string) {
   return value ? new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit" }).format(new Date(value)) : "—";
 }
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "V1 fulfilments are unavailable right now.";
+  return userFacingError(error, "V1 fulfilments are unavailable right now.");
 }
 
 function recordText(value: Record<string, unknown> | undefined, key: string) {

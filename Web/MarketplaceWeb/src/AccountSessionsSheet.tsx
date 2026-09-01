@@ -9,6 +9,7 @@ import {
   type AccountSession,
 } from "./accountSessions";
 import { useModalDialog } from "./useModalDialog";
+import { userFacingError } from "./userFacingError";
 
 export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey, appName, onDismiss, onSessionExpired }: {
   accessToken: string;
@@ -35,7 +36,7 @@ export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey,
       setSessions((await getAccountSessions({ ...auth, ...metadata })).sessions);
     } catch (loadError) {
       if (loadError instanceof AccountSessionRequestError && loadError.status === 401) return onSessionExpired();
-      setError(loadError instanceof Error ? loadError.message : "Devices could not be loaded.");
+      setError(userFacingError(loadError, "Devices could not be loaded."));
     } finally { setLoading(false); }
   }, [auth, metadata, onSessionExpired]);
 
@@ -47,7 +48,7 @@ export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey,
       setSessions((await signOutOtherSessions({ ...auth, ...metadata })).sessions);
     } catch (signOutError) {
       if (signOutError instanceof AccountSessionRequestError && signOutError.status === 401) return onSessionExpired();
-      setError(signOutError instanceof Error ? signOutError.message : "Other devices could not be signed out.");
+      setError(userFacingError(signOutError, "Other devices could not be signed out."));
     } finally { setBusy(false); }
   };
 
@@ -57,7 +58,7 @@ export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey,
       setSessions((await revokeAccountSession({ ...auth, sessionId })).sessions);
     } catch (removeError) {
       if (removeError instanceof AccountSessionRequestError && removeError.status === 401) return onSessionExpired();
-      setError(removeError instanceof Error ? removeError.message : "That device could not be signed out.");
+      setError(userFacingError(removeError, "That device could not be signed out."));
     } finally { setRevokingSessionId(undefined); }
   };
 

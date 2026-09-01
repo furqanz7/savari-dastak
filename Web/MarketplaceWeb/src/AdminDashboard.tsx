@@ -56,6 +56,7 @@ import {
   type V1AdminCommandCenter,
 } from "./dastakV1";
 import { useAdminPullToRefresh, useAdminWorkspaceRefresh } from "./adminRefresh";
+import { userFacingError } from "./userFacingError";
 
 type Props = {
   accessToken: string;
@@ -699,4 +700,4 @@ function feedFailureMessage(feed: AdminBootstrapFeed, error: unknown) {
     commandCenter: "Command center metrics could not be refreshed.",
   } satisfies Record<AdminBootstrapFeed, string>)[feed];
 }
-function message(error: unknown) { return error instanceof Error ? error.message : "Dastak Admin is unavailable."; }
+function message(error: unknown) { return userFacingError(error, "Dastak Admin is unavailable."); }

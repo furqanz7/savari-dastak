@@ -22,6 +22,7 @@ import {
   type V1AdminPersonaState,
 } from "./dastakV1";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { userFacingError } from "./userFacingError";
 
 export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
   const [query, setQuery] = useState("");
@@ -135,4 +136,4 @@ function personaLabel(value: string) { return value === "DELIVERY" ? "Delivery" 
 function roleLabel(value: string) { return value === "SUPERADMIN" ? "Superadmin" : "Executive Admin"; }
 function personaIcon(value: string) { return value === "MERCHANT" ? <Store size={11} /> : value === "DELIVERY" ? <Bike size={11} /> : <ShoppingBag size={11} />; }
 function formatDate(value: string) { return new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }); }
-function message(error: unknown) { return error instanceof Error ? error.message : "The network directory could not be loaded."; }
+function message(error: unknown) { return userFacingError(error, "The network directory could not be loaded."); }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CirclePause, Plus, RefreshCw, ShieldCheck, Store } from "lucide-react";
 import { MerchantV1CatalogueControl } from "./MerchantV1CatalogueControl";
+import { userFacingError } from "./userFacingError";
 import {
   formatV1Price,
   getV1MerchantRestaurantMenu,
@@ -224,5 +225,5 @@ function RestaurantOptionEditor({ option, groupId, busy, save }: {
 }
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "Restaurant menu control is unavailable.";
+  return userFacingError(error, "Restaurant menu control is unavailable.");
 }

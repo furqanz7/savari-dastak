@@ -9,6 +9,7 @@ import {
   type V1OperationalSafety,
 } from "./dastakV1";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { userFacingError } from "./userFacingError";
 
 type Props = { auth: DastakV1Auth };
 
@@ -148,5 +149,5 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
 }
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : "Operational safety is unavailable.";
+  return userFacingError(error, "Operational safety is unavailable.");
 }
