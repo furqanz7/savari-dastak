@@ -96,6 +96,32 @@ final class FunctionClientTests: XCTestCase {
         XCTAssertEqual(callCount, 0)
     }
 
+    func testInvokeRecoversFromOneTransientSessionReadBeforeTransport() async throws {
+        let transport = RecordingTransport(
+            statusCode: 200,
+            responseBody: #"{"accepted":true}"#.data(using: .utf8)!
+        )
+        let tokens = TransientAccessTokenProvider()
+        let client = SupabaseFunctionClient(
+            configuration: makeConfiguration(),
+            accessTokenProvider: { try await tokens.load() },
+            transport: transport.send
+        )
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "request-restored-session"))
+
+        let response: TestResponse = try await client.invoke(
+            "perform-action",
+            request: TestRequest(value: 2),
+            idempotencyKey: key
+        )
+
+        XCTAssertEqual(response, TestResponse(accepted: true))
+        let tokenCallCount = await tokens.callCount()
+        let transportCallCount = await transport.recordedCallCount()
+        XCTAssertEqual(tokenCallCount, 2)
+        XCTAssertEqual(transportCallCount, 1)
+    }
+
     func testInvokeMapsMalformedErrorEnvelopePredictably() async throws {
         let transport = RecordingTransport(
             statusCode: 500,
@@ -169,4 +195,20 @@ private actor RecordingTransport {
     func recordedCallCount() -> Int {
         callCount
     }
+}
+
+private actor TransientAccessTokenProvider {
+    private var calls = 0
+
+    func load() throws -> String? {
+        calls += 1
+        if calls == 1 { throw TransientAccessTokenError.unavailable }
+        return "restored-user-access-token"
+    }
+
+    func callCount() -> Int { calls }
+}
+
+private enum TransientAccessTokenError: Error {
+    case unavailable
 }

@@ -60,16 +60,7 @@ public struct SupabaseFunctionClient: FunctionClient {
         request: Request,
         idempotencyKey: IdempotencyKey
     ) async throws -> Response {
-        let accessToken: String
-        do {
-            guard let token = try await accessTokenProvider()?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !token.isEmpty else {
-                throw FunctionClientError.authenticationRequired
-            }
-            accessToken = token
-        } catch {
-            throw FunctionClientError.authenticationRequired
-        }
+        let accessToken = try await authenticatedAccessToken()
 
         let url = configuration.supabaseURL
             .appendingPathComponent("functions")
@@ -99,6 +90,25 @@ public struct SupabaseFunctionClient: FunctionClient {
         }
 
         return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private func authenticatedAccessToken() async throws -> String {
+        for attempt in 0..<2 {
+            do {
+                if let token = try await accessTokenProvider()?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !token.isEmpty
+                {
+                    return token
+                }
+            } catch {
+                // A restored mobile session can briefly be unavailable while
+                // the auth client publishes its initial local session. Make
+                // one bounded second read; a real missing session still fails.
+            }
+            if attempt == 0 { await Task.yield() }
+        }
+        throw FunctionClientError.authenticationRequired
     }
 }
 
