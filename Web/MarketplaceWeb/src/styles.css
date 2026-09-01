@@ -2634,7 +2634,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .role-profile:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
 .role-profile:disabled { cursor: progress; opacity: .65; }
 .role-profile-main { display: grid; grid-template-columns: 58px minmax(0, 1fr) 40px; gap: 16px; align-items: center; }
-.role-profile-avatar { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 50%; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-size: 18px; font-weight: 750; }
+.role-profile-avatar { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 15px; color: var(--dastak-accent); background: var(--dastak-accent-soft); font-size: 18px; font-weight: 750; }
 .role-profile-copy { min-width: 0; }
 .role-profile-copy strong, .role-profile-copy small { display: block; overflow-wrap: anywhere; }
 .role-profile-copy strong { font-size: 18px; }

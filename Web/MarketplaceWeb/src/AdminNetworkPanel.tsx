@@ -3,15 +3,15 @@ import {
   Bike,
   CheckCircle2,
   ChevronDown,
-  CircleUserRound,
+  CalendarDays,
   Clock3,
+  IdCard,
   Mail,
   Phone,
-  RefreshCw,
   Search,
   ShieldCheck,
+  ShoppingBag,
   Store,
-  UserRound,
   UsersRound,
 } from "lucide-react";
 import {
@@ -21,6 +21,7 @@ import {
   type V1AdminPersona,
   type V1AdminPersonaState,
 } from "./dastakV1";
+import { useAdminWorkspaceRefresh } from "./adminRefresh";
 
 export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
   const [query, setQuery] = useState("");
@@ -73,11 +74,12 @@ export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
   }, [auth, filters]);
 
   const selectedPerson = people.find((person) => person.id === selected);
+  const refreshWorkspace = useCallback(() => load(false), [load]);
+  useAdminWorkspaceRefresh(refreshWorkspace);
 
   return <section className="admin-section admin-network" role="tabpanel">
     <header className="admin-section-heading">
       <div><p className="eyebrow">CONNECTED IDENTITIES</p><h2>Customer, Merchant & Delivery network</h2><p>One canonical identity with independently onboarded personas and live operating context.</p></div>
-      <button className="icon-button" type="button" onClick={() => void load(false)} disabled={loading} aria-label="Refresh network"><RefreshCw size={18} /></button>
     </header>
 
     <div className="admin-network-toolbar">
@@ -90,7 +92,7 @@ export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
     {loading ? <div className="admin-directory-loading" role="status"><span /><p>Connecting identity and operating records…</p></div> : people.length === 0 ? <div className="admin-empty-state"><UsersRound size={28} /><h3>No identities match these filters</h3><p>Try another search or persona state.</p></div> : <div className="admin-network-layout">
       <div className="admin-people-list" aria-label="Dastak identities">
         {people.map((person) => <button type="button" key={person.id} className={person.id === selected ? "selected" : ""} onClick={() => setSelected(person.id)}>
-          <span className="admin-person-avatar">{initials(person.displayName)}</span>
+          <span className="admin-person-mark" aria-hidden="true"><IdCard size={20} /></span>
           <span><strong>{person.displayName}</strong><small>{person.email ?? person.phoneNumber}</small><span className="admin-persona-row">{person.adminRole ? <b className="admin-persona admin"><ShieldCheck size={11} /> {roleLabel(person.adminRole)}</b> : null}{person.personas.map((entry) => <b key={entry.persona} className={`admin-persona ${entry.state.toLowerCase()}`}>{personaIcon(entry.persona)} {personaLabel(entry.persona)}</b>)}</span></span>
           <em>{person.accountState === "ACTIVE" ? "Active" : "Retired"}</em>
         </button>)}
@@ -103,16 +105,16 @@ export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
 
 function PersonDetail({ person }: { person: V1AdminNetworkPerson }) {
   return <article>
-    <header><span className="admin-person-avatar large">{initials(person.displayName)}</span><div><p className="eyebrow">IDENTITY</p><h3>{person.displayName}</h3><span>{person.accountState === "ACTIVE" ? <><CheckCircle2 size={14} /> Active canonical account</> : <><Clock3 size={14} /> Deleted identity · eligible for governed recovery</>}</span></div></header>
+    <header><span className="admin-person-mark large" aria-hidden="true"><IdCard size={25} /></span><div><p className="eyebrow">IDENTITY RECORD</p><h3>{person.displayName}</h3><span>{person.accountState === "ACTIVE" ? <><CheckCircle2 size={14} /> Active canonical account</> : <><Clock3 size={14} /> Deleted identity · eligible for governed recovery</>}</span></div></header>
     <dl className="admin-contact-grid">
       <div><dt><Mail size={14} /> Email</dt><dd>{person.email ?? "No email available"}</dd></div>
       <div><dt><Phone size={14} /> Verified phone</dt><dd>{person.phoneNumber} {person.phoneVerified ? <CheckCircle2 size={13} /> : null}</dd></div>
       <div><dt><Clock3 size={14} /> Last sign-in</dt><dd>{person.lastSignInAt ? formatDate(person.lastSignInAt) : "Never recorded"}</dd></div>
-      <div><dt><CircleUserRound size={14} /> Joined</dt><dd>{formatDate(person.createdAt)}</dd></div>
+      <div><dt><CalendarDays size={14} /> Joined</dt><dd>{formatDate(person.createdAt)}</dd></div>
     </dl>
 
     <section><h4>Persona lifecycle</h4><div className="admin-persona-detail-grid">
-      <PersonaDetail icon={<UserRound />} title="Customer" state={personaState(person, "CUSTOMER")} detail={`${person.customer.orderCount} orders · ${person.customer.activeOrderCount} active`} />
+      <PersonaDetail icon={<ShoppingBag />} title="Customer" state={personaState(person, "CUSTOMER")} detail={`${person.customer.orderCount} orders · ${person.customer.activeOrderCount} active`} />
       <PersonaDetail icon={<Store />} title="Merchant" state={personaState(person, "MERCHANT")} detail={person.merchant ? `${label(person.merchant.applicationStatus)} · ${person.merchant.organizationName ?? person.merchant.businessName} · ${person.merchant.branchCount} branches` : "Onboarding not started"} />
       <PersonaDetail icon={<Bike />} title="Delivery Partner" state={personaState(person, "DELIVERY")} detail={person.delivery ? `${label(person.delivery.applicationStatus)} · ${label(person.delivery.deliveryMethod)} · ${person.delivery.activeMissionCount} active missions` : "Onboarding not started"} />
       {person.adminRole ? <PersonaDetail icon={<ShieldCheck />} title="Admin" state="ACTIVE" detail={`${roleLabel(person.adminRole)} · full operations access`} /> : null}
@@ -128,10 +130,9 @@ function PersonaDetail({ icon, title, state, detail }: { icon: ReactNode; title:
 function personaState(person: V1AdminNetworkPerson, persona: "CUSTOMER" | "MERCHANT" | "DELIVERY") {
   return person.personas.find((entry) => entry.persona === persona)?.state ?? "NOT ONBOARDED";
 }
-function initials(name: string) { return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
 function label(value: string) { return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function personaLabel(value: string) { return value === "DELIVERY" ? "Delivery" : label(value); }
 function roleLabel(value: string) { return value === "SUPERADMIN" ? "Superadmin" : "Executive Admin"; }
-function personaIcon(value: string) { return value === "MERCHANT" ? <Store size={11} /> : value === "DELIVERY" ? <Bike size={11} /> : <UserRound size={11} />; }
+function personaIcon(value: string) { return value === "MERCHANT" ? <Store size={11} /> : value === "DELIVERY" ? <Bike size={11} /> : <ShoppingBag size={11} />; }
 function formatDate(value: string) { return new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }); }
 function message(error: unknown) { return error instanceof Error ? error.message : "The network directory could not be loaded."; }

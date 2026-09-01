@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CircleAlert, PauseCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { CircleAlert, PauseCircle, ShieldCheck } from "lucide-react";
 import {
   getV1AdminOperationalSafety,
   manageV1RiderEscalation,
@@ -8,6 +8,7 @@ import {
   type V1OperationalPauseScope,
   type V1OperationalSafety,
 } from "./dastakV1";
+import { useAdminWorkspaceRefresh } from "./adminRefresh";
 
 type Props = { auth: DastakV1Auth };
 
@@ -28,6 +29,7 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
     }
   }, [auth]);
   useEffect(() => { void refresh(); }, [refresh]);
+  useAdminWorkspaceRefresh(refresh);
 
   const existing = useMemo(() => snapshot?.pauses.find((pause) =>
     pause.scope === scope && pause.targetId === targetId.trim()), [scope, snapshot, targetId]);
@@ -94,7 +96,6 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
       <section className="admin-section">
         <header>
           <div><h2>Scoped emergency controls</h2><p>New commitments only; paid work continues.</p></div>
-          <button className="icon-button" type="button" disabled={busy} onClick={() => void refresh()} aria-label="Refresh operational safety"><RefreshCw size={18} /></button>
         </header>
         {!snapshot?.permissions.canManageOperationalPauses ? (
           <p className="admin-empty">This account has trace-only access.</p>

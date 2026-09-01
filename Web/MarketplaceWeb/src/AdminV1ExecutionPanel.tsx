@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Camera, Clock3, PackageCheck, RefreshCw, Route, ShieldCheck, WalletCards } from "lucide-react";
+import { Camera, Clock3, PackageCheck, Route, ShieldCheck, WalletCards } from "lucide-react";
 import { getEvidenceUrl } from "./admin";
 import {
   authorizeV1ExceptionalDeliveryHandoff,
@@ -17,13 +17,13 @@ import {
   type V1AdminExecutionTrace,
 } from "./dastakV1";
 import { processV1Refund } from "./payments";
+import { useAdminWorkspaceRefresh } from "./adminRefresh";
 
 export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   const [orders, setOrders] = useState<V1AdminExecutionOrder[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [trace, setTrace] = useState<V1AdminExecutionTrace>();
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const selectedIdRef = useRef<string | undefined>(undefined);
 
@@ -37,8 +37,7 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
     }
   }, [auth]);
 
-  const refresh = useCallback(async (showProgress = false) => {
-    if (showProgress) setBusy(true);
+  const refresh = useCallback(async () => {
     try {
       const result = await getV1AdminExecutionOrders({ ...auth, limit: 50 });
       setOrders(result);
@@ -55,11 +54,11 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
       setError(message(refreshError));
     } finally {
       setLoading(false);
-      if (showProgress) setBusy(false);
     }
   }, [auth, loadTrace]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useAdminWorkspaceRefresh(refresh);
 
   const select = (orderId: string) => {
     selectedIdRef.current = orderId;
@@ -69,7 +68,7 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   };
 
   return <section className="v1-execution-panel" role="tabpanel" aria-label="Current Dastak orders">
-    <header><div><p className="eyebrow">LIVE ORDER CONTROL</p><h2>Orders</h2><span>Inspect matching, payment, fulfilment, custody and recovery in one trace.</span></div><button className="icon-button" type="button" disabled={busy} onClick={() => void refresh(true)} aria-label="Refresh orders"><RefreshCw size={18} /></button></header>
+    <header><div><p className="eyebrow">LIVE ORDER CONTROL</p><h2>Orders</h2><span>Inspect matching, payment, fulfilment, custody and recovery in one trace.</span></div></header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {loading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length === 0 ? <p className="admin-empty">No current-generation orders have been submitted.</p> : <div className="v1-execution-layout">
       <nav aria-label="Current orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>

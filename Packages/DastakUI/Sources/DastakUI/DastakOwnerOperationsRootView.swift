@@ -100,6 +100,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
     @Published private(set) var deliveryApplications: [DeliveryPartnerApplication] = []
     @Published private(set) var networkPeople: [DastakAdminNetworkPerson] = []
     @Published private(set) var networkHasMore = false
+    @Published private(set) var catalogueTaxonomy: DastakAdminCatalogueTaxonomy?
     @Published private(set) var catalogueSKUs: [DastakAdminCatalogueSKU] = []
     @Published private(set) var catalogueHasMore = false
     @Published private(set) var isLoadingNetwork = false
@@ -455,6 +456,9 @@ final class DastakOwnerOperationsModel: ObservableObject {
 
     func loadCatalogue(
         query: String = "",
+        categoryTypeID: UUID? = nil,
+        categoryID: UUID? = nil,
+        subcategoryID: UUID? = nil,
         status: String? = nil,
         qaStatus: String? = nil,
         append: Bool = false
@@ -463,9 +467,17 @@ final class DastakOwnerOperationsModel: ObservableObject {
         isLoadingCatalogue = true
         defer { isLoadingCatalogue = false }
         do {
+            if !append, catalogueTaxonomy == nil {
+                catalogueTaxonomy = try await v1Client.catalogueTaxonomy(
+                    idempotencyKey: key()
+                )
+            }
             let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
             let page = try await v1Client.cataloguePage(
                 query: normalizedQuery.isEmpty ? nil : normalizedQuery,
+                categoryTypeID: categoryTypeID,
+                categoryID: categoryID,
+                subcategoryID: subcategoryID,
                 status: status,
                 qaStatus: qaStatus,
                 limit: 40,
@@ -779,15 +791,11 @@ struct DastakAdminRefreshSummaryCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Some workspaces need a refresh")
                         .font(.headline)
-                    Text("Current data remains available. \(workspaceNames) will retry independently.")
+                    Text("Current data remains available. Pull down to refresh \(workspaceNames).")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
-            Button("Retry unavailable workspaces", systemImage: "arrow.clockwise", action: retry)
-                .buttonStyle(.bordered)
-                .disabled(isRefreshing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(MarketplaceSpacing.medium)
         .background(MarketplaceColors.warning.color.opacity(0.1))
@@ -830,10 +838,9 @@ struct DastakAdminWorkspaceIssueCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            Button("Try again", systemImage: "arrow.clockwise", action: retry)
-                .buttonStyle(.bordered)
-                .disabled(isRefreshing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            Label("Pull down to try this workspace again", systemImage: "arrow.down")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
         }
         .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
@@ -1100,24 +1107,15 @@ struct DastakOwnerOperationsView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                Text("OWNER OPERATIONS")
-                    .font(.caption.weight(.semibold))
-                    .tracking(2)
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                Text("Marketplace control")
-                    .font(MarketplaceTypography.instrumentSerif(fixedSize: 48))
-                Text("Support, refunds, handoff security and lifecycle recovery.")
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button { Task { await model.refresh() } } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(MarketplaceIconButtonStyle())
-            .disabled(model.isRefreshing)
-            .accessibilityLabel("Refresh operations")
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+            Text("OWNER OPERATIONS")
+                .font(.caption.weight(.semibold))
+                .tracking(2)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text("Marketplace control")
+                .font(MarketplaceTypography.instrumentSerif(fixedSize: 48))
+            Text("Support, refunds, handoff security and lifecycle recovery.")
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -1302,10 +1300,7 @@ struct DastakOwnerOperationsView: View {
         ContentUnavailableView {
             Label("Operations unavailable", systemImage: "wifi.exclamationmark")
         } description: {
-            Text("Check your connection and try again.")
-        } actions: {
-            Button("Retry") { Task { await model.refresh() } }
-                .buttonStyle(MarketplacePrimaryButtonStyle())
+            Text("Check your connection, then pull down to refresh.")
         }
         .frame(maxWidth: .infinity, minHeight: 320)
     }

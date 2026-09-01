@@ -226,22 +226,109 @@ public struct DastakAdminCatalogueSKU: Codable, Equatable, Identifiable, Sendabl
     }
 
     public let id: UUID
+    public let categoryTypeID: UUID?
+    public let categoryTypeName: String?
+    public let categoryID: UUID?
+    public let categoryName: String?
+    public let subcategoryID: UUID?
+    public let subcategoryName: String?
+    public let brandID: UUID?
     public let name: String
     public let brandName: String?
+    public let slug: String?
+    public let variant: String?
     public let packSize: String
+    public let description: String?
+    public let imageKey: String?
+    public let quantityValue: Double?
+    public let quantityUnit: String?
+    public let packCount: Int?
+    public let manufacturerName: String?
+    public let countryOfOriginCode: String?
+    public let hsnCode: String?
+    public let dietType: String?
+    public let shelfLifeDays: Int?
+    public let barcode: String?
     public let listPricePaise: Int?
     public let sellingPricePaise: Int?
     public let currencyCode: String
+    public let taxRateBps: Int?
     public let status: String
     public let qaStatus: String
     public let activationReady: Bool
     public let activationBlockers: [String]
+    public let selectionCount: Int?
     public let imageCount: Int
     public let aliasCount: Int
     public let identifierCount: Int
     public let primaryImage: PrimaryImage?
     public let version: Int
     public let updatedAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, categoryTypeName, categoryName, subcategoryName, name, brandName
+        case slug, variant, packSize, description, imageKey, quantityValue
+        case quantityUnit, packCount, manufacturerName, countryOfOriginCode
+        case hsnCode, dietType, shelfLifeDays, barcode, listPricePaise
+        case sellingPricePaise, currencyCode, taxRateBps, status, qaStatus
+        case activationReady, activationBlockers, selectionCount, imageCount
+        case aliasCount, identifierCount, primaryImage, version, updatedAt
+        case categoryTypeID = "categoryTypeId"
+        case categoryID = "categoryId"
+        case subcategoryID = "subcategoryId"
+        case brandID = "brandId"
+    }
+}
+
+public struct DastakAdminCatalogueTaxonomy: Codable, Equatable, Sendable {
+    public struct CategoryType: Codable, Equatable, Identifiable, Sendable {
+        public let id: UUID
+        public let name: String
+        public let slug: String
+        public let imageKey: String?
+        public let status: String
+        public let sortOrder: Int
+        public let version: Int
+        public let updatedAt: String
+    }
+
+    public struct Category: Codable, Equatable, Identifiable, Sendable {
+        public let id: UUID
+        public let categoryTypeID: UUID?
+        public let name: String
+        public let slug: String
+        public let imageKey: String?
+        public let status: String
+        public let sortOrder: Int
+        public let version: Int
+        public let updatedAt: String
+
+        private enum CodingKeys: String, CodingKey {
+            case id, name, slug, imageKey, status, sortOrder, version, updatedAt
+            case categoryTypeID = "categoryTypeId"
+        }
+    }
+
+    public struct Subcategory: Codable, Equatable, Identifiable, Sendable {
+        public let id: UUID
+        public let categoryID: UUID
+        public let name: String
+        public let slug: String
+        public let imageKey: String?
+        public let status: String
+        public let sortOrder: Int
+        public let version: Int
+        public let updatedAt: String
+
+        private enum CodingKeys: String, CodingKey {
+            case id, name, slug, imageKey, status, sortOrder, version, updatedAt
+            case categoryID = "categoryId"
+        }
+    }
+
+    public let categoryTypes: [CategoryType]
+    public let categories: [Category]
+    public let subcategories: [Subcategory]
 }
 
 public struct DastakAdminCatalogueCursor: Codable, Equatable, Sendable {
@@ -489,12 +576,16 @@ public protocol DastakV1AdminClient: Sendable {
     ) async throws -> DastakAdminNetworkPage
     func cataloguePage(
         query: String?,
+        categoryTypeID: UUID?,
+        categoryID: UUID?,
+        subcategoryID: UUID?,
         status: String?,
         qaStatus: String?,
         limit: Int,
         cursor: DastakAdminCatalogueCursor?,
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakAdminCataloguePage
+    func catalogueTaxonomy(idempotencyKey: IdempotencyKey) async throws -> DastakAdminCatalogueTaxonomy
     func updateCatalogueSKU(
         id: UUID,
         expectedVersion: Int,
@@ -585,7 +676,11 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
             let status: String
         }
         let operation: String
+        let skuLimit: Int?
         let query: String?
+        let categoryTypeId: UUID?
+        let categoryId: UUID?
+        let subcategoryId: UUID?
         let status: String?
         let qaStatus: String?
         let limit: Int?
@@ -772,6 +867,9 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
 
     public func cataloguePage(
         query: String?,
+        categoryTypeID: UUID?,
+        categoryID: UUID?,
+        subcategoryID: UUID?,
         status: String?,
         qaStatus: String?,
         limit: Int = 50,
@@ -783,11 +881,39 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
             "dastak-v1-catalogue",
             request: CatalogueRequest(
                 operation: "adminCataloguePage",
+                skuLimit: nil,
                 query: query,
+                categoryTypeId: categoryTypeID,
+                categoryId: categoryID,
+                subcategoryId: subcategoryID,
                 status: status,
                 qaStatus: qaStatus,
                 limit: limit,
                 cursor: cursor,
+                skuId: nil,
+                expectedVersion: nil,
+                patch: nil
+            ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func catalogueTaxonomy(
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakAdminCatalogueTaxonomy {
+        try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: CatalogueRequest(
+                operation: "adminSnapshot",
+                skuLimit: 1,
+                query: nil,
+                categoryTypeId: nil,
+                categoryId: nil,
+                subcategoryId: nil,
+                status: nil,
+                qaStatus: nil,
+                limit: nil,
+                cursor: nil,
                 skuId: nil,
                 expectedVersion: nil,
                 patch: nil
@@ -809,7 +935,11 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
             "dastak-v1-catalogue",
             request: CatalogueRequest(
                 operation: "updateSku",
+                skuLimit: nil,
                 query: nil,
+                categoryTypeId: nil,
+                categoryId: nil,
+                subcategoryId: nil,
                 status: nil,
                 qaStatus: nil,
                 limit: nil,

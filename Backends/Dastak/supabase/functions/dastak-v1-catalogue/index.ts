@@ -32,6 +32,12 @@ Deno.serve((request) =>
           p_sku_limit: input.skuLimit,
         },
       ),
+    adminTaxonomy: (input) =>
+      callAuthenticatedRPC(
+        input.accessToken,
+        "dastak_v1_catalogue_taxonomy_snapshot",
+        {},
+      ),
     adminPage: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

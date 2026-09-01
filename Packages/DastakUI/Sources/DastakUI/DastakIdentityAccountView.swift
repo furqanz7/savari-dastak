@@ -218,7 +218,10 @@ public struct DastakIdentityAccountView: View {
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
                         .frame(width: 58, height: 58)
-                        .background(MarketplaceColors.dastakAccentSoft.color, in: Circle())
+                        .background(
+                            MarketplaceColors.dastakAccentSoft.color,
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        )
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text(model.customer?.displayName ?? (model.isLoading ? "Loading account" : roleName))
@@ -593,8 +596,8 @@ public struct DastakIdentityAccountView: View {
                 Text(message)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
-                Button("Try again") { Task { await model.load() } }
-                    .font(.subheadline.weight(.semibold))
+                Label("Pull down to try again", systemImage: "arrow.down")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
             }
             Spacer()

@@ -590,7 +590,8 @@ export type V1AdminSku = Omit<V1CatalogueSku, "listPricePaise" | "sellingPricePa
 };
 
 export type V1AdminSnapshot = {
-  categories: Array<V1CatalogueCategory & { status: string; version: number; updatedAt: string }>;
+  categoryTypes: Array<V1CatalogueCategory & { status: string; version: number; updatedAt: string }>;
+  categories: Array<V1CatalogueCategory & { categoryTypeId?: string; status: string; version: number; updatedAt: string }>;
   subcategories: Array<V1CatalogueSubcategory & { status: string; version: number; updatedAt: string }>;
   brands: Array<V1CatalogueBrand & { imageKey?: string; status: string; version: number; updatedAt: string }>;
   skus: V1AdminSku[];
@@ -709,6 +710,9 @@ export type V1AdminNetworkPage = {
 
 export type V1AdminCataloguePageSku = V1AdminSku & {
   categoryTypeId?: string;
+  categoryTypeName?: string;
+  categoryName: string;
+  subcategoryName: string;
   brandName?: string;
   qaStatus: "PENDING" | "NEEDS_REVIEW" | "VERIFIED" | "REJECTED";
   activationReady: boolean;
@@ -2461,7 +2465,8 @@ export function parseV1AdminSnapshot(value: unknown): V1AdminSnapshot {
     !Array.isArray(source.brands) || !Array.isArray(source.skus) ||
     !Array.isArray(source.configuration) || !Array.isArray(source.branches)) invalid("admin catalogue response");
   return {
-    categories: source.categories.map((item) => parseAdminEntity(item, parseCategory)),
+    categoryTypes: requiredArray(source.categoryTypes ?? []).map((item) => parseAdminEntity(item, parseCategory)),
+    categories: source.categories.map(parseAdminCategory),
     subcategories: source.subcategories.map((item) => parseAdminEntity(item, parseSubcategory)),
     brands: source.brands.map(parseAdminBrand),
     skus: source.skus.map(parseAdminSku),
@@ -2469,6 +2474,15 @@ export function parseV1AdminSnapshot(value: unknown): V1AdminSnapshot {
     truncated: requiredBoolean(source.truncated),
     configuration: source.configuration.map(parseConfiguration),
     branches: source.branches.map(parseBranch),
+  };
+}
+
+function parseAdminCategory(value: unknown) {
+  const source = requiredRecord(value);
+  return {
+    ...parseAdminEntity(value, parseCategory),
+    categoryTypeId: source.categoryTypeId === null || source.categoryTypeId === undefined
+      ? undefined : requiredUuid(source.categoryTypeId),
   };
 }
 
@@ -2814,6 +2828,9 @@ function parseAdminCataloguePageSku(value: unknown): V1AdminCataloguePageSku {
     ...parseAdminSku(value),
     categoryTypeId: source.categoryTypeId === null || source.categoryTypeId === undefined
       ? undefined : requiredUuid(source.categoryTypeId),
+    categoryTypeName: optionalText(source.categoryTypeName, 100),
+    categoryName: optionalText(source.categoryName, 100) ?? "Unclassified category",
+    subcategoryName: optionalText(source.subcategoryName, 100) ?? "Unclassified subcategory",
     brandName: optionalText(source.brandName, 160),
     qaStatus: qaStatus as V1AdminCataloguePageSku["qaStatus"],
     activationReady: requiredBoolean(source.activationReady),

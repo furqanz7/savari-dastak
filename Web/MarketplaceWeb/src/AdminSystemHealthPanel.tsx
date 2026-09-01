@@ -1,19 +1,18 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { AlertTriangle, BellRing, Clock3, RefreshCw, ServerCog, ShieldCheck } from "lucide-react";
+import { AlertTriangle, BellRing, Clock3, ServerCog, ShieldCheck } from "lucide-react";
 import {
   getV1AdminSystemHealth,
   type DastakV1Auth,
   type V1SystemHealth,
 } from "./dastakV1";
+import { useAdminWorkspaceRefresh } from "./adminRefresh";
 
 export function AdminSystemHealthPanel({ auth }: { auth: DastakV1Auth }) {
   const [health, setHealth] = useState<V1SystemHealth>();
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string>();
 
-  const refresh = useCallback(async (showProgress = false) => {
-    if (showProgress) setRefreshing(true);
+  const refresh = useCallback(async () => {
     try {
       setHealth(await getV1AdminSystemHealth(auth));
       setError(undefined);
@@ -21,11 +20,11 @@ export function AdminSystemHealthPanel({ auth }: { auth: DastakV1Auth }) {
       setError(message(healthError));
     } finally {
       setLoading(false);
-      if (showProgress) setRefreshing(false);
     }
   }, [auth]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useAdminWorkspaceRefresh(refresh);
 
   return <section className="v1-health-panel" role="tabpanel" aria-label="Dastak V1 system health">
     <header>
@@ -34,9 +33,6 @@ export function AdminSystemHealthPanel({ auth }: { auth: DastakV1Auth }) {
         <h2>System health</h2>
         <span>Transactional delivery, critical invariants and payment reconciliation.</span>
       </div>
-      <button className="icon-button" type="button" disabled={refreshing} onClick={() => void refresh(true)} aria-label="Refresh system health">
-        <RefreshCw size={18} />
-      </button>
     </header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {loading ? <div className="catalogue-loading" role="status"><span /> Loading system health</div> : health ? <>

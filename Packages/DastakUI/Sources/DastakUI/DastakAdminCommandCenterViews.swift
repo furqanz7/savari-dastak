@@ -1,3 +1,4 @@
+import Foundation
 import MarketplaceDesignSystem
 import MarketplaceFoundation
 import MarketplaceInfrastructure
@@ -46,7 +47,6 @@ struct DastakAdminOverviewView: View {
                 .frame(maxWidth: .infinity)
             }
             .navigationTitle("Command center")
-            .toolbar { refreshButton }
             .refreshable { await model.refresh() }
         }
         .marketplacePage()
@@ -116,13 +116,6 @@ struct DastakAdminOverviewView: View {
         .marketplaceFlatSurface()
     }
 
-    private var refreshButton: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Button { Task { await model.refresh() } } label: { Image(systemName: "arrow.clockwise") }
-                .disabled(model.isRefreshing)
-                .accessibilityLabel("Refresh command center")
-        }
-    }
 }
 
 struct DastakAdminApprovalsView: View {
@@ -304,7 +297,7 @@ struct DastakAdminMoreView: View {
                             openWorkspace: {},
                             services: services
                         )
-                    } label: { MoreRow(title: "My account", detail: "Profile, security and sessions", symbol: "person.crop.circle") }
+                    } label: { MoreRow(title: "My account", detail: "Profile, security and sessions", symbol: "person.text.rectangle") }
                 }
             }
             .listStyle(.inset)
@@ -317,63 +310,93 @@ struct DastakAdminMoreView: View {
 private struct DastakAdminCatalogueView: View {
     @ObservedObject var model: DastakOwnerOperationsModel
     @State private var query = ""
+    @State private var categoryTypeID: UUID?
+    @State private var categoryID: UUID?
+    @State private var subcategoryID: UUID?
     @State private var status: String?
     @State private var qaStatus: String?
     @State private var selectedSKU: DastakAdminCatalogueSKU?
 
     var body: some View {
-        List {
-            Section {
-                Picker("Visibility", selection: $status) {
-                    Text("Any visibility").tag(String?.none)
-                    Text("Active").tag(String?.some("ACTIVE"))
-                    Text("Draft").tag(String?.some("DRAFT"))
-                    Text("Inactive").tag(String?.some("INACTIVE"))
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                AdminPageIntro(
+                    eyebrow: "MASTER CATALOGUE",
+                    title: "Every product, exactly represented",
+                    detail: "Browse the same imagery and customer-facing detail with governed department, category, subcategory, QA, pricing and visibility."
+                )
+
+                if let taxonomy = model.catalogueTaxonomy {
+                    LazyVGrid(
+                        columns: [GridItem(.flexible()), GridItem(.flexible())],
+                        spacing: MarketplaceSpacing.compact
+                    ) {
+                        AdminMetric(title: "Departments", value: taxonomy.categoryTypes.count, detail: "top-level groups", symbol: "square.grid.2x2")
+                        AdminMetric(title: "Categories", value: taxonomy.categories.count, detail: "customer aisles", symbol: "rectangle.3.group")
+                        AdminMetric(title: "Subcategories", value: taxonomy.subcategories.count, detail: "exact families", symbol: "square.grid.3x3")
+                        AdminMetric(title: "SKUs shown", value: model.catalogueSKUs.count, detail: model.catalogueHasMore ? "more available" : "filtered result", symbol: "shippingbox")
+                    }
                 }
-                Picker("QA", selection: $qaStatus) {
-                    Text("Any QA state").tag(String?.none)
-                    Text("Verified").tag(String?.some("VERIFIED"))
-                    Text("Needs review").tag(String?.some("NEEDS_REVIEW"))
-                    Text("Pending").tag(String?.some("PENDING"))
-                    Text("Rejected").tag(String?.some("REJECTED"))
-                }
-            }
+
+                catalogueFilters
+
             if let issue = model.issue(for: .catalogue) {
-                Section {
-                    DastakAdminWorkspaceIssueCard(
-                        issue: issue,
-                        lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: .catalogue),
-                        isRefreshing: model.isLoadingCatalogue
-                    ) { Task { await load() } }
-                }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
+                DastakAdminWorkspaceIssueCard(
+                    issue: issue,
+                    lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: .catalogue),
+                    isRefreshing: model.isLoadingCatalogue
+                ) { Task { await load() } }
             }
             if model.isLoadingCatalogue, model.catalogueSKUs.isEmpty {
-                HStack { Spacer(); ProgressView("Loading exact SKUs"); Spacer() }.listRowBackground(Color.clear)
+                ProgressView("Loading exact SKUs")
+                    .frame(maxWidth: .infinity, minHeight: 240)
             } else if model.catalogueSKUs.isEmpty,
                       model.issue(for: .catalogue) == nil || model.lastSuccessfulRefresh(for: .catalogue) != nil {
-                ContentUnavailableView.search(text: query)
+                ContentUnavailableView(
+                    "No exact SKUs found",
+                    systemImage: "shippingbox.and.arrow.backward",
+                    description: Text("Change a classification filter or search for another product.")
+                )
+                .frame(maxWidth: .infinity, minHeight: 240)
+                .marketplaceFlatSurface()
             } else {
-                Section("Exact SKU library") {
+                AdminSectionHeader(eyebrow: "EXACT SKU LIBRARY", title: "Customer-ready product records")
                     ForEach(model.catalogueSKUs) { sku in
-                        Button { selectedSKU = sku } label: { AdminSKURow(sku: sku) }.buttonStyle(.plain)
+                        Button { selectedSKU = sku } label: { AdminSKUCard(sku: sku) }
+                            .buttonStyle(.plain)
                     }
                     if model.catalogueHasMore {
-                        Button("Load next 40 SKUs") { Task { await load(append: true) } }
+                        Button("Load next 40 SKUs", systemImage: "chevron.down") {
+                            Task { await load(append: true) }
+                        }
+                            .buttonStyle(.bordered)
                             .frame(maxWidth: .infinity)
                             .disabled(model.isLoadingCatalogue)
                     }
-                }
             }
+            }
+            .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+            .padding(MarketplaceSpacing.large)
+            .frame(maxWidth: .infinity)
         }
         .navigationTitle("Catalogue")
-        .searchable(text: $query, prompt: "SKU, brand or alias")
+        .searchable(text: $query, prompt: "SKU, brand, alias or category")
         .onSubmit(of: .search) { Task { await load() } }
+        .onChange(of: categoryTypeID) {
+            categoryID = nil
+            subcategoryID = nil
+            Task { await load() }
+        }
+        .onChange(of: categoryID) {
+            subcategoryID = nil
+            Task { await load() }
+        }
+        .onChange(of: subcategoryID) { Task { await load() } }
         .onChange(of: status) { Task { await load() } }
         .onChange(of: qaStatus) { Task { await load() } }
         .task { if model.catalogueSKUs.isEmpty { await load() } }
         .refreshable { await load() }
+        .marketplacePage()
         .sheet(item: $selectedSKU) { sku in
             AdminSKUEditor(sku: sku, model: model)
                 .presentationDetents([.medium, .large])
@@ -381,8 +404,68 @@ private struct DastakAdminCatalogueView: View {
         }
     }
 
+    private var catalogueFilters: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            AdminSectionHeader(eyebrow: "CLASSIFICATION & READINESS", title: "Refine the library")
+            Picker("Department", selection: $categoryTypeID) {
+                Text("All departments").tag(UUID?.none)
+                ForEach(model.catalogueTaxonomy?.categoryTypes ?? []) { value in
+                    Text(value.name).tag(UUID?.some(value.id))
+                }
+            }
+            Picker("Category", selection: $categoryID) {
+                Text("All categories").tag(UUID?.none)
+                ForEach(visibleCategories) { value in
+                    Text(value.name).tag(UUID?.some(value.id))
+                }
+            }
+            Picker("Subcategory", selection: $subcategoryID) {
+                Text("All subcategories").tag(UUID?.none)
+                ForEach(visibleSubcategories) { value in
+                    Text(value.name).tag(UUID?.some(value.id))
+                }
+            }
+            Picker("Visibility", selection: $status) {
+                Text("Any visibility").tag(String?.none)
+                Text("Active").tag(String?.some("ACTIVE"))
+                Text("Draft").tag(String?.some("DRAFT"))
+                Text("Inactive").tag(String?.some("INACTIVE"))
+            }
+            Picker("QA", selection: $qaStatus) {
+                Text("Any QA state").tag(String?.none)
+                Text("Verified").tag(String?.some("VERIFIED"))
+                Text("Needs review").tag(String?.some("NEEDS_REVIEW"))
+                Text("Pending").tag(String?.some("PENDING"))
+                Text("Rejected").tag(String?.some("REJECTED"))
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+    }
+
+    private var visibleCategories: [DastakAdminCatalogueTaxonomy.Category] {
+        (model.catalogueTaxonomy?.categories ?? []).filter {
+            categoryTypeID == nil || $0.categoryTypeID == categoryTypeID
+        }
+    }
+
+    private var visibleSubcategories: [DastakAdminCatalogueTaxonomy.Subcategory] {
+        let visibleIDs = Set(visibleCategories.map(\.id))
+        return (model.catalogueTaxonomy?.subcategories ?? []).filter {
+            (categoryID == nil || $0.categoryID == categoryID) && visibleIDs.contains($0.categoryID)
+        }
+    }
+
     private func load(append: Bool = false) async {
-        await model.loadCatalogue(query: query, status: status, qaStatus: qaStatus, append: append)
+        await model.loadCatalogue(
+            query: query,
+            categoryTypeID: categoryTypeID,
+            categoryID: categoryID,
+            subcategoryID: subcategoryID,
+            status: status,
+            qaStatus: qaStatus,
+            append: append
+        )
     }
 }
 
@@ -798,6 +881,27 @@ private struct AdminSKUEditor: View {
         NavigationStack {
             Form {
                 Section { AdminSKURow(sku: sku) }
+                Section("Customer-facing classification") {
+                    LabeledContent("Department", value: sku.categoryTypeName ?? "Not classified")
+                    LabeledContent("Category", value: sku.categoryName ?? "Not classified")
+                    LabeledContent("Subcategory", value: sku.subcategoryName ?? "Not classified")
+                    if let description = sku.description, !description.isEmpty {
+                        Text(description)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Section("Product record") {
+                    LabeledContent("Pack", value: sku.packSize)
+                    if let variant = sku.variant { LabeledContent("Variant", value: variant) }
+                    if let manufacturerName = sku.manufacturerName { LabeledContent("Manufacturer", value: manufacturerName) }
+                    if let countryOfOriginCode = sku.countryOfOriginCode { LabeledContent("Country of origin", value: countryOfOriginCode) }
+                    if let dietType = sku.dietType { LabeledContent("Diet type", value: dietType.replacingOccurrences(of: "_", with: " ").capitalized) }
+                    if let shelfLifeDays = sku.shelfLifeDays { LabeledContent("Shelf life", value: "\(shelfLifeDays) days") }
+                    if let barcode = sku.barcode { LabeledContent("Barcode", value: barcode).font(.caption.monospaced()) }
+                    if let hsnCode = sku.hsnCode { LabeledContent("HSN", value: hsnCode).font(.caption.monospaced()) }
+                    if let taxRateBps = sku.taxRateBps { LabeledContent("Tax", value: String(format: "%.2f%%", Double(taxRateBps) / 100)) }
+                }
                 Section("Authoritative pricing") {
                     TextField("MRP", text: $listPrice)
 #if os(iOS)
@@ -822,8 +926,12 @@ private struct AdminSKUEditor: View {
                     LabeledContent("Result", value: sku.activationReady ? "Ready to activate" : "Needs attention")
                     LabeledContent("QA", value: sku.qaStatus.replacingOccurrences(of: "_", with: " ").capitalized)
                     LabeledContent("Images", value: "\(sku.imageCount)")
+                    LabeledContent("Merchant selections", value: "\(sku.selectionCount ?? 0)")
                     LabeledContent("Identifiers", value: "\(sku.identifierCount)")
                     LabeledContent("Search aliases", value: "\(sku.aliasCount)")
+                    if let primaryImage = sku.primaryImage {
+                        LabeledContent("Image rights", value: primaryImage.rightsStatus.replacingOccurrences(of: "_", with: " ").capitalized)
+                    }
                     if !sku.activationReady {
                         ForEach(sku.activationBlockers, id: \.self) { blocker in
                             Label(activationBlockerLabel(blocker), systemImage: "exclamationmark.circle")
@@ -866,17 +974,132 @@ private struct AdminPageIntro: View { let eyebrow: String; let title: String; le
 private struct AdminApprovalRow: View { let title: String; let detail: String; let symbol: String; var body: some View { HStack(spacing: MarketplaceSpacing.medium) { Image(systemName: symbol).font(.title3).foregroundStyle(MarketplaceColors.dastakAccent.color).frame(width: 46, height: 46).background(MarketplaceColors.dastakIconBackground.color, in: RoundedRectangle(cornerRadius: 14)); VStack(alignment: .leading, spacing: 4) { Text(title).font(.headline); Text(detail).font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }; Spacer(); Image(systemName: "chevron.right").foregroundStyle(.tertiary) }.padding(MarketplaceSpacing.medium).marketplaceFlatSurface() } }
 private struct MoreRow: View { let title: String; let detail: String; let symbol: String; var body: some View { Label { VStack(alignment: .leading, spacing: 3) { Text(title).font(.headline); Text(detail).font(.caption).foregroundStyle(.secondary) } } icon: { Image(systemName: symbol).foregroundStyle(MarketplaceColors.dastakAccent.color) }.padding(.vertical, 4) } }
 private struct AdminStateCard: View { let title: String; let detail: String; let symbol: String; let attention: Bool; var body: some View { HStack(spacing: MarketplaceSpacing.medium) { Image(systemName: symbol).font(.title2).foregroundStyle(attention ? MarketplaceColors.warning.color : MarketplaceColors.success.color); VStack(alignment: .leading, spacing: 4) { Text(title).font(.headline); Text(detail).font(.subheadline).foregroundStyle(.secondary) }; Spacer() }.padding(MarketplaceSpacing.medium).marketplaceFlatSurface() } }
-private struct AdminPersonRow: View { let person: DastakAdminNetworkPerson; var body: some View { HStack(spacing: 12) { Text(initials(person.displayName)).font(.caption.bold()).frame(width: 40, height: 40).background(MarketplaceColors.dastakIconBackground.color, in: Circle()); VStack(alignment: .leading, spacing: 3) { Text(person.displayName).font(.headline); Text(person.email ?? person.phoneNumber).font(.caption).foregroundStyle(.secondary); Text(person.personas.map { $0.persona.rawValue.capitalized }.joined(separator: " · ")).font(.caption2).foregroundStyle(MarketplaceColors.dastakAccent.color) } } } }
+private struct AdminPersonRow: View {
+    let person: DastakAdminNetworkPerson
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.text.rectangle")
+                .font(.title3)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 44, height: 40)
+                .background(
+                    MarketplaceColors.dastakIconBackground.color,
+                    in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                Text(person.displayName).font(.headline)
+                Text(person.email ?? person.phoneNumber).font(.caption).foregroundStyle(.secondary)
+                Text(person.personas.map { $0.persona.rawValue.capitalized }.joined(separator: " · "))
+                    .font(.caption2)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+        }
+    }
+}
 private struct AdminPersonDetail: View { let person: DastakAdminNetworkPerson; var body: some View { List { Section("Identity") { LabeledContent("Name", value: person.displayName); LabeledContent("Email", value: person.email ?? "Not available"); LabeledContent("Verified phone", value: person.phoneNumber); LabeledContent("Account", value: person.accountState.capitalized); if let role = person.adminRole { LabeledContent("Admin role", value: role.displayName) } }; Section("Customer") { LabeledContent("Orders", value: "\(person.customer.orderCount)"); LabeledContent("Active orders", value: "\(person.customer.activeOrderCount)") }; if let merchant = person.merchant { Section("Merchant") { LabeledContent("Application", value: merchant.applicationStatus.capitalized); LabeledContent("Business", value: merchant.organizationName ?? merchant.businessName); LabeledContent("Branches", value: "\(merchant.branchCount)") } }; if let delivery = person.delivery { Section("Delivery Partner") { LabeledContent("Application", value: delivery.applicationStatus.capitalized); LabeledContent("Method", value: delivery.deliveryMethod.capitalized); LabeledContent("Availability", value: delivery.availability?.capitalized ?? "Not active"); LabeledContent("Active missions", value: "\(delivery.activeMissionCount)") } } }.navigationTitle(person.displayName) } }
+
+private struct AdminSKUCard: View {
+    let sku: DastakAdminCatalogueSKU
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            HStack(alignment: .top, spacing: MarketplaceSpacing.medium) {
+                DastakProductArtwork(
+                    imageKey: sku.primaryImage?.imageKey ?? sku.imageKey,
+                    fallbackSymbol: "shippingbox"
+                )
+                .frame(width: 108)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(hierarchy)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        .lineLimit(2)
+                    Text(sku.name)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                    Text([sku.brandName, sku.variant, sku.packSize].compactMap { $0 }.joined(separator: " · "))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    if let description = sku.description, !description.isEmpty {
+                        Text(description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.tertiary)
+            }
+
+            HStack(spacing: MarketplaceSpacing.compact) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CUSTOMER PRICE")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    Text(priceLabel)
+                        .font(.headline)
+                }
+                Spacer()
+                AdminSKUStatePill(
+                    title: sku.status.replacingOccurrences(of: "_", with: " ").capitalized,
+                    ready: sku.status == "ACTIVE"
+                )
+                AdminSKUStatePill(
+                    title: sku.qaStatus.replacingOccurrences(of: "_", with: " ").capitalized,
+                    ready: sku.activationReady
+                )
+            }
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    private var hierarchy: String {
+        [sku.categoryTypeName, sku.categoryName, sku.subcategoryName]
+            .compactMap { $0 }
+            .joined(separator: "  ›  ")
+    }
+
+    private var priceLabel: String {
+        guard let sellingPricePaise = sku.sellingPricePaise else { return "Pricing not set" }
+        return DastakFormatting.money(Money(paise: sellingPricePaise))
+    }
+}
+
+private struct AdminSKUStatePill: View {
+    let title: String
+    let ready: Bool
+
+    var body: some View {
+        Label(title, systemImage: ready ? "checkmark.seal.fill" : "clock")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(ready ? MarketplaceColors.success.color : MarketplaceColors.warning.color)
+            .padding(.horizontal, 9)
+            .frame(minHeight: 28)
+            .background(
+                (ready ? MarketplaceColors.success.color : MarketplaceColors.warning.color).opacity(0.1),
+                in: Capsule()
+            )
+    }
+}
+
 private struct AdminSKURow: View {
     let sku: DastakAdminCatalogueSKU
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: sku.primaryImage == nil ? "photo.badge.exclamationmark" : "photo.fill")
-                .foregroundStyle(sku.primaryImage == nil ? MarketplaceColors.warning.color : MarketplaceColors.success.color)
-                .frame(width: 42, height: 42)
-                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+        HStack(alignment: .top, spacing: 12) {
+            DastakProductArtwork(
+                imageKey: sku.primaryImage?.imageKey ?? sku.imageKey,
+                fallbackSymbol: "shippingbox"
+            )
+            .frame(width: 82)
             VStack(alignment: .leading, spacing: 3) {
                 Text(sku.name).font(.headline).lineLimit(2)
                 Text([sku.brandName, sku.packSize].compactMap { $0 }.joined(separator: " · "))
@@ -896,7 +1119,6 @@ private struct AdminSKURow: View {
     }
 }
 
-private func initials(_ value: String) -> String { value.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased() }
 private func adminDate(_ value: String) -> String { ISO8601DateFormatter().date(from: value)?.formatted(date: .abbreviated, time: .shortened) ?? "just now" }
 private func activationBlockerLabel(_ value: String) -> String {
     [

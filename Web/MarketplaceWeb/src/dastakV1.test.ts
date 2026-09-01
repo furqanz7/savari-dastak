@@ -5,6 +5,7 @@ import {
   authorizeV1ExceptionalDeliveryHandoff,
   declareV1FulfilmentPackages,
   getV1AdminAccess,
+  getV1AdminCatalogue,
   getV1AdminCataloguePage,
   getV1AdminCommandCenter,
   getV1AdminExecutionTrace,
@@ -538,8 +539,11 @@ describe("Dastak V1 web contract", () => {
         skus: [{
           id: skuId,
           categoryTypeId: packageId,
+          categoryTypeName: "Groceries",
           categoryId,
+          categoryName: "Staples",
           subcategoryId,
+          subcategoryName: "Flours",
           brandId: null,
           brandName: "Dastak",
           name: "Whole Wheat Atta",
@@ -583,8 +587,11 @@ describe("Dastak V1 web contract", () => {
         }, {
           id: "99999999-9999-4999-8999-999999999999",
           categoryTypeId: packageId,
+          categoryTypeName: "Groceries",
           categoryId,
+          categoryName: "Staples",
           subcategoryId,
+          subcategoryName: "Flours",
           brandId: null,
           brandName: null,
           name: "Unpriced Draft",
@@ -638,6 +645,9 @@ describe("Dastak V1 web contract", () => {
     });
     expect(catalogue.skus[0]).toMatchObject({
       name: "Whole Wheat Atta",
+      categoryTypeName: "Groceries",
+      categoryName: "Staples",
+      subcategoryName: "Flours",
       sellingPricePaise: 7500,
       qaStatus: "VERIFIED",
       activationReady: true,
@@ -653,6 +663,34 @@ describe("Dastak V1 web contract", () => {
       activationReady: false,
       activationBlockers: ["DASTAK_PRICING_REQUIRED"],
     });
+  });
+
+  it("loads the Admin taxonomy hierarchy with refresh-safe entity metadata", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const updatedAt = "2026-09-01T10:00:00Z";
+    const snapshot = await getV1AdminCatalogue(auth, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        categoryTypes: [{
+          id: packageId, name: "Groceries", slug: "groceries", imageKey: null,
+          sortOrder: 1, status: "ACTIVE", version: 2, updatedAt,
+        }],
+        categories: [{
+          id: categoryId, categoryTypeId: packageId, name: "Staples", slug: "staples",
+          imageKey: null, sortOrder: 1, status: "ACTIVE", version: 3, updatedAt,
+        }],
+        subcategories: [{
+          id: subcategoryId, categoryId, name: "Flours", slug: "flours", imageKey: null,
+          sortOrder: 1, status: "ACTIVE", version: 4, updatedAt,
+        }],
+        brands: [], skus: [], skuCount: 1, truncated: false, configuration: [], branches: [],
+      });
+    });
+
+    expect(requestBody).toEqual({ operation: "adminSnapshot", skuLimit: 1000 });
+    expect(snapshot.categoryTypes[0]).toMatchObject({ name: "Groceries", updatedAt });
+    expect(snapshot.categories[0]).toMatchObject({ categoryTypeId: packageId, name: "Staples" });
+    expect(snapshot.subcategories[0]).toMatchObject({ categoryId, name: "Flours" });
   });
 
   it("decodes the audited minimum system health projection", async () => {

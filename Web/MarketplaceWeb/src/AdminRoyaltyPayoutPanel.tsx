@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw, WalletCards } from "lucide-react";
+import { WalletCards } from "lucide-react";
 import { formatPrice } from "./catalogue";
 import { getAdminRoyaltyPayouts, type AdminRoyaltyPayout } from "./earnings";
+import { useAdminWorkspaceRefresh } from "./adminRefresh";
 
 type Auth = { accessToken: string; supabaseUrl: string; publishableKey: string };
 
@@ -22,6 +23,7 @@ export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
   }, [auth]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useAdminWorkspaceRefresh(refresh);
 
   return (
     <section className="admin-royalty-payouts" role="tabpanel" aria-labelledby="admin-payouts-title">
@@ -31,7 +33,6 @@ export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
           <h2 id="admin-payouts-title">Royalty payouts</h2>
           <p>Provider state, immutable destination snapshots, attempts, and reconciliation.</p>
         </div>
-        <button className="icon-button" type="button" disabled={loading} onClick={() => void refresh()} aria-label="Refresh Royalty payouts"><RefreshCw size={18} /></button>
       </header>
       {error ? <p className="order-error" role="alert">{error}</p> : null}
       {loading && payouts.length === 0

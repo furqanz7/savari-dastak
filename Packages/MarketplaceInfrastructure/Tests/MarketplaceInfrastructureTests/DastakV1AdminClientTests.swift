@@ -80,9 +80,23 @@ final class DastakV1AdminClientTests: XCTestCase {
         let functions = RecordingAdminFunctionClient()
         let client = SupabaseDastakV1AdminClient(functions: functions)
         let skuID = try XCTUnwrap(UUID(uuidString: "22222222-2222-4222-8222-222222222222"))
+        let categoryTypeID = try XCTUnwrap(UUID(uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"))
+        let categoryID = try XCTUnwrap(UUID(uuidString: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"))
+        let subcategoryID = try XCTUnwrap(UUID(uuidString: "cccccccc-cccc-4ccc-8ccc-cccccccccccc"))
+
+        let taxonomy = try await client.catalogueTaxonomy(idempotencyKey: key("admin-taxonomy"))
+        XCTAssertEqual(taxonomy.categoryTypes.first?.name, "Groceries")
+        XCTAssertEqual(taxonomy.categories.first?.categoryTypeID, categoryTypeID)
+        XCTAssertEqual(taxonomy.subcategories.first?.categoryID, categoryID)
+        var request = try await requestBody(functions, expectedName: "dastak-v1-catalogue")
+        XCTAssertEqual(request["operation"] as? String, "adminSnapshot")
+        XCTAssertEqual(request["skuLimit"] as? Int, 1)
 
         let page = try await client.cataloguePage(
             query: "Atta",
+            categoryTypeID: categoryTypeID,
+            categoryID: categoryID,
+            subcategoryID: subcategoryID,
             status: "ACTIVE",
             qaStatus: "VERIFIED",
             limit: 25,
@@ -94,11 +108,17 @@ final class DastakV1AdminClientTests: XCTestCase {
         XCTAssertEqual(page.skus.first?.activationReady, true)
         XCTAssertEqual(page.skus.first?.activationBlockers, [])
         XCTAssertEqual(page.skus.first?.primaryImage?.rightsStatus, "CLEARED")
+        XCTAssertEqual(page.skus.first?.categoryTypeName, "Groceries")
+        XCTAssertEqual(page.skus.first?.categoryName, "Flour")
+        XCTAssertEqual(page.skus.first?.subcategoryName, "Wheat Flour")
         XCTAssertNil(page.skus.last?.listPricePaise)
         XCTAssertNil(page.skus.last?.sellingPricePaise)
         XCTAssertEqual(page.skus.last?.activationBlockers, ["DASTAK_PRICING_REQUIRED"])
-        var request = try await requestBody(functions, expectedName: "dastak-v1-catalogue")
+        request = try await requestBody(functions, expectedName: "dastak-v1-catalogue")
         XCTAssertEqual(request["operation"] as? String, "adminCataloguePage")
+        XCTAssertEqual(request["categoryTypeId"] as? String, categoryTypeID.uuidString.uppercased())
+        XCTAssertEqual(request["categoryId"] as? String, categoryID.uuidString.uppercased())
+        XCTAssertEqual(request["subcategoryId"] as? String, subcategoryID.uuidString.uppercased())
         XCTAssertEqual(request["status"] as? String, "ACTIVE")
         XCTAssertEqual(request["qaStatus"] as? String, "VERIFIED")
 
@@ -224,6 +244,7 @@ private actor RecordingAdminFunctionClient: FunctionClient {
         case ("dastak-v1-orders", "manageRiderEscalation"): response = adminEscalationMutationJSON
         case ("dastak-v1-orders", "setOperationalPause"): response = adminPauseMutationJSON
         case ("dastak-v1-catalogue", "adminCataloguePage"): response = adminCataloguePageJSON
+        case ("dastak-v1-catalogue", "adminSnapshot"): response = adminCatalogueTaxonomyJSON
         case ("dastak-v1-catalogue", "updateSku"): response = adminCatalogueMutationJSON
         case ("earnings", "adminRoyaltyPayouts"): response = adminRoyaltyPayoutsJSON
         case ("issue-evidence-url", "download"): response = adminEvidenceJSON
@@ -277,16 +298,23 @@ private let adminNetworkPageJSON = #"""
   "nextCursor":{"updatedAt":"2026-08-31T12:00:00Z","accountId":"33333333-3333-4333-8333-333333333333"}
 }
 """#.data(using: .utf8)!
+private let adminCatalogueTaxonomyJSON = #"""
+{
+  "categoryTypes":[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Groceries","slug":"groceries","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}],
+  "categories":[{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","categoryTypeId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Flour","slug":"flour","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}],
+  "subcategories":[{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","categoryId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","name":"Wheat Flour","slug":"wheat-flour","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}]
+}
+"""#.data(using: .utf8)!
 private let adminCataloguePageJSON = #"""
 {
   "skus":[{
-    "id":"22222222-2222-4222-8222-222222222222","name":"Whole Wheat Atta","brandName":"Dastak","packSize":"1 kg",
+    "id":"22222222-2222-4222-8222-222222222222","categoryTypeId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","categoryTypeName":"Groceries","categoryId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","categoryName":"Flour","subcategoryId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","subcategoryName":"Wheat Flour","name":"Whole Wheat Atta","brandName":"Dastak","packSize":"1 kg","description":"Stone-ground whole wheat flour.",
     "listPricePaise":8000,"sellingPricePaise":7500,"currencyCode":"INR","status":"ACTIVE","qaStatus":"VERIFIED",
     "activationReady":true,"activationBlockers":[],"imageCount":1,"aliasCount":2,"identifierCount":1,
     "primaryImage":{"id":"88888888-8888-4888-8888-888888888888","imageKey":"catalogue/atta-primary.webp","status":"VERIFIED","rightsStatus":"CLEARED","sourceType":"ADMIN_UPLOAD"},
     "version":4,"updatedAt":"2026-08-31T12:00:00Z"
   },{
-    "id":"99999999-9999-4999-8999-999999999999","name":"Unpriced Draft","brandName":null,"packSize":"1 pack",
+    "id":"99999999-9999-4999-8999-999999999999","categoryTypeName":"Groceries","categoryName":"Flour","subcategoryName":"Wheat Flour","name":"Unpriced Draft","brandName":null,"packSize":"1 pack",
     "listPricePaise":null,"sellingPricePaise":null,"currencyCode":"INR","status":"DRAFT","qaStatus":"NEEDS_REVIEW",
     "activationReady":false,"activationBlockers":["DASTAK_PRICING_REQUIRED"],"imageCount":0,"aliasCount":0,"identifierCount":0,
     "primaryImage":null,"version":1,"updatedAt":"2026-08-31T12:00:00Z"

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
+  BadgeCheck,
   Bike,
   Check,
   CircleAlert,
@@ -9,13 +10,12 @@ import {
   FileText,
   LayoutDashboard,
   PackageSearch,
-  RefreshCw,
   RotateCcw,
   ShieldCheck,
   Store,
-  UserRound,
   UsersRound,
   WalletCards,
+  WifiOff,
   X,
 } from "lucide-react";
 import { RoleAccountView } from "./RoleAccountView";
@@ -55,6 +55,7 @@ import {
   type V1AdminAccess,
   type V1AdminCommandCenter,
 } from "./dastakV1";
+import { useAdminPullToRefresh, useAdminWorkspaceRefresh } from "./adminRefresh";
 
 type Props = {
   accessToken: string;
@@ -171,6 +172,10 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
       if (showProgress) setBusy(undefined);
     }
   }, [auth]);
+
+  const refreshWorkspace = useCallback(() => refresh(true), [refresh]);
+  useAdminWorkspaceRefresh(refreshWorkspace);
+  const pull = useAdminPullToRefresh();
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -336,7 +341,7 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     { id: "health", label: "System health", icon: <Activity size={18} /> },
     { id: "legacy", label: "Legacy history", icon: <FileText size={18} /> },
     { id: "access", label: "Admin access", icon: <ShieldCheck size={18} /> },
-    { id: "account", label: "My account", icon: <UserRound size={18} /> },
+    { id: "account", label: "My account", icon: <BadgeCheck size={18} /> },
   ];
   const mobilePrimaryNavigation = mainNavigation.filter((item) => item.id !== "catalogue");
   const mobileWorkspaceNavigation = [
@@ -344,20 +349,23 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     ...controlNavigation,
   ];
 
-  return <div className="admin-console">
+  return <div className="admin-console" style={{ "--admin-pull-distance": `${pull.distance}px`, "--admin-pull-progress": pull.progress } as CSSProperties}>
+    <div className={`admin-pull-indicator ${pull.refreshing ? "refreshing" : ""}`} aria-live="polite" aria-hidden={!pull.refreshing && pull.distance === 0}>
+      <span><span className="admin-pull-glyph">↓</span>{pull.refreshing ? "Refreshing current workspace" : pull.progress >= 1 ? "Release to refresh" : "Pull to refresh"}</span>
+    </div>
     <aside className="admin-sidebar" aria-label="Admin navigation">
       <header><span>D</span><div><strong>Dastak</strong><small>Admin control</small></div></header>
       <p>OPERATIONS</p>
       <AdminNavigation items={mainNavigation} selected={tab} onSelect={setTab} />
       <p>CONTROL & GOVERNANCE</p>
       <AdminNavigation items={controlNavigation} selected={tab} onSelect={setTab} />
-      <footer><span>{initials(displayName ?? "Admin")}</span><div><strong>{displayName ?? "Dastak Admin"}</strong><small>{adminRoleLabel(adminAccess?.role)}</small></div></footer>
+      <footer><span className="admin-identity-mark"><ShieldCheck size={18} /></span><div><strong>{displayName ?? "Dastak Admin"}</strong><small>{adminRoleLabel(adminAccess?.role)}</small></div></footer>
     </aside>
 
     <main className="admin-shell">
-      <header className="admin-heading"><div><p className="eyebrow">{adminRoleLabel(adminAccess?.role).toUpperCase()} WORKSPACE</p><h1>{tabTitle(tab)}</h1><p>{tabDescription(tab)}</p></div><button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={busy === "refresh"} aria-label="Refresh Admin workspace"><RefreshCw size={19} /></button></header>
+      <header className="admin-heading"><div><p className="eyebrow">{adminRoleLabel(adminAccess?.role).toUpperCase()} WORKSPACE</p><h1>{tabTitle(tab)}</h1><p>{tabDescription(tab)}</p></div></header>
       <nav className="admin-secondary-mobile" aria-label="More Admin workspaces"><AdminNavigation items={mobileWorkspaceNavigation} selected={tab} onSelect={setTab} /></nav>
-      <AdminFeedStatus issues={feedIssues} updatedAt={feedUpdatedAt} busy={busy === "refresh"} onRetry={() => void refresh(true)} />
+      <AdminFeedStatus issues={feedIssues} updatedAt={feedUpdatedAt} />
       {actionError ? <p className="order-error" role="alert">{actionError}</p> : null}
       {notice ? <div className="admin-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div> : null}
 
@@ -393,20 +401,17 @@ function AdminNavigation({ items, selected, onSelect }: {
   return <>{items.map((item) => <button type="button" key={item.id} className={selected === item.id ? "selected" : ""} aria-current={selected === item.id ? "page" : undefined} onClick={() => onSelect(item.id)}>{item.icon}<span>{item.label}</span>{item.badge ? <b>{item.badge}</b> : null}</button>)}</>;
 }
 
-function AdminFeedStatus({ issues, updatedAt, busy, onRetry }: {
+function AdminFeedStatus({ issues, updatedAt }: {
   issues: Partial<Record<AdminBootstrapFeed, AdminFeedIssue>>;
   updatedAt: Partial<Record<AdminBootstrapFeed, string>>;
-  busy: boolean;
-  onRetry: () => void;
 }) {
   const activeIssues = adminBootstrapFeeds
     .map((feed) => issues[feed])
     .filter((issue): issue is AdminFeedIssue => Boolean(issue));
   if (activeIssues.length === 0) return null;
   return <section className="admin-feed-status" aria-label="Workspace refresh status">
-    <header><span><RefreshCw size={18} /></span><div><strong>Some workspaces need a refresh</strong><p>Current successful data remains visible. Each unavailable feed is identified below.</p></div></header>
+    <header><span><WifiOff size={18} /></span><div><strong>Some workspaces are temporarily unavailable</strong><p>Current successful data stays visible. Pull down anywhere to try these feeds again.</p></div></header>
     <ul>{activeIssues.map((issue) => <li key={issue.feed}><div><strong>{issue.label}</strong><span>{issue.message}</span></div><small>{formatFeedUpdatedAt(updatedAt[issue.feed])}</small></li>)}</ul>
-    <button className="secondary-button" type="button" disabled={busy} onClick={onRetry}><RefreshCw size={16} /> Retry unavailable workspaces</button>
   </section>;
 }
 
@@ -434,10 +439,6 @@ function tabDescription(tab: AdminTab) {
     legacy: "Read-only oversight for the pre-V1 order lifecycle.",
     account: "Profile, security, sessions and sign-out controls.",
   } satisfies Record<AdminTab, string>)[tab];
-}
-
-function initials(value: string) {
-  return value.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
 function adminRoleLabel(role?: V1AdminAccess["role"]) {

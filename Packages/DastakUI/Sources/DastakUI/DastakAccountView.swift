@@ -128,9 +128,9 @@ struct DastakAccountView: View {
                 VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
                     HStack(spacing: MarketplaceSpacing.medium) {
                         ZStack {
-                            Circle()
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .fill(.white.opacity(0.09))
-                            Circle()
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .stroke(.white.opacity(0.12), lineWidth: 1)
                             Text(profileInitials)
                                 .font(.title2.weight(.semibold))

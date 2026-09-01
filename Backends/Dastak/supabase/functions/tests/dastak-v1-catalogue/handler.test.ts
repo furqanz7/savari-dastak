@@ -374,6 +374,37 @@ Deno.test("V1 catalogue exposes safe database conflict errors", async () => {
   });
 });
 
+Deno.test("V1 Admin snapshot composes canonical taxonomy without exposing another write path", async () => {
+  let taxonomyInput: unknown;
+  const response = await handleV1Catalogue(
+    request({ operation: "adminSnapshot", skuLimit: 250 }),
+    dependencies({
+      adminSnapshot: () =>
+        Promise.resolve({
+          skus: [],
+          skuCount: 0,
+          truncated: false,
+          configuration: [],
+          branches: [],
+        }),
+      adminTaxonomy: (input) => {
+        taxonomyInput = input;
+        return Promise.resolve({
+          categoryTypes: [{ id: categoryTypeId, name: "Groceries" }],
+          categories: [{ id: categoryId, categoryTypeId }],
+          subcategories: [{ id: subcategoryId, categoryId }],
+          brands: [],
+        });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(taxonomyInput, { accessToken: actor.accessToken });
+  assertEquals((await body(response)).categoryTypes, [
+    { id: categoryTypeId, name: "Groceries" },
+  ]);
+});
+
 Deno.test("V1 catalogue hides unexpected dependency details", async () => {
   const response = await handleV1Catalogue(
     request({ operation: "adminSnapshot" }),
@@ -416,6 +447,14 @@ function dependencies(
     customerRestaurants: overrides.customerRestaurants ??
       (() => Promise.resolve({ restaurants: [] })),
     adminSnapshot: overrides.adminSnapshot ?? (() => Promise.resolve(snapshot)),
+    adminTaxonomy: overrides.adminTaxonomy ??
+      (() =>
+        Promise.resolve({
+          categoryTypes: [],
+          categories: [],
+          subcategories: [],
+          brands: [],
+        })),
     adminPage: overrides.adminPage ??
       (() => Promise.resolve({ skus: [], hasMore: false })),
     merchantSnapshot: overrides.merchantSnapshot ??

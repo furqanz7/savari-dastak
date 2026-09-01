@@ -21,6 +21,9 @@ export type V1CatalogueDependencies = {
   adminSnapshot: (
     input: { accessToken: string; skuLimit: number },
   ) => Promise<unknown>;
+  adminTaxonomy: (
+    input: { accessToken: string },
+  ) => Promise<unknown>;
   adminPage: (input: {
     accessToken: string;
     query: string | null;
@@ -134,11 +137,19 @@ export async function handleV1Catalogue(
           return validationError();
         }
         const skuLimit = parsedLimit ?? 1000;
-        const result = await dependencies.adminSnapshot({
-          accessToken: actor.accessToken,
-          skuLimit,
-        });
-        return json(result);
+        const [snapshot, taxonomy] = await Promise.all([
+          dependencies.adminSnapshot({
+            accessToken: actor.accessToken,
+            skuLimit,
+          }),
+          dependencies.adminTaxonomy({ accessToken: actor.accessToken }),
+        ]);
+        const snapshotRecord = record(snapshot);
+        const taxonomyRecord = record(taxonomy);
+        if (!snapshotRecord || !taxonomyRecord) {
+          throw new Error("invalid Admin catalogue projection");
+        }
+        return json({ ...snapshotRecord, ...taxonomyRecord });
       }
       case "adminCataloguePage":
         return await adminCataloguePage(body, actor, dependencies);
