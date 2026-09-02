@@ -67,11 +67,11 @@ describe("delivery partner client", () => {
   });
 
   it("requires valid vehicle verification for motor methods", async () => {
-    expect(requiresVehicleVerification("walking")).toBe(false);
-    expect(requiresVehicleVerification("bicycle")).toBe(false);
+    expect(requiresVehicleVerification("retired")).toBe(false);
     expect(requiresVehicleVerification("bike")).toBe(true);
     expect(requiresVehicleVerification("motorbike")).toBe(true);
     expect(requiresVehicleVerification("scooter")).toBe(true);
+    expect(requiresVehicleVerification("goods_vehicle")).toBe(true);
     expect(normalizeVehicleRegistration(" tn 23  ab 1234 ")).toBe("TN 23 AB 1234");
     expect(isValidVehicleRegistration("TN 23 AB 1234")).toBe(true);
     expect(isValidVehicleRegistration("TN@23")).toBe(false);
@@ -102,7 +102,7 @@ describe("delivery partner client", () => {
     })).toBe("identity_and_vehicle_verified");
     expect(deliveryPartnerVerificationState({
       ...base,
-      deliveryMethod: "walking",
+      deliveryMethod: "retired",
     })).toBe("identity_verified");
   });
 

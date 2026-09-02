@@ -144,8 +144,8 @@ async function publishLocation(input: PublishDeliveryPartnerLocationInput) {
 }
 
 function isDeliveryMethod(value: unknown): value is DeliveryPartnerApplication["deliveryMethod"] {
-  return value === "walking" || value === "bicycle" || value === "bike" ||
-    value === "motorbike" || value === "scooter" || value === "auto" || value === "car";
+  return value === "motorbike" || value === "scooter" ||
+    value === "auto" || value === "goods_vehicle";
 }
 
 function rpcResponse(data: unknown, functionName: string) {

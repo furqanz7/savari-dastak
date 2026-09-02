@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, Bike, CreditCard, MapPin, Package, Phone, RefreshCw, Send, ShieldCheck, X } from "lucide-react";
+import { ArrowLeft, CreditCard, MapPin, Navigation, Package, Phone, RefreshCw, Send, ShieldCheck, X } from "lucide-react";
 import { formatPrice } from "./catalogue";
 import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
 import {
@@ -278,7 +278,7 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
           <label>Recipient Dastak phone<input type="tel" inputMode="tel" value={recipientPhone} onChange={(event) => setRecipientPhone(event.target.value)} required /></label>
           <label>Contents<input value={contents} maxLength={300} onChange={(event) => setContents(event.target.value)} required /></label>
           <label>Declared value (₹)<input type="number" inputMode="decimal" min="0" step="0.01" value={declaredValue} onChange={(event) => setDeclaredValue(event.target.value)} required /></label>
-          <label>Delivery method<select value={deliveryMethod} onChange={(event) => { setDeliveryMethod(event.target.value as ParcelDeliveryMethod); setQuote(undefined); }}><option value="bike">Bike</option><option value="auto">Auto</option><option value="bicycle">Bicycle</option><option value="walking">Walking</option></select></label>
+          <label>Delivery method<select value={deliveryMethod} onChange={(event) => { setDeliveryMethod(event.target.value as ParcelDeliveryMethod); setQuote(undefined); }}><option value="bike">Motorbike</option><option value="auto">Auto</option></select></label>
         </div>
         {!quote ? (
           <button className="primary-button parcel-submit" type="submit" disabled={busy || !pickup || !dropoff}><Send size={18} /> Check delivery price</button>
@@ -366,7 +366,7 @@ function ParcelDetail({ parcel, busy, onBack, onPay, onCancel, onSupport, onRefr
       <header className="customer-detail-header"><button className="customer-back-button" type="button" onClick={onBack}><ArrowLeft size={18} /> Parcels</button><button className="icon-button" type="button" disabled={busy} onClick={() => void onRefresh()} aria-label="Refresh parcel" title="Refresh"><RefreshCw size={18} /></button></header>
       <section className="customer-status-hero"><p className="eyebrow">Parcel {parcel.parcelId.slice(-6).toUpperCase()}</p><h1>{presentation.title}</h1><p>{presentation.message}</p><span>{parcelPaymentStateLabel(parcel.paymentStatus)}</span></section>
       <CustomerRouteMap points={points} />
-      {parcel.courier && <section className="customer-contact-card"><span className="order-icon"><Bike size={20} /></span><div><strong>{parcel.courier.displayName}</strong><small>Your delivery partner · {parcel.courier.deliveryMethod}</small></div><a href={`tel:${parcel.courier.phoneNumber}`} aria-label="Call delivery partner"><Phone size={18} /></a></section>}
+      {parcel.courier && <section className="customer-contact-card"><span className="order-icon"><Navigation size={20} /></span><div><strong>{parcel.courier.displayName}</strong><small>Your delivery partner · {parcelMethodLabel(parcel.courier.deliveryMethod)}</small></div><a href={`tel:${parcel.courier.phoneNumber}`} aria-label="Call delivery partner"><Phone size={18} /></a></section>}
       {parcel.handoffCode && <section className="customer-handoff"><small>Share at {parcel.handoffCode.purpose}</small><strong>{parcel.handoffCode.code}</strong><span>Verification code</span></section>}
       <section className="customer-receipt"><header><h2>Parcel details</h2><strong>{formatPrice(parcel.deliveryFee.paise)}</strong></header><div><span>Contents<small>{parcel.declaredContents}</small></span><strong>{formatPrice(parcel.declaredValue.paise)}</strong></div><div><span>Recipient<small>{parcel.recipient.name}</small></span>{parcel.recipient.phoneNumber && <a href={`tel:${parcel.recipient.phoneNumber}`}>{parcel.recipient.phoneNumber}</a>}</div></section>
       <CustomerTimeline items={[
@@ -387,6 +387,11 @@ function ParcelDetail({ parcel, busy, onBack, onPay, onCancel, onSupport, onRefr
 }
 
 function isFinal(parcel: ParcelDelivery) { return parcel.status === "delivered" || parcel.status === "cancelled"; }
+function parcelMethodLabel(method: ParcelDelivery["deliveryMethod"]) {
+  if (method === "retired") return "Retired delivery method";
+  if (method === "bike") return "Motorbike";
+  return method.charAt(0).toUpperCase() + method.slice(1);
+}
 function formatDistance(meters: number) { return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`; }
 function formatDuration(seconds: number) { const minutes = Math.max(1, Math.round(seconds / 60)); return `${minutes} min`; }
 function delay(milliseconds: number) { return new Promise((resolve) => window.setTimeout(resolve, milliseconds)); }

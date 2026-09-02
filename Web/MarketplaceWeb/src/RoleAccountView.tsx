@@ -3,21 +3,21 @@ import {
   AlertTriangle,
   BadgeCheck,
   Bell,
-  Bike,
   CarFront,
   ChevronRight,
   ClipboardList,
-  Footprints,
   Hand,
   LayoutGrid,
   LogOut,
   Mail,
   MonitorSmartphone,
+  Navigation,
   Pencil,
   Phone,
   ShieldCheck,
   Siren,
   Store,
+  Truck,
   Trash2,
   X,
 } from "lucide-react";
@@ -209,7 +209,7 @@ export function RoleAccountView({
       <h2 id="role-support-title">Support and safety</h2>
       <div className="role-account-group">
         {onOpenWorkspace && <button type="button" className="role-account-row" onClick={onOpenWorkspace}>
-          <span className="role-row-icon"><Bike size={19} /></span>
+          <span className="role-row-icon"><Navigation size={19} /></span>
           <span><strong>Delivery workspace</strong><small>Open your current assignment</small></span>
           <ChevronRight size={18} />
         </button>}
@@ -424,19 +424,20 @@ function initials(name: string) {
 
 function methodLabel(method?: DeliveryMethod | null) {
   switch (method) {
-    case "walking": return "Walking";
-    case "bicycle": return "Bicycle";
+    case "retired": return "Retired delivery method";
     case "bike": return "Motorbike";
     case "auto": return "Auto";
-    case "car": return "Car";
+    case "motorbike": return "Motorbike";
+    case "scooter": return "Scooter";
+    case "goods_vehicle": return "Tempo / goods vehicle";
     default: return "Not available";
   }
 }
 
 function methodIcon(method?: DeliveryMethod | null) {
-  if (method === "walking") return <Footprints size={18} />;
-  if (method === "bicycle" || method === "bike") return <Bike size={18} />;
-  if (method === "auto" || method === "car") return <CarFront size={18} />;
+  if (method === "bike" || method === "motorbike" || method === "scooter") return <Navigation size={18} />;
+  if (method === "auto") return <CarFront size={18} />;
+  if (method === "goods_vehicle") return <Truck size={18} />;
   return <ShieldCheck size={18} />;
 }
 

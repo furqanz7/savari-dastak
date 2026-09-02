@@ -267,7 +267,7 @@ configure_setting 'matching.wave2_hold_seconds' '180' '99400000-0000-4000-8000-0
 configure_setting 'payment.reservation_seconds' '300' '99400000-0000-4000-8000-000000000202'
 configure_setting 'matching.wave2_max_pickup_route_meters' '50000' '99400000-0000-4000-8000-000000000203'
 configure_setting 'delivery.default_sku_logistics' '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}' '99400000-0000-4000-8000-000000000204'
-configure_setting 'delivery.transport_load_profiles' '[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]' '99400000-0000-4000-8000-000000000205'
+configure_setting 'delivery.transport_load_profiles' '[{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]' '99400000-0000-4000-8000-000000000205'
 configure_setting 'delivery.rider_initial_pool_size' '2' '99400000-0000-4000-8000-000000000206'
 configure_setting 'delivery.rider_offer_timeout_seconds' '30' '99400000-0000-4000-8000-000000000207'
 configure_setting 'delivery.rider_pool_expansion' '{"initialRadiusMeters":1000,"radiusStepMeters":5000,"additionalRidersPerRound":2,"maximumRounds":4}' '99400000-0000-4000-8000-000000000208'
@@ -286,7 +286,7 @@ offer_b_a="$("${psql_base[@]}" -Atc "select id from dastak_v1.delivery_offers wh
 [[ -n "$offer_a_a" && -n "$offer_a_b" && -n "$offer_b_a" ]] || { printf 'initial nearby pools were not created\n' >&2; exit 1; }
 
 # Current transport is revalidated at acceptance, not trusted from the offer.
-"${psql_base[@]}" -c "update private.delivery_partner_profiles set delivery_method='walking' where account_id='$rider_a'::uuid" >/dev/null
+"${psql_base[@]}" -c "update private.delivery_partner_profiles set delivery_method='scooter' where account_id='$rider_a'::uuid" >/dev/null
 incapable="$("${psql_base[@]}" -At -F '|' -c "select response_status,response_body->'error'->>'code' from public.dastak_v1_accept_delivery_offer('$rider_a'::uuid,'$offer_a_a'::uuid,'incapable-$run_token','incapable')")"
 [[ "$incapable" == "409|transport_incapable" ]] || { printf 'incapable transport was not rejected: %s\n' "$incapable" >&2; exit 1; }
 "${psql_base[@]}" -c "update private.delivery_partner_profiles set delivery_method='motorbike' where account_id='$rider_a'::uuid" >/dev/null

@@ -238,7 +238,7 @@ insert into private.delivery_partner_applications (
 (
   '81000000-0000-4000-8000-000000000051',
   '81000000-0000-4000-8000-000000000005',
-  'bicycle',
+  'scooter',
   'dastak-partner/81000000-0000-4000-8000-000000000005/identity.pdf',
   'approved',
   now(),
@@ -256,7 +256,7 @@ insert into private.delivery_partner_profiles (
   (
     '81000000-0000-4000-8000-000000000005',
     '81000000-0000-4000-8000-000000000051',
-    'bicycle'
+    'scooter'
   );
 
 insert into private.delivery_partner_availability (

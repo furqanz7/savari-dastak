@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Bike,
   CheckCircle2,
   ChevronDown,
   CalendarDays,
   Clock3,
   IdCard,
   Mail,
+  Navigation,
   Phone,
   Search,
   ShieldCheck,
@@ -117,7 +117,7 @@ function PersonDetail({ person }: { person: V1AdminNetworkPerson }) {
     <section><h4>Persona lifecycle</h4><div className="admin-persona-detail-grid">
       <PersonaDetail icon={<ShoppingBag />} title="Customer" state={personaState(person, "CUSTOMER")} detail={`${person.customer.orderCount} orders · ${person.customer.activeOrderCount} active`} />
       <PersonaDetail icon={<Store />} title="Merchant" state={personaState(person, "MERCHANT")} detail={person.merchant ? `${label(person.merchant.applicationStatus)} · ${person.merchant.organizationName ?? person.merchant.businessName} · ${person.merchant.branchCount} branches` : "Onboarding not started"} />
-      <PersonaDetail icon={<Bike />} title="Delivery Partner" state={personaState(person, "DELIVERY")} detail={person.delivery ? `${label(person.delivery.applicationStatus)} · ${label(person.delivery.deliveryMethod)} · ${person.delivery.activeMissionCount} active missions` : "Onboarding not started"} />
+      <PersonaDetail icon={<Navigation />} title="Delivery Partner" state={personaState(person, "DELIVERY")} detail={person.delivery ? `${label(person.delivery.applicationStatus)} · ${deliveryMethodLabel(person.delivery.deliveryMethod)} · ${person.delivery.activeMissionCount} active missions` : "Onboarding not started"} />
       {person.adminRole ? <PersonaDetail icon={<ShieldCheck />} title="Admin" state="ACTIVE" detail={`${roleLabel(person.adminRole)} · full operations access`} /> : null}
     </div></section>
     <footer>Identity {person.id.slice(0, 8).toUpperCase()} · Updated {formatDate(person.updatedAt)}</footer>
@@ -132,8 +132,14 @@ function personaState(person: V1AdminNetworkPerson, persona: "CUSTOMER" | "MERCH
   return person.personas.find((entry) => entry.persona === persona)?.state ?? "NOT ONBOARDED";
 }
 function label(value: string) { return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+function deliveryMethodLabel(value: string) {
+  if (value === "goods_vehicle") return "Tempo / goods vehicle";
+  if (value === "retired") return "Retired delivery method";
+  if (value === "bike" || value === "motorbike") return "Motorbike";
+  return label(value);
+}
 function personaLabel(value: string) { return value === "DELIVERY" ? "Delivery" : label(value); }
 function roleLabel(value: string) { return value === "SUPERADMIN" ? "Superadmin" : "Executive Admin"; }
-function personaIcon(value: string) { return value === "MERCHANT" ? <Store size={11} /> : value === "DELIVERY" ? <Bike size={11} /> : <ShoppingBag size={11} />; }
+function personaIcon(value: string) { return value === "MERCHANT" ? <Store size={11} /> : value === "DELIVERY" ? <Navigation size={11} /> : <ShoppingBag size={11} />; }
 function formatDate(value: string) { return new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }); }
 function message(error: unknown) { return userFacingError(error, "The network directory could not be loaded."); }

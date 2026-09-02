@@ -1,9 +1,9 @@
 import {
   Activity,
   ArrowRight,
-  Bike,
   Boxes,
   CircleAlert,
+  Navigation,
   PackageCheck,
   ShieldCheck,
   Store,
@@ -58,7 +58,7 @@ export function AdminOverviewPanel({
       <Metric icon={<PackageCheck />} label="Active orders" value={snapshot.commerce.activeOrders} detail={`${snapshot.commerce.deliveredToday} delivered today`} onClick={() => onNavigate("orders")} />
       <Metric icon={<UsersRound />} label="Active accounts" value={snapshot.identities.activeAccounts} detail={`${snapshot.identities.customers} customers`} onClick={() => onNavigate("network")} />
       <Metric icon={<Store />} label="Merchant branches" value={snapshot.network.activeBranches} detail={`${snapshot.network.activeOrganizations} organizations`} onClick={() => onNavigate("network")} />
-      <Metric icon={<Bike />} label="Riders online" value={snapshot.network.onlineRiders} detail={`${snapshot.network.assignedRiders} assigned`} onClick={() => onNavigate("safety")} />
+      <Metric icon={<Navigation />} label="Riders online" value={snapshot.network.onlineRiders} detail={`${snapshot.network.assignedRiders} assigned`} onClick={() => onNavigate("safety")} />
       <Metric icon={<Boxes />} label="Active catalogue" value={snapshot.catalogue.active} detail={`${snapshot.catalogue.needsReview} need QA`} onClick={() => onNavigate("catalogue")} />
       <Metric icon={<Activity />} label="Open incidents" value={snapshot.actionQueue.openIncidents} detail="Invariant monitoring" onClick={() => onNavigate("health")} attention={snapshot.actionQueue.openIncidents > 0} />
     </div>
@@ -67,7 +67,7 @@ export function AdminOverviewPanel({
       <section className="admin-action-queue">
         <header><div><p className="eyebrow">ACTION QUEUE</p><h3>Needs attention</h3></div><span>{actionCount}</span></header>
         <QueueRow icon={<Store />} title="Merchant applications" value={queue.merchantApplications} onClick={() => onNavigate("approvals")} />
-        <QueueRow icon={<Bike />} title="Delivery applications" value={queue.deliveryApplications} onClick={() => onNavigate("approvals")} />
+        <QueueRow icon={<Navigation />} title="Delivery applications" value={queue.deliveryApplications} onClick={() => onNavigate("approvals")} />
         <QueueRow icon={<CircleAlert />} title="Safety escalations" value={queue.riderEscalations + queue.activePauses} onClick={() => onNavigate("safety")} />
         <QueueRow icon={<Activity />} title="System incidents" value={queue.openIncidents} onClick={() => onNavigate("health")} />
       </section>

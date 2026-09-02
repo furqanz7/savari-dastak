@@ -704,23 +704,21 @@ public struct DastakIdentityAccountView: View {
 
     private func deliveryMethodName(_ method: DeliveryMethod) -> String {
         switch method {
-        case .walking: "Walking"
-        case .bicycle: "Bicycle"
+        case .retired: "Retired delivery method"
         case .bike, .motorbike: "Motorbike"
         case .scooter: "Scooter"
         case .auto: "Auto"
-        case .car: "Car"
+        case .goodsVehicle: "Tempo / goods vehicle"
         }
     }
 
     private func deliveryMethodSymbol(_ method: DeliveryMethod) -> String {
         switch method {
-        case .walking: "figure.walk"
-        case .bicycle: "bicycle"
+        case .retired: "nosign"
         case .bike, .motorbike: "motorcycle"
-        case .scooter: "bicycle"
+        case .scooter: "scooter"
         case .auto: "car.side"
-        case .car: "car"
+        case .goodsVehicle: "truck.box.fill"
         }
     }
 

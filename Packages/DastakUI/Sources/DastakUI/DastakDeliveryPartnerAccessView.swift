@@ -73,7 +73,11 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
                 idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
             )
             if snapshot.onboardingState == .rejected {
-                deliveryMethod = snapshot.deliveryMethod == .bike ? .motorbike : snapshot.deliveryMethod ?? .motorbike
+                switch snapshot.deliveryMethod {
+                case .bike: deliveryMethod = .motorbike
+                case .retired, nil: deliveryMethod = .motorbike
+                default: deliveryMethod = snapshot.deliveryMethod ?? .motorbike
+                }
                 vehicleRegistrationNumber = snapshot.vehicleRegistrationNumber ?? ""
                 vehicleMakeModel = snapshot.vehicleMakeModel ?? ""
                 reviewReason = snapshot.reviewReason
@@ -417,7 +421,7 @@ public struct DastakDeliveryPartnerAccessView: View {
                 applicationSection(
                     number: "3",
                     title: "Verify your vehicle",
-                    description: "Motorbike, Scooter, Auto, and Car partners must verify the vehicle used for deliveries."
+                    description: "Motorbike, Scooter, Auto, and Tempo / goods vehicle partners must verify the vehicle used for deliveries."
                 ) {
                     VStack(spacing: MarketplaceSpacing.compact) {
                         TextField("Registration number", text: $model.vehicleRegistrationNumber)
@@ -618,11 +622,9 @@ public struct DastakDeliveryPartnerAccessView: View {
         title: String,
         symbol: String
     )] = [
-        (.walking, "Walk", "figure.walk"),
-        (.bicycle, "Bicycle", "bicycle"),
         (.motorbike, "Motorbike", "fuelpump.fill"),
-        (.scooter, "Scooter", "bicycle"),
+        (.scooter, "Scooter", "scooter"),
         (.auto, "Auto", "car.side.fill"),
-        (.car, "Car", "car.fill")
+        (.goodsVehicle, "Tempo / goods vehicle", "truck.box.fill")
     ]
 }

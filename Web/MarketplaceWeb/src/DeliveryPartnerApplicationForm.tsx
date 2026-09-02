@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   CheckCircle2,
-  Bike,
-  Car,
+  CarFront,
   Clock3,
   FileCheck2,
   FileUp,
-  Footprints,
   Gauge,
+  Navigation,
   ShieldCheck,
   Truck,
   WifiOff,
@@ -50,12 +49,10 @@ const methods: Array<{
   detail: string;
   icon: LucideIcon;
 }> = [
-  { value: "walking", label: "Walk", detail: "Identity only", icon: Footprints },
-  { value: "bicycle", label: "Bicycle", detail: "Identity only", icon: Bike },
   { value: "motorbike", label: "Motorbike", detail: "Vehicle check", icon: Gauge },
-  { value: "scooter", label: "Scooter", detail: "Vehicle check", icon: Bike },
-  { value: "auto", label: "Auto", detail: "Vehicle check", icon: Truck },
-  { value: "car", label: "Car", detail: "Vehicle check", icon: Car },
+  { value: "scooter", label: "Scooter", detail: "Vehicle check", icon: Navigation },
+  { value: "auto", label: "Auto", detail: "Vehicle check", icon: CarFront },
+  { value: "goods_vehicle", label: "Tempo / goods vehicle", detail: "Vehicle check", icon: Truck },
 ];
 
 export function DeliveryPartnerApplicationForm({
@@ -101,7 +98,11 @@ export function DeliveryPartnerApplicationForm({
       setSnapshot(nextSnapshot);
       if (nextSnapshot.onboardingState === "rejected") {
         if (nextSnapshot.deliveryMethod) {
-          setDeliveryMethod(nextSnapshot.deliveryMethod === "bike" ? "motorbike" : nextSnapshot.deliveryMethod);
+          setDeliveryMethod(
+            nextSnapshot.deliveryMethod === "bike" || nextSnapshot.deliveryMethod === "retired"
+              ? "motorbike"
+              : nextSnapshot.deliveryMethod,
+          );
         }
         setRegistration(nextSnapshot.vehicleRegistrationNumber ?? "");
         setMakeModel(nextSnapshot.vehicleMakeModel ?? "");
@@ -286,7 +287,7 @@ export function DeliveryPartnerApplicationForm({
       {needsVehicle && <ApplicationSection
         number="3"
         title="Verify your vehicle"
-        detail="Motorbike, Scooter, Auto, and Car partners must verify the vehicle used for deliveries."
+        detail="Motorbike, Scooter, Auto, and Tempo / goods vehicle partners must verify the vehicle used for deliveries."
       >
         <div className="vehicle-details-grid">
           <label>
@@ -335,6 +336,7 @@ export function DeliveryPartnerApplicationForm({
 }
 
 function deliveryMethodLabel(method: DeliveryMethod) {
+  if (method === "retired") return "Retired delivery method";
   return methods.find((option) => option.value === (method === "bike" ? "motorbike" : method))?.label ?? "Delivery Partner";
 }
 

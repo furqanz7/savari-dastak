@@ -274,6 +274,11 @@ insert into storage.objects (bucket_id, name, owner_id) values
   ),
   (
     'dastak-evidence',
+    'dastak-partner/70000000-0000-4000-8000-000000000003/vehicle.pdf',
+    '70000000-0000-4000-8000-000000000003'
+  ),
+  (
+    'dastak-evidence',
     'dastak-partner/70000000-0000-4000-8000-000000000004/identity.pdf',
     '70000000-0000-4000-8000-000000000004'
   ),
@@ -435,7 +440,7 @@ select is(
     from private.delivery_partner_profiles
     where account_id = '70000000-0000-4000-8000-000000000002'
   ),
-  'bike',
+  'motorbike',
   'approval fixes the reviewed delivery method on the profile'
 );
 select is(
@@ -471,9 +476,10 @@ select is(
     select response_body ->> 'status'
     from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000003',
-      'walking',
+      'bike',
       'dastak-partner/70000000-0000-4000-8000-000000000003/identity.pdf',
-      null, null, null,
+      'TN 23 EF 9012', 'Honda Shine',
+      'dastak-partner/70000000-0000-4000-8000-000000000003/vehicle.pdf',
       'partner-reject-submit',
       'partner-reject-submit-digest'
     )
@@ -514,9 +520,10 @@ select is(
     select response_body ->> 'status'
     from public.submit_delivery_partner_application_v2(
       '70000000-0000-4000-8000-000000000003',
-      'bicycle',
+      'bike',
       'dastak-partner/70000000-0000-4000-8000-000000000003/identity-v2.pdf',
-      null, null, null,
+      'TN 23 EF 9012', 'Honda Shine',
+      'dastak-partner/70000000-0000-4000-8000-000000000003/vehicle.pdf',
       'partner-reapply',
       'partner-reapply-digest'
     )

@@ -152,9 +152,9 @@ function Trace({ trace, auth, onChanged }: {
     </TraceSection>
     <TraceSection title="Rider mission and offer pool">
       {!delivery?.mission ? <p>No rider mission yet.</p> : <>
-        <article><strong>{text(delivery.mission, "status")?.replaceAll("_", " ") ?? "MISSION"} · {text(delivery.mission, "riderName") ?? "No rider assigned"}</strong><span>{text(delivery.mission, "transportType") ?? "Transport pending"} · {number(delivery.mission, "pickupCount") ?? 0} pickup(s) · pool round {number(delivery.mission, "poolRound") ?? 0}<br />Out for delivery {formatOptional(text(delivery.mission, "outForDeliveryAt"))} · rider arrived {formatOptional(text(delivery.mission, "arrivedCustomerAt"))} · delivered {formatOptional(text(delivery.mission, "deliveredAt"))}</span></article>
+        <article><strong>{text(delivery.mission, "status")?.replaceAll("_", " ") ?? "MISSION"} · {text(delivery.mission, "riderName") ?? "No rider assigned"}</strong><span>{formatTransport(text(delivery.mission, "transportType"))} · {number(delivery.mission, "pickupCount") ?? 0} pickup(s) · pool round {number(delivery.mission, "poolRound") ?? 0}<br />Out for delivery {formatOptional(text(delivery.mission, "outForDeliveryAt"))} · rider arrived {formatOptional(text(delivery.mission, "arrivedCustomerAt"))} · delivered {formatOptional(text(delivery.mission, "deliveredAt"))}</span></article>
         <p>{delivery.offers.length} rider offer(s) · {countStatus(delivery.offers, "ACCEPTED")} accepted · {countStatus(delivery.offers, "CLOSED")} competing closed</p>
-        {delivery.offers.map((offer, index) => <article key={text(offer, "id") ?? index}><strong>{text(offer, "riderName") ?? "Rider"} · {text(offer, "status") ?? "UNKNOWN"}</strong><span>{text(offer, "transportType") ?? "—"} · {number(offer, "distanceMeters") ?? 0}m · round {number(offer, "poolRound") ?? 0}</span></article>)}
+        {delivery.offers.map((offer, index) => <article key={text(offer, "id") ?? index}><strong>{text(offer, "riderName") ?? "Rider"} · {text(offer, "status") ?? "UNKNOWN"}</strong><span>{formatTransport(text(offer, "transportType"))} · {number(offer, "distanceMeters") ?? 0}m · round {number(offer, "poolRound") ?? 0}</span></article>)}
       </>}
     </TraceSection>
     <TraceSection title="Pickup stops and waiting">
@@ -536,6 +536,23 @@ function formatTime(value: string) {
 }
 function formatDuration(seconds: number) {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+function formatTransport(value?: string) {
+  switch (value) {
+    case "WALKING":
+    case "BICYCLE":
+      return "Retired delivery method";
+    case "MOTORBIKE":
+      return "Motorbike";
+    case "SCOOTER":
+      return "Scooter";
+    case "AUTO":
+      return "Auto";
+    case "CAR":
+      return "Tempo / goods vehicle";
+    default:
+      return value ?? "Transport pending";
+  }
 }
 function shortId(value?: string) {
   return value ? value.slice(0, 8).toUpperCase() : "—";

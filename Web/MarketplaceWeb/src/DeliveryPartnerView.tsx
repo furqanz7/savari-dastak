@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Banknote, Bike, Camera, Check, CircleAlert, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, WalletCards, X } from "lucide-react";
+import { Banknote, Camera, Check, CircleAlert, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, WalletCards, X } from "lucide-react";
 import {
   acceptV1DeliveryOffer,
   acceptDeliveryOffer,
@@ -446,7 +446,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
   return (
     <div className="delivery-shell">
       <nav className="workspace-tabs" role="tablist" aria-label="Delivery Partner workspace">
-        <button type="button" role="tab" aria-selected={section === "deliveries"} className={section === "deliveries" ? "selected" : ""} onClick={() => setSection("deliveries")}><Bike size={18} /> Deliveries</button>
+        <button type="button" role="tab" aria-selected={section === "deliveries"} className={section === "deliveries" ? "selected" : ""} onClick={() => setSection("deliveries")}><Navigation size={18} /> Deliveries</button>
         <button type="button" role="tab" aria-selected={section === "royalty"} className={section === "royalty" ? "selected" : ""} onClick={() => setSection("royalty")}><WalletCards size={18} /> Royalty</button>
         <button type="button" role="tab" aria-selected={section === "account"} className={section === "account" ? "selected" : ""} onClick={() => setSection("account")}><UserRound size={18} /> Account</button>
       </nav>
@@ -581,7 +581,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
 
           {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && !v1Dispatch.completedMission && !dispatch.offer && !dispatch.currentJob && !parcelDispatch.offer && !parcelDispatch.currentJob && (
             <section className="delivery-empty">
-              <Bike size={25} />
+              <Navigation size={25} />
               <div><h2>{online ? "Waiting for assignments" : "Offline"}</h2><p>{online ? "No ready orders nearby." : "Go online when available."}</p></div>
             </section>
           )}
@@ -1170,6 +1170,8 @@ function coordinateLabel(location: { latitude: number; longitude: number }) {
   return `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;
 }
 function deliveryMethodLabel(method: string) {
+  if (method === "retired") return "Retired delivery method";
+  if (method === "goods_vehicle") return "Tempo / goods vehicle";
   return method === "bike" || method === "motorbike"
     ? "Motorbike"
     : method === "auto"
@@ -1177,6 +1179,8 @@ function deliveryMethodLabel(method: string) {
       : `${method.charAt(0).toUpperCase()}${method.slice(1)}`;
 }
 function transportLabel(transport: string) {
+  if (transport === "CAR") return "Tempo / goods vehicle";
+  if (transport === "WALKING" || transport === "BICYCLE") return "Retired delivery method";
   return transport === "MOTORBIKE"
     ? "Motorbike"
     : `${transport.charAt(0)}${transport.slice(1).toLowerCase()}`;

@@ -107,7 +107,7 @@ insert into private.delivery_partner_applications (
   status, reviewed_at, reviewed_by
 ) values (
   'ce230000-0000-4000-8000-000000000001',
-  'ce000000-0000-4000-8000-000000000003', 'walking',
+  'ce000000-0000-4000-8000-000000000003', 'motorbike',
   'dastak-partner/ce000000-0000-4000-8000-000000000003/id.jpg',
   'approved', pg_catalog.now(), 'ce000000-0000-4000-8000-000000000001'
 );
@@ -115,7 +115,7 @@ insert into private.delivery_partner_profiles (
   account_id, approved_application_id, delivery_method
 ) values (
   'ce000000-0000-4000-8000-000000000003',
-  'ce230000-0000-4000-8000-000000000001', 'walking'
+  'ce230000-0000-4000-8000-000000000001', 'motorbike'
 );
 insert into private.delivery_partner_availability (
   account_id, status, location, service_zone_id, last_seen_at, available_until
@@ -358,7 +358,7 @@ insert into dastak_v1.delivery_missions (
 ) values (
   'ce280000-0000-4000-8000-000000000001',
   'ce100000-0000-4000-8000-000000000003', 'OUT_FOR_DELIVERY',
-  'ce000000-0000-4000-8000-000000000003', 'WALKING', '{}', 1,
+  'ce000000-0000-4000-8000-000000000003', 'MOTORBIKE', '{}', 1,
   pg_catalog.clock_timestamp() - interval '30 minutes',
   pg_catalog.clock_timestamp() - interval '20 minutes',
   pg_catalog.clock_timestamp() - interval '19 minutes',

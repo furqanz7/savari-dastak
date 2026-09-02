@@ -1088,12 +1088,11 @@ private struct DastakHandoffCodeField: View {
 private enum DastakPartnerFormatting {
     static func method(_ method: DeliveryMethod) -> String {
         switch method {
-        case .walking: "Walking"
-        case .bicycle: "Bicycle"
+        case .retired: "Retired delivery method"
         case .bike, .motorbike: "Motorbike"
         case .scooter: "Scooter"
         case .auto: "Auto"
-        case .car: "Car"
+        case .goodsVehicle: "Tempo / goods vehicle"
         }
     }
 

@@ -100,7 +100,7 @@ insert into private.delivery_partner_applications (
   account_id, delivery_method, identity_evidence_object_path
 ) values (
   'ad000000-0000-4000-8000-000000000003',
-  'bicycle', 'delivery-applications/command/identity.jpg'
+  'motorbike', 'delivery-applications/command/identity.jpg'
 );
 
 select lives_ok(

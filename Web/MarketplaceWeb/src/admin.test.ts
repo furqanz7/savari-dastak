@@ -46,7 +46,7 @@ describe("Dastak Admin client", () => {
       accountId,
       displayName: "Partner One",
       phoneNumber: "+919999999999",
-      deliveryMethod: "bike",
+      deliveryMethod: "motorbike",
       identityEvidenceObjectPath: `dastak-partner/${accountId}/identity.jpg`,
       vehicleRegistrationNumber: "TN 23 AB 1234",
       vehicleMakeModel: "Bajaj Pulsar 150",

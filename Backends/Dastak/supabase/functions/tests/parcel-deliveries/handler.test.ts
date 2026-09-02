@@ -63,6 +63,31 @@ Deno.test("quote uses the server route and ignores client-owned pricing", async 
   assertEquals("courierPayoutPaise" in (quoted ?? {}), false);
 });
 
+Deno.test("retired walking and bicycle parcel methods are rejected", async () => {
+  for (const deliveryMethod of ["walking", "bicycle"]) {
+    let routeCalled = false;
+    const response = await handleParcelDeliveries(
+      request({
+        body: {
+          operation: "quote",
+          deliveryMethod,
+          pickup: { latitude: 12.68, longitude: 78.62, address: "1 Pickup Road" },
+          dropoff: { latitude: 12.69, longitude: 78.64, address: "2 Drop Road" },
+        },
+      }),
+      dependencies({
+        routeParcel: () => {
+          routeCalled = true;
+          return Promise.resolve({ distanceMeters: 4_250, durationSeconds: 720 });
+        },
+      }),
+    );
+
+    assertEquals(routeCalled, false);
+    await assertError(response, 400, "validation_failed");
+  }
+});
+
 Deno.test("create parcel forwards only customer intent", async () => {
   let recorded: Record<string, unknown> | undefined;
   const response = await handleParcelDeliveries(

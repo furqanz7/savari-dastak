@@ -54,7 +54,7 @@ Deno.test("partner submission forwards normalized self-owned evidence only", asy
       body: {
         operation: "submit",
         accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        deliveryMethod: "bike",
+        deliveryMethod: "motorbike",
         identityEvidenceObjectPath: evidencePath,
         vehicleRegistrationNumber: " tn 23 ab 1234 ",
         vehicleMakeModel: "  Honda   Activa 6G ",
@@ -66,7 +66,7 @@ Deno.test("partner submission forwards normalized self-owned evidence only", asy
       submitApplication: (input) => {
         recorded = input;
         return Promise.resolve({
-          responseBody: { applicationId, status: "pending", deliveryMethod: "bike" },
+          responseBody: { applicationId, status: "pending", deliveryMethod: "motorbike" },
           responseStatus: 200,
         });
       },
@@ -75,7 +75,7 @@ Deno.test("partner submission forwards normalized self-owned evidence only", asy
 
   assertEquals(response.status, 200);
   assertEquals(recorded?.accountId, accountId);
-  assertEquals(recorded?.deliveryMethod, "bike");
+  assertEquals(recorded?.deliveryMethod, "motorbike");
   assertEquals(recorded?.identityEvidenceObjectPath, evidencePath);
   assertEquals(recorded?.vehicleRegistrationNumber, "TN 23 AB 1234");
   assertEquals(recorded?.vehicleMakeModel, "Honda Activa 6G");
@@ -102,10 +102,10 @@ Deno.test("motor delivery methods require self-owned vehicle details and proof",
     request({
       body: {
         operation: "submit",
-        deliveryMethod: "car",
+        deliveryMethod: "goods_vehicle",
         identityEvidenceObjectPath: evidencePath,
         vehicleRegistrationNumber: "TN 23 AB 1234",
-        vehicleMakeModel: "Maruti Suzuki Swift",
+        vehicleMakeModel: "Tata Ace",
         vehicleEvidenceObjectPath: evidencePath,
       },
     }),
@@ -144,12 +144,12 @@ Deno.test("motorbike and scooter onboarding preserve the selected transport type
   assertEquals(recorded, ["motorbike", "scooter"]);
 });
 
-Deno.test("walking and bicycle applications cannot smuggle vehicle data", async () => {
+Deno.test("retired bicycle applications are rejected", async () => {
   const response = await handleDeliveryPartners(
     request({
       body: {
         operation: "submit",
-        deliveryMethod: "walking",
+        deliveryMethod: "bicycle",
         identityEvidenceObjectPath: evidencePath,
         vehicleRegistrationNumber: "TN 23 AB 1234",
       },
@@ -172,13 +172,28 @@ Deno.test("partner submission rejects unsupported methods and foreign evidence",
   );
   await assertError(unsupported, 400, "validation_failed");
 
-  const foreign = await handleDeliveryPartners(
+  const retiredWalking = await handleDeliveryPartners(
     request({
       body: {
         operation: "submit",
         deliveryMethod: "walking",
+        identityEvidenceObjectPath: evidencePath,
+      },
+    }),
+    dependencies(),
+  );
+  await assertError(retiredWalking, 400, "validation_failed");
+
+  const foreign = await handleDeliveryPartners(
+    request({
+      body: {
+        operation: "submit",
+        deliveryMethod: "motorbike",
         identityEvidenceObjectPath:
           "dastak-partner/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/identity.pdf",
+        vehicleRegistrationNumber: "TN 23 AB 1234",
+        vehicleMakeModel: "Verified vehicle",
+        vehicleEvidenceObjectPath: vehicleEvidencePath,
       },
     }),
     dependencies(),
@@ -385,7 +400,7 @@ function dependencies(
     isActiveOwner: () => Promise.resolve(true),
     submitApplication: () =>
       Promise.resolve({
-        responseBody: { applicationId, status: "pending", deliveryMethod: "walking" },
+        responseBody: { applicationId, status: "pending", deliveryMethod: "motorbike" },
         responseStatus: 200,
       }),
     getSelfSnapshot: () =>
@@ -396,7 +411,7 @@ function dependencies(
     listPendingApplications: () => Promise.resolve([]),
     reviewApplication: () =>
       Promise.resolve({
-        responseBody: { applicationId, status: "approved", deliveryMethod: "walking" },
+        responseBody: { applicationId, status: "approved", deliveryMethod: "motorbike" },
         responseStatus: 200,
       }),
     setAvailability: () =>

@@ -85,7 +85,7 @@ struct DastakParcelComposerView: View {
             )
 
             Picker("Delivery method", selection: $deliveryMethod) {
-                Label("Bike", systemImage: "motorcycle").tag(DeliveryMethod.bike)
+                Label("Motorbike", systemImage: "motorcycle").tag(DeliveryMethod.bike)
                 Label("Auto", systemImage: "car.side").tag(DeliveryMethod.auto)
             }
             .pickerStyle(.segmented)

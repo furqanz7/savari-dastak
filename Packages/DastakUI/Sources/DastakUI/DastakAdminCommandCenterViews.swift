@@ -86,7 +86,7 @@ struct DastakAdminOverviewView: View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: MarketplaceSpacing.compact) {
             AdminMetric(title: "Active orders", value: snapshot.commerce.activeOrders, detail: "\(snapshot.commerce.deliveredToday) delivered today", symbol: "shippingbox.fill")
             AdminMetric(title: "Active accounts", value: snapshot.identities.activeAccounts, detail: "\(snapshot.identities.customers) customers", symbol: "person.2.fill")
-            AdminMetric(title: "Riders online", value: snapshot.network.onlineRiders, detail: "\(snapshot.network.assignedRiders) assigned", symbol: "bicycle")
+            AdminMetric(title: "Riders online", value: snapshot.network.onlineRiders, detail: "\(snapshot.network.assignedRiders) assigned", symbol: "motorcycle")
             AdminMetric(title: "Active catalogue", value: snapshot.catalogue.active, detail: "\(snapshot.catalogue.needsReview) need QA", symbol: "square.grid.3x3.fill")
         }
     }
@@ -96,7 +96,7 @@ struct DastakAdminOverviewView: View {
         return VStack(alignment: .leading, spacing: 0) {
             AdminSectionHeader(eyebrow: "ACTION QUEUE", title: "Needs attention")
             AdminQueueRow(title: "Merchant applications", count: queue.merchantApplications, symbol: "storefront")
-            AdminQueueRow(title: "Delivery applications", count: queue.deliveryApplications, symbol: "bicycle")
+            AdminQueueRow(title: "Delivery applications", count: queue.deliveryApplications, symbol: "motorcycle")
             AdminQueueRow(title: "Safety escalations", count: queue.riderEscalations + queue.activePauses, symbol: "exclamationmark.shield")
             AdminQueueRow(title: "System incidents", count: queue.openIncidents, symbol: "waveform.path.ecg")
         }
@@ -151,7 +151,7 @@ struct DastakAdminApprovalsView: View {
                     ) {
                         ForEach(model.deliveryApplications, id: \.applicationID) { application in
                             Button { selected = .delivery(application) } label: {
-                                AdminApprovalRow(title: application.displayName, detail: "\(application.deliveryMethod.displayName) · \(application.phoneNumber)", symbol: "bicycle")
+                                AdminApprovalRow(title: application.displayName, detail: "\(application.deliveryMethod.displayName) · \(application.phoneNumber)", symbol: "motorcycle")
                             }.buttonStyle(.plain)
                         }
                     }
@@ -561,7 +561,7 @@ private struct DastakAdminGovernanceView: View {
                             ForEach(safety.riderEscalations) { escalation in
                                 Button { selectedEscalation = escalation } label: {
                                     HStack(spacing: MarketplaceSpacing.medium) {
-                                        Image(systemName: escalation.custodyStarted ? "shippingbox.fill" : "bicycle")
+                                        Image(systemName: escalation.custodyStarted ? "shippingbox.fill" : "motorcycle")
                                             .font(.title2).foregroundStyle(MarketplaceColors.warning.color)
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(escalation.displayOrderNumber).font(.headline)
@@ -1068,7 +1068,7 @@ private struct AdminPersonRow: View {
         }
     }
 }
-private struct AdminPersonDetail: View { let person: DastakAdminNetworkPerson; var body: some View { List { Section("Identity") { LabeledContent("Name", value: person.displayName); LabeledContent("Email", value: person.email ?? "Not available"); LabeledContent("Phone number", value: person.phoneNumber); LabeledContent("Account", value: person.accountState.capitalized); if let role = person.adminRole { LabeledContent("Admin role", value: role.displayName) } }; Section("Customer") { LabeledContent("Orders", value: "\(person.customer.orderCount)"); LabeledContent("Active orders", value: "\(person.customer.activeOrderCount)") }; if let merchant = person.merchant { Section("Merchant") { LabeledContent("Application", value: merchant.applicationStatus.capitalized); LabeledContent("Business", value: merchant.organizationName ?? merchant.businessName); LabeledContent("Branches", value: "\(merchant.branchCount)") } }; if let delivery = person.delivery { Section("Delivery Partner") { LabeledContent("Application", value: delivery.applicationStatus.capitalized); LabeledContent("Method", value: delivery.deliveryMethod.capitalized); LabeledContent("Availability", value: delivery.availability?.capitalized ?? "Not active"); LabeledContent("Active missions", value: "\(delivery.activeMissionCount)") } } }.navigationTitle(person.displayName) } }
+private struct AdminPersonDetail: View { let person: DastakAdminNetworkPerson; var body: some View { List { Section("Identity") { LabeledContent("Name", value: person.displayName); LabeledContent("Email", value: person.email ?? "Not available"); LabeledContent("Phone number", value: person.phoneNumber); LabeledContent("Account", value: person.accountState.capitalized); if let role = person.adminRole { LabeledContent("Admin role", value: role.displayName) } }; Section("Customer") { LabeledContent("Orders", value: "\(person.customer.orderCount)"); LabeledContent("Active orders", value: "\(person.customer.activeOrderCount)") }; if let merchant = person.merchant { Section("Merchant") { LabeledContent("Application", value: merchant.applicationStatus.capitalized); LabeledContent("Business", value: merchant.organizationName ?? merchant.businessName); LabeledContent("Branches", value: "\(merchant.branchCount)") } }; if let delivery = person.delivery { Section("Delivery Partner") { LabeledContent("Application", value: delivery.applicationStatus.capitalized); LabeledContent("Method", value: adminDeliveryMethod(delivery.deliveryMethod)); LabeledContent("Availability", value: delivery.availability?.capitalized ?? "Not active"); LabeledContent("Active missions", value: "\(delivery.activeMissionCount)") } } }.navigationTitle(person.displayName) } }
 
 private struct AdminSKUCard: View {
     let sku: DastakAdminCatalogueSKU
@@ -1191,6 +1191,16 @@ private struct AdminSKURow: View {
 }
 
 private func adminDate(_ value: String) -> String { ISO8601DateFormatter().date(from: value)?.formatted(date: .abbreviated, time: .shortened) ?? "just now" }
+private func adminDeliveryMethod(_ value: String) -> String {
+    switch value.lowercased() {
+    case "walking", "bicycle", "retired": "Retired delivery method"
+    case "bike", "motorbike": "Motorbike"
+    case "scooter": "Scooter"
+    case "auto": "Auto"
+    case "car", "goods_vehicle": "Tempo / goods vehicle"
+    default: value.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
 private func activationBlockerLabel(_ value: String) -> String {
     [
         "QA_VERIFIED_REQUIRED": "Complete QA verification",

@@ -2,13 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MerchantOrderStatus, OrderLocation } from "./orders";
 
 export type DeliveryMethod =
-  | "walking"
-  | "bicycle"
+  | "retired"
   | "bike"
   | "motorbike"
   | "scooter"
   | "auto"
-  | "car";
+  | "goods_vehicle";
 export type PartnerAvailability = {
   status: "online" | "offline";
   location: OrderLocation | null;
@@ -256,10 +255,13 @@ const deliveryEvidenceExtensions = new Map([
 const maximumEvidenceBytes = 10 * 1024 * 1024;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const deliveryMethods = new Set<DeliveryMethod>([
-  "walking", "bicycle", "bike", "motorbike", "scooter", "auto", "car",
+  "retired", "bike", "motorbike", "scooter", "auto", "goods_vehicle",
+]);
+const selectableDeliveryMethods = new Set<DeliveryMethod>([
+  "bike", "motorbike", "scooter", "auto", "goods_vehicle",
 ]);
 const motorVehicleMethods = new Set<DeliveryMethod>([
-  "bike", "motorbike", "scooter", "auto", "car",
+  "bike", "motorbike", "scooter", "auto", "goods_vehicle",
 ]);
 const v1TransportTypes = new Set<V1TransportType>([
   "WALKING", "BICYCLE", "MOTORBIKE", "SCOOTER", "AUTO", "CAR",
@@ -393,7 +395,7 @@ export async function submitDeliveryPartnerApplication(
   },
   fetcher: Fetcher = fetch,
 ) {
-  if (!deliveryMethods.has(input.deliveryMethod) || !input.identityEvidenceObjectPath) throw validationError();
+  if (!selectableDeliveryMethods.has(input.deliveryMethod) || !input.identityEvidenceObjectPath) throw validationError();
   const deliveryMethod = input.deliveryMethod === "bike" ? "motorbike" : input.deliveryMethod;
   const vehicleRequired = requiresVehicleVerification(deliveryMethod);
   const registration = input.vehicleRegistrationNumber
@@ -1181,6 +1183,8 @@ function location(value: unknown): OrderLocation {
 }
 
 function requiredDeliveryMethod(value: unknown) {
+  if (value === "walking" || value === "bicycle") return "retired" as const;
+  if (value === "car") return "goods_vehicle" as const;
   if (!deliveryMethods.has(value as DeliveryMethod)) invalid();
   return value as DeliveryMethod;
 }

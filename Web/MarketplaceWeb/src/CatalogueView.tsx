@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Bell,
-  Bike,
   ChevronRight,
   CircleHelp,
   CreditCard,
@@ -19,6 +18,7 @@ import {
   MapPin,
   Minus,
   MonitorSmartphone,
+  Navigation,
   PackageOpen,
   Pencil,
   Plus,
@@ -960,7 +960,7 @@ export function CatalogueView({
             onUseCurrentLocation={useCurrentLocation}
           />
           <button className="parcel-promo" type="button" onClick={onOpenParcel}>
-            <span className="parcel-promo-icon"><Bike size={22} /></span>
+            <span className="parcel-promo-icon"><Navigation size={22} /></span>
             <span><strong>Send a parcel</strong><small>Immediate pickup and delivery</small></span>
             <ChevronRight size={20} />
           </button>
@@ -1270,7 +1270,7 @@ export function CatalogueView({
               role="button"
               aria-busy={deliveryPartnerAccountState === "loading" || undefined}
             >
-              <span className="customer-account-icon"><Bike size={21} /></span>
+              <span className="customer-account-icon"><Navigation size={21} /></span>
               <span>
                 <strong>{partnerAccountPresentation.title}</strong>
                 <small>{partnerAccountPresentation.detail}</small>
@@ -1551,7 +1551,7 @@ function CustomerOrderDetail({ order, busy, onBack, onPay, onCancel, onSupport, 
         <span>{paymentStateLabel(order.paymentState)}</span>
       </section>
       <CustomerRouteMap points={points} />
-      {order.courier && <section className="customer-contact-card"><span className="order-icon"><Bike size={20} /></span><div><strong>{order.courier.displayName}</strong><small>Your delivery partner · {order.courier.deliveryMethod}</small></div><a href={`tel:${order.courier.phoneNumber}`} aria-label="Call delivery partner"><Phone size={18} /></a></section>}
+      {order.courier && <section className="customer-contact-card"><span className="order-icon"><Navigation size={20} /></span><div><strong>{order.courier.displayName}</strong><small>Your delivery partner · {courierMethodLabel(order.courier.deliveryMethod)}</small></div><a href={`tel:${order.courier.phoneNumber}`} aria-label="Call delivery partner"><Phone size={18} /></a></section>}
       {order.handoffCode?.purpose === "delivery" && <section className="customer-handoff"><small>Share only at your door</small><strong>{order.handoffCode.code}</strong><span>Delivery code</span></section>}
       <section className="customer-receipt">
         <header><h2>Receipt</h2><strong>{formatPrice(order.total.paise)}</strong></header>
@@ -1737,6 +1737,12 @@ function StoreCatalogue({ store, supabaseUrl, cartStoreId, quantities, onQuantit
 
 function isFinalOrder(order: MerchantOrderSnapshot) {
   return order.status === "cancelled" || order.status === "delivered";
+}
+
+function courierMethodLabel(method: string) {
+  if (method === "retired") return "Retired delivery method";
+  if (method === "bike") return "Motorbike";
+  return method.charAt(0).toUpperCase() + method.slice(1);
 }
 
 function orderMessage(error: unknown) {

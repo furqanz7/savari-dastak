@@ -2,29 +2,45 @@ import Foundation
 import MarketplaceFoundation
 
 public enum DeliveryMethod: String, Codable, Equatable, Sendable {
-    case walking
-    case bicycle
+    case retired
     case bike
     case motorbike
     case scooter
     case auto
-    case car
+    case goodsVehicle = "goods_vehicle"
 
     public var requiresVehicleVerification: Bool {
         switch self {
-        case .bike, .motorbike, .scooter, .auto, .car: true
-        case .walking, .bicycle: false
+        case .bike, .motorbike, .scooter, .auto, .goodsVehicle: true
+        case .retired: false
         }
     }
 
     public var displayName: String {
         switch self {
-        case .walking: "Walk"
-        case .bicycle: "Bicycle"
+        case .retired: "Retired delivery method"
         case .bike, .motorbike: "Motorbike"
         case .scooter: "Scooter"
         case .auto: "Auto"
-        case .car: "Car"
+        case .goodsVehicle: "Tempo / goods vehicle"
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        switch value {
+        case "walking", "bicycle", "retired": self = .retired
+        case "car", "goods_vehicle": self = .goodsVehicle
+        case "bike": self = .bike
+        case "motorbike": self = .motorbike
+        case "scooter": self = .scooter
+        case "auto": self = .auto
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown delivery method."
+            )
         }
     }
 }

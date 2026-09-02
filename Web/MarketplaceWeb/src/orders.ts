@@ -5,7 +5,7 @@ export type OrderLineInput = { productId: string; quantity: number };
 export type CustomerCourierSnapshot = {
   displayName: string;
   phoneNumber: string;
-  deliveryMethod: "walking" | "bicycle" | "bike" | "auto";
+  deliveryMethod: "retired" | "bike" | "auto";
   location: OrderLocation | null;
   lastSeenAt: string | null;
 };
@@ -489,10 +489,13 @@ function courierSnapshot(value: unknown): CustomerCourierSnapshot | undefined {
   const source = record(value);
   const deliveryMethod = source?.deliveryMethod;
   if (!source || typeof deliveryMethod !== "string" || !deliveryMethods.has(deliveryMethod)) invalid();
+  const normalizedMethod = deliveryMethod === "walking" || deliveryMethod === "bicycle"
+    ? "retired"
+    : deliveryMethod;
   return {
     displayName: requiredText(source.displayName, 100),
     phoneNumber: phone(source.phoneNumber),
-    deliveryMethod: deliveryMethod as CustomerCourierSnapshot["deliveryMethod"],
+    deliveryMethod: normalizedMethod as CustomerCourierSnapshot["deliveryMethod"],
     location: source.location === null || source.location === undefined ? null : location(source.location),
     lastSeenAt: source.lastSeenAt === null || source.lastSeenAt === undefined ? null : timestamp(source.lastSeenAt),
   };
@@ -593,4 +596,4 @@ const orderStatuses = new Set([
   "at_store", "picked_up", "in_transit", "delivered", "cancelled", "returning_to_merchant",
 ]);
 const paymentStates = new Set(["payment_pending", "paid", "not_collected", "refund_pending", "refunded"]);
-const deliveryMethods = new Set(["walking", "bicycle", "bike", "auto"]);
+const deliveryMethods = new Set(["walking", "bicycle", "retired", "bike", "auto"]);

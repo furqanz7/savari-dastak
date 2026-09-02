@@ -1330,11 +1330,11 @@ private struct DastakCourierCard: View {
 
     private var methodSymbol: String {
         switch courier.deliveryMethod {
-        case .walking: "figure.walk"
-        case .bicycle: "bicycle"
+        case .retired: "nosign"
         case .bike, .motorbike: "motorcycle"
-        case .scooter: "bicycle"
-        case .auto, .car: "car.fill"
+        case .scooter: "scooter"
+        case .auto: "car.fill"
+        case .goodsVehicle: "truck.box.fill"
         }
     }
 
