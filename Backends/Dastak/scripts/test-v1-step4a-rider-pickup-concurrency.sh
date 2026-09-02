@@ -103,19 +103,35 @@ on conflict (account_id) do update set status='online', location=excluded.locati
   available_until=excluded.available_until,
   state_version=private.delivery_partner_availability.state_version+1;
 
-insert into dastak_v1.categories (id,name,slug,status,created_by) values
-('99400000-0000-4000-8000-000000000040','Step Four Category','step-four-category','ACTIVE','99400000-0000-4000-8000-000000000001')
+insert into dastak_v1.category_types (id,name,slug,status,created_by) values
+('99400000-0000-4000-8000-000000000039','Step Four Type','step-four-type','ACTIVE','99400000-0000-4000-8000-000000000001')
+on conflict (id) do nothing;
+insert into dastak_v1.categories (id,category_type_id,name,slug,status,created_by) values
+('99400000-0000-4000-8000-000000000040','99400000-0000-4000-8000-000000000039','Step Four Category','step-four-category','ACTIVE','99400000-0000-4000-8000-000000000001')
 on conflict (id) do nothing;
 insert into dastak_v1.subcategories (id,category_id,name,slug,status,created_by) values
 ('99400000-0000-4000-8000-000000000041','99400000-0000-4000-8000-000000000040','Step Four Subcategory','step-four-subcategory','ACTIVE','99400000-0000-4000-8000-000000000001')
 on conflict (id) do nothing;
 insert into dastak_v1.skus (
   id,subcategory_id,canonical_name,slug,pack_size,list_price_paise,
-  selling_price_paise,logistics_attributes,status,created_by
+  selling_price_paise,logistics_attributes,status,
+  qa_status,qa_verified_at,qa_verified_by,created_by
 ) values
-('99400000-0000-4000-8000-000000000042','99400000-0000-4000-8000-000000000041','Step Four Product A','step-four-product-a','1 unit',1000,900,'{"weightGrams":1000,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}','ACTIVE','99400000-0000-4000-8000-000000000001'),
-('99400000-0000-4000-8000-000000000043','99400000-0000-4000-8000-000000000041','Step Four Product B','step-four-product-b','1 unit',1000,900,'{"weightGrams":1000,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}','ACTIVE','99400000-0000-4000-8000-000000000001')
+('99400000-0000-4000-8000-000000000042','99400000-0000-4000-8000-000000000041','Step Four Product A','step-four-product-a','1 unit',1000,900,'{"weightGrams":1000,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}','DRAFT','VERIFIED',now(),'99400000-0000-4000-8000-000000000001','99400000-0000-4000-8000-000000000001'),
+('99400000-0000-4000-8000-000000000043','99400000-0000-4000-8000-000000000041','Step Four Product B','step-four-product-b','1 unit',1000,900,'{"weightGrams":1000,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}','DRAFT','VERIFIED',now(),'99400000-0000-4000-8000-000000000001','99400000-0000-4000-8000-000000000001')
 on conflict (id) do nothing;
+
+insert into dastak_v1.sku_images (
+  id,sku_id,image_key,role,source_type,source_reference,status,
+  created_by,verified_by,verified_at,rights_status,rights_reference,
+  rights_verified_by,rights_verified_at
+) values
+('99400000-0000-4000-8000-000000000044','99400000-0000-4000-8000-000000000042','test-fixtures/step-four-product-a.webp','PRIMARY','OWNER_CAPTURE','V1 race fixture','VERIFIED','99400000-0000-4000-8000-000000000001','99400000-0000-4000-8000-000000000001',now(),'CLEARED','Test fixture rights clearance','99400000-0000-4000-8000-000000000001',now()),
+('99400000-0000-4000-8000-000000000045','99400000-0000-4000-8000-000000000043','test-fixtures/step-four-product-b.webp','PRIMARY','OWNER_CAPTURE','V1 race fixture','VERIFIED','99400000-0000-4000-8000-000000000001','99400000-0000-4000-8000-000000000001',now(),'CLEARED','Test fixture rights clearance','99400000-0000-4000-8000-000000000001',now())
+on conflict (id) do nothing;
+update dastak_v1.skus set status='ACTIVE',updated_at=now(),version=version+1
+where id in ('99400000-0000-4000-8000-000000000042','99400000-0000-4000-8000-000000000043')
+  and status <> 'ACTIVE';
 
 insert into dastak_v1.merchant_organizations (
   id,legal_name,display_name,merchant_type,status,created_by

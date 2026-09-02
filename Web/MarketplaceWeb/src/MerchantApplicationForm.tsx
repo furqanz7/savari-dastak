@@ -7,9 +7,10 @@ import {
   FileUp,
   LockKeyhole,
   MapPin,
-  RefreshCw,
+  ShoppingBasket,
   ShieldCheck,
   Store,
+  UtensilsCrossed,
   WifiOff,
   X,
 } from "lucide-react";
@@ -19,10 +20,13 @@ import {
   isAcceptedEvidenceFile,
   getMerchantApplicationSnapshot,
   type MerchantApplicationSnapshot,
+  type MerchantType,
   MerchantApplicationRequestError,
   submitMerchantApplication,
   uploadMerchantEvidence,
 } from "./merchant-application";
+import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
+import { usePullToRefresh } from "./usePullToRefresh";
 
 type Props = {
   accessState: "denied" | "pending" | "suspended";
@@ -46,19 +50,24 @@ export function MerchantApplicationForm({
   onSessionExpired,
 }: Props) {
   const [businessName, setBusinessName] = useState("");
+  const [legalName, setLegalName] = useState("");
+  const [merchantType, setMerchantType] = useState<MerchantType>();
   const [businessAddress, setBusinessAddress] = useState("");
+  const [storeLocation, setStoreLocation] = useState<SelectedPlace>();
   const [evidenceFile, setEvidenceFile] = useState<File>();
   const [uploadedEvidence, setUploadedEvidence] = useState<{ file: File; path: string }>();
   const [snapshot, setSnapshot] = useState<MerchantApplicationSnapshot>();
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const [submitError, setSubmitError] = useState<string>();
   const submissionKey = useRef<string | undefined>(undefined);
 
-  const valid = businessName.trim().length >= 1 && businessName.trim().length <= 120
+  const valid = !!merchantType
+    && legalName.trim().length >= 1 && legalName.trim().length <= 160
+    && businessName.trim().length >= 1 && businessName.trim().length <= 120
     && businessAddress.trim().length >= 1 && businessAddress.trim().length <= 300
+    && !!storeLocation
     && !!evidenceFile && isAcceptedEvidenceFile(evidenceFile) && !loading;
 
   const loadSnapshot = useCallback(async () => {
@@ -70,8 +79,17 @@ export function MerchantApplicationForm({
         accessToken: session.access_token,
       });
       setSnapshot(nextSnapshot);
+      if (nextSnapshot.merchantType) setMerchantType(nextSnapshot.merchantType);
+      if (nextSnapshot.legalName) setLegalName(nextSnapshot.legalName);
       if (nextSnapshot.businessName) setBusinessName(nextSnapshot.businessName);
       if (nextSnapshot.businessAddress) setBusinessAddress(nextSnapshot.businessAddress);
+      if (nextSnapshot.businessAddress && nextSnapshot.latitude !== null && nextSnapshot.longitude !== null) {
+        setStoreLocation({
+          address: nextSnapshot.businessAddress,
+          latitude: nextSnapshot.latitude,
+          longitude: nextSnapshot.longitude,
+        });
+      }
       return true;
     } catch (loadError) {
       if (loadError instanceof MerchantApplicationRequestError && loadError.status === 401) {
@@ -103,16 +121,28 @@ export function MerchantApplicationForm({
             ? "approved"
             : "application";
 
-  const refresh = async () => {
-    setRefreshing(true);
+  const refresh = useCallback(async () => {
     const loaded = await loadSnapshot();
     if (loaded) onSubmitted();
-    setRefreshing(false);
-  };
+  }, [loadSnapshot, onSubmitted]);
+  const pull = usePullToRefresh(refresh, presentation !== "application");
+
+  useEffect(() => {
+    if (presentation === "application" || presentation === "loading") return;
+    const interval = window.setInterval(() => { void refresh(); }, 20_000);
+    const becameVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", becameVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", becameVisible);
+    };
+  }, [presentation, refresh]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!valid || !evidenceFile) return;
+    if (!valid || !evidenceFile || !merchantType || !storeLocation) return;
     setBusy(true);
     setSubmitError(undefined);
     try {
@@ -125,18 +155,30 @@ export function MerchantApplicationForm({
         supabaseUrl,
         publishableKey,
         accessToken: session.access_token,
+        merchantType,
+        legalName,
         businessName,
         businessAddress,
+        latitude: storeLocation.latitude,
+        longitude: storeLocation.longitude,
         evidenceObjectPath,
         idempotencyKey: submissionKey.current,
       });
       setSnapshot({
         onboardingState: "pending",
         applicationId: result.applicationId,
+        merchantType,
+        legalName: legalName.trim(),
         businessName: businessName.trim(),
         businessAddress: businessAddress.trim(),
+        latitude: storeLocation.latitude,
+        longitude: storeLocation.longitude,
+        serviceZoneId: result.serviceZoneId,
+        serviceZoneName: result.serviceZoneName,
         evidenceObjectPath,
         reviewReason: null,
+        organizationId: null,
+        branchId: null,
       });
       submissionKey.current = undefined;
       onSubmitted();
@@ -162,6 +204,9 @@ export function MerchantApplicationForm({
     const Icon = state.icon;
     return (
       <section className="merchant-access-state">
+        <div className={`application-pull-indicator ${pull.refreshing ? "refreshing" : ""}`} style={{ opacity: pull.distance > 0 || pull.refreshing ? 1 : 0 }} aria-live="polite">
+          {pull.refreshing ? "Checking your application…" : pull.progress >= 1 ? "Release to check" : "Pull down to check status"}
+        </div>
         <span className="application-heading-icon"><Icon size={25} /></span>
         <div className="merchant-state-copy">
           <p className="eyebrow">{state.eyebrow}</p>
@@ -171,15 +216,13 @@ export function MerchantApplicationForm({
         {(presentation === "pending" || presentation === "approved") && <ApplicationProgress current={3} />}
         {snapshot?.businessName && (
           <div className="merchant-application-summary">
-            <small>Store</small>
+            <small>{snapshot.merchantType === "RESTAURANT_CAFE" ? "Restaurant / Cafe" : "Retail store"}</small>
             <strong>{snapshot.businessName}</strong>
             {snapshot.businessAddress && <span>{snapshot.businessAddress}</span>}
+            {snapshot.serviceZoneName && <span className="application-zone"><MapPin size={14} /> {snapshot.serviceZoneName}</span>}
           </div>
         )}
-        <button className="primary-button application-submit" type="button" disabled={refreshing} onClick={refresh}>
-          <RefreshCw size={17} className={refreshing ? "spin" : undefined} />
-          {refreshing ? "Checking status" : state.action}
-        </button>
+        <p className="application-refresh-hint">Pull down on mobile to check now. This page also checks automatically.</p>
       </section>
     );
   }
@@ -204,14 +247,34 @@ export function MerchantApplicationForm({
         </aside>
       )}
 
+      <section className="application-section" aria-labelledby="merchant-type-title">
+        <header>
+          <span className="application-section-icon"><Store size={18} /></span>
+          <div><h2 id="merchant-type-title">Business type</h2><p>This selects the correct Dastak catalogue and order tools.</p></div>
+        </header>
+        <div className="merchant-type-grid" role="radiogroup" aria-label="Business type">
+          <button type="button" role="radio" aria-checked={merchantType === "RESTAURANT_CAFE"} className={merchantType === "RESTAURANT_CAFE" ? "selected" : ""} onClick={() => { setMerchantType("RESTAURANT_CAFE"); submissionKey.current = undefined; setSubmitError(undefined); }}>
+            <span><UtensilsCrossed size={22} /></span><strong>Restaurant or cafe</strong><small>Build menus, items, options and food availability.</small>
+          </button>
+          <button type="button" role="radio" aria-checked={merchantType === "RETAIL"} className={merchantType === "RETAIL" ? "selected" : ""} onClick={() => { setMerchantType("RETAIL"); submissionKey.current = undefined; setSubmitError(undefined); }}>
+            <span><ShoppingBasket size={22} /></span><strong>Retail store</strong><small>Select exact products from Dastak's canonical catalogue.</small>
+          </button>
+        </div>
+      </section>
+
       <section className="application-section" aria-labelledby="merchant-store-title">
         <header>
           <span className="application-section-icon"><Store size={18} /></span>
-          <div><h2 id="merchant-store-title">Store details</h2><p>Use the public name and complete trading address.</p></div>
+          <div><h2 id="merchant-store-title">Business and branch</h2><p>Tell Admin who operates it and what customers should see.</p></div>
         </header>
         <label>
+          <span className="application-field-label">Legal business name <small>{legalName.length}/160</small></span>
+          <input autoComplete="organization" maxLength={160} value={legalName} placeholder="Name on registration or identity document" onChange={(event) => { setLegalName(event.target.value); submissionKey.current = undefined; setSubmitError(undefined); }} />
+          <small className="application-field-help">Used for verification and never substituted for the public store name.</small>
+        </label>
+        <label>
           <span className="application-field-label">
-            Business name <small>{businessName.length}/120</small>
+            Customer-facing name <small>{businessName.length}/120</small>
           </span>
           <input
             autoComplete="organization"
@@ -243,6 +306,24 @@ export function MerchantApplicationForm({
             }}
           />
         </label>
+      </section>
+
+      <section className="application-section" aria-labelledby="merchant-location-title">
+        <header>
+          <span className="application-section-icon"><MapPin size={18} /></span>
+          <div><h2 id="merchant-location-title">Exact store location</h2><p>Required to connect this branch to the correct Dastak service area.</p></div>
+        </header>
+        <LocationSearchField label="Store location" value={storeLocation} disabled={busy} onSelectionCleared={() => {
+          setStoreLocation(undefined);
+          submissionKey.current = undefined;
+          setSubmitError(undefined);
+        }} onChange={(place) => {
+          setStoreLocation(place);
+          if (!businessAddress.trim()) setBusinessAddress(place.address.slice(0, 300));
+          submissionKey.current = undefined;
+          setSubmitError(undefined);
+        }} />
+        {storeLocation && <div className="application-location-confirmed"><CheckCircle2 size={17} /><span><strong>Store pin selected</strong><small>Admin will verify this location and service area before approval.</small></span></div>}
       </section>
 
       <section className="application-section" aria-labelledby="merchant-document-title">
@@ -305,15 +386,13 @@ function merchantStatusCopy(presentation: Exclude<Presentation, "loading" | "app
         eyebrow: "Application received",
         title: "Your store is under review",
         message: "We'll unlock the merchant workspace as soon as the application is approved.",
-        action: "Check status",
       };
     case "approved":
       return {
         icon: CheckCircle2,
         eyebrow: "Approved",
         title: "Your merchant access is ready",
-        message: "Refresh access to open your store workspace.",
-        action: "Open merchant workspace",
+        message: "Your store workspace will open automatically.",
       };
     case "suspended":
       return {
@@ -321,7 +400,6 @@ function merchantStatusCopy(presentation: Exclude<Presentation, "loading" | "app
         eyebrow: "Access paused",
         title: "Merchant access is suspended",
         message: "Your store workspace is unavailable while this account is being reviewed.",
-        action: "Check access",
       };
     case "failure":
       return {
@@ -329,7 +407,6 @@ function merchantStatusCopy(presentation: Exclude<Presentation, "loading" | "app
         eyebrow: "Connection issue",
         title: "We couldn't check your application",
         message: error ?? "Try again when your connection is stable.",
-        action: "Try again",
       };
   }
 }

@@ -12,15 +12,28 @@ type EvidenceFile = { type: string; size: number };
 export type MerchantApplicationResult = {
   applicationId: string;
   status: "pending";
+  merchantType: MerchantType;
+  serviceZoneId: string;
+  serviceZoneName: string;
 };
+
+export type MerchantType = "RETAIL" | "RESTAURANT_CAFE";
 
 export type MerchantApplicationSnapshot = {
   onboardingState: "not_applied" | "pending" | "approved" | "rejected";
   applicationId: string | null;
+  merchantType: MerchantType | null;
+  legalName: string | null;
   businessName: string | null;
   businessAddress: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  serviceZoneId: string | null;
+  serviceZoneName: string | null;
   evidenceObjectPath: string | null;
   reviewReason: string | null;
+  organizationId: string | null;
+  branchId: string | null;
 };
 
 export type MerchantAccountState = MerchantApplicationSnapshot["onboardingState"] | "unavailable";
@@ -107,10 +120,18 @@ export async function getMerchantApplicationSnapshot(
   return {
     onboardingState: onboardingState as MerchantApplicationSnapshot["onboardingState"],
     applicationId: nullableUUID(result.applicationId),
+    merchantType: merchantType(result.merchantType),
+    legalName: nullableText(result.legalName, 160),
     businessName: nullableText(result.businessName, 120),
     businessAddress: nullableText(result.businessAddress, 300),
+    latitude: nullableCoordinate(result.latitude, -90, 90),
+    longitude: nullableCoordinate(result.longitude, -180, 180),
+    serviceZoneId: nullableUUID(result.serviceZoneId),
+    serviceZoneName: nullableText(result.serviceZoneName, 160),
     evidenceObjectPath: nullableText(result.evidenceObjectPath, 500),
     reviewReason: nullableText(result.reviewReason, 500),
+    organizationId: nullableUUID(result.organizationId),
+    branchId: nullableUUID(result.branchId),
   };
 }
 
@@ -152,8 +173,12 @@ export async function getMerchantAccountState(
 
 export async function submitMerchantApplication(
   input: AuthenticatedInput & {
+    merchantType: MerchantType;
+    legalName: string;
     businessName: string;
     businessAddress: string;
+    latitude: number;
+    longitude: number;
     evidenceObjectPath: string;
     idempotencyKey: string;
   },
@@ -161,9 +186,14 @@ export async function submitMerchantApplication(
 ): Promise<MerchantApplicationResult> {
   const businessName = normalize(input.businessName);
   const businessAddress = normalize(input.businessAddress);
+  const legalName = normalize(input.legalName);
   if (
+    !["RETAIL", "RESTAURANT_CAFE"].includes(input.merchantType) ||
+    legalName.length < 1 || legalName.length > 160 ||
     businessName.length < 1 || businessName.length > 120 ||
     businessAddress.length < 1 || businessAddress.length > 300 ||
+    !Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90 ||
+    !Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180 ||
     !input.evidenceObjectPath
   ) {
     throw validationError();
@@ -181,8 +211,12 @@ export async function submitMerchantApplication(
       },
       body: JSON.stringify({
         operation: "submit",
+        merchantType: input.merchantType,
+        legalName,
         businessName,
         businessAddress,
+        latitude: input.latitude,
+        longitude: input.longitude,
         evidenceObjectPath: input.evidenceObjectPath,
       }),
     });
@@ -200,18 +234,40 @@ export async function submitMerchantApplication(
   }
 
   const result = record(payload);
-  if (!result || !uuidPattern.test(String(result.applicationId)) || result.status !== "pending") {
+  const resultMerchantType = merchantType(result?.merchantType);
+  const serviceZoneId = nullableUUID(result?.serviceZoneId);
+  const serviceZoneName = nullableText(result?.serviceZoneName, 160);
+  if (!result || !uuidPattern.test(String(result.applicationId)) || result.status !== "pending" ||
+    !resultMerchantType || !serviceZoneId || !serviceZoneName) {
     throw new MerchantApplicationRequestError(
       "invalid_response",
       "Dastak received an invalid merchant application response.",
       502,
     );
   }
-  return { applicationId: String(result.applicationId).toLowerCase(), status: "pending" };
+  return {
+    applicationId: String(result.applicationId).toLowerCase(),
+    status: "pending",
+    merchantType: resultMerchantType,
+    serviceZoneId,
+    serviceZoneName,
+  };
 }
 
 function normalize(value: string) {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function merchantType(value: unknown): MerchantType | null {
+  return value === "RETAIL" || value === "RESTAURANT_CAFE" ? value : null;
+}
+
+function nullableCoordinate(value: unknown, minimum: number, maximum: number) {
+  return value === null || value === undefined
+    ? null
+    : typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum
+      ? value
+      : null;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

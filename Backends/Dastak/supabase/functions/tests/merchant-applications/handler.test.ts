@@ -63,8 +63,12 @@ Deno.test("merchant submission forwards only normalized server-owned input", asy
       {
         operation: "submit",
         accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        merchantType: "RETAIL",
+        legalName: "  Corner   Retail   Private Limited  ",
         businessName: "  Corner   Store  ",
         businessAddress: "  12   Main Road  ",
+        latitude: 12.6819,
+        longitude: 78.6201,
         evidenceObjectPath: `merchant/${accountId}/registration.pdf`,
       },
       "Bearer session-token",
@@ -74,7 +78,13 @@ Deno.test("merchant submission forwards only normalized server-owned input", asy
       submitMerchantApplication: (input) => {
         recorded = input;
         return Promise.resolve({
-          responseBody: { applicationId, status: "pending" },
+          responseBody: {
+            applicationId,
+            status: "pending",
+            merchantType: "RETAIL",
+            serviceZoneId,
+            serviceZoneName: "Vaniyambadi",
+          },
           responseStatus: 200,
         });
       },
@@ -82,10 +92,20 @@ Deno.test("merchant submission forwards only normalized server-owned input", asy
   );
 
   assertEquals(response.status, 200);
-  assertEquals(await jsonBody(response), { applicationId, status: "pending" });
+  assertEquals(await jsonBody(response), {
+    applicationId,
+    status: "pending",
+    merchantType: "RETAIL",
+    serviceZoneId,
+    serviceZoneName: "Vaniyambadi",
+  });
   assertEquals(recorded?.accountId, accountId);
+  assertEquals(recorded?.merchantType, "RETAIL");
+  assertEquals(recorded?.legalName, "Corner Retail Private Limited");
   assertEquals(recorded?.businessName, "Corner Store");
   assertEquals(recorded?.businessAddress, "12 Main Road");
+  assertEquals(recorded?.latitude, 12.6819);
+  assertEquals(recorded?.longitude, 78.6201);
   assertEquals(recorded?.evidenceObjectPath, `merchant/${accountId}/registration.pdf`);
   assertEquals(recorded?.idempotencyKey, "merchant-submit-1");
   assert(recorded?.requestDigest.match(/^[0-9a-f]{64}$/));
@@ -97,8 +117,12 @@ Deno.test("merchant submission rejects another account evidence path", async () 
     request(
       {
         operation: "submit",
+        merchantType: "RESTAURANT_CAFE",
+        legalName: "Corner Foods",
         businessName: "Corner Store",
         businessAddress: "12 Main Road",
+        latitude: 12.6819,
+        longitude: 78.6201,
         evidenceObjectPath: "merchant/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/registration.pdf",
       },
       "Bearer session-token",
@@ -167,10 +191,19 @@ Deno.test("active owner can list pending merchant applications", async () => {
   const applications = [{
     applicationId,
     accountId,
+    applicantName: "Furqan",
+    applicantPhone: "+919342068881",
+    merchantType: "RETAIL" as const,
+    legalName: "Corner Retail Private Limited",
     businessName: "Corner Store",
     businessAddress: "12 Main Road",
+    latitude: 12.6819,
+    longitude: 78.6201,
+    serviceZoneId,
+    serviceZoneName: "Vaniyambadi",
     evidenceObjectPath: `merchant/${accountId}/registration.pdf`,
     status: "pending" as const,
+    submittedAt: "2026-09-02T07:30:00.000Z",
   }];
   const response = await handleMerchantApplications(
     request({ operation: "list" }, "Bearer session-token"),
@@ -238,6 +271,7 @@ Deno.test("merchant application dependency failures do not leak details", async 
 
 const accountId = "22222222-2222-4222-8222-222222222222";
 const applicationId = "33333333-3333-4333-8333-333333333333";
+const serviceZoneId = "44444444-4444-4444-8444-444444444444";
 
 function dependencies(
   overrides: Partial<{

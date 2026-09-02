@@ -8,9 +8,13 @@ import UniformTypeIdentifiers
 private final class DastakMerchantApplicationModel: ObservableObject {
     static let maximumBusinessNameLength = 120
     static let maximumBusinessAddressLength = 300
+    static let maximumLegalNameLength = 160
 
+    @Published var merchantType: MerchantType?
+    @Published var legalName = ""
     @Published var businessName = ""
     @Published var businessAddress = ""
+    @Published private(set) var selectedLocation: DastakDeliveryLocation?
     @Published private(set) var evidenceName: String?
     @Published private(set) var onboardingState: MerchantOnboardingState = .notApplied
     @Published private(set) var applicationID: UUID?
@@ -36,15 +40,23 @@ private final class DastakMerchantApplicationModel: ObservableObject {
         businessName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    var normalizedLegalName: String {
+        legalName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var normalizedBusinessAddress: String {
         businessAddress.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var canSubmit: Bool {
-        !normalizedBusinessName.isEmpty
+        merchantType != nil
+            && !normalizedLegalName.isEmpty
+            && normalizedLegalName.count <= Self.maximumLegalNameLength
+            && !normalizedBusinessName.isEmpty
             && normalizedBusinessName.count <= Self.maximumBusinessNameLength
             && !normalizedBusinessAddress.isEmpty
             && normalizedBusinessAddress.count <= Self.maximumBusinessAddressLength
+            && selectedLocation != nil
             && evidenceData != nil
             && loadErrorMessage == nil
             && !isSubmitting
@@ -63,11 +75,23 @@ private final class DastakMerchantApplicationModel: ObservableObject {
             onboardingState = snapshot.onboardingState
             applicationID = snapshot.applicationID
             reviewReason = snapshot.reviewReason
+            merchantType = snapshot.merchantType
+            if let snapshotLegalName = snapshot.legalName, !snapshotLegalName.isEmpty {
+                legalName = snapshotLegalName
+            }
             if let snapshotName = snapshot.businessName, !snapshotName.isEmpty {
                 businessName = snapshotName
             }
             if let snapshotAddress = snapshot.businessAddress, !snapshotAddress.isEmpty {
                 businessAddress = snapshotAddress
+            }
+            if let latitude = snapshot.latitude,
+               let longitude = snapshot.longitude,
+               let address = snapshot.businessAddress {
+                selectedLocation = DastakDeliveryLocation(
+                    address: address,
+                    point: GeoPoint(latitude: latitude, longitude: longitude)
+                )
             }
         } catch {
             loadErrorMessage = "We could not check your merchant application. Check your connection and try again."
@@ -76,10 +100,35 @@ private final class DastakMerchantApplicationModel: ObservableObject {
 
     func updateBusinessName(_ value: String) {
         businessName = String(value.prefix(Self.maximumBusinessNameLength))
+        submissionKey = nil
+        submissionErrorMessage = nil
+    }
+
+    func updateLegalName(_ value: String) {
+        legalName = String(value.prefix(Self.maximumLegalNameLength))
+        submissionKey = nil
+        submissionErrorMessage = nil
+    }
+
+    func selectMerchantType(_ value: MerchantType) {
+        merchantType = value
+        submissionKey = nil
+        submissionErrorMessage = nil
     }
 
     func updateBusinessAddress(_ value: String) {
         businessAddress = String(value.prefix(Self.maximumBusinessAddressLength))
+        submissionKey = nil
+        submissionErrorMessage = nil
+    }
+
+    func selectLocation(_ location: DastakDeliveryLocation) {
+        selectedLocation = location
+        if normalizedBusinessAddress.isEmpty {
+            businessAddress = String(location.address.prefix(Self.maximumBusinessAddressLength))
+        }
+        submissionKey = nil
+        submissionErrorMessage = nil
     }
 
     func selectEvidence(url: URL) {
@@ -121,6 +170,8 @@ private final class DastakMerchantApplicationModel: ObservableObject {
     @discardableResult
     func submit() async -> Bool {
         guard canSubmit,
+              let merchantType,
+              let selectedLocation,
               let evidenceData,
               let evidenceContentType,
               let fileExtension = Self.evidenceExtension(evidenceContentType)
@@ -153,8 +204,12 @@ private final class DastakMerchantApplicationModel: ObservableObject {
             let key = submissionKey ?? IdempotencyKey(rawValue: UUID().uuidString)!
             submissionKey = key
             let result = try await applicationClient.submit(
+                merchantType: merchantType,
+                legalName: normalizedLegalName,
                 businessName: normalizedBusinessName,
                 businessAddress: normalizedBusinessAddress,
+                latitude: selectedLocation.point.latitude,
+                longitude: selectedLocation.point.longitude,
                 evidenceObjectPath: evidencePath,
                 idempotencyKey: key
             )
@@ -218,17 +273,19 @@ enum DastakMerchantAccessPresentation: Equatable {
 
 public struct DastakMerchantAccessView: View {
     private enum Field: Hashable {
+        case legalName
         case businessName
         case businessAddress
     }
 
     private let route: AccountRoute
     @StateObject private var model: DastakMerchantApplicationModel
+    @StateObject private var locationManager = DastakLocationManager()
     @Environment(\.marketplaceSignOut) private var signOut
     @Environment(\.marketplaceAccessRefresh) private var refreshAccess
     @State private var showsImporter = false
+    @State private var showsLocationPicker = false
     @State private var showsSignOutConfirmation = false
-    @State private var isRefreshing = false
     @FocusState private var focusedField: Field?
 
     public init(route: AccountRoute, services: MarketplaceAuthenticatedServices) {
@@ -254,6 +311,7 @@ public struct DastakMerchantAccessView: View {
                         .padding(.bottom, presentation == .application ? 112 : 36)
                         .frame(maxWidth: .infinity)
                 }
+                .refreshable { await refreshApplicationAndAccess() }
 #if os(iOS)
                 .scrollDismissesKeyboard(.interactively)
 #endif
@@ -267,6 +325,22 @@ public struct DastakMerchantAccessView: View {
         .contentShape(Rectangle())
         .onTapGesture { focusedField = nil }
         .task { await model.load() }
+        .task(id: presentation) {
+            guard presentation == .pending || presentation == .approved else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                guard !Task.isCancelled else { return }
+                await refreshApplicationAndAccess()
+            }
+        }
+        .sheet(isPresented: $showsLocationPicker) {
+            DastakLocationPicker(
+                title: "Store location",
+                currentLocation: model.selectedLocation ?? locationManager.location,
+                useLocation: model.selectLocation,
+                requestCurrentLocation: locationManager.requestLocation
+            )
+        }
         .fileImporter(
             isPresented: $showsImporter,
             allowedContentTypes: [.pdf, .jpeg, .png],
@@ -345,17 +419,15 @@ public struct DastakMerchantAccessView: View {
                 eyebrow: "APPLICATION RECEIVED",
                 title: "Your store is under review",
                 message: "We'll unlock the merchant workspace as soon as the application is approved.",
-                progressStep: 3,
-                primaryAction: "Check status"
+                progressStep: 3
             )
         case .approved:
             statusView(
                 symbol: "checkmark.seal.fill",
                 eyebrow: "APPROVED",
                 title: "Your merchant access is ready",
-                message: "Refresh access to open your store workspace.",
-                progressStep: 3,
-                primaryAction: "Open merchant workspace"
+                message: "Your workspace will open automatically. Pull down if you want to check immediately.",
+                progressStep: 3
             )
         case .suspended:
             statusView(
@@ -363,26 +435,23 @@ public struct DastakMerchantAccessView: View {
                 eyebrow: "ACCESS PAUSED",
                 title: "Merchant access is suspended",
                 message: "Your store workspace is unavailable while this account is being reviewed.",
-                progressStep: nil,
-                primaryAction: "Check access"
+                progressStep: nil
             )
         case .loadFailure:
             statusView(
                 symbol: "wifi.exclamationmark",
                 eyebrow: "CONNECTION ISSUE",
                 title: "We couldn't check your application",
-                message: model.loadErrorMessage ?? "Try again when your connection is stable.",
-                progressStep: nil,
-                primaryAction: "Try again"
+                message: model.loadErrorMessage ?? "Pull down to try again when your connection is stable.",
+                progressStep: nil
             )
         case .unavailable:
             statusView(
                 symbol: "lock.shield",
                 eyebrow: "ACCESS UNAVAILABLE",
                 title: "This account cannot open Merchant",
-                message: "Refresh access or use the account linked to your store.",
-                progressStep: nil,
-                primaryAction: "Refresh access"
+                message: "Pull down to check access or use the account linked to your store.",
+                progressStep: nil
             )
         }
     }
@@ -428,12 +497,49 @@ public struct DastakMerchantAccessView: View {
             }
 
             formSection(
+                symbol: "square.grid.2x2",
+                title: "Business type",
+                message: "This selects the catalogue and order tools your branch receives after approval."
+            ) {
+                HStack(spacing: 10) {
+                    merchantTypeButton(
+                        .restaurantCafe,
+                        symbol: "fork.knife",
+                        title: "Restaurant or cafe",
+                        detail: "Menus and food options"
+                    )
+                    merchantTypeButton(
+                        .retail,
+                        symbol: "basket",
+                        title: "Retail store",
+                        detail: "Canonical retail SKUs"
+                    )
+                }
+            }
+
+            formSection(
                 symbol: "storefront",
-                title: "Store details",
-                message: "Use the public name and complete trading address."
+                title: "Business and branch",
+                message: "Tell Admin who operates it and what customers should see."
             ) {
                 VStack(alignment: .leading, spacing: 9) {
-                    fieldLabel("Business name", count: model.businessName.count, maximum: DastakMerchantApplicationModel.maximumBusinessNameLength)
+                    fieldLabel("Legal business name", count: model.legalName.count, maximum: DastakMerchantApplicationModel.maximumLegalNameLength)
+                    TextField("Name on your registration document", text: Binding(
+                        get: { model.legalName },
+                        set: { model.updateLegalName($0) }
+                    ))
+                    .textContentType(.organizationName)
+#if os(iOS)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.next)
+                    .onSubmit { focusedField = .businessName }
+#endif
+                    .focused($focusedField, equals: .legalName)
+                    .merchantTextField()
+                }
+
+                VStack(alignment: .leading, spacing: 9) {
+                    fieldLabel("Customer-facing name", count: model.businessName.count, maximum: DastakMerchantApplicationModel.maximumBusinessNameLength)
                     TextField("Store name", text: Binding(
                         get: { model.businessName },
                         set: { model.updateBusinessName($0) }
@@ -463,6 +569,42 @@ public struct DastakMerchantAccessView: View {
                     .focused($focusedField, equals: .businessAddress)
                     .merchantTextField(minimumHeight: 104, alignment: .topLeading)
                 }
+            }
+
+            formSection(
+                symbol: "mappin.and.ellipse",
+                title: "Exact store location",
+                message: "Required to connect this branch to the correct Dastak service area."
+            ) {
+                Button {
+                    focusedField = nil
+                    showsLocationPicker = true
+                } label: {
+                    HStack(alignment: .top, spacing: 14) {
+                        Image(systemName: model.selectedLocation == nil ? "mappin.circle" : "checkmark.circle.fill")
+                            .font(.system(size: 21, weight: .medium))
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            .frame(width: 42, height: 42)
+                            .background(MarketplaceColors.dastakAccentSoft.color)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(model.selectedLocation == nil ? "Choose store location" : "Store pin selected")
+                                .font(.subheadline.weight(.semibold))
+                            Text(model.selectedLocation?.address ?? "Search an address or use the current location")
+                                .font(.caption)
+                                .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
+                                .lineLimit(3)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.bold())
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(14)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .merchantSurface()
             }
 
             formSection(
@@ -563,8 +705,7 @@ public struct DastakMerchantAccessView: View {
         eyebrow: String,
         title: String,
         message: String,
-        progressStep: Int?,
-        primaryAction: String
+        progressStep: Int?
     ) -> some View {
         VStack(alignment: .leading, spacing: 28) {
             Image(systemName: symbol)
@@ -606,43 +747,62 @@ public struct DastakMerchantAccessView: View {
                 .merchantSurface()
             }
 
-            VStack(spacing: 10) {
-                Button {
-                    Task { await refreshApplicationAndAccess() }
-                } label: {
-                    HStack(spacing: 9) {
-                        if isRefreshing {
-                            ProgressView().tint(MarketplaceColors.dastakIconBackground.color)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        Text(isRefreshing ? "Checking status" : primaryAction)
-                    }
-                }
-                .buttonStyle(DastakMerchantPrimaryButtonStyle())
-                .disabled(isRefreshing)
-
-                Button("Use a different account") { showsSignOutConfirmation = true }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
-                    .frame(maxWidth: .infinity, minHeight: 46)
-                    .buttonStyle(.plain)
-            }
+            Label("Pull down to check now. Dastak also checks automatically.", systemImage: "arrow.down")
+                .font(.footnote)
+                .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 22)
     }
 
     private func refreshApplicationAndAccess() async {
-        isRefreshing = true
         await model.load()
         await refreshAccess()
-        isRefreshing = false
     }
 
     private func nonEmpty(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func merchantTypeButton(
+        _ type: MerchantType,
+        symbol: String,
+        title: String,
+        detail: String
+    ) -> some View {
+        let selected = model.merchantType == type
+        return Button {
+            model.selectMerchantType(type)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: symbol)
+                        .font(.system(size: 19, weight: .medium))
+                    Spacer()
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                }
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(MarketplaceColors.dastakText.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(MarketplaceColors.dastakSecondaryText.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+            .background(selected ? MarketplaceColors.dastakAccentSoft.color : MarketplaceColors.dastakSurface.color)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(selected ? MarketplaceColors.dastakAccent.color : MarketplaceColors.dividerDark.color, lineWidth: selected ? 1.5 : 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func fieldLabel(_ title: String, count: Int, maximum: Int) -> some View {

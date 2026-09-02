@@ -635,12 +635,13 @@ button:disabled { cursor: wait; opacity: .55; }
 .review-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 7px; color: var(--accent); background: var(--accent-soft); }
 .review-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
 .review-facts span { padding: 5px 7px; border-radius: 5px; color: var(--text-secondary); background: var(--surface-muted); font-size: 12px; font-weight: 650; }
-.evidence-button { min-height: 40px; margin-top: 14px; padding: 0 11px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #bfd4d0; border-radius: 7px; color: #17675f; background: #f2f8f6; font-weight: 750; }
+.evidence-button { min-height: 40px; margin-top: 14px; padding: 0 11px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #bfd4d0; border-radius: 7px; color: #17675f; background: #f2f8f6; font-weight: 750; text-decoration: none; }
 .evidence-button svg:last-child { margin-left: 2px; }
 .review-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #e1e3e1; }
 .review-actions button { min-height: 42px; width: 100%; margin: 0; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 .review-confirmation { display: grid; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #e1e3e1; }
 .review-confirmation > strong { font-size: 14px; }
+.review-confirmation > p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
 .review-confirmation input { width: 100%; height: 44px; padding: 0 11px; border: 1px solid #c8cfca; border-radius: 6px; color: #18221c; background: #fff; }
 .review-confirmation input:focus { outline: 3px solid var(--accent-soft); border-color: var(--accent); }
 .review-confirmation > div { display: flex; justify-content: flex-end; gap: 8px; }
@@ -1526,6 +1527,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .application-section > label:not(.application-file-picker) { position: relative; display: grid; gap: 8px; font-size: 14px; font-weight: 700; }
 .application-field-label { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
 .application-field-label small { color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.application-field-help { margin: 0; color: var(--text-secondary); font-size: 12px; font-weight: 500; line-height: 1.45; }
 .application-step-number {
   width: 29px;
   height: 29px;
@@ -1538,9 +1540,74 @@ button:disabled { cursor: wait; opacity: .55; }
   font-size: 12px;
   font-weight: 800;
 }
+.merchant-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+.merchant-type-grid button {
+  min-width: 0;
+  min-height: 136px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 13px;
+  align-content: center;
+  align-items: center;
+  padding: 17px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  color: var(--text-primary);
+  background: var(--surface);
+  text-align: left;
+}
+.merchant-type-grid button > span {
+  grid-row: 1 / span 2;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--dastak-accent);
+  background: var(--dastak-accent-soft);
+}
+.merchant-type-grid button strong { align-self: end; font-size: 16px; }
+.merchant-type-grid button small { align-self: start; margin-top: 4px; color: var(--text-secondary); line-height: 1.35; }
+.merchant-type-grid button:hover { border-color: color-mix(in srgb, var(--dastak-accent) 55%, var(--divider)); }
+.merchant-type-grid button:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
+.merchant-type-grid button.selected {
+  border-color: var(--dastak-accent);
+  background: color-mix(in srgb, var(--dastak-accent-soft) 76%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--dastak-accent);
+}
+.application-location-confirmed {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--success) 30%, var(--divider));
+  border-radius: 10px;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+}
+.application-location-confirmed > span { display: grid; gap: 3px; }
+.application-location-confirmed strong { color: var(--text-primary); font-size: 13px; }
+.application-location-confirmed small { color: var(--text-secondary); font-size: 12px; line-height: 1.4; }
+.application-zone { display: inline-flex; align-items: center; gap: 5px; color: var(--dastak-accent) !important; font-weight: 700; }
+.application-refresh-hint { margin: -8px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.application-pull-indicator {
+  min-height: 24px;
+  margin: -18px 0 -8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  transition: opacity 160ms ease;
+}
+.application-pull-indicator.refreshing { color: var(--dastak-accent); }
 .delivery-method-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px;
 }
 .delivery-method-option {
@@ -2135,6 +2202,8 @@ button:disabled { cursor: wait; opacity: .55; }
   .merchant-access-state { gap: 22px; padding-top: 20px; }
   .application-progress small { font-size: 11px; }
   .application-section { padding-top: 20px; }
+  .merchant-type-grid { grid-template-columns: 1fr; }
+  .merchant-type-grid button { min-height: 116px; }
   .delivery-method-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .delivery-method-option { min-height: 94px; }
   .vehicle-details-grid { grid-template-columns: 1fr; }

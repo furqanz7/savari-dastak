@@ -30,7 +30,7 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
         let path: String
     }
 
-    @Published var deliveryMethod: MarketplaceInfrastructure.DeliveryMethod = .bike {
+    @Published var deliveryMethod: MarketplaceInfrastructure.DeliveryMethod = .motorbike {
         didSet { if oldValue != deliveryMethod { submissionKey = nil } }
     }
     @Published var vehicleRegistrationNumber = "" {
@@ -73,7 +73,7 @@ private final class DastakDeliveryPartnerApplicationModel: ObservableObject {
                 idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
             )
             if snapshot.onboardingState == .rejected {
-                deliveryMethod = snapshot.deliveryMethod ?? .bike
+                deliveryMethod = snapshot.deliveryMethod == .bike ? .motorbike : snapshot.deliveryMethod ?? .motorbike
                 vehicleRegistrationNumber = snapshot.vehicleRegistrationNumber ?? ""
                 vehicleMakeModel = snapshot.vehicleMakeModel ?? ""
                 reviewReason = snapshot.reviewReason
@@ -299,6 +299,7 @@ public struct DastakDeliveryPartnerAccessView: View {
                 .padding(.bottom, showsApplicationForm ? 112 : MarketplaceSpacing.large)
                 .frame(maxWidth: .infinity)
             }
+            .refreshable { await onRefresh() }
 #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
 #endif
@@ -321,6 +322,14 @@ public struct DastakDeliveryPartnerAccessView: View {
         .marketplacePage()
         .task {
             if access == .notApplied || access == .rejected { await model.load() }
+        }
+        .task(id: access) {
+            guard access == .pending || access == .suspended || access == .unavailable else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                guard !Task.isCancelled else { return }
+                await onRefresh()
+            }
         }
         .fileImporter(
             isPresented: Binding(
@@ -408,7 +417,7 @@ public struct DastakDeliveryPartnerAccessView: View {
                 applicationSection(
                     number: "3",
                     title: "Verify your vehicle",
-                    description: "Bike, Auto, and Car partners must verify the vehicle used for deliveries."
+                    description: "Motorbike, Scooter, Auto, and Car partners must verify the vehicle used for deliveries."
                 ) {
                     VStack(spacing: MarketplaceSpacing.compact) {
                         TextField("Registration number", text: $model.vehicleRegistrationNumber)
@@ -582,8 +591,10 @@ public struct DastakDeliveryPartnerAccessView: View {
                 .font(MarketplaceTypography.supporting)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Check status") { Task { await onRefresh() } }
-                .buttonStyle(MarketplaceSecondaryButtonStyle())
+            Text("Pull down to check now. This screen also checks automatically.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, MarketplaceSpacing.xxLarge)
@@ -609,7 +620,8 @@ public struct DastakDeliveryPartnerAccessView: View {
     )] = [
         (.walking, "Walk", "figure.walk"),
         (.bicycle, "Bicycle", "bicycle"),
-        (.bike, "Bike", "fuelpump.fill"),
+        (.motorbike, "Motorbike", "fuelpump.fill"),
+        (.scooter, "Scooter", "bicycle"),
         (.auto, "Auto", "car.side.fill"),
         (.car, "Car", "car.fill")
     ]

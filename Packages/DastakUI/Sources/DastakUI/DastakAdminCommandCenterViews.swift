@@ -136,7 +136,11 @@ struct DastakAdminApprovalsView: View {
                     ) {
                         ForEach(model.merchantApplications, id: \.applicationID) { application in
                             Button { selected = .merchant(application) } label: {
-                                AdminApprovalRow(title: application.businessName, detail: application.businessAddress, symbol: "storefront")
+                                AdminApprovalRow(
+                                    title: application.businessName,
+                                    detail: "\(application.merchantType.displayName) · \(application.serviceZoneName)",
+                                    symbol: application.merchantType == .restaurantCafe ? "fork.knife" : "storefront"
+                                )
                             }.buttonStyle(.plain)
                         }
                     }
@@ -147,7 +151,7 @@ struct DastakAdminApprovalsView: View {
                     ) {
                         ForEach(model.deliveryApplications, id: \.applicationID) { application in
                             Button { selected = .delivery(application) } label: {
-                                AdminApprovalRow(title: application.displayName, detail: "\(application.deliveryMethod.rawValue.capitalized) · \(application.phoneNumber)", symbol: "bicycle")
+                                AdminApprovalRow(title: application.displayName, detail: "\(application.deliveryMethod.displayName) · \(application.phoneNumber)", symbol: "bicycle")
                             }.buttonStyle(.plain)
                         }
                     }
@@ -790,6 +794,13 @@ private struct AdminReviewSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                     AdminPageIntro(eyebrow: "APPLICATION REVIEW", title: title, detail: detail)
+                    applicationFacts
+                    Label(approvalEffect, systemImage: "checkmark.shield.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(MarketplaceSpacing.medium)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .marketplaceFlatSurface()
                     Label("Evidence is stored privately and review actions are written to the immutable audit trail.", systemImage: "lock.shield.fill")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -840,7 +851,67 @@ private struct AdminReviewSheet: View {
     }
 
     private var title: String { switch target { case let .merchant(value): value.businessName; case let .delivery(value): value.displayName } }
-    private var detail: String { switch target { case let .merchant(value): value.businessAddress; case let .delivery(value): "\(value.deliveryMethod.rawValue.capitalized) · \(value.phoneNumber)" } }
+    private var detail: String { switch target { case let .merchant(value): value.businessAddress; case let .delivery(value): "\(value.deliveryMethod.displayName) · \(value.phoneNumber)" } }
+    @ViewBuilder private var applicationFacts: some View {
+        VStack(spacing: 0) {
+            switch target {
+            case let .merchant(value):
+                reviewFact("Business type", value.merchantType.displayName)
+                reviewFact("Legal name", value.legalName)
+                reviewFact("Applicant", value.applicantName)
+                reviewFact("Phone", value.applicantPhone)
+                reviewFact("Service zone", value.serviceZoneName)
+                reviewFact("Submitted", value.submittedAt.formatted(date: .abbreviated, time: .shortened))
+                Button {
+                    if let url = merchantMapURL(value) { openURL(url) }
+                } label: {
+                    HStack {
+                        Label("Open exact store location", systemImage: "map.fill")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .padding(.horizontal, MarketplaceSpacing.medium)
+            case let .delivery(value):
+                reviewFact("Applicant", value.displayName)
+                reviewFact("Phone", value.phoneNumber)
+                reviewFact("Delivery method", value.deliveryMethod.displayName)
+                if let registration = value.vehicleRegistrationNumber { reviewFact("Registration", registration) }
+                if let vehicle = value.vehicleMakeModel { reviewFact("Vehicle", vehicle) }
+                reviewFact("Submitted", adminDate(value.submittedAt))
+            }
+        }
+        .marketplaceFlatSurface()
+    }
+    private func reviewFact(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.medium) {
+            Text(label).font(.subheadline).foregroundStyle(.secondary)
+            Spacer(minLength: MarketplaceSpacing.medium)
+            Text(value).font(.subheadline.weight(.semibold)).multilineTextAlignment(.trailing)
+        }
+        .padding(.horizontal, MarketplaceSpacing.medium)
+        .padding(.vertical, MarketplaceSpacing.compact)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+    private var approvalEffect: String {
+        switch target {
+        case .merchant:
+            "Approval creates the verified merchant organization, customer-facing branch, owner permissions and a safely closed operating workspace."
+        case .delivery:
+            "Approval creates the verified Delivery Partner profile offline. The rider chooses when to go online after opening the workspace."
+        }
+    }
+    private func merchantMapURL(_ application: MerchantApplication) -> URL? {
+        var components = URLComponents(string: "https://maps.apple.com/")
+        components?.queryItems = [
+            URLQueryItem(name: "ll", value: "\(application.latitude),\(application.longitude)"),
+            URLQueryItem(name: "q", value: application.businessName),
+        ]
+        return components?.url
+    }
     private var evidence: [(label: String, path: String)] {
         switch target {
         case let .merchant(value):

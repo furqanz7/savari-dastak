@@ -1090,7 +1090,8 @@ private enum DastakPartnerFormatting {
         switch method {
         case .walking: "Walking"
         case .bicycle: "Bicycle"
-        case .bike: "Bike"
+        case .bike, .motorbike: "Motorbike"
+        case .scooter: "Scooter"
         case .auto: "Auto"
         case .car: "Car"
         }

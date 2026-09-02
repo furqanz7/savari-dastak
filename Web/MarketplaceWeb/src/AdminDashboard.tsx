@@ -383,8 +383,15 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
         : tab === "account" ? <RoleAccountView accessToken={accessToken} displayName={displayName} email={email} phoneNumber={phoneNumber} roleName={adminRoleLabel(adminAccess?.role)} accessLabel="Full operations access" supabaseUrl={supabaseUrl} publishableKey={publishableKey} allowsAccountDeletion={false} onSignOut={onSignOut} />
         : loading ? <div className="catalogue-loading" role="status"><span /> Loading operations</div>
         : tab === "approvals" ? <div className="admin-approvals" role="tabpanel">
-          <ApprovalSection title="Merchant applications" count={merchants.length} empty={feedIssues.merchantApprovals && !feedUpdatedAt.merchantApprovals ? "Merchant application count is not available yet." : "No merchant applications waiting."}>{merchants.map((application) => <ReviewCard key={application.applicationId} icon={<Store size={20} />} title={application.businessName} subtitle={application.businessAddress} facts={[`Account ${shortId(application.accountId)}`]} evidence={[{ label: "View business evidence", path: application.evidenceObjectPath }]} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("merchant", application.applicationId, decision, reason)} />)}</ApprovalSection>
-          <ApprovalSection title="Delivery Partner applications" count={partners.length} empty={feedIssues.deliveryApprovals && !feedUpdatedAt.deliveryApprovals ? "Delivery application count is not available yet." : "No Delivery Partner applications waiting."}>{partners.map((application) => <ReviewCard key={application.applicationId} icon={<Bike size={20} />} title={application.displayName} subtitle={application.phoneNumber} facts={[methodLabel(application.deliveryMethod), ...(application.vehicleRegistrationNumber ? [`${application.vehicleRegistrationNumber} · ${application.vehicleMakeModel}`] : []), `Submitted ${formatDate(application.submittedAt)}`]} evidence={[{ label: "View identity proof", path: application.identityEvidenceObjectPath }, ...(application.vehicleEvidenceObjectPath ? [{ label: "View vehicle RC", path: application.vehicleEvidenceObjectPath }] : [])]} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("partner", application.applicationId, decision, reason)} />)}</ApprovalSection>
+          <ApprovalSection title="Merchant applications" count={merchants.length} empty={feedIssues.merchantApprovals && !feedUpdatedAt.merchantApprovals ? "Merchant application count is not available yet." : "No merchant applications waiting."}>{merchants.map((application) => <ReviewCard key={application.applicationId} icon={<Store size={20} />} title={application.businessName} subtitle={application.businessAddress} facts={[
+            application.merchantType === "RESTAURANT_CAFE" ? "Restaurant / Cafe" : "Retail store",
+            `Legal name · ${application.legalName}`,
+            `Applicant · ${application.applicantName}`,
+            application.applicantPhone,
+            `Service area · ${application.serviceZoneName}`,
+            `Submitted ${formatDate(application.submittedAt)}`,
+          ]} location={{ latitude: application.latitude, longitude: application.longitude }} evidence={[{ label: "View business evidence", path: application.evidenceObjectPath }]} approvalSummary={`Approval creates one active ${application.merchantType === "RESTAURANT_CAFE" ? "restaurant" : "retail"} organization and branch in ${application.serviceZoneName}, grants this applicant Merchant owner access, and starts the branch closed until the merchant opens it.`} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("merchant", application.applicationId, decision, reason)} />)}</ApprovalSection>
+          <ApprovalSection title="Delivery Partner applications" count={partners.length} empty={feedIssues.deliveryApprovals && !feedUpdatedAt.deliveryApprovals ? "Delivery application count is not available yet." : "No Delivery Partner applications waiting."}>{partners.map((application) => <ReviewCard key={application.applicationId} icon={<Bike size={20} />} title={application.displayName} subtitle={application.phoneNumber} facts={[methodLabel(application.deliveryMethod), ...(application.vehicleRegistrationNumber ? [`${application.vehicleRegistrationNumber} · ${application.vehicleMakeModel}`] : []), `Submitted ${formatDate(application.submittedAt)}`]} evidence={[{ label: "View identity proof", path: application.identityEvidenceObjectPath }, ...(application.vehicleEvidenceObjectPath ? [{ label: "View vehicle RC", path: application.vehicleEvidenceObjectPath }] : [])]} approvalSummary="Approval creates the verified Delivery Partner profile and starts it offline. The rider must deliberately go online from an active service area before receiving work." busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("partner", application.applicationId, decision, reason)} />)}</ApprovalSection>
         </div>
         : tab === "legacy" ? <OrdersPanel orders={orders} available={!feedIssues.legacyHistory || Boolean(feedUpdatedAt.legacyHistory)} busy={Boolean(busy)} onReview={reviewRefund} onRefund={retryRefund} />
         : <ExceptionsPanel operations={operations} available={!feedIssues.operations || Boolean(feedUpdatedAt.operations)} busy={Boolean(busy)} onResolve={resolveSupport} onReset={resetHandoff} onReconcile={reconcile} onReviewRefund={() => setTab("legacy")} />}
@@ -527,12 +534,14 @@ function ApprovalSection({ title, count, empty, children }: { title: string; cou
   );
 }
 
-function ReviewCard({ icon, title, subtitle, facts, evidence, busy, onEvidence, onReview }: {
+function ReviewCard({ icon, title, subtitle, facts, evidence, location, approvalSummary, busy, onEvidence, onReview }: {
   icon: ReactNode;
   title: string;
   subtitle: string;
   facts: string[];
   evidence: Array<{ label: string; path: string }>;
+  location?: { latitude: number; longitude: number };
+  approvalSummary: string;
   busy: boolean;
   onEvidence: (path: string) => Promise<void>;
   onReview: (decision: ReviewDecision, reason?: string) => Promise<void>;
@@ -555,6 +564,7 @@ function ReviewCard({ icon, title, subtitle, facts, evidence, busy, onEvidence, 
     <article className="review-card">
       <header><span className="review-icon">{icon}</span><div><h3>{title}</h3><p>{subtitle}</p></div></header>
       <div className="review-facts">{facts.map((fact) => <span key={fact}>{fact}</span>)}</div>
+      {location ? <a className="evidence-button" href={`https://maps.apple.com/?ll=${location.latitude},${location.longitude}&q=Store`} target="_blank" rel="noreferrer"><Store size={17} /> Open exact store pin <ExternalLink size={14} /></a> : null}
       {evidence.map((document) => (
         <button key={document.path} className="evidence-button" type="button" disabled={busy} onClick={() => void onEvidence(document.path)}>
           <FileText size={17} /> {document.label} <ExternalLink size={14} />
@@ -568,6 +578,7 @@ function ReviewCard({ icon, title, subtitle, facts, evidence, busy, onEvidence, 
       ) : (
         <div className="review-confirmation">
           <strong>{mode === "approve" ? "Approve this application?" : "Reason for rejection"}</strong>
+          {mode === "approve" ? <p>{approvalSummary}</p> : null}
           {mode === "reject" && <input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Required reason" />}
           <div>
             <button className="secondary-button" type="button" disabled={busy} onClick={() => setMode(undefined)}>Cancel</button>

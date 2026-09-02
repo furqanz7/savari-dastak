@@ -152,6 +152,16 @@ values
   ('88888888-8888-4888-8888-888888888888', 'owner', now()),
   ('99999999-9999-4999-8999-999999999999', 'customer', null);
 
+insert into public.service_zones (id, name, boundary, active) values (
+  '44444444-4444-4444-8444-444444444404',
+  'Merchant onboarding test zone',
+  extensions.st_geomfromtext(
+    'POLYGON((78.50 12.50,78.50 12.80,78.80 12.80,78.80 12.50,78.50 12.50))',
+    4326
+  ),
+  true
+);
+
 select is(
   (
     select response_body #>> '{error,code}'
@@ -244,6 +254,16 @@ select is(
   'pending',
   'application is stored privately as pending'
 );
+
+-- The evolved approval contract requires the identity and exact branch fields
+-- that the original submit RPC predates. Complete this legacy fixture before
+-- exercising current provisioning; new clients use submit_merchant_application_v2.
+update private.merchant_applications application
+set merchant_type = 'RETAIL',
+    legal_name = 'Corner Store Private Limited',
+    location = extensions.st_setsrid(extensions.st_makepoint(78.65, 12.65), 4326),
+    service_zone_id = '44444444-4444-4444-8444-444444444404'
+where application.account_id = '77777777-7777-4777-8777-777777777777';
 select is(
   (select route from public.resolve_app_access('77777777-7777-4777-8777-777777777777', 'merchant')),
   'pending_approval',

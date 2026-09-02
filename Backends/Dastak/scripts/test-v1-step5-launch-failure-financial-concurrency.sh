@@ -122,21 +122,39 @@ insert into private.delivery_partner_availability (
 ) on conflict (account_id) do update set
   status='online',location=excluded.location,service_zone_id=excluded.service_zone_id,
   last_seen_at=now(),available_until=now()+interval '2 hours';
-insert into dastak_v1.categories (id,name,slug,status,created_by) values
-('99600000-0000-4000-8000-000000000050','Step 5 Category','step-5-category','ACTIVE','99600000-0000-4000-8000-000000000001')
+insert into dastak_v1.category_types (id,name,slug,status,created_by) values
+('99600000-0000-4000-8000-000000000049','Step 5 Type','step-5-type','ACTIVE','99600000-0000-4000-8000-000000000001')
+on conflict (id) do nothing;
+insert into dastak_v1.categories (id,category_type_id,name,slug,status,created_by) values
+('99600000-0000-4000-8000-000000000050','99600000-0000-4000-8000-000000000049','Step 5 Category','step-5-category','ACTIVE','99600000-0000-4000-8000-000000000001')
 on conflict (id) do nothing;
 insert into dastak_v1.subcategories (id,category_id,name,slug,status,created_by) values
 ('99600000-0000-4000-8000-000000000051','99600000-0000-4000-8000-000000000050','Step 5 Subcategory','step-5-subcategory','ACTIVE','99600000-0000-4000-8000-000000000001')
 on conflict (id) do nothing;
 insert into dastak_v1.skus (
   id,subcategory_id,canonical_name,slug,pack_size,list_price_paise,
-  selling_price_paise,logistics_attributes,status,created_by
+  selling_price_paise,logistics_attributes,status,
+  qa_status,qa_verified_at,qa_verified_by,created_by
 ) values (
   '99600000-0000-4000-8000-000000000052','99600000-0000-4000-8000-000000000051',
   'Step 5 Exact Product','step-5-exact-product','1 unit',1000,900,
   '{"weightGrams":500,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}',
-  'ACTIVE','99600000-0000-4000-8000-000000000001'
+  'DRAFT','VERIFIED',now(),'99600000-0000-4000-8000-000000000001',
+  '99600000-0000-4000-8000-000000000001'
 ) on conflict (id) do nothing;
+
+insert into dastak_v1.sku_images (
+  id,sku_id,image_key,role,source_type,source_reference,status,
+  created_by,verified_by,verified_at,rights_status,rights_reference,
+  rights_verified_by,rights_verified_at
+) values (
+  '99600000-0000-4000-8000-000000000053','99600000-0000-4000-8000-000000000052',
+  'test-fixtures/step-5-exact-product.webp','PRIMARY','OWNER_CAPTURE','V1 race fixture','VERIFIED',
+  '99600000-0000-4000-8000-000000000001','99600000-0000-4000-8000-000000000001',now(),
+  'CLEARED','Test fixture rights clearance','99600000-0000-4000-8000-000000000001',now()
+) on conflict (id) do nothing;
+update dastak_v1.skus set status='ACTIVE',updated_at=now(),version=version+1
+where id='99600000-0000-4000-8000-000000000052' and status <> 'ACTIVE';
 
 insert into dastak_v1.merchant_organizations (id,legal_name,display_name,merchant_type,status,created_by) values
 ('99600000-0000-4000-8000-000000000020','Step 5 Source Private Limited','Secret Source Merchant','RETAIL','ACTIVE','99600000-0000-4000-8000-000000000001'),

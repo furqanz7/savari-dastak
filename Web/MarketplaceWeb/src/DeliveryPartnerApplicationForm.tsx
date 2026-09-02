@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
+  CheckCircle2,
   Bike,
   Car,
+  Clock3,
   FileCheck2,
   FileUp,
   Footprints,
   Gauge,
   ShieldCheck,
   Truck,
+  WifiOff,
   type LucideIcon,
 } from "lucide-react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
@@ -23,9 +26,12 @@ import {
   submitDeliveryPartnerApplication,
   uploadPartnerEvidence,
   type DeliveryMethod,
+  type DeliveryPartnerSnapshot,
 } from "./delivery";
+import { usePullToRefresh } from "./usePullToRefresh";
 
 type Props = {
+  accessState: "denied" | "pending" | "suspended";
   client: SupabaseClient;
   session: Session;
   supabaseUrl: string;
@@ -33,6 +39,8 @@ type Props = {
   onSubmitted: () => void;
   onSessionExpired: () => void;
 };
+
+type Presentation = "loading" | "application" | "pending" | "approved" | "suspended" | "failure";
 
 type UploadedEvidence = { file: File; path: string };
 
@@ -51,6 +59,7 @@ const methods: Array<{
 ];
 
 export function DeliveryPartnerApplicationForm({
+  accessState,
   client,
   session,
   supabaseUrl,
@@ -68,6 +77,8 @@ export function DeliveryPartnerApplicationForm({
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
+  const [snapshot, setSnapshot] = useState<DeliveryPartnerSnapshot>();
   const [reviewReason, setReviewReason] = useState<string>();
   const requestKey = useRef(crypto.randomUUID());
   const needsVehicle = requiresVehicleVerification(deliveryMethod);
@@ -79,32 +90,68 @@ export function DeliveryPartnerApplicationForm({
     normalizedMakeModel.length >= 2 && normalizedMakeModel.length <= 80
   ));
 
-  useEffect(() => {
-    let active = true;
-    void getDeliveryPartnerSnapshot({
-      supabaseUrl,
-      publishableKey,
-      accessToken: session.access_token,
-    }).then((snapshot) => {
-      if (!active || snapshot.onboardingState !== "rejected") return;
-      if (snapshot.deliveryMethod) {
-        setDeliveryMethod(snapshot.deliveryMethod === "bike" ? "motorbike" : snapshot.deliveryMethod);
+  const loadSnapshot = useCallback(async () => {
+    setLoadError(undefined);
+    try {
+      const nextSnapshot = await getDeliveryPartnerSnapshot({
+        supabaseUrl,
+        publishableKey,
+        accessToken: session.access_token,
+      });
+      setSnapshot(nextSnapshot);
+      if (nextSnapshot.onboardingState === "rejected") {
+        if (nextSnapshot.deliveryMethod) {
+          setDeliveryMethod(nextSnapshot.deliveryMethod === "bike" ? "motorbike" : nextSnapshot.deliveryMethod);
+        }
+        setRegistration(nextSnapshot.vehicleRegistrationNumber ?? "");
+        setMakeModel(nextSnapshot.vehicleMakeModel ?? "");
+        setReviewReason(nextSnapshot.reviewReason ?? undefined);
       }
-      setRegistration(snapshot.vehicleRegistrationNumber ?? "");
-      setMakeModel(snapshot.vehicleMakeModel ?? "");
-      setReviewReason(snapshot.reviewReason ?? undefined);
-    }).catch((loadError) => {
-      if (!active) return;
-      if (loadError instanceof DeliveryRequestError && loadError.status === 401) {
+      return true;
+    } catch (snapshotError) {
+      if (snapshotError instanceof DeliveryRequestError && snapshotError.status === 401) {
         onSessionExpired();
-        return;
+        return false;
       }
-      setError(userFacingError(loadError, "The application could not be loaded."));
-    }).finally(() => {
-      if (active) setLoading(false);
-    });
-    return () => { active = false; };
+      setLoadError(userFacingError(snapshotError, "The application could not be loaded."));
+      return false;
+    } finally {
+      setLoading(false);
+    }
   }, [onSessionExpired, publishableKey, session.access_token, supabaseUrl]);
+
+  useEffect(() => { void loadSnapshot(); }, [loadSnapshot]);
+
+  const presentation: Presentation = accessState === "suspended"
+    ? "suspended"
+    : loading
+      ? "loading"
+      : accessState === "pending" || snapshot?.onboardingState === "pending"
+        ? "pending"
+        : loadError
+          ? "failure"
+          : snapshot?.onboardingState === "approved"
+            ? "approved"
+            : "application";
+
+  const refresh = useCallback(async () => {
+    const loaded = await loadSnapshot();
+    if (loaded) onSubmitted();
+  }, [loadSnapshot, onSubmitted]);
+  const pull = usePullToRefresh(refresh, presentation !== "application");
+
+  useEffect(() => {
+    if (presentation === "application" || presentation === "loading") return;
+    const interval = window.setInterval(() => { void refresh(); }, 20_000);
+    const becameVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", becameVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", becameVisible);
+    };
+  }, [presentation, refresh]);
 
   const resetRequest = () => {
     requestKey.current = crypto.randomUUID();
@@ -158,6 +205,36 @@ export function DeliveryPartnerApplicationForm({
     }
     resetRequest();
   };
+
+  if (presentation === "loading") {
+    return <section className="merchant-access-state merchant-access-loading" role="status">
+      <span className="merchant-state-spinner" />
+      <p>Checking your Delivery Partner application</p>
+    </section>;
+  }
+
+  if (presentation !== "application") {
+    const state = deliveryStatusCopy(presentation, loadError);
+    const Icon = state.icon;
+    return <section className="merchant-access-state">
+      <div className={`application-pull-indicator ${pull.refreshing ? "refreshing" : ""}`} style={{ opacity: pull.distance > 0 || pull.refreshing ? 1 : 0 }} aria-live="polite">
+        {pull.refreshing ? "Checking your application…" : pull.progress >= 1 ? "Release to check" : "Pull down to check status"}
+      </div>
+      <span className="application-heading-icon"><Icon size={25} /></span>
+      <div className="merchant-state-copy">
+        <p className="eyebrow">{state.eyebrow}</p>
+        <h1>{state.title}</h1>
+        <p>{state.message}</p>
+      </div>
+      {(presentation === "pending" || presentation === "approved") && <ApplicationProgress current={3} />}
+      {snapshot?.deliveryMethod && <div className="merchant-application-summary">
+        <small>Delivery method</small>
+        <strong>{deliveryMethodLabel(snapshot.deliveryMethod)}</strong>
+        <span>{snapshot.vehicleMakeModel || (requiresVehicleVerification(snapshot.deliveryMethod) ? "Vehicle verification submitted" : "Identity verification submitted")}</span>
+      </div>}
+      <p className="application-refresh-hint">Pull down on mobile to check now. This page also checks automatically.</p>
+    </section>;
+  }
 
   return (
     <form className="application-onboarding delivery-application-panel" onSubmit={submit}>
@@ -255,6 +332,39 @@ export function DeliveryPartnerApplicationForm({
       </div>
     </form>
   );
+}
+
+function deliveryMethodLabel(method: DeliveryMethod) {
+  return methods.find((option) => option.value === (method === "bike" ? "motorbike" : method))?.label ?? "Delivery Partner";
+}
+
+function deliveryStatusCopy(presentation: Exclude<Presentation, "loading" | "application">, error?: string) {
+  switch (presentation) {
+    case "pending": return {
+      icon: Clock3,
+      eyebrow: "Application received",
+      title: "Your application is under review",
+      message: "We'll unlock Delivery Partner mode as soon as identity and vehicle checks are complete.",
+    };
+    case "approved": return {
+      icon: CheckCircle2,
+      eyebrow: "Approved",
+      title: "Delivery Partner access is ready",
+      message: "Your verified profile will open offline, ready for you to choose when to go online.",
+    };
+    case "suspended": return {
+      icon: ShieldCheck,
+      eyebrow: "Access paused",
+      title: "Delivery access is suspended",
+      message: "You cannot receive delivery work while this account is under review.",
+    };
+    case "failure": return {
+      icon: WifiOff,
+      eyebrow: "Connection issue",
+      title: "We couldn't check your application",
+      message: error ?? "Try again when your connection is stable.",
+    };
+  }
 }
 
 function ApplicationSection({

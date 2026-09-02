@@ -5,13 +5,26 @@ public enum DeliveryMethod: String, Codable, Equatable, Sendable {
     case walking
     case bicycle
     case bike
+    case motorbike
+    case scooter
     case auto
     case car
 
     public var requiresVehicleVerification: Bool {
         switch self {
-        case .bike, .auto, .car: true
+        case .bike, .motorbike, .scooter, .auto, .car: true
         case .walking, .bicycle: false
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .walking: "Walk"
+        case .bicycle: "Bicycle"
+        case .bike, .motorbike: "Motorbike"
+        case .scooter: "Scooter"
+        case .auto: "Auto"
+        case .car: "Car"
         }
     }
 }

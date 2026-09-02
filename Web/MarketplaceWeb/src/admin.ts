@@ -11,17 +11,26 @@ export type ReviewDecision = "approve" | "reject";
 export type MerchantAdminApplication = {
   applicationId: string;
   accountId: string;
+  applicantName: string;
+  applicantPhone: string;
+  merchantType: "RETAIL" | "RESTAURANT_CAFE";
+  legalName: string;
   businessName: string;
   businessAddress: string;
+  latitude: number;
+  longitude: number;
+  serviceZoneId: string;
+  serviceZoneName: string;
   evidenceObjectPath: string;
   status: "pending" | "approved" | "rejected";
+  submittedAt: string;
 };
 export type PartnerAdminApplication = {
   applicationId: string;
   accountId: string;
   displayName: string;
   phoneNumber: string;
-  deliveryMethod: "walking" | "bicycle" | "bike" | "auto" | "car";
+  deliveryMethod: "walking" | "bicycle" | "bike" | "motorbike" | "scooter" | "auto" | "car";
   identityEvidenceObjectPath: string;
   vehicleRegistrationNumber: string | null;
   vehicleMakeModel: string | null;
@@ -276,10 +285,19 @@ function merchantApplication(value: unknown): MerchantAdminApplication {
   return {
     applicationId: requiredUUID(source?.applicationId),
     accountId,
+    applicantName: requiredText(source?.applicantName, 100),
+    applicantPhone: requiredText(source?.applicantPhone, 30),
+    merchantType: merchantType(source?.merchantType),
+    legalName: requiredText(source?.legalName, 160),
     businessName: requiredText(source?.businessName, 120),
     businessAddress: requiredText(source?.businessAddress, 300),
+    latitude: coordinate(source?.latitude, -90, 90),
+    longitude: coordinate(source?.longitude, -180, 180),
+    serviceZoneId: requiredUUID(source?.serviceZoneId),
+    serviceZoneName: requiredText(source?.serviceZoneName, 160),
     evidenceObjectPath,
     status,
+    submittedAt: timestamp(source?.submittedAt),
   };
 }
 
@@ -291,8 +309,8 @@ function partnerApplication(value: unknown): PartnerAdminApplication {
   const vehicleRegistrationNumber = nullableText(source?.vehicleRegistrationNumber, 20);
   const vehicleMakeModel = nullableText(source?.vehicleMakeModel, 80);
   const vehicleEvidenceObjectPath = nullableText(source?.vehicleEvidenceObjectPath, 500);
-  const motorVehicle = ["bike", "auto", "car"].includes(String(method));
-  if (!["walking", "bicycle", "bike", "auto", "car"].includes(String(method)) ||
+  const motorVehicle = ["bike", "motorbike", "scooter", "auto", "car"].includes(String(method));
+  if (!["walking", "bicycle", "bike", "motorbike", "scooter", "auto", "car"].includes(String(method)) ||
     !evidenceObjectPath.startsWith(`dastak-partner/${accountId}/`) ||
     (motorVehicle && (
       !vehicleRegistrationNumber || !vehicleMakeModel || !vehicleEvidenceObjectPath ||
@@ -433,6 +451,14 @@ const ownerEntityKinds = new Set(["merchant_order", "parcel_delivery"]);
 
 function applicationStatus(value: unknown) {
   if (value !== "pending" && value !== "approved" && value !== "rejected") invalid();
+  return value;
+}
+function merchantType(value: unknown): MerchantAdminApplication["merchantType"] {
+  if (value !== "RETAIL" && value !== "RESTAURANT_CAFE") invalid();
+  return value;
+}
+function coordinate(value: unknown, minimum: number, maximum: number) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < minimum || value > maximum) invalid();
   return value;
 }
 function money(value: unknown) {

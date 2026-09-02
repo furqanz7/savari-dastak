@@ -128,21 +128,39 @@ insert into dastak_v1.branch_operational_states (
 on conflict (branch_id) do update
 set is_open=true,accepting_orders=true,updated_by=excluded.updated_by,
     version=dastak_v1.branch_operational_states.version+1;
-insert into dastak_v1.categories (id,name,slug,status,created_by) values
-('99500000-0000-4000-8000-000000000012','Step 4B Category','step-4b-category','ACTIVE','99500000-0000-4000-8000-000000000001')
+insert into dastak_v1.category_types (id,name,slug,status,created_by) values
+('99500000-0000-4000-8000-000000000009','Step 4B Type','step-4b-type','ACTIVE','99500000-0000-4000-8000-000000000001')
+on conflict (id) do nothing;
+insert into dastak_v1.categories (id,category_type_id,name,slug,status,created_by) values
+('99500000-0000-4000-8000-000000000012','99500000-0000-4000-8000-000000000009','Step 4B Category','step-4b-category','ACTIVE','99500000-0000-4000-8000-000000000001')
 on conflict (id) do nothing;
 insert into dastak_v1.subcategories (id,category_id,name,slug,status,created_by) values
 ('99500000-0000-4000-8000-000000000013','99500000-0000-4000-8000-000000000012','Step 4B Subcategory','step-4b-subcategory','ACTIVE','99500000-0000-4000-8000-000000000001')
 on conflict (id) do nothing;
 insert into dastak_v1.skus (
   id, subcategory_id, canonical_name, slug, pack_size,
-  list_price_paise, selling_price_paise, logistics_attributes, status, created_by
+  list_price_paise, selling_price_paise, logistics_attributes, status,
+  qa_status,qa_verified_at,qa_verified_by,created_by
 ) values (
   '99500000-0000-4000-8000-000000000014','99500000-0000-4000-8000-000000000013',
   'Step 4B Product','step-4b-product','1 unit',1000,900,
   '{"weightGrams":500,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}',
-  'ACTIVE','99500000-0000-4000-8000-000000000001'
+  'DRAFT','VERIFIED',now(),'99500000-0000-4000-8000-000000000001',
+  '99500000-0000-4000-8000-000000000001'
 ) on conflict (id) do nothing;
+
+insert into dastak_v1.sku_images (
+  id,sku_id,image_key,role,source_type,source_reference,status,
+  created_by,verified_by,verified_at,rights_status,rights_reference,
+  rights_verified_by,rights_verified_at
+) values (
+  '99500000-0000-4000-8000-000000000015','99500000-0000-4000-8000-000000000014',
+  'test-fixtures/step-4b-product.webp','PRIMARY','OWNER_CAPTURE','V1 race fixture','VERIFIED',
+  '99500000-0000-4000-8000-000000000001','99500000-0000-4000-8000-000000000001',now(),
+  'CLEARED','Test fixture rights clearance','99500000-0000-4000-8000-000000000001',now()
+) on conflict (id) do nothing;
+update dastak_v1.skus set status='ACTIVE',updated_at=now(),version=version+1
+where id='99500000-0000-4000-8000-000000000014' and status <> 'ACTIVE';
 
 insert into dastak_v1.orders (
   id, display_order_number, customer_id, order_type, status,

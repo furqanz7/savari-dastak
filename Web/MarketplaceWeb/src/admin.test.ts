@@ -27,10 +27,19 @@ describe("Dastak Admin client", () => {
     const merchant = {
       applicationId,
       accountId,
+      applicantName: "Merchant One",
+      applicantPhone: "+919342068881",
+      merchantType: "RETAIL",
+      legalName: "Town Retail Private Limited",
       businessName: "Town Store",
       businessAddress: "Main Road",
+      latitude: 12.6819,
+      longitude: 78.6201,
+      serviceZoneId: storeId,
+      serviceZoneName: "Vaniyambadi",
       evidenceObjectPath: `merchant/${accountId}/proof.pdf`,
       status: "pending",
+      submittedAt: "2026-07-22T05:30:00Z",
     };
     const partner = {
       applicationId,

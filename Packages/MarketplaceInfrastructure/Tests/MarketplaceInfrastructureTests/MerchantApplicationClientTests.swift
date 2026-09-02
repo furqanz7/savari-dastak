@@ -10,13 +10,19 @@ final class MerchantApplicationClientTests: XCTestCase {
         let key = try XCTUnwrap(IdempotencyKey(rawValue: "merchant-submit-1"))
 
         let result = try await client.submit(
+            merchantType: .retail,
+            legalName: "Corner Store Private Limited",
             businessName: "Corner Store",
             businessAddress: "12 Main Road",
+            latitude: 12.65,
+            longitude: 78.65,
             evidenceObjectPath: "merchant/account/registration.pdf",
             idempotencyKey: key
         )
 
         XCTAssertEqual(result.status, .pending)
+        XCTAssertEqual(result.merchantType, .retail)
+        XCTAssertEqual(result.serviceZoneName, "Central service area")
         let recordedCall = await functions.lastCall()
         let call = try XCTUnwrap(recordedCall)
         XCTAssertEqual(call.name, "merchant-applications")
@@ -25,8 +31,12 @@ final class MerchantApplicationClientTests: XCTestCase {
             try JSONDecoder().decode(CapturedMerchantRequest.self, from: call.body),
             .init(
                 operation: "submit",
+                merchantType: "RETAIL",
+                legalName: "Corner Store Private Limited",
                 businessName: "Corner Store",
                 businessAddress: "12 Main Road",
+                latitude: 12.65,
+                longitude: 78.65,
                 evidenceObjectPath: "merchant/account/registration.pdf",
                 applicationId: nil,
                 decision: nil,
@@ -59,6 +69,8 @@ final class MerchantApplicationClientTests: XCTestCase {
         let snapshot = try await client.selfSnapshot(idempotencyKey: key)
 
         XCTAssertEqual(snapshot.onboardingState, .rejected)
+        XCTAssertEqual(snapshot.merchantType, .retail)
+        XCTAssertEqual(snapshot.legalName, "Corner Store Private Limited")
         XCTAssertEqual(snapshot.businessName, "Corner Store")
         XCTAssertEqual(snapshot.businessAddress, "12 Main Road")
         XCTAssertEqual(snapshot.reviewReason, "Upload a clearer document.")
@@ -96,8 +108,12 @@ final class MerchantApplicationClientTests: XCTestCase {
 
 private struct CapturedMerchantRequest: Decodable, Equatable {
     let operation: String
+    let merchantType: String?
+    let legalName: String?
     let businessName: String?
     let businessAddress: String?
+    let latitude: Double?
+    let longitude: Double?
     let evidenceObjectPath: String?
     let applicationId: UUID?
     let decision: String?
@@ -124,13 +140,13 @@ private actor RecordingMerchantFunctionClient: FunctionClient {
         let response: Data
         switch operation {
         case "submit":
-            response = #"{"applicationId":"33333333-3333-4333-8333-333333333333","status":"pending"}"#.data(using: .utf8)!
+            response = #"{"applicationId":"33333333-3333-4333-8333-333333333333","status":"pending","merchantType":"RETAIL","serviceZoneId":"44444444-4444-4444-8444-444444444444","serviceZoneName":"Central service area"}"#.data(using: .utf8)!
         case "list":
-            response = #"{"applications":[{"applicationId":"33333333-3333-4333-8333-333333333333","accountId":"22222222-2222-4222-8222-222222222222","businessName":"Corner Store","businessAddress":"12 Main Road","evidenceObjectPath":"merchant/22222222-2222-4222-8222-222222222222/registration.pdf","status":"pending"}]}"#.data(using: .utf8)!
+            response = #"{"applications":[{"applicationId":"33333333-3333-4333-8333-333333333333","accountId":"22222222-2222-4222-8222-222222222222","applicantName":"Merchant Owner","applicantPhone":"+919876543210","merchantType":"RETAIL","legalName":"Corner Store Private Limited","businessName":"Corner Store","businessAddress":"12 Main Road","latitude":12.65,"longitude":78.65,"serviceZoneId":"44444444-4444-4444-8444-444444444444","serviceZoneName":"Central service area","evidenceObjectPath":"merchant/22222222-2222-4222-8222-222222222222/registration.pdf","status":"pending","submittedAt":800000000}]}"#.data(using: .utf8)!
         case "selfSnapshot":
-            response = #"{"onboardingState":"rejected","applicationId":"33333333-3333-4333-8333-333333333333","businessName":"Corner Store","businessAddress":"12 Main Road","evidenceObjectPath":"merchant/22222222-2222-4222-8222-222222222222/registration.pdf","reviewReason":"Upload a clearer document."}"#.data(using: .utf8)!
+            response = #"{"onboardingState":"rejected","applicationId":"33333333-3333-4333-8333-333333333333","merchantType":"RETAIL","legalName":"Corner Store Private Limited","businessName":"Corner Store","businessAddress":"12 Main Road","latitude":12.65,"longitude":78.65,"serviceZoneId":"44444444-4444-4444-8444-444444444444","serviceZoneName":"Central service area","evidenceObjectPath":"merchant/22222222-2222-4222-8222-222222222222/registration.pdf","reviewReason":"Upload a clearer document.","organizationId":null,"branchId":null}"#.data(using: .utf8)!
         case "review":
-            response = #"{"applicationId":"33333333-3333-4333-8333-333333333333","status":"approved"}"#.data(using: .utf8)!
+            response = #"{"applicationId":"33333333-3333-4333-8333-333333333333","status":"approved","merchantType":"RETAIL","serviceZoneId":"44444444-4444-4444-8444-444444444444","serviceZoneName":"Central service area"}"#.data(using: .utf8)!
         default:
             throw FunctionClientError.invalidResponse
         }

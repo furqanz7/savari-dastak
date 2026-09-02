@@ -34,16 +34,20 @@ async function isActiveOwner(accountId: string) {
 }
 
 async function submitMerchantApplication(input: SubmitMerchantApplicationInput) {
-  const { data, error } = await serviceClient.rpc("submit_merchant_application", {
+  const { data, error } = await serviceClient.rpc("submit_merchant_application_v2", {
     p_account_id: input.accountId,
+    p_merchant_type: input.merchantType,
+    p_legal_name: input.legalName,
     p_business_name: input.businessName,
     p_business_address: input.businessAddress,
+    p_latitude: input.latitude,
+    p_longitude: input.longitude,
     p_evidence_object_path: input.evidenceObjectPath,
     p_idempotency_key: input.idempotencyKey,
     p_request_digest: input.requestDigest,
   });
   if (error) throw error;
-  return rpcResponse(data, "submit_merchant_application");
+  return rpcResponse(data, "submit_merchant_application_v2");
 }
 
 async function getMerchantApplicationSnapshot(accountId: string) {
@@ -68,9 +72,18 @@ async function listMerchantApplications(ownerId: string) {
     if (
       typeof row.application_id !== "string" ||
       typeof row.account_id !== "string" ||
+      typeof row.applicant_name !== "string" ||
+      typeof row.applicant_phone !== "string" ||
+      (row.merchant_type !== "RETAIL" && row.merchant_type !== "RESTAURANT_CAFE") ||
+      typeof row.legal_name !== "string" ||
       typeof row.business_name !== "string" ||
       typeof row.business_address !== "string" ||
+      typeof row.latitude !== "number" || !Number.isFinite(row.latitude) ||
+      typeof row.longitude !== "number" || !Number.isFinite(row.longitude) ||
+      typeof row.service_zone_id !== "string" ||
+      typeof row.service_zone_name !== "string" ||
       typeof row.evidence_object_path !== "string" ||
+      typeof row.submitted_at !== "string" ||
       (status !== "pending" && status !== "approved" && status !== "rejected")
     ) {
       throw new Error("list_merchant_applications returned an invalid row");
@@ -78,10 +91,19 @@ async function listMerchantApplications(ownerId: string) {
     return {
       applicationId: row.application_id,
       accountId: row.account_id,
+      applicantName: row.applicant_name,
+      applicantPhone: row.applicant_phone,
+      merchantType: row.merchant_type,
+      legalName: row.legal_name,
       businessName: row.business_name,
       businessAddress: row.business_address,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      serviceZoneId: row.service_zone_id,
+      serviceZoneName: row.service_zone_name,
       evidenceObjectPath: row.evidence_object_path,
       status,
+      submittedAt: row.submitted_at,
     };
   });
 }

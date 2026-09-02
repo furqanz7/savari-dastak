@@ -10,6 +10,7 @@ import {
 
 const accountId = "22222222-2222-4222-8222-222222222222";
 const applicationId = "33333333-3333-4333-8333-333333333333";
+const serviceZoneId = "44444444-4444-4444-8444-444444444444";
 const auth = {
   supabaseUrl: "https://example.supabase.co",
   publishableKey: "publishable-key",
@@ -32,21 +33,35 @@ describe("merchant application", () => {
     let request: RequestInit | undefined;
     const result = await submitMerchantApplication({
       ...auth,
+      merchantType: "RETAIL",
+      legalName: "  Corner   Retail Private Limited  ",
       businessName: "  Corner   Store  ",
       businessAddress: "  12   Main Road  ",
+      latitude: 12.6819,
+      longitude: 78.6201,
       evidenceObjectPath: `merchant/${accountId}/evidence.pdf`,
       idempotencyKey: "merchant-submit-1",
     }, (_url, init) => {
       request = init;
-      return Promise.resolve(new Response(JSON.stringify({ applicationId, status: "pending" }), { status: 200 }));
+      return Promise.resolve(new Response(JSON.stringify({
+        applicationId,
+        status: "pending",
+        merchantType: "RETAIL",
+        serviceZoneId,
+        serviceZoneName: "Vaniyambadi",
+      }), { status: 200 }));
     });
 
-    expect(result).toEqual({ applicationId, status: "pending" });
+    expect(result).toEqual({ applicationId, status: "pending", merchantType: "RETAIL", serviceZoneId, serviceZoneName: "Vaniyambadi" });
     expect(request?.headers).toMatchObject({ "X-Idempotency-Key": "merchant-submit-1" });
     expect(JSON.parse(String(request?.body))).toEqual({
       operation: "submit",
+      merchantType: "RETAIL",
+      legalName: "Corner Retail Private Limited",
       businessName: "Corner Store",
       businessAddress: "12 Main Road",
+      latitude: 12.6819,
+      longitude: 78.6201,
       evidenceObjectPath: `merchant/${accountId}/evidence.pdf`,
     });
   });
@@ -54,8 +69,12 @@ describe("merchant application", () => {
   it("preserves safe application errors", async () => {
     await expect(submitMerchantApplication({
       ...auth,
+      merchantType: "RESTAURANT_CAFE",
+      legalName: "Corner Foods",
       businessName: "Corner Store",
       businessAddress: "12 Main Road",
+      latitude: 12.6819,
+      longitude: 78.6201,
       evidenceObjectPath: `merchant/${accountId}/evidence.pdf`,
       idempotencyKey: "merchant-submit-2",
     }, () => Promise.resolve(new Response(JSON.stringify({

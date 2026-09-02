@@ -59,8 +59,15 @@ insert into public.service_zones (id, name, boundary, active) values (
   extensions.st_geomfromtext('POLYGON((80 15,81 15,81 16,80 16,80 15))', 4326), true
 ) on conflict (id) do nothing;
 
-insert into dastak_v1.categories (id, name, slug, status, created_by) values (
-  '99200000-0000-4000-8000-000000000011', 'Step Two Race Category',
+insert into dastak_v1.category_types (id, name, slug, status, created_by) values (
+  '99200000-0000-4000-8000-000000000009', 'Step Two Race Type',
+  'step-two-race-type', 'ACTIVE', '99200000-0000-4000-8000-000000000002'
+) on conflict (id) do nothing;
+insert into dastak_v1.categories (
+  id, category_type_id, name, slug, status, created_by
+) values (
+  '99200000-0000-4000-8000-000000000011',
+  '99200000-0000-4000-8000-000000000009', 'Step Two Race Category',
   'step-two-race-category', 'ACTIVE', '99200000-0000-4000-8000-000000000002'
 ) on conflict (id) do nothing;
 insert into dastak_v1.subcategories (
@@ -72,19 +79,44 @@ insert into dastak_v1.subcategories (
 ) on conflict (id) do nothing;
 insert into dastak_v1.skus (
   id, subcategory_id, canonical_name, slug, pack_size,
-  list_price_paise, selling_price_paise, logistics_attributes, status, created_by
+  list_price_paise, selling_price_paise, logistics_attributes, status,
+  qa_status, qa_verified_at, qa_verified_by, created_by
 ) values
 ('99200000-0000-4000-8000-000000000013',
  '99200000-0000-4000-8000-000000000012', 'Step Two Race Product A',
  'step-two-race-product-a', '1 unit', 1200, 1000,
  '{"weightGrams":400,"lengthMillimetres":150,"widthMillimetres":100,"heightMillimetres":80,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}',
- 'ACTIVE', '99200000-0000-4000-8000-000000000002'),
+ 'DRAFT', 'VERIFIED', now(), '99200000-0000-4000-8000-000000000002',
+ '99200000-0000-4000-8000-000000000002'),
 ('99200000-0000-4000-8000-000000000014',
  '99200000-0000-4000-8000-000000000012', 'Step Two Race Product B',
  'step-two-race-product-b', '1 unit', 2200, 2000,
  '{"weightGrams":600,"lengthMillimetres":200,"widthMillimetres":100,"heightMillimetres":90,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}',
- 'ACTIVE', '99200000-0000-4000-8000-000000000002')
+ 'DRAFT', 'VERIFIED', now(), '99200000-0000-4000-8000-000000000002',
+ '99200000-0000-4000-8000-000000000002')
 on conflict (id) do nothing;
+
+insert into dastak_v1.sku_images (
+  id, sku_id, image_key, role, source_type, source_reference,
+  status, created_by, verified_by, verified_at,
+  rights_status, rights_reference, rights_verified_by, rights_verified_at
+) values
+('99200000-0000-4000-8000-000000000015','99200000-0000-4000-8000-000000000013',
+ 'test-fixtures/step-two-race-product-a.webp','PRIMARY','OWNER_CAPTURE','V1 race fixture',
+ 'VERIFIED','99200000-0000-4000-8000-000000000002','99200000-0000-4000-8000-000000000002',now(),
+ 'CLEARED','Test fixture rights clearance','99200000-0000-4000-8000-000000000002',now()),
+('99200000-0000-4000-8000-000000000016','99200000-0000-4000-8000-000000000014',
+ 'test-fixtures/step-two-race-product-b.webp','PRIMARY','OWNER_CAPTURE','V1 race fixture',
+ 'VERIFIED','99200000-0000-4000-8000-000000000002','99200000-0000-4000-8000-000000000002',now(),
+ 'CLEARED','Test fixture rights clearance','99200000-0000-4000-8000-000000000002',now())
+on conflict (id) do nothing;
+
+update dastak_v1.skus
+set status='ACTIVE', updated_at=now(), version=version+1
+where id in (
+  '99200000-0000-4000-8000-000000000013',
+  '99200000-0000-4000-8000-000000000014'
+) and status <> 'ACTIVE';
 
 insert into dastak_v1.merchant_organizations (
   id, legal_name, display_name, merchant_type, status, created_by
@@ -163,7 +195,8 @@ insert into dastak_v1.merchant_sku_selections (
 ('99200000-0000-4000-8000-000000000041', '99200000-0000-4000-8000-000000000014',
  'SELECTED', '99200000-0000-4000-8000-000000000005')
 on conflict (branch_id, sku_id) do update
-set state = 'SELECTED', selected_by = excluded.selected_by;
+set state = 'SELECTED', selected_by = excluded.selected_by,
+    version = dastak_v1.merchant_sku_selections.version + 1;
 
 insert into dastak_v1.platform_settings (
   id, setting_key, scope_type, setting_value, updated_by, update_reason

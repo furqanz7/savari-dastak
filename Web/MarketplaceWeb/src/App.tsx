@@ -820,10 +820,13 @@ function Restricted({
       </RestrictedShell>
     );
   }
-  if (config.variant === "dastak-delivery" && access.state === "denied") {
+  if (config.variant === "dastak-delivery") {
     return (
       <RestrictedShell onSignOut={onSignOut}>
         <DeliveryPartnerApplicationForm
+          accessState={access.state === "pending" || access.state === "suspended"
+            ? access.state
+            : "denied"}
           client={supabase}
           session={session}
           supabaseUrl={config.supabaseUrl}

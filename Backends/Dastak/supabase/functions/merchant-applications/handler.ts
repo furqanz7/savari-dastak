@@ -2,20 +2,34 @@ import { corsPreflight, json } from "../_shared/http.ts";
 import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
 export type MerchantApplicationStatus = "pending" | "approved" | "rejected";
+export type MerchantType = "RETAIL" | "RESTAURANT_CAFE";
 
 export type MerchantApplication = {
   applicationId: string;
   accountId: string;
+  applicantName: string;
+  applicantPhone: string;
+  merchantType: MerchantType;
+  legalName: string;
   businessName: string;
   businessAddress: string;
+  latitude: number;
+  longitude: number;
+  serviceZoneId: string;
+  serviceZoneName: string;
   evidenceObjectPath: string;
   status: MerchantApplicationStatus;
+  submittedAt: string;
 };
 
 export type SubmitMerchantApplicationInput = {
   accountId: string;
+  merchantType: MerchantType;
+  legalName: string;
   businessName: string;
   businessAddress: string;
+  latitude: number;
+  longitude: number;
   evidenceObjectPath: string;
   idempotencyKey: string;
   requestDigest: string;
@@ -107,19 +121,35 @@ async function submit(
   dependencies: Dependencies,
 ) {
   const idempotencyKey = requiredIdempotencyKey(request);
+  const merchantType: MerchantType | undefined =
+    body.merchantType === "RETAIL" || body.merchantType === "RESTAURANT_CAFE"
+      ? body.merchantType
+      : undefined;
+  const legalName = normalizeRequiredText(body.legalName, 160);
   const businessName = normalizeRequiredText(body.businessName, 120);
   const businessAddress = normalizeRequiredText(body.businessAddress, 300);
+  const latitude = finiteNumber(body.latitude, -90, 90);
+  const longitude = finiteNumber(body.longitude, -180, 180);
   const evidenceObjectPath = typeof body.evidenceObjectPath === "string"
     ? body.evidenceObjectPath
     : "";
   if (
-    !idempotencyKey || !businessName || !businessAddress ||
+    !idempotencyKey || !merchantType || !legalName || !businessName || !businessAddress ||
+    latitude === undefined || longitude === undefined ||
     !validMerchantEvidencePath(evidenceObjectPath, accountId)
   ) {
     return validationError();
   }
 
-  const normalized = { businessName, businessAddress, evidenceObjectPath };
+  const normalized = {
+    merchantType,
+    legalName,
+    businessName,
+    businessAddress,
+    latitude,
+    longitude,
+    evidenceObjectPath,
+  };
   const result = await dependencies.submitMerchantApplication({
     accountId,
     ...normalized,
@@ -193,6 +223,12 @@ function normalizeRequiredText(value: unknown, maximumLength: number) {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length >= 1 && normalized.length <= maximumLength ? normalized : undefined;
+}
+
+function finiteNumber(value: unknown, minimum: number, maximum: number) {
+  return typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum
+    ? value
+    : undefined;
 }
 
 function validMerchantEvidencePath(path: string, accountId: string) {

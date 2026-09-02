@@ -25,8 +25,13 @@ insert into public.accounts (id,display_name,phone_number) values (
 insert into private.account_memberships (account_id,role,approved_at) values (
   '99700000-0000-4000-8000-000000000001','customer',null
 ) on conflict (account_id,role) do nothing;
-insert into dastak_v1.categories (id,name,slug,status,created_by) values (
-  '99700000-0000-4000-8000-000000000020','Step Six Category',
+insert into dastak_v1.category_types (id,name,slug,status,created_by) values (
+  '99700000-0000-4000-8000-000000000019','Step Six Type',
+  'step-six-type','ACTIVE','99700000-0000-4000-8000-000000000001'
+) on conflict (id) do nothing;
+insert into dastak_v1.categories (id,category_type_id,name,slug,status,created_by) values (
+  '99700000-0000-4000-8000-000000000020',
+  '99700000-0000-4000-8000-000000000019','Step Six Category',
   'step-six-category','ACTIVE','99700000-0000-4000-8000-000000000001'
 ) on conflict (id) do nothing;
 insert into dastak_v1.subcategories (
@@ -38,14 +43,28 @@ insert into dastak_v1.subcategories (
 ) on conflict (id) do nothing;
 insert into dastak_v1.skus (
   id,subcategory_id,canonical_name,slug,pack_size,list_price_paise,
-  selling_price_paise,logistics_attributes,status,created_by
+  selling_price_paise,logistics_attributes,status,
+  qa_status,qa_verified_at,qa_verified_by,created_by
 ) values (
   '99700000-0000-4000-8000-000000000022',
   '99700000-0000-4000-8000-000000000021','Step Six Product',
   'step-six-product','1 unit',1000,900,
   '{"weightGrams":100,"lengthMillimetres":100,"widthMillimetres":100,"heightMillimetres":100,"temperatureClass":"AMBIENT","fragile":false,"bulky":false}',
-  'ACTIVE','99700000-0000-4000-8000-000000000001'
+  'DRAFT','VERIFIED',now(),'99700000-0000-4000-8000-000000000001',
+  '99700000-0000-4000-8000-000000000001'
 ) on conflict (id) do nothing;
+insert into dastak_v1.sku_images (
+  id,sku_id,image_key,role,source_type,source_reference,status,
+  created_by,verified_by,verified_at,rights_status,rights_reference,
+  rights_verified_by,rights_verified_at
+) values (
+  '99700000-0000-4000-8000-000000000024','99700000-0000-4000-8000-000000000022',
+  'test-fixtures/step-six-product.webp','PRIMARY','OWNER_CAPTURE','V1 race fixture','VERIFIED',
+  '99700000-0000-4000-8000-000000000001','99700000-0000-4000-8000-000000000001',now(),
+  'CLEARED','Test fixture rights clearance','99700000-0000-4000-8000-000000000001',now()
+) on conflict (id) do nothing;
+update dastak_v1.skus set status='ACTIVE',updated_at=now(),version=version+1
+where id='99700000-0000-4000-8000-000000000022' and status <> 'ACTIVE';
 insert into dastak_v1.orders (
   id,display_order_number,customer_id,order_type,status,submitted_at,version
 ) values (
@@ -84,8 +103,8 @@ wait "$fanout_a_pid"
 wait "$fanout_b_pid"
 
 fanout_state="$("${psql_base[@]}" -Atc "select (event.status = 'PUBLISHED')::text || '|' || count(intent.id)::text || '|' || count(delivery.id)::text from dastak_v1.domain_events_outbox event left join dastak_v1.notification_intents intent on intent.event_id=event.id left join dastak_v1.notification_deliveries delivery on delivery.intent_id=intent.id where event.event_key='$event_key' group by event.status")"
-[[ "$fanout_state" == "true|1|1" ]] || {
-  printf 'concurrent fan-out did not publish exactly one fixture copy: %s\n' "$fanout_state" >&2
+[[ "$fanout_state" == "true|2|1" ]] || {
+  printf 'concurrent fan-out did not publish both platform intents and one registered-device delivery: %s\n' "$fanout_state" >&2
   exit 1
 }
 
@@ -119,7 +138,7 @@ delivery_state="$("${psql_base[@]}" -Atc "select status::text || '|' || attempts
 
 intent_count="$("${psql_base[@]}" -Atc "select count(*) from dastak_v1.notification_intents where event_id=(select id from dastak_v1.domain_events_outbox where event_key='$event_key')")"
 delivery_count="$("${psql_base[@]}" -Atc "select count(*) from dastak_v1.notification_deliveries where event_id=(select id from dastak_v1.domain_events_outbox where event_key='$event_key')")"
-[[ "$intent_count" == "1" && "$delivery_count" == "1" ]] || {
+[[ "$intent_count" == "2" && "$delivery_count" == "1" ]] || {
   printf 'notification dedupe failed: intents=%s deliveries=%s\n' "$intent_count" "$delivery_count" >&2
   exit 1
 }

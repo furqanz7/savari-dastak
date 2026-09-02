@@ -63,8 +63,19 @@ insert into public.service_zones (id, name, boundary, active) values (
   true
 ) on conflict (id) do nothing;
 
-insert into dastak_v1.categories (id, name, slug, status, created_by) values (
+insert into dastak_v1.category_types (id, name, slug, status, created_by) values (
+  '99100000-0000-4000-8000-000000000009',
+  'Wave One Race Type',
+  'wave-one-race-type',
+  'ACTIVE',
+  '99100000-0000-4000-8000-000000000002'
+) on conflict (id) do nothing;
+
+insert into dastak_v1.categories (
+  id, category_type_id, name, slug, status, created_by
+) values (
   '99100000-0000-4000-8000-000000000011',
+  '99100000-0000-4000-8000-000000000009',
   'Wave One Race Category',
   'wave-one-race-category',
   'ACTIVE',
@@ -84,7 +95,8 @@ insert into dastak_v1.subcategories (
 
 insert into dastak_v1.skus (
   id, subcategory_id, canonical_name, slug, pack_size,
-  list_price_paise, selling_price_paise, status, created_by
+  list_price_paise, selling_price_paise, status,
+  qa_status, qa_verified_at, qa_verified_by, created_by
 ) values (
   '99100000-0000-4000-8000-000000000013',
   '99100000-0000-4000-8000-000000000012',
@@ -93,9 +105,32 @@ insert into dastak_v1.skus (
   '1 unit',
   500,
   450,
-  'ACTIVE',
+  'DRAFT',
+  'VERIFIED',
+  now(),
+  '99100000-0000-4000-8000-000000000002',
   '99100000-0000-4000-8000-000000000002'
 ) on conflict (id) do nothing;
+
+insert into dastak_v1.sku_images (
+  id, sku_id, image_key, role, source_type, source_reference,
+  status, created_by, verified_by, verified_at,
+  rights_status, rights_reference, rights_verified_by, rights_verified_at
+) values (
+  '99100000-0000-4000-8000-000000000014',
+  '99100000-0000-4000-8000-000000000013',
+  'test-fixtures/wave-one-race-product.webp',
+  'PRIMARY','OWNER_CAPTURE','V1 race fixture','VERIFIED',
+  '99100000-0000-4000-8000-000000000002',
+  '99100000-0000-4000-8000-000000000002',now(),
+  'CLEARED','Test fixture rights clearance',
+  '99100000-0000-4000-8000-000000000002',now()
+) on conflict (id) do nothing;
+
+update dastak_v1.skus
+set status='ACTIVE', updated_at=now(), version=version+1
+where id='99100000-0000-4000-8000-000000000013'
+  and status <> 'ACTIVE';
 
 insert into dastak_v1.merchant_organizations (
   id, legal_name, display_name, merchant_type, status, created_by

@@ -5,10 +5,11 @@ import { userFacingError } from "./userFacingError";
 
 export type SelectedPlace = { address: string; latitude: number; longitude: number };
 
-export function LocationSearchField({ label, value, onChange, disabled }: {
+export function LocationSearchField({ label, value, onChange, onSelectionCleared, disabled }: {
   label: string;
   value?: SelectedPlace;
   onChange: (place: SelectedPlace) => void;
+  onSelectionCleared?: () => void;
   disabled?: boolean;
 }) {
   const [query, setQuery] = useState(value?.address ?? "");
@@ -72,7 +73,12 @@ export function LocationSearchField({ label, value, onChange, disabled }: {
       <label>{label}</label>
       <div className="place-search-input">
         <MapPin size={18} />
-        <input value={query} disabled={disabled || busy} placeholder={`Search ${label.toLowerCase()}`} onKeyDown={searchOnEnter} onChange={(event) => { setQuery(event.target.value); setResults([]); }} />
+        <input value={query} disabled={disabled || busy} placeholder={`Search ${label.toLowerCase()}`} onKeyDown={searchOnEnter} onChange={(event) => {
+          const nextQuery = event.target.value;
+          setQuery(nextQuery);
+          setResults([]);
+          if (value && nextQuery !== value.address) onSelectionCleared?.();
+        }} />
         <button className="icon-button" type="button" onClick={() => void search()} disabled={disabled || busy || query.trim().length < 3} aria-label={`Search ${label.toLowerCase()}`} title="Search"><Search size={17} /></button>
         <button className="icon-button" type="button" disabled={disabled || busy} onClick={locate} aria-label={`Use current location for ${label.toLowerCase()}`} title="Use current location"><LocateFixed size={17} /></button>
       </div>

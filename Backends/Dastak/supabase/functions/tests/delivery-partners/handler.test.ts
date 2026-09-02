@@ -114,6 +114,36 @@ Deno.test("motor delivery methods require self-owned vehicle details and proof",
   await assertError(sameDocument, 400, "validation_failed");
 });
 
+Deno.test("motorbike and scooter onboarding preserve the selected transport type", async () => {
+  const recorded: string[] = [];
+  for (const deliveryMethod of ["motorbike", "scooter"] as const) {
+    const response = await handleDeliveryPartners(
+      request({
+        body: {
+          operation: "submit",
+          deliveryMethod,
+          identityEvidenceObjectPath: evidencePath,
+          vehicleRegistrationNumber: "TN 23 AB 1234",
+          vehicleMakeModel: "Verified vehicle",
+          vehicleEvidenceObjectPath: vehicleEvidencePath,
+        },
+        idempotencyKey: `submit-${deliveryMethod}`,
+      }),
+      dependencies({
+        submitApplication: (input) => {
+          recorded.push(input.deliveryMethod);
+          return Promise.resolve({
+            responseBody: { applicationId, status: "pending", deliveryMethod },
+            responseStatus: 200,
+          });
+        },
+      }),
+    );
+    assertEquals(response.status, 200);
+  }
+  assertEquals(recorded, ["motorbike", "scooter"]);
+});
+
 Deno.test("walking and bicycle applications cannot smuggle vehicle data", async () => {
   const response = await handleDeliveryPartners(
     request({

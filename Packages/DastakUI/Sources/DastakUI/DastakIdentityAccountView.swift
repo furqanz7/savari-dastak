@@ -706,7 +706,8 @@ public struct DastakIdentityAccountView: View {
         switch method {
         case .walking: "Walking"
         case .bicycle: "Bicycle"
-        case .bike: "Motorbike"
+        case .bike, .motorbike: "Motorbike"
+        case .scooter: "Scooter"
         case .auto: "Auto"
         case .car: "Car"
         }
@@ -716,7 +717,8 @@ public struct DastakIdentityAccountView: View {
         switch method {
         case .walking: "figure.walk"
         case .bicycle: "bicycle"
-        case .bike: "motorcycle"
+        case .bike, .motorbike: "motorcycle"
+        case .scooter: "bicycle"
         case .auto: "car.side"
         case .car: "car"
         }
