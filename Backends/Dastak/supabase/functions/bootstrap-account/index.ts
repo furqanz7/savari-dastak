@@ -34,7 +34,6 @@ async function callBootstrapAccountRpc(
     p_application: input.application,
     p_display_name: input.displayName,
     p_phone_number: input.phoneNumber,
-    p_verified_phone_number: input.verifiedPhoneNumber,
     p_idempotency_key: input.idempotencyKey,
     p_request_digest: input.requestDigest,
   });
@@ -83,10 +82,10 @@ async function callBootstrapAccountRpc(
 
 async function recoverIdentity(input: BootstrapAccountInput, recoveryAccountId: string) {
   const digest = await sha256(input.email.trim().toLowerCase());
-  const prepared = await serviceRoleClient.rpc("prepare_dastak_identity_recovery", {
+  const prepared = await serviceRoleClient.rpc("prepare_dastak_profile_phone_recovery", {
     p_temporary_auth_user_id: input.accountId,
     p_account_id: recoveryAccountId,
-    p_verified_phone_number: input.verifiedPhoneNumber,
+    p_profile_phone_number: input.phoneNumber,
     p_requested_email_digest: digest,
     p_application: input.application,
     p_display_name: input.displayName,

@@ -11,14 +11,9 @@ export type AccountProfileDependencies = {
     accountId: string;
     accessToken: string;
     oauthAuthenticatedAt?: number;
-    verifiedPhoneNumber?: string;
   }>;
   snapshotProfile: (accountId: string) => Promise<AccountProfile | null>;
-  updateProfile: (
-    accountId: string,
-    profile: AccountProfile,
-    verifiedPhoneNumber?: string,
-  ) => Promise<AccountProfile | null>;
+  updateProfile: (accountId: string, profile: AccountProfile) => Promise<AccountProfile | null>;
   snapshotIdentities: (accessToken: string) => Promise<unknown>;
   beginIdentityLink: (input: {
     accessToken: string;
@@ -67,7 +62,6 @@ export async function handleAccountProfile(
     accountId: string;
     accessToken: string;
     oauthAuthenticatedAt?: number;
-    verifiedPhoneNumber?: string;
   };
   try {
     actor = await dependencies.authenticateBearer(authorization);
@@ -92,19 +86,7 @@ export async function handleAccountProfile(
       case "update": {
         const profile = normalizeProfile(body.displayName, body.phoneNumber);
         if (profile instanceof Response) return profile;
-        if (actor.verifiedPhoneNumber !== profile.phoneNumber) {
-          return json({
-            error: {
-              code: "phone_verification_required",
-              message: "Verify the new phone number before saving it.",
-            },
-          }, 409);
-        }
-        const updated = await dependencies.updateProfile(
-          actor.accountId,
-          profile,
-          actor.verifiedPhoneNumber,
-        );
+        const updated = await dependencies.updateProfile(actor.accountId, profile);
         return updated ? json({ profile: updated }) : profileRequired();
       }
       case "identitySnapshot":

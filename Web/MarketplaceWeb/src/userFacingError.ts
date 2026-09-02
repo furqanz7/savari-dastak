@@ -34,46 +34,6 @@ export function userFacingError(error: unknown, fallback: string) {
   return message;
 }
 
-export function phoneVerificationError(
-  error: unknown,
-  stage: "send" | "verify",
-) {
-  const message = readableErrorMessage(error);
-  const lowered = message?.toLowerCase() ?? "";
-  const code = errorCode(error);
-
-  if (isConnectivityFailure(lowered)) {
-    return "Dastak could not connect. Check your internet connection and try again.";
-  }
-  if (isRateLimited(lowered, code) || lowered.includes("rate limit")) {
-    return stage === "send"
-      ? "Too many verification codes were requested. Wait a few minutes, then try again."
-      : "Too many verification attempts were made. Wait a few minutes, then try again.";
-  }
-  if (
-    stage === "verify" &&
-    (lowered.includes("invalid") || lowered.includes("expired") || lowered.includes("otp") ||
-      code.includes("otp"))
-  ) {
-    return "That verification code is incorrect or expired. Check the code and try again.";
-  }
-  if (
-    stage === "send" &&
-    (!message || lowered.includes("phone provider") || lowered.includes("sms provider") ||
-      lowered.includes("unsupported phone") || lowered.includes("sms_send") ||
-      code.includes("phone_provider") || code.includes("sms"))
-  ) {
-    return "Phone verification is temporarily unavailable. Dastak could not send a code right now.";
-  }
-
-  return userFacingError(
-    error,
-    stage === "send"
-      ? "Dastak could not send a verification code. Please try again."
-      : "Dastak could not verify that code. Please try again.",
-  );
-}
-
 export function readableErrorMessage(error: unknown) {
   const candidate = extractMessage(error, 0);
   if (typeof candidate !== "string") return undefined;

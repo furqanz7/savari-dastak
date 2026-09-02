@@ -7,7 +7,6 @@ export type AuthenticateBearer = (
   accountId: string;
   oauthProviders?: Array<"apple" | "google">;
   email?: string;
-  verifiedPhoneNumber?: string;
 }>;
 
 export type BootstrapAccountInput = {
@@ -15,7 +14,6 @@ export type BootstrapAccountInput = {
   application: DastakApplication;
   displayName: string;
   phoneNumber: string;
-  verifiedPhoneNumber: string;
   email: string;
   idempotencyKey: string;
   requestDigest: string;
@@ -66,7 +64,6 @@ export async function handleBootstrapAccount(
     accountId: string;
     oauthProviders?: Array<"apple" | "google">;
     email?: string;
-    verifiedPhoneNumber?: string;
   };
   try {
     user = await dependencies.authenticateBearer(authorization);
@@ -118,22 +115,12 @@ export async function handleBootstrapAccount(
     return normalized.response;
   }
 
-  if (user.verifiedPhoneNumber !== normalized.value.phoneNumber) {
-    return json({
-      error: {
-        code: "phone_verification_required",
-        message: "Verify this phone number before continuing.",
-      },
-    }, 409);
-  }
-
   try {
     const result = await dependencies.bootstrapAccount({
       accountId: user.accountId,
       application: normalized.value.application,
       displayName: normalized.value.displayName,
       phoneNumber: normalized.value.phoneNumber,
-      verifiedPhoneNumber: user.verifiedPhoneNumber,
       email: user.email,
       idempotencyKey,
       requestDigest: await canonicalBootstrapDigest(normalized.value),

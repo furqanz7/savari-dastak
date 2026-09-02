@@ -6,7 +6,6 @@ export async function verifyBearerUser(bearerToken: string) {
     accountId: session.accountId,
     oauthProviders: session.oauthProviders,
     email: session.email,
-    verifiedPhoneNumber: session.verifiedPhoneNumber,
   };
 }
 
@@ -47,16 +46,7 @@ export async function verifyBearerSession(bearerToken: string) {
     oauthProviders,
     oauthAuthenticatedAt: oauthAuthenticationTimestamp(token),
     email: data.user.email,
-    verifiedPhoneNumber: data.user.phone_confirmed_at
-      ? canonicalAuthPhone(data.user.phone)
-      : undefined,
   };
-}
-
-export function canonicalAuthPhone(value?: string | null) {
-  if (!value) return undefined;
-  const normalized = value.startsWith("+") ? value : `+${value}`;
-  return /^\+[1-9][0-9]{7,14}$/.test(normalized) ? normalized : undefined;
 }
 
 export function dastakOAuthProviders(user: {
@@ -76,9 +66,7 @@ export function dastakOAuthProviders(user: {
   );
   if (
     providers.length < 1 ||
-    identityProviders.some((provider) =>
-      provider !== "apple" && provider !== "google" && provider !== "phone"
-    )
+    identityProviders.some((provider) => provider !== "apple" && provider !== "google")
   ) {
     throw new Error("Dastak requires an Apple or Google OAuth identity.");
   }

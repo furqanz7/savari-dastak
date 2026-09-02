@@ -109,7 +109,7 @@ function PersonDetail({ person }: { person: V1AdminNetworkPerson }) {
     <header><span className="admin-person-mark large" aria-hidden="true"><IdCard size={25} /></span><div><p className="eyebrow">IDENTITY RECORD</p><h3>{person.displayName}</h3><span>{person.accountState === "ACTIVE" ? <><CheckCircle2 size={14} /> Active canonical account</> : <><Clock3 size={14} /> Deleted identity · eligible for governed recovery</>}</span></div></header>
     <dl className="admin-contact-grid">
       <div><dt><Mail size={14} /> Email</dt><dd>{person.email ?? "No email available"}</dd></div>
-      <div><dt><Phone size={14} /> Verified phone</dt><dd>{person.phoneNumber} {person.phoneVerified ? <CheckCircle2 size={13} /> : null}</dd></div>
+      <div><dt><Phone size={14} /> Phone number</dt><dd>{person.phoneNumber}</dd></div>
       <div><dt><Clock3 size={14} /> Last sign-in</dt><dd>{person.lastSignInAt ? formatDate(person.lastSignInAt) : "Never recorded"}</dd></div>
       <div><dt><CalendarDays size={14} /> Joined</dt><dd>{formatDate(person.createdAt)}</dd></div>
     </dl>

@@ -20,7 +20,6 @@ Deno.test("bootstrap account accepts browser CORS preflight", async () => {
           accountId: "22222222-2222-4222-8222-222222222222",
           oauthProviders: ["apple"],
           email: "test@example.com",
-          verifiedPhoneNumber: "+14155552671",
         });
       },
     }),
@@ -42,7 +41,6 @@ Deno.test("bootstrap account rejects missing authorization", async () => {
           accountId: "22222222-2222-4222-8222-222222222222",
           oauthProviders: ["apple"],
           email: "test@example.com",
-          verifiedPhoneNumber: "+14155552671",
         });
       },
     }),
@@ -92,7 +90,6 @@ Deno.test("bootstrap account rejects malformed authorization without authenticat
           accountId: "22222222-2222-4222-8222-222222222222",
           oauthProviders: ["google"],
           email: "test@example.com",
-          verifiedPhoneNumber: "+14155552671",
         });
       },
     }),
@@ -125,7 +122,6 @@ Deno.test("bootstrap account rejects authenticated sessions without Apple or Goo
           accountId: "22222222-2222-4222-8222-222222222222",
           oauthProviders: [],
           email: "test@example.com",
-          verifiedPhoneNumber: "+14155552671",
         }),
     }),
   );
@@ -134,35 +130,22 @@ Deno.test("bootstrap account rejects authenticated sessions without Apple or Goo
   assertEquals((await jsonBody(response)).error.code, "oauth_identity_required");
 });
 
-Deno.test("bootstrap account requires verified email and exact verified phone proof", async () => {
-  for (
-    const actor of [
-      {
-        accountId: "22222222-2222-4222-8222-222222222222",
-        oauthProviders: ["apple"] as Array<"apple" | "google">,
-        verifiedPhoneNumber: "+14155552671",
-      },
-      {
-        accountId: "22222222-2222-4222-8222-222222222222",
-        oauthProviders: ["google"] as Array<"apple" | "google">,
-        email: "test@example.com",
-        verifiedPhoneNumber: "+14155550000",
-      },
-    ]
-  ) {
-    const response = await handleBootstrapAccount(
-      request({
-        authorization: "Bearer session-token",
-        headers: { "X-Idempotency-Key": crypto.randomUUID() },
-      }),
-      dependencies({ authenticateBearer: () => Promise.resolve(actor) }),
-    );
-    assertEquals(response.status, actor.email ? 409 : 403);
-    assertEquals(
-      (await jsonBody(response)).error.code,
-      actor.email ? "phone_verification_required" : "verified_email_required",
-    );
-  }
+Deno.test("bootstrap account requires verified OAuth email but no phone authentication", async () => {
+  const response = await handleBootstrapAccount(
+    request({
+      authorization: "Bearer session-token",
+      headers: { "X-Idempotency-Key": crypto.randomUUID() },
+    }),
+    dependencies({
+      authenticateBearer: () =>
+        Promise.resolve({
+          accountId: "22222222-2222-4222-8222-222222222222",
+          oauthProviders: ["apple"],
+        }),
+    }),
+  );
+  assertEquals(response.status, 403);
+  assertEquals((await jsonBody(response)).error.code, "verified_email_required");
 });
 
 Deno.test("bootstrap account binds the explicitly requested Dastak application", async () => {
@@ -177,7 +160,7 @@ Deno.test("bootstrap account binds the explicitly requested Dastak application",
       dependencies({
         bootstrapAccount: (input) => {
           recorded = input;
-          return Promise.resolve({ responseBody: { phoneState: "verified" }, responseStatus: 200 });
+          return Promise.resolve({ responseBody: { phoneRecorded: true }, responseStatus: 200 });
         },
       }),
     );
@@ -245,7 +228,7 @@ Deno.test("bootstrap account forwards normalized server-only RPC payload", async
         return Promise.resolve({
           responseBody: {
             accountId: "22222222-2222-4222-8222-222222222222",
-            phoneState: "verified",
+            phoneRecorded: true,
           },
           responseStatus: 200,
         });
@@ -256,14 +239,13 @@ Deno.test("bootstrap account forwards normalized server-only RPC payload", async
   assertEquals(response.status, 200);
   assertEquals(await jsonBody(response), {
     accountId: "22222222-2222-4222-8222-222222222222",
-    phoneState: "verified",
+    phoneRecorded: true,
   });
   assertExists(recorded);
   assertEquals(recorded.accountId, "22222222-2222-4222-8222-222222222222");
   assertEquals(recorded.application, "customer");
   assertEquals(recorded.displayName, "Test User");
   assertEquals(recorded.phoneNumber, "+14155552671");
-  assertEquals(recorded.verifiedPhoneNumber, "+14155552671");
   assertEquals(recorded.email, "test@example.com");
   assertEquals(recorded.idempotencyKey, "key-1");
   assertEquals(
@@ -337,14 +319,13 @@ function dependencies(
           accountId: "22222222-2222-4222-8222-222222222222",
           oauthProviders: ["apple"],
           email: "test@example.com",
-          verifiedPhoneNumber: "+14155552671",
         })),
     bootstrapAccount: overrides.bootstrapAccount ??
       (() =>
         Promise.resolve({
           responseBody: {
             accountId: "22222222-2222-4222-8222-222222222222",
-            phoneState: "verified",
+            phoneRecorded: true,
           },
           responseStatus: 200,
         })),

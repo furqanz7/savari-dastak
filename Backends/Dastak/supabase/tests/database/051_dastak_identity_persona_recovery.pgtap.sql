@@ -7,7 +7,7 @@ select no_plan();
 select has_table('private', 'account_personas',
   'Dastak stores independent Customer, Merchant and Delivery personas');
 select has_table('private', 'account_phone_claims',
-  'Dastak stores one canonical verified-phone claim per identity');
+  'Dastak stores one canonical mandatory profile-phone claim per identity');
 select is((select relrowsecurity from pg_catalog.pg_class where oid =
   'private.account_personas'::regclass), true, 'persona authority enforces RLS');
 select is(has_table_privilege('authenticated', 'private.account_personas', 'SELECT'), false,
@@ -25,38 +25,52 @@ insert into auth.users (
   created_at, updated_at
 ) values
   ('bb000000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000',
-   'authenticated', 'authenticated', 'customer@example.com', '+919200000001', '',
-   pg_catalog.now(), pg_catalog.now(), '{}'::jsonb, '{}'::jsonb,
+   'authenticated', 'authenticated', 'customer@example.com', null, '',
+   pg_catalog.now(), null, '{}'::jsonb, '{}'::jsonb,
    pg_catalog.now(), pg_catalog.now()),
   ('bb000000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000',
-   'authenticated', 'authenticated', 'merchant@example.com', '+919200000002', '',
-   pg_catalog.now(), pg_catalog.now(), '{}'::jsonb, '{}'::jsonb,
+   'authenticated', 'authenticated', 'merchant@example.com', null, '',
+   pg_catalog.now(), null, '{}'::jsonb, '{}'::jsonb,
    pg_catalog.now(), pg_catalog.now()),
   ('bb000000-0000-4000-8000-000000000003', '00000000-0000-0000-0000-000000000000',
-   'authenticated', 'authenticated', 'delivery@example.com', '+919200000003', '',
-   pg_catalog.now(), pg_catalog.now(), '{}'::jsonb, '{}'::jsonb,
+   'authenticated', 'authenticated', 'delivery@example.com', null, '',
+   pg_catalog.now(), null, '{}'::jsonb, '{}'::jsonb,
    pg_catalog.now(), pg_catalog.now()),
   ('bb000000-0000-4000-8000-000000000004', '00000000-0000-0000-8000-000000000000',
-   'authenticated', 'authenticated', 'admin@example.com', '+919200000004', '',
-   pg_catalog.now(), pg_catalog.now(), '{}'::jsonb, '{}'::jsonb,
+   'authenticated', 'authenticated', 'admin@example.com', null, '',
+   pg_catalog.now(), null, '{}'::jsonb, '{}'::jsonb,
    pg_catalog.now(), pg_catalog.now()),
   ('bb000000-0000-4000-8000-000000000005', '00000000-0000-0000-0000-000000000000',
-   'authenticated', 'authenticated', 'recovery@example.com', '+919200000005', '',
-   pg_catalog.now(), pg_catalog.now(), '{}'::jsonb, '{}'::jsonb,
+   'authenticated', 'authenticated', 'recovery@example.com', null, '',
+   pg_catalog.now(), null, '{}'::jsonb, '{}'::jsonb,
    pg_catalog.now(), pg_catalog.now()),
   ('bb000000-0000-4000-8000-000000000006', '00000000-0000-0000-0000-000000000000',
-   'authenticated', 'authenticated', 'superadmin-personas@example.com', '+919200000006', '',
-   pg_catalog.now(), pg_catalog.now(), '{}'::jsonb, '{}'::jsonb,
+   'authenticated', 'authenticated', 'superadmin-personas@example.com', null, '',
+   pg_catalog.now(), null, '{}'::jsonb, '{}'::jsonb,
    pg_catalog.now(), pg_catalog.now()),
   ('bb000000-0000-4000-8000-000000000007', '00000000-0000-0000-0000-000000000000',
-   'authenticated', 'authenticated', 'old-recovery@example.com', '+919200000007', '',
-   pg_catalog.now(), pg_catalog.now(), '{"provider":"google","providers":["google"]}'::jsonb, '{}'::jsonb,
+   'authenticated', 'authenticated', 'old-recovery@example.com', null, '',
+   pg_catalog.now(), null, '{"provider":"google","providers":["google"]}'::jsonb, '{}'::jsonb,
    pg_catalog.now(), pg_catalog.now());
 
 select lives_ok($$select * from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000001', 'customer', 'Customer', '+919200000001',
-  '+919200000001', 'customer-bootstrap', 'customer-digest')$$,
+  'customer-bootstrap', 'customer-digest')$$,
   'Customer bootstrap accepts only the explicitly requested persona');
+select is((select (response_body ->> 'phoneRecorded')::boolean
+  from public.bootstrap_dastak_persona(
+    'bb000000-0000-4000-8000-000000000001', 'customer', 'Customer', '+919200000001',
+    'customer-bootstrap', 'customer-digest')), true,
+  'Customer bootstrap confirms the mandatory profile phone was recorded');
+select is((select phone_verification_state::text from public.accounts
+  where id = 'bb000000-0000-4000-8000-000000000001'), 'unverified',
+  'profile phone is not represented as an authentication proof');
+select is((select verification_source from private.account_phone_claims
+  where account_id = 'bb000000-0000-4000-8000-000000000001'), 'PROFILE_ENTRY',
+  'phone uniqueness authority records profile entry as its source');
+select is((select verified_at from private.account_phone_claims
+  where account_id = 'bb000000-0000-4000-8000-000000000001'), null,
+  'phone uniqueness authority does not fabricate verification time');
 select is((select pg_catalog.count(*) from private.account_personas
   where account_id = 'bb000000-0000-4000-8000-000000000001'), 1::bigint,
   'Customer bootstrap creates exactly one persona');
@@ -66,7 +80,7 @@ select is((select persona::text from private.account_personas
 
 select lives_ok($$select * from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000002', 'merchant', 'Merchant', '+919200000002',
-  '+919200000002', 'merchant-bootstrap', 'merchant-digest')$$,
+  'merchant-bootstrap', 'merchant-digest')$$,
   'Merchant app bootstrap creates the base identity before onboarding');
 select is((select pg_catalog.count(*) from private.account_personas
   where account_id = 'bb000000-0000-4000-8000-000000000002'), 0::bigint,
@@ -77,7 +91,7 @@ select is((select pg_catalog.count(*) from private.account_memberships
 
 select lives_ok($$select * from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000003', 'delivery', 'Delivery', '+919200000003',
-  '+919200000003', 'delivery-bootstrap', 'delivery-digest')$$,
+  'delivery-bootstrap', 'delivery-digest')$$,
   'Delivery app bootstrap creates the base identity before onboarding');
 select is((select pg_catalog.count(*) from private.account_personas
   where account_id = 'bb000000-0000-4000-8000-000000000003'), 0::bigint,
@@ -85,7 +99,7 @@ select is((select pg_catalog.count(*) from private.account_personas
 
 select lives_ok($$select * from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000004', 'admin', 'Admin', '+919200000004',
-  '+919200000004', 'admin-bootstrap', 'admin-digest')$$,
+  'admin-bootstrap', 'admin-digest')$$,
   'Admin bootstrap creates only a canonical identity');
 select is((select pg_catalog.count(*) from private.account_personas
   where account_id = 'bb000000-0000-4000-8000-000000000004'), 0::bigint,
@@ -96,11 +110,11 @@ select is((select route from public.resolve_app_access(
 
 select is((select response_status from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000005', 'customer', 'Recovery', '+919200000001',
-  '+919200000001', 'collision', 'collision-digest')), 409,
-  'an active verified phone cannot be claimed by a second identity');
+  'collision', 'collision-digest')), 409,
+  'an active profile phone cannot be claimed by a second identity');
 select is((select response_body #>> '{error,code}' from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000005', 'customer', 'Recovery', '+919200000001',
-  '+919200000001', 'collision', 'collision-digest')), 'phone_number_in_use',
+  'collision', 'collision-digest')), 'phone_number_in_use',
   'active phone collision returns a stable safe error');
 
 insert into private.account_memberships (account_id, role, approved_at) values
@@ -139,12 +153,12 @@ select is((select phone from auth.users
 
 select is((select response_body #>> '{error,code}' from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000005', 'customer', 'Recovery', '+919200000001',
-  '+919200000001', 'recovery', 'recovery-digest')), 'identity_recovery_required',
-  'a newly verified email is routed to canonical identity recovery for the fully deleted phone');
+  'recovery', 'recovery-digest')), 'identity_recovery_required',
+  'a newly authenticated email is routed to canonical identity recovery for the fully deleted phone');
 
 select lives_ok($$select * from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000001', 'customer', 'Customer', '+919200000001',
-  '+919200000001', 'recover-customer', 'recover-customer-digest')$$,
+  'recover-customer', 'recover-customer-digest')$$,
   'the same canonical identity can recover only the selected deleted persona');
 select is((select state::text from private.account_personas
   where account_id = 'bb000000-0000-4000-8000-000000000001' and persona = 'CUSTOMER'),
@@ -156,7 +170,7 @@ select is((select pg_catalog.count(*) from private.account_personas
 
 select lives_ok($$select * from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000006', 'customer', 'Superadmin', '+919200000006',
-  '+919200000006', 'superadmin-customer', 'superadmin-digest')$$,
+  'superadmin-customer', 'superadmin-digest')$$,
   'Superadmin may independently onboard Customer');
 select lives_ok($$select dastak_v1_api.bootstrap_superadmin(
   'bb000000-0000-4000-8000-000000000006')$$,
@@ -173,14 +187,11 @@ select is((select (public.dastak_identity_retirement_inventory()
 
 select lives_ok($$select * from public.bootstrap_dastak_persona(
   'bb000000-0000-4000-8000-000000000007', 'customer', 'Old identity', '+919200000007',
-  '+919200000007', 'old-recovery-bootstrap', 'old-recovery-digest')$$,
+  'old-recovery-bootstrap', 'old-recovery-digest')$$,
   'a canonical identity is established before new-email recovery');
 insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at)
 values ('old-google-subject', 'bb000000-0000-4000-8000-000000000007',
   '{"sub":"old-google-subject","email":"old-recovery@example.com"}', 'google',
-  pg_catalog.now(), pg_catalog.now()),
-  ('919200000007', 'bb000000-0000-4000-8000-000000000007',
-  '{"sub":"919200000007","phone":"+919200000007"}', 'phone',
   pg_catalog.now(), pg_catalog.now());
 select lives_ok($$select public.prepare_dastak_persona_deletion(
   'bb000000-0000-4000-8000-000000000007', 'CUSTOMER', 'delete-for-new-email')$$,
@@ -192,27 +203,24 @@ insert into auth.users (
   created_at, updated_at
 ) values (
   'bb000000-0000-4000-8000-000000000008', '00000000-0000-0000-0000-000000000000',
-  'authenticated', 'authenticated', 'new-recovery@example.com', '919200000007', '',
-  pg_catalog.now(), pg_catalog.now(), '{"provider":"google","providers":["google","phone"]}'::jsonb,
+  'authenticated', 'authenticated', 'new-recovery@example.com', null, '',
+  pg_catalog.now(), null, '{"provider":"google","providers":["google"]}'::jsonb,
   '{"full_name":"Recovered identity"}'::jsonb, pg_catalog.now(), pg_catalog.now()
 );
 insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at)
 values ('new-google-subject', 'bb000000-0000-4000-8000-000000000008',
   '{"sub":"new-google-subject","email":"new-recovery@example.com"}', 'google',
-  pg_catalog.now(), pg_catalog.now()),
-  ('919200000007', 'bb000000-0000-4000-8000-000000000008',
-  '{"sub":"919200000007","phone":"+919200000007"}', 'phone',
   pg_catalog.now(), pg_catalog.now());
 
 select lives_ok($$select public.complete_dastak_identity_recovery(
-  public.prepare_dastak_identity_recovery(
+  public.prepare_dastak_profile_phone_recovery(
     'bb000000-0000-4000-8000-000000000008',
     'bb000000-0000-4000-8000-000000000007',
     '+919200000007',
     pg_catalog.encode(extensions.digest('new-recovery@example.com', 'sha256'), 'hex'),
     'customer', 'Recovered identity', 'new-recovery-bootstrap-digest'
   ), true, null)$$,
-  'new verified email and phone identities transfer to the canonical Dastak identity');
+  'new OAuth identity and entered profile phone recover the canonical Dastak identity');
 select is((select pg_catalog.count(*) from auth.users
   where id = 'bb000000-0000-4000-8000-000000000008'), 0::bigint,
   'temporary recovery Auth user is removed');
@@ -220,11 +228,11 @@ select is((select email from auth.users
   where id = 'bb000000-0000-4000-8000-000000000007'), 'new-recovery@example.com',
   'canonical identity adopts the newly verified email');
 select is((select phone from auth.users
-  where id = 'bb000000-0000-4000-8000-000000000007'), '919200000007',
-  'canonical identity regains the verified phone after recovery');
+  where id = 'bb000000-0000-4000-8000-000000000007'), null,
+  'canonical identity keeps phone data outside Supabase Auth after recovery');
 select is((select pg_catalog.string_agg(provider, ',' order by provider)
-  from auth.identities where user_id = 'bb000000-0000-4000-8000-000000000007'), 'google,phone',
-  'canonical identity receives only the newly verified sign-in identities');
+  from auth.identities where user_id = 'bb000000-0000-4000-8000-000000000007'), 'google',
+  'canonical identity receives only the newly authenticated OAuth identity');
 select is((select pg_catalog.count(*)
   from private.customer_auth_identities identity
   join auth.identities auth_identity

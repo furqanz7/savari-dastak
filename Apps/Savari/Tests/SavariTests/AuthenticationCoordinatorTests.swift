@@ -185,10 +185,6 @@ private actor FakeAuthenticationClient: AuthenticationClient {
         googleCalls += 1
     }
 
-    func requestPhoneVerification(phoneNumber: String) async throws {}
-
-    func verifyPhone(phoneNumber: String, code: String) async throws {}
-
     func restoreAccount() async throws -> AccountRoute {
         guard !shouldFailRestore else {
             throw TestAuthenticationError.profileLookupFailed

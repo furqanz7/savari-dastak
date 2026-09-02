@@ -160,7 +160,7 @@ final class AuthenticationClientTests: XCTestCase {
             responses: [
                 .init(
                     statusCode: 200,
-                    body: #"{"accountId":"\#(accountID.uuidString)","phoneState":"unverified"}"#.data(using: .utf8)!
+                    body: #"{"accountId":"\#(accountID.uuidString)","phoneRecorded":true}"#.data(using: .utf8)!
                 )
             ]
         )
@@ -317,11 +317,11 @@ final class AuthenticationClientTests: XCTestCase {
         )
     }
 
-    func testBootstrapRejectsResponseWithoutVerifiedPhoneProof() async throws {
+    func testBootstrapRejectsResponseWithoutRecordedPhoneProof() async throws {
         let operations = RecordingAuthenticationOperations(
             bootstrapResult: AccountBootstrapResult(
                 accountID: UUID(),
-                phoneState: .unverified
+                phoneRecorded: false
             )
         )
         let client = SupabaseAuthenticationClient(operations: operations)
@@ -333,9 +333,9 @@ final class AuthenticationClientTests: XCTestCase {
                 phoneNumber: "+919876543210",
                 key: key
             )
-            XCTFail("Expected missing verified-phone proof to fail closed")
+            XCTFail("Expected missing required-phone proof to fail closed")
         } catch let error as AuthenticationClientError {
-            XCTAssertEqual(error, .unexpectedPhoneVerificationState)
+            XCTAssertEqual(error, .unexpectedPhoneRecordingState)
         }
     }
 

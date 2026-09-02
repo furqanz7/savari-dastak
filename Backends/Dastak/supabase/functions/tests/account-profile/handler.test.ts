@@ -51,13 +51,20 @@ Deno.test("account profile normalizes updates", async () => {
   assertEquals(updated, profile);
 });
 
-Deno.test("account profile rejects an unverified phone replacement", async () => {
+Deno.test("account profile accepts a valid phone replacement without phone authentication", async () => {
+  let updated: unknown;
+  const replacement = { displayName: "Test User", phoneNumber: "+14155552671" };
   const response = await handleAccountProfile(
-    request({ operation: "update", displayName: "Test User", phoneNumber: "+14155552671" }),
-    dependencies(),
+    request({ operation: "update", ...replacement }),
+    dependencies({
+      updateProfile: (_accountId, value) => {
+        updated = value;
+        return Promise.resolve(value);
+      },
+    }),
   );
-  assertEquals(response.status, 409);
-  assertEquals((await response.json()).error.code, "phone_verification_required");
+  assertEquals(response.status, 200);
+  assertEquals(updated, replacement);
 });
 
 Deno.test("account profile rejects an invalid phone number", async () => {
@@ -225,7 +232,6 @@ function dependencies(
           accountId,
           accessToken: "session-token",
           oauthAuthenticatedAt: 1_700_000_000,
-          verifiedPhoneNumber: profile.phoneNumber,
         })),
     snapshotProfile: overrides.snapshotProfile ?? (() => Promise.resolve(profile)),
     updateProfile: overrides.updateProfile ?? ((_accountId, value) => Promise.resolve(value)),

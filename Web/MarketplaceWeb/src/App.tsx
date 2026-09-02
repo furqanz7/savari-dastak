@@ -14,6 +14,7 @@ import {
   CircleAlert,
   BadgeCheck,
   LockKeyhole,
+  Phone,
   LogOut,
   RefreshCw,
   ShieldCheck,
@@ -43,7 +44,7 @@ import { canCompleteDastakLaunch, dastakLaunchVideos, takeNextDastakLaunchVideo 
 import { readAppConfig } from "./config";
 import { PhoneNumberField } from "./PhoneNumberField";
 import { AppleLogo, GoogleLogo } from "./IdentityProviderLogos";
-import { phoneVerificationError, readableErrorMessage, userFacingError } from "./userFacingError";
+import { readableErrorMessage, userFacingError } from "./userFacingError";
 
 const AdminDashboard = lazy(() => import("./AdminDashboard").then((module) => ({ default: module.AdminDashboard })));
 const DastakCustomerView = lazy(() => import("./DastakCustomerView").then((module) => ({ default: module.DastakCustomerView })));
@@ -547,8 +548,6 @@ function ProfileForm({ session, onComplete, onSignOut }: {
   const [phoneNumber, setPhoneNumber] = useState(() => canonicalSessionPhone(session.user.phone) ?? "+91");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [verificationCode, setVerificationCode] = useState("");
-  const [verificationSent, setVerificationSent] = useState(false);
   const [identityRecoveryComplete, setIdentityRecoveryComplete] = useState(false);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [touched, setTouched] = useState({ name: false, phone: false });
@@ -559,12 +558,6 @@ function ProfileForm({ session, onComplete, onSignOut }: {
   const provider = session.user.app_metadata.provider === "apple"
     ? "Apple"
     : session.user.app_metadata.provider === "google" ? "Google" : "your identity provider";
-
-  const changePhoneNumber = () => {
-    setVerificationSent(false);
-    setVerificationCode("");
-    setError(undefined);
-  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -579,42 +572,10 @@ function ProfileForm({ session, onComplete, onSignOut }: {
     setBusy(true);
     setError(undefined);
     try {
-      let verifiedSession = session;
-      const phoneAlreadyVerified = canonicalSessionPhone(session.user.phone) === phoneNumber &&
-        Boolean(session.user.phone_confirmed_at);
-      if (!phoneAlreadyVerified && !verificationSent) {
-        const { error: verificationError } = await supabase.auth.updateUser({ phone: phoneNumber });
-        if (verificationError) {
-          setError(phoneVerificationError(verificationError, "send"));
-          setBusy(false);
-          return;
-        }
-        setVerificationSent(true);
-        setBusy(false);
-        return;
-      }
-      if (!phoneAlreadyVerified) {
-        if (!/^\d{6}$/.test(verificationCode.trim())) {
-          throw new Error("Enter the 6-digit verification code sent to your phone.");
-        }
-        const verified = await supabase.auth.verifyOtp({
-          phone: phoneNumber,
-          token: verificationCode.trim(),
-          type: "phone_change",
-        });
-        if (verified.error) {
-          setError(phoneVerificationError(verified.error, "verify"));
-          setBusy(false);
-          return;
-        }
-        const refreshed = verified.data.session ?? (await supabase.auth.getSession()).data.session;
-        if (!refreshed) throw new Error("Phone verification completed, but the session could not be refreshed.");
-        verifiedSession = refreshed;
-      }
       const profile = { displayName, phoneNumber };
       await completeProfile(
         supabase,
-        verifiedSession,
+        session,
         config,
         profile,
         submissionAttempt.current.keyFor(profile),
@@ -665,35 +626,18 @@ function ProfileForm({ session, onComplete, onSignOut }: {
         onChange={setPhoneNumber}
         id="profile-phone"
         required
-        disabled={busy || verificationSent}
+        disabled={busy}
         invalid={touched.phone && Boolean(validation.phone)}
         describedBy="phone-hint phone-error"
         onBlur={() => setTouched((current) => ({ ...current, phone: true }))}
       />
     </div>
     <small id="phone-hint">{isCustomerProfile ? <>
-      <LockKeyhole size={13} aria-hidden="true" /> Verified once to protect your identity and used when an active delivery requires contact.
-    </> : "Verified once to protect your identity and used when an active delivery requires contact."}</small>
+      <Phone size={13} aria-hidden="true" /> Required for your Dastak profile and active-delivery contact. No SMS verification is used.
+    </> : "Required for your Dastak profile and operational contact. No SMS verification is used."}</small>
     <small id="phone-error" className="field-error" aria-live="polite">
       {touched.phone ? validation.phone ?? "" : ""}
     </small>
-    {verificationSent && <label>
-      <span className="profile-verification-heading">
-        Verification code
-        <button type="button" disabled={busy} onClick={changePhoneNumber}>Change number</button>
-      </span>
-      <input
-        autoComplete="one-time-code"
-        inputMode="numeric"
-        pattern="[0-9]{6}"
-        maxLength={6}
-        value={verificationCode}
-        disabled={busy}
-        placeholder="6-digit code"
-        onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ""))}
-      />
-      <small>Sent to {phoneNumber}.</small>
-    </label>}
     {error && <div className="error-text profile-submit-error" role="alert">
       <CircleAlert size={18} aria-hidden="true" />
       <span><strong>We couldn’t continue</strong><small>{error}</small></span>
@@ -707,7 +651,7 @@ function ProfileForm({ session, onComplete, onSignOut }: {
       {busy ? "Saving your details…" : <>
         {identityRecoveryComplete
           ? "Continue to sign in"
-          : verificationSent ? "Verify and continue" : "Save and continue"}
+          : "Save and continue"}
         {isCustomerProfile && <ArrowRight size={18} aria-hidden="true" />}
       </>}
     </button>

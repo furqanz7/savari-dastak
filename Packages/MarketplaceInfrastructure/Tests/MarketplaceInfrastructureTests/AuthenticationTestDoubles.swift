@@ -19,8 +19,6 @@ actor FakeAuthenticationClient: AuthenticationClient {
     }
     func restoreAccount() async throws -> AccountRoute { restoredRoute }
     func suggestedDisplayName() async -> String? { suggestedName }
-    func requestPhoneVerification(phoneNumber: String) async throws {}
-    func verifyPhone(phoneNumber: String, code: String) async throws {}
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,
@@ -69,7 +67,7 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
         accountAccessRoute: AccountRoute = .active,
         bootstrapResult: AccountBootstrapResult = AccountBootstrapResult(
             accountID: UUID(),
-            phoneState: .verified
+            phoneRecorded: true
         ),
         bootstrapError: BootstrapError? = nil
     ) {
@@ -128,8 +126,6 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
         signOutCallCount += 1
     }
 
-    func requestPhoneVerification(phoneNumber: String) async throws {}
-    func verifyPhone(phoneNumber: String, code: String) async throws {}
 
     func recordedAppleCredentials() -> AppleCredentials? {
         appleCredentials

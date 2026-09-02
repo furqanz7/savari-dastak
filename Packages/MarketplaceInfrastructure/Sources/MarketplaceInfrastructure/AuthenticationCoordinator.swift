@@ -189,14 +189,6 @@ public final class AuthenticationCoordinator: ObservableObject {
         pendingProfileSubmission = nil
     }
 
-    public func requestPhoneVerification(phoneNumber: String) async throws {
-        try await client.requestPhoneVerification(phoneNumber: phoneNumber)
-    }
-
-    public func verifyPhone(phoneNumber: String, code: String) async throws {
-        try await client.verifyPhone(phoneNumber: phoneNumber, code: code)
-    }
-
     public func signOut() async throws {
         try await client.signOut()
         pendingProfileSubmission = nil
@@ -254,8 +246,8 @@ extension AuthenticationClientError {
              .oauthSessionExpired,
              .oauthSignInFailed:
             return "Profile completion failed."
-        case .unexpectedPhoneVerificationState:
-            return "Profile completion returned an invalid phone state."
+        case .unexpectedPhoneRecordingState:
+            return "Profile completion did not record the required phone number."
         }
     }
 
@@ -274,7 +266,7 @@ extension AuthenticationClientError {
              .bootstrapRejected,
              .invalidE164PhoneNumber,
              .invalidProfileDisplayName,
-             .unexpectedPhoneVerificationState:
+             .unexpectedPhoneRecordingState:
             return "Google sign-in could not be completed."
         }
     }

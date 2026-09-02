@@ -38,8 +38,8 @@ export function AccountProfileSheet({ profile, busy, error, contactMessage, onDi
         </header>
         <label><span>Full name</span><input ref={nameInput} autoComplete="name" maxLength={80} required value={displayName} aria-invalid={nameTouched && !!validation.displayName || undefined} aria-describedby={nameTouched && validation.displayName ? "account-name-error" : undefined} onChange={(event) => setDisplayName(event.target.value)} onBlur={() => setNameTouched(true)} /></label>
         {nameTouched && validation.displayName && <small id="account-name-error" className="field-error" role="alert">{validation.displayName}</small>}
-        <div className="phone-field-group"><span>Verified phone number</span><output className="account-verified-phone" aria-label="Verified phone number">{profile.phoneNumber}</output></div>
-        <small>{contactMessage ?? "Your verified number identifies your Dastak account. Contact Support if it must be changed."}</small>
+        <div className="phone-field-group"><span>Phone number</span><output className="account-verified-phone" aria-label="Phone number">{profile.phoneNumber}</output></div>
+        <small>{contactMessage ?? "This required contact number is recorded on your Dastak profile. Contact Support if it must be changed."}</small>
         {error && <p className="order-error" role="alert">{error}</p>}
         <button className="primary-button customer-sheet-action" type="submit" disabled={busy}>
           <Check size={18} /> {busy ? "Saving..." : "Save changes"}

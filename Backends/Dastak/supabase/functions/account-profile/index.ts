@@ -48,13 +48,11 @@ async function readProfile(accountId: string) {
 async function updateProfile(
   accountId: string,
   profile: AccountProfile,
-  verifiedPhoneNumber?: string,
 ) {
   const { data, error } = await serviceRoleClient.rpc("update_dastak_account_profile", {
     p_account_id: accountId,
     p_display_name: profile.displayName,
     p_phone_number: profile.phoneNumber,
-    p_verified_phone_number: verifiedPhoneNumber ?? null,
   });
   if (error) throw error;
   const value = data as { displayName?: unknown; phoneNumber?: unknown } | null;

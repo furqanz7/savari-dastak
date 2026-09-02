@@ -11,18 +11,13 @@ public struct E164PhoneNumber: Equatable, Sendable {
     }
 }
 
-enum PhoneVerificationState: String, Codable, Sendable {
-    case unverified
-    case verified
-}
-
 struct AccountBootstrapResult: Decodable, Equatable, Sendable {
     let accountID: UUID
-    let phoneState: PhoneVerificationState
+    let phoneRecorded: Bool
 
     private enum CodingKeys: String, CodingKey {
         case accountID = "accountId"
-        case phoneState
+        case phoneRecorded
     }
 }
 

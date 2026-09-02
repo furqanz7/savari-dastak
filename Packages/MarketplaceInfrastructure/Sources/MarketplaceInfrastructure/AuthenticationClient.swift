@@ -28,8 +28,6 @@ public protocol AuthenticationClient: Sendable {
     func signInWithGoogle(redirectTo: URL) async throws
     func suggestedDisplayName() async -> String?
     func restoreAccount() async throws -> AccountRoute
-    func requestPhoneVerification(phoneNumber: String) async throws
-    func verifyPhone(phoneNumber: String, code: String) async throws
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,
@@ -52,7 +50,7 @@ public enum AuthenticationClientError: Error, Equatable, Sendable {
     case oauthProviderUnavailable
     case oauthSessionExpired
     case oauthSignInFailed
-    case unexpectedPhoneVerificationState
+    case unexpectedPhoneRecordingState
 }
 
 enum OAuthSignInErrorMapper {
@@ -165,8 +163,6 @@ protocol SupabaseAuthenticationOperations: Sendable {
     func currentAccountID() async -> UUID?
     func accountProfileID(for accountID: UUID) async throws -> UUID?
     func resolveAppAccess(for requiredAccess: MarketplaceApplicationAccess) async throws -> AccountRoute
-    func requestPhoneVerification(phoneNumber: String) async throws
-    func verifyPhone(phoneNumber: String, code: String) async throws
     func bootstrapAccount(
         displayName: String,
         phoneNumber: String,
@@ -271,22 +267,9 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
         } catch {
             throw AuthenticationClientError.bootstrapAmbiguousFailure
         }
-        guard result.phoneState == .verified else {
-            throw AuthenticationClientError.unexpectedPhoneVerificationState
+        guard result.phoneRecorded else {
+            throw AuthenticationClientError.unexpectedPhoneRecordingState
         }
-    }
-
-    public func requestPhoneVerification(phoneNumber: String) async throws {
-        try await operations.requestPhoneVerification(
-            phoneNumber: try E164PhoneNumber(phoneNumber).rawValue
-        )
-    }
-
-    public func verifyPhone(phoneNumber: String, code: String) async throws {
-        try await operations.verifyPhone(
-            phoneNumber: try E164PhoneNumber(phoneNumber).rawValue,
-            code: code
-        )
     }
 
     public func signOut() async throws {
@@ -537,16 +520,5 @@ extension SupabaseAuthenticationClient {
             try await supabaseClient.auth.signOut(scope: .local)
         }
 
-        func requestPhoneVerification(phoneNumber: String) async throws {
-            try await supabaseClient.auth.update(user: UserAttributes(phone: phoneNumber))
-        }
-
-        func verifyPhone(phoneNumber: String, code: String) async throws {
-            _ = try await supabaseClient.auth.verifyOTP(
-                phone: phoneNumber,
-                token: code,
-                type: .phoneChange
-            )
-        }
     }
 }

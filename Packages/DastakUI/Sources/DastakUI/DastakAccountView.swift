@@ -1443,10 +1443,10 @@ struct DastakProfileEditor: View {
                     }
 
                     VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                        Text("Verified phone number")
+                        Text("Phone number")
                             .font(.subheadline.weight(.semibold))
                         HStack(spacing: MarketplaceSpacing.small) {
-                            Image(systemName: "checkmark.shield.fill")
+                            Image(systemName: "phone.fill")
                                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
                             Text(phoneNumber)
                                 .font(.body.monospacedDigit())
@@ -1456,7 +1456,7 @@ struct DastakProfileEditor: View {
                         .padding(.horizontal, MarketplaceSpacing.compact)
                         .frame(minHeight: 56)
                         .dastakAccountSurface()
-                        .accessibilityLabel("Verified phone number \(phoneNumber)")
+                        .accessibilityLabel("Phone number \(phoneNumber)")
                         Label(
                             contactMessage,
                             systemImage: "lock.fill"
