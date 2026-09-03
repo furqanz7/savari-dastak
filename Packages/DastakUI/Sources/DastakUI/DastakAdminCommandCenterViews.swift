@@ -936,6 +936,22 @@ private struct AdminSKUEditor: View {
     let sku: DastakAdminCatalogueSKU
     @ObservedObject var model: DastakOwnerOperationsModel
     @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var variant: String
+    @State private var packSize: String
+    @State private var productDescription: String
+    @State private var subcategoryID: UUID
+    @State private var quantityValue: String
+    @State private var quantityUnit: String
+    @State private var packCount: String
+    @State private var manufacturer: String
+    @State private var countryOfOrigin: String
+    @State private var barcode: String
+    @State private var hsnCode: String
+    @State private var dietType: String
+    @State private var shelfLifeDays: String
+    @State private var taxRate: String
+    @State private var qaStatus: String
     @State private var listPrice: String
     @State private var sellingPrice: String
     @State private var status: String
@@ -943,6 +959,22 @@ private struct AdminSKUEditor: View {
     init(sku: DastakAdminCatalogueSKU, model: DastakOwnerOperationsModel) {
         self.sku = sku
         self.model = model
+        _name = State(initialValue: sku.name)
+        _variant = State(initialValue: sku.variant ?? "")
+        _packSize = State(initialValue: sku.packSize)
+        _productDescription = State(initialValue: sku.description ?? "")
+        _subcategoryID = State(initialValue: sku.subcategoryID ?? UUID())
+        _quantityValue = State(initialValue: sku.quantityValue.map { String($0) } ?? "")
+        _quantityUnit = State(initialValue: sku.quantityUnit ?? "")
+        _packCount = State(initialValue: sku.packCount.map(String.init) ?? "")
+        _manufacturer = State(initialValue: sku.manufacturerName ?? "")
+        _countryOfOrigin = State(initialValue: sku.countryOfOriginCode ?? "")
+        _barcode = State(initialValue: sku.barcode ?? "")
+        _hsnCode = State(initialValue: sku.hsnCode ?? "")
+        _dietType = State(initialValue: sku.dietType ?? "")
+        _shelfLifeDays = State(initialValue: sku.shelfLifeDays.map(String.init) ?? "")
+        _taxRate = State(initialValue: sku.taxRateBps.map { String(format: "%.2f", Double($0) / 100) } ?? "")
+        _qaStatus = State(initialValue: sku.qaStatus)
         _listPrice = State(initialValue: sku.listPricePaise.map { String(format: "%.2f", Double($0) / 100) } ?? "")
         _sellingPrice = State(initialValue: sku.sellingPricePaise.map { String(format: "%.2f", Double($0) / 100) } ?? "")
         _status = State(initialValue: sku.status)
@@ -955,23 +987,52 @@ private struct AdminSKUEditor: View {
                 Section("Customer-facing classification") {
                     LabeledContent("Department", value: sku.categoryTypeName ?? "Not classified")
                     LabeledContent("Category", value: sku.categoryName ?? "Not classified")
-                    LabeledContent("Subcategory", value: sku.subcategoryName ?? "Not classified")
-                    if let description = sku.description, !description.isEmpty {
-                        Text(description)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    Picker("Subcategory", selection: $subcategoryID) {
+                        ForEach(model.catalogueTaxonomy?.subcategories ?? []) { item in
+                            Text(item.name).tag(item.id)
+                        }
                     }
                 }
-                Section("Product record") {
-                    LabeledContent("Pack", value: sku.packSize)
-                    if let variant = sku.variant { LabeledContent("Variant", value: variant) }
-                    if let manufacturerName = sku.manufacturerName { LabeledContent("Manufacturer", value: manufacturerName) }
-                    if let countryOfOriginCode = sku.countryOfOriginCode { LabeledContent("Country of origin", value: countryOfOriginCode) }
-                    if let dietType = sku.dietType { LabeledContent("Diet type", value: dietType.replacingOccurrences(of: "_", with: " ").capitalized) }
-                    if let shelfLifeDays = sku.shelfLifeDays { LabeledContent("Shelf life", value: "\(shelfLifeDays) days") }
-                    if let barcode = sku.barcode { LabeledContent("Barcode", value: barcode).font(.caption.monospaced()) }
-                    if let hsnCode = sku.hsnCode { LabeledContent("HSN", value: hsnCode).font(.caption.monospaced()) }
-                    if let taxRateBps = sku.taxRateBps { LabeledContent("Tax", value: String(format: "%.2f%%", Double(taxRateBps) / 100)) }
+                Section("Product identity") {
+                    TextField("Product name", text: $name)
+                    TextField("Variant", text: $variant)
+                    TextField("Pack label", text: $packSize)
+                    TextField("Customer description", text: $productDescription, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+                Section("SKU quantity") {
+                    TextField("Quantity value", text: $quantityValue)
+#if os(iOS)
+                        .keyboardType(.decimalPad)
+#endif
+                    TextField("Unit (g, kg, ml, l, pc)", text: $quantityUnit)
+#if os(iOS)
+                        .textInputAutocapitalization(.never)
+#endif
+                    TextField("Items in pack", text: $packCount)
+#if os(iOS)
+                        .keyboardType(.numberPad)
+#endif
+                    Text("The pack label remains customer-facing; these fields keep quantity searchable and machine-readable.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("Product details") {
+                    TextField("Manufacturer", text: $manufacturer)
+                    TextField("Country code", text: $countryOfOrigin)
+#if os(iOS)
+                        .textInputAutocapitalization(.characters)
+#endif
+                    TextField("Barcode", text: $barcode)
+#if os(iOS)
+                        .textContentType(.none)
+#endif
+                    TextField("HSN", text: $hsnCode)
+                    TextField("Diet type", text: $dietType)
+                    TextField("Shelf life in days", text: $shelfLifeDays)
+#if os(iOS)
+                        .keyboardType(.numberPad)
+#endif
                 }
                 Section("Authoritative pricing") {
                     TextField("MRP", text: $listPrice)
@@ -979,6 +1040,10 @@ private struct AdminSKUEditor: View {
                         .keyboardType(.decimalPad)
 #endif
                     TextField("Selling price", text: $sellingPrice)
+#if os(iOS)
+                        .keyboardType(.decimalPad)
+#endif
+                    TextField("Tax %", text: $taxRate)
 #if os(iOS)
                         .keyboardType(.decimalPad)
 #endif
@@ -991,6 +1056,12 @@ private struct AdminSKUEditor: View {
                         Text("Draft").tag("DRAFT")
                         Text("Active").tag("ACTIVE").disabled(!sku.activationReady && sku.status != "ACTIVE")
                         Text("Inactive").tag("INACTIVE")
+                    }
+                    Picker("Quality review", selection: $qaStatus) {
+                        Text("Draft").tag("DRAFT")
+                        Text("In review").tag("IN_REVIEW")
+                        Text("Verified").tag("VERIFIED")
+                        Text("Rejected").tag("REJECTED")
                     }
                 }
                 Section("Activation readiness") {
@@ -1023,11 +1094,57 @@ private struct AdminSKUEditor: View {
         guard let list = Decimal(string: listPrice), let selling = Decimal(string: sellingPrice) else { return nil }
         return (NSDecimalNumber(decimal: list * 100).intValue, NSDecimalNumber(decimal: selling * 100).intValue)
     }
-    private var valid: Bool { guard let values else { return false }; return values.0 >= 0 && values.1 >= 0 && values.1 <= values.0 }
+    private var parsedQuantity: Double? { quantityValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : Double(quantityValue) }
+    private var parsedPackCount: Int? { packCount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : Int(packCount) }
+    private var parsedShelfLife: Int? { shelfLifeDays.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : Int(shelfLifeDays) }
+    private var parsedTaxRateBps: Int? {
+        guard !taxRate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let value = Decimal(string: taxRate)
+        else { return nil }
+        return NSDecimalNumber(decimal: value * 100).intValue
+    }
+    private var valid: Bool {
+        guard let values, sku.subcategoryID != nil,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !packSize.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              values.0 >= 0, values.1 >= 0, values.1 <= values.0
+        else { return false }
+        if !quantityValue.isEmpty, (parsedQuantity ?? 0) <= 0 { return false }
+        if !packCount.isEmpty, (parsedPackCount ?? 0) <= 0 { return false }
+        if !shelfLifeDays.isEmpty, (parsedShelfLife ?? 0) <= 0 { return false }
+        if !taxRate.isEmpty, !(0...10_000).contains(parsedTaxRateBps ?? -1) { return false }
+        return quantityValue.isEmpty == quantityUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     private var canSave: Bool { valid && !(status == "ACTIVE" && sku.status != "ACTIVE" && !sku.activationReady) }
     private func save() async {
-        guard let values else { return }
-        if await model.updateCatalogueSKU(sku, listPricePaise: values.0, sellingPricePaise: values.1, status: status) { dismiss() }
+        guard let values, let originalSubcategoryID = sku.subcategoryID else { return }
+        let patch = DastakAdminCatalogueSKUPatch(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            variant: optional(variant),
+            packSize: packSize.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: optional(productDescription),
+            subcategoryID: model.catalogueTaxonomy?.subcategories.contains(where: { $0.id == subcategoryID }) == true ? subcategoryID : originalSubcategoryID,
+            brandID: sku.brandID,
+            barcode: optional(barcode),
+            quantityValue: parsedQuantity,
+            quantityUnit: optional(quantityUnit)?.lowercased(),
+            packCount: parsedPackCount,
+            manufacturerName: optional(manufacturer),
+            countryOfOriginCode: optional(countryOfOrigin)?.uppercased(),
+            hsnCode: optional(hsnCode),
+            dietType: optional(dietType)?.uppercased().replacingOccurrences(of: " ", with: "_"),
+            shelfLifeDays: parsedShelfLife,
+            listPricePaise: values.0,
+            sellingPricePaise: values.1,
+            taxRateBps: parsedTaxRateBps,
+            qaStatus: qaStatus,
+            status: status
+        )
+        if await model.updateCatalogueSKU(sku, patch: patch) { dismiss() }
+    }
+    private func optional(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

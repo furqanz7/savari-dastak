@@ -5,7 +5,6 @@ import SwiftUI
 public struct DastakMerchantRootView: View {
     private enum Section: Hashable {
         case orders
-        case catalogue
         case store
         case account
     }
@@ -26,12 +25,8 @@ public struct DastakMerchantRootView: View {
                 .tabItem { Label("Orders", systemImage: "list.bullet.clipboard") }
                 .tag(Section.orders)
 
-            DastakMerchantCatalogueView(model: model)
-                .tabItem { Label("Catalogue", systemImage: "square.grid.2x2") }
-                .tag(Section.catalogue)
-
-            DastakMerchantStoreView(model: model)
-                .tabItem { Label("Store", systemImage: "storefront") }
+            DastakMerchantStoreAndCatalogueView(model: model)
+                .tabItem { Label("Store", systemImage: "square.grid.2x2") }
                 .tag(Section.store)
 
             DastakIdentityAccountView(
@@ -39,7 +34,7 @@ public struct DastakMerchantRootView: View {
                 openWorkspace: { section = .store },
                 services: services
             )
-                .tabItem { Label("Account", systemImage: "person.crop.circle") }
+                .tabItem { Label("Account", systemImage: "person.text.rectangle") }
                 .tag(Section.account)
         }
         .tint(MarketplaceColors.dastakAccent.color)

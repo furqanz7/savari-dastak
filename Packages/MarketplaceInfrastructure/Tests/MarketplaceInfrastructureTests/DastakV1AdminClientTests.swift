@@ -138,6 +138,42 @@ final class DastakV1AdminClientTests: XCTestCase {
         XCTAssertEqual(patch["listPricePaise"] as? Int, 8_000)
         XCTAssertEqual(patch["sellingPricePaise"] as? Int, 7_500)
         XCTAssertEqual(patch["status"] as? String, "ACTIVE")
+
+        _ = try await client.updateCatalogueSKU(
+            id: skuID,
+            expectedVersion: 4,
+            patch: DastakAdminCatalogueSKUPatch(
+                name: "Whole Wheat Atta",
+                variant: "Stone ground",
+                packSize: "2 x 500 g",
+                description: "Whole wheat flour",
+                subcategoryID: subcategoryID,
+                brandID: nil,
+                barcode: "8901234567890",
+                quantityValue: 500,
+                quantityUnit: "g",
+                packCount: 2,
+                manufacturerName: "Dastak Foods",
+                countryOfOriginCode: "IN",
+                hsnCode: "1101",
+                dietType: "VEGETARIAN",
+                shelfLifeDays: 180,
+                listPricePaise: 8_000,
+                sellingPricePaise: 7_500,
+                taxRateBps: 500,
+                qaStatus: "VERIFIED",
+                status: "ACTIVE"
+            ),
+            idempotencyKey: key("admin-sku-rich-save")
+        )
+        request = try await requestBody(functions, expectedName: "dastak-v1-catalogue")
+        let richPatch = try XCTUnwrap(request["patch"] as? [String: Any])
+        XCTAssertEqual(richPatch["subcategoryId"] as? String, subcategoryID.uuidString.uppercased())
+        XCTAssertEqual(richPatch["quantityValue"] as? Double, 500)
+        XCTAssertEqual(richPatch["quantityUnit"] as? String, "g")
+        XCTAssertEqual(richPatch["packCount"] as? Int, 2)
+        XCTAssertEqual(richPatch["taxRateBps"] as? Int, 500)
+        XCTAssertEqual(richPatch["qaStatus"] as? String, "VERIFIED")
     }
 
     func testGovernanceFinanceAndEvidenceUseProtectedFunctionBoundaries() async throws {

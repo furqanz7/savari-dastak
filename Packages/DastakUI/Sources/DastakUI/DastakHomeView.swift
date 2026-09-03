@@ -9,6 +9,8 @@ struct DastakHomeView: View {
     let openCart: () -> Void
     let sendParcel: () -> Void
     @State private var selectedRestaurant: DastakV1RestaurantMenu?
+    @State private var selectedCategoryID: UUID?
+    @State private var selectedSubcategoryID: UUID?
     @State private var isSearchPresented = false
     @FocusState private var isSearchFieldFocused: Bool
 
@@ -170,34 +172,82 @@ struct DastakHomeView: View {
     private var categoryRail: some View {
         if !model.canonicalCategories.isEmpty {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                Text("Browse categories")
-                    .font(MarketplaceTypography.sectionTitle)
-                ScrollView(.horizontal) {
-                    HStack(spacing: MarketplaceSpacing.compact) {
-                        ForEach(model.canonicalCategories) { category in
-                            Button(action: presentSearch) {
-                                VStack(spacing: 8) {
-                                    Image(systemName: categorySymbol(category.slug))
-                                        .font(.title2.weight(.light))
-                                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                                        .frame(width: 54, height: 54)
-                                        .background(
-                                            MarketplaceColors.dastakAccentSoft.color,
-                                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        )
-                                    Text(category.name)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.center)
-                                }
-                                .frame(width: 84)
-                            }
-                            .buttonStyle(.plain)
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("SHOP DASTAK")
+                            .font(.caption2.bold())
+                            .tracking(1.1)
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        Text(selectedCategory?.name ?? "Everything, beautifully organised")
+                            .font(MarketplaceTypography.sectionTitle)
+                    }
+                    Spacer()
+                    if selectedCategoryID != nil {
+                        Button("All categories") {
+                            selectedCategoryID = nil
+                            selectedSubcategoryID = nil
                         }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     }
                 }
-                .scrollIndicators(.hidden)
+
+                if selectedCategoryID == nil {
+                    ForEach(model.canonicalCategoryTypes) { type in
+                        let categories = model.canonicalCategories.filter { $0.categoryTypeID == type.id }
+                        if !categories.isEmpty {
+                            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                                Text(type.name).font(.headline)
+                                LazyVGrid(
+                                    columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
+                                    spacing: MarketplaceSpacing.compact
+                                ) {
+                                    ForEach(categories) { category in
+                                        Button {
+                                            selectedCategoryID = category.id
+                                            selectedSubcategoryID = nil
+                                        } label: {
+                                            DastakCategoryTile(category: category)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                            Button {
+                                selectedSubcategoryID = nil
+                            } label: {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "sparkles")
+                                        .font(.title2)
+                                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                        .frame(width: 82, height: 74)
+                                        .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 16))
+                                    Text("All").font(.caption.bold())
+                                }
+                                .padding(6)
+                                .background(selectedSubcategoryID == nil ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 18))
+                            }
+                            .buttonStyle(.plain)
+                            ForEach(visibleSubcategories) { subcategory in
+                                Button {
+                                    selectedSubcategoryID = subcategory.id
+                                } label: {
+                                    DastakSubcategoryTile(
+                                        subcategory: subcategory,
+                                        selected: selectedSubcategoryID == subcategory.id
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                }
             }
         }
     }
@@ -211,9 +261,7 @@ struct DastakHomeView: View {
             DastakEmptyState(
                 symbol: failure.symbol,
                 title: failure.title,
-                message: failure.message,
-                actionTitle: failure.actionTitle,
-                action: { Task { await model.refreshV1Catalogue() } }
+                message: failure.message
             )
             .frame(minHeight: 280)
         } else if model.activeProducts.isEmpty {
@@ -230,10 +278,13 @@ struct DastakHomeView: View {
                     action: { Task { await model.refreshV1Catalogue() } }
                 )
             }
-            ForEach(model.canonicalCategories) { category in
-                let products = Array(model.products(in: category.id).prefix(6))
-                if !products.isEmpty {
-                    categorySection(category, products: products)
+            if let category = selectedCategory {
+                categorySection(category, products: selectedProducts)
+            } else {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                    Text("POPULAR NOW").font(.caption2.bold()).tracking(1.1).foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text("Everyday essentials").font(MarketplaceTypography.sectionTitle)
+                    productGrid(Array(model.activeProducts.prefix(12)))
                 }
             }
         }
@@ -248,18 +299,23 @@ struct DastakHomeView: View {
                 Text(category.name)
                     .font(MarketplaceTypography.sectionTitle)
                 Spacer()
-                Button("See all", action: presentSearch)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Text("\(products.count) products")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
-            LazyVGrid(
+            productGrid(products)
+        }
+    }
+
+    private func productGrid(_ products: [DastakV1CatalogueSKU]) -> some View {
+        LazyVGrid(
                 columns: [
                     GridItem(.flexible(), spacing: MarketplaceSpacing.compact),
                     GridItem(.flexible(), spacing: MarketplaceSpacing.compact)
                 ],
                 spacing: MarketplaceSpacing.compact
-            ) {
+        ) {
                 ForEach(products) { product in
                     DastakV1ProductTile(
                         product: product,
@@ -271,8 +327,21 @@ struct DastakHomeView: View {
                         }
                     )
                 }
-            }
         }
+    }
+
+    private var selectedCategory: DastakV1CatalogueCategory? {
+        model.canonicalCategories.first { $0.id == selectedCategoryID }
+    }
+
+    private var visibleSubcategories: [DastakV1CatalogueSubcategory] {
+        model.canonicalSubcategories.filter { $0.categoryID == selectedCategoryID }
+    }
+
+    private var selectedProducts: [DastakV1CatalogueSKU] {
+        if let selectedSubcategoryID { return model.products(inSubcategory: selectedSubcategoryID) }
+        guard let selectedCategoryID else { return model.activeProducts }
+        return model.products(in: selectedCategoryID)
     }
 
     private var parcelBand: some View {
@@ -555,6 +624,53 @@ struct DastakHomeView: View {
         if slug.contains("food") || slug.contains("grocery") { return "basket" }
         if slug.contains("home") { return "house" }
         return "square.grid.2x2"
+    }
+}
+
+private struct DastakCategoryTile: View {
+    let category: DastakV1CatalogueCategory
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            DastakProductArtwork(
+                imageKey: category.imageKey ?? category.previewImageKeys?.first,
+                fallbackSymbol: "square.grid.2x2.fill"
+            )
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1.28, contentMode: .fit)
+            Text(category.name)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(8)
+        .background(MarketplaceColors.surface(for: colorScheme), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(MarketplaceColors.divider(for: colorScheme), lineWidth: 1))
+    }
+}
+
+private struct DastakSubcategoryTile: View {
+    let subcategory: DastakV1CatalogueSubcategory
+    let selected: Bool
+
+    var body: some View {
+        VStack(spacing: 8) {
+            DastakProductArtwork(
+                imageKey: subcategory.imageKey ?? subcategory.previewImageKeys?.first,
+                fallbackSymbol: "shippingbox.fill"
+            )
+            .frame(width: 82, height: 74)
+            Text(subcategory.name)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(width: 88)
+        }
+        .padding(6)
+        .background(selected ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 18))
     }
 }
 

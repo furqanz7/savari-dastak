@@ -56,6 +56,161 @@ public struct DastakV1MerchantEvidence: Codable, Equatable, Identifiable, Sendab
     public let capturedAt: String
 }
 
+public struct DastakV1MerchantCatalogueSnapshot: Codable, Equatable, Sendable {
+    public struct OperationalState: Codable, Equatable, Sendable {
+        public let isOpen: Bool
+        public let acceptingOrders: Bool
+        public let version: Int
+        public let updatedAt: String?
+    }
+
+    public struct Capacity: Codable, Equatable, Sendable {
+        public let limit: Int
+        public let held: Int
+        public let available: Int
+    }
+
+    public struct Branch: Codable, Equatable, Sendable {
+        public let branchID: UUID
+        public let branchName: String
+        public let branchStatus: String
+        public let branchVersion: Int
+        public let organizationID: UUID
+        public let organizationName: String
+        public let merchantType: String
+        public let operationalState: OperationalState
+        public let capacity: Capacity
+
+        private enum CodingKeys: String, CodingKey {
+            case branchName, branchStatus, branchVersion, organizationName
+            case merchantType, operationalState, capacity
+            case branchID = "branchId"
+            case organizationID = "organizationId"
+        }
+    }
+
+    public struct CategoryType: Codable, Equatable, Identifiable, Sendable {
+        public let categoryTypeID: UUID
+        public let name: String
+        public let slug: String
+        public let imageKey: String?
+        public let sortOrder: Int
+        public var id: UUID { categoryTypeID }
+
+        private enum CodingKeys: String, CodingKey {
+            case name, slug, imageKey, sortOrder
+            case categoryTypeID = "categoryTypeId"
+        }
+    }
+
+    public struct Category: Codable, Equatable, Identifiable, Sendable {
+        public let categoryID: UUID
+        public let categoryTypeID: UUID?
+        public let name: String
+        public let slug: String
+        public let imageKey: String?
+        public let sortOrder: Int
+        public var id: UUID { categoryID }
+
+        private enum CodingKeys: String, CodingKey {
+            case name, slug, imageKey, sortOrder
+            case categoryID = "categoryId"
+            case categoryTypeID = "categoryTypeId"
+        }
+    }
+
+    public struct Subcategory: Codable, Equatable, Identifiable, Sendable {
+        public let subcategoryID: UUID
+        public let categoryID: UUID
+        public let name: String
+        public let slug: String
+        public let imageKey: String?
+        public let sortOrder: Int
+        public var id: UUID { subcategoryID }
+
+        private enum CodingKeys: String, CodingKey {
+            case name, slug, imageKey, sortOrder
+            case subcategoryID = "subcategoryId"
+            case categoryID = "categoryId"
+        }
+    }
+
+    public struct SKU: Codable, Equatable, Identifiable, Sendable {
+        public let skuID: UUID
+        public let categoryTypeID: UUID?
+        public let categoryID: UUID
+        public let subcategoryID: UUID
+        public let brandName: String?
+        public let name: String
+        public let variant: String?
+        public let packSize: String
+        public let description: String?
+        public let imageKey: String?
+        public let galleryImageKeys: [String]
+        public let quantityValue: Double?
+        public let quantityUnit: String?
+        public let packCount: Int?
+        public let dietType: String?
+        public let searchTerms: [String]
+        public let listPricePaise: Int
+        public let sellingPricePaise: Int
+        public let currencyCode: String
+        public let catalogueStatus: String
+        public let selected: Bool
+        public let selectionState: String?
+        public let selectionVersion: Int
+        public let selectionUpdatedAt: String?
+        public var id: UUID { skuID }
+
+        private enum CodingKeys: String, CodingKey {
+            case brandName, name, variant, packSize, description, imageKey
+            case galleryImageKeys, quantityValue, quantityUnit, packCount
+            case dietType, searchTerms, listPricePaise, sellingPricePaise
+            case currencyCode, catalogueStatus, selected, selectionState
+            case selectionVersion, selectionUpdatedAt
+            case skuID = "skuId"
+            case categoryTypeID = "categoryTypeId"
+            case categoryID = "categoryId"
+            case subcategoryID = "subcategoryId"
+        }
+    }
+
+    public let branch: Branch
+    public let categoryTypes: [CategoryType]
+    public let categories: [Category]
+    public let subcategories: [Subcategory]
+    public let skus: [SKU]
+    public let truncated: Bool
+}
+
+public struct DastakV1MerchantSelectionMutation: Codable, Equatable, Sendable {
+    public let branchID: UUID
+    public let skuID: UUID
+    public let selected: Bool
+    public let state: String
+    public let version: Int
+    public let updatedAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case selected, state, version, updatedAt
+        case branchID = "branchId"
+        case skuID = "skuId"
+    }
+}
+
+public struct DastakV1MerchantBranchStateMutation: Codable, Equatable, Sendable {
+    public let branchID: UUID
+    public let isOpen: Bool
+    public let acceptingOrders: Bool
+    public let version: Int
+    public let updatedAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case isOpen, acceptingOrders, version, updatedAt
+        case branchID = "branchId"
+    }
+}
+
 public protocol DastakV1MerchantClient: Sendable {
     func fulfilments(limit: Int, idempotencyKey: IdempotencyKey) async throws -> [DastakV1MerchantFulfilment]
     func declarePackages(
@@ -75,6 +230,25 @@ public protocol DastakV1MerchantClient: Sendable {
         expectedVersion: Int,
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakV1MerchantFulfilment
+    func canonicalCatalogue(
+        branchID: UUID?,
+        limit: Int,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1MerchantCatalogueSnapshot
+    func updateCatalogueSelection(
+        branchID: UUID,
+        skuID: UUID,
+        selected: Bool,
+        expectedVersion: Int,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1MerchantSelectionMutation
+    func updateBranchState(
+        branchID: UUID,
+        isOpen: Bool,
+        acceptingOrders: Bool,
+        expectedVersion: Int,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1MerchantBranchStateMutation
 }
 
 public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
@@ -89,6 +263,17 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
 
     private struct Collection: Decodable, Sendable {
         let fulfilments: [DastakV1MerchantFulfilment]
+    }
+
+    private struct CatalogueRequest: Encodable, Sendable {
+        let operation: String
+        let branchId: UUID?
+        let limit: Int?
+        let skuId: UUID?
+        let selected: Bool?
+        let expectedVersion: Int?
+        let isOpen: Bool?
+        let acceptingOrders: Bool?
     }
 
     private let functions: any FunctionClient
@@ -160,6 +345,76 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
             objectPath: nil,
             expectedVersion: expectedVersion,
             key: idempotencyKey
+        )
+    }
+
+    public func canonicalCatalogue(
+        branchID: UUID? = nil,
+        limit: Int = 1_000,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1MerchantCatalogueSnapshot {
+        precondition((1...1_000).contains(limit))
+        return try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: CatalogueRequest(
+                operation: "merchantSnapshot",
+                branchId: branchID,
+                limit: limit,
+                skuId: nil,
+                selected: nil,
+                expectedVersion: nil,
+                isOpen: nil,
+                acceptingOrders: nil
+            ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func updateCatalogueSelection(
+        branchID: UUID,
+        skuID: UUID,
+        selected: Bool,
+        expectedVersion: Int,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1MerchantSelectionMutation {
+        precondition(expectedVersion >= 0)
+        return try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: CatalogueRequest(
+                operation: "updateMerchantSelection",
+                branchId: branchID,
+                limit: nil,
+                skuId: skuID,
+                selected: selected,
+                expectedVersion: expectedVersion,
+                isOpen: nil,
+                acceptingOrders: nil
+            ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func updateBranchState(
+        branchID: UUID,
+        isOpen: Bool,
+        acceptingOrders: Bool,
+        expectedVersion: Int,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1MerchantBranchStateMutation {
+        precondition(expectedVersion >= 0)
+        return try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: CatalogueRequest(
+                operation: "updateBranchOperationalState",
+                branchId: branchID,
+                limit: nil,
+                skuId: nil,
+                selected: nil,
+                expectedVersion: expectedVersion,
+                isOpen: isOpen,
+                acceptingOrders: acceptingOrders
+            ),
+            idempotencyKey: idempotencyKey
         )
     }
 

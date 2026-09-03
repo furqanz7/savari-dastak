@@ -69,7 +69,7 @@ struct DastakSearchView: View {
 
     private func productRow(_ product: DastakV1CatalogueSKU) -> some View {
         HStack(spacing: MarketplaceSpacing.compact) {
-            DastakProductArtwork(symbol: artworkSymbol(for: product))
+            DastakProductArtwork(imageKey: product.imageKey, fallbackSymbol: artworkSymbol(for: product))
                 .frame(width: 68)
 
             VStack(alignment: .leading, spacing: 4) {

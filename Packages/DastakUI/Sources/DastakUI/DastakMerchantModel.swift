@@ -54,6 +54,7 @@ final class DastakMerchantModel: ObservableObject {
     @Published private(set) var orders: [MerchantOrderSnapshot] = []
     @Published private(set) var v1Fulfilments: [DastakV1MerchantFulfilment] = []
     @Published private(set) var catalogue: CatalogueSnapshot?
+    @Published private(set) var canonicalCatalogue: DastakV1MerchantCatalogueSnapshot?
     @Published private(set) var earnings: DastakEarningsSnapshot?
     @Published private(set) var isLoading = true
     @Published private(set) var isRefreshing = false
@@ -149,8 +150,74 @@ final class DastakMerchantModel: ObservableObject {
             self.earnings = result.2
             v1Fulfilments = result.3
             errorMessage = nil
+            await refreshCanonicalCatalogue(reportFailure: false)
         } catch {
             errorMessage = message(for: error, fallback: "Merchant information could not be refreshed.")
+        }
+    }
+
+    func refreshCanonicalCatalogue(reportFailure: Bool = true) async {
+        do {
+            canonicalCatalogue = try await v1Client.canonicalCatalogue(
+                branchID: canonicalCatalogue?.branch.branchID,
+                limit: 1_000,
+                idempotencyKey: makeKey()
+            )
+            if reportFailure { errorMessage = nil }
+        } catch {
+            canonicalCatalogue = nil
+            if reportFailure,
+               !String(describing: error).localizedCaseInsensitiveContains("retail-only")
+            {
+                errorMessage = message(for: error, fallback: "The store catalogue could not be refreshed.")
+            }
+        }
+    }
+
+    func setCanonicalSelection(_ sku: DastakV1MerchantCatalogueSnapshot.SKU) async {
+        guard let snapshot = canonicalCatalogue else { return }
+        let identity = "canonical-sku:\(sku.skuID):\(sku.selectionVersion):\(!sku.selected)"
+        guard !isBusy else { return }
+        busyIdentity = identity
+        defer { busyIdentity = nil }
+        do {
+            _ = try await v1Client.updateCatalogueSelection(
+                branchID: snapshot.branch.branchID,
+                skuID: sku.skuID,
+                selected: !sku.selected,
+                expectedVersion: sku.selectionVersion,
+                idempotencyKey: actionKey(for: identity)
+            )
+            actionKeys[identity] = nil
+            await refreshCanonicalCatalogue()
+            notice = sku.selected ? "Removed from your storefront." : "Added to your storefront."
+        } catch {
+            errorMessage = message(for: error, fallback: "The storefront selection could not be saved.")
+            await refreshCanonicalCatalogue(reportFailure: false)
+        }
+    }
+
+    func setCanonicalBranch(isOpen: Bool, acceptingOrders: Bool) async {
+        guard let snapshot = canonicalCatalogue else { return }
+        let state = snapshot.branch.operationalState
+        let identity = "canonical-branch:\(state.version):\(isOpen):\(acceptingOrders)"
+        guard !isBusy else { return }
+        busyIdentity = identity
+        defer { busyIdentity = nil }
+        do {
+            _ = try await v1Client.updateBranchState(
+                branchID: snapshot.branch.branchID,
+                isOpen: isOpen,
+                acceptingOrders: isOpen && acceptingOrders,
+                expectedVersion: state.version,
+                idempotencyKey: actionKey(for: identity)
+            )
+            actionKeys[identity] = nil
+            await refreshCanonicalCatalogue()
+            notice = isOpen ? (acceptingOrders ? "Store is accepting orders." : "New orders are paused.") : "Store is closed."
+        } catch {
+            errorMessage = message(for: error, fallback: "The store status could not be updated.")
+            await refreshCanonicalCatalogue(reportFailure: false)
         }
     }
 

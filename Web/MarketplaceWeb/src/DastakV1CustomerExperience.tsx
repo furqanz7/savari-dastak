@@ -23,7 +23,8 @@ import {
 import {
   cancelV1Order, commitV1LaunchPayment, formatV1Price, getV1Catalogue, getV1Order, getV1Orders,
   getV1Restaurants, reportV1CustomerIssue, submitV1Order, uploadV1CustomerIssueEvidence,
-  type DastakV1Auth, type V1CatalogueCategory, type V1CatalogueSku, type V1Order,
+  type DastakV1Auth, type V1CatalogueCategory, type V1CatalogueCategoryType,
+  type V1CatalogueSku, type V1CatalogueSubcategory, type V1Order,
   type V1OrderCursor, type V1RestaurantMenu, type V1RestaurantMenuItem,
 } from "./dastakV1";
 import {
@@ -99,6 +100,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const [addresses, setAddresses] = useState<CustomerDeliveryAddress[]>([]);
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>();
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string>();
   const [cart, setCart] = useState<Cart>(() => loadCart(props.accountId));
   const [foodCart, setFoodCart] = useState<FoodCartLine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -652,10 +654,14 @@ export function DastakV1CustomerExperience(props: Props) {
     {props.section === "home" ? <HomeSection
       supabaseUrl={props.supabaseUrl}
       restaurants={restaurants}
+      categoryTypes={catalogue?.categoryTypes ?? []}
       categories={catalogue?.categories ?? []}
+      subcategories={catalogue?.subcategories ?? []}
       skus={catalogue?.skus ?? []}
       selectedCategory={selectedCategory}
-      onCategory={setSelectedCategory}
+      selectedSubcategory={selectedSubcategory}
+      onCategory={(id) => { setSelectedCategory(id); setSelectedSubcategory(undefined); }}
+      onSubcategory={setSelectedSubcategory}
       onSearch={() => props.onNavigate("search")}
       onOrders={() => props.onNavigate("orders")}
       onParcel={props.onOpenParcel}
@@ -768,16 +774,24 @@ function CustomerHeader({ address, count, onCart }: { address?: CustomerDelivery
   </header>;
 }
 
-function HomeSection({ supabaseUrl, restaurants, categories, skus, selectedCategory, onCategory, onSearch, onOrders, onParcel, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, selectedCategory, selectedSubcategory, onCategory, onSubcategory, onSearch, onOrders, onParcel, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
   supabaseUrl: string;
   restaurants: V1RestaurantMenu[];
-  categories: V1CatalogueCategory[]; skus: V1CatalogueSku[]; selectedCategory?: string;
-  onCategory: (id?: string) => void; onSearch: () => void; onOrders: () => void; onParcel: () => void;
+  categoryTypes: V1CatalogueCategoryType[]; categories: V1CatalogueCategory[];
+  subcategories: V1CatalogueSubcategory[]; skus: V1CatalogueSku[];
+  selectedCategory?: string; selectedSubcategory?: string;
+  onCategory: (id?: string) => void; onSubcategory: (id?: string) => void;
+  onSearch: () => void; onOrders: () => void; onParcel: () => void;
   onAdd: (sku: V1CatalogueSku) => void; onRestaurant: (restaurant: V1RestaurantMenu) => void;
   wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>;
   onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void;
 }) {
-  const visible = selectedCategory ? skus.filter((sku) => sku.categoryId === selectedCategory) : skus;
+  const visible = skus.filter((sku) =>
+    (!selectedCategory || sku.categoryId === selectedCategory) &&
+    (!selectedSubcategory || sku.subcategoryId === selectedSubcategory));
+  const categorySubcategories = subcategories.filter((item) => item.categoryId === selectedCategory);
+  const selectedName = subcategories.find((item) => item.id === selectedSubcategory)?.name
+    ?? categories.find((item) => item.id === selectedCategory)?.name;
   return <>
     <section className="v1-hero"><p>YOUR EVERYDAY, DELIVERED</p><h1>One basket.<br />Dastak finds every item.</h1><span><ShieldCheck size={18} /> You pay only after your full basket is secured</span></section>
     <button className="v1-search-launch" type="button" onClick={onSearch}><Search size={19} /><span>Search products and essentials</span><ChevronRight size={18} /></button>
@@ -788,13 +802,17 @@ function HomeSection({ supabaseUrl, restaurants, categories, skus, selectedCateg
         <ChevronRight size={18} />
       </button>)}</div>
     </section> : null}
-    <section className="v1-section"><header><div><p>CANONICAL CATALOGUE</p><h2>Browse categories</h2></div></header>
-      <div className="v1-category-rail">
-        <button className={!selectedCategory ? "selected" : ""} type="button" onClick={() => onCategory(undefined)}><Sparkles size={22} /><span>All</span></button>
-        {categories.map((category) => <button className={selectedCategory === category.id ? "selected" : ""} type="button" key={category.id} onClick={() => onCategory(category.id)}><PackageCheck size={22} /><span>{category.name}</span></button>)}
-      </div>
+    <section className="v1-section v1-catalogue-directory"><header><div><p>SHOP DASTAK</p><h2>{selectedCategory ? selectedName : "Everything, beautifully organised"}</h2></div>{selectedCategory ? <button type="button" className="v1-text-action" onClick={() => onCategory(undefined)}>All categories</button> : null}</header>
+      {!selectedCategory ? <div className="v1-category-groups">{categoryTypes.map((type) => {
+        const grouped = categories.filter((category) => category.categoryTypeId === type.id);
+        if (!grouped.length) return null;
+        return <section key={type.id}><header><h3>{type.name}</h3><span>{grouped.length} categories</span></header><div className="v1-category-grid">{grouped.map((category) => <button type="button" key={category.id} onClick={() => onCategory(category.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={category} /><strong>{category.name}</strong><small>{subcategories.filter((item) => item.categoryId === category.id).length} collections</small></button>)}</div></section>;
+      })}</div> : <div className="v1-subcategory-rail" role="group" aria-label="Product collection">
+        <button className={!selectedSubcategory ? "selected" : ""} type="button" onClick={() => onSubcategory(undefined)}><span className="v1-subcategory-all"><Sparkles size={23} /></span><strong>All</strong></button>
+        {categorySubcategories.map((subcategory) => <button className={selectedSubcategory === subcategory.id ? "selected" : ""} type="button" key={subcategory.id} onClick={() => onSubcategory(subcategory.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={subcategory} /><strong>{subcategory.name}</strong></button>)}
+      </div>}
     </section>
-    <section className="v1-section"><header><div><p>EXACT PRODUCTS</p><h2>{categories.find((category) => category.id === selectedCategory)?.name ?? "Everyday essentials"}</h2></div><span>{visible.length} products</span></header>
+    <section className="v1-section"><header><div><p>{selectedCategory ? "IN THIS COLLECTION" : "POPULAR NOW"}</p><h2>{selectedName ?? "Everyday essentials"}</h2></div><span>{visible.length} products</span></header>
       <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />
     </section>
     <section className="v1-service-band"><PackageCheck size={24} /><div><strong>Send a parcel</strong><span>Door-to-door delivery across your city</span></div><button type="button" onClick={onParcel}>Open <ChevronRight size={17} /></button></section>
@@ -804,10 +822,17 @@ function HomeSection({ supabaseUrl, restaurants, categories, skus, selectedCateg
 
 function SearchSection({ supabaseUrl, query, onQuery, searching, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; query: string; onQuery: (value: string) => void; searching: boolean; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
   const submit = (event: FormEvent) => event.preventDefault();
-  return <section className="v1-search-page"><header><p>CANONICAL CATALOGUE</p><h1>Find an exact product</h1><span>Search by product, brand or category. Retail merchant identity stays private.</span></header>
+  return <section className="v1-search-page"><header><p>SEARCH DASTAK</p><h1>What are you looking for?</h1><span>Search products, brands, pack sizes, categories, common names or barcodes.</span></header>
     <form className="v1-search-field" role="search" onSubmit={submit}><Search size={20} /><input autoFocus value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Products, brands and categories" aria-label="Search Dastak products" />{query ? <button type="button" onClick={() => onQuery("")} aria-label="Clear search"><X size={17} /></button> : null}</form>
     {searching ? <div className="v1-inline-loading" role="status"><span /> Searching Dastak</div> : skus.length ? <ProductGrid supabaseUrl={supabaseUrl} skus={skus} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <EmptyState title={query ? "No exact matches" : "Catalogue is empty"} copy={query ? "Try another product, brand or category." : "Dastak is preparing launch products."} />}
   </section>;
+}
+
+function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1CatalogueCategory }) {
+  const keys = [item.imageKey, ...item.previewImageKeys].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index).slice(0, 4);
+  return <span className={`v1-category-art count-${keys.length}`} aria-hidden="true">{keys.length
+    ? keys.map((key) => <ProductImage key={key} src={catalogueImageUrl(supabaseUrl, key)} alt="" />)
+    : <PackageCheck size={28} />}</span>;
 }
 
 function ProductGrid({ supabaseUrl, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {

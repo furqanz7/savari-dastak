@@ -45,11 +45,9 @@ struct DastakRefreshNotice: View {
             }
 
             Spacer(minLength: MarketplaceSpacing.small)
-
-            Button(failure.actionTitle, action: action)
-                .font(.footnote.bold())
-                .buttonStyle(.bordered)
-                .tint(MarketplaceColors.dastakAccent.color)
+            Text("Pull to refresh")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
         }
         .padding(MarketplaceSpacing.compact)
         .marketplaceFlatSurface()

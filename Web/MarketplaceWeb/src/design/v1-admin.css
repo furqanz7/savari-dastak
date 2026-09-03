@@ -73,6 +73,15 @@
 .admin-sku-technical span { min-width: 0; display: grid; gap: 3px; padding: 12px; overflow-wrap: anywhere; background: var(--surface); color: var(--text-secondary); font-size: 9px; }
 .admin-sku-technical strong { color: var(--text-primary); font-size: 8px; text-transform: uppercase; }
 .admin-sku-technical .wide { grid-column: span 2; }
+.admin-sku-master-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; padding: 20px; border-top: 1px solid var(--divider); background: color-mix(in srgb, var(--surface-muted) 68%, transparent); }
+.admin-sku-master-fields > header { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin-bottom: 3px; color: var(--dastak-accent); }
+.admin-sku-master-fields > header div { display: grid; gap: 2px; color: var(--text-primary); }
+.admin-sku-master-fields > header small { color: var(--text-secondary); font-weight: 500; }
+.admin-sku-master-fields label { min-width: 0; display: grid; gap: 5px; color: var(--text-secondary); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.admin-sku-master-fields input, .admin-sku-master-fields select, .admin-sku-master-fields textarea { width: 100%; min-width: 0; padding: 0 10px; border: 1px solid var(--divider); border-radius: 10px; color: var(--text-primary); background: var(--surface-raised); font: inherit; text-transform: none; }
+.admin-sku-master-fields input, .admin-sku-master-fields select { min-height: 44px; }
+.admin-sku-master-fields textarea { padding-block: 10px; resize: vertical; }
+.admin-sku-master-fields .wide { grid-column: span 2; }
 
 /* Finished Admin workspace: adaptive command center, connected identity
    directory and large-catalogue operating surface. */
@@ -302,6 +311,7 @@
   .admin-sku-price-summary, .v1-admin-status { grid-column: 1 / -1; }
   .admin-sku-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 16px 16px; }
   .admin-sku-technical { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-sku-master-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 16px; }
 }
 
 @media (max-width: 480px) {
@@ -320,9 +330,10 @@
   .admin-sku-card { border-radius: 17px; }
   .admin-sku-customer-preview { grid-template-columns: 1fr; }
   .admin-sku-artwork { min-height: 190px; }
-  .admin-sku-commercial, .admin-sku-facts, .admin-sku-technical { grid-template-columns: 1fr; }
+  .admin-sku-commercial, .admin-sku-facts, .admin-sku-technical, .admin-sku-master-fields { grid-template-columns: 1fr; }
   .admin-sku-commercial > *, .admin-sku-price-summary, .v1-admin-status, .admin-sku-technical .wide { grid-column: 1; }
   .admin-sku-record > summary { padding-inline: 16px; }
+  .admin-sku-master-fields .wide { grid-column: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

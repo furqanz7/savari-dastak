@@ -353,6 +353,82 @@ public struct DastakAdminCatalogueMutation: Codable, Equatable, Sendable {
     public let updatedAt: String
 }
 
+public struct DastakAdminCatalogueSKUPatch: Encodable, Equatable, Sendable {
+    public let name: String?
+    public let variant: String?
+    public let packSize: String?
+    public let description: String?
+    public let subcategoryID: UUID?
+    public let brandID: UUID?
+    public let barcode: String?
+    public let quantityValue: Double?
+    public let quantityUnit: String?
+    public let packCount: Int?
+    public let manufacturerName: String?
+    public let countryOfOriginCode: String?
+    public let hsnCode: String?
+    public let dietType: String?
+    public let shelfLifeDays: Int?
+    public let listPricePaise: Int
+    public let sellingPricePaise: Int
+    public let taxRateBps: Int?
+    public let qaStatus: String?
+    public let status: String
+
+    public init(
+        name: String?,
+        variant: String?,
+        packSize: String?,
+        description: String?,
+        subcategoryID: UUID?,
+        brandID: UUID?,
+        barcode: String?,
+        quantityValue: Double?,
+        quantityUnit: String?,
+        packCount: Int?,
+        manufacturerName: String?,
+        countryOfOriginCode: String?,
+        hsnCode: String?,
+        dietType: String?,
+        shelfLifeDays: Int?,
+        listPricePaise: Int,
+        sellingPricePaise: Int,
+        taxRateBps: Int?,
+        qaStatus: String?,
+        status: String
+    ) {
+        self.name = name
+        self.variant = variant
+        self.packSize = packSize
+        self.description = description
+        self.subcategoryID = subcategoryID
+        self.brandID = brandID
+        self.barcode = barcode
+        self.quantityValue = quantityValue
+        self.quantityUnit = quantityUnit
+        self.packCount = packCount
+        self.manufacturerName = manufacturerName
+        self.countryOfOriginCode = countryOfOriginCode
+        self.hsnCode = hsnCode
+        self.dietType = dietType
+        self.shelfLifeDays = shelfLifeDays
+        self.listPricePaise = listPricePaise
+        self.sellingPricePaise = sellingPricePaise
+        self.taxRateBps = taxRateBps
+        self.qaStatus = qaStatus
+        self.status = status
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, variant, packSize, description, barcode, quantityValue
+        case quantityUnit, packCount, manufacturerName, countryOfOriginCode
+        case hsnCode, dietType, shelfLifeDays, listPricePaise
+        case sellingPricePaise, taxRateBps, qaStatus, status
+        case subcategoryID = "subcategoryId"
+        case brandID = "brandId"
+    }
+}
+
 public enum DastakAdminOperationalPauseScope: String, Codable, Equatable, CaseIterable, Sendable {
     case retailZone = "ZONE_RETAIL"
     case foodZone = "ZONE_FOOD"
@@ -594,6 +670,12 @@ public protocol DastakV1AdminClient: Sendable {
         status: String,
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakAdminCatalogueMutation
+    func updateCatalogueSKU(
+        id: UUID,
+        expectedVersion: Int,
+        patch: DastakAdminCatalogueSKUPatch,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakAdminCatalogueMutation
     func setExecutiveAdmin(
         slot: Int,
         email: String?,
@@ -670,11 +752,6 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
     }
 
     private struct CatalogueRequest: Encodable, Sendable {
-        struct Patch: Encodable, Sendable {
-            let listPricePaise: Int
-            let sellingPricePaise: Int
-            let status: String
-        }
         let operation: String
         let skuLimit: Int?
         let query: String?
@@ -687,7 +764,7 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
         let cursor: DastakAdminCatalogueCursor?
         let skuId: UUID?
         let expectedVersion: Int?
-        let patch: Patch?
+        let patch: DastakAdminCatalogueSKUPatch?
     }
 
     private struct OrderCollection: Decodable, Sendable {
@@ -947,10 +1024,55 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
                 skuId: id,
                 expectedVersion: expectedVersion,
                 patch: .init(
+                    name: nil,
+                    variant: nil,
+                    packSize: nil,
+                    description: nil,
+                    subcategoryID: nil,
+                    brandID: nil,
+                    barcode: nil,
+                    quantityValue: nil,
+                    quantityUnit: nil,
+                    packCount: nil,
+                    manufacturerName: nil,
+                    countryOfOriginCode: nil,
+                    hsnCode: nil,
+                    dietType: nil,
+                    shelfLifeDays: nil,
                     listPricePaise: listPricePaise,
                     sellingPricePaise: sellingPricePaise,
+                    taxRateBps: nil,
+                    qaStatus: nil,
                     status: status
                 )
+            ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func updateCatalogueSKU(
+        id: UUID,
+        expectedVersion: Int,
+        patch: DastakAdminCatalogueSKUPatch,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakAdminCatalogueMutation {
+        precondition(expectedVersion > 0)
+        return try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: CatalogueRequest(
+                operation: "updateSku",
+                skuLimit: nil,
+                query: nil,
+                categoryTypeId: nil,
+                categoryId: nil,
+                subcategoryId: nil,
+                status: nil,
+                qaStatus: nil,
+                limit: nil,
+                cursor: nil,
+                skuId: id,
+                expectedVersion: expectedVersion,
+                patch: patch
             ),
             idempotencyKey: idempotencyKey
         )

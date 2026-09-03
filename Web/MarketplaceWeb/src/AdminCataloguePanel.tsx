@@ -170,24 +170,58 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
         <Select label="Visibility" value={status} onChange={setStatus}><option value="">Any status</option><option value="ACTIVE">Active</option><option value="DRAFT">Draft</option><option value="INACTIVE">Inactive</option></Select>
         <Select label="QA" value={qaStatus} onChange={setQaStatus}><option value="">Any QA state</option><option value="VERIFIED">Verified</option><option value="NEEDS_REVIEW">Needs review</option><option value="PENDING">Pending</option><option value="REJECTED">Rejected</option></Select>
       </div>
-      {loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : <div className="v1-admin-sku-list">{skus.map((sku) => <SkuEditor key={`${sku.id}:${sku.version}`} sku={sku} supabaseUrl={auth.supabaseUrl} disabled={busy} onSave={updateSku} />)}</div>}
+      {loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : <div className="v1-admin-sku-list">{skus.map((sku) => <SkuEditor key={`${sku.id}:${sku.version}`} sku={sku} taxonomy={snapshot} supabaseUrl={auth.supabaseUrl} disabled={busy} onSave={updateSku} />)}</div>}
       {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadPage(true)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 SKUs"}</button> : null}
     </section>
     <details className="v1-admin-import"><summary><Upload size={18} /><span><strong>Advanced atomic import</strong><small>Imports enter Draft and require taxonomy, QA, price and cleared imagery before activation</small></span><ChevronDown size={17} /></summary><form onSubmit={runImport}><label htmlFor="v1-catalogue-import">Catalogue JSON</label><textarea id="v1-catalogue-import" value={source} onChange={(event) => setSource(event.target.value)} rows={16} spellCheck={false} disabled={busy} /><p className="field-help">Use approved taxonomy slugs. A successful import does not make a product customer-visible.</p><button className="primary-button" type="submit" disabled={busy}>{busy ? "Importing…" : "Validate and import as Draft"}</button></form></details>
   </section>;
 }
 
-function SkuEditor({ sku, supabaseUrl, disabled, onSave }: { sku: V1AdminCataloguePageSku; supabaseUrl: string; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void> }) {
+function SkuEditor({ sku, taxonomy, supabaseUrl, disabled, onSave }: { sku: V1AdminCataloguePageSku; taxonomy?: V1AdminSnapshot; supabaseUrl: string; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void> }) {
+  const [name, setName] = useState(sku.name);
+  const [variant, setVariant] = useState(sku.variant ?? "");
+  const [packSize, setPackSize] = useState(sku.packSize);
+  const [description, setDescription] = useState(sku.description ?? "");
+  const [subcategoryId, setSubcategoryId] = useState(sku.subcategoryId);
+  const [brandId, setBrandId] = useState(sku.brandId ?? "");
+  const [barcode, setBarcode] = useState(sku.barcode ?? "");
+  const [quantityValue, setQuantityValue] = useState(sku.quantityValue?.toString() ?? "");
+  const [quantityUnit, setQuantityUnit] = useState(sku.quantityUnit ?? "");
+  const [packCount, setPackCount] = useState(sku.packCount?.toString() ?? "");
+  const [manufacturerName, setManufacturerName] = useState(sku.manufacturerName ?? "");
+  const [countryOfOriginCode, setCountryOfOriginCode] = useState(sku.countryOfOriginCode ?? "");
+  const [hsnCode, setHsnCode] = useState(sku.hsnCode ?? "");
+  const [dietType, setDietType] = useState(sku.dietType);
+  const [shelfLifeDays, setShelfLifeDays] = useState(sku.shelfLifeDays?.toString() ?? "");
+  const [taxPercent, setTaxPercent] = useState((sku.taxRateBps / 100).toString());
+  const [qaStatus, setQaStatus] = useState(sku.qaStatus);
   const [listPrice, setListPrice] = useState(sku.listPricePaise === undefined ? "" : (sku.listPricePaise / 100).toFixed(2));
   const [sellingPrice, setSellingPrice] = useState(sku.sellingPricePaise === undefined ? "" : (sku.sellingPricePaise / 100).toFixed(2));
   const [status, setStatus] = useState(sku.status);
   const listPricePaise = priceInPaise(listPrice);
   const sellingPricePaise = priceInPaise(sellingPrice);
-  const changed = listPricePaise !== sku.listPricePaise || sellingPricePaise !== sku.sellingPricePaise || status !== sku.status;
-  const valid = listPricePaise !== undefined && sellingPricePaise !== undefined && sellingPricePaise <= listPricePaise;
+  const numericQuantity = optionalPositiveNumber(quantityValue);
+  const numericPackCount = optionalPositiveInteger(packCount);
+  const numericShelfLife = optionalPositiveInteger(shelfLifeDays);
+  const taxRateBps = priceInPaise(taxPercent);
+  const changed = listPricePaise !== sku.listPricePaise || sellingPricePaise !== sku.sellingPricePaise || status !== sku.status ||
+    name.trim() !== sku.name || variant.trim() !== (sku.variant ?? "") || packSize.trim() !== sku.packSize ||
+    description.trim() !== (sku.description ?? "") || subcategoryId !== sku.subcategoryId || brandId !== (sku.brandId ?? "") ||
+    barcode.trim() !== (sku.barcode ?? "") || numericQuantity !== (sku.quantityValue ?? null) || quantityUnit !== (sku.quantityUnit ?? "") ||
+    numericPackCount !== (sku.packCount ?? null) || manufacturerName.trim() !== (sku.manufacturerName ?? "") ||
+    countryOfOriginCode.trim().toUpperCase() !== (sku.countryOfOriginCode ?? "") || hsnCode.trim() !== (sku.hsnCode ?? "") ||
+    dietType !== sku.dietType || numericShelfLife !== (sku.shelfLifeDays ?? null) || taxRateBps !== sku.taxRateBps || qaStatus !== sku.qaStatus;
+  const valid = Boolean(name.trim() && packSize.trim() && subcategoryId) && listPricePaise !== undefined &&
+    sellingPricePaise !== undefined && sellingPricePaise <= listPricePaise && taxRateBps !== undefined && taxRateBps <= 10000 &&
+    !Number.isNaN(numericQuantity) && !Number.isNaN(numericPackCount) && !Number.isNaN(numericShelfLife);
   const activatingWithoutEvidence = status === "ACTIVE" && sku.status !== "ACTIVE" && !sku.activationReady;
   const canSave = valid && changed && !activatingWithoutEvidence;
-  return <form className="admin-sku-card" onSubmit={(event) => { event.preventDefault(); if (canSave) void onSave(sku, { listPricePaise, sellingPricePaise, status }); }}>
+  const patch = { name: name.trim(), variant: variant.trim() || null, packSize: packSize.trim(), description: description.trim() || null,
+    subcategoryId, brandId: brandId || null, barcode: barcode.trim() || null, quantityValue: numericQuantity,
+    quantityUnit: quantityUnit || null, packCount: numericPackCount, manufacturerName: manufacturerName.trim() || null,
+    countryOfOriginCode: countryOfOriginCode.trim().toUpperCase() || null, hsnCode: hsnCode.trim() || null,
+    dietType, shelfLifeDays: numericShelfLife, taxRateBps, qaStatus, listPricePaise, sellingPricePaise, status };
+  return <form className="admin-sku-card" onSubmit={(event) => { event.preventDefault(); if (canSave) void onSave(sku, patch); }}>
     <div className="admin-sku-customer-preview">
       <SkuArtwork sku={sku} supabaseUrl={supabaseUrl} />
       <div className="admin-sku-copy">
@@ -225,6 +259,26 @@ function SkuEditor({ sku, supabaseUrl, disabled, onSave }: { sku: V1AdminCatalog
         <SkuFact icon={<Search />} label="Discovery data" value={`${sku.identifierCount} identifiers · ${sku.aliasCount} aliases`} />
       </div>
       <div className="admin-sku-technical"><span><strong>Country of origin</strong>{sku.countryOfOriginCode ?? "Not recorded"}</span><span><strong>SKU</strong>{sku.id}</span><span><strong>Slug</strong>{sku.slug}</span><span><strong>Updated</strong>{formatDate(sku.updatedAt)}</span><span className="wide"><strong>Logistics</strong>{readableObject(sku.logisticsAttributes)}</span><span className="wide"><strong>Attributes</strong>{readableObject(sku.attributes)}</span></div>
+      <section className="admin-sku-master-fields" aria-label="Authoritative SKU controls">
+        <header><Package size={18} /><div><strong>Identity, quantity &amp; compliance</strong><small>These values become the shared customer, merchant and Admin product record.</small></div></header>
+        <label><span>Product name</span><input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} /></label>
+        <label><span>Variant</span><input value={variant} maxLength={160} onChange={(event) => setVariant(event.target.value)} /></label>
+        <label className="wide"><span>Description</span><textarea value={description} maxLength={1000} rows={3} onChange={(event) => setDescription(event.target.value)} /></label>
+        <label><span>Subcategory</span><select value={subcategoryId} onChange={(event) => setSubcategoryId(event.target.value)}>{taxonomy?.subcategories.map((item) => <option key={item.id} value={item.id}>{taxonomy.categories.find((category) => category.id === item.categoryId)?.name ?? "Category"} · {item.name}</option>)}</select></label>
+        <label><span>Brand</span><select value={brandId} onChange={(event) => setBrandId(event.target.value)}><option value="">No brand</option>{taxonomy?.brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label><span>Display pack</span><input value={packSize} maxLength={80} onChange={(event) => setPackSize(event.target.value)} placeholder="1 kg" /></label>
+        <label><span>Unit quantity</span><input inputMode="decimal" value={quantityValue} onChange={(event) => setQuantityValue(event.target.value)} placeholder="1000" /></label>
+        <label><span>Quantity unit</span><select value={quantityUnit} onChange={(event) => setQuantityUnit(event.target.value)}><option value="">Not structured</option>{["g","kg","ml","l","unit","pack","pair","sheet","roll","tablet","capsule"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label>
+        <label><span>Units per pack</span><input inputMode="numeric" value={packCount} onChange={(event) => setPackCount(event.target.value)} placeholder="1" /></label>
+        <label><span>Manufacturer</span><input value={manufacturerName} maxLength={200} onChange={(event) => setManufacturerName(event.target.value)} /></label>
+        <label><span>Barcode</span><input value={barcode} maxLength={64} onChange={(event) => setBarcode(event.target.value)} /></label>
+        <label><span>HSN</span><input inputMode="numeric" value={hsnCode} maxLength={8} onChange={(event) => setHsnCode(event.target.value)} /></label>
+        <label><span>Country code</span><input value={countryOfOriginCode} maxLength={2} onChange={(event) => setCountryOfOriginCode(event.target.value)} placeholder="IN" /></label>
+        <label><span>Diet</span><select value={dietType} onChange={(event) => setDietType(event.target.value)}><option value="NA">Not applicable</option><option value="VEG">Vegetarian</option><option value="NON_VEG">Non-vegetarian</option><option value="EGG">Contains egg</option></select></label>
+        <label><span>Shelf life (days)</span><input inputMode="numeric" value={shelfLifeDays} onChange={(event) => setShelfLifeDays(event.target.value)} /></label>
+        <label><span>Tax (%)</span><input inputMode="decimal" value={taxPercent} onChange={(event) => setTaxPercent(event.target.value)} /></label>
+        <label><span>QA state</span><select value={qaStatus} onChange={(event) => setQaStatus(event.target.value as V1AdminCataloguePageSku["qaStatus"])}><option value="PENDING">Pending</option><option value="NEEDS_REVIEW">Needs review</option><option value="VERIFIED">Verified</option><option value="REJECTED">Rejected</option></select></label>
+      </section>
     </details>
   </form>;
 }
@@ -250,6 +304,15 @@ function priceInPaise(value: string) {
   if (!normalized) return undefined;
   const amount = Number(normalized);
   return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : undefined;
+}
+function optionalPositiveNumber(value: string): number | null {
+  if (!value.trim()) return null;
+  const result = Number(value);
+  return Number.isFinite(result) && result > 0 ? result : Number.NaN;
+}
+function optionalPositiveInteger(value: string): number | null {
+  const result = optionalPositiveNumber(value);
+  return result === null || Number.isInteger(result) ? result : Number.NaN;
 }
 function message(error: unknown) { return userFacingError(error, "The catalogue operation could not be completed."); }
 function label(value: string) { return value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (character) => character.toUpperCase()); }

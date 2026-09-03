@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { CirclePause, Plus, RefreshCw, ShieldCheck, Store } from "lucide-react";
+import { CirclePause, Plus, ShieldCheck, Store } from "lucide-react";
 import { MerchantV1CatalogueControl } from "./MerchantV1CatalogueControl";
 import { userFacingError } from "./userFacingError";
 import {
@@ -128,7 +128,7 @@ function MerchantV1RestaurantMenuControl({ auth, initial }: Props & { initial: V
   };
 
   return <section className="merchant-v1-control merchant-v1-menu-control">
-    <header className="merchant-orders-heading"><div><p className="eyebrow">V1 Restaurant / Cafe</p><h1>{menu.restaurant.name}</h1><p>{menu.restaurant.branchName}</p></div><button className="icon-button" type="button" disabled={Boolean(busy)} onClick={() => void refresh()} aria-label="Refresh menu"><RefreshCw size={18} /></button></header>
+    <header className="merchant-orders-heading"><div><p className="eyebrow">STORE &amp; MENU</p><h1>{menu.restaurant.name}</h1><p>{menu.restaurant.branchName}</p></div></header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     <div className="merchant-v1-operation-grid">
       <article><Store size={19} /><span><strong>{menu.restaurant.isOpen ? "Restaurant open" : "Restaurant closed"}</strong><small>Existing paid commitments continue</small></span><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void setOperation(!menu.restaurant.isOpen, false)}>{menu.restaurant.isOpen ? "Close" : "Open"}</button></article>

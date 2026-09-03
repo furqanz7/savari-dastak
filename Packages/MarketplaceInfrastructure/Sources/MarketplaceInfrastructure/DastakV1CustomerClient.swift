@@ -3,10 +3,17 @@ import MarketplaceFoundation
 
 public struct DastakV1CatalogueCategory: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
+    public let categoryTypeID: UUID?
     public let name: String
     public let slug: String
     public let imageKey: String?
+    public let previewImageKeys: [String]?
     public let sortOrder: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, slug, imageKey, previewImageKeys, sortOrder
+        case categoryTypeID = "categoryTypeId"
+    }
 }
 
 public struct DastakV1CatalogueSubcategory: Codable, Equatable, Identifiable, Sendable {
@@ -15,6 +22,7 @@ public struct DastakV1CatalogueSubcategory: Codable, Equatable, Identifiable, Se
     public let name: String
     public let slug: String
     public let imageKey: String?
+    public let previewImageKeys: [String]?
     public let sortOrder: Int
 
     private enum CodingKeys: String, CodingKey {
@@ -23,6 +31,7 @@ public struct DastakV1CatalogueSubcategory: Codable, Equatable, Identifiable, Se
         case name
         case slug
         case imageKey
+        case previewImageKeys
         case sortOrder
     }
 }
@@ -45,6 +54,7 @@ public struct DastakV1SKULogistics: Codable, Equatable, Sendable {
 
 public struct DastakV1CatalogueSKU: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
+    public let categoryTypeID: UUID?
     public let categoryID: UUID
     public let subcategoryID: UUID
     public let brand: DastakV1CatalogueBrand?
@@ -54,7 +64,15 @@ public struct DastakV1CatalogueSKU: Codable, Equatable, Identifiable, Sendable {
     public let packSize: String
     public let description: String?
     public let imageKey: String?
+    public let galleryImageKeys: [String]?
     public let barcode: String?
+    public let quantityValue: Decimal?
+    public let quantityUnit: String?
+    public let packCount: Int?
+    public let manufacturerName: String?
+    public let countryOfOriginCode: String?
+    public let dietType: String?
+    public let shelfLifeDays: Int?
     public let listPricePaise: Int
     public let sellingPricePaise: Int
     public let currencyCode: String
@@ -65,6 +83,7 @@ public struct DastakV1CatalogueSKU: Codable, Equatable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case categoryTypeID = "categoryTypeId"
         case categoryID = "categoryId"
         case subcategoryID = "subcategoryId"
         case brand
@@ -74,7 +93,10 @@ public struct DastakV1CatalogueSKU: Codable, Equatable, Identifiable, Sendable {
         case packSize
         case description
         case imageKey
+        case galleryImageKeys
         case barcode
+        case quantityValue, quantityUnit, packCount, manufacturerName
+        case countryOfOriginCode, dietType, shelfLifeDays
         case listPricePaise
         case sellingPricePaise
         case currencyCode
@@ -99,6 +121,7 @@ public struct DastakV1CatalogueCursor: Codable, Equatable, Sendable {
 
 public struct DastakV1CatalogueSnapshot: Codable, Equatable, Sendable {
     public let catalogueVersion: String?
+    public let categoryTypes: [DastakV1CatalogueCategory]?
     public let categories: [DastakV1CatalogueCategory]
     public let subcategories: [DastakV1CatalogueSubcategory]
     public let skus: [DastakV1CatalogueSKU]

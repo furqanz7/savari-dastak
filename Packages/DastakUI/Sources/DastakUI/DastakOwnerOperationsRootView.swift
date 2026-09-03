@@ -498,20 +498,16 @@ final class DastakOwnerOperationsModel: ObservableObject {
 
     func updateCatalogueSKU(
         _ sku: DastakAdminCatalogueSKU,
-        listPricePaise: Int,
-        sellingPricePaise: Int,
-        status: String
+        patch: DastakAdminCatalogueSKUPatch
     ) async -> Bool {
         await perform(
-            identity: "sku:\(sku.id):\(sku.version):\(listPricePaise):\(sellingPricePaise):\(status)",
+            identity: "sku:\(sku.id):\(sku.version):\(patch.name ?? ""):\(patch.sellingPricePaise):\(patch.status)",
             success: "Catalogue SKU updated."
         ) { key in
             _ = try await self.v1Client.updateCatalogueSKU(
                 id: sku.id,
                 expectedVersion: sku.version,
-                listPricePaise: listPricePaise,
-                sellingPricePaise: sellingPricePaise,
-                status: status,
+                patch: patch,
                 idempotencyKey: key
             )
             await self.loadCatalogue()

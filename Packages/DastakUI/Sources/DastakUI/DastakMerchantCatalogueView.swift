@@ -5,6 +5,313 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct DastakMerchantStoreAndCatalogueView: View {
+    private enum LegacySection: String, CaseIterable, Identifiable {
+        case store = "Store"
+        case catalogue = "Catalogue"
+        var id: String { rawValue }
+    }
+
+    @ObservedObject var model: DastakMerchantModel
+    @State private var legacySection = LegacySection.store
+
+    var body: some View {
+        if model.isLoading {
+            DastakLoadingOverlay(title: "Loading store")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.canonicalCatalogue != nil {
+            DastakMerchantCanonicalCatalogueView(model: model)
+        } else {
+            VStack(spacing: 0) {
+                Picker("Store workspace", selection: $legacySection) {
+                    ForEach(LegacySection.allCases) { section in
+                        Text(section.rawValue).tag(section)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, MarketplaceSpacing.medium)
+                .padding(.top, MarketplaceSpacing.compact)
+
+                if legacySection == .store {
+                    DastakMerchantStoreView(model: model)
+                } else {
+                    DastakMerchantCatalogueView(model: model)
+                }
+            }
+        }
+    }
+}
+
+private struct DastakMerchantCanonicalCatalogueView: View {
+    @ObservedObject var model: DastakMerchantModel
+    @State private var query = ""
+    @State private var selectedOnly = false
+    @State private var categoryTypeID: UUID?
+    @State private var categoryID: UUID?
+    @State private var subcategoryID: UUID?
+
+    private let columns = [
+        GridItem(.flexible(), spacing: MarketplaceSpacing.compact),
+        GridItem(.flexible(), spacing: MarketplaceSpacing.compact),
+    ]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                if let snapshot = model.canonicalCatalogue {
+                    LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                        storeHeader(snapshot)
+                        operatingControls(snapshot)
+                        libraryNote
+                        catalogueTools(snapshot)
+                        productGrid(snapshot)
+                    }
+                    .frame(maxWidth: MarketplaceMetrics.contentMaxWidth)
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .padding(.bottom, MarketplaceSpacing.xxLarge)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .refreshable { await model.refreshCanonicalCatalogue() }
+            .navigationTitle("Store & Catalogue")
+            .dastakInlineNavigationTitle()
+            .searchable(text: $query, prompt: "Products, brands, packs or categories")
+        }
+    }
+
+    private func storeHeader(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+            Text("YOUR STOREFRONT")
+                .font(.caption.bold())
+                .tracking(1.4)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text(snapshot.branch.branchName)
+                .font(.largeTitle.bold())
+            Text(snapshot.branch.organizationName)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            HStack(spacing: MarketplaceSpacing.small) {
+                DastakStatusPill(
+                    text: snapshot.branch.operationalState.isOpen ? "Open" : "Closed",
+                    emphasis: snapshot.branch.operationalState.isOpen
+                )
+                DastakStatusPill(
+                    text: snapshot.branch.operationalState.acceptingOrders ? "Accepting orders" : "Orders paused",
+                    emphasis: snapshot.branch.operationalState.acceptingOrders
+                )
+            }
+        }
+        .padding(.top, MarketplaceSpacing.compact)
+    }
+
+    private func operatingControls(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
+        let state = snapshot.branch.operationalState
+        return HStack(spacing: MarketplaceSpacing.compact) {
+            merchantControl(
+                symbol: "storefront",
+                title: state.isOpen ? "Store open" : "Store closed",
+                detail: "Branch availability",
+                action: state.isOpen ? "Close" : "Open"
+            ) {
+                Task { await model.setCanonicalBranch(isOpen: !state.isOpen, acceptingOrders: false) }
+            }
+            merchantControl(
+                symbol: "shippingbox",
+                title: "\(snapshot.branch.capacity.available) slots",
+                detail: state.acceptingOrders ? "Taking new orders" : "New orders paused",
+                action: state.acceptingOrders ? "Pause" : "Accept"
+            ) {
+                Task { await model.setCanonicalBranch(isOpen: true, acceptingOrders: !state.acceptingOrders) }
+            }
+        }
+    }
+
+    private func merchantControl(
+        symbol: String,
+        title: String,
+        detail: String,
+        action: String,
+        perform: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Image(systemName: symbol)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text(title).font(.headline)
+            Text(detail).font(.caption).foregroundStyle(.secondary)
+            Button(action, action: perform)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.isBusy)
+        }
+        .frame(maxWidth: .infinity, minHeight: 142, alignment: .leading)
+        .padding(MarketplaceSpacing.compact)
+        .marketplaceFlatSurface()
+    }
+
+    private var libraryNote: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Dastak product library").font(.headline)
+                Text("Select only what this store genuinely sells. Product identity, imagery, quantity and customer price remain consistent everywhere.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } icon: {
+            Image(systemName: "checkmark.shield")
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+        }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
+    }
+
+    private func catalogueTools(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+            Picker("Catalogue scope", selection: $selectedOnly) {
+                Text("All products").tag(false)
+                Text("My storefront").tag(true)
+            }
+            .pickerStyle(.segmented)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: MarketplaceSpacing.small) {
+                    filterChip("All departments", selected: categoryTypeID == nil) {
+                        categoryTypeID = nil; categoryID = nil; subcategoryID = nil
+                    }
+                    ForEach(snapshot.categoryTypes) { type in
+                        filterChip(type.name, selected: categoryTypeID == type.id) {
+                            categoryTypeID = type.id; categoryID = nil; subcategoryID = nil
+                        }
+                    }
+                }
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                    ForEach(snapshot.categories.filter { categoryTypeID == nil || $0.categoryTypeID == categoryTypeID }) { category in
+                        Button {
+                            categoryID = category.id
+                            subcategoryID = nil
+                        } label: {
+                            VStack(spacing: 6) {
+                                DastakProductArtwork(imageKey: category.imageKey, fallbackSymbol: "square.grid.2x2")
+                                    .frame(width: 78, height: 68)
+                                    .overlay {
+                                        if categoryID == category.id {
+                                            RoundedRectangle(cornerRadius: MarketplaceMetrics.compactCornerRadius)
+                                                .stroke(MarketplaceColors.dastakAccent.color, lineWidth: 2)
+                                        }
+                                    }
+                                Text(category.name)
+                                    .font(.caption.weight(.semibold))
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
+                                    .frame(width: 84)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            if let categoryID {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: MarketplaceSpacing.small) {
+                        filterChip("All", selected: subcategoryID == nil) { subcategoryID = nil }
+                        ForEach(snapshot.subcategories.filter { $0.categoryID == categoryID }) { item in
+                            filterChip(item.name, selected: subcategoryID == item.id) { subcategoryID = item.id }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func productGrid(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
+        let products = visibleProducts(snapshot)
+        return Group {
+            if products.isEmpty {
+                DastakEmptyState(
+                    symbol: "magnifyingglass",
+                    title: "No matching products",
+                    message: "Try a different product, brand, pack or category."
+                )
+            } else {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                    ForEach(products) { sku in
+                        canonicalProductCard(sku)
+                    }
+                }
+            }
+        }
+    }
+
+    private func canonicalProductCard(
+        _ sku: DastakV1MerchantCatalogueSnapshot.SKU
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ZStack(alignment: .topTrailing) {
+                DastakProductArtwork(imageKey: sku.imageKey, fallbackSymbol: "shippingbox")
+                    .frame(maxWidth: .infinity)
+                if sku.selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(MarketplaceColors.success.color)
+                        .padding(8)
+                }
+            }
+            if let brand = sku.brandName {
+                Text(brand.uppercased())
+                    .font(.caption2.bold())
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+            Text(sku.name).font(.subheadline.bold()).lineLimit(2)
+            Text([sku.variant, sku.packSize].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(DastakFormatting.money(Money(paise: sku.sellingPricePaise)))
+                .font(.headline.monospacedDigit())
+            Button {
+                Task { await model.setCanonicalSelection(sku) }
+            } label: {
+                Text(sku.selected ? "Remove" : "Select")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(MarketplaceColors.dastakAccent.color)
+            .disabled(model.isBusy || sku.catalogueStatus != "ACTIVE")
+        }
+        .padding(MarketplaceSpacing.compact)
+        .marketplaceFlatSurface()
+    }
+
+    private func visibleProducts(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> [DastakV1MerchantCatalogueSnapshot.SKU] {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let categories = Dictionary(uniqueKeysWithValues: snapshot.categories.map { ($0.id, $0.name) })
+        let subcategories = Dictionary(uniqueKeysWithValues: snapshot.subcategories.map { ($0.id, $0.name) })
+        return snapshot.skus.filter { sku in
+            guard categoryTypeID == nil || sku.categoryTypeID == categoryTypeID,
+                  categoryID == nil || sku.categoryID == categoryID,
+                  subcategoryID == nil || sku.subcategoryID == subcategoryID,
+                  !selectedOnly || sku.selected
+            else { return false }
+            guard !normalized.isEmpty else { return true }
+            return [sku.name, sku.brandName, sku.variant, sku.packSize, categories[sku.categoryID], subcategories[sku.subcategoryID]]
+                .compactMap { $0 }
+                .joined(separator: " ")
+                .appending(" " + sku.searchTerms.joined(separator: " "))
+                .lowercased()
+                .contains(normalized)
+        }
+    }
+
+    private func filterChip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .font(.caption.weight(.semibold))
+            .buttonStyle(.bordered)
+            .tint(selected ? MarketplaceColors.dastakAccent.color : .secondary)
+    }
+}
+
 struct DastakMerchantStoreView: View {
     @ObservedObject var model: DastakMerchantModel
     @State private var showsEditor = false
@@ -143,18 +450,6 @@ struct DastakMerchantCatalogueView: View {
             .refreshable { await model.refreshAll() }
             .navigationTitle("Catalogue")
             .dastakInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.refreshAll() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(MarketplaceIconButtonStyle())
-                    .disabled(model.isRefreshing || model.isBusy)
-                    .accessibilityLabel("Refresh catalogue")
-                }
-            }
         }
         .sheet(item: $editor) { editor in
             switch editor {

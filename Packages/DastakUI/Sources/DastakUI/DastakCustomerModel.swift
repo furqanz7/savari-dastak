@@ -203,6 +203,14 @@ final class DastakCustomerModel: ObservableObject {
         v1Catalogue?.categories ?? []
     }
 
+    var canonicalCategoryTypes: [DastakV1CatalogueCategory] {
+        v1Catalogue?.categoryTypes ?? []
+    }
+
+    var canonicalSubcategories: [DastakV1CatalogueSubcategory] {
+        v1Catalogue?.subcategories ?? []
+    }
+
     var wishlistRetailProducts: [DastakV1CatalogueSKU] {
         let products = Dictionary(uniqueKeysWithValues: (v1Catalogue?.skus ?? []).map { ($0.id, $0) })
         return wishlistItems.compactMap { item in
@@ -232,6 +240,10 @@ final class DastakCustomerModel: ObservableObject {
 
     func products(in categoryID: UUID) -> [DastakV1CatalogueSKU] {
         (v1Catalogue?.skus ?? []).filter { $0.categoryID == categoryID }
+    }
+
+    func products(inSubcategory subcategoryID: UUID) -> [DastakV1CatalogueSKU] {
+        (v1Catalogue?.skus ?? []).filter { $0.subcategoryID == subcategoryID }
     }
 
     var hasCompleteDeliveryAddress: Bool {

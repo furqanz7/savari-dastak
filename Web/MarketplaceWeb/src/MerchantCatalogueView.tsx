@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ImagePlus, LocateFixed, PackagePlus, Pencil, Plus, RefreshCw, Save, Store, X } from "lucide-react";
+import { ImagePlus, LocateFixed, PackagePlus, Pencil, Plus, Save, Store, X } from "lucide-react";
 import { userFacingError } from "./userFacingError";
 import {
   catalogueImageUrl,
@@ -250,7 +250,6 @@ export function MerchantCatalogueView({
           <h1>{mode === "store" ? "Store" : "Catalogue"}</h1>
           <p>{mode === "store" ? "Customer-facing location and availability." : "Categories, products, prices, and stock."}</p>
         </div>
-        <button className="icon-button" type="button" onClick={() => void load()} disabled={busy} aria-label="Refresh catalogue" title="Refresh catalogue"><RefreshCw size={19} /></button>
       </header>
 
       {error && <p className="order-error" role="alert">{error}</p>}

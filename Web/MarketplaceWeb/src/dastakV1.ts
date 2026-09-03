@@ -49,16 +49,20 @@ export type V1OperationalSafety = {
 
 export type V1CatalogueCategory = {
   id: string;
+  categoryTypeId?: string;
   name: string;
   slug: string;
   imageKey?: string;
+  previewImageKeys: string[];
   sortOrder: number;
 };
 
+export type V1CatalogueCategoryType = V1CatalogueCategory;
 export type V1CatalogueSubcategory = V1CatalogueCategory & { categoryId: string };
 export type V1CatalogueBrand = { id: string; name: string; slug: string };
 export type V1CatalogueSku = {
   id: string;
+  categoryTypeId?: string;
   categoryId: string;
   subcategoryId: string;
   brand?: V1CatalogueBrand;
@@ -68,7 +72,16 @@ export type V1CatalogueSku = {
   packSize: string;
   description?: string;
   imageKey?: string;
+  galleryImageKeys: string[];
   barcode?: string;
+  quantityValue?: number;
+  quantityUnit?: string;
+  packCount?: number;
+  manufacturerName?: string;
+  countryOfOriginCode?: string;
+  dietType?: string;
+  shelfLifeDays?: number;
+  attributes: Record<string, unknown>;
   listPricePaise: number;
   sellingPricePaise: number;
   currencyCode: "INR";
@@ -77,6 +90,7 @@ export type V1CatalogueSku = {
 
 export type V1CatalogueSnapshot = {
   catalogueVersion?: string;
+  categoryTypes: V1CatalogueCategoryType[];
   categories: V1CatalogueCategory[];
   subcategories: V1CatalogueSubcategory[];
   skus: V1CatalogueSku[];
@@ -320,13 +334,16 @@ export type V1MerchantCanonicalCatalogue = {
     };
     capacity: { limit: number; held: number; available: number };
   };
-  categories: Array<{ categoryId: string; name: string; slug: string; sortOrder: number }>;
+  categoryTypes: Array<{ categoryTypeId: string; name: string; slug: string; imageKey?: string; sortOrder: number }>;
+  categories: Array<{ categoryId: string; categoryTypeId?: string; name: string; slug: string; imageKey?: string; sortOrder: number }>;
   subcategories: Array<{
-    subcategoryId: string; categoryId: string; name: string; slug: string; sortOrder: number;
+    subcategoryId: string; categoryId: string; name: string; slug: string; imageKey?: string; sortOrder: number;
   }>;
   skus: Array<{
-    skuId: string; categoryId: string; subcategoryId: string; brandName?: string;
+    skuId: string; categoryTypeId?: string; categoryId: string; subcategoryId: string; brandName?: string;
     name: string; variant?: string; packSize: string; description?: string; imageKey?: string;
+    galleryImageKeys: string[]; quantityValue?: number; quantityUnit?: string; packCount?: number;
+    dietType?: string; searchTerms: string[];
     listPricePaise: number; sellingPricePaise: number; currencyCode: "INR";
     catalogueStatus: string; selected: boolean; selectionState?: string;
     selectionVersion: number; selectionUpdatedAt?: string;
@@ -1708,6 +1725,7 @@ export function parseV1Catalogue(value: unknown): V1CatalogueSnapshot {
   const cursor = source.nextCursor === null || source.nextCursor === undefined ? undefined : record(source.nextCursor);
   return {
     catalogueVersion: optionalTimestamp(source.catalogueVersion),
+    categoryTypes: Array.isArray(source.categoryTypes) ? source.categoryTypes.map(parseCategory) : [],
     categories: source.categories.map(parseCategory),
     subcategories: source.subcategories.map(parseSubcategory),
     skus: source.skus.map(parseSku),
@@ -2127,6 +2145,7 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
   const branch = requiredRecord(source.branch);
   const operationalState = requiredRecord(branch.operationalState);
   const capacity = requiredRecord(branch.capacity);
+  const categoryTypes = Array.isArray(source.categoryTypes) ? source.categoryTypes : [];
   const categories = requiredArray(source.categories);
   const subcategories = requiredArray(source.subcategories);
   const skus = requiredArray(source.skus);
@@ -2151,12 +2170,23 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         available: requiredInteger(capacity.available, 0),
       },
     },
+    categoryTypes: categoryTypes.map((item) => {
+      const type = requiredRecord(item);
+      return {
+        categoryTypeId: requiredUuid(type.categoryTypeId),
+        name: requiredText(type.name, 100), slug: requiredText(type.slug, 120),
+        imageKey: optionalText(type.imageKey, 500), sortOrder: requiredInteger(type.sortOrder, 0),
+      };
+    }),
     categories: categories.map((item) => {
       const category = requiredRecord(item);
       return {
         categoryId: requiredUuid(category.categoryId),
+        categoryTypeId: category.categoryTypeId === null || category.categoryTypeId === undefined
+          ? undefined : requiredUuid(category.categoryTypeId),
         name: requiredText(category.name, 100),
         slug: requiredText(category.slug, 120),
+        imageKey: optionalText(category.imageKey, 500),
         sortOrder: requiredInteger(category.sortOrder, 0),
       };
     }),
@@ -2167,6 +2197,7 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         categoryId: requiredUuid(subcategory.categoryId),
         name: requiredText(subcategory.name, 100),
         slug: requiredText(subcategory.slug, 120),
+        imageKey: optionalText(subcategory.imageKey, 500),
         sortOrder: requiredInteger(subcategory.sortOrder, 0),
       };
     }),
@@ -2174,6 +2205,8 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
       const sku = requiredRecord(item);
       return {
         skuId: requiredUuid(sku.skuId),
+        categoryTypeId: sku.categoryTypeId === null || sku.categoryTypeId === undefined
+          ? undefined : requiredUuid(sku.categoryTypeId),
         categoryId: requiredUuid(sku.categoryId),
         subcategoryId: requiredUuid(sku.subcategoryId),
         brandName: optionalText(sku.brandName, 100),
@@ -2182,6 +2215,14 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         packSize: requiredText(sku.packSize, 80),
         description: optionalText(sku.description, 1000),
         imageKey: optionalText(sku.imageKey, 500),
+        galleryImageKeys: Array.isArray(sku.galleryImageKeys)
+          ? sku.galleryImageKeys.map((item) => requiredText(item, 500)) : [],
+        quantityValue: optionalFiniteNumber(sku.quantityValue, 0),
+        quantityUnit: optionalText(sku.quantityUnit, 20),
+        packCount: optionalInteger(sku.packCount, 1),
+        dietType: optionalText(sku.dietType, 20),
+        searchTerms: Array.isArray(sku.searchTerms)
+          ? sku.searchTerms.map((item) => requiredText(item, 160)) : [],
         listPricePaise: requiredInteger(sku.listPricePaise, 0),
         sellingPricePaise: requiredInteger(sku.sellingPricePaise, 0),
         currencyCode: currency(sku.currencyCode),
@@ -2531,7 +2572,12 @@ function parseCategory(value: unknown): V1CatalogueCategory {
   if (!source) invalid("category");
   return {
     id: requiredUuid(source.id), name: requiredText(source.name, 100), slug: requiredText(source.slug, 100),
-    imageKey: optionalText(source.imageKey, 500), sortOrder: requiredInteger(source.sortOrder, 0),
+    categoryTypeId: source.categoryTypeId === null || source.categoryTypeId === undefined
+      ? undefined : requiredUuid(source.categoryTypeId),
+    imageKey: optionalText(source.imageKey, 500),
+    previewImageKeys: Array.isArray(source.previewImageKeys)
+      ? source.previewImageKeys.map((item) => requiredText(item, 500)) : [],
+    sortOrder: requiredInteger(source.sortOrder, 0),
   };
 }
 
@@ -2553,12 +2599,26 @@ function parseSku(value: unknown): V1CatalogueSku {
   const sellingPricePaise = requiredInteger(source.sellingPricePaise, 0);
   if (sellingPricePaise > listPricePaise) invalid("SKU price");
   return {
-    id: requiredUuid(source.id), categoryId: requiredUuid(source.categoryId), subcategoryId: requiredUuid(source.subcategoryId),
+    id: requiredUuid(source.id),
+    categoryTypeId: source.categoryTypeId === null || source.categoryTypeId === undefined
+      ? undefined : requiredUuid(source.categoryTypeId),
+    categoryId: requiredUuid(source.categoryId), subcategoryId: requiredUuid(source.subcategoryId),
     brand: source.brand === null || source.brand === undefined ? undefined : parseBrand(source.brand),
     name: requiredText(source.name, 160), slug: requiredText(source.slug, 160),
     variant: optionalText(source.variant, 160), packSize: requiredText(source.packSize, 80),
     description: optionalText(source.description, 1000), imageKey: optionalText(source.imageKey, 500),
+    galleryImageKeys: Array.isArray(source.galleryImageKeys)
+      ? source.galleryImageKeys.map((item) => requiredText(item, 500)) : [],
     barcode: optionalText(source.barcode, 64), listPricePaise,
+    quantityValue: optionalFiniteNumber(source.quantityValue, 0),
+    quantityUnit: optionalText(source.quantityUnit, 20),
+    packCount: optionalInteger(source.packCount, 1),
+    manufacturerName: optionalText(source.manufacturerName, 200),
+    countryOfOriginCode: optionalText(source.countryOfOriginCode, 2),
+    dietType: optionalText(source.dietType, 20),
+    shelfLifeDays: optionalInteger(source.shelfLifeDays, 1),
+    attributes: source.attributes === null || source.attributes === undefined
+      ? {} : requiredRecord(source.attributes),
     sellingPricePaise, currencyCode: currency(source.currencyCode),
     logisticsAttributes: logistics,
   };
@@ -2649,6 +2709,8 @@ function parseAdminSku(value: unknown): V1AdminSku {
   if (status !== "DRAFT" && status !== "ACTIVE" && status !== "INACTIVE") invalid("SKU status");
   return {
     id: requiredUuid(source.id),
+    categoryTypeId: source.categoryTypeId === null || source.categoryTypeId === undefined
+      ? undefined : requiredUuid(source.categoryTypeId),
     categoryId: requiredUuid(source.categoryId),
     subcategoryId: requiredUuid(source.subcategoryId),
     brand: undefined,
@@ -2658,7 +2720,17 @@ function parseAdminSku(value: unknown): V1AdminSku {
     packSize: requiredText(source.packSize, 80),
     description: optionalText(source.description, 1000),
     imageKey: optionalText(source.imageKey, 500),
+    galleryImageKeys: [],
     barcode: optionalText(source.barcode, 64),
+    quantityValue: optionalFiniteNumber(source.quantityValue, 0),
+    quantityUnit: optionalText(source.quantityUnit, 20),
+    packCount: optionalInteger(source.packCount, 1),
+    manufacturerName: optionalText(source.manufacturerName, 200),
+    countryOfOriginCode: optionalText(source.countryOfOriginCode, 2),
+    dietType: optionalText(source.dietType, 20),
+    shelfLifeDays: optionalInteger(source.shelfLifeDays, 1),
+    attributes: source.attributes === null || source.attributes === undefined
+      ? {} : requiredRecord(source.attributes),
     listPricePaise,
     sellingPricePaise,
     currencyCode: currency(source.currencyCode),
@@ -2936,6 +3008,11 @@ function optionalInteger(value: unknown, minimum: number) {
 }
 function requiredFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : invalid("number");
+}
+function optionalFiniteNumber(value: unknown, minimum: number) {
+  if (value === null || value === undefined) return undefined;
+  const result = requiredFiniteNumber(value);
+  return result >= minimum ? result : invalid("number");
 }
 function requiredBoolean(value: unknown) { return typeof value === "boolean" ? value : invalid("boolean"); }
 function optionalBoolean(value: unknown) {
