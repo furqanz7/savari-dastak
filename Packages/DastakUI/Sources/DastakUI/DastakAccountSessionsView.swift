@@ -29,7 +29,9 @@ private final class DastakAccountSessionsModel: ObservableObject {
     }
 
     func load() async {
+        guard !isLoading else { return }
         isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         do {
             sessions = try await client.snapshot(
@@ -39,8 +41,14 @@ private final class DastakAccountSessionsModel: ObservableObject {
             errorMessage = nil
         } catch where isAuthenticationFailure(error) {
             sessionExpired = true
+        } catch where error is CancellationError ||
+            (error as? URLError)?.code == .cancelled ||
+            Task.isCancelled {
+            return
         } catch {
-            errorMessage = "Your signed-in devices could not be loaded."
+            if sessions.isEmpty {
+                errorMessage = "Your signed-in devices could not be loaded."
+            }
         }
     }
 

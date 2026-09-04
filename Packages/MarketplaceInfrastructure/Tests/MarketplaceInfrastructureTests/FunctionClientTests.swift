@@ -15,7 +15,7 @@ final class FunctionClientTests: XCTestCase {
         let client = SupabaseFunctionClient(
             configuration: makeConfiguration(),
             accessTokenProvider: { "user-access-token" },
-            transport: transport.send
+            transport: { try await transport.send($0) }
         )
         let key = try XCTUnwrap(IdempotencyKey(rawValue: "request-123"))
 
@@ -48,7 +48,7 @@ final class FunctionClientTests: XCTestCase {
         let client = SupabaseFunctionClient(
             configuration: makeConfiguration(),
             accessTokenProvider: { "user-access-token" },
-            transport: transport.send
+            transport: { try await transport.send($0) }
         )
         let key = try XCTUnwrap(IdempotencyKey(rawValue: "request-456"))
 
@@ -170,6 +170,93 @@ final class FunctionClientTests: XCTestCase {
         }
     }
 
+    func testInvokeRecoversFromTransientTransportFailureWithSameRequest() async throws {
+        let transport = SequencedTransport([
+            .failure(URLError(.networkConnectionLost)),
+            .response(statusCode: 200, body: #"{"accepted":true}"#.data(using: .utf8)!)
+        ])
+        let client = SupabaseFunctionClient(
+            configuration: makeConfiguration(),
+            accessTokenProvider: { "user-access-token" },
+            transport: { try await transport.send($0) }
+        )
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "transient-transport"))
+
+        let response: TestResponse = try await client.invoke(
+            "perform-action",
+            request: TestRequest(value: 2),
+            idempotencyKey: key
+        )
+
+        XCTAssertEqual(response, TestResponse(accepted: true))
+        let requests = await transport.recordedRequests()
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(
+            requests.map { $0.value(forHTTPHeaderField: "X-Idempotency-Key") },
+            ["transient-transport", "transient-transport"]
+        )
+    }
+
+    func testInvokeRecoversFromTransientGatewayResponse() async throws {
+        let transport = SequencedTransport([
+            .response(
+                statusCode: 503,
+                body: #"{"error":{"code":"temporarily_unavailable","message":"Try again"}}"#
+                    .data(using: .utf8)!
+            ),
+            .response(statusCode: 200, body: #"{"accepted":true}"#.data(using: .utf8)!)
+        ])
+        let client = SupabaseFunctionClient(
+            configuration: makeConfiguration(),
+            accessTokenProvider: { "user-access-token" },
+            transport: { try await transport.send($0) }
+        )
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "gateway-retry"))
+
+        let response: TestResponse = try await client.invoke(
+            "perform-action",
+            request: TestRequest(value: 2),
+            idempotencyKey: key
+        )
+
+        XCTAssertEqual(response, TestResponse(accepted: true))
+        let callCount = await transport.callCount()
+        XCTAssertEqual(callCount, 2)
+    }
+
+    func testInvokeDoesNotRetryNonTransientClientResponse() async throws {
+        let transport = SequencedTransport([
+            .response(
+                statusCode: 400,
+                body: #"{"error":{"code":"invalid_request","message":"Invalid request"}}"#
+                    .data(using: .utf8)!
+            )
+        ])
+        let client = SupabaseFunctionClient(
+            configuration: makeConfiguration(),
+            accessTokenProvider: { "user-access-token" },
+            transport: { try await transport.send($0) }
+        )
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "no-client-retry"))
+
+        do {
+            let _: TestResponse = try await client.invoke(
+                "perform-action",
+                request: TestRequest(value: 2),
+                idempotencyKey: key
+            )
+            XCTFail("Expected a client error")
+        } catch let error as FunctionClientError {
+            XCTAssertEqual(
+                error,
+                .api(statusCode: 400, code: "invalid_request", message: "Invalid request")
+            )
+        }
+
+        let callCount = await transport.callCount()
+        XCTAssertEqual(callCount, 1)
+    }
+
     private func makeConfiguration() -> BackendConfiguration {
         BackendConfiguration(
             product: "test-product",
@@ -219,6 +306,42 @@ private actor RecordingTransport {
     func recordedCallCount() -> Int {
         callCount
     }
+}
+
+private actor SequencedTransport {
+    enum Result {
+        case response(statusCode: Int, body: Data)
+        case failure(any Error)
+    }
+
+    private var results: [Result]
+    private var requests: [URLRequest] = []
+
+    init(_ results: [Result]) {
+        self.results = results
+    }
+
+    func send(_ request: URLRequest) throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
+        let result = results.removeFirst()
+        switch result {
+        case let .response(statusCode, body):
+            return (
+                body,
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: statusCode,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+            )
+        case let .failure(error):
+            throw error
+        }
+    }
+
+    func recordedRequests() -> [URLRequest] { requests }
+    func callCount() -> Int { requests.count }
 }
 
 private actor TransientAccessTokenProvider {

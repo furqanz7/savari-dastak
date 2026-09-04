@@ -7,7 +7,7 @@ import SwiftUI
 private final class DastakIdentityAccountModel: ObservableObject {
     @Published private(set) var customer: MarketplaceCheckoutCustomer?
     @Published private(set) var deliveryPartner: DeliveryPartnerSnapshot?
-    @Published private(set) var isLoading = true
+    @Published private(set) var isLoading = false
     @Published private(set) var isDeleting = false
     @Published var errorMessage: String?
 
@@ -30,7 +30,9 @@ private final class DastakIdentityAccountModel: ObservableObject {
     }
 
     func load() async {
+        guard !isLoading else { return }
         isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         do {
             let profile = try await profileClient.snapshot(idempotencyKey: key())
@@ -46,8 +48,14 @@ private final class DastakIdentityAccountModel: ObservableObject {
                 )
             }
             errorMessage = nil
+        } catch where error is CancellationError ||
+            (error as? URLError)?.code == .cancelled ||
+            Task.isCancelled {
+            return
         } catch {
-            errorMessage = "Your account details could not be loaded."
+            if customer == nil {
+                errorMessage = "Your account details could not be loaded."
+            }
         }
     }
 

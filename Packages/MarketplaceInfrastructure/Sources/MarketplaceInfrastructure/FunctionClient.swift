@@ -37,7 +37,7 @@ public struct SupabaseFunctionClient: FunctionClient {
             guard #available(macOS 12.0, *) else {
                 throw FunctionClientError.invalidResponse
             }
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await Self.session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw FunctionClientError.invalidResponse
             }
@@ -77,7 +77,10 @@ public struct SupabaseFunctionClient: FunctionClient {
         )
         urlRequest.setValue(idempotencyKey.rawValue, forHTTPHeaderField: "X-Idempotency-Key")
 
-        let (data, response) = try await transport(urlRequest)
+        let (data, response) = try await sendWithTransientRecovery(
+            urlRequest,
+            endpoint: name
+        )
         guard (200..<300).contains(response.statusCode) else {
             guard let payload = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data) else {
                 throw FunctionClientError.malformedErrorResponse(statusCode: response.statusCode)
@@ -100,6 +103,50 @@ public struct SupabaseFunctionClient: FunctionClient {
             #endif
             throw FunctionClientError.invalidResponse
         }
+    }
+
+    private func sendWithTransientRecovery(
+        _ request: URLRequest,
+        endpoint: String
+    ) async throws -> (Data, HTTPURLResponse) {
+        let delays: [Duration] = [.milliseconds(120), .milliseconds(320)]
+
+        for attempt in 0...delays.count {
+            do {
+                let response = try await transport(request)
+                if Self.retryable(statusCode: response.1.statusCode), attempt < delays.count {
+                    #if DEBUG
+                    print(
+                        "[Dastak API] transient_response endpoint=\(endpoint) " +
+                            "status=\(response.1.statusCode) retry=\(attempt + 1)"
+                    )
+                    #endif
+                    try await Task.sleep(for: delays[attempt])
+                    continue
+                }
+                return response
+            } catch {
+                if Self.isCancellation(error) { throw CancellationError() }
+                guard Self.isTransientTransport(error), attempt < delays.count else {
+                    #if DEBUG
+                    print(
+                        "[Dastak API] request_failed endpoint=\(endpoint) " +
+                            "category=\(Self.safeTransportFailure(error)) attempts=\(attempt + 1)"
+                    )
+                    #endif
+                    throw error
+                }
+                #if DEBUG
+                print(
+                    "[Dastak API] transient_transport endpoint=\(endpoint) " +
+                        "category=\(Self.safeTransportFailure(error)) retry=\(attempt + 1)"
+                )
+                #endif
+                try await Task.sleep(for: delays[attempt])
+            }
+        }
+
+        throw FunctionClientError.invalidResponse
     }
 
     private func authenticatedAccessToken() async throws -> String {
@@ -143,6 +190,44 @@ public struct SupabaseFunctionClient: FunctionClient {
         }
         let path = codingPath.map(\.stringValue).joined(separator: ".")
         return path.isEmpty ? category : "\(category):\(path)"
+    }
+
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.waitsForConnectivity = true
+        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForResource = 30
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
+
+    private static func retryable(statusCode: Int) -> Bool {
+        statusCode == 429 || [502, 503, 504].contains(statusCode)
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        return (error as? URLError)?.code == .cancelled || Task.isCancelled
+    }
+
+    private static func isTransientTransport(_ error: Error) -> Bool {
+        guard let error = error as? URLError else { return false }
+        return [
+            .timedOut,
+            .cannotFindHost,
+            .cannotConnectToHost,
+            .dnsLookupFailed,
+            .networkConnectionLost,
+            .notConnectedToInternet,
+            .secureConnectionFailed,
+            .cannotLoadFromNetwork,
+            .dataNotAllowed
+        ].contains(error.code)
+    }
+
+    private static func safeTransportFailure(_ error: Error) -> String {
+        if let error = error as? URLError { return "url_\(error.code.rawValue)" }
+        return String(describing: type(of: error))
     }
 }
 

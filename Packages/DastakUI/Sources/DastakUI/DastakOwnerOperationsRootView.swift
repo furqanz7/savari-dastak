@@ -53,11 +53,16 @@ struct DastakAdminWorkspaceState: Equatable, Sendable {
     mutating func recordFailure(_ issue: DastakAdminWorkspaceIssue) {
         issues[issue.workspace] = issue
     }
+
+    mutating func beginRefresh(_ workspace: DastakAdminWorkspace) {
+        issues.removeValue(forKey: workspace)
+    }
 }
 
 private enum DastakAdminLoadResult<Value: Sendable>: Sendable {
     case success(Value)
     case failure(DastakAdminWorkspaceIssue)
+    case cancelled
 }
 
 private func loadAdminWorkspace<Value: Sendable>(
@@ -68,6 +73,11 @@ private func loadAdminWorkspace<Value: Sendable>(
     do {
         return .success(try await operation())
     } catch {
+        if error is CancellationError ||
+            (error as? URLError)?.code == .cancelled ||
+            Task.isCancelled {
+            return .cancelled
+        }
         let message: String
         switch error {
         case FunctionClientError.authenticationRequired,
@@ -147,11 +157,14 @@ final class DastakOwnerOperationsModel: ObservableObject {
     var isBusy: Bool { busyIdentity != nil }
     var isRefreshing: Bool { !refreshingWorkspaces.isEmpty }
     var workspaceIssues: [DastakAdminWorkspaceIssue] {
-        workspaceState.issues.values.sorted { $0.workspace.rawValue < $1.workspace.rawValue }
+        workspaceState.issues.values
+            .filter { workspaceState.lastSuccessfulRefresh[$0.workspace] == nil }
+            .sorted { $0.workspace.rawValue < $1.workspace.rawValue }
     }
 
     func issue(for workspace: DastakAdminWorkspace) -> DastakAdminWorkspaceIssue? {
-        workspaceState.issues[workspace]
+        guard workspaceState.lastSuccessfulRefresh[workspace] == nil else { return nil }
+        return workspaceState.issues[workspace]
     }
 
     func lastSuccessfulRefresh(for workspace: DastakAdminWorkspace) -> Date? {
@@ -188,6 +201,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
             return
         }
 
+        beginRefresh(workspace)
         refreshingWorkspaces.insert(workspace)
         defer {
             refreshingWorkspaces.remove(workspace)
@@ -500,6 +514,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
         append: Bool = false
     ) async {
         guard !isLoadingNetwork else { return }
+        beginRefresh(.network)
         isLoadingNetwork = true
         defer { isLoadingNetwork = false }
         do {
@@ -517,6 +532,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
             networkHasMore = page.hasMore
             recordSuccess(.network)
         } catch {
+            guard !Self.isCancellation(error) else { return }
             recordFailure(
                 .network,
                 message: passiveMessage(for: error, fallback: "The marketplace network could not be loaded.")
@@ -534,6 +550,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
         append: Bool = false
     ) async {
         guard !isLoadingCatalogue else { return }
+        beginRefresh(.catalogue)
         isLoadingCatalogue = true
         defer { isLoadingCatalogue = false }
         do {
@@ -559,6 +576,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
             catalogueHasMore = page.hasMore
             recordSuccess(.catalogue)
         } catch {
+            guard !Self.isCancellation(error) else { return }
             recordFailure(
                 .catalogue,
                 message: passiveMessage(for: error, fallback: "The master catalogue could not be loaded.")
@@ -649,7 +667,15 @@ final class DastakOwnerOperationsModel: ObservableObject {
             state.recordFailure(issue)
             workspaceState = state
             return nil
+        case .cancelled:
+            return nil
         }
+    }
+
+    private func beginRefresh(_ workspace: DastakAdminWorkspace) {
+        var state = workspaceState
+        state.beginRefresh(workspace)
+        workspaceState = state
     }
 
     private func recordSuccess(_ workspace: DastakAdminWorkspace) {
@@ -674,6 +700,12 @@ final class DastakOwnerOperationsModel: ObservableObject {
         default:
             fallback
         }
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError ||
+            (error as? URLError)?.code == .cancelled ||
+            Task.isCancelled
     }
 
     private func key() -> IdempotencyKey {
@@ -739,9 +771,9 @@ public struct DastakOwnerOperationsRootView: View {
         .task { await model.bootstrap() }
         .task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                try? await Task.sleep(for: .seconds(90))
                 guard !Task.isCancelled else { return }
-                await model.refreshAll()
+                await refreshVisibleTab()
             }
         }
         .task { await observeAdminChanges() }

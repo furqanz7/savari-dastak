@@ -47,4 +47,23 @@ final class DastakAdminWorkspaceStateTests: XCTestCase {
             Date(timeIntervalSince1970: 4_000)
         )
     }
+
+    func testBeginningRefreshClearsWarningWithoutDiscardingLastGoodData() {
+        let lastSuccess = Date(timeIntervalSince1970: 5_000)
+        var state = DastakAdminWorkspaceState()
+
+        state.recordSuccess(.commandCenter, at: lastSuccess)
+        state.recordFailure(
+            DastakAdminWorkspaceIssue(
+                workspace: .commandCenter,
+                message: "Command center could not be refreshed.",
+                occurredAt: Date(timeIntervalSince1970: 6_000)
+            )
+        )
+
+        state.beginRefresh(.commandCenter)
+
+        XCTAssertNil(state.issues[.commandCenter])
+        XCTAssertEqual(state.lastSuccessfulRefresh[.commandCenter], lastSuccess)
+    }
 }
