@@ -861,7 +861,7 @@ private struct AdminReviewSheet: View {
                 reviewFact("Applicant", value.applicantName)
                 reviewFact("Phone", value.applicantPhone)
                 reviewFact("Service zone", value.serviceZoneName)
-                reviewFact("Submitted", value.submittedAt.formatted(date: .abbreviated, time: .shortened))
+                reviewFact("Submitted", adminDate(value.submittedAt))
                 Button {
                     if let url = merchantMapURL(value) { openURL(url) }
                 } label: {

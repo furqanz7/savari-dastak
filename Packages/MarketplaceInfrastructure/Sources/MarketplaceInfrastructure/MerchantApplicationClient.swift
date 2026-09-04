@@ -62,7 +62,7 @@ public struct MerchantApplication: Codable, Equatable, Sendable {
     public let serviceZoneName: String
     public let evidenceObjectPath: String
     public let status: MerchantApplicationStatus
-    public let submittedAt: Date
+    public let submittedAt: String
 
     private enum CodingKeys: String, CodingKey {
         case applicationID = "applicationId"

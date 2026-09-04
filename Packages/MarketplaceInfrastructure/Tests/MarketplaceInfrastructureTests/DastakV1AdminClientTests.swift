@@ -4,6 +4,28 @@ import XCTest
 @testable import MarketplaceInfrastructure
 
 final class DastakV1AdminClientTests: XCTestCase {
+    func testLiveOrdersAndTraceDecodeProductionResponseShape() async throws {
+        let functions = RecordingAdminFunctionClient()
+        let client = SupabaseDastakV1AdminClient(functions: functions)
+
+        let orders = try await client.orders(limit: 50, idempotencyKey: key("admin-orders"))
+        let order = try XCTUnwrap(orders.first)
+        XCTAssertEqual(order.displayOrderNumber, "DSK-260903-00000052")
+        XCTAssertEqual(order.status, "PREPARING")
+        XCTAssertEqual(order.version, 9)
+        var request = try await requestBody(functions)
+        XCTAssertEqual(request["operation"] as? String, "adminExecutionOrders")
+        XCTAssertEqual(request["limit"] as? Int, 50)
+
+        let trace = try await client.trace(orderID: order.id, idempotencyKey: key("admin-trace"))
+        XCTAssertEqual(trace.order.id, order.id)
+        XCTAssertEqual(trace.launchPayment?.collectionStatus, "DUE")
+        XCTAssertEqual(trace.launchPayment?.commitment?.amountPaise, 58_500)
+        request = try await requestBody(functions)
+        XCTAssertEqual(request["operation"] as? String, "adminExecutionTrace")
+        XCTAssertEqual(request["orderId"] as? String, order.id.uuidString.uppercased())
+    }
+
     func testAccessDecodesFixedSuperadminAndExecutiveSlots() async throws {
         let functions = RecordingAdminFunctionClient()
         let client = SupabaseDastakV1AdminClient(functions: functions)
@@ -272,6 +294,8 @@ private actor RecordingAdminFunctionClient: FunctionClient {
         let operation = try JSONDecoder().decode(AdminOperation.self, from: body).operation
         let response: Data
         switch (name, operation) {
+        case ("dastak-v1-orders", "adminExecutionOrders"): response = adminOrdersJSON
+        case ("dastak-v1-orders", "adminExecutionTrace"): response = adminTraceJSON
         case ("dastak-v1-orders", "adminAccess"): response = adminAccessJSON
         case ("dastak-v1-orders", "adminCommandCenter"): response = adminCommandCenterJSON
         case ("dastak-v1-orders", "adminNetworkPage"): response = adminNetworkPageJSON
@@ -293,6 +317,54 @@ private actor RecordingAdminFunctionClient: FunctionClient {
 }
 
 private struct AdminOperation: Decodable { let operation: String }
+private let adminOrdersJSON = #"""
+{
+  "orders":[{
+    "id":"77777777-7777-4777-8777-777777777777",
+    "displayOrderNumber":"DSK-260903-00000052",
+    "orderType":"MARKETPLACE",
+    "status":"PREPARING",
+    "version":9,
+    "paidAt":null,
+    "updatedAt":"2026-09-03T16:04:00Z",
+    "deliveredAt":null,
+    "submittedAt":"2026-09-03T15:59:00Z",
+    "fullySecuredAt":"2026-09-03T16:00:00Z"
+  }]
+}
+"""#.data(using: .utf8)!
+private let adminTraceJSON = #"""
+{
+  "order":{
+    "id":"77777777-7777-4777-8777-777777777777",
+    "displayOrderNumber":"DSK-260903-00000052",
+    "orderType":"MARKETPLACE",
+    "status":"PREPARING",
+    "version":9,
+    "paidAt":null,
+    "updatedAt":"2026-09-03T16:04:00Z",
+    "deliveredAt":null
+  },
+  "launchPayment":{
+    "commitment":{
+      "id":"88888888-8888-4888-8888-888888888888",
+      "optionCode":"PAY_VIA_UPI_OR_CASH_ON_DELIVERY",
+      "customerId":"11111111-1111-4111-8111-111111111111",
+      "amountPaise":58500,
+      "currencyCode":"INR",
+      "securedAt":"2026-09-03T16:00:00Z",
+      "reservationExpiresAt":"2026-09-03T16:15:00Z",
+      "committedAt":"2026-09-03T16:04:00Z",
+      "version":1
+    },
+    "collectionStatus":"DUE",
+    "attempts":[],
+    "platformFee":null
+  },
+  "fulfilments":[],
+  "events":[]
+}
+"""#.data(using: .utf8)!
 private let adminAccessJSON = #"""
 {
   "role":"SUPERADMIN","canManageAdmins":true,

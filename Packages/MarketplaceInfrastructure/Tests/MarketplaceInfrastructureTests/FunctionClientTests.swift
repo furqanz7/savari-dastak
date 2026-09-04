@@ -146,6 +146,30 @@ final class FunctionClientTests: XCTestCase {
         }
     }
 
+    func testInvokeMapsMalformedSuccessfulResponsePredictably() async throws {
+        let transport = RecordingTransport(
+            statusCode: 200,
+            responseBody: #"{"accepted":"not-a-boolean"}"#.data(using: .utf8)!
+        )
+        let client = SupabaseFunctionClient(
+            configuration: makeConfiguration(),
+            accessTokenProvider: { "user-access-token" },
+            transport: transport.send
+        )
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "request-malformed-success"))
+
+        do {
+            let _: TestResponse = try await client.invoke(
+                "perform-action",
+                request: TestRequest(value: 2),
+                idempotencyKey: key
+            )
+            XCTFail("Expected an invalid response")
+        } catch let error as FunctionClientError {
+            XCTAssertEqual(error, .invalidResponse)
+        }
+    }
+
     private func makeConfiguration() -> BackendConfiguration {
         BackendConfiguration(
             product: "test-product",

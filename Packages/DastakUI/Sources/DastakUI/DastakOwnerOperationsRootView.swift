@@ -702,12 +702,24 @@ public struct DastakOwnerOperationsRootView: View {
 
     private let services: MarketplaceAuthenticatedServices
     @StateObject private var model: DastakOwnerOperationsModel
-    @State private var tab: Tab = .overview
+    @State private var tab: Tab
     @Environment(\.scenePhase) private var scenePhase
 
     public init(services: MarketplaceAuthenticatedServices) {
         self.services = services
         _model = StateObject(wrappedValue: DastakOwnerOperationsModel(services: services))
+        #if DEBUG
+        let initialTab: Tab = switch ProcessInfo.processInfo.environment["DASTAK_ADMIN_INITIAL_TAB"] {
+        case "approvals": .approvals
+        case "orders": .operations
+        case "network": .network
+        case "more": .more
+        default: .overview
+        }
+        _tab = State(initialValue: initialTab)
+        #else
+        _tab = State(initialValue: .overview)
+        #endif
     }
 
     public var body: some View {

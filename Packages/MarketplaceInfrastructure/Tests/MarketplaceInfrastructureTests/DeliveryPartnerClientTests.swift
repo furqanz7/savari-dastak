@@ -65,6 +65,7 @@ final class DeliveryPartnerClientTests: XCTestCase {
         let applications = try await client.listPending(idempotencyKey: listKey)
         XCTAssertEqual(applications.first?.displayName, "Delivery Partner")
         XCTAssertEqual(applications.first?.phoneNumber, "+919876543210")
+        XCTAssertEqual(applications.first?.submittedAt, "2026-07-16T12:00:00Z")
 
         let reviewed = try await client.review(
             applicationID: applicationID,

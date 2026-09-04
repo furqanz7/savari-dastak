@@ -53,6 +53,7 @@ final class MerchantApplicationClientTests: XCTestCase {
         let applications = try await client.listPending(idempotencyKey: key)
 
         XCTAssertEqual(applications.count, 1)
+        XCTAssertEqual(applications.first?.submittedAt, "2026-07-16T12:00:00Z")
         let recordedCall = await functions.lastCall()
         let call = try XCTUnwrap(recordedCall)
         XCTAssertEqual(
@@ -142,7 +143,7 @@ private actor RecordingMerchantFunctionClient: FunctionClient {
         case "submit":
             response = #"{"applicationId":"33333333-3333-4333-8333-333333333333","status":"pending","merchantType":"RETAIL","serviceZoneId":"44444444-4444-4444-8444-444444444444","serviceZoneName":"Central service area"}"#.data(using: .utf8)!
         case "list":
-            response = #"{"applications":[{"applicationId":"33333333-3333-4333-8333-333333333333","accountId":"22222222-2222-4222-8222-222222222222","applicantName":"Merchant Owner","applicantPhone":"+919876543210","merchantType":"RETAIL","legalName":"Corner Store Private Limited","businessName":"Corner Store","businessAddress":"12 Main Road","latitude":12.65,"longitude":78.65,"serviceZoneId":"44444444-4444-4444-8444-444444444444","serviceZoneName":"Central service area","evidenceObjectPath":"merchant/22222222-2222-4222-8222-222222222222/registration.pdf","status":"pending","submittedAt":800000000}]}"#.data(using: .utf8)!
+            response = #"{"applications":[{"applicationId":"33333333-3333-4333-8333-333333333333","accountId":"22222222-2222-4222-8222-222222222222","applicantName":"Merchant Owner","applicantPhone":"+919876543210","merchantType":"RETAIL","legalName":"Corner Store Private Limited","businessName":"Corner Store","businessAddress":"12 Main Road","latitude":12.65,"longitude":78.65,"serviceZoneId":"44444444-4444-4444-8444-444444444444","serviceZoneName":"Central service area","evidenceObjectPath":"merchant/22222222-2222-4222-8222-222222222222/registration.pdf","status":"pending","submittedAt":"2026-07-16T12:00:00Z"}]}"#.data(using: .utf8)!
         case "selfSnapshot":
             response = #"{"onboardingState":"rejected","applicationId":"33333333-3333-4333-8333-333333333333","merchantType":"RETAIL","legalName":"Corner Store Private Limited","businessName":"Corner Store","businessAddress":"12 Main Road","latitude":12.65,"longitude":78.65,"serviceZoneId":"44444444-4444-4444-8444-444444444444","serviceZoneName":"Central service area","evidenceObjectPath":"merchant/22222222-2222-4222-8222-222222222222/registration.pdf","reviewReason":"Upload a clearer document.","organizationId":null,"branchId":null}"#.data(using: .utf8)!
         case "review":
