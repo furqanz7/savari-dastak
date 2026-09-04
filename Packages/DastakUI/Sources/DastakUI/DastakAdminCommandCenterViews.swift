@@ -47,7 +47,7 @@ struct DastakAdminOverviewView: View {
                 .frame(maxWidth: .infinity)
             }
             .navigationTitle("Command center")
-            .refreshable { await model.refresh() }
+            .refreshable { await model.refresh(.commandCenter) }
         }
         .marketplacePage()
     }
@@ -161,7 +161,7 @@ struct DastakAdminApprovalsView: View {
                 .frame(maxWidth: .infinity)
             }
             .navigationTitle("Approvals")
-            .refreshable { await model.refresh() }
+            .refreshable { await model.refresh([.merchantApprovals, .deliveryApprovals]) }
         }
         .marketplacePage()
         .sheet(item: $selected) { target in
@@ -589,7 +589,7 @@ private struct DastakAdminGovernanceView: View {
             .frame(maxWidth: .infinity)
         }
         .navigationTitle("Safety & health")
-        .refreshable { await model.refresh() }
+        .refreshable { await model.refresh([.systemHealth, .operationalSafety, .commandCenter]) }
         .marketplacePage()
         .sheet(isPresented: $createsPause) {
             AdminPauseSheet(model: model, pause: nil)
@@ -692,7 +692,7 @@ private struct DastakAdminFinanceView: View {
             .frame(maxWidth: .infinity)
         }
         .navigationTitle("Finance & Royalty")
-        .refreshable { await model.refresh() }
+        .refreshable { await model.refresh([.liveOrders, .royaltyPayouts]) }
         .marketplacePage()
     }
 }

@@ -126,6 +126,12 @@ private final class AuthenticationShellModel: ObservableObject {
                     try await accessTokenBroker.accessToken()
                 }
             ),
+            adminEvents: SupabaseAdminEventClient(
+                configuration: configuration,
+                accessTokenProvider: {
+                    try await accessTokenBroker.accessToken()
+                }
+            ),
             accountIDProvider: {
                 guard let accountID = await operations.currentAccountID() else {
                     throw MarketplaceAuthenticatedServicesError.authenticationRequired

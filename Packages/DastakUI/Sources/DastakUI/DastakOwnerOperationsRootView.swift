@@ -88,6 +88,18 @@ private func loadAdminWorkspace<Value: Sendable>(
 
 @MainActor
 final class DastakOwnerOperationsModel: ObservableObject {
+    private static let primaryWorkspaces: Set<DastakAdminWorkspace> = [
+        .operations,
+        .liveOrders,
+        .adminAccess,
+        .commandCenter,
+        .merchantApprovals,
+        .deliveryApprovals,
+        .systemHealth,
+        .operationalSafety,
+        .royaltyPayouts
+    ]
+
     @Published private(set) var snapshot: OwnerOrderOperationsSnapshot?
     @Published private(set) var v1Orders: [DastakV1AdminOrder] = []
     @Published private(set) var v1Trace: DastakV1AdminExecutionTrace?
@@ -106,7 +118,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
     @Published private(set) var isLoadingNetwork = false
     @Published private(set) var isLoadingCatalogue = false
     @Published private(set) var isLoading = true
-    @Published private(set) var isRefreshing = false
+    @Published private(set) var refreshingWorkspaces: Set<DastakAdminWorkspace> = []
     @Published private(set) var busyIdentity: String?
     @Published private(set) var workspaceState = DastakAdminWorkspaceState()
     @Published var actionErrorMessage: String?
@@ -121,6 +133,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
     private var networkCursor: DastakAdminNetworkCursor?
     private var catalogueCursor: DastakAdminCatalogueCursor?
     private var actionKeys: [String: IdempotencyKey] = [:]
+    private var pendingRefreshWorkspaces: Set<DastakAdminWorkspace> = []
 
     init(services: MarketplaceAuthenticatedServices) {
         operationsClient = SupabaseOwnerOrderOperationsClient(functions: services.functions)
@@ -132,6 +145,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
     }
 
     var isBusy: Bool { busyIdentity != nil }
+    var isRefreshing: Bool { !refreshingWorkspaces.isEmpty }
     var workspaceIssues: [DastakAdminWorkspaceIssue] {
         workspaceState.issues.values.sorted { $0.workspace.rawValue < $1.workspace.rawValue }
     }
@@ -145,84 +159,119 @@ final class DastakOwnerOperationsModel: ObservableObject {
     }
 
     func bootstrap() async {
-        await refresh()
+        await refresh(.commandCenter)
         isLoading = false
+        await refresh(Self.primaryWorkspaces.subtracting([.commandCenter]))
     }
 
-    func refresh() async {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        defer { isRefreshing = false }
-        let operationsClient = operationsClient
-        let v1Client = v1Client
-        let merchantApplicationClient = merchantApplicationClient
-        let deliveryApplicationClient = deliveryApplicationClient
-        let keys = (key(), key(), key(), key(), key(), key(), key(), key(), key())
-        async let operations = loadAdminWorkspace(
-            .operations,
-            fallback: "Order support and recovery could not be refreshed."
-        ) { try await operationsClient.snapshot(limit: 100, idempotencyKey: keys.0) }
-        async let currentOrders = loadAdminWorkspace(
-            .liveOrders,
-            fallback: "Live order and collection trace could not be refreshed."
-        ) { try await v1Client.orders(limit: 50, idempotencyKey: keys.1) }
-        async let currentAdminAccess = loadAdminWorkspace(
-            .adminAccess,
-            fallback: "Protected Admin access settings could not be refreshed."
-        ) { try await v1Client.access(idempotencyKey: keys.2) }
-        async let currentCommandCenter = loadAdminWorkspace(
-            .commandCenter,
-            fallback: "Command center metrics could not be refreshed."
-        ) { try await v1Client.commandCenter(idempotencyKey: keys.3) }
-        async let currentHealth = loadAdminWorkspace(
-            .systemHealth,
-            fallback: "System health signals could not be refreshed."
-        ) { try await v1Client.systemHealth(idempotencyKey: keys.4) }
-        async let currentSafety = loadAdminWorkspace(
-            .operationalSafety,
-            fallback: "Safety controls and escalation signals could not be refreshed."
-        ) { try await v1Client.operationalSafety(idempotencyKey: keys.5) }
-        async let currentPayouts = loadAdminWorkspace(
-            .royaltyPayouts,
-            fallback: "Royalty payout reconciliation could not be refreshed."
-        ) { try await v1Client.royaltyPayouts(limit: 100, idempotencyKey: keys.6) }
-        async let currentMerchants = loadAdminWorkspace(
-            .merchantApprovals,
-            fallback: "Merchant applications could not be refreshed."
-        ) { try await merchantApplicationClient.listPending(idempotencyKey: keys.7) }
-        async let currentDeliveryPartners = loadAdminWorkspace(
-            .deliveryApprovals,
-            fallback: "Delivery Partner applications could not be refreshed."
-        ) { try await deliveryApplicationClient.listPending(idempotencyKey: keys.8) }
-        let loaded = await (
-            operations, currentOrders, currentAdminAccess, currentCommandCenter,
-            currentMerchants, currentDeliveryPartners, currentHealth, currentSafety, currentPayouts
-        )
-        if let value = resolve(loaded.0, workspace: .operations) { snapshot = value }
-        let orders = resolve(loaded.1, workspace: .liveOrders)
-        if let orders { v1Orders = orders }
-        if let value = resolve(loaded.2, workspace: .adminAccess) { adminAccess = value }
-        if let value = resolve(loaded.3, workspace: .commandCenter) { commandCenter = value }
-        if let value = resolve(loaded.4, workspace: .merchantApprovals) { merchantApplications = value }
-        if let value = resolve(loaded.5, workspace: .deliveryApprovals) { deliveryApplications = value }
-        if let value = resolve(loaded.6, workspace: .systemHealth) { systemHealth = value }
-        if let value = resolve(loaded.7, workspace: .operationalSafety) { operationalSafety = value }
-        if let value = resolve(loaded.8, workspace: .royaltyPayouts) { royaltyPayouts = value }
+    func refreshAll() async {
+        await refresh(Self.primaryWorkspaces)
+    }
 
-        if let orders {
-            let selectedID = v1Trace.map(\.order.id).flatMap { current in
-                orders.contains(where: { $0.id == current }) ? current : nil
-            } ?? orders.first?.id
-            if let selectedID {
-                let traceKey = key()
-                let trace = await loadAdminWorkspace(
-                    .liveOrders,
-                    fallback: "The selected order trace could not be refreshed."
-                ) { try await v1Client.trace(orderID: selectedID, idempotencyKey: traceKey) }
-                if let value = resolve(trace, workspace: .liveOrders) { v1Trace = value }
-            } else {
-                v1Trace = nil
+    func refresh(_ workspace: DastakAdminWorkspace) async {
+        await refresh([workspace])
+    }
+
+    func refresh(_ workspaces: Set<DastakAdminWorkspace>) async {
+        await withTaskGroup(of: Void.self) { group in
+            for workspace in workspaces {
+                group.addTask { [weak self] in
+                    await self?.refreshWorkspace(workspace)
+                }
             }
+        }
+    }
+
+    private func refreshWorkspace(_ workspace: DastakAdminWorkspace) async {
+        if refreshingWorkspaces.contains(workspace) {
+            pendingRefreshWorkspaces.insert(workspace)
+            return
+        }
+
+        refreshingWorkspaces.insert(workspace)
+        defer {
+            refreshingWorkspaces.remove(workspace)
+            pendingRefreshWorkspaces.remove(workspace)
+        }
+
+        repeat {
+            pendingRefreshWorkspaces.remove(workspace)
+            await refreshWorkspaceOnce(workspace)
+        } while pendingRefreshWorkspaces.contains(workspace)
+    }
+
+    private func refreshWorkspaceOnce(_ workspace: DastakAdminWorkspace) async {
+        switch workspace {
+        case .operations:
+            let client = operationsClient
+            let requestKey = key()
+            let result = await loadAdminWorkspace(
+                .operations,
+                fallback: "Order support and recovery could not be refreshed."
+            ) { try await client.snapshot(limit: 100, idempotencyKey: requestKey) }
+            if let value = resolve(result, workspace: .operations) { snapshot = value }
+        case .liveOrders:
+            await retryLiveOrders()
+        case .adminAccess:
+            let client = v1Client
+            let requestKey = key()
+            let result = await loadAdminWorkspace(
+                .adminAccess,
+                fallback: "Protected Admin access settings could not be refreshed."
+            ) { try await client.access(idempotencyKey: requestKey) }
+            if let value = resolve(result, workspace: .adminAccess) { adminAccess = value }
+        case .commandCenter:
+            let client = v1Client
+            let requestKey = key()
+            let result = await loadAdminWorkspace(
+                .commandCenter,
+                fallback: "Command center metrics could not be refreshed."
+            ) { try await client.commandCenter(idempotencyKey: requestKey) }
+            if let value = resolve(result, workspace: .commandCenter) { commandCenter = value }
+        case .merchantApprovals:
+            let client = merchantApplicationClient
+            let requestKey = key()
+            let result = await loadAdminWorkspace(
+                .merchantApprovals,
+                fallback: "Merchant applications could not be refreshed."
+            ) { try await client.listPending(idempotencyKey: requestKey) }
+            if let value = resolve(result, workspace: .merchantApprovals) { merchantApplications = value }
+        case .deliveryApprovals:
+            let client = deliveryApplicationClient
+            let requestKey = key()
+            let result = await loadAdminWorkspace(
+                .deliveryApprovals,
+                fallback: "Delivery Partner applications could not be refreshed."
+            ) { try await client.listPending(idempotencyKey: requestKey) }
+            if let value = resolve(result, workspace: .deliveryApprovals) { deliveryApplications = value }
+        case .systemHealth:
+            let client = v1Client
+            let requestKey = key()
+            let result = await loadAdminWorkspace(
+                .systemHealth,
+                fallback: "System health signals could not be refreshed."
+            ) { try await client.systemHealth(idempotencyKey: requestKey) }
+            if let value = resolve(result, workspace: .systemHealth) { systemHealth = value }
+        case .operationalSafety:
+            let client = v1Client
+            let requestKey = key()
+            let result = await loadAdminWorkspace(
+                .operationalSafety,
+                fallback: "Safety controls and escalation signals could not be refreshed."
+            ) { try await client.operationalSafety(idempotencyKey: requestKey) }
+            if let value = resolve(result, workspace: .operationalSafety) { operationalSafety = value }
+        case .royaltyPayouts:
+            let client = v1Client
+            let requestKey = key()
+            let result = await loadAdminWorkspace(
+                .royaltyPayouts,
+                fallback: "Royalty payout reconciliation could not be refreshed."
+            ) { try await client.royaltyPayouts(limit: 100, idempotencyKey: requestKey) }
+            if let value = resolve(result, workspace: .royaltyPayouts) { royaltyPayouts = value }
+        case .network:
+            await loadNetwork()
+        case .catalogue:
+            await loadCatalogue()
         }
     }
 
@@ -242,7 +291,11 @@ final class DastakOwnerOperationsModel: ObservableObject {
             actionErrorMessage = "This support case reference is invalid."
             return false
         }
-        return await perform(identity: "support:\(caseID):\(resolution)", success: "Support case resolved.") { key in
+        return await perform(
+            identity: "support:\(caseID):\(resolution)",
+            success: "Support case resolved.",
+            refreshing: [.operations, .liveOrders, .commandCenter]
+        ) { key in
             _ = try await self.operationsClient.resolveSupport(
                 caseID: caseID,
                 resolution: resolution,
@@ -257,7 +310,11 @@ final class DastakOwnerOperationsModel: ObservableObject {
             return false
         }
         let identity = "handoff:\(exception.entityKind.rawValue):\(exception.entityID):\(purpose.rawValue):\(reason)"
-        return await perform(identity: identity, success: "A new secure handoff code is ready.") { key in
+        return await perform(
+            identity: identity,
+            success: "A new secure handoff code is ready.",
+            refreshing: [.operations, .liveOrders, .commandCenter]
+        ) { key in
             switch exception.entityKind {
             case .merchantOrder:
                 _ = try await self.merchantClient.ownerResetHandoffCode(
@@ -284,7 +341,11 @@ final class DastakOwnerOperationsModel: ObservableObject {
         reason: String
     ) async -> Bool {
         let identity = "refund:\(exception.entityID):\(outcome.rawValue):\(faultSource?.rawValue ?? "none"):\(reason)"
-        return await perform(identity: identity, success: outcome == .deny ? "Refund request declined." : "Refund approved and queued.") { key in
+        return await perform(
+            identity: identity,
+            success: outcome == .deny ? "Refund request declined." : "Refund approved and queued.",
+            refreshing: [.operations, .liveOrders, .commandCenter]
+        ) { key in
             let order = try await self.operationsClient.reviewRefund(
                 orderID: exception.entityID,
                 outcome: outcome,
@@ -304,7 +365,11 @@ final class DastakOwnerOperationsModel: ObservableObject {
     }
 
     func reconcile() async {
-        let succeeded = await perform(identity: "reconcile", success: "Lifecycle recovery completed.") { key in
+        let succeeded = await perform(
+            identity: "reconcile",
+            success: "Lifecycle recovery completed.",
+            refreshing: [.operations, .liveOrders, .commandCenter, .operationalSafety]
+        ) { key in
             let result = try await self.operationsClient.reconcile(idempotencyKey: key)
             self.notice = "Recovered \(result.merchantOrdersRecovered + result.parcelsRecovered) orders and created \(result.merchantOffersCreated + result.parcelOffersCreated) assignments."
         }
@@ -318,7 +383,8 @@ final class DastakOwnerOperationsModel: ObservableObject {
             identity: "admin-access:\(slot.slot):\(assignment ?? "clear"):\(slot.version)",
             success: assignment == nil
                 ? "Executive Admin access removed."
-                : "Executive Admin access saved."
+                : "Executive Admin access saved.",
+            refreshing: [.adminAccess, .commandCenter, .network]
         ) { key in
             _ = try await self.v1Client.setExecutiveAdmin(
                 slot: slot.slot,
@@ -335,7 +401,8 @@ final class DastakOwnerOperationsModel: ObservableObject {
     func reviewMerchant(_ application: MerchantApplication, approve: Bool, reason: String?) async -> Bool {
         await perform(
             identity: "merchant:\(application.applicationID):\(approve):\(reason ?? "")",
-            success: approve ? "Merchant approved." : "Merchant application declined."
+            success: approve ? "Merchant approved." : "Merchant application declined.",
+            refreshing: [.merchantApprovals, .commandCenter, .network]
         ) { key in
             _ = try await self.merchantApplicationClient.review(
                 applicationID: application.applicationID,
@@ -349,7 +416,8 @@ final class DastakOwnerOperationsModel: ObservableObject {
     func reviewDelivery(_ application: DeliveryPartnerApplication, approve: Bool, reason: String?) async -> Bool {
         await perform(
             identity: "delivery:\(application.applicationID):\(approve):\(reason ?? "")",
-            success: approve ? "Delivery Partner approved." : "Delivery Partner application declined."
+            success: approve ? "Delivery Partner approved." : "Delivery Partner application declined.",
+            refreshing: [.deliveryApprovals, .commandCenter, .network]
         ) { key in
             _ = try await self.deliveryApplicationClient.review(
                 applicationID: application.applicationID,
@@ -389,7 +457,8 @@ final class DastakOwnerOperationsModel: ObservableObject {
     ) async -> Bool {
         await perform(
             identity: "pause:\(scope.rawValue):\(targetID):\(active):\(expectedVersion):\(reason)",
-            success: active ? "New work paused for the selected scope." : "New work resumed for the selected scope."
+            success: active ? "New work paused for the selected scope." : "New work resumed for the selected scope.",
+            refreshing: [.operationalSafety, .commandCenter]
         ) { key in
             _ = try await self.v1Client.setOperationalPause(
                 scope: scope,
@@ -411,7 +480,8 @@ final class DastakOwnerOperationsModel: ObservableObject {
             identity: "rider-escalation:\(escalation.missionID):\(action):\(escalation.version):\(reason)",
             success: action == "RELEASE_REMATCH"
                 ? "Rider released and matching restarted."
-                : "Delivery recovery started with custody protected."
+                : "Delivery recovery started with custody protected.",
+            refreshing: [.operationalSafety, .operations, .liveOrders, .commandCenter]
         ) { key in
             _ = try await self.v1Client.manageRiderEscalation(
                 missionID: escalation.missionID,
@@ -502,7 +572,8 @@ final class DastakOwnerOperationsModel: ObservableObject {
     ) async -> Bool {
         await perform(
             identity: "sku:\(sku.id):\(sku.version):\(patch.name ?? ""):\(patch.sellingPricePaise):\(patch.status)",
-            success: "Catalogue SKU updated."
+            success: "Catalogue SKU updated.",
+            refreshing: [.catalogue, .commandCenter]
         ) { key in
             _ = try await self.v1Client.updateCatalogueSKU(
                 id: sku.id,
@@ -510,93 +581,11 @@ final class DastakOwnerOperationsModel: ObservableObject {
                 patch: patch,
                 idempotencyKey: key
             )
-            await self.loadCatalogue()
         }
     }
 
     func retry(_ workspace: DastakAdminWorkspace) async {
-        if workspace == .network {
-            await loadNetwork()
-            return
-        }
-        if workspace == .catalogue {
-            await loadCatalogue()
-            return
-        }
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        defer { isRefreshing = false }
-
-        switch workspace {
-        case .operations:
-            let client = operationsClient
-            let requestKey = key()
-            let result = await loadAdminWorkspace(
-                .operations,
-                fallback: "Order support and recovery could not be refreshed."
-            ) { try await client.snapshot(limit: 100, idempotencyKey: requestKey) }
-            if let value = resolve(result, workspace: .operations) { snapshot = value }
-        case .liveOrders:
-            await retryLiveOrders()
-        case .adminAccess:
-            let client = v1Client
-            let requestKey = key()
-            let result = await loadAdminWorkspace(
-                .adminAccess,
-                fallback: "Protected Admin access settings could not be refreshed."
-            ) { try await client.access(idempotencyKey: requestKey) }
-            if let value = resolve(result, workspace: .adminAccess) { adminAccess = value }
-        case .commandCenter:
-            let client = v1Client
-            let requestKey = key()
-            let result = await loadAdminWorkspace(
-                .commandCenter,
-                fallback: "Command center metrics could not be refreshed."
-            ) { try await client.commandCenter(idempotencyKey: requestKey) }
-            if let value = resolve(result, workspace: .commandCenter) { commandCenter = value }
-        case .merchantApprovals:
-            let client = merchantApplicationClient
-            let requestKey = key()
-            let result = await loadAdminWorkspace(
-                .merchantApprovals,
-                fallback: "Merchant applications could not be refreshed."
-            ) { try await client.listPending(idempotencyKey: requestKey) }
-            if let value = resolve(result, workspace: .merchantApprovals) { merchantApplications = value }
-        case .deliveryApprovals:
-            let client = deliveryApplicationClient
-            let requestKey = key()
-            let result = await loadAdminWorkspace(
-                .deliveryApprovals,
-                fallback: "Delivery Partner applications could not be refreshed."
-            ) { try await client.listPending(idempotencyKey: requestKey) }
-            if let value = resolve(result, workspace: .deliveryApprovals) { deliveryApplications = value }
-        case .systemHealth:
-            let client = v1Client
-            let requestKey = key()
-            let result = await loadAdminWorkspace(
-                .systemHealth,
-                fallback: "System health signals could not be refreshed."
-            ) { try await client.systemHealth(idempotencyKey: requestKey) }
-            if let value = resolve(result, workspace: .systemHealth) { systemHealth = value }
-        case .operationalSafety:
-            let client = v1Client
-            let requestKey = key()
-            let result = await loadAdminWorkspace(
-                .operationalSafety,
-                fallback: "Safety controls and escalation signals could not be refreshed."
-            ) { try await client.operationalSafety(idempotencyKey: requestKey) }
-            if let value = resolve(result, workspace: .operationalSafety) { operationalSafety = value }
-        case .royaltyPayouts:
-            let client = v1Client
-            let requestKey = key()
-            let result = await loadAdminWorkspace(
-                .royaltyPayouts,
-                fallback: "Royalty payout reconciliation could not be refreshed."
-            ) { try await client.royaltyPayouts(limit: 100, idempotencyKey: requestKey) }
-            if let value = resolve(result, workspace: .royaltyPayouts) { royaltyPayouts = value }
-        case .network, .catalogue:
-            break
-        }
+        await refresh(workspace)
     }
 
     private func retryLiveOrders() async {
@@ -626,6 +615,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
     private func perform(
         identity: String,
         success: String,
+        refreshing workspaces: Set<DastakAdminWorkspace>,
         operation: (IdempotencyKey) async throws -> Void
     ) async -> Bool {
         guard !isBusy else { return false }
@@ -638,7 +628,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
             actionKeys[identity] = nil
             notice = success
             actionErrorMessage = nil
-            await refresh()
+            await refresh(workspaces)
             return true
         } catch {
             actionErrorMessage = message(for: error, fallback: "The Admin action could not be completed.")
@@ -751,12 +741,16 @@ public struct DastakOwnerOperationsRootView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 guard !Task.isCancelled else { return }
-                await model.refresh()
+                await model.refreshAll()
             }
+        }
+        .task { await observeAdminChanges() }
+        .onChange(of: tab) {
+            Task { await refreshVisibleTab() }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
-            Task { await model.refresh() }
+            Task { await refreshVisibleTab() }
         }
         .overlay(alignment: .top) {
             if let message = model.actionErrorMessage ?? model.notice {
@@ -782,6 +776,39 @@ public struct DastakOwnerOperationsRootView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.actionErrorMessage ?? model.notice)
+    }
+
+    private func refreshVisibleTab() async {
+        switch tab {
+        case .overview:
+            await model.refresh(.commandCenter)
+        case .approvals:
+            await model.refresh([.merchantApprovals, .deliveryApprovals])
+        case .operations:
+            await model.refresh([.operations, .liveOrders])
+        case .network:
+            break
+        case .more:
+            await model.refresh(.adminAccess)
+        }
+    }
+
+    private func observeAdminChanges() async {
+        while !Task.isCancelled {
+            do {
+                for try await event in services.adminEvents.events() {
+                    guard !Task.isCancelled else { return }
+                    let workspaces = Set(event.workspaces.compactMap(DastakAdminWorkspace.init(rawValue:)))
+                    guard !workspaces.isEmpty else { continue }
+                    await model.refresh(workspaces)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // The slower poll remains a recovery path while Realtime reconnects.
+            }
+            try? await Task.sleep(for: .seconds(3))
+        }
     }
 }
 
@@ -927,7 +954,7 @@ struct DastakAdminAccessView: View {
             }
             .background(Color.black.opacity(0.015))
             .navigationTitle("Access")
-            .refreshable { await model.refresh() }
+            .refreshable { await model.refresh(.adminAccess) }
         }
     }
 
@@ -1104,7 +1131,7 @@ struct DastakOwnerOperationsView: View {
                 .padding(MarketplaceSpacing.large)
                 .frame(maxWidth: .infinity)
             }
-            .refreshable { await model.refresh() }
+            .refreshable { await model.refresh([.operations, .liveOrders]) }
         }
         .marketplacePage()
         .sheet(item: $selectedException) { exception in
