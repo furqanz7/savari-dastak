@@ -58,7 +58,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if let snapshot = model.canonicalCatalogue, let categoryID {
+                if let snapshot = model.canonicalCatalogue, categoryTypeID != nil {
                     categoryBrowser(categoryID: categoryID, snapshot: snapshot)
                 } else if let snapshot = model.canonicalCatalogue {
                     ScrollView {
@@ -92,11 +92,12 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     }
 
     private func categoryBrowser(
-        categoryID: UUID,
+        categoryID: UUID?,
         snapshot: DastakV1MerchantCatalogueSnapshot
     ) -> some View {
         let products = visibleProducts(snapshot)
         let categoryName = snapshot.categories.first { $0.id == categoryID }?.name ?? "Products"
+        let departmentName = snapshot.categoryTypes.first { $0.id == categoryTypeID }?.name ?? categoryName
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
                 Picker("Catalogue scope", selection: $selectedOnly) {
@@ -111,7 +112,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                             .font(.caption2.bold())
                             .tracking(1.1)
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                        Text(categoryName)
+                        Text(departmentName)
                             .font(.title3.bold())
                             .lineLimit(1)
                     }
@@ -128,6 +129,14 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     .font(.caption2.bold())
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 }
+                Picker("Type", selection: $subcategoryID) {
+                    Text("All types").tag(UUID?.none)
+                    ForEach(snapshot.subcategories.filter { $0.categoryID == categoryID }) { item in
+                        Text(item.name).tag(UUID?.some(item.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(MarketplaceColors.dastakAccent.color)
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
             .padding(.vertical, MarketplaceSpacing.small)
@@ -136,7 +145,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
 
             HStack(alignment: .top, spacing: 8) {
                 ScrollView(.vertical) {
-                    merchantSubcategoryRail(categoryID: categoryID, snapshot: snapshot)
+                    merchantSubcategoryRail(snapshot: snapshot)
                         .padding(.vertical, MarketplaceSpacing.small)
                         .padding(.bottom, 110)
                 }
@@ -172,6 +181,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 .scrollIndicators(.hidden)
                 .refreshable { await model.refreshCanonicalCatalogue() }
                 .frame(maxWidth: .infinity)
+                .id(categoryID)
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
             .frame(maxHeight: .infinity, alignment: .top)
@@ -330,8 +340,6 @@ private struct DastakMerchantCanonicalCatalogueView: View {
 
             if categoryID == nil, categoryTypeID == nil {
                 departmentDirectory(snapshot)
-            } else if categoryID == nil {
-                categoryDirectory(snapshot)
             }
         }
     }
@@ -349,7 +357,8 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                         ForEach(group.types) { type in
                             Button {
                                 categoryTypeID = type.id
-                                categoryID = nil
+                                let children = snapshot.categories.filter { $0.categoryTypeID == type.id }
+                                categoryID = (children.first { $0.status == "ACTIVE" } ?? children.first)?.id
                                 subcategoryID = nil
                             } label: {
                                 VStack(spacing: 7) {
@@ -382,62 +391,6 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         }
     }
 
-    private func categoryDirectory(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-            ForEach(snapshot.categoryTypes.filter { categoryTypeID == nil || $0.id == categoryTypeID }) { type in
-                let categories = snapshot.categories.filter { $0.categoryTypeID == type.id }
-                if !categories.isEmpty {
-                    VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                        Text(type.name)
-                            .font(.headline)
-                        LazyVGrid(
-                            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
-                            alignment: .leading,
-                            spacing: MarketplaceSpacing.compact
-                        ) {
-                            ForEach(categories) { category in
-                                Button {
-                                    categoryTypeID = type.id
-                                    categoryID = category.id
-                                    subcategoryID = nil
-                                } label: {
-                                    VStack(spacing: 7) {
-                                        DastakCategoryArtwork(
-                                            imageKey: category.imageKey ?? categoryArtworkKey(category.id, in: snapshot),
-                                            previewImageKeys: category.previewImageKeys,
-                                            fallbackSymbol: DastakCatalogueSymbol.symbol(for: category.slug)
-                                        )
-                                            .frame(maxWidth: .infinity)
-                                            .aspectRatio(1, contentMode: .fit)
-                                            .overlay {
-                                                if categoryID == category.id {
-                                                    RoundedRectangle(cornerRadius: MarketplaceMetrics.compactCornerRadius)
-                                                        .stroke(MarketplaceColors.dastakAccent.color, lineWidth: 2)
-                                                }
-                                            }
-                                        Text(category.name)
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(.primary)
-                                            .multilineTextAlignment(.center)
-                                            .lineLimit(2)
-                                            .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
-                                        if category.status != nil, category.status != "ACTIVE" {
-                                            Text("COMING SOON")
-                                                .font(.system(size: 8, weight: .bold))
-                                                .tracking(0.5)
-                                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     private func productGrid(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
         let products = visibleProducts(snapshot)
         return Group {
@@ -460,23 +413,19 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     }
 
     private func merchantSubcategoryRail(
-        categoryID: UUID,
         snapshot: DastakV1MerchantCatalogueSnapshot
     ) -> some View {
         LazyVStack(spacing: MarketplaceSpacing.compact) {
-            Button { subcategoryID = nil } label: {
-                merchantCollectionTile(title: "All", imageKey: categoryArtworkKey(categoryID, in: snapshot), selected: subcategoryID == nil)
-            }
-            .buttonStyle(.plain)
-            ForEach(snapshot.subcategories.filter { $0.categoryID == categoryID }) { item in
-                Button { subcategoryID = item.id } label: {
+            ForEach(snapshot.categories.filter { $0.categoryTypeID == categoryTypeID }) { item in
+                Button { categoryID = item.id; subcategoryID = nil } label: {
                     merchantCollectionTile(
                         title: item.name,
-                        imageKey: item.imageKey ?? subcategoryArtworkKey(item.id, in: snapshot),
-                        selected: subcategoryID == item.id
+                        imageKey: item.imageKey ?? item.previewImageKeys?.first ?? categoryArtworkKey(item.id, in: snapshot),
+                        selected: categoryID == item.id
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(categoryID == item.id ? .isSelected : [])
             }
         }
         .frame(width: 72)
@@ -583,10 +532,6 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         snapshot.skus.first { $0.categoryID == categoryID && $0.imageKey != nil }?.imageKey
     }
 
-    private func subcategoryArtworkKey(_ subcategoryID: UUID, in snapshot: DastakV1MerchantCatalogueSnapshot) -> String? {
-        snapshot.skus.first { $0.subcategoryID == subcategoryID && $0.imageKey != nil }?.imageKey
-    }
-
     private var priorityArtworkKeys: [String] {
         guard let snapshot = model.canonicalCatalogue else { return [] }
         var keys: [String] = []
@@ -595,9 +540,9 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 .flatMap({ $0.imageKey ?? categoryArtworkKey($0.id, in: snapshot) }) {
                 keys.append(key)
             }
-            keys.append(contentsOf: snapshot.subcategories
-                .filter { $0.categoryID == categoryID }
-                .compactMap { $0.imageKey ?? subcategoryArtworkKey($0.id, in: snapshot) })
+            keys.append(contentsOf: snapshot.categories
+                .filter { $0.categoryTypeID == categoryTypeID }
+                .compactMap { $0.imageKey ?? $0.previewImageKeys?.first ?? categoryArtworkKey($0.id, in: snapshot) })
             keys.append(contentsOf: visibleProducts(snapshot).prefix(16).compactMap(\.imageKey))
         } else {
             let destinations: [(String?, [String]?)]

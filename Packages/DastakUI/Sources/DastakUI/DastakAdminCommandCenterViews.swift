@@ -332,11 +332,7 @@ private struct DastakAdminCatalogueView: View {
                         catalogueIntroduction
                         catalogueToolbar
                         if categoryID == nil && trimmedQuery.isEmpty && status == nil && qaStatus == nil {
-                            if categoryTypeID == nil {
-                                departmentDirectory
-                            } else {
-                                categoryDirectory
-                            }
+                            departmentDirectory
                         } else if shouldShowProducts {
                             catalogueResults
                         }
@@ -414,7 +410,7 @@ private struct DastakAdminCatalogueView: View {
                             .font(.caption2.bold())
                             .tracking(1.1)
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                        Text(category.name)
+                        Text(model.catalogueTaxonomy?.categoryTypes.first { $0.id == categoryTypeID }?.name ?? category.name)
                             .font(.title3.bold())
                             .lineLimit(1)
                     }
@@ -434,7 +430,7 @@ private struct DastakAdminCatalogueView: View {
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 }
                 HStack(alignment: .firstTextBaseline) {
-                    Text(visibleSubcategories.first { $0.id == subcategoryID }?.name ?? "All products")
+                    Text(visibleSubcategories.first { $0.id == subcategoryID }?.name ?? category.name)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                     Spacer()
@@ -465,6 +461,7 @@ private struct DastakAdminCatalogueView: View {
                 .scrollIndicators(.hidden)
                 .refreshable { await load() }
                 .frame(maxWidth: .infinity)
+                .id(categoryID)
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
             .frame(maxHeight: .infinity, alignment: .top)
@@ -528,7 +525,8 @@ private struct DastakAdminCatalogueView: View {
                         ForEach(group.types) { type in
                             Button {
                                 categoryTypeID = type.id
-                                categoryID = nil
+                                let children = taxonomy.categories.filter { $0.categoryTypeID == type.id }
+                                categoryID = (children.first { $0.status == "ACTIVE" } ?? children.first)?.id
                                 subcategoryID = nil
                             } label: {
                                 AdminCatalogueDepartmentTile(categoryType: type)
@@ -545,64 +543,20 @@ private struct DastakAdminCatalogueView: View {
     }
 
     @ViewBuilder
-    private var categoryDirectory: some View {
-        if let taxonomy = model.catalogueTaxonomy {
-            ForEach(taxonomy.categoryTypes.filter { categoryTypeID == nil || $0.id == categoryTypeID }) { type in
-                let categories = taxonomy.categories.filter { $0.categoryTypeID == type.id }
-                if !categories.isEmpty {
-                    VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-                        Text(type.name).font(.title3.bold())
-                        LazyVGrid(
-                            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
-                            alignment: .leading,
-                            spacing: MarketplaceSpacing.medium
-                        ) {
-                            ForEach(categories) { category in
-                                Button {
-                                    categoryTypeID = type.id
-                                    categoryID = category.id
-                                } label: {
-                                    AdminCatalogueCategoryTile(
-                                        category: category,
-                                        imageKey: category.imageKey ?? categoryArtworkKey(category.id),
-                                        previewImageKeys: category.previewImageKeys
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-            }
-        } else if model.isLoadingCatalogue {
-            ProgressView("Loading catalogue")
-                .frame(maxWidth: .infinity, minHeight: 220)
-        }
-    }
-
-    @ViewBuilder
     private var selectedCategoryRail: some View {
         if categoryID != nil {
             LazyVStack(spacing: MarketplaceSpacing.compact) {
-                Button { subcategoryID = nil } label: {
-                    AdminCatalogueCollectionTile(
-                        title: "All",
-                        imageKey: selectedCategory.flatMap { $0.imageKey ?? categoryArtworkKey($0.id) },
-                        previewImageKeys: selectedCategory?.previewImageKeys,
-                        selected: subcategoryID == nil
-                    )
-                }
-                .buttonStyle(.plain)
-                ForEach(visibleSubcategories) { subcategory in
-                    Button { subcategoryID = subcategory.id } label: {
+                ForEach(visibleCategories) { category in
+                    Button { categoryID = category.id; subcategoryID = nil } label: {
                         AdminCatalogueCollectionTile(
-                            title: subcategory.name,
-                            imageKey: subcategory.imageKey ?? subcategoryArtworkKey(subcategory.id),
-                            previewImageKeys: subcategory.previewImageKeys,
-                            selected: subcategoryID == subcategory.id
+                            title: category.name,
+                            imageKey: category.imageKey ?? categoryArtworkKey(category.id),
+                            previewImageKeys: category.previewImageKeys,
+                            selected: categoryID == category.id
                         )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(categoryID == category.id ? .isSelected : [])
                 }
             }
             .frame(width: 72)
@@ -676,30 +630,14 @@ private struct DastakAdminCatalogueView: View {
         }.flatMap { $0.primaryImage?.imageKey ?? $0.imageKey }
     }
 
-    private func subcategoryArtworkKey(_ subcategoryID: UUID) -> String? {
-        if let preview = model.catalogueTaxonomy?.subcategories.first(where: {
-            $0.id == subcategoryID
-        })?.previewImageKeys?.first {
-            return preview
-        }
-        if let preview = model.catalogueTaxonomy?.skuPreviews?.first(where: {
-            $0.subcategoryID == subcategoryID && $0.imageKey != nil
-        })?.imageKey {
-            return preview
-        }
-        return model.catalogueSKUs.first {
-            $0.subcategoryID == subcategoryID && ($0.primaryImage?.imageKey ?? $0.imageKey) != nil
-        }.flatMap { $0.primaryImage?.imageKey ?? $0.imageKey }
-    }
-
     private var priorityArtworkKeys: [String] {
         var keys: [String] = []
         if categoryID != nil {
             if let key = selectedCategory.flatMap({ $0.imageKey ?? categoryArtworkKey($0.id) }) {
                 keys.append(key)
             }
-            keys.append(contentsOf: visibleSubcategories.compactMap {
-                $0.imageKey ?? subcategoryArtworkKey($0.id)
+            keys.append(contentsOf: visibleCategories.compactMap {
+                $0.imageKey ?? categoryArtworkKey($0.id)
             })
             keys.append(contentsOf: model.catalogueSKUs.prefix(16).compactMap {
                 $0.primaryImage?.imageKey ?? $0.imageKey

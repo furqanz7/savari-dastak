@@ -147,6 +147,13 @@
 .merchant-v1-subcategory-rail > button.selected { border-color: color-mix(in srgb, var(--dastak-accent) 42%, var(--divider)); background: var(--dastak-accent-soft); }
 .merchant-v1-subcategory-rail .merchant-v1-product-art { aspect-ratio: 1; }
 .merchant-v1-category-results { min-width: 0; }
+.merchant-v1-category-browser { height: max(340px, calc(100dvh - 220px)); overflow: hidden; }
+.merchant-v1-category-browser .merchant-v1-subcategory-rail { position: static; height: 100%; max-height: none; align-content: start; overscroll-behavior: contain; }
+.merchant-v1-category-results { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 100px; scrollbar-width: thin; }
+.merchant-v1-browser-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; }
+.merchant-v1-browser-heading h2 { margin: 0; font-size: 20px; }
+.merchant-v1-type-filter { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 12px; font-weight: 650; }
+.merchant-v1-type-filter select { min-width: 0; max-width: 100%; padding: 9px 12px; border: 1px solid var(--divider); border-radius: 12px; color: var(--text-primary); background: var(--surface-raised); font: inherit; }
 .merchant-v1-category-results > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .merchant-v1-category-results h2 { min-width: 0; margin: 0; overflow: hidden; font-size: 20px; text-overflow: ellipsis; white-space: nowrap; }
 .merchant-v1-category-results header span { color: var(--text-secondary); font-size: 11px; white-space: nowrap; }

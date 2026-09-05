@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowRight, Ban, Check, ChevronRight, CircleAlert, ClockAlert, Copy, Download,
   Heart, Leaf, LockKeyhole, MapPin, Minus, PackageCheck, PackageX, Plus,
-  ReceiptText, RefreshCw, RotateCcw, Search, ShieldCheck, ShoppingBag, Sparkles,
+  ReceiptText, RefreshCw, RotateCcw, Search, ShieldCheck, ShoppingBag,
   UserRound, X,
 } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
@@ -710,7 +710,12 @@ export function DastakV1CustomerExperience(props: Props) {
       selectedCategoryType={selectedCategoryType}
       selectedCategory={selectedCategory}
       selectedSubcategory={selectedSubcategory}
-      onCategoryType={(id) => { setSelectedCategoryType(id); setSelectedCategory(undefined); setSelectedSubcategory(undefined); }}
+      onCategoryType={(id) => {
+        const children = id ? catalogue?.categories.filter((item) => item.categoryTypeId === id) ?? [] : [];
+        setSelectedCategoryType(id);
+        setSelectedCategory((children.find((item) => item.status === "ACTIVE") ?? children[0])?.id);
+        setSelectedSubcategory(undefined);
+      }}
       onCategory={(id) => {
         setSelectedCategory(id);
         setSelectedSubcategory(undefined);
@@ -828,7 +833,7 @@ function CustomerHeader({ address, count, onSearch, onCart }: { address?: Custom
   </header>;
 }
 
-function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, loadingProducts, selectedCategoryType, selectedCategory, selectedSubcategory, onCategoryType, onCategory, onSubcategory, onOrders, onParcel, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+export function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, loadingProducts, selectedCategoryType, selectedCategory, selectedSubcategory, onCategoryType, onCategory, onSubcategory, onOrders, onParcel, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
   supabaseUrl: string;
   restaurants: V1RestaurantMenu[];
   categoryTypes: V1CatalogueCategoryType[]; categories: V1CatalogueCategory[];
@@ -842,6 +847,10 @@ function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subc
   wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>;
   onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void;
 }) {
+  const directoryRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (selectedCategoryType) directoryRef.current?.scrollIntoView({ block: "start" });
+  }, [selectedCategoryType]);
   const visible = skus.filter((sku) =>
     (!selectedCategory || sku.categoryId === selectedCategory) &&
     (!selectedSubcategory || sku.subcategoryId === selectedSubcategory));
@@ -852,28 +861,29 @@ function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subc
   const selectedName = subcategories.find((item) => item.id === selectedSubcategory)?.name
     ?? categories.find((item) => item.id === selectedCategory)?.name;
   return <>
-    <section className="v1-hero"><p>YOUR EVERYDAY, DELIVERED</p><h1>One basket.<br />Dastak finds every item.</h1><span><ShieldCheck size={18} /> You pay only after your full basket is secured</span></section>
-    {restaurants.length ? <section className="v1-section"><header><div><p>RESTAURANTS &amp; CAFES</p><h2>Food, in the same Dastak</h2></div><span>Choose one</span></header>
+    {!selectedType ? <section className="v1-hero"><p>YOUR EVERYDAY, DELIVERED</p><h1>One basket.<br />Dastak finds every item.</h1><span><ShieldCheck size={18} /> You pay only after your full basket is secured</span></section> : null}
+    {!selectedType && restaurants.length ? <section className="v1-section"><header><div><p>RESTAURANTS &amp; CAFES</p><h2>Food, in the same Dastak</h2></div><span>Choose one</span></header>
       <div className="v1-restaurant-rail">{restaurants.map((restaurant) => <button type="button" key={restaurant.restaurant.branchId} onClick={() => onRestaurant(restaurant)}>
         <span className="v1-restaurant-art"><ShoppingBag size={28} /></span>
         <span><strong>{restaurant.restaurant.name}</strong><small>{restaurant.restaurant.branchName}</small><b>{restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items</b></span>
         <ChevronRight size={18} />
       </button>)}</div>
     </section> : null}
-    <section className="v1-section v1-catalogue-directory"><header><div><p>SHOP DASTAK</p><h2>{selectedCategory ? selectedName : selectedType?.name ?? "Everything, beautifully organised"}</h2></div>{selectedCategory ? <button type="button" className="v1-text-action" onClick={() => onCategory(undefined)}>All categories</button> : selectedType ? <button type="button" className="v1-text-action" onClick={() => onCategoryType(undefined)}>All departments</button> : null}</header>
-      {!selectedCategory ? <div className="v1-category-groups">{selectedType ? <section><header><h3>{selectedType.name}</h3><span>{selectedTypeCategories.length} categories</span></header><div className="v1-category-grid">{selectedTypeCategories.map((category) => <button type="button" key={category.id} onClick={() => onCategory(category.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={category} /><strong>{category.name}</strong><small>{subcategories.filter((item) => item.categoryId === category.id).length} collections{category.status && category.status !== "ACTIVE" ? " · Coming soon" : ""}</small></button>)}</div></section> : navigationGroups.map((group) => <section key={group.key}><header><h3>{group.name}</h3><span>{group.types.length} departments</span></header><div className="v1-category-grid">{group.types.map((type) => <button type="button" key={type.id} onClick={() => onCategoryType(type.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={type} /><strong>{type.name}</strong><small>{categories.filter((item) => item.categoryTypeId === type.id).length} categories{type.status && type.status !== "ACTIVE" ? " · Coming soon" : ""}</small></button>)}</div></section>)}</div> : <div className="v1-category-browser">
-        <div className="v1-subcategory-rail" role="group" aria-label="Product collection">
-          <button className={!selectedSubcategory ? "selected" : ""} type="button" onClick={() => onSubcategory(undefined)}><span className="v1-subcategory-all"><Sparkles size={23} /></span><strong>All</strong></button>
-          {categorySubcategories.map((subcategory) => <button className={selectedSubcategory === subcategory.id ? "selected" : ""} type="button" key={subcategory.id} onClick={() => onSubcategory(subcategory.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={subcategory} /><strong>{subcategory.name}</strong></button>)}
+    <section ref={directoryRef} className="v1-section v1-catalogue-directory"><header><div><p>SHOP DASTAK</p><h2>{selectedType?.name ?? "Everything, beautifully organised"}</h2></div>{selectedType ? <button type="button" className="v1-text-action" onClick={() => onCategoryType(undefined)}>All categories</button> : null}</header>
+      {!selectedType ? <div className="v1-category-groups">{navigationGroups.map((group) => <section key={group.key}><header><h3>{group.name}</h3></header><div className="v1-category-grid">{group.types.map((type) => <button type="button" key={type.id} onClick={() => onCategoryType(type.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={type} /><strong>{type.name}</strong>{type.status && type.status !== "ACTIVE" ? <small>Coming soon</small> : null}</button>)}</div></section>)}</div> : <div className="v1-category-browser">
+        <div className="v1-subcategory-rail" role="group" aria-label="Subcategories">
+          {selectedTypeCategories.map((category) => <button className={selectedCategory === category.id ? "selected" : ""} aria-pressed={selectedCategory === category.id} type="button" key={category.id} onClick={() => onCategory(category.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={category} /><strong>{category.name}</strong></button>)}
         </div>
-        <div className="v1-category-results"><header><h3>{selectedSubcategory ? categorySubcategories.find((item) => item.id === selectedSubcategory)?.name ?? "Products" : "All products"}</h3><span>{loadingProducts ? "Loading…" : `${visible.length} products`}</span></header>{loadingProducts ? <div className="v1-inline-loading" role="status"><span /> Loading this category</div> : <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />}</div>
+        <div className="v1-category-results" key={selectedCategory}><header><h3>{selectedName ?? "Products"}</h3><span>{loadingProducts ? "Loading…" : `${visible.length} products`}</span></header>
+          {categorySubcategories.length ? <label className="v1-catalogue-type-filter">Type<select aria-label="Product type" value={selectedSubcategory ?? ""} onChange={(event) => onSubcategory(event.target.value || undefined)}><option value="">All types</option>{categorySubcategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
+          {loadingProducts ? <div className="v1-inline-loading" role="status"><span /> Loading this category</div> : selectedCategory ? <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <p>Products coming soon.</p>}</div>
       </div>}
     </section>
     {!selectedCategory && !selectedCategoryType ? <section className="v1-section"><header><div><p>POPULAR NOW</p><h2>Everyday essentials</h2></div><span>{visible.length} products</span></header>
       <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />
     </section> : null}
-    <section className="v1-service-band"><PackageCheck size={24} /><div><strong>Send a parcel</strong><span>Door-to-door delivery across your city</span></div><button type="button" onClick={onParcel}>Open <ChevronRight size={17} /></button></section>
-    <button className="v1-order-link" type="button" onClick={onOrders}>View your Dastak orders <ArrowRight size={17} /></button>
+    {!selectedType ? <><section className="v1-service-band"><PackageCheck size={24} /><div><strong>Send a parcel</strong><span>Door-to-door delivery across your city</span></div><button type="button" onClick={onParcel}>Open <ChevronRight size={17} /></button></section>
+    <button className="v1-order-link" type="button" onClick={onOrders}>View your Dastak orders <ArrowRight size={17} /></button></> : null}
   </>;
 }
 

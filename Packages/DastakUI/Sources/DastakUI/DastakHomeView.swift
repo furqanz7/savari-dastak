@@ -18,8 +18,8 @@ struct DastakHomeView: View {
     var body: some View {
         GeometryReader { _ in
             ZStack(alignment: .top) {
-                if let selectedCategory {
-                    selectedCategoryBrowser(selectedCategory)
+                if let selectedCategoryType {
+                    selectedDepartmentBrowser(selectedCategoryType)
                         .allowsHitTesting(!isSearchPresented)
                 } else {
                     ScrollView {
@@ -67,6 +67,9 @@ struct DastakHomeView: View {
         .dastakNavigationBarHidden()
         .task(id: priorityArtworkKeys) {
             await DastakProductArtwork.prefetch(imageKeys: priorityArtworkKeys)
+        }
+        .task(id: selectedCategoryID) {
+            if let selectedCategoryID { await model.loadV1Category(selectedCategoryID) }
         }
         .sheet(item: $selectedRestaurant) { restaurant in
             DastakRestaurantMenuView(model: model, restaurant: restaurant)
@@ -206,24 +209,7 @@ struct DastakHomeView: View {
                     }
                 }
 
-                if let selectedCategoryType {
-                    let categories = categories(in: selectedCategoryType.id)
-                    LazyVGrid(
-                        columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4),
-                        spacing: MarketplaceSpacing.medium
-                    ) {
-                        ForEach(categories) { category in
-                            Button {
-                                selectedCategoryID = category.id
-                                selectedSubcategoryID = nil
-                                Task { await model.loadV1Category(category.id) }
-                            } label: {
-                                DastakCategoryTile(category: category)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                } else {
+                Group {
                     ForEach(navigationSections, id: \.key) { section in
                         VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
                             Text(section.name).font(.title3.bold())
@@ -234,7 +220,8 @@ struct DastakHomeView: View {
                                 ForEach(section.types) { type in
                                     Button {
                                         selectedCategoryTypeID = type.id
-                                        selectedCategoryID = nil
+                                        let children = categories(in: type.id)
+                                        selectedCategoryID = (children.first { $0.status == "ACTIVE" } ?? children.first)?.id
                                         selectedSubcategoryID = nil
                                     } label: {
                                         DastakDepartmentTile(categoryType: type)
@@ -283,7 +270,7 @@ struct DastakHomeView: View {
         }
     }
 
-    private func selectedCategoryBrowser(_ category: DastakV1CatalogueCategory) -> some View {
+    private func selectedDepartmentBrowser(_ type: DastakV1CatalogueCategory) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
             header
                 .padding(.horizontal, MarketplaceSpacing.medium)
@@ -296,17 +283,18 @@ struct DastakHomeView: View {
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     Spacer()
                     Button("All categories") {
+                        selectedCategoryTypeID = nil
                         selectedCategoryID = nil
                         selectedSubcategoryID = nil
                     }
                     .font(.caption2.bold())
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 }
-                Text(category.name)
+                Text(type.name)
                     .font(.title2.bold())
                     .lineLimit(1)
                 HStack(alignment: .firstTextBaseline) {
-                    Text(selectedSubcategory?.name ?? "All products")
+                    Text(selectedCategory?.name ?? "Products")
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                     Spacer()
@@ -316,6 +304,18 @@ struct DastakHomeView: View {
                 }
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
+
+            if !visibleSubcategories.isEmpty {
+                Picker("Type", selection: $selectedSubcategoryID) {
+                    Text("All types").tag(UUID?.none)
+                    ForEach(visibleSubcategories) { item in
+                        Text(item.name).tag(UUID?.some(item.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(MarketplaceColors.dastakAccent.color)
+                .padding(.horizontal, MarketplaceSpacing.medium)
+            }
 
             HStack(alignment: .top, spacing: 8) {
                 ScrollView(.vertical) {
@@ -327,10 +327,10 @@ struct DastakHomeView: View {
 
                 ScrollView(.vertical) {
                     Group {
-                        if model.loadingV1CategoryIDs.contains(category.id), selectedProducts.isEmpty {
-                            ProgressView("Loading (category.name)")
+                        if let category = selectedCategory, model.loadingV1CategoryIDs.contains(category.id), selectedProducts.isEmpty {
+                            ProgressView("Loading \(category.name)")
                                 .frame(maxWidth: .infinity, minHeight: 320)
-                        } else if model.failedV1CategoryIDs.contains(category.id), selectedProducts.isEmpty {
+                        } else if let category = selectedCategory, model.failedV1CategoryIDs.contains(category.id), selectedProducts.isEmpty {
                             DastakEmptyState(
                                 symbol: "arrow.clockwise",
                                 title: "Products could not be loaded",
@@ -342,7 +342,7 @@ struct DastakHomeView: View {
                         } else if selectedProducts.isEmpty {
                             DastakEmptyState(
                                 symbol: DastakCatalogueSymbol.symbol(
-                                    for: selectedSubcategory?.slug ?? category.slug
+                                    for: selectedSubcategory?.slug ?? selectedCategory?.slug ?? type.slug
                                 ),
                                 title: "Approved products coming soon",
                                 message: "This collection is already organised in Dastak. Products will appear here after catalogue and safety checks are complete."
@@ -357,6 +357,7 @@ struct DastakHomeView: View {
                 .scrollIndicators(.hidden)
                 .refreshable { await model.refreshV1Catalogue() }
                 .frame(maxWidth: .infinity)
+                .id(selectedCategoryID)
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
             .frame(maxHeight: .infinity, alignment: .top)
@@ -366,29 +367,17 @@ struct DastakHomeView: View {
 
     private var subcategoryRail: some View {
         LazyVStack(spacing: MarketplaceSpacing.compact) {
-            Button { selectedSubcategoryID = nil } label: {
-                VStack(spacing: 7) {
-                    DastakProductArtwork(
-                        imageKey: selectedCategory?.imageKey ?? selectedCategory?.previewImageKeys?.first,
-                        fallbackSymbol: DastakCatalogueSymbol.symbol(for: selectedCategory?.slug ?? "all")
-                    )
-                    .frame(width: 64, height: 58)
-                    Text("All")
-                        .font(.caption2.bold())
-                        .foregroundStyle(.primary)
-                }
-                .padding(4)
-                .background(selectedSubcategoryID == nil ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 15))
-            }
-            .buttonStyle(.plain)
-            ForEach(visibleSubcategories) { subcategory in
-                Button { selectedSubcategoryID = subcategory.id } label: {
-                    DastakSubcategoryTile(
-                        subcategory: subcategory,
-                        selected: selectedSubcategoryID == subcategory.id
-                    )
+            ForEach(selectedCategoryType.map { categories(in: $0.id) } ?? []) { category in
+                Button {
+                    selectedCategoryID = category.id
+                    selectedSubcategoryID = nil
+                } label: {
+                    DastakCategoryTile(category: category)
+                        .padding(4)
+                        .background(selectedCategoryID == category.id ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 15))
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selectedCategoryID == category.id ? .isSelected : [])
             }
         }
     }
@@ -399,7 +388,7 @@ struct DastakHomeView: View {
             if let key = selectedCategory.imageKey ?? selectedCategory.previewImageKeys?.first {
                 keys.append(key)
             }
-            keys.append(contentsOf: visibleSubcategories.compactMap { $0.imageKey ?? $0.previewImageKeys?.first })
+            keys.append(contentsOf: (selectedCategoryType.map { categories(in: $0.id) } ?? []).compactMap { $0.imageKey ?? $0.previewImageKeys?.first })
             keys.append(contentsOf: selectedProducts.prefix(16).compactMap(\.imageKey))
         } else {
             let destinations = selectedCategoryType.map { categories(in: $0.id) }
@@ -473,7 +462,7 @@ struct DastakHomeView: View {
 
     private var selectedProducts: [DastakV1CatalogueSKU] {
         if let selectedSubcategoryID { return model.products(inSubcategory: selectedSubcategoryID) }
-        guard let selectedCategoryID else { return model.activeProducts }
+        guard let selectedCategoryID else { return selectedCategoryTypeID == nil ? model.activeProducts : [] }
         return model.products(in: selectedCategoryID)
     }
 

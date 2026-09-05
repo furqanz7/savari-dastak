@@ -50,6 +50,9 @@
 .admin-catalogue-browser { min-width: 0; }
 .admin-catalogue-browser.with-rail { display: grid; grid-template-columns: 100px minmax(0, 1fr); align-items: start; gap: 14px; }
 .admin-catalogue-products { min-width: 0; }
+.admin-catalogue-browser.with-rail { height: max(340px, calc(100dvh - 220px)); overflow: hidden; }
+.admin-catalogue-browser.with-rail .admin-subcategory-rail { position: static; height: 100%; max-height: none; align-content: start; overscroll-behavior: contain; }
+.admin-catalogue-browser.with-rail .admin-catalogue-products { height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 100px; scrollbar-width: thin; }
 .admin-subcategory-rail { position: sticky; top: 12px; display: grid; gap: 7px; max-height: calc(100dvh - 150px); overflow-y: auto; margin: 0; padding: 0 2px 90px 0; scrollbar-width: none; }
 .admin-subcategory-rail::-webkit-scrollbar { display: none; }
 .admin-subcategory-rail button, .admin-subcategory-rail button:first-child { width: 100px; min-width: 0; max-width: none; display: grid; place-items: initial; gap: 6px; padding: 5px; border: 1px solid transparent; border-radius: 15px; color: var(--text-primary); background: transparent; font-size: 10px; line-height: 1.25; text-align: center; }
