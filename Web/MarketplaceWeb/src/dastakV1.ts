@@ -54,6 +54,7 @@ export type V1CatalogueCategory = {
   slug: string;
   imageKey?: string;
   previewImageKeys: string[];
+  navigationSection?: { key: string; name: string; sortOrder: number };
   status?: string;
   requiresControlledFlow?: boolean;
   sortOrder: number;
@@ -336,10 +337,10 @@ export type V1MerchantCanonicalCatalogue = {
     };
     capacity: { limit: number; held: number; available: number };
   };
-  categoryTypes: Array<{ categoryTypeId: string; name: string; slug: string; imageKey?: string; status?: string; requiresControlledFlow?: boolean; sortOrder: number }>;
-  categories: Array<{ categoryId: string; categoryTypeId?: string; name: string; slug: string; imageKey?: string; status?: string; requiresControlledFlow?: boolean; sortOrder: number }>;
+  categoryTypes: Array<{ categoryTypeId: string; name: string; slug: string; imageKey?: string; previewImageKeys: string[]; navigationSection?: { key: string; name: string; sortOrder: number }; status?: string; requiresControlledFlow?: boolean; sortOrder: number }>;
+  categories: Array<{ categoryId: string; categoryTypeId?: string; name: string; slug: string; imageKey?: string; previewImageKeys: string[]; status?: string; requiresControlledFlow?: boolean; sortOrder: number }>;
   subcategories: Array<{
-    subcategoryId: string; categoryId: string; name: string; slug: string; imageKey?: string; status?: string; requiresControlledFlow?: boolean; sortOrder: number;
+    subcategoryId: string; categoryId: string; name: string; slug: string; imageKey?: string; previewImageKeys: string[]; status?: string; requiresControlledFlow?: boolean; sortOrder: number;
   }>;
   skus: Array<{
     skuId: string; categoryTypeId?: string; categoryId: string; subcategoryId: string; brandName?: string;
@@ -2196,10 +2197,18 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
     },
     categoryTypes: categoryTypes.map((item) => {
       const type = requiredRecord(item);
+      const navigation = record(type.navigationSection);
       return {
         categoryTypeId: requiredUuid(type.categoryTypeId),
         name: requiredText(type.name, 100), slug: requiredText(type.slug, 120),
         imageKey: optionalText(type.imageKey, 500),
+        previewImageKeys: Array.isArray(type.previewImageKeys)
+          ? type.previewImageKeys.map((value) => requiredText(value, 500)) : [],
+        navigationSection: navigation ? {
+          key: requiredText(navigation.key, 80),
+          name: requiredText(navigation.name, 100),
+          sortOrder: requiredInteger(navigation.sortOrder, 0),
+        } : undefined,
         status: optionalText(type.status, 30),
         requiresControlledFlow: optionalBoolean(type.requiresControlledFlow),
         sortOrder: requiredInteger(type.sortOrder, 0),
@@ -2214,6 +2223,8 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         name: requiredText(category.name, 100),
         slug: requiredText(category.slug, 120),
         imageKey: optionalText(category.imageKey, 500),
+        previewImageKeys: Array.isArray(category.previewImageKeys)
+          ? category.previewImageKeys.map((value) => requiredText(value, 500)) : [],
         status: optionalText(category.status, 30),
         requiresControlledFlow: optionalBoolean(category.requiresControlledFlow),
         sortOrder: requiredInteger(category.sortOrder, 0),
@@ -2227,6 +2238,8 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         name: requiredText(subcategory.name, 100),
         slug: requiredText(subcategory.slug, 120),
         imageKey: optionalText(subcategory.imageKey, 500),
+        previewImageKeys: Array.isArray(subcategory.previewImageKeys)
+          ? subcategory.previewImageKeys.map((value) => requiredText(value, 500)) : [],
         status: optionalText(subcategory.status, 30),
         requiresControlledFlow: optionalBoolean(subcategory.requiresControlledFlow),
         sortOrder: requiredInteger(subcategory.sortOrder, 0),
@@ -2601,6 +2614,7 @@ async function invoke(
 function parseCategory(value: unknown): V1CatalogueCategory {
   const source = record(value);
   if (!source) invalid("category");
+  const navigation = record(source.navigationSection);
   return {
     id: requiredUuid(source.id), name: requiredText(source.name, 100), slug: requiredText(source.slug, 100),
     categoryTypeId: source.categoryTypeId === null || source.categoryTypeId === undefined
@@ -2608,6 +2622,11 @@ function parseCategory(value: unknown): V1CatalogueCategory {
     imageKey: optionalText(source.imageKey, 500),
     previewImageKeys: Array.isArray(source.previewImageKeys)
       ? source.previewImageKeys.map((item) => requiredText(item, 500)) : [],
+    navigationSection: navigation ? {
+      key: requiredText(navigation.key, 80),
+      name: requiredText(navigation.name, 100),
+      sortOrder: requiredInteger(navigation.sortOrder, 0),
+    } : undefined,
     status: optionalText(source.status, 30),
     requiresControlledFlow: optionalBoolean(source.requiresControlledFlow),
     sortOrder: requiredInteger(source.sortOrder, 0),

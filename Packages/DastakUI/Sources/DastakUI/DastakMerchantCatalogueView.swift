@@ -313,21 +313,71 @@ private struct DastakMerchantCanonicalCatalogueView: View {
             }
             .pickerStyle(.segmented)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: MarketplaceSpacing.small) {
-                    filterChip("All departments", selected: categoryTypeID == nil) {
+            if let selectedType = snapshot.categoryTypes.first(where: { $0.id == categoryTypeID }) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("DEPARTMENT").font(.caption2.bold()).tracking(1)
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        Text(selectedType.name).font(.headline)
+                    }
+                    Spacer()
+                    Button("All departments") {
                         categoryTypeID = nil; categoryID = nil; subcategoryID = nil
                     }
-                    ForEach(snapshot.categoryTypes) { type in
-                        filterChip(type.name, selected: categoryTypeID == type.id) {
-                            categoryTypeID = type.id; categoryID = nil; subcategoryID = nil
-                        }
-                    }
+                    .font(.caption.weight(.semibold))
                 }
             }
 
-            if categoryID == nil {
+            if categoryID == nil, categoryTypeID == nil {
+                departmentDirectory(snapshot)
+            } else if categoryID == nil {
                 categoryDirectory(snapshot)
+            }
+        }
+    }
+
+    private func departmentDirectory(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+            ForEach(merchantNavigationGroups(snapshot), id: \.key) { group in
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                    Text(group.name).font(.headline)
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
+                        alignment: .leading,
+                        spacing: MarketplaceSpacing.compact
+                    ) {
+                        ForEach(group.types) { type in
+                            Button {
+                                categoryTypeID = type.id
+                                categoryID = nil
+                                subcategoryID = nil
+                            } label: {
+                                VStack(spacing: 7) {
+                                    DastakCategoryArtwork(
+                                        imageKey: type.imageKey,
+                                        previewImageKeys: type.previewImageKeys,
+                                        fallbackSymbol: DastakCatalogueSymbol.symbol(for: type.slug)
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                    .aspectRatio(1, contentMode: .fit)
+                                    Text(type.name)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(2)
+                                        .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
+                                    if type.status != nil, type.status != "ACTIVE" {
+                                        Text("COMING SOON")
+                                            .font(.system(size: 8, weight: .bold))
+                                            .tracking(0.5)
+                                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
         }
     }
@@ -352,8 +402,9 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                                     subcategoryID = nil
                                 } label: {
                                     VStack(spacing: 7) {
-                                        DastakProductArtwork(
+                                        DastakCategoryArtwork(
                                             imageKey: category.imageKey ?? categoryArtworkKey(category.id, in: snapshot),
+                                            previewImageKeys: category.previewImageKeys,
                                             fallbackSymbol: DastakCatalogueSymbol.symbol(for: category.slug)
                                         )
                                             .frame(maxWidth: .infinity)
@@ -549,19 +600,47 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 .compactMap { $0.imageKey ?? subcategoryArtworkKey($0.id, in: snapshot) })
             keys.append(contentsOf: visibleProducts(snapshot).prefix(16).compactMap(\.imageKey))
         } else {
-            keys.append(contentsOf: snapshot.categories.prefix(32)
-                .compactMap { $0.imageKey ?? categoryArtworkKey($0.id, in: snapshot) })
+            let destinations: [(String?, [String]?)]
+            if let categoryTypeID {
+                destinations = snapshot.categories
+                    .filter { $0.categoryTypeID == categoryTypeID }
+                    .map { ($0.imageKey ?? categoryArtworkKey($0.id, in: snapshot), $0.previewImageKeys) }
+            } else {
+                destinations = snapshot.categoryTypes.map { ($0.imageKey, $0.previewImageKeys) }
+            }
+            for destination in destinations {
+                keys.append(contentsOf: ([destination.0].compactMap { $0 }
+                    + (destination.1 ?? [])).prefix(2))
+            }
         }
         var seen = Set<String>()
-        return keys.filter { seen.insert($0).inserted }.prefix(48).map { $0 }
+        return keys.filter { seen.insert($0).inserted }.prefix(32).map { $0 }
     }
 
-    private func filterChip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .font(.caption.weight(.semibold))
-            .buttonStyle(.bordered)
-            .tint(selected ? MarketplaceColors.dastakAccent.color : .secondary)
+    private func merchantNavigationGroups(
+        _ snapshot: DastakV1MerchantCatalogueSnapshot
+    ) -> [MerchantCatalogueNavigationGroup] {
+        let grouped = Dictionary(grouping: snapshot.categoryTypes) {
+            $0.navigationSection?.key ?? "more"
+        }
+        return grouped.map { key, types in
+            let metadata = types.compactMap(\.navigationSection).first
+            return MerchantCatalogueNavigationGroup(
+                key: key,
+                name: metadata?.name ?? "More to explore",
+                sortOrder: metadata?.sortOrder ?? 999,
+                types: types.sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+            )
+        }
+        .sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
     }
+}
+
+private struct MerchantCatalogueNavigationGroup {
+    let key: String
+    let name: String
+    let sortOrder: Int
+    let types: [DastakV1MerchantCatalogueSnapshot.CategoryType]
 }
 
 struct DastakMerchantStoreView: View {

@@ -9,6 +9,7 @@ struct DastakHomeView: View {
     let openCart: () -> Void
     let sendParcel: () -> Void
     @State private var selectedRestaurant: DastakV1RestaurantMenu?
+    @State private var selectedCategoryTypeID: UUID?
     @State private var selectedCategoryID: UUID?
     @State private var selectedSubcategoryID: UUID?
     @State private var isSearchPresented = false
@@ -25,7 +26,9 @@ struct DastakHomeView: View {
                         LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                             header
                             categoryRail
-                            catalogueContent
+                            if selectedCategoryTypeID == nil {
+                                catalogueContent
+                            }
                             restaurantRail
                             parcelBand
                         }
@@ -179,7 +182,7 @@ struct DastakHomeView: View {
 
     @ViewBuilder
     private var categoryRail: some View {
-        if !model.canonicalCategories.isEmpty {
+        if !model.canonicalCategoryTypes.isEmpty {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
                 HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.small) {
                     VStack(alignment: .leading, spacing: 3) {
@@ -187,13 +190,14 @@ struct DastakHomeView: View {
                             .font(.caption2.bold())
                             .tracking(1.1)
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                        Text(selectedCategory?.name ?? "Everything, beautifully organised")
+                        Text(selectedCategoryType?.name ?? "Everything, beautifully organised")
                             .font(.title2.bold())
                             .lineLimit(2)
                     }
                     Spacer()
-                    if selectedCategoryID != nil {
-                        Button("All categories") {
+                    if selectedCategoryTypeID != nil {
+                        Button("All departments") {
+                            selectedCategoryTypeID = nil
                             selectedCategoryID = nil
                             selectedSubcategoryID = nil
                         }
@@ -202,26 +206,40 @@ struct DastakHomeView: View {
                     }
                 }
 
-                if selectedCategoryID == nil {
-                    ForEach(model.canonicalCategoryTypes) { type in
-                        let categories = model.canonicalCategories.filter { $0.categoryTypeID == type.id }
-                        if !categories.isEmpty {
-                            VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-                                Text(type.name).font(.title3.bold())
-                                LazyVGrid(
-                                    columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4),
-                                    spacing: MarketplaceSpacing.medium
-                                ) {
-                                    ForEach(categories) { category in
-                                        Button {
-                                            selectedCategoryID = category.id
-                                            selectedSubcategoryID = nil
-                                            Task { await model.loadV1Category(category.id) }
-                                        } label: {
-                                            DastakCategoryTile(category: category)
-                                        }
-                                        .buttonStyle(.plain)
+                if let selectedCategoryType {
+                    let categories = categories(in: selectedCategoryType.id)
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4),
+                        spacing: MarketplaceSpacing.medium
+                    ) {
+                        ForEach(categories) { category in
+                            Button {
+                                selectedCategoryID = category.id
+                                selectedSubcategoryID = nil
+                                Task { await model.loadV1Category(category.id) }
+                            } label: {
+                                DastakCategoryTile(category: category)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                } else {
+                    ForEach(navigationSections, id: \.key) { section in
+                        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                            Text(section.name).font(.title3.bold())
+                            LazyVGrid(
+                                columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4),
+                                spacing: MarketplaceSpacing.medium
+                            ) {
+                                ForEach(section.types) { type in
+                                    Button {
+                                        selectedCategoryTypeID = type.id
+                                        selectedCategoryID = nil
+                                        selectedSubcategoryID = nil
+                                    } label: {
+                                        DastakDepartmentTile(categoryType: type)
                                     }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -384,10 +402,15 @@ struct DastakHomeView: View {
             keys.append(contentsOf: visibleSubcategories.compactMap { $0.imageKey ?? $0.previewImageKeys?.first })
             keys.append(contentsOf: selectedProducts.prefix(16).compactMap(\.imageKey))
         } else {
-            keys.append(contentsOf: model.canonicalCategories.compactMap { $0.imageKey ?? $0.previewImageKeys?.first })
+            let destinations = selectedCategoryType.map { categories(in: $0.id) }
+                ?? model.canonicalCategoryTypes
+            for destination in destinations {
+                keys.append(contentsOf: ([destination.imageKey].compactMap { $0 }
+                    + (destination.previewImageKeys ?? [])).prefix(2))
+            }
         }
         var seen = Set<String>()
-        return keys.filter { seen.insert($0).inserted }.prefix(48).map { $0 }
+        return keys.filter { seen.insert($0).inserted }.prefix(32).map { $0 }
     }
 
     private func productGrid(_ products: [DastakV1CatalogueSKU]) -> some View {
@@ -414,6 +437,30 @@ struct DastakHomeView: View {
 
     private var selectedCategory: DastakV1CatalogueCategory? {
         model.canonicalCategories.first { $0.id == selectedCategoryID }
+    }
+
+    private var selectedCategoryType: DastakV1CatalogueCategory? {
+        model.canonicalCategoryTypes.first { $0.id == selectedCategoryTypeID }
+    }
+
+    private func categories(in categoryTypeID: UUID) -> [DastakV1CatalogueCategory] {
+        model.canonicalCategories.filter { $0.categoryTypeID == categoryTypeID }
+    }
+
+    private var navigationSections: [DastakCatalogueNavigationGroup] {
+        let grouped = Dictionary(grouping: model.canonicalCategoryTypes) {
+            $0.navigationSection?.key ?? "more"
+        }
+        return grouped.map { key, types in
+            let metadata = types.compactMap(\.navigationSection).first
+            return DastakCatalogueNavigationGroup(
+                key: key,
+                name: metadata?.name ?? "More to explore",
+                sortOrder: metadata?.sortOrder ?? 999,
+                types: types.sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+            )
+        }
+        .sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
     }
 
     private var visibleSubcategories: [DastakV1CatalogueSubcategory] {
@@ -713,13 +760,50 @@ struct DastakHomeView: View {
     }
 }
 
+private struct DastakCatalogueNavigationGroup {
+    let key: String
+    let name: String
+    let sortOrder: Int
+    let types: [DastakV1CatalogueCategory]
+}
+
+private struct DastakDepartmentTile: View {
+    let categoryType: DastakV1CatalogueCategory
+
+    var body: some View {
+        VStack(spacing: 7) {
+            DastakCategoryArtwork(
+                imageKey: categoryType.imageKey,
+                previewImageKeys: categoryType.previewImageKeys,
+                fallbackSymbol: DastakCatalogueSymbol.symbol(for: categoryType.slug)
+            )
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1, contentMode: .fit)
+            Text(categoryType.name)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 31, alignment: .top)
+            if categoryType.status != nil, categoryType.status != "ACTIVE" {
+                Text("COMING SOON")
+                    .font(.system(size: 8, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
 private struct DastakCategoryTile: View {
     let category: DastakV1CatalogueCategory
 
     var body: some View {
         VStack(spacing: 7) {
-            DastakProductArtwork(
-                imageKey: category.imageKey ?? category.previewImageKeys?.first,
+            DastakCategoryArtwork(
+                imageKey: category.imageKey,
+                previewImageKeys: category.previewImageKeys,
                 fallbackSymbol: DastakCatalogueSymbol.symbol(for: category.slug)
             )
             .frame(maxWidth: .infinity)

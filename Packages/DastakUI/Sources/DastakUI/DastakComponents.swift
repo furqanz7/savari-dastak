@@ -353,6 +353,114 @@ struct DastakProductArtwork: View {
     }
 }
 
+/// A broad catalogue destination should read like a shelf, not like a single
+/// arbitrary SKU. This composes up to two approved pack shots into one quiet,
+/// consistent category card while retaining a semantic fallback for empty
+/// controlled or coming-soon departments.
+struct DastakCategoryArtwork: View {
+    private let imageKeys: [String]
+    private let fallbackSymbol: String
+
+    init(
+        imageKey: String?,
+        previewImageKeys: [String]? = nil,
+        fallbackSymbol: String,
+        maximumImages: Int = 2
+    ) {
+        var seen = Set<String>()
+        self.imageKeys = ([imageKey].compactMap { $0 } + (previewImageKeys ?? []))
+            .filter { seen.insert($0).inserted }
+            .prefix(max(1, maximumImages))
+            .map { $0 }
+        self.fallbackSymbol = fallbackSymbol
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    MarketplaceColors.accent(for: colorScheme)
+                        .opacity(colorScheme == .dark ? 0.12 : 0.065),
+                    Color.primary.opacity(colorScheme == .dark ? 0.04 : 0.015),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Image(systemName: fallbackSymbol)
+                .font(.system(size: 27, weight: .light))
+                .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
+                .opacity(imageKeys.isEmpty ? 1 : 0.28)
+
+            if !imageKeys.isEmpty {
+                HStack(spacing: imageKeys.count == 1 ? 0 : -10) {
+                    ForEach(Array(imageKeys.enumerated()), id: \.element) { index, imageKey in
+                        DastakBareArtworkImage(imageKey: imageKey)
+                            .rotationEffect(.degrees(rotation(for: index)))
+                            .zIndex(Double(index))
+                    }
+                }
+                .padding(imageKeys.count == 1 ? 7 : 9)
+            }
+        }
+        .aspectRatio(1.18, contentMode: .fit)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: MarketplaceMetrics.compactCornerRadius,
+                style: .continuous
+            )
+        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: MarketplaceMetrics.compactCornerRadius,
+                style: .continuous
+            )
+            .stroke(Color.primary.opacity(colorScheme == .dark ? 0.09 : 0.045), lineWidth: 0.75)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func rotation(for index: Int) -> Double {
+        guard imageKeys.count > 1 else { return 0 }
+        return switch index {
+        case 0: -3.5
+        case 1: 2.5
+        default: -1.5
+        }
+    }
+}
+
+private struct DastakBareArtworkImage: View {
+    let imageKey: String
+    @StateObject private var loader = DastakArtworkViewModel()
+
+    var body: some View {
+        Group {
+            if let image = loader.image {
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .transition(.opacity)
+            } else {
+                Color.clear
+            }
+        }
+        .task(id: artworkRequest) { await loader.load(artworkRequest) }
+        .animation(.easeOut(duration: 0.16), value: loader.image != nil)
+    }
+
+    private var artworkRequest: DastakArtworkRequest? {
+        DastakArtworkURLFactory.request(
+            for: imageKey,
+            baseURLString: Bundle.main.object(
+                forInfoDictionaryKey: "MarketplaceSupabaseURL"
+            ) as? String
+        )
+    }
+}
+
 struct DastakQuantityControl: View {
     let quantity: Int
     let decrement: () -> Void

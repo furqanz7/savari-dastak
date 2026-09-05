@@ -6,8 +6,9 @@
 .v1-deliver-to span { min-width: 0; display: grid; gap: 1px; }
 .v1-deliver-to small { color: var(--text-secondary); font-size: 9px; font-weight: 800; letter-spacing: .1em; }
 .v1-deliver-to strong { color: var(--text-primary); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.v1-customer-header > button { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--divider); border-radius: 50%; color: var(--text-primary); background: var(--surface-raised); }
-.v1-customer-header > button b { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 5px; border-radius: 999px; color: var(--primary-action-foreground); background: var(--dastak-accent); font-size: 10px; }
+.v1-header-actions { display: flex; gap: 8px; }
+.v1-header-actions button { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--divider); border-radius: 50%; color: var(--text-primary); background: var(--surface-raised); }
+.v1-header-actions button b { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 5px; border-radius: 999px; color: var(--primary-action-foreground); background: var(--dastak-accent); font-size: 10px; }
 .v1-alert { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; margin: 14px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--divider)); border-radius: 10px; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 8%, var(--surface)); font-size: 13px; }
 .v1-alert button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; color: inherit; background: transparent; }
 .v1-hero { padding: clamp(42px, 8vw, 86px) 0 30px; }
@@ -15,8 +16,6 @@
 .v1-hero h1 { margin: 10px 0 18px; font-family: var(--font-dastak-wordmark); font-size: clamp(44px, 7vw, 74px); font-weight: 400; line-height: .98; }
 .v1-hero > span { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px; font-weight: 650; }
 .v1-hero > span svg { color: var(--dastak-accent); }
-.v1-search-launch { width: 100%; min-height: 56px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 0 16px; border: 1px solid var(--divider); border-radius: var(--radius-control); color: var(--text-secondary); background: var(--surface-raised); text-align: left; }
-.v1-search-launch svg:first-child { color: var(--dastak-accent); }
 .v1-section { padding: 34px 0 8px; }
 .v1-section > header { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
 .v1-section h2 { margin: 5px 0 0; font-size: 24px; }
@@ -28,7 +27,7 @@
 .v1-category-rail button.selected { border-color: color-mix(in srgb, var(--dastak-accent) 55%, var(--divider)); background: var(--dastak-accent-soft); }
 .v1-text-action { min-height: 42px; padding: 0 14px; border: 1px solid var(--divider); border-radius: 999px; color: var(--dastak-accent); background: var(--surface-raised); font-weight: 750; }
 .v1-category-groups { display: grid; gap: 42px; }
-.v1-category-groups > section { display: grid; gap: 14px; }
+.v1-category-groups > section { display: grid; gap: 14px; content-visibility: auto; contain-intrinsic-size: 330px; }
 .v1-category-groups > section > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .v1-category-groups h3 { margin: 0; font-size: 20px; }
 .v1-category-groups header span { color: var(--text-secondary); font-size: 11px; }

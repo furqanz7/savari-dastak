@@ -688,6 +688,8 @@ describe("Dastak V1 web contract", () => {
       return Response.json({
         categoryTypes: [{
           id: packageId, name: "Groceries", slug: "groceries", imageKey: null,
+          previewImageKeys: ["catalogue/rice.webp", "catalogue/atta.webp"],
+          navigationSection: { key: "grocery-kitchen", name: "Grocery & Kitchen", sortOrder: 10 },
           sortOrder: 1, status: "ACTIVE", version: 2, updatedAt,
         }],
         categories: [{
@@ -703,7 +705,12 @@ describe("Dastak V1 web contract", () => {
     });
 
     expect(requestBody).toEqual({ operation: "adminSnapshot", skuLimit: 1000 });
-    expect(snapshot.categoryTypes[0]).toMatchObject({ name: "Groceries", updatedAt });
+    expect(snapshot.categoryTypes[0]).toMatchObject({
+      name: "Groceries",
+      previewImageKeys: ["catalogue/rice.webp", "catalogue/atta.webp"],
+      navigationSection: { key: "grocery-kitchen", name: "Grocery & Kitchen", sortOrder: 10 },
+      updatedAt,
+    });
     expect(snapshot.categories[0]).toMatchObject({ categoryTypeId: packageId, name: "Staples" });
     expect(snapshot.subcategories[0]).toMatchObject({ categoryId, name: "Flours" });
   });

@@ -20,6 +20,8 @@ final class DastakV1CustomerClientTests: XCTestCase {
 
         XCTAssertEqual(snapshot.skus.first?.name, "Whole Milk")
         XCTAssertEqual(snapshot.skus.first?.price, Money(paise: 6_900))
+        XCTAssertEqual(snapshot.categoryTypes?.first?.previewImageKeys, ["catalogue/milk.webp"])
+        XCTAssertEqual(snapshot.categoryTypes?.first?.navigationSection?.name, "Grocery & Kitchen")
         let recorded = await functions.lastCall()
         let call = try XCTUnwrap(recorded)
         XCTAssertEqual(call.name, "dastak-v1-catalogue")
@@ -365,6 +367,7 @@ private let lineID = UUID(uuidString: "55555555-5555-4555-8555-555555555555")!
 private let catalogueJSON = """
 {
   "catalogueVersion":"2026-08-22T10:00:00Z",
+  "categoryTypes":[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Dairy, Bread & Eggs","slug":"dairy-bread-eggs","imageKey":null,"previewImageKeys":["catalogue/milk.webp"],"navigationSection":{"key":"grocery-kitchen","name":"Grocery & Kitchen","sortOrder":10},"sortOrder":1}],
   "categories":[{"id":"\(categoryID)","name":"Groceries","slug":"groceries","imageKey":null,"sortOrder":1}],
   "subcategories":[{"id":"\(subcategoryID)","categoryId":"\(categoryID)","name":"Dairy","slug":"dairy","imageKey":null,"sortOrder":1}],
   "skus":[{

@@ -332,7 +332,11 @@ private struct DastakAdminCatalogueView: View {
                         catalogueIntroduction
                         catalogueToolbar
                         if categoryID == nil && trimmedQuery.isEmpty && status == nil && qaStatus == nil {
-                            categoryDirectory
+                            if categoryTypeID == nil {
+                                departmentDirectory
+                            } else {
+                                categoryDirectory
+                            }
                         } else if shouldShowProducts {
                             catalogueResults
                         }
@@ -511,6 +515,36 @@ private struct DastakAdminCatalogueView: View {
     }
 
     @ViewBuilder
+    private var departmentDirectory: some View {
+        if let taxonomy = model.catalogueTaxonomy {
+            ForEach(adminNavigationGroups(taxonomy), id: \.key) { group in
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                    Text(group.name).font(.title3.bold())
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
+                        alignment: .leading,
+                        spacing: MarketplaceSpacing.medium
+                    ) {
+                        ForEach(group.types) { type in
+                            Button {
+                                categoryTypeID = type.id
+                                categoryID = nil
+                                subcategoryID = nil
+                            } label: {
+                                AdminCatalogueDepartmentTile(categoryType: type)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        } else if model.isLoadingCatalogue {
+            ProgressView("Loading catalogue")
+                .frame(maxWidth: .infinity, minHeight: 220)
+        }
+    }
+
+    @ViewBuilder
     private var categoryDirectory: some View {
         if let taxonomy = model.catalogueTaxonomy {
             ForEach(taxonomy.categoryTypes.filter { categoryTypeID == nil || $0.id == categoryTypeID }) { type in
@@ -530,7 +564,8 @@ private struct DastakAdminCatalogueView: View {
                                 } label: {
                                     AdminCatalogueCategoryTile(
                                         category: category,
-                                        imageKey: category.imageKey ?? categoryArtworkKey(category.id)
+                                        imageKey: category.imageKey ?? categoryArtworkKey(category.id),
+                                        previewImageKeys: category.previewImageKeys
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -553,6 +588,7 @@ private struct DastakAdminCatalogueView: View {
                     AdminCatalogueCollectionTile(
                         title: "All",
                         imageKey: selectedCategory.flatMap { $0.imageKey ?? categoryArtworkKey($0.id) },
+                        previewImageKeys: selectedCategory?.previewImageKeys,
                         selected: subcategoryID == nil
                     )
                 }
@@ -562,6 +598,7 @@ private struct DastakAdminCatalogueView: View {
                         AdminCatalogueCollectionTile(
                             title: subcategory.name,
                             imageKey: subcategory.imageKey ?? subcategoryArtworkKey(subcategory.id),
+                            previewImageKeys: subcategory.previewImageKeys,
                             selected: subcategoryID == subcategory.id
                         )
                     }
@@ -624,6 +661,11 @@ private struct DastakAdminCatalogueView: View {
     }
 
     private func categoryArtworkKey(_ categoryID: UUID) -> String? {
+        if let preview = model.catalogueTaxonomy?.categories.first(where: {
+            $0.id == categoryID
+        })?.previewImageKeys?.first {
+            return preview
+        }
         if let preview = model.catalogueTaxonomy?.skuPreviews?.first(where: {
             $0.categoryID == categoryID && $0.imageKey != nil
         })?.imageKey {
@@ -635,6 +677,11 @@ private struct DastakAdminCatalogueView: View {
     }
 
     private func subcategoryArtworkKey(_ subcategoryID: UUID) -> String? {
+        if let preview = model.catalogueTaxonomy?.subcategories.first(where: {
+            $0.id == subcategoryID
+        })?.previewImageKeys?.first {
+            return preview
+        }
         if let preview = model.catalogueTaxonomy?.skuPreviews?.first(where: {
             $0.subcategoryID == subcategoryID && $0.imageKey != nil
         })?.imageKey {
@@ -658,12 +705,20 @@ private struct DastakAdminCatalogueView: View {
                 $0.primaryImage?.imageKey ?? $0.imageKey
             })
         } else {
-            keys.append(contentsOf: (model.catalogueTaxonomy?.categories ?? []).prefix(32).compactMap {
-                $0.imageKey ?? categoryArtworkKey($0.id)
-            })
+            if categoryTypeID == nil {
+                for type in model.catalogueTaxonomy?.categoryTypes ?? [] {
+                    keys.append(contentsOf: ([type.imageKey].compactMap { $0 }
+                        + (type.previewImageKeys ?? [])).prefix(2))
+                }
+            } else {
+                for category in visibleCategories {
+                    keys.append(contentsOf: ([category.imageKey].compactMap { $0 }
+                        + (category.previewImageKeys ?? [])).prefix(2))
+                }
+            }
         }
         var seen = Set<String>()
-        return keys.filter { seen.insert($0).inserted }.prefix(48).map { $0 }
+        return keys.filter { seen.insert($0).inserted }.prefix(32).map { $0 }
     }
 
     private var catalogueFilters: some View {
@@ -716,6 +771,24 @@ private struct DastakAdminCatalogueView: View {
         return (model.catalogueTaxonomy?.subcategories ?? []).filter {
             (categoryID == nil || $0.categoryID == categoryID) && visibleIDs.contains($0.categoryID)
         }
+    }
+
+    private func adminNavigationGroups(
+        _ taxonomy: DastakAdminCatalogueTaxonomy
+    ) -> [AdminCatalogueNavigationGroup] {
+        let grouped = Dictionary(grouping: taxonomy.categoryTypes) {
+            $0.navigationSection?.key ?? "more"
+        }
+        return grouped.map { key, types in
+            let metadata = types.compactMap(\.navigationSection).first
+            return AdminCatalogueNavigationGroup(
+                key: key,
+                name: metadata?.name ?? "More to explore",
+                sortOrder: metadata?.sortOrder ?? 999,
+                types: types.sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+            )
+        }
+        .sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
     }
 
     private func load(append: Bool = false) async {
@@ -1448,11 +1521,13 @@ private struct AdminPersonDetail: View { let person: DastakAdminNetworkPerson; v
 private struct AdminCatalogueCategoryTile: View {
     let category: DastakAdminCatalogueTaxonomy.Category
     let imageKey: String?
+    let previewImageKeys: [String]?
 
     var body: some View {
         VStack(spacing: 7) {
-            DastakProductArtwork(
+            DastakCategoryArtwork(
                 imageKey: imageKey,
+                previewImageKeys: previewImageKeys,
                 fallbackSymbol: DastakCatalogueSymbol.symbol(for: category.slug)
             )
                 .frame(maxWidth: .infinity)
@@ -1463,21 +1538,66 @@ private struct AdminCatalogueCategoryTile: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
+            if category.status != "ACTIVE" {
+                Text("COMING SOON")
+                    .font(.system(size: 8, weight: .bold))
+                    .tracking(0.5)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
         }
         .contentShape(Rectangle())
     }
 }
 
+private struct AdminCatalogueDepartmentTile: View {
+    let categoryType: DastakAdminCatalogueTaxonomy.CategoryType
+
+    var body: some View {
+        VStack(spacing: 7) {
+            DastakCategoryArtwork(
+                imageKey: categoryType.imageKey,
+                previewImageKeys: categoryType.previewImageKeys,
+                fallbackSymbol: DastakCatalogueSymbol.symbol(for: categoryType.slug)
+            )
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1, contentMode: .fit)
+            Text(categoryType.name)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
+            if categoryType.status != "ACTIVE" {
+                Text("COMING SOON")
+                    .font(.system(size: 8, weight: .bold))
+                    .tracking(0.5)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct AdminCatalogueNavigationGroup {
+    let key: String
+    let name: String
+    let sortOrder: Int
+    let types: [DastakAdminCatalogueTaxonomy.CategoryType]
+}
+
 private struct AdminCatalogueCollectionTile: View {
     let title: String
     let imageKey: String?
+    let previewImageKeys: [String]?
     let selected: Bool
 
     var body: some View {
         VStack(spacing: 7) {
-            DastakProductArtwork(
+            DastakCategoryArtwork(
                 imageKey: imageKey,
-                fallbackSymbol: title == "All" ? "sparkles" : DastakCatalogueSymbol.symbol(for: title)
+                previewImageKeys: previewImageKeys,
+                fallbackSymbol: title == "All" ? "sparkles" : DastakCatalogueSymbol.symbol(for: title),
+                maximumImages: 1
             )
                 .frame(width: 64, height: 58)
             Text(title)

@@ -1,6 +1,12 @@
 import Foundation
 import MarketplaceFoundation
 
+public struct DastakV1CatalogueNavigationSection: Codable, Equatable, Sendable {
+    public let key: String
+    public let name: String
+    public let sortOrder: Int
+}
+
 public struct DastakV1CatalogueCategory: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let categoryTypeID: UUID?
@@ -8,12 +14,14 @@ public struct DastakV1CatalogueCategory: Codable, Equatable, Identifiable, Senda
     public let slug: String
     public let imageKey: String?
     public let previewImageKeys: [String]?
+    public let navigationSection: DastakV1CatalogueNavigationSection?
     public let status: String?
     public let requiresControlledFlow: Bool?
     public let sortOrder: Int
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, slug, imageKey, previewImageKeys, status, requiresControlledFlow, sortOrder
+        case id, name, slug, imageKey, previewImageKeys, navigationSection
+        case status, requiresControlledFlow, sortOrder
         case categoryTypeID = "categoryTypeId"
     }
 }

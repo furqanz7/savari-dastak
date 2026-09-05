@@ -94,13 +94,16 @@ public struct DastakV1MerchantCatalogueSnapshot: Codable, Equatable, Sendable {
         public let name: String
         public let slug: String
         public let imageKey: String?
+        public let previewImageKeys: [String]?
+        public let navigationSection: DastakV1CatalogueNavigationSection?
         public let status: String?
         public let requiresControlledFlow: Bool?
         public let sortOrder: Int
         public var id: UUID { categoryTypeID }
 
         private enum CodingKeys: String, CodingKey {
-            case name, slug, imageKey, status, requiresControlledFlow, sortOrder
+            case name, slug, imageKey, previewImageKeys, navigationSection
+            case status, requiresControlledFlow, sortOrder
             case categoryTypeID = "categoryTypeId"
         }
     }
@@ -111,13 +114,14 @@ public struct DastakV1MerchantCatalogueSnapshot: Codable, Equatable, Sendable {
         public let name: String
         public let slug: String
         public let imageKey: String?
+        public let previewImageKeys: [String]?
         public let status: String?
         public let requiresControlledFlow: Bool?
         public let sortOrder: Int
         public var id: UUID { categoryID }
 
         private enum CodingKeys: String, CodingKey {
-            case name, slug, imageKey, status, requiresControlledFlow, sortOrder
+            case name, slug, imageKey, previewImageKeys, status, requiresControlledFlow, sortOrder
             case categoryID = "categoryId"
             case categoryTypeID = "categoryTypeId"
         }
@@ -129,13 +133,14 @@ public struct DastakV1MerchantCatalogueSnapshot: Codable, Equatable, Sendable {
         public let name: String
         public let slug: String
         public let imageKey: String?
+        public let previewImageKeys: [String]?
         public let status: String?
         public let requiresControlledFlow: Bool?
         public let sortOrder: Int
         public var id: UUID { subcategoryID }
 
         private enum CodingKeys: String, CodingKey {
-            case name, slug, imageKey, status, requiresControlledFlow, sortOrder
+            case name, slug, imageKey, previewImageKeys, status, requiresControlledFlow, sortOrder
             case subcategoryID = "subcategoryId"
             case categoryID = "categoryId"
         }

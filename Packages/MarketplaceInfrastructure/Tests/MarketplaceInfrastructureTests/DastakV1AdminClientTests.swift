@@ -108,6 +108,8 @@ final class DastakV1AdminClientTests: XCTestCase {
 
         let taxonomy = try await client.catalogueTaxonomy(idempotencyKey: key("admin-taxonomy"))
         XCTAssertEqual(taxonomy.categoryTypes.first?.name, "Groceries")
+        XCTAssertEqual(taxonomy.categoryTypes.first?.previewImageKeys, ["catalogue/atta-preview.webp"])
+        XCTAssertEqual(taxonomy.categoryTypes.first?.navigationSection?.name, "Grocery & Kitchen")
         XCTAssertEqual(taxonomy.categories.first?.categoryTypeID, categoryTypeID)
         XCTAssertEqual(taxonomy.subcategories.first?.categoryID, categoryID)
         XCTAssertEqual(taxonomy.skuPreviews?.first?.imageKey, "catalogue/atta-preview.webp")
@@ -409,7 +411,7 @@ private let adminNetworkPageJSON = #"""
 """#.data(using: .utf8)!
 private let adminCatalogueTaxonomyJSON = #"""
 {
-  "categoryTypes":[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Groceries","slug":"groceries","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}],
+  "categoryTypes":[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Groceries","slug":"groceries","imageKey":null,"previewImageKeys":["catalogue/atta-preview.webp"],"navigationSection":{"key":"grocery-kitchen","name":"Grocery & Kitchen","sortOrder":10},"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}],
   "categories":[{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","categoryTypeId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Flour","slug":"flour","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}],
   "subcategories":[{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","categoryId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","name":"Wheat Flour","slug":"wheat-flour","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}],
   "skus":[{"categoryId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","subcategoryId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","imageKey":"catalogue/atta-preview.webp"}]
