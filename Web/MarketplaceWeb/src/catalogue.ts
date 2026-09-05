@@ -299,11 +299,17 @@ export function formatPrice(paise: number) {
   }).format(paise / 100);
 }
 
-export function catalogueImageUrl(supabaseUrl: string, path: string | null) {
+export function catalogueImageUrl(supabaseUrl: string, path: string | null, pixelSize = 512) {
   if (!path) return null;
   const segments = path.split("/");
   if (segments.some((segment) => !segment || segment === "." || segment === ".." || segment.includes("\\"))) return null;
-  return `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/public/dastak-catalogue/${segments.map(encodeURIComponent).join("/")}`;
+  const dimension = Math.min(Math.max(Math.round(pixelSize), 128), 1024);
+  const url = new URL(`${supabaseUrl.replace(/\/$/, "")}/storage/v1/render/image/public/dastak-catalogue/${segments.map(encodeURIComponent).join("/")}`);
+  url.searchParams.set("width", String(dimension));
+  url.searchParams.set("height", String(dimension));
+  url.searchParams.set("resize", "contain");
+  url.searchParams.set("quality", "72");
+  return url.toString();
 }
 
 function parseStore(value: unknown): CatalogueStore {

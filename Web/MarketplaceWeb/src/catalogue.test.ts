@@ -87,7 +87,11 @@ describe("catalogue data", () => {
 
   it("encodes public catalogue image paths", () => {
     expect(catalogueImageUrl("https://example.supabase.co", "merchant/account/lime soda.jpg"))
-      .toBe("https://example.supabase.co/storage/v1/object/public/dastak-catalogue/merchant/account/lime%20soda.jpg");
+      .toBe("https://example.supabase.co/storage/v1/render/image/public/dastak-catalogue/merchant/account/lime%20soda.jpg?width=512&height=512&resize=contain&quality=72");
+    expect(catalogueImageUrl("https://example.supabase.co/", "merchant/account/lime soda.jpg", 4096))
+      .toContain("width=1024&height=1024");
+    expect(catalogueImageUrl("https://example.supabase.co", "merchant/account/lime soda.jpg", 1))
+      .toContain("width=128&height=128");
     expect(catalogueImageUrl("https://example.supabase.co", null)).toBeNull();
   });
 
