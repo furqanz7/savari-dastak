@@ -1,3 +1,4 @@
+import Foundation
 import MarketplaceDesignSystem
 import MarketplaceInfrastructure
 import SwiftUI
@@ -7,56 +8,157 @@ import UIKit
 import AppKit
 #endif
 
+struct DastakArtworkRequest: Hashable, Sendable {
+    let thumbnailURL: URL
+    let originalURL: URL
+
+    var candidateURLs: [URL] {
+        thumbnailURL == originalURL ? [thumbnailURL] : [thumbnailURL, originalURL]
+    }
+}
+
+enum DastakArtworkURLFactory {
+    static func request(
+        for imageKey: String?,
+        baseURLString: String?,
+        pixelSize: Int = 512
+    ) -> DastakArtworkRequest? {
+        guard let imageKey,
+              let baseURLString,
+              !baseURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+
+        let segments = imageKey.split(separator: "/", omittingEmptySubsequences: false)
+        guard !segments.isEmpty,
+              segments.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\\") })
+        else { return nil }
+
+        var allowedPathCharacters = CharacterSet.urlPathAllowed
+        allowedPathCharacters.remove(charactersIn: "/?#")
+        let encoded = segments.compactMap {
+            String($0).addingPercentEncoding(withAllowedCharacters: allowedPathCharacters)
+        }
+        guard encoded.count == segments.count else { return nil }
+
+        let base = baseURLString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let path = encoded.joined(separator: "/")
+        guard let originalURL = URL(
+            string: base + "/storage/v1/object/public/dastak-catalogue/" + path
+        ), var thumbnailComponents = URLComponents(
+            string: base + "/storage/v1/render/image/public/dastak-catalogue/" + path
+        ) else { return nil }
+
+        let dimension = min(max(pixelSize, 128), 1_024)
+        thumbnailComponents.queryItems = [
+            URLQueryItem(name: "width", value: String(dimension)),
+            URLQueryItem(name: "height", value: String(dimension)),
+            URLQueryItem(name: "resize", value: "contain"),
+            URLQueryItem(name: "quality", value: "72"),
+        ]
+        guard let thumbnailURL = thumbnailComponents.url else { return nil }
+        return DastakArtworkRequest(thumbnailURL: thumbnailURL, originalURL: originalURL)
+    }
+}
+
+enum DastakCatalogueSymbol {
+    static func symbol(for value: String) -> String {
+        let value = value.lowercased()
+        if value.contains("pharmacy") || value.contains("medicine") || value.contains("health") || value.contains("first-aid") {
+            return "cross.case.fill"
+        }
+        if value.contains("paan") || value.contains("betel") || value.contains("mukhwas") {
+            return "leaf.fill"
+        }
+        if value.contains("fruit") || value.contains("vegetable") || value.contains("produce") || value.contains("herb") {
+            return "leaf.fill"
+        }
+        if value.contains("dairy") || value.contains("milk") || value.contains("beverage") || value.contains("drink") {
+            return "takeoutbag.and.cup.and.straw.fill"
+        }
+        if value.contains("baby") || value.contains("care") || value.contains("beauty") {
+            return "sparkles"
+        }
+        if value.contains("home") || value.contains("kitchen") || value.contains("clean") {
+            return "house.fill"
+        }
+        if value.contains("pet") { return "pawprint.fill" }
+        if value.contains("toy") || value.contains("game") { return "gamecontroller.fill" }
+        if value.contains("electronic") || value.contains("mobile") { return "desktopcomputer" }
+        if value.contains("hardware") || value.contains("automotive") { return "wrench.and.screwdriver.fill" }
+        if value.contains("food") || value.contains("snack") || value.contains("grocery") { return "basket.fill" }
+        return "shippingbox.fill"
+    }
+}
+
 private actor DastakArtworkDataStore {
     static let shared = DastakArtworkDataStore()
 
     private var cachedData: [URL: Data] = [:]
     private var cachedByteCount = 0
-    private var inFlight: [URL: Task<Data?, Never>] = [:]
+    private var inFlight: [DastakArtworkRequest: Task<Data?, Never>] = [:]
     private let maximumCachedBytes = 64 * 1_024 * 1_024
 
-    func data(for url: URL) async -> Data? {
-        if let data = cachedData[url] { return data }
-        if let task = inFlight[url] { return await task.value }
+    func data(for request: DastakArtworkRequest) async -> Data? {
+        if let data = cachedData[request.thumbnailURL] { return data }
+        if let task = inFlight[request] { return await task.value }
 
         let task = Task<Data?, Never> {
-            var request = URLRequest(
-                url: url,
-                cachePolicy: .returnCacheDataElseLoad,
-                timeoutInterval: 20
-            )
-            request.setValue("image/avif,image/webp,image/*", forHTTPHeaderField: "Accept")
-            do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-                guard let response = response as? HTTPURLResponse,
-                      (200..<300).contains(response.statusCode),
-                      !data.isEmpty
-                else { return nil }
-                return data
-            } catch {
-                return nil
+            for candidateURL in request.candidateURLs {
+                if let data = await Self.download(candidateURL) {
+                    return data
+                }
             }
+            return nil
         }
-        inFlight[url] = task
+        inFlight[request] = task
         let data = await task.value
-        inFlight[url] = nil
+        inFlight[request] = nil
         if let data {
-            cache(data, for: url)
+            cache(data, for: request.thumbnailURL)
         }
         return data
     }
 
-    func prefetch(_ urls: [URL]) async {
-        var seen = Set<URL>()
-        let uniqueURLs = Array(urls.filter { seen.insert($0).inserted }.prefix(48))
-        for start in stride(from: 0, to: uniqueURLs.count, by: 6) {
-            let end = min(start + 6, uniqueURLs.count)
+    func prefetch(_ requests: [DastakArtworkRequest]) async {
+        var seen = Set<DastakArtworkRequest>()
+        let uniqueRequests = Array(requests.filter { seen.insert($0).inserted }.prefix(64))
+        for start in stride(from: 0, to: uniqueRequests.count, by: 8) {
+            let end = min(start + 8, uniqueRequests.count)
             await withTaskGroup(of: Void.self) { group in
-                for url in uniqueURLs[start..<end] {
-                    group.addTask { _ = await self.data(for: url) }
+                for request in uniqueRequests[start..<end] {
+                    group.addTask { _ = await self.data(for: request) }
                 }
             }
         }
+    }
+
+    private static func download(_ url: URL) async -> Data? {
+        for attempt in 0..<3 {
+            if Task.isCancelled { return nil }
+            var urlRequest = URLRequest(
+                url: url,
+                cachePolicy: .returnCacheDataElseLoad,
+                timeoutInterval: 12
+            )
+            urlRequest.setValue("image/webp,image/*", forHTTPHeaderField: "Accept")
+            do {
+                let (data, response) = try await URLSession.shared.data(for: urlRequest)
+                guard let response = response as? HTTPURLResponse else { return nil }
+                if (200..<300).contains(response.statusCode),
+                   !data.isEmpty,
+                   response.mimeType?.lowercased().hasPrefix("image/") != false {
+                    return data
+                }
+                guard (response.statusCode == 429 || (500..<600).contains(response.statusCode)), attempt < 2 else {
+                    return nil
+                }
+            } catch {
+                guard attempt < 2 else { return nil }
+            }
+            let delay = attempt == 0 ? 150_000_000 : 450_000_000
+            try? await Task.sleep(nanoseconds: UInt64(delay))
+        }
+        return nil
     }
 
     private func cache(_ data: Data, for url: URL) {
@@ -76,13 +178,16 @@ private actor DastakArtworkDataStore {
 @MainActor
 private final class DastakArtworkViewModel: ObservableObject {
     @Published private(set) var image: Image?
-    private var representedURL: URL?
+    private var representedRequest: DastakArtworkRequest?
 
-    func load(_ url: URL?) async {
-        guard representedURL != url || image == nil else { return }
-        representedURL = url
+    func load(_ request: DastakArtworkRequest?) async {
+        guard representedRequest != request || image == nil else { return }
+        representedRequest = request
         image = nil
-        guard let url, let data = await DastakArtworkDataStore.shared.data(for: url), representedURL == url else {
+        guard let request,
+              let data = await DastakArtworkDataStore.shared.data(for: request),
+              representedRequest == request
+        else {
             return
         }
 #if canImport(UIKit)
@@ -193,7 +298,7 @@ struct DastakProductArtwork: View {
                     .transition(.opacity)
             } else {
                 fallback
-                    .opacity(imageURL == nil ? 1 : 0.58)
+                    .opacity(artworkRequest == nil ? 1 : 0.58)
             }
         }
         .aspectRatio(1.18, contentMode: .fit)
@@ -211,14 +316,14 @@ struct DastakProductArtwork: View {
             .stroke(Color.primary.opacity(colorScheme == .dark ? 0.09 : 0.045), lineWidth: 0.75)
         }
         .accessibilityHidden(true)
-        .task(id: imageURL) {
-            await loader.load(imageURL)
+        .task(id: artworkRequest) {
+            await loader.load(artworkRequest)
         }
         .animation(.easeOut(duration: 0.16), value: loader.image != nil)
     }
 
     static func prefetch(imageKeys: [String]) async {
-        await DastakArtworkDataStore.shared.prefetch(imageKeys.compactMap(imageURL(for:)))
+        await DastakArtworkDataStore.shared.prefetch(imageKeys.compactMap(artworkRequest(for:)))
     }
 
     private var fallback: some View {
@@ -227,24 +332,15 @@ struct DastakProductArtwork: View {
             .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
     }
 
-    private var imageURL: URL? {
-        Self.imageURL(for: imageKey)
+    private var artworkRequest: DastakArtworkRequest? {
+        Self.artworkRequest(for: imageKey)
     }
 
-    private static func imageURL(for imageKey: String?) -> URL? {
-        guard let imageKey,
-              let base = Bundle.main.object(forInfoDictionaryKey: "MarketplaceSupabaseURL") as? String
-        else { return nil }
-        let segments = imageKey.split(separator: "/", omittingEmptySubsequences: false)
-        guard !segments.isEmpty,
-              segments.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\\") })
-        else { return nil }
-        let encoded = segments.compactMap {
-            String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
-        }
-        guard encoded.count == segments.count else { return nil }
-        return URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) +
-            "/storage/v1/object/public/dastak-catalogue/" + encoded.joined(separator: "/"))
+    private static func artworkRequest(for imageKey: String?) -> DastakArtworkRequest? {
+        DastakArtworkURLFactory.request(
+            for: imageKey,
+            baseURLString: Bundle.main.object(forInfoDictionaryKey: "MarketplaceSupabaseURL") as? String
+        )
     }
 
     private var symbol: String {

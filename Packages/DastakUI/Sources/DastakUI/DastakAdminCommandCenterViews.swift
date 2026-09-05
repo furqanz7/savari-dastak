@@ -1451,7 +1451,10 @@ private struct AdminCatalogueCategoryTile: View {
 
     var body: some View {
         VStack(spacing: 7) {
-            DastakProductArtwork(imageKey: imageKey, fallbackSymbol: "square.grid.2x2.fill")
+            DastakProductArtwork(
+                imageKey: imageKey,
+                fallbackSymbol: DastakCatalogueSymbol.symbol(for: category.slug)
+            )
                 .frame(maxWidth: .infinity)
                 .aspectRatio(1, contentMode: .fit)
             Text(category.name)
@@ -1472,7 +1475,10 @@ private struct AdminCatalogueCollectionTile: View {
 
     var body: some View {
         VStack(spacing: 7) {
-            DastakProductArtwork(imageKey: imageKey, fallbackSymbol: title == "All" ? "sparkles" : "shippingbox")
+            DastakProductArtwork(
+                imageKey: imageKey,
+                fallbackSymbol: title == "All" ? "sparkles" : DastakCatalogueSymbol.symbol(for: title)
+            )
                 .frame(width: 64, height: 58)
             Text(title)
                 .font(.caption2.weight(.semibold))
@@ -1494,7 +1500,11 @@ private struct AdminCatalogueGridCard: View {
         VStack(alignment: .leading, spacing: 6) {
             DastakProductArtwork(
                 imageKey: sku.primaryImage?.imageKey ?? sku.imageKey,
-                fallbackSymbol: "shippingbox"
+                fallbackSymbol: DastakCatalogueSymbol.symbol(
+                    for: [sku.categoryTypeName, sku.categoryName, sku.subcategoryName]
+                        .compactMap { $0 }
+                        .joined(separator: " ")
+                )
             )
             .frame(maxWidth: .infinity)
             .aspectRatio(1.04, contentMode: .fit)
@@ -1502,6 +1512,18 @@ private struct AdminCatalogueGridCard: View {
                 Image(systemName: sku.activationReady ? "checkmark.seal.fill" : "clock.badge.exclamationmark")
                     .foregroundStyle(sku.activationReady ? MarketplaceColors.success.color : MarketplaceColors.warning.color)
                     .padding(8)
+            }
+            .overlay(alignment: .bottomLeading) {
+                if sku.primaryImage?.imageKey == nil, sku.imageKey == nil {
+                    Text("ARTWORK NEEDED")
+                        .font(.system(size: 8, weight: .bold))
+                        .tracking(0.5)
+                        .foregroundStyle(MarketplaceColors.warning.color)
+                        .padding(.horizontal, 7)
+                        .frame(minHeight: 22)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(7)
+                }
             }
             if let brand = sku.brandName {
                 Text(brand.uppercased())

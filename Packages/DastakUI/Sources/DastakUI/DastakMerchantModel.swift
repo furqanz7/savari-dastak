@@ -166,7 +166,7 @@ final class DastakMerchantModel: ObservableObject {
         do {
             let refreshed = try await v1Client.canonicalCatalogue(
                 branchID: canonicalCatalogue?.branch.branchID,
-                limit: 1_000,
+                limit: 5_000,
                 idempotencyKey: makeKey()
             )
             canonicalCatalogue = refreshed

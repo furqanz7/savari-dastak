@@ -54,6 +54,9 @@ struct DastakWishlistMenuSelection: Identifiable {
 final class DastakCustomerModel: ObservableObject {
     @Published private(set) var catalogue: CatalogueSnapshot?
     @Published private(set) var v1Catalogue: DastakV1CatalogueSnapshot?
+    @Published private(set) var v1CategoryProducts: [UUID: [DastakV1CatalogueSKU]] = [:]
+    @Published private(set) var loadingV1CategoryIDs: Set<UUID> = []
+    @Published private(set) var failedV1CategoryIDs: Set<UUID> = []
     @Published private(set) var v1Restaurants: [DastakV1RestaurantMenu] = []
     @Published private(set) var v1SearchResults: [DastakV1CatalogueSKU] = []
     @Published private(set) var v1Orders: [DastakV1OrderSnapshot] = []
@@ -239,11 +242,15 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func products(in categoryID: UUID) -> [DastakV1CatalogueSKU] {
-        (v1Catalogue?.skus ?? []).filter { $0.categoryID == categoryID }
+        if let scoped = v1CategoryProducts[categoryID] { return scoped }
+        return (v1Catalogue?.skus ?? []).filter { $0.categoryID == categoryID }
     }
 
     func products(inSubcategory subcategoryID: UUID) -> [DastakV1CatalogueSKU] {
-        (v1Catalogue?.skus ?? []).filter { $0.subcategoryID == subcategoryID }
+        guard let categoryID = canonicalSubcategories.first(where: { $0.id == subcategoryID })?.categoryID else {
+            return (v1Catalogue?.skus ?? []).filter { $0.subcategoryID == subcategoryID }
+        }
+        return products(in: categoryID).filter { $0.subcategoryID == subcategoryID }
     }
 
     var hasCompleteDeliveryAddress: Bool {
@@ -528,10 +535,50 @@ final class DastakCustomerModel: ObservableObject {
                 idempotencyKey: makeKey()
             )
             v1Catalogue = try await catalogue
+            v1CategoryProducts = [:]
+            failedV1CategoryIDs = []
             v1Restaurants = try await restaurants
             v1CatalogueRefreshFailure = nil
         } catch {
             v1CatalogueRefreshFailure = refreshFailure(for: error)
+        }
+    }
+
+    func loadV1Category(_ categoryID: UUID, force: Bool = false) async {
+        guard (force || v1CategoryProducts[categoryID] == nil),
+              !loadingV1CategoryIDs.contains(categoryID)
+        else { return }
+
+        loadingV1CategoryIDs.insert(categoryID)
+        failedV1CategoryIDs.remove(categoryID)
+        defer { loadingV1CategoryIDs.remove(categoryID) }
+
+        do {
+            var products: [DastakV1CatalogueSKU] = []
+            var cursor: DastakV1CatalogueCursor?
+            var pageCount = 0
+            repeat {
+                let page = try await v1Client.catalogue(
+                    query: nil,
+                    categoryID: categoryID,
+                    subcategoryID: nil,
+                    limit: 250,
+                    cursor: cursor,
+                    idempotencyKey: makeKey()
+                )
+                products.append(contentsOf: page.skus)
+                cursor = page.nextCursor
+                pageCount += 1
+            } while cursor != nil && pageCount < 20
+
+            var seen = Set<UUID>()
+            v1CategoryProducts[categoryID] = products
+                .filter { seen.insert($0.id).inserted }
+                .sorted { lhs, rhs in
+                    lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                }
+        } catch {
+            failedV1CategoryIDs.insert(categoryID)
         }
     }
 

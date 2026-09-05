@@ -8,10 +8,12 @@ public struct DastakV1CatalogueCategory: Codable, Equatable, Identifiable, Senda
     public let slug: String
     public let imageKey: String?
     public let previewImageKeys: [String]?
+    public let status: String?
+    public let requiresControlledFlow: Bool?
     public let sortOrder: Int
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, slug, imageKey, previewImageKeys, sortOrder
+        case id, name, slug, imageKey, previewImageKeys, status, requiresControlledFlow, sortOrder
         case categoryTypeID = "categoryTypeId"
     }
 }
@@ -23,6 +25,8 @@ public struct DastakV1CatalogueSubcategory: Codable, Equatable, Identifiable, Se
     public let slug: String
     public let imageKey: String?
     public let previewImageKeys: [String]?
+    public let status: String?
+    public let requiresControlledFlow: Bool?
     public let sortOrder: Int
 
     private enum CodingKeys: String, CodingKey {
@@ -32,6 +36,8 @@ public struct DastakV1CatalogueSubcategory: Codable, Equatable, Identifiable, Se
         case slug
         case imageKey
         case previewImageKeys
+        case status
+        case requiresControlledFlow
         case sortOrder
     }
 }

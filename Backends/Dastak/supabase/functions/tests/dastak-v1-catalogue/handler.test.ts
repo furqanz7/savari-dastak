@@ -301,6 +301,38 @@ Deno.test("V1 merchant catalogue exposes canonical selection and branch controls
     limit: 500,
   });
 
+  const completeMerchantSnapshot = await handleV1Catalogue(
+    request({
+      operation: "merchantSnapshot",
+      branchId: categoryId,
+    }),
+    dependencies({
+      merchantSnapshot: (input) => Promise.resolve({ recorded: input }),
+    }),
+  );
+  assertEquals((await body(completeMerchantSnapshot)).recorded, {
+    accessToken: actor.accessToken,
+    branchId: categoryId,
+    limit: 5000,
+  });
+
+  let invalidSnapshotCalls = 0;
+  const invalidMerchantSnapshot = await handleV1Catalogue(
+    request({
+      operation: "merchantSnapshot",
+      branchId: categoryId,
+      limit: 5001,
+    }),
+    dependencies({
+      merchantSnapshot: () => {
+        invalidSnapshotCalls += 1;
+        return Promise.resolve({});
+      },
+    }),
+  );
+  assertEquals(invalidMerchantSnapshot.status, 400);
+  assertEquals(invalidSnapshotCalls, 0);
+
   const selectionResponse = await handleV1Catalogue(
     request({
       operation: "updateMerchantSelection",

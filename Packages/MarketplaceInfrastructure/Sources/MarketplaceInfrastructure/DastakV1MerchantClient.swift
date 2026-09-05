@@ -94,11 +94,13 @@ public struct DastakV1MerchantCatalogueSnapshot: Codable, Equatable, Sendable {
         public let name: String
         public let slug: String
         public let imageKey: String?
+        public let status: String?
+        public let requiresControlledFlow: Bool?
         public let sortOrder: Int
         public var id: UUID { categoryTypeID }
 
         private enum CodingKeys: String, CodingKey {
-            case name, slug, imageKey, sortOrder
+            case name, slug, imageKey, status, requiresControlledFlow, sortOrder
             case categoryTypeID = "categoryTypeId"
         }
     }
@@ -109,11 +111,13 @@ public struct DastakV1MerchantCatalogueSnapshot: Codable, Equatable, Sendable {
         public let name: String
         public let slug: String
         public let imageKey: String?
+        public let status: String?
+        public let requiresControlledFlow: Bool?
         public let sortOrder: Int
         public var id: UUID { categoryID }
 
         private enum CodingKeys: String, CodingKey {
-            case name, slug, imageKey, sortOrder
+            case name, slug, imageKey, status, requiresControlledFlow, sortOrder
             case categoryID = "categoryId"
             case categoryTypeID = "categoryTypeId"
         }
@@ -125,11 +129,13 @@ public struct DastakV1MerchantCatalogueSnapshot: Codable, Equatable, Sendable {
         public let name: String
         public let slug: String
         public let imageKey: String?
+        public let status: String?
+        public let requiresControlledFlow: Bool?
         public let sortOrder: Int
         public var id: UUID { subcategoryID }
 
         private enum CodingKeys: String, CodingKey {
-            case name, slug, imageKey, sortOrder
+            case name, slug, imageKey, status, requiresControlledFlow, sortOrder
             case subcategoryID = "subcategoryId"
             case categoryID = "categoryId"
         }
@@ -384,10 +390,10 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
 
     public func canonicalCatalogue(
         branchID: UUID? = nil,
-        limit: Int = 1_000,
+        limit: Int = 5_000,
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakV1MerchantCatalogueSnapshot {
-        precondition((1...1_000).contains(limit))
+        precondition((1...5_000).contains(limit))
         return try await functions.invoke(
             "dastak-v1-catalogue",
             request: CatalogueRequest(

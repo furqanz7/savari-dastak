@@ -147,9 +147,15 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     Group {
                         if products.isEmpty {
                             DastakEmptyState(
-                                symbol: "magnifyingglass",
-                                title: "No matching products",
-                                message: "Try a different product, brand, pack or category."
+                                symbol: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? DastakCatalogueSymbol.symbol(for: categoryName)
+                                    : "magnifyingglass",
+                                title: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? "Approved products coming soon"
+                                    : "No matching products",
+                                message: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? "This category is in the master catalogue. Selectable SKUs will appear after catalogue and safety checks are complete."
+                                    : "Try a different product, brand, pack or category."
                             )
                             .frame(minHeight: 300)
                         } else {
@@ -346,7 +352,10 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                                     subcategoryID = nil
                                 } label: {
                                     VStack(spacing: 7) {
-                                        DastakProductArtwork(imageKey: category.imageKey ?? categoryArtworkKey(category.id, in: snapshot), fallbackSymbol: "square.grid.2x2")
+                                        DastakProductArtwork(
+                                            imageKey: category.imageKey ?? categoryArtworkKey(category.id, in: snapshot),
+                                            fallbackSymbol: DastakCatalogueSymbol.symbol(for: category.slug)
+                                        )
                                             .frame(maxWidth: .infinity)
                                             .aspectRatio(1, contentMode: .fit)
                                             .overlay {
@@ -361,6 +370,12 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                                             .multilineTextAlignment(.center)
                                             .lineLimit(2)
                                             .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
+                                        if category.status != nil, category.status != "ACTIVE" {
+                                            Text("COMING SOON")
+                                                .font(.system(size: 8, weight: .bold))
+                                                .tracking(0.5)
+                                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                        }
                                     }
                                 }
                                 .buttonStyle(.plain)
@@ -418,7 +433,10 @@ private struct DastakMerchantCanonicalCatalogueView: View {
 
     private func merchantCollectionTile(title: String, imageKey: String?, selected: Bool) -> some View {
         VStack(spacing: 6) {
-            DastakProductArtwork(imageKey: imageKey, fallbackSymbol: title == "All" ? "sparkles" : "shippingbox")
+            DastakProductArtwork(
+                imageKey: imageKey,
+                fallbackSymbol: title == "All" ? "sparkles" : DastakCatalogueSymbol.symbol(for: title)
+            )
                 .frame(width: 64, height: 58)
             Text(title)
                 .font(.caption2.weight(.semibold))

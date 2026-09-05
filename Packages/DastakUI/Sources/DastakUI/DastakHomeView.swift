@@ -216,6 +216,7 @@ struct DastakHomeView: View {
                                         Button {
                                             selectedCategoryID = category.id
                                             selectedSubcategoryID = nil
+                                            Task { await model.loadV1Category(category.id) }
                                         } label: {
                                             DastakCategoryTile(category: category)
                                         }
@@ -307,8 +308,33 @@ struct DastakHomeView: View {
                 .frame(width: 76)
 
                 ScrollView(.vertical) {
-                    productGrid(selectedProducts)
-                        .padding(.bottom, 148)
+                    Group {
+                        if model.loadingV1CategoryIDs.contains(category.id), selectedProducts.isEmpty {
+                            ProgressView("Loading (category.name)")
+                                .frame(maxWidth: .infinity, minHeight: 320)
+                        } else if model.failedV1CategoryIDs.contains(category.id), selectedProducts.isEmpty {
+                            DastakEmptyState(
+                                symbol: "arrow.clockwise",
+                                title: "Products could not be loaded",
+                                message: "Your catalogue is still here. Try loading this category again.",
+                                actionTitle: "Try again",
+                                action: { Task { await model.loadV1Category(category.id, force: true) } }
+                            )
+                            .frame(minHeight: 320)
+                        } else if selectedProducts.isEmpty {
+                            DastakEmptyState(
+                                symbol: DastakCatalogueSymbol.symbol(
+                                    for: selectedSubcategory?.slug ?? category.slug
+                                ),
+                                title: "Approved products coming soon",
+                                message: "This collection is already organised in Dastak. Products will appear here after catalogue and safety checks are complete."
+                            )
+                            .frame(minHeight: 320)
+                        } else {
+                            productGrid(selectedProducts)
+                        }
+                    }
+                    .padding(.bottom, 148)
                 }
                 .scrollIndicators(.hidden)
                 .refreshable { await model.refreshV1Catalogue() }
@@ -326,7 +352,7 @@ struct DastakHomeView: View {
                 VStack(spacing: 7) {
                     DastakProductArtwork(
                         imageKey: selectedCategory?.imageKey ?? selectedCategory?.previewImageKeys?.first,
-                        fallbackSymbol: "sparkles"
+                        fallbackSymbol: DastakCatalogueSymbol.symbol(for: selectedCategory?.slug ?? "all")
                     )
                     .frame(width: 64, height: 58)
                     Text("All")
@@ -694,7 +720,7 @@ private struct DastakCategoryTile: View {
         VStack(spacing: 7) {
             DastakProductArtwork(
                 imageKey: category.imageKey ?? category.previewImageKeys?.first,
-                fallbackSymbol: "square.grid.2x2.fill"
+                fallbackSymbol: DastakCatalogueSymbol.symbol(for: category.slug)
             )
             .frame(maxWidth: .infinity)
             .aspectRatio(1, contentMode: .fit)
@@ -704,6 +730,12 @@ private struct DastakCategoryTile: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 31, alignment: .top)
+            if category.status != nil, category.status != "ACTIVE" {
+                Text("COMING SOON")
+                    .font(.system(size: 8, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            }
         }
         .contentShape(Rectangle())
     }
@@ -717,7 +749,7 @@ private struct DastakSubcategoryTile: View {
         VStack(spacing: 6) {
             DastakProductArtwork(
                 imageKey: subcategory.imageKey ?? subcategory.previewImageKeys?.first,
-                fallbackSymbol: "shippingbox.fill"
+                fallbackSymbol: DastakCatalogueSymbol.symbol(for: subcategory.slug)
             )
             .frame(width: 64, height: 58)
             Text(subcategory.name)

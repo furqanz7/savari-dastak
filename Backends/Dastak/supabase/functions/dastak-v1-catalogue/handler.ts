@@ -165,7 +165,7 @@ export async function handleV1Catalogue(
         return await adminCataloguePage(body, actor, dependencies);
       case "merchantSnapshot": {
         const branchId = optionalUUID(body.branchId);
-        const parsedLimit = optionalInteger(body.limit, 1, 1000);
+        const parsedLimit = optionalInteger(body.limit, 1, 5000);
         if (
           branchId === undefined ||
           (body.limit !== null && body.limit !== undefined &&
@@ -177,7 +177,7 @@ export async function handleV1Catalogue(
           await dependencies.merchantSnapshot({
             accessToken: actor.accessToken,
             branchId,
-            limit: parsedLimit ?? 1000,
+            limit: parsedLimit ?? 5000,
           }),
         );
       }
