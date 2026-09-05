@@ -1,6 +1,101 @@
 import MarketplaceDesignSystem
 import MarketplaceInfrastructure
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
+private actor DastakArtworkDataStore {
+    static let shared = DastakArtworkDataStore()
+
+    private var cachedData: [URL: Data] = [:]
+    private var cachedByteCount = 0
+    private var inFlight: [URL: Task<Data?, Never>] = [:]
+    private let maximumCachedBytes = 64 * 1_024 * 1_024
+
+    func data(for url: URL) async -> Data? {
+        if let data = cachedData[url] { return data }
+        if let task = inFlight[url] { return await task.value }
+
+        let task = Task<Data?, Never> {
+            var request = URLRequest(
+                url: url,
+                cachePolicy: .returnCacheDataElseLoad,
+                timeoutInterval: 20
+            )
+            request.setValue("image/avif,image/webp,image/*", forHTTPHeaderField: "Accept")
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let response = response as? HTTPURLResponse,
+                      (200..<300).contains(response.statusCode),
+                      !data.isEmpty
+                else { return nil }
+                return data
+            } catch {
+                return nil
+            }
+        }
+        inFlight[url] = task
+        let data = await task.value
+        inFlight[url] = nil
+        if let data {
+            cache(data, for: url)
+        }
+        return data
+    }
+
+    func prefetch(_ urls: [URL]) async {
+        var seen = Set<URL>()
+        let uniqueURLs = Array(urls.filter { seen.insert($0).inserted }.prefix(48))
+        for start in stride(from: 0, to: uniqueURLs.count, by: 6) {
+            let end = min(start + 6, uniqueURLs.count)
+            await withTaskGroup(of: Void.self) { group in
+                for url in uniqueURLs[start..<end] {
+                    group.addTask { _ = await self.data(for: url) }
+                }
+            }
+        }
+    }
+
+    private func cache(_ data: Data, for url: URL) {
+        guard data.count <= maximumCachedBytes else { return }
+        if let previous = cachedData.updateValue(data, forKey: url) {
+            cachedByteCount -= previous.count
+        }
+        cachedByteCount += data.count
+        while cachedByteCount > maximumCachedBytes, let oldestURL = cachedData.keys.first {
+            if let removed = cachedData.removeValue(forKey: oldestURL) {
+                cachedByteCount -= removed.count
+            }
+        }
+    }
+}
+
+@MainActor
+private final class DastakArtworkViewModel: ObservableObject {
+    @Published private(set) var image: Image?
+    private var representedURL: URL?
+
+    func load(_ url: URL?) async {
+        guard representedURL != url || image == nil else { return }
+        representedURL = url
+        image = nil
+        guard let url, let data = await DastakArtworkDataStore.shared.data(for: url), representedURL == url else {
+            return
+        }
+#if canImport(UIKit)
+        if let platformImage = UIImage(data: data) {
+            image = Image(uiImage: platformImage)
+        }
+#elseif canImport(AppKit)
+        if let platformImage = NSImage(data: data) {
+            image = Image(nsImage: platformImage)
+        }
+#endif
+    }
+}
 
 struct DastakEmptyState: View {
     let symbol: String
@@ -78,6 +173,7 @@ struct DastakProductArtwork: View {
     }
 
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var loader = DastakArtworkViewModel()
 
     var body: some View {
         ZStack {
@@ -89,19 +185,15 @@ struct DastakProductArtwork: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            if let imageURL {
-                AsyncImage(url: imageURL) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .padding(7)
-                    } else {
-                        fallback
-                    }
-                }
+            if let image = loader.image {
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .padding(7)
+                    .transition(.opacity)
             } else {
                 fallback
+                    .opacity(imageURL == nil ? 1 : 0.58)
             }
         }
         .aspectRatio(1.18, contentMode: .fit)
@@ -119,6 +211,14 @@ struct DastakProductArtwork: View {
             .stroke(Color.primary.opacity(colorScheme == .dark ? 0.09 : 0.045), lineWidth: 0.75)
         }
         .accessibilityHidden(true)
+        .task(id: imageURL) {
+            await loader.load(imageURL)
+        }
+        .animation(.easeOut(duration: 0.16), value: loader.image != nil)
+    }
+
+    static func prefetch(imageKeys: [String]) async {
+        await DastakArtworkDataStore.shared.prefetch(imageKeys.compactMap(imageURL(for:)))
     }
 
     private var fallback: some View {
@@ -128,6 +228,10 @@ struct DastakProductArtwork: View {
     }
 
     private var imageURL: URL? {
+        Self.imageURL(for: imageKey)
+    }
+
+    private static func imageURL(for imageKey: String?) -> URL? {
         guard let imageKey,
               let base = Bundle.main.object(forInfoDictionaryKey: "MarketplaceSupabaseURL") as? String
         else { return nil }

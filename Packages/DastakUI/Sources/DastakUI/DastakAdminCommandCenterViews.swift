@@ -323,35 +323,27 @@ private struct DastakAdminCatalogueView: View {
     @State private var showsFilters = false
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("MASTER CATALOGUE")
-                        .font(.caption2.bold())
-                        .tracking(1.3)
-                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    Text(selectedCategory?.name ?? "Everything, beautifully organised")
-                        .font(.title.bold())
-                        .lineLimit(2)
-                    Text(selectedCategory == nil
-                         ? "The same image-led catalogue customers and merchants browse."
-                         : "Open any product to manage its exact record, visibility and readiness.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if let selectedCategory {
+                selectedCategoryBrowser(selectedCategory)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                        catalogueIntroduction
+                        catalogueToolbar
+                        if categoryID == nil && trimmedQuery.isEmpty && status == nil && qaStatus == nil {
+                            categoryDirectory
+                        } else if shouldShowProducts {
+                            catalogueResults
+                        }
+                    }
+                    .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+                    .padding(MarketplaceSpacing.medium)
+                    .padding(.bottom, 132)
+                    .frame(maxWidth: .infinity)
                 }
-
-                catalogueToolbar
-                if categoryID == nil && trimmedQuery.isEmpty && status == nil && qaStatus == nil {
-                    categoryDirectory
-                } else if shouldShowProducts {
-                    catalogueResults
-                }
+                .refreshable { await load() }
             }
-            .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
-            .padding(MarketplaceSpacing.medium)
-            .padding(.bottom, 132)
-            .frame(maxWidth: .infinity)
         }
         .navigationTitle("Catalogue")
         .searchable(text: $query, prompt: "SKU, brand, alias or category")
@@ -370,7 +362,9 @@ private struct DastakAdminCatalogueView: View {
         .onChange(of: status) { Task { await load() } }
         .onChange(of: qaStatus) { Task { await load() } }
         .task { if model.catalogueSKUs.isEmpty { await load() } }
-        .refreshable { await load() }
+        .task(id: priorityArtworkKeys) {
+            await DastakProductArtwork.prefetch(imageKeys: priorityArtworkKeys)
+        }
         .marketplacePage()
         .sheet(item: $selectedSKU) { sku in
             AdminSKUEditor(sku: sku, model: model)
@@ -387,6 +381,92 @@ private struct DastakAdminCatalogueView: View {
             .marketplacePage()
             .presentationDetents([.medium, .large])
         }
+    }
+
+    private var catalogueIntroduction: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("MASTER CATALOGUE")
+                .font(.caption2.bold())
+                .tracking(1.3)
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text("Everything, beautifully organised")
+                .font(.title.bold())
+                .lineLimit(2)
+            Text("The same image-led catalogue customers and merchants browse.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func selectedCategoryBrowser(
+        _ category: DastakAdminCatalogueTaxonomy.Category
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.small) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("MASTER CATALOGUE")
+                            .font(.caption2.bold())
+                            .tracking(1.1)
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        Text(category.name)
+                            .font(.title3.bold())
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    Button("Filters", systemImage: "line.3.horizontal.decrease") { showsFilters = true }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    Button("All categories") {
+                        categoryTypeID = nil
+                        categoryID = nil
+                        subcategoryID = nil
+                        status = nil
+                        qaStatus = nil
+                        query = ""
+                    }
+                    .font(.caption2.bold())
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    Text(visibleSubcategories.first { $0.id == subcategoryID }?.name ?? "All products")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer()
+                    Text("\(model.catalogueSKUs.count) loaded")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .padding(.vertical, MarketplaceSpacing.small)
+
+            Divider()
+
+            HStack(alignment: .top, spacing: 8) {
+                ScrollView(.vertical) {
+                    selectedCategoryRail
+                        .padding(.vertical, MarketplaceSpacing.small)
+                        .padding(.bottom, 110)
+                }
+                .scrollIndicators(.hidden)
+                .frame(width: 76)
+
+                ScrollView(.vertical) {
+                    catalogueResults
+                        .padding(.vertical, MarketplaceSpacing.small)
+                        .padding(.bottom, 132)
+                }
+                .scrollIndicators(.hidden)
+                .refreshable { await load() }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .frame(maxHeight: .infinity, alignment: .top)
+        }
+        .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity)
     }
 
     private var trimmedQuery: String {
@@ -467,7 +547,7 @@ private struct DastakAdminCatalogueView: View {
 
     @ViewBuilder
     private var selectedCategoryRail: some View {
-        if categoryID != nil, !visibleSubcategories.isEmpty {
+        if categoryID != nil {
             LazyVStack(spacing: MarketplaceSpacing.compact) {
                 Button { subcategoryID = nil } label: {
                     AdminCatalogueCollectionTile(
@@ -518,15 +598,7 @@ private struct DastakAdminCatalogueView: View {
             .marketplaceFlatSurface()
         } else {
             AdminSectionHeader(eyebrow: "EXACT SKU LIBRARY", title: "Customer-ready products")
-            if categoryID != nil, !visibleSubcategories.isEmpty {
-                HStack(alignment: .top, spacing: 8) {
-                    selectedCategoryRail
-                    adminProductGrid
-                        .frame(maxWidth: .infinity, alignment: .top)
-                }
-            } else {
-                adminProductGrid
-            }
+            adminProductGrid
             if model.catalogueHasMore {
                 Button("Load next 40 products", systemImage: "chevron.down") {
                     Task { await load(append: true) }
@@ -571,6 +643,27 @@ private struct DastakAdminCatalogueView: View {
         return model.catalogueSKUs.first {
             $0.subcategoryID == subcategoryID && ($0.primaryImage?.imageKey ?? $0.imageKey) != nil
         }.flatMap { $0.primaryImage?.imageKey ?? $0.imageKey }
+    }
+
+    private var priorityArtworkKeys: [String] {
+        var keys: [String] = []
+        if categoryID != nil {
+            if let key = selectedCategory.flatMap({ $0.imageKey ?? categoryArtworkKey($0.id) }) {
+                keys.append(key)
+            }
+            keys.append(contentsOf: visibleSubcategories.compactMap {
+                $0.imageKey ?? subcategoryArtworkKey($0.id)
+            })
+            keys.append(contentsOf: model.catalogueSKUs.prefix(16).compactMap {
+                $0.primaryImage?.imageKey ?? $0.imageKey
+            })
+        } else {
+            keys.append(contentsOf: (model.catalogueTaxonomy?.categories ?? []).prefix(32).compactMap {
+                $0.imageKey ?? categoryArtworkKey($0.id)
+            })
+        }
+        var seen = Set<String>()
+        return keys.filter { seen.insert($0).inserted }.prefix(48).map { $0 }
     }
 
     private var catalogueFilters: some View {

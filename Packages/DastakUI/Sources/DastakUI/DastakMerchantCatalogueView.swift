@@ -57,22 +57,26 @@ private struct DastakMerchantCanonicalCatalogueView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                if let snapshot = model.canonicalCatalogue {
-                    LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-                        storeHeader(snapshot)
-                        operatingControls(snapshot)
-                        libraryNote
-                        catalogueTools(snapshot)
-                        productGrid(snapshot)
+            Group {
+                if let snapshot = model.canonicalCatalogue, let categoryID {
+                    categoryBrowser(categoryID: categoryID, snapshot: snapshot)
+                } else if let snapshot = model.canonicalCatalogue {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                            storeHeader(snapshot)
+                            operatingControls(snapshot)
+                            libraryNote
+                            catalogueTools(snapshot)
+                            productGrid(snapshot)
+                        }
+                        .frame(maxWidth: MarketplaceMetrics.contentMaxWidth)
+                        .padding(.horizontal, MarketplaceSpacing.medium)
+                        .padding(.bottom, 148)
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: MarketplaceMetrics.contentMaxWidth)
-                    .padding(.horizontal, MarketplaceSpacing.medium)
-                    .padding(.bottom, 148)
-                    .frame(maxWidth: .infinity)
+                    .refreshable { await model.refreshCanonicalCatalogue() }
                 }
             }
-            .refreshable { await model.refreshCanonicalCatalogue() }
             .navigationTitle("Store & Catalogue")
             .dastakInlineNavigationTitle()
             .searchable(text: $query, prompt: "Products, brands, packs or categories")
@@ -81,7 +85,93 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     pendingSelectionBar
                 }
             }
+            .task(id: priorityArtworkKeys) {
+                await DastakProductArtwork.prefetch(imageKeys: priorityArtworkKeys)
+            }
         }
+    }
+
+    private func categoryBrowser(
+        categoryID: UUID,
+        snapshot: DastakV1MerchantCatalogueSnapshot
+    ) -> some View {
+        let products = visibleProducts(snapshot)
+        let categoryName = snapshot.categories.first { $0.id == categoryID }?.name ?? "Products"
+        return VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                Picker("Catalogue scope", selection: $selectedOnly) {
+                    Text("All products").tag(false)
+                    Text("My storefront").tag(true)
+                }
+                .pickerStyle(.segmented)
+
+                HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.small) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("DASTAK CATALOGUE")
+                            .font(.caption2.bold())
+                            .tracking(1.1)
+                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        Text(categoryName)
+                            .font(.title3.bold())
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    Text("\(products.count) products")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Button("All categories") {
+                        categoryTypeID = nil
+                        self.categoryID = nil
+                        subcategoryID = nil
+                        query = ""
+                    }
+                    .font(.caption2.bold())
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                }
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .padding(.vertical, MarketplaceSpacing.small)
+
+            Divider()
+
+            HStack(alignment: .top, spacing: 8) {
+                ScrollView(.vertical) {
+                    merchantSubcategoryRail(categoryID: categoryID, snapshot: snapshot)
+                        .padding(.vertical, MarketplaceSpacing.small)
+                        .padding(.bottom, 110)
+                }
+                .scrollIndicators(.hidden)
+                .frame(width: 76)
+
+                ScrollView(.vertical) {
+                    Group {
+                        if products.isEmpty {
+                            DastakEmptyState(
+                                symbol: "magnifyingglass",
+                                title: "No matching products",
+                                message: "Try a different product, brand, pack or category."
+                            )
+                            .frame(minHeight: 300)
+                        } else {
+                            LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                                ForEach(products) { sku in
+                                    canonicalProductCard(sku)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, MarketplaceSpacing.small)
+                    .padding(.bottom, 148)
+                }
+                .scrollIndicators(.hidden)
+                .refreshable { await model.refreshCanonicalCatalogue() }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .frame(maxHeight: .infinity, alignment: .top)
+        }
+        .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity)
     }
 
     private var pendingSelectionBar: some View {
@@ -293,26 +383,6 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     title: "No matching products",
                     message: "Try a different product, brand, pack or category."
                 )
-            } else if let categoryID {
-                VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(snapshot.categories.first { $0.id == categoryID }?.name ?? "Products")
-                            .font(.title3.bold())
-                        Spacer()
-                        Text("\(products.count) products")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    HStack(alignment: .top, spacing: 8) {
-                        merchantSubcategoryRail(categoryID: categoryID, snapshot: snapshot)
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                            ForEach(products) { sku in
-                                canonicalProductCard(sku)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .top)
-                    }
-                }
             } else {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) {
                     ForEach(products) { sku in
@@ -446,6 +516,26 @@ private struct DastakMerchantCanonicalCatalogueView: View {
 
     private func subcategoryArtworkKey(_ subcategoryID: UUID, in snapshot: DastakV1MerchantCatalogueSnapshot) -> String? {
         snapshot.skus.first { $0.subcategoryID == subcategoryID && $0.imageKey != nil }?.imageKey
+    }
+
+    private var priorityArtworkKeys: [String] {
+        guard let snapshot = model.canonicalCatalogue else { return [] }
+        var keys: [String] = []
+        if let categoryID {
+            if let key = snapshot.categories.first(where: { $0.id == categoryID })
+                .flatMap({ $0.imageKey ?? categoryArtworkKey($0.id, in: snapshot) }) {
+                keys.append(key)
+            }
+            keys.append(contentsOf: snapshot.subcategories
+                .filter { $0.categoryID == categoryID }
+                .compactMap { $0.imageKey ?? subcategoryArtworkKey($0.id, in: snapshot) })
+            keys.append(contentsOf: visibleProducts(snapshot).prefix(16).compactMap(\.imageKey))
+        } else {
+            keys.append(contentsOf: snapshot.categories.prefix(32)
+                .compactMap { $0.imageKey ?? categoryArtworkKey($0.id, in: snapshot) })
+        }
+        var seen = Set<String>()
+        return keys.filter { seen.insert($0).inserted }.prefix(48).map { $0 }
     }
 
     private func filterChip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {

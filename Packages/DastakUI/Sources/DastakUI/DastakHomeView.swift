@@ -15,32 +15,39 @@ struct DastakHomeView: View {
     @FocusState private var isSearchFieldFocused: Bool
 
     var body: some View {
-        ZStack(alignment: .top) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                    header
-                    catalogueSearch
-                    categoryRail
-                    catalogueContent
-                    restaurantRail
-                    parcelBand
+        GeometryReader { _ in
+            ZStack(alignment: .top) {
+                if let selectedCategory {
+                    selectedCategoryBrowser(selectedCategory)
+                        .allowsHitTesting(!isSearchPresented)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                            header
+                            categoryRail
+                            catalogueContent
+                            restaurantRail
+                            parcelBand
+                        }
+                        .padding(.horizontal, MarketplaceSpacing.medium)
+                        .padding(.bottom, 148)
+                    }
+                    .scrollIndicators(.hidden)
+                    .refreshable { await model.refreshV1Catalogue() }
+                    .allowsHitTesting(!isSearchPresented)
                 }
-                .padding(.horizontal, MarketplaceSpacing.medium)
-                .padding(.bottom, 148)
-            }
-            .scrollIndicators(.hidden)
-            .allowsHitTesting(!isSearchPresented)
 
-            if isSearchPresented {
-                Color.black.opacity(0.2)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: closeSearch)
+                if isSearchPresented {
+                    Color.black.opacity(0.2)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: closeSearch)
 
-                searchOverlay
-                    .padding(.horizontal, MarketplaceSpacing.medium)
-                    .padding(.top, MarketplaceSpacing.small)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    searchOverlay
+                        .padding(.horizontal, MarketplaceSpacing.medium)
+                        .padding(.top, MarketplaceSpacing.small)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
         }
         .animation(.snappy(duration: 0.28), value: isSearchPresented)
@@ -55,33 +62,14 @@ struct DastakHomeView: View {
         .animation(.snappy(duration: 0.28), value: model.cart.itemCount)
         .marketplacePage()
         .dastakNavigationBarHidden()
-        .refreshable { await model.refreshV1Catalogue() }
+        .task(id: priorityArtworkKeys) {
+            await DastakProductArtwork.prefetch(imageKeys: priorityArtworkKeys)
+        }
         .sheet(item: $selectedRestaurant) { restaurant in
             DastakRestaurantMenuView(model: model, restaurant: restaurant)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-    }
-
-    private var catalogueSearch: some View {
-        Button(action: presentSearch) {
-            HStack(spacing: MarketplaceSpacing.small) {
-                Image(systemName: "magnifyingglass")
-                    .font(.body.weight(.semibold))
-                Text("Search products, brands and categories")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Image(systemName: "mic.fill")
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, MarketplaceSpacing.medium)
-            .frame(minHeight: 52)
-            .background(.ultraThinMaterial, in: Capsule())
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Search Dastak catalogue")
     }
 
     @ViewBuilder
@@ -268,65 +256,112 @@ struct DastakHomeView: View {
                     action: { Task { await model.refreshV1Catalogue() } }
                 )
             }
-            if let category = selectedCategory {
-                categorySection(category, products: selectedProducts)
-            } else {
-                VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                    Text("POPULAR NOW").font(.caption2.bold()).tracking(1.1).foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    Text("Everyday essentials").font(MarketplaceTypography.sectionTitle)
-                    productGrid(Array(model.activeProducts.prefix(12)))
-                }
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                Text("POPULAR NOW").font(.caption2.bold()).tracking(1.1).foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Text("Everyday essentials").font(MarketplaceTypography.sectionTitle)
+                productGrid(Array(model.activeProducts.prefix(12)))
             }
         }
     }
 
-    private func categorySection(
-        _ category: DastakV1CatalogueCategory,
-        products: [DastakV1CatalogueSKU]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(selectedSubcategory?.name ?? "All products")
-                    .font(MarketplaceTypography.sectionTitle)
-                Spacer()
-                Text("\(products.count) products")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private func selectedCategoryBrowser(_ category: DastakV1CatalogueCategory) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+            header
+                .padding(.horizontal, MarketplaceSpacing.medium)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("SHOP DASTAK")
+                        .font(.caption2.bold())
+                        .tracking(1.1)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Spacer()
+                    Button("All categories") {
+                        selectedCategoryID = nil
+                        selectedSubcategoryID = nil
+                    }
+                    .font(.caption2.bold())
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                }
+                Text(category.name)
+                    .font(.title2.bold())
+                    .lineLimit(1)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(selectedSubcategory?.name ?? "All products")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer()
+                    Text("\(selectedProducts.count) products")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .padding(.horizontal, MarketplaceSpacing.medium)
 
             HStack(alignment: .top, spacing: 8) {
-                LazyVStack(spacing: MarketplaceSpacing.compact) {
-                    Button { selectedSubcategoryID = nil } label: {
-                        VStack(spacing: 7) {
-                            Image(systemName: "sparkles")
-                                .font(.title3)
-                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                                .frame(width: 64, height: 58)
-                                .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 14))
-                            Text("All")
-                                .font(.caption2.bold())
-                                .foregroundStyle(.primary)
-                        }
-                        .padding(4)
-                        .background(selectedSubcategoryID == nil ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 15))
-                    }
-                    .buttonStyle(.plain)
-                    ForEach(visibleSubcategories) { subcategory in
-                        Button { selectedSubcategoryID = subcategory.id } label: {
-                            DastakSubcategoryTile(
-                                subcategory: subcategory,
-                                selected: selectedSubcategoryID == subcategory.id
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
+                ScrollView(.vertical) {
+                    subcategoryRail
+                        .padding(.bottom, 110)
                 }
-                .frame(width: 72)
+                .scrollIndicators(.hidden)
+                .frame(width: 76)
 
-                productGrid(products)
-                    .frame(maxWidth: .infinity, alignment: .top)
+                ScrollView(.vertical) {
+                    productGrid(selectedProducts)
+                        .padding(.bottom, 148)
+                }
+                .scrollIndicators(.hidden)
+                .refreshable { await model.refreshV1Catalogue() }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .frame(maxHeight: .infinity, alignment: .top)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var subcategoryRail: some View {
+        LazyVStack(spacing: MarketplaceSpacing.compact) {
+            Button { selectedSubcategoryID = nil } label: {
+                VStack(spacing: 7) {
+                    DastakProductArtwork(
+                        imageKey: selectedCategory?.imageKey ?? selectedCategory?.previewImageKeys?.first,
+                        fallbackSymbol: "sparkles"
+                    )
+                    .frame(width: 64, height: 58)
+                    Text("All")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.primary)
+                }
+                .padding(4)
+                .background(selectedSubcategoryID == nil ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 15))
+            }
+            .buttonStyle(.plain)
+            ForEach(visibleSubcategories) { subcategory in
+                Button { selectedSubcategoryID = subcategory.id } label: {
+                    DastakSubcategoryTile(
+                        subcategory: subcategory,
+                        selected: selectedSubcategoryID == subcategory.id
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
+    }
+
+    private var priorityArtworkKeys: [String] {
+        var keys: [String] = []
+        if let selectedCategory {
+            if let key = selectedCategory.imageKey ?? selectedCategory.previewImageKeys?.first {
+                keys.append(key)
+            }
+            keys.append(contentsOf: visibleSubcategories.compactMap { $0.imageKey ?? $0.previewImageKeys?.first })
+            keys.append(contentsOf: selectedProducts.prefix(16).compactMap(\.imageKey))
+        } else {
+            keys.append(contentsOf: model.canonicalCategories.compactMap { $0.imageKey ?? $0.previewImageKeys?.first })
+        }
+        var seen = Set<String>()
+        return keys.filter { seen.insert($0).inserted }.prefix(48).map { $0 }
     }
 
     private func productGrid(_ products: [DastakV1CatalogueSKU]) -> some View {
