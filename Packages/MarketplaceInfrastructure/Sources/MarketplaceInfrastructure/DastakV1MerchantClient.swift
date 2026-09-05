@@ -171,6 +171,7 @@ public struct DastakV1MerchantCatalogueSnapshot: Codable, Equatable, Sendable {
         public let selectionState: String?
         public let selectionVersion: Int
         public let stockQuantity: Int?
+        public let stockReservedQuantity: Int?
         public let selectionUpdatedAt: String?
         public var id: UUID { skuID }
 
@@ -179,7 +180,7 @@ public struct DastakV1MerchantCatalogueSnapshot: Codable, Equatable, Sendable {
             case galleryImageKeys, quantityValue, quantityUnit, packCount
             case dietType, searchTerms, listPricePaise, sellingPricePaise
             case currencyCode, catalogueStatus, selected, selectionState
-            case selectionVersion, selectionUpdatedAt, stockQuantity
+            case selectionVersion, selectionUpdatedAt, stockQuantity, stockReservedQuantity
             case skuID = "skuId"
             case categoryTypeID = "categoryTypeId"
             case categoryID = "categoryId"

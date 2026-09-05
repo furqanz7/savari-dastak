@@ -308,15 +308,19 @@ function MerchantProductDetail({ sku, products, branch, supabaseUrl, onSelect, o
   onSave: (sku: V1MerchantCanonicalCatalogue["skus"][number], quantity: number) => Promise<boolean>; busy: boolean; error?: string;
 }) {
   const [stock, setStock] = useState(sku.stockQuantity?.toString() ?? "");
+  const [stockVersion, setStockVersion] = useState(sku.selectionVersion);
+  const stale = stockVersion !== sku.selectionVersion;
   const [saved, setSaved] = useState(false);
   const quantity = Number(stock);
   const valid = stock.trim() !== "" && /^\d+$/.test(stock) && Number.isSafeInteger(quantity) && quantity >= 0 && quantity <= 1_000_000;
   const change = (value: string) => { setStock(value); setSaved(false); };
   return <ProductDetailCard product={merchantDetail(sku)} products={products.map(merchantDetail)} supabaseUrl={supabaseUrl} onSelect={onSelect} onClose={onClose}
-    action={<button type="button" disabled={busy || !valid || sku.catalogueStatus !== "ACTIVE"} onClick={async () => { setSaved(await onSave(sku, quantity)); }}>{busy ? "Saving…" : "Save stock"}</button>}>
-    <section className="product-detail-info product-stock-editor"><h3>Stock quantity</h3><p>{branch} · units of {sku.packSize}</p>
+    action={<button type="button" disabled={busy || stale || !valid || quantity + (sku.stockReservedQuantity ?? 0) > 1_000_000 || sku.catalogueStatus !== "ACTIVE"} onClick={async () => { setSaved(await onSave(sku, quantity)); }}>{busy ? "Saving…" : "Save stock"}</button>}>
+    <section className="product-detail-info product-stock-editor"><h3>Available stock</h3><p>{branch} · units of {sku.packSize}</p>
+      <p>Available: {sku.stockQuantity ?? "Not set"} · Reserved for orders: {sku.stockReservedQuantity ?? 0}</p>
       <div className="product-stock-input"><button type="button" disabled={busy || quantity <= 0} aria-label="Decrease stock count" onClick={() => change(String(Math.max(0, (quantity || 0) - 1)))}>−</button><input inputMode="numeric" aria-label="Stock quantity" placeholder="Not set" value={stock} disabled={busy} onChange={(event) => change(event.target.value)} /><button type="button" disabled={busy || quantity >= 1_000_000} aria-label="Increase stock count" onClick={() => change(String(Math.min(1_000_000, (quantity || 0) + 1)))}>+</button></div>
-      <p>Update this recorded count after sales and restocks. Saving zero makes this product unavailable. Confirm physical quantities for each order.</p>
+      <p>Accepted orders reduce available stock automatically. Cancelled reservations return to stock. Enter only unreserved units when restocking or correcting a count; do not deduct these orders again. Zero makes the product unavailable.</p>
+      {stale ? <p role="status">The stock count has changed. <button type="button" disabled={busy} onClick={() => { change(sku.stockQuantity?.toString() ?? ""); setStockVersion(sku.selectionVersion); }}>Use latest stock count</button></p> : null}
       {error ? <p role="alert">{error}</p> : saved ? <p role="status">Stock count saved.</p> : null}
     </section>
   </ProductDetailCard>;

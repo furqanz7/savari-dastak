@@ -349,7 +349,7 @@ export type V1MerchantCanonicalCatalogue = {
     dietType?: string; searchTerms: string[];
     listPricePaise: number; sellingPricePaise: number; currencyCode: "INR";
     catalogueStatus: string; selected: boolean; selectionState?: string;
-    selectionVersion: number; selectionUpdatedAt?: string; stockQuantity?: number;
+    selectionVersion: number; selectionUpdatedAt?: string; stockQuantity?: number; stockReservedQuantity?: number;
   }>;
   truncated: boolean;
 };
@@ -2277,6 +2277,7 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         selectionState: optionalText(sku.selectionState, 40),
         selectionVersion: requiredInteger(sku.selectionVersion, 0),
         stockQuantity: optionalInteger(sku.stockQuantity, 0),
+        stockReservedQuantity: optionalInteger(sku.stockReservedQuantity, 0),
         selectionUpdatedAt: optionalTimestamp(sku.selectionUpdatedAt),
       };
     }),

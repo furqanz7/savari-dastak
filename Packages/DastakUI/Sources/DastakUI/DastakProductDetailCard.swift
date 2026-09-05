@@ -296,6 +296,7 @@ struct DastakMerchantProductDetailView: View {
     @ObservedObject var model: DastakMerchantModel
     @State private var selectedID: UUID
     @State private var stock: String
+    @State private var stockVersion: Int
     @State private var saved = false
     @Environment(\.dismiss) private var dismiss
 
@@ -303,6 +304,7 @@ struct DastakMerchantProductDetailView: View {
         self.model = model
         _selectedID = State(initialValue: initial.id)
         _stock = State(initialValue: initial.stockQuantity.map(String.init) ?? "")
+        _stockVersion = State(initialValue: initial.selectionVersion)
     }
 
     var body: some View {
@@ -311,12 +313,13 @@ struct DastakMerchantProductDetailView: View {
                 products: snapshot.skus.filter { $0.categoryID == sku.categoryID }.map(DastakDetailProduct.init),
                 select: { id in
                     guard !model.isBusy, let next = snapshot.skus.first(where: { $0.id == id }) else { return }
-                    selectedID = id; stock = next.stockQuantity.map(String.init) ?? ""; saved = false
+                    selectedID = id; stock = next.stockQuantity.map(String.init) ?? ""; stockVersion = next.selectionVersion; saved = false
                 }, close: { dismiss() }
             ) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Stock quantity").font(.headline)
+                    Text("Available stock").font(.headline)
                     Text("\(snapshot.branch.branchName) · units of \(sku.packSize)").font(.caption).foregroundStyle(.secondary)
+                    Text("Available: \(sku.stockQuantity.map(String.init) ?? "Not set") · Reserved for orders: \(sku.stockReservedQuantity ?? 0)").font(.caption)
                     HStack {
                         Button { stock = String(max(min(max(Int(stock) ?? 0, 0), 1_000_000) - 1, 0)); saved = false } label: { Image(systemName: "minus").frame(width: 44, height: 44) }.accessibilityLabel("Decrease stock count")
                         TextField("Not set", text: $stock).multilineTextAlignment(.center).textFieldStyle(.roundedBorder)
@@ -327,7 +330,15 @@ struct DastakMerchantProductDetailView: View {
                             .onChange(of: stock) { _, _ in saved = false }
                         Button { stock = String(min(min(max(Int(stock) ?? 0, 0), 1_000_000) + 1, 1_000_000)); saved = false } label: { Image(systemName: "plus").frame(width: 44, height: 44) }.accessibilityLabel("Increase stock count")
                     }.disabled(model.isBusy)
-                    Text("Update this recorded count after sales and restocks. Saving zero makes this product unavailable. Confirm physical quantities for each order.").font(.caption).foregroundStyle(.secondary)
+                    Text("Accepted orders reduce available stock automatically. Cancelled reservations return to stock. Enter only unreserved units when restocking or correcting a count; do not deduct these orders again. Zero makes the product unavailable.").font(.caption).foregroundStyle(.secondary)
+                    if stockVersion != sku.selectionVersion {
+                        Text("The stock count has changed.").font(.caption)
+                        Button("Use latest stock count") {
+                            stock = sku.stockQuantity.map(String.init) ?? ""
+                            stockVersion = sku.selectionVersion
+                            saved = false
+                        }.disabled(model.isBusy)
+                    }
                     if let error = model.errorMessage { Text(error).font(.caption).foregroundStyle(.red) }
                     if saved { Label("Stock count saved", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.green) }
                 }.productInfoSurface()
@@ -340,7 +351,7 @@ struct DastakMerchantProductDetailView: View {
                 }
                 .buttonStyle(.plain).foregroundStyle(.white)
                 .background(Color(red: 0.02, green: 0.32, blue: 1), in: RoundedRectangle(cornerRadius: 12))
-                .disabled(model.isBusy || sku.catalogueStatus != "ACTIVE" || Int(stock).map { !(0...1_000_000).contains($0) } != false)
+                .disabled(model.isBusy || stockVersion != sku.selectionVersion || sku.catalogueStatus != "ACTIVE" || Int(stock).map { !(0...(1_000_000 - (sku.stockReservedQuantity ?? 0))).contains($0) } != false)
             }
         }
     }

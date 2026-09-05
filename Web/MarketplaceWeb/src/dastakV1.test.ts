@@ -208,12 +208,12 @@ describe("Dastak V1 web contract", () => {
         skuId, categoryId, subcategoryId, brandName: null, name: "Rice", variant: null,
         packSize: "1 kg", description: null, imageKey: null, listPricePaise: 10000,
         sellingPricePaise: 9500, currencyCode: "INR", catalogueStatus: "ACTIVE",
-        selected: true, selectionState: "SELECTED", selectionVersion: 3, stockQuantity: 24,
+        selected: true, selectionState: "SELECTED", selectionVersion: 3, stockQuantity: 24, stockReservedQuantity: 3,
         selectionUpdatedAt: "2026-08-24T00:00:00Z",
       }],
       truncated: false,
     }));
-    expect(catalogue.skus[0]).toMatchObject({ selected: true, sellingPricePaise: 9500, stockQuantity: 24 });
+    expect(catalogue.skus[0]).toMatchObject({ selected: true, sellingPricePaise: 9500, stockQuantity: 24, stockReservedQuantity: 3 });
 
     const calls: Record<string, unknown>[] = [];
     const command = async (_url: RequestInfo | URL, init?: RequestInit) => {

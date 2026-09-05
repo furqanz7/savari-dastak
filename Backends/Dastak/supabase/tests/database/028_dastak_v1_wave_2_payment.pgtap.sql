@@ -260,7 +260,7 @@ insert into dastak_v1.platform_settings (
 ('98000000-0000-4000-8000-000000000056', 'matching.operational_reliability_bps',
  'GLOBAL', '9000', '98000000-0000-4000-8000-000000000002', 'Step Two reliability.'),
 ('98000000-0000-4000-8000-000000000057', 'delivery.transport_load_profiles', 'GLOBAL',
- '[{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]',
+ '[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]',
  '98000000-0000-4000-8000-000000000002', 'Step Two transport.'),
 ('98000000-0000-4000-8000-000000000058', 'delivery.default_sku_logistics', 'GLOBAL',
  '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}',
@@ -360,6 +360,11 @@ where order_id = (select (body ->> 'id')::uuid from tap_step2_order)
   and wave = 'WAVE_2';
 grant select on tap_step2_opportunities to authenticated;
 
+update dastak_v1.merchant_sku_selections
+set stock_quantity = 10, version = version + 1
+where branch_id in ('98000000-0000-4000-8000-000000000021',
+  '98000000-0000-4000-8000-000000000031', '98000000-0000-4000-8000-000000000041');
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '98000000-0000-4000-8000-000000000003', true);
 select public.dastak_v1_accept_wave2_opportunity(
@@ -397,6 +402,9 @@ select is(
   0::bigint,
   'provisional holds consume no final preparation capacity'
 );
+select is((select sum(stock_reserved_quantity) from dastak_v1.merchant_sku_selections
+  where branch_id in ('98000000-0000-4000-8000-000000000021', '98000000-0000-4000-8000-000000000031')),
+  0::bigint, 'unselected provisional offers do not deduct merchant stock');
 select is(
   dastak_v1_api.order_json(
     (select (body ->> 'id')::uuid from tap_step2_order),
@@ -448,6 +456,12 @@ select is(
   1::bigint,
   'only the selected merchant consumes one capacity slot'
 );
+select is((select sum(stock_quantity) from dastak_v1.merchant_sku_selections
+  where branch_id = '98000000-0000-4000-8000-000000000041'), 15::bigint,
+  'Wave 2 final selection deducts both SKU quantities atomically');
+select is((select sum(stock_reserved_quantity) from dastak_v1.merchant_sku_selections
+  where branch_id = '98000000-0000-4000-8000-000000000041'), 5::bigint,
+  'Wave 2 final stock reservations match the selected basket');
 select is(
   (
     select count(*)
@@ -586,6 +600,9 @@ select is(
   1::bigint,
   'duplicate callbacks remain idempotent'
 );
+select is((select sum(stock_quantity) from dastak_v1.merchant_sku_selections
+  where branch_id = '98000000-0000-4000-8000-000000000041'), 15::bigint,
+  'payment, preparation and duplicate callbacks never deduct stock again');
 select is(
   (
     select count(*) from dastak_v1.payment_provider_events
@@ -699,5 +716,39 @@ select is(
   'payment expiry releases capacity exactly once'
 );
 
+select is((select sum(stock_quantity) from dastak_v1.merchant_sku_selections
+  where branch_id = '98000000-0000-4000-8000-000000000041'), 15::bigint,
+  'payment expiry restores only that order, not another paid order');
+select is((select sum(stock_reserved_quantity) from dastak_v1.merchant_sku_selections
+  where branch_id = '98000000-0000-4000-8000-000000000041'), 5::bigint,
+  'paid order stock remains reserved after a different order expires');
+
+-- Isolate the stock trigger from custody verification, which has its own suite.
+-- Transition/custody and royalty guards are bypassed to seed a pickup outcome;
+-- the production inventory trigger remains enabled throughout.
+savepoint stock_pickup_test;
+alter table dastak_v1.fulfilments disable trigger fulfilments_guard;
+alter table dastak_v1.fulfilments disable trigger fulfilments_credit_merchant_royalty;
+update dastak_v1.fulfilments set status = 'PICKED_UP', version = version + 1
+where order_id = (select (body ->> 'id')::uuid from tap_step2_order);
+alter table dastak_v1.fulfilments enable trigger fulfilments_guard;
+alter table dastak_v1.fulfilments enable trigger fulfilments_credit_merchant_royalty;
+select is((select sum(stock_quantity) from dastak_v1.merchant_sku_selections
+  where branch_id = '98000000-0000-4000-8000-000000000041'), 15::bigint,
+  'pickup finalises stock without a second deduction');
+select is((select sum(stock_reserved_quantity) from dastak_v1.merchant_sku_selections
+  where branch_id = '98000000-0000-4000-8000-000000000041'), 0::bigint,
+  'pickup clears reserved stock for both SKUs');
+select is((select count(*) from dastak_v1.merchant_stock_reservations where state = 'CONSUMED'),
+  2::bigint, 'both order reservations record consumption');
+select lives_ok($$select dastak_v1_api.apply_order_stock(inventory_hold_id, 'CONSUME')
+  from dastak_v1.merchant_stock_reservations where state = 'CONSUMED'$$,
+  'consumption replay is idempotent');
+select lives_ok($$select dastak_v1_api.apply_order_stock(inventory_hold_id, 'RELEASE')
+  from dastak_v1.merchant_stock_reservations where state = 'CONSUMED'$$,
+  'a later release cannot restock already picked-up products');
+select is((select sum(stock_quantity) from dastak_v1.merchant_sku_selections
+  where branch_id = '98000000-0000-4000-8000-000000000041'), 15::bigint,
+  'post-pickup replays cannot manufacture stock');
 select * from finish();
 rollback;

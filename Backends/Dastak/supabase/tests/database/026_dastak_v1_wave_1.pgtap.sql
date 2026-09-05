@@ -430,7 +430,7 @@ insert into dastak_v1.platform_settings (
 (
   '97000000-0000-4000-8000-000000000047',
   'delivery.transport_load_profiles', 'GLOBAL',
-  '[{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]',
+  '[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]',
   '97000000-0000-4000-8000-000000000002', 'Wave 2 transport test profile.'
 ),
 (
@@ -693,6 +693,73 @@ select set_config(
   '97000000-0000-4000-8000-000000000003',
   true
 );
+select lives_ok($$select dastak_v1_api.update_merchant_stock_selection(
+  '97000000-0000-4000-8000-000000000003',
+  '97000000-0000-4000-8000-000000000021',
+  '97000000-0000-4000-8000-000000000013', true, 1, 'opening-stock-a', 20)$$,
+  'merchant enters opening stock before accepting an order');
+reset role;
+
+savepoint stock_insufficient_test;
+select dastak_v1_api.update_merchant_stock_selection(
+  '97000000-0000-4000-8000-000000000003',
+  '97000000-0000-4000-8000-000000000021',
+  '97000000-0000-4000-8000-000000000013', true, 2, 'insufficient-stock-opening', 2);
+select throws_ok($$select dastak_v1_api.accept_wave1_opportunity(
+  '97000000-0000-4000-8000-000000000003',
+  (select opportunity_id from tap_wave1_opportunity_ids where branch_id = '97000000-0000-4000-8000-000000000021'),
+  'insufficient-stock-accept', 1, 10)$$,
+  '55000', 'branch is no longer eligible for this order',
+  'acceptance rechecks stock changed since the opportunity was offered');
+select is((select stock_quantity from dastak_v1.merchant_sku_selections where branch_id = '97000000-0000-4000-8000-000000000021' and sku_id = '97000000-0000-4000-8000-000000000013'), 2, 'rejected acceptance cannot make stock negative');
+select is((select count(*) from dastak_v1.merchant_stock_reservations), 0::bigint,
+  'rejected acceptance leaves no partial inventory reservation');
+rollback to stock_insufficient_test;
+
+savepoint stock_zero_test;
+select dastak_v1_api.update_merchant_stock_selection(
+  '97000000-0000-4000-8000-000000000003',
+  '97000000-0000-4000-8000-000000000021',
+  '97000000-0000-4000-8000-000000000013', true, 2, 'stock-zero-opening', 3);
+select lives_ok($$select dastak_v1_api.accept_wave1_opportunity(
+  '97000000-0000-4000-8000-000000000003',
+  (select opportunity_id from tap_wave1_opportunity_ids where branch_id = '97000000-0000-4000-8000-000000000021'),
+  'stock-zero-accept', 1, 10)$$, 'an order can reserve the last units');
+select is((select stock_quantity from dastak_v1.merchant_sku_selections where branch_id = '97000000-0000-4000-8000-000000000021' and sku_id = '97000000-0000-4000-8000-000000000013'), 0, 'last-unit reservation leaves zero available stock');
+select is((select state::text from dastak_v1.merchant_sku_selections
+  where branch_id = '97000000-0000-4000-8000-000000000021'), 'UNAVAILABLE',
+  'selling the last units automatically marks the SKU unavailable');
+select set_config('request.jwt.claim.sub', '97000000-0000-4000-8000-000000000001', true);
+select public.dastak_v1_cancel_prepayment_order(
+  (select (body ->> 'id')::uuid from tap_wave1_order), 'stock-zero-cancel', 4);
+select is((select stock_quantity from dastak_v1.merchant_sku_selections where branch_id = '97000000-0000-4000-8000-000000000021' and sku_id = '97000000-0000-4000-8000-000000000013'), 3, 'cancelled last-unit reservation restores available stock');
+select is((select state::text from dastak_v1.merchant_sku_selections
+  where branch_id = '97000000-0000-4000-8000-000000000021'), 'SELECTED',
+  'cancellation restores automatic availability');
+rollback to stock_zero_test;
+
+savepoint untracked_stock_test;
+select set_config('request.jwt.claim.sub', '97000000-0000-4000-8000-000000000004', true);
+select lives_ok($$select dastak_v1_api.accept_wave1_opportunity(
+  '97000000-0000-4000-8000-000000000004',
+  (select opportunity_id from tap_wave1_opportunity_ids where branch_id = '97000000-0000-4000-8000-000000000031'),
+  'untracked-accept', 1, 10)$$, 'legacy SKU without an opening count keeps its existing order flow');
+select is((select count(*) from dastak_v1.merchant_stock_reservations), 0::bigint,
+  'unknown opening stock does not create invented numeric reservations');
+select dastak_v1_api.update_merchant_stock_selection(
+  '97000000-0000-4000-8000-000000000004',
+  '97000000-0000-4000-8000-000000000031',
+  '97000000-0000-4000-8000-000000000013', true, 1, 'first-count-after-order', 10);
+select set_config('request.jwt.claim.sub', '97000000-0000-4000-8000-000000000001', true);
+select public.dastak_v1_cancel_prepayment_order(
+  (select (body ->> 'id')::uuid from tap_wave1_order), 'untracked-cancel', 4);
+select is((select stock_quantity from dastak_v1.merchant_sku_selections
+  where branch_id = '97000000-0000-4000-8000-000000000031'), 10,
+  'historical untracked orders cannot inflate a newly entered stock count');
+rollback to untracked_stock_test;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '97000000-0000-4000-8000-000000000003', true);
 create temp table tap_wave1_accept on commit drop as
 select public.dastak_v1_accept_wave1_opportunity(
   (
@@ -715,6 +782,44 @@ select is(
   'AWAITING_PAYMENT',
   'a complete Wave 1 reservation passes the authoritative coordinator'
 );
+select is((select stock_quantity from dastak_v1.merchant_sku_selections where branch_id = '97000000-0000-4000-8000-000000000021' and sku_id = '97000000-0000-4000-8000-000000000013'), 17, 'acceptance automatically deducts the exact SKU quantity');
+select is((select stock_reserved_quantity from dastak_v1.merchant_sku_selections
+  where branch_id = '97000000-0000-4000-8000-000000000021'), 3,
+  'accepted units are reserved until physical pickup');
+select is((select count(*) from dastak_v1.merchant_stock_reservations where state = 'RESERVED'),
+  1::bigint, 'one immutable inventory reservation is recorded per hold');
+select lives_ok($$select dastak_v1_api.accept_wave1_opportunity(
+  '97000000-0000-4000-8000-000000000003',
+  (select opportunity_id from tap_wave1_opportunity_ids where branch_id = '97000000-0000-4000-8000-000000000021'),
+  'wave1-accept-a', 1, 10)$$, 'acceptance can be retried idempotently');
+select is((select stock_quantity from dastak_v1.merchant_sku_selections where branch_id = '97000000-0000-4000-8000-000000000021' and sku_id = '97000000-0000-4000-8000-000000000013'), 17, 'acceptance retry does not deduct twice');
+select throws_ok($$select dastak_v1_api.update_merchant_stock_selection(
+  '97000000-0000-4000-8000-000000000003',
+  '97000000-0000-4000-8000-000000000021',
+  '97000000-0000-4000-8000-000000000013', true, 2, 'stale-stock-edit', 20)$$,
+  '40001', 'stale merchant SKU selection version', 'stale manual counts cannot overwrite an order deduction');
+select set_config('request.jwt.claim.sub', '97000000-0000-4000-8000-000000000004', true);
+select lives_ok($$select dastak_v1_api.update_merchant_stock_selection(
+  '97000000-0000-4000-8000-000000000004',
+  '97000000-0000-4000-8000-000000000031',
+  '97000000-0000-4000-8000-000000000013', true, 1, 'opening-stock-b', 20)$$,
+  'the same SKU and version at another merchant do not collide');
+select is((select stock_quantity from dastak_v1.merchant_sku_selections
+  where branch_id = '97000000-0000-4000-8000-000000000031'), 20,
+  'only the winning merchant loses stock');
+select set_config('request.jwt.claim.sub', '97000000-0000-4000-8000-000000000003', true);
+savepoint stock_shortage_test;
+update dastak_v1.merchant_sku_selections set stock_quantity = 2, version = version + 1
+  where branch_id = '97000000-0000-4000-8000-000000000021';
+select is(dastak_v1_api.evaluate_wave1_candidate(
+  (select (body ->> 'id')::uuid from tap_wave1_order),
+  '97000000-0000-4000-8000-000000000021') ->> 'selectedLineCount',
+  '0', 'matching excludes a merchant without enough units for the exact order quantity');
+rollback to stock_shortage_test;
+select is(has_function_privilege('authenticated', 'dastak_v1_api.apply_order_stock(uuid,text)', 'EXECUTE'),
+  false, 'clients cannot manufacture inventory reservations');
+select is(has_table_privilege('authenticated', 'dastak_v1.merchant_stock_reservations', 'INSERT'),
+  false, 'clients cannot write the stock reservation ledger');
 select is(
   (
     select count(*)
@@ -879,6 +984,12 @@ select is(
   0::bigint,
   'cancellation after a winner releases every physical hold'
 );
+select is((select stock_quantity from dastak_v1.merchant_sku_selections where branch_id = '97000000-0000-4000-8000-000000000021' and sku_id = '97000000-0000-4000-8000-000000000013'), 20, 'cancellation restores the exact reserved count');
+select is((select stock_reserved_quantity from dastak_v1.merchant_sku_selections
+  where branch_id = '97000000-0000-4000-8000-000000000021'), 0, 'cancellation clears reserved stock');
+select lives_ok($$select dastak_v1_api.apply_order_stock(inventory_hold_id, 'RELEASE')
+  from dastak_v1.merchant_stock_reservations$$, 'release replay is safe');
+select is((select stock_quantity from dastak_v1.merchant_sku_selections where branch_id = '97000000-0000-4000-8000-000000000021' and sku_id = '97000000-0000-4000-8000-000000000013'), 20, 'releasing twice never inflates stock');
 select is(
   (
     select count(*)
