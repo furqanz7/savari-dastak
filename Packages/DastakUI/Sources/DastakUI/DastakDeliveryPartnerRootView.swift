@@ -1089,6 +1089,8 @@ private enum DastakPartnerFormatting {
     static func method(_ method: DeliveryMethod) -> String {
         switch method {
         case .retired: "Retired delivery method"
+        case .walking: "Walking"
+        case .bicycle: "Bicycle"
         case .bike, .motorbike: "Motorbike"
         case .scooter: "Scooter"
         case .auto: "Auto"

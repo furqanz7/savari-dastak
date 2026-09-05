@@ -4,6 +4,16 @@ import XCTest
 @testable import MarketplaceInfrastructure
 
 final class DeliveryPartnerClientTests: XCTestCase {
+    func testNonMotorMethodsDecodeWithoutVehicleVerification() throws {
+        for method in [DeliveryMethod.walking, .bicycle] {
+            let decoded = try JSONDecoder().decode(DeliveryMethod.self, from: JSONEncoder().encode(method))
+            XCTAssertEqual(decoded, method)
+            XCTAssertFalse(decoded.requiresVehicleVerification)
+            XCTAssertEqual(decoded.displayName, method.rawValue.capitalized)
+        }
+        XCTAssertTrue(DeliveryMethod.goodsVehicle.requiresVehicleVerification)
+    }
+
     func testSubmitUsesTypedMethodAndEvidenceWithoutClientOwnedApproval() async throws {
         let functions = RecordingDeliveryPartnerFunctionClient()
         let client = SupabaseDeliveryPartnerClient(functions: functions)

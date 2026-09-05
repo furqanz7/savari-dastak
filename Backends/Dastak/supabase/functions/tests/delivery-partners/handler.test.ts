@@ -144,7 +144,26 @@ Deno.test("motorbike and scooter onboarding preserve the selected transport type
   assertEquals(recorded, ["motorbike", "scooter"]);
 });
 
-Deno.test("retired bicycle applications are rejected", async () => {
+Deno.test("walking and bicycle applications need identity evidence only", async () => {
+  for (const deliveryMethod of ["walking", "bicycle"]) {
+    let recorded: Record<string, unknown> | undefined;
+    const response = await handleDeliveryPartners(
+      request({ body: { operation: "submit", deliveryMethod, identityEvidenceObjectPath: evidencePath } }),
+      dependencies({ submitApplication: (input) => {
+        recorded = { ...input };
+        return Promise.resolve({ responseBody: { applicationId, status: "pending", deliveryMethod }, responseStatus: 200 });
+      } }),
+    );
+    assertEquals(response.status, 200);
+    assertEquals(recorded?.deliveryMethod, deliveryMethod);
+    assertEquals(recorded?.accountId, accountId);
+    assertEquals(recorded?.vehicleRegistrationNumber, null);
+    assertEquals(recorded?.vehicleMakeModel, null);
+    assertEquals(recorded?.vehicleEvidenceObjectPath, null);
+  }
+});
+
+Deno.test("non-motor applications reject unnecessary vehicle fields", async () => {
   const response = await handleDeliveryPartners(
     request({
       body: {
@@ -171,18 +190,6 @@ Deno.test("partner submission rejects unsupported methods and foreign evidence",
     dependencies(),
   );
   await assertError(unsupported, 400, "validation_failed");
-
-  const retiredWalking = await handleDeliveryPartners(
-    request({
-      body: {
-        operation: "submit",
-        deliveryMethod: "walking",
-        identityEvidenceObjectPath: evidencePath,
-      },
-    }),
-    dependencies(),
-  );
-  await assertError(retiredWalking, 400, "validation_failed");
 
   const foreign = await handleDeliveryPartners(
     request({

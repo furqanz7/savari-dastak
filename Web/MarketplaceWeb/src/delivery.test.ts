@@ -57,6 +57,30 @@ const offer = {
 };
 
 describe("delivery partner client", () => {
+  it.each(["walking", "bicycle"] as const)("submits and preserves %s with identity only", async (deliveryMethod) => {
+    expect(requiresVehicleVerification(deliveryMethod)).toBe(false);
+    let body: Record<string, unknown> | undefined;
+    const result = await submitDeliveryPartnerApplication({
+      ...auth,
+      deliveryMethod,
+      identityEvidenceObjectPath: `dastak-partner/${accountId}/identity-${applicationId}.pdf`,
+      idempotencyKey: `submit-${deliveryMethod}`,
+    }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(new Response(JSON.stringify({ applicationId, status: "pending", deliveryMethod }), { status: 200 }));
+    });
+    expect(result.deliveryMethod).toBe(deliveryMethod);
+    expect(body?.deliveryMethod).toBe(deliveryMethod);
+    expect(body?.vehicleRegistrationNumber).toBeNull();
+    expect(body?.vehicleMakeModel).toBeNull();
+    expect(body?.vehicleEvidenceObjectPath).toBeNull();
+    const snapshot = await getDeliveryPartnerSnapshot(auth, () => Promise.resolve(new Response(JSON.stringify({
+      onboardingState: "approved", applicationId, deliveryMethod, availability,
+    }), { status: 200 })));
+    expect(snapshot.deliveryMethod).toBe(deliveryMethod);
+    expect(deliveryPartnerVerificationState(snapshot)).toBe("identity_verified");
+  });
+
   it("accepts only supported evidence and creates an account-scoped object path", () => {
     expect(isAcceptedPartnerEvidence({ type: "application/pdf", size: 100 })).toBe(true);
     expect(isAcceptedPartnerEvidence({ type: "text/plain", size: 100 })).toBe(false);

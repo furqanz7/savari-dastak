@@ -85,6 +85,8 @@ struct DastakParcelComposerView: View {
             )
 
             Picker("Delivery method", selection: $deliveryMethod) {
+                Label("Walking", systemImage: "figure.walk").tag(DeliveryMethod.walking)
+                Label("Bicycle", systemImage: "bicycle").tag(DeliveryMethod.bicycle)
                 Label("Motorbike", systemImage: "motorcycle").tag(DeliveryMethod.bike)
                 Label("Auto", systemImage: "car.side").tag(DeliveryMethod.auto)
             }

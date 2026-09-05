@@ -30,7 +30,7 @@ export type PartnerAdminApplication = {
   accountId: string;
   displayName: string;
   phoneNumber: string;
-  deliveryMethod: "motorbike" | "scooter" | "auto" | "goods_vehicle";
+  deliveryMethod: "walking" | "bicycle" | "motorbike" | "scooter" | "auto" | "goods_vehicle";
   identityEvidenceObjectPath: string;
   vehicleRegistrationNumber: string | null;
   vehicleMakeModel: string | null;
@@ -311,7 +311,7 @@ function partnerApplication(value: unknown): PartnerAdminApplication {
   const vehicleEvidenceObjectPath = nullableText(source?.vehicleEvidenceObjectPath, 500);
   const normalizedMethod = method === "bike" ? "motorbike" : method === "car" ? "goods_vehicle" : method;
   const motorVehicle = ["motorbike", "scooter", "auto", "goods_vehicle"].includes(String(normalizedMethod));
-  if (!["motorbike", "scooter", "auto", "goods_vehicle"].includes(String(normalizedMethod)) ||
+  if (!["walking", "bicycle", "motorbike", "scooter", "auto", "goods_vehicle"].includes(String(normalizedMethod)) ||
     !evidenceObjectPath.startsWith(`dastak-partner/${accountId}/`) ||
     (motorVehicle && (
       !vehicleRegistrationNumber || !vehicleMakeModel || !vehicleEvidenceObjectPath ||

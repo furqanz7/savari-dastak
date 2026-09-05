@@ -144,7 +144,7 @@ async function publishLocation(input: PublishDeliveryPartnerLocationInput) {
 }
 
 function isDeliveryMethod(value: unknown): value is DeliveryPartnerApplication["deliveryMethod"] {
-  return value === "motorbike" || value === "scooter" ||
+  return value === "walking" || value === "bicycle" || value === "motorbike" || value === "scooter" ||
     value === "auto" || value === "goods_vehicle";
 }
 

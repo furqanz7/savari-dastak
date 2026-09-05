@@ -3,6 +3,8 @@ import MarketplaceFoundation
 
 public enum DeliveryMethod: String, Codable, Equatable, Sendable {
     case retired
+    case walking
+    case bicycle
     case bike
     case motorbike
     case scooter
@@ -12,13 +14,15 @@ public enum DeliveryMethod: String, Codable, Equatable, Sendable {
     public var requiresVehicleVerification: Bool {
         switch self {
         case .bike, .motorbike, .scooter, .auto, .goodsVehicle: true
-        case .retired: false
+        case .retired, .walking, .bicycle: false
         }
     }
 
     public var displayName: String {
         switch self {
         case .retired: "Retired delivery method"
+        case .walking: "Walking"
+        case .bicycle: "Bicycle"
         case .bike, .motorbike: "Motorbike"
         case .scooter: "Scooter"
         case .auto: "Auto"
@@ -30,7 +34,9 @@ public enum DeliveryMethod: String, Codable, Equatable, Sendable {
         let container = try decoder.singleValueContainer()
         let value = try container.decode(String.self)
         switch value {
-        case "walking", "bicycle", "retired": self = .retired
+        case "walking": self = .walking
+        case "bicycle": self = .bicycle
+        case "retired": self = .retired
         case "car", "goods_vehicle": self = .goodsVehicle
         case "bike": self = .bike
         case "motorbike": self = .motorbike

@@ -2,6 +2,8 @@ import { corsPreflight, json } from "../_shared/http.ts";
 import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
 export type DeliveryMethod =
+  | "walking"
+  | "bicycle"
   | "motorbike"
   | "scooter"
   | "auto"
@@ -73,6 +75,8 @@ export type DeliveryPartnerDependencies = {
 };
 
 const deliveryMethods = new Set<DeliveryMethod>([
+  "walking",
+  "bicycle",
   "motorbike",
   "scooter",
   "auto",

@@ -278,7 +278,7 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
           <label>Recipient Dastak phone<input type="tel" inputMode="tel" value={recipientPhone} onChange={(event) => setRecipientPhone(event.target.value)} required /></label>
           <label>Contents<input value={contents} maxLength={300} onChange={(event) => setContents(event.target.value)} required /></label>
           <label>Declared value (₹)<input type="number" inputMode="decimal" min="0" step="0.01" value={declaredValue} onChange={(event) => setDeclaredValue(event.target.value)} required /></label>
-          <label>Delivery method<select value={deliveryMethod} onChange={(event) => { setDeliveryMethod(event.target.value as ParcelDeliveryMethod); setQuote(undefined); }}><option value="bike">Motorbike</option><option value="auto">Auto</option></select></label>
+          <label>Delivery method<select value={deliveryMethod} onChange={(event) => { setDeliveryMethod(event.target.value as ParcelDeliveryMethod); setQuote(undefined); }}><option value="walking">Walking</option><option value="bicycle">Bicycle</option><option value="bike">Motorbike</option><option value="auto">Auto</option></select></label>
         </div>
         {!quote ? (
           <button className="primary-button parcel-submit" type="submit" disabled={busy || !pickup || !dropoff}><Send size={18} /> Check delivery price</button>

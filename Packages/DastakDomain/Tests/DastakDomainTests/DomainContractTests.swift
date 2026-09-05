@@ -7,7 +7,7 @@ final class DomainContractTests: XCTestCase {
     func testSupportedDeliveryMethodsMatchApprovedLaunchScope() {
         XCTAssertEqual(
             Set(DeliveryMethod.allCases),
-            Set([.bike, .auto])
+            Set([.walking, .bicycle, .bike, .auto])
         )
     }
 

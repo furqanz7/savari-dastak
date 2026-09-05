@@ -4,7 +4,7 @@ select extensions.no_plan();
 
 create temp table tap_locked_transport_profiles(value jsonb) on commit drop;
 insert into tap_locked_transport_profiles values (
-  '[{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]'::jsonb
+  '[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]'::jsonb
 );
 
 select extensions.has_type('dastak_v1', 'rider_escalation_state', 'rider escalation state exists');
@@ -39,10 +39,10 @@ select extensions.has_function('public', 'dastak_v1_set_operational_pause',
 select extensions.has_function('public', 'dastak_v1_admin_operational_safety', array[]::text[]);
 
 select extensions.ok(dastak_v1.is_valid_transport_load_profiles(value),
-  'locked four-profile configuration is accepted') from tap_locked_transport_profiles;
+  'locked six-profile configuration is accepted') from tap_locked_transport_profiles;
 select extensions.ok(not dastak_v1.is_valid_transport_load_profiles(
   (select value - 3 from tap_locked_transport_profiles)
-), 'all four profiles are required');
+), 'all six profiles are required');
 select extensions.ok(not dastak_v1.is_valid_transport_load_profiles(
   pg_catalog.jsonb_set((select value from tap_locked_transport_profiles),
     '{0,maxPackageCount}', '3'::jsonb)
@@ -55,6 +55,7 @@ select extensions.ok(not dastak_v1.is_valid_default_sku_logistics(
 ), 'changed unknown-SKU fallback is rejected');
 
 with limits(transport_type, weight_grams, volume_mm3, packages, longest_mm) as (values
+  ('WALKING',5000,20000000,2,400), ('BICYCLE',10000,35000000,3,500),
   ('MOTORBIKE',20000,60000000,4,600),
   ('SCOOTER',25000,75000000,5,650), ('AUTO',80000,250000000,12,1000),
   ('CAR',150000,500000000,20,1200)
@@ -68,6 +69,7 @@ select extensions.ok(
 ) from limits;
 
 with limits(transport_type, weight_grams, volume_mm3, packages, longest_mm) as (values
+  ('WALKING',5000,20000000,2,400), ('BICYCLE',10000,35000000,3,500),
   ('MOTORBIKE',20000,60000000,4,600),
   ('SCOOTER',25000,75000000,5,650), ('AUTO',80000,250000000,12,1000),
   ('CAR',150000,500000000,20,1200)
@@ -80,6 +82,7 @@ select extensions.ok(not (
 ), transport_type || ' rejects weight above its cap') from limits;
 
 with limits(transport_type, weight_grams, volume_mm3, packages, longest_mm) as (values
+  ('WALKING',5000,20000000,2,400), ('BICYCLE',10000,35000000,3,500),
   ('MOTORBIKE',20000,60000000,4,600),
   ('SCOOTER',25000,75000000,5,650), ('AUTO',80000,250000000,12,1000),
   ('CAR',150000,500000000,20,1200)
@@ -92,6 +95,7 @@ select extensions.ok(not (
 ), transport_type || ' rejects volume above its cap') from limits;
 
 with limits(transport_type, weight_grams, volume_mm3, packages, longest_mm) as (values
+  ('WALKING',5000,20000000,2,400), ('BICYCLE',10000,35000000,3,500),
   ('MOTORBIKE',20000,60000000,4,600),
   ('SCOOTER',25000,75000000,5,650), ('AUTO',80000,250000000,12,1000),
   ('CAR',150000,500000000,20,1200)
@@ -104,6 +108,7 @@ select extensions.ok(not (
 ), transport_type || ' rejects package count above its cap') from limits;
 
 with limits(transport_type, weight_grams, volume_mm3, packages, longest_mm) as (values
+  ('WALKING',5000,20000000,2,400), ('BICYCLE',10000,35000000,3,500),
   ('MOTORBIKE',20000,60000000,4,600),
   ('SCOOTER',25000,75000000,5,650), ('AUTO',80000,250000000,12,1000),
   ('CAR',150000,500000000,20,1200)

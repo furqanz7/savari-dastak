@@ -540,8 +540,9 @@ function formatDuration(seconds: number) {
 function formatTransport(value?: string) {
   switch (value) {
     case "WALKING":
+      return "Walking";
     case "BICYCLE":
-      return "Retired delivery method";
+      return "Bicycle";
     case "MOTORBIKE":
       return "Motorbike";
     case "SCOOTER":

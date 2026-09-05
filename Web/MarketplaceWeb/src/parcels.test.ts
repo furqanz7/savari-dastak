@@ -28,6 +28,15 @@ const auth = {
 };
 
 describe("parcel delivery", () => {
+  it.each(["walking", "bicycle"] as const)("preserves %s in parcel and courier snapshots", (deliveryMethod) => {
+    const result = parseParcel({ ...parcel, deliveryMethod, courier: {
+      displayName: "Aamir", phoneNumber: "+919812345678", deliveryMethod,
+      location: null, lastSeenAt: null,
+    } });
+    expect(result.deliveryMethod).toBe(deliveryMethod);
+    expect(result.courier?.deliveryMethod).toBe(deliveryMethod);
+  });
+
   it("keeps one customer action per parcel state and retries failed payments", () => {
     expect(parcelPresentation("payment_pending", "failed", "sender").primaryAction).toBe("pay");
     expect(parcelPresentation("assigned", "paid", "sender").primaryAction).toBe("cancel");

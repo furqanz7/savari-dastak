@@ -1745,7 +1745,9 @@ private struct AdminSKURow: View {
 private func adminDate(_ value: String) -> String { ISO8601DateFormatter().date(from: value)?.formatted(date: .abbreviated, time: .shortened) ?? "just now" }
 private func adminDeliveryMethod(_ value: String) -> String {
     switch value.lowercased() {
-    case "walking", "bicycle", "retired": "Retired delivery method"
+    case "walking": "Walking"
+    case "bicycle": "Bicycle"
+    case "retired": "Retired delivery method"
     case "bike", "motorbike": "Motorbike"
     case "scooter": "Scooter"
     case "auto": "Auto"

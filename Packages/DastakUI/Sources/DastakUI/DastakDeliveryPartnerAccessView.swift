@@ -622,6 +622,8 @@ public struct DastakDeliveryPartnerAccessView: View {
         title: String,
         symbol: String
     )] = [
+        (.walking, "Walking", "figure.walk"),
+        (.bicycle, "Bicycle", "bicycle"),
         (.motorbike, "Motorbike", "fuelpump.fill"),
         (.scooter, "Scooter", "scooter"),
         (.auto, "Auto", "car.side.fill"),

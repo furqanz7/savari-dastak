@@ -110,7 +110,7 @@ export class ParcelRoutingUnavailableError extends Error {}
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const phonePattern = /^\+[1-9][0-9]{7,14}$/;
-const deliveryMethods = new Set(["bike", "auto"]);
+const deliveryMethods = new Set(["walking", "bicycle", "bike", "auto"]);
 
 export async function handleParcelDeliveries(
   request: Request,

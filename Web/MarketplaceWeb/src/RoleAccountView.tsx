@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   AlertTriangle,
   BadgeCheck,
+  Bike,
+  Footprints,
   Bell,
   CarFront,
   ChevronRight,
@@ -425,6 +427,8 @@ function initials(name: string) {
 function methodLabel(method?: DeliveryMethod | null) {
   switch (method) {
     case "retired": return "Retired delivery method";
+    case "walking": return "Walking";
+    case "bicycle": return "Bicycle";
     case "bike": return "Motorbike";
     case "auto": return "Auto";
     case "motorbike": return "Motorbike";
@@ -435,6 +439,8 @@ function methodLabel(method?: DeliveryMethod | null) {
 }
 
 function methodIcon(method?: DeliveryMethod | null) {
+  if (method === "walking") return <Footprints size={18} />;
+  if (method === "bicycle") return <Bike size={18} />;
   if (method === "bike" || method === "motorbike" || method === "scooter") return <Navigation size={18} />;
   if (method === "auto") return <CarFront size={18} />;
   if (method === "goods_vehicle") return <Truck size={18} />;

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   CheckCircle2,
+  Bike,
+  Footprints,
   CarFront,
   Clock3,
   FileCheck2,
@@ -49,6 +51,8 @@ const methods: Array<{
   detail: string;
   icon: LucideIcon;
 }> = [
+  { value: "walking", label: "Walking", detail: "Identity only", icon: Footprints },
+  { value: "bicycle", label: "Bicycle", detail: "Identity only", icon: Bike },
   { value: "motorbike", label: "Motorbike", detail: "Vehicle check", icon: Gauge },
   { value: "scooter", label: "Scooter", detail: "Vehicle check", icon: Navigation },
   { value: "auto", label: "Auto", detail: "Vehicle check", icon: CarFront },

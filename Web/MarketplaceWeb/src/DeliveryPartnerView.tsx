@@ -1180,7 +1180,6 @@ function deliveryMethodLabel(method: string) {
 }
 function transportLabel(transport: string) {
   if (transport === "CAR") return "Tempo / goods vehicle";
-  if (transport === "WALKING" || transport === "BICYCLE") return "Retired delivery method";
   return transport === "MOTORBIKE"
     ? "Motorbike"
     : `${transport.charAt(0)}${transport.slice(1).toLowerCase()}`;

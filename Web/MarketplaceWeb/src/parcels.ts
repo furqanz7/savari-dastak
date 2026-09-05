@@ -1,7 +1,7 @@
 import { parseCustomerOrderSupportCase } from "./orders";
 import type { CustomerOrderActions, CustomerOrderSupportCase, CustomerOrderSupportCategory } from "./orders";
 
-export type ParcelDeliveryMethod = "retired" | "bike" | "auto";
+export type ParcelDeliveryMethod = "walking" | "bicycle" | "retired" | "bike" | "auto";
 export type ParcelStatus = "payment_pending" | "paid" | "assigned" | "en_route_to_pickup" | "picked_up" | "in_transit" | "delivered" | "cancelled";
 export type ParcelPoint = { latitude: number; longitude: number; address: string };
 export type ParcelMoney = { currency: "INR"; paise: number };
@@ -387,8 +387,7 @@ function money(value: unknown, allowZero = false): ParcelMoney {
 }
 
 function method(value: unknown): ParcelDeliveryMethod {
-  if (value === "walking" || value === "bicycle") return "retired";
-  if (value !== "retired" && value !== "bike" && value !== "auto") invalid();
+  if (value !== "walking" && value !== "bicycle" && value !== "retired" && value !== "bike" && value !== "auto") invalid();
   return value;
 }
 

@@ -63,9 +63,10 @@ Deno.test("quote uses the server route and ignores client-owned pricing", async 
   assertEquals("courierPayoutPaise" in (quoted ?? {}), false);
 });
 
-Deno.test("retired walking and bicycle parcel methods are rejected", async () => {
+Deno.test("walking and bicycle parcel methods reach server routing and pricing", async () => {
   for (const deliveryMethod of ["walking", "bicycle"]) {
-    let routeCalled = false;
+    let routedMethod: string | undefined;
+    let quotedMethod: string | undefined;
     const response = await handleParcelDeliveries(
       request({
         body: {
@@ -76,15 +77,20 @@ Deno.test("retired walking and bicycle parcel methods are rejected", async () =>
         },
       }),
       dependencies({
-        routeParcel: () => {
-          routeCalled = true;
+        routeParcel: (input) => {
+          routedMethod = input.deliveryMethod;
           return Promise.resolve({ distanceMeters: 4_250, durationSeconds: 720 });
+        },
+        quoteParcel: (input) => {
+          quotedMethod = input.deliveryMethod;
+          return Promise.resolve({ responseBody: { ...quote(), deliveryMethod }, responseStatus: 200 });
         },
       }),
     );
 
-    assertEquals(routeCalled, false);
-    await assertError(response, 400, "validation_failed");
+    assertEquals(response.status, 200);
+    assertEquals(routedMethod, deliveryMethod);
+    assertEquals(quotedMethod, deliveryMethod);
   }
 });
 
