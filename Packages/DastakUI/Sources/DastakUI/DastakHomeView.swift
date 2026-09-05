@@ -19,10 +19,10 @@ struct DastakHomeView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                     header
-                    promise
-                    restaurantRail
+                    catalogueSearch
                     categoryRail
                     catalogueContent
+                    restaurantRail
                     parcelBand
                 }
                 .padding(.horizontal, MarketplaceSpacing.medium)
@@ -61,6 +61,27 @@ struct DastakHomeView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
+    }
+
+    private var catalogueSearch: some View {
+        Button(action: presentSearch) {
+            HStack(spacing: MarketplaceSpacing.small) {
+                Image(systemName: "magnifyingglass")
+                    .font(.body.weight(.semibold))
+                Text("Search products, brands and categories")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: "mic.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .frame(minHeight: 52)
+            .background(.ultraThinMaterial, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Search Dastak catalogue")
     }
 
     @ViewBuilder
@@ -199,7 +220,7 @@ struct DastakHomeView: View {
                             VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
                                 Text(type.name).font(.headline)
                                 LazyVGrid(
-                                    columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
+                                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
                                     spacing: MarketplaceSpacing.compact
                                 ) {
                                     ForEach(categories) { category in
@@ -215,38 +236,6 @@ struct DastakHomeView: View {
                             }
                         }
                     }
-                } else {
-                    ScrollView(.horizontal) {
-                        HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
-                            Button {
-                                selectedSubcategoryID = nil
-                            } label: {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "sparkles")
-                                        .font(.title2)
-                                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                                        .frame(width: 82, height: 74)
-                                        .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 16))
-                                    Text("All").font(.caption.bold())
-                                }
-                                .padding(6)
-                                .background(selectedSubcategoryID == nil ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 18))
-                            }
-                            .buttonStyle(.plain)
-                            ForEach(visibleSubcategories) { subcategory in
-                                Button {
-                                    selectedSubcategoryID = subcategory.id
-                                } label: {
-                                    DastakSubcategoryTile(
-                                        subcategory: subcategory,
-                                        selected: selectedSubcategoryID == subcategory.id
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    .scrollIndicators(.hidden)
                 }
             }
         }
@@ -304,7 +293,38 @@ struct DastakHomeView: View {
                     .foregroundStyle(.secondary)
             }
 
-            productGrid(products)
+            HStack(alignment: .top, spacing: MarketplaceSpacing.small) {
+                LazyVStack(spacing: MarketplaceSpacing.small) {
+                    Button { selectedSubcategoryID = nil } label: {
+                        VStack(spacing: 7) {
+                            Image(systemName: "sparkles")
+                                .font(.title2)
+                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                .frame(width: 74, height: 66)
+                                .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 15))
+                            Text("All")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(5)
+                        .background(selectedSubcategoryID == nil ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    .buttonStyle(.plain)
+                    ForEach(visibleSubcategories) { subcategory in
+                        Button { selectedSubcategoryID = subcategory.id } label: {
+                            DastakSubcategoryTile(
+                                subcategory: subcategory,
+                                selected: selectedSubcategoryID == subcategory.id
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(width: 88)
+
+                productGrid(products)
+                    .frame(maxWidth: .infinity, alignment: .top)
+            }
         }
     }
 
@@ -629,25 +649,23 @@ struct DastakHomeView: View {
 
 private struct DastakCategoryTile: View {
     let category: DastakV1CatalogueCategory
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: 7) {
             DastakProductArtwork(
                 imageKey: category.imageKey ?? category.previewImageKeys?.first,
                 fallbackSymbol: "square.grid.2x2.fill"
             )
             .frame(maxWidth: .infinity)
-            .aspectRatio(1.28, contentMode: .fit)
+            .aspectRatio(1, contentMode: .fit)
             Text(category.name)
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
         }
-        .padding(8)
-        .background(MarketplaceColors.surface(for: colorScheme), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(MarketplaceColors.divider(for: colorScheme), lineWidth: 1))
+        .contentShape(Rectangle())
     }
 }
 
@@ -661,16 +679,16 @@ private struct DastakSubcategoryTile: View {
                 imageKey: subcategory.imageKey ?? subcategory.previewImageKeys?.first,
                 fallbackSymbol: "shippingbox.fill"
             )
-            .frame(width: 82, height: 74)
+            .frame(width: 74, height: 66)
             Text(subcategory.name)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .frame(width: 88)
+                .frame(width: 80)
         }
-        .padding(6)
-        .background(selected ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 18))
+        .padding(5)
+        .background(selected ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 16))
     }
 }
 

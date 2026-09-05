@@ -283,6 +283,7 @@ Deno.test("V1 Admin catalogue page rejects malformed filters before database acc
 
 Deno.test("V1 merchant catalogue exposes canonical selection and branch controls", async () => {
   let selection: unknown;
+  let selections: unknown;
   let operation: unknown;
   const merchantSnapshot = await handleV1Catalogue(
     request({
@@ -323,6 +324,33 @@ Deno.test("V1 merchant catalogue exposes canonical selection and branch controls
     selected: true,
     expectedVersion: 0,
     idempotencyKey: "selection-key",
+  });
+
+  const selectionsResponse = await handleV1Catalogue(
+    request({
+      operation: "updateMerchantSelections",
+      branchId: categoryId,
+      selections: [
+        { skuId, selected: true, expectedVersion: 0 },
+        { skuId: categoryId, selected: false, expectedVersion: 4 },
+      ],
+    }, "selections-key"),
+    dependencies({
+      updateMerchantSelections: (input) => {
+        selections = input;
+        return Promise.resolve({ updatedCount: 2 });
+      },
+    }),
+  );
+  assertEquals(selectionsResponse.status, 200);
+  assertEquals(selections, {
+    accessToken: actor.accessToken,
+    branchId: categoryId,
+    selections: [
+      { skuId, selected: true, expectedVersion: 0 },
+      { skuId: categoryId, selected: false, expectedVersion: 4 },
+    ],
+    idempotencyKey: "selections-key",
   });
 
   const operationResponse = await handleV1Catalogue(
@@ -464,6 +492,8 @@ function dependencies(
     importCatalogue: overrides.importCatalogue ?? (() => Promise.resolve({})),
     updateSku: overrides.updateSku ?? (() => Promise.resolve({})),
     updateMerchantSelection: overrides.updateMerchantSelection ??
+      (() => Promise.resolve({})),
+    updateMerchantSelections: overrides.updateMerchantSelections ??
       (() => Promise.resolve({})),
     updateBranchOperationalState: overrides.updateBranchOperationalState ??
       (() => Promise.resolve({})),

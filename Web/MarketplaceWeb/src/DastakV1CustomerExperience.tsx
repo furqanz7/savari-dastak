@@ -807,14 +807,17 @@ function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subc
         const grouped = categories.filter((category) => category.categoryTypeId === type.id);
         if (!grouped.length) return null;
         return <section key={type.id}><header><h3>{type.name}</h3><span>{grouped.length} categories</span></header><div className="v1-category-grid">{grouped.map((category) => <button type="button" key={category.id} onClick={() => onCategory(category.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={category} /><strong>{category.name}</strong><small>{subcategories.filter((item) => item.categoryId === category.id).length} collections</small></button>)}</div></section>;
-      })}</div> : <div className="v1-subcategory-rail" role="group" aria-label="Product collection">
-        <button className={!selectedSubcategory ? "selected" : ""} type="button" onClick={() => onSubcategory(undefined)}><span className="v1-subcategory-all"><Sparkles size={23} /></span><strong>All</strong></button>
-        {categorySubcategories.map((subcategory) => <button className={selectedSubcategory === subcategory.id ? "selected" : ""} type="button" key={subcategory.id} onClick={() => onSubcategory(subcategory.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={subcategory} /><strong>{subcategory.name}</strong></button>)}
+      })}</div> : <div className="v1-category-browser">
+        <div className="v1-subcategory-rail" role="group" aria-label="Product collection">
+          <button className={!selectedSubcategory ? "selected" : ""} type="button" onClick={() => onSubcategory(undefined)}><span className="v1-subcategory-all"><Sparkles size={23} /></span><strong>All</strong></button>
+          {categorySubcategories.map((subcategory) => <button className={selectedSubcategory === subcategory.id ? "selected" : ""} type="button" key={subcategory.id} onClick={() => onSubcategory(subcategory.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={subcategory} /><strong>{subcategory.name}</strong></button>)}
+        </div>
+        <div className="v1-category-results"><header><h3>{selectedName}</h3><span>{visible.length} products</span></header><ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /></div>
       </div>}
     </section>
-    <section className="v1-section"><header><div><p>{selectedCategory ? "IN THIS COLLECTION" : "POPULAR NOW"}</p><h2>{selectedName ?? "Everyday essentials"}</h2></div><span>{visible.length} products</span></header>
+    {!selectedCategory ? <section className="v1-section"><header><div><p>POPULAR NOW</p><h2>Everyday essentials</h2></div><span>{visible.length} products</span></header>
       <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />
-    </section>
+    </section> : null}
     <section className="v1-service-band"><PackageCheck size={24} /><div><strong>Send a parcel</strong><span>Door-to-door delivery across your city</span></div><button type="button" onClick={onParcel}>Open <ChevronRight size={17} /></button></section>
     <button className="v1-order-link" type="button" onClick={onOrders}>View your Dastak orders <ArrowRight size={17} /></button>
   </>;

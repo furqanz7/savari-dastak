@@ -36,6 +36,7 @@ import {
   updateV1AdminSku,
   updateV1MerchantBranchState,
   updateV1MerchantSkuSelection,
+  updateV1MerchantSkuSelections,
   upsertV1RestaurantMenuEntity,
 } from "./dastakV1";
 
@@ -219,6 +220,11 @@ describe("Dastak V1 web contract", () => {
       ...auth, branchId, skuId, selected: false, expectedVersion: 3,
       idempotencyKey: "merchant-sku-1",
     }, command);
+    await updateV1MerchantSkuSelections({
+      ...auth, branchId,
+      selections: [{ skuId, selected: true, expectedVersion: 4 }],
+      idempotencyKey: "merchant-skus-1",
+    }, command);
     await updateV1MerchantBranchState({
       ...auth, branchId, isOpen: true, acceptingOrders: false, expectedVersion: 2,
       idempotencyKey: "merchant-branch-1",
@@ -227,6 +233,10 @@ describe("Dastak V1 web contract", () => {
       {
         operation: "updateMerchantSelection", branchId, skuId,
         selected: false, expectedVersion: 3,
+      },
+      {
+        operation: "updateMerchantSelections", branchId,
+        selections: [{ skuId, selected: true, expectedVersion: 4 }],
       },
       {
         operation: "updateBranchOperationalState", branchId,

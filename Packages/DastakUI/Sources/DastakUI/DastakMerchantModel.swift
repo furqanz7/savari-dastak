@@ -55,6 +55,7 @@ final class DastakMerchantModel: ObservableObject {
     @Published private(set) var v1Fulfilments: [DastakV1MerchantFulfilment] = []
     @Published private(set) var catalogue: CatalogueSnapshot?
     @Published private(set) var canonicalCatalogue: DastakV1MerchantCatalogueSnapshot?
+    @Published private(set) var pendingCanonicalSelections: [UUID: Bool] = [:]
     @Published private(set) var earnings: DastakEarningsSnapshot?
     @Published private(set) var isLoading = true
     @Published private(set) var isRefreshing = false
@@ -71,6 +72,7 @@ final class DastakMerchantModel: ObservableObject {
     private var actionKeys: [String: IdempotencyKey] = [:]
     private var ordersRefreshInFlight = false
     private var ordersRefreshQueued = false
+    private var canonicalSelectionSaveKey: IdempotencyKey?
 
     init(
         services: MarketplaceAuthenticatedServices,
@@ -129,6 +131,10 @@ final class DastakMerchantModel: ObservableObject {
         busyIdentity != nil
     }
 
+    var hasPendingCanonicalSelections: Bool {
+        !pendingCanonicalSelections.isEmpty
+    }
+
     func bootstrap() async {
         await refreshAll()
         isLoading = false
@@ -158,14 +164,18 @@ final class DastakMerchantModel: ObservableObject {
 
     func refreshCanonicalCatalogue(reportFailure: Bool = true) async {
         do {
-            canonicalCatalogue = try await v1Client.canonicalCatalogue(
+            let refreshed = try await v1Client.canonicalCatalogue(
                 branchID: canonicalCatalogue?.branch.branchID,
                 limit: 1_000,
                 idempotencyKey: makeKey()
             )
+            canonicalCatalogue = refreshed
+            pendingCanonicalSelections = pendingCanonicalSelections.filter { skuID, desired in
+                refreshed.skus.first(where: { $0.skuID == skuID })?.selected != desired
+            }
+            if pendingCanonicalSelections.isEmpty { canonicalSelectionSaveKey = nil }
             if reportFailure { errorMessage = nil }
         } catch {
-            canonicalCatalogue = nil
             if reportFailure,
                !String(describing: error).localizedCaseInsensitiveContains("retail-only")
             {
@@ -174,25 +184,61 @@ final class DastakMerchantModel: ObservableObject {
         }
     }
 
-    func setCanonicalSelection(_ sku: DastakV1MerchantCatalogueSnapshot.SKU) async {
-        guard let snapshot = canonicalCatalogue else { return }
-        let identity = "canonical-sku:\(sku.skuID):\(sku.selectionVersion):\(!sku.selected)"
-        guard !isBusy else { return }
-        busyIdentity = identity
+    func canonicalSelection(for sku: DastakV1MerchantCatalogueSnapshot.SKU) -> Bool {
+        pendingCanonicalSelections[sku.skuID] ?? sku.selected
+    }
+
+    func stageCanonicalSelection(_ sku: DastakV1MerchantCatalogueSnapshot.SKU) {
+        guard sku.catalogueStatus == "ACTIVE", busyIdentity != "canonical-catalogue-save" else { return }
+        let desired = !canonicalSelection(for: sku)
+        var next = pendingCanonicalSelections
+        if desired == sku.selected { next[sku.skuID] = nil }
+        else { next[sku.skuID] = desired }
+        pendingCanonicalSelections = next
+        canonicalSelectionSaveKey = nil
+        errorMessage = nil
+    }
+
+    func discardCanonicalSelections() {
+        pendingCanonicalSelections = [:]
+        canonicalSelectionSaveKey = nil
+    }
+
+    func saveCanonicalSelections() async {
+        guard let snapshot = canonicalCatalogue,
+              !pendingCanonicalSelections.isEmpty,
+              !isBusy
+        else { return }
+        let commands = snapshot.skus.compactMap { sku -> DastakV1MerchantSelectionCommand? in
+            guard let selected = pendingCanonicalSelections[sku.skuID], selected != sku.selected else { return nil }
+            return DastakV1MerchantSelectionCommand(
+                skuID: sku.skuID,
+                selected: selected,
+                expectedVersion: sku.selectionVersion
+            )
+        }
+        guard !commands.isEmpty else {
+            discardCanonicalSelections()
+            return
+        }
+
+        busyIdentity = "canonical-catalogue-save"
+        errorMessage = nil
+        let saveKey = canonicalSelectionSaveKey ?? makeKey()
+        canonicalSelectionSaveKey = saveKey
         defer { busyIdentity = nil }
         do {
-            _ = try await v1Client.updateCatalogueSelection(
+            _ = try await v1Client.updateCatalogueSelections(
                 branchID: snapshot.branch.branchID,
-                skuID: sku.skuID,
-                selected: !sku.selected,
-                expectedVersion: sku.selectionVersion,
-                idempotencyKey: actionKey(for: identity)
+                selections: commands,
+                idempotencyKey: saveKey
             )
-            actionKeys[identity] = nil
+            pendingCanonicalSelections = [:]
+            canonicalSelectionSaveKey = nil
             await refreshCanonicalCatalogue()
-            notice = sku.selected ? "Removed from your storefront." : "Added to your storefront."
+            notice = "\(commands.count) storefront \(commands.count == 1 ? "change" : "changes") saved."
         } catch {
-            errorMessage = message(for: error, fallback: "The storefront selection could not be saved.")
+            errorMessage = message(for: error, fallback: "The storefront changes could not be saved.")
             await refreshCanonicalCatalogue(reportFailure: false)
         }
     }

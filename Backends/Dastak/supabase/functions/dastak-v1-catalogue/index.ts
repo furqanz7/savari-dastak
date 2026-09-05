@@ -99,6 +99,16 @@ Deno.serve((request) =>
           p_idempotency_key: input.idempotencyKey,
         },
       ),
+    updateMerchantSelections: (input) =>
+      callAuthenticatedRPC(
+        input.accessToken,
+        "dastak_v1_update_merchant_sku_selections",
+        {
+          p_branch_id: input.branchId,
+          p_selections: input.selections,
+          p_idempotency_key: input.idempotencyKey,
+        },
+      ),
     updateBranchOperationalState: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

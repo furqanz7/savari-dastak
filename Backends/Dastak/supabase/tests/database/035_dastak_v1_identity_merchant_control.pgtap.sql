@@ -23,6 +23,24 @@ select is(
   false,
   'merchant clients cannot mutate canonical selections as table DML'
 );
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.dastak_v1_update_merchant_sku_selections(uuid,jsonb,text)',
+    'EXECUTE'
+  ),
+  true,
+  'authenticated merchants can atomically save staged canonical selections'
+);
+select is(
+  has_function_privilege(
+    'anon',
+    'public.dastak_v1_update_merchant_sku_selections(uuid,jsonb,text)',
+    'EXECUTE'
+  ),
+  false,
+  'anonymous callers cannot save merchant catalogue selections'
+);
 
 select is(
   public.dastak_before_user_created(
@@ -298,6 +316,30 @@ select throws_ok(
   'stale merchant selection is rejected'
 );
 select is(
+  public.dastak_v1_update_merchant_sku_selections(
+    'a5400000-0000-4000-8000-000000000001',
+    '[
+      {"skuId":"a5800000-0000-4000-8000-000000000001","selected":false,"expectedVersion":1},
+      {"skuId":"a5800000-0000-4000-8000-000000000002","selected":false,"expectedVersion":1}
+    ]'::jsonb,
+    'save-control-catalogue-1'
+  ) ->> 'updatedCount',
+  '2',
+  'merchant saves several staged SKU selections in one command'
+);
+select is(
+  public.dastak_v1_update_merchant_sku_selections(
+    'a5400000-0000-4000-8000-000000000001',
+    '[
+      {"skuId":"a5800000-0000-4000-8000-000000000001","selected":false,"expectedVersion":1},
+      {"skuId":"a5800000-0000-4000-8000-000000000002","selected":false,"expectedVersion":1}
+    ]'::jsonb,
+    'save-control-catalogue-1'
+  ) #>> '{selections,0,version}',
+  '2',
+  'replaying a batch returns its first committed response without another write'
+);
+select is(
   public.dastak_v1_set_branch_operational_state(
     'a5400000-0000-4000-8000-000000000001', 'branch-control-open-1', 0, true, true
   ) ->> 'acceptingOrders',
@@ -330,7 +372,7 @@ select is(
         'a5800000-0000-4000-8000-000000000002'
       )
   ),
-  2::bigint,
+  4::bigint,
   'each branch/SKU selection has an independent outbox aggregate'
 );
 select ok(

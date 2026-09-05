@@ -6,6 +6,7 @@ import {
   CalendarClock,
   Check,
   ChevronDown,
+  ChevronRight,
   CircleAlert,
   Database,
   Factory,
@@ -17,6 +18,7 @@ import {
   Settings2,
   Tags,
   Upload,
+  X,
 } from "lucide-react";
 import {
   getV1AdminCatalogue, getV1AdminCataloguePage, importV1AdminCatalogue, updateV1AdminSku,
@@ -55,6 +57,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [editingSku, setEditingSku] = useState<V1AdminCataloguePageSku>();
   const importKeys = useRef(new Map<string, string>());
 
   const filters = useMemo(() => ({
@@ -143,38 +146,59 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
       await updateV1AdminSku({ ...auth, skuId: sku.id, expectedVersion: sku.version, patch, idempotencyKey: crypto.randomUUID() });
       setNotice(`${sku.name} was updated with version protection.`);
       await loadPage(false);
+      setEditingSku(undefined);
     } catch (updateError) { setError(message(updateError)); }
     finally { setBusy(false); }
   };
 
+  const showProducts = Boolean(query.trim() || categoryId || subcategoryId || status || qaStatus);
+
   return <section className="admin-section v1-admin-catalogue" role="tabpanel">
-    <header className="admin-section-heading"><div><p className="eyebrow">MASTER CATALOGUE</p><h2>Every product, exactly represented</h2><p>Browse the same visual product truth customers see, with governed taxonomy, evidence, QA, pricing and visibility in one record.</p></div></header>
+    <header className="admin-section-heading"><div><p className="eyebrow">MASTER CATALOGUE</p><h2>{categoryId ? snapshot?.categories.find((category) => category.id === categoryId)?.name : "Everything, beautifully organised"}</h2><p>Browse the same image-led catalogue customers and merchants use. Open a product for governance, QA, pricing and visibility.</p></div></header>
     {error ? <p className="order-error" role="alert"><CircleAlert size={16} /> {error}</p> : null}
     {notice ? <p className="v1-admin-notice" role="status"><Check size={17} /> {notice}</p> : null}
-    {snapshot ? <>
-      <div className="v1-admin-summary"><Summary label="Departments" value={snapshot.categoryTypes.length} /><Summary label="Categories" value={snapshot.categories.length} /><Summary label="Subcategories" value={snapshot.subcategories.length} /><Summary label="Canonical SKUs" value={snapshot.skuCount} /><Summary label="Retail branches" value={snapshot.branches.length} /></div>
-      <section className="v1-admin-taxonomy"><header><Boxes size={20} /><div><h3>Catalogue hierarchy</h3><p>Department → category → subcategory → exact SKU</p></div></header><div>{snapshot.categoryTypes.map((type) => {
-        const categories = snapshot.categories.filter((category) => category.categoryTypeId === type.id);
-        const subcategoryCount = snapshot.subcategories.filter((subcategory) => categories.some((category) => category.id === subcategory.categoryId)).length;
-        return <article key={type.id}><span><strong>{type.name}</strong><small>{categories.length} categories · {subcategoryCount} subcategories</small></span><em>{type.status}</em><p>{categories.slice(0, 5).map((category) => category.name).join(" · ") || "Classification pending"}</p></article>;
-      })}</div></section>
-      <section className="v1-admin-config"><header><Settings2 size={20} /><div><h3>Launch configuration</h3><p>Effective settings and validation state for the customer catalogue.</p></div></header><div>{snapshot.configuration.map((setting) => <article key={setting.key} className={!setting.valid || (setting.required && !setting.explicit) ? "attention" : ""}><code>{setting.key}</code><strong>{displayValue(setting.value)}</strong><span>{setting.explicit ? "Explicit" : "Default"} · {setting.valid ? "Valid" : "Invalid"}</span></article>)}</div></section>
-    </> : null}
-    <section className="v1-admin-skus">
-      <header><Tags size={20} /><div><h3>SKU library</h3><p>Only QA-ready exact products with valid pricing and imagery can be activated.</p></div></header>
-      <div className="admin-catalogue-toolbar">
-        <label className="admin-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search SKU, brand, alias or category" aria-label="Search catalogue" /></label>
-        <Select label="Department" value={categoryTypeId} onChange={chooseCategoryType}><option value="">All departments</option>{snapshot?.categoryTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}</Select>
-        <Select label="Category" value={categoryId} onChange={chooseCategory}><option value="">All categories</option>{visibleCategories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</Select>
-        <Select label="Subcategory" value={subcategoryId} onChange={setSubcategoryId}><option value="">All subcategories</option>{visibleSubcategories.map((subcategory) => <option value={subcategory.id} key={subcategory.id}>{subcategory.name}</option>)}</Select>
-        <Select label="Visibility" value={status} onChange={setStatus}><option value="">Any status</option><option value="ACTIVE">Active</option><option value="DRAFT">Draft</option><option value="INACTIVE">Inactive</option></Select>
-        <Select label="QA" value={qaStatus} onChange={setQaStatus}><option value="">Any QA state</option><option value="VERIFIED">Verified</option><option value="NEEDS_REVIEW">Needs review</option><option value="PENDING">Pending</option><option value="REJECTED">Rejected</option></Select>
-      </div>
-      {loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : <div className="v1-admin-sku-list">{skus.map((sku) => <SkuEditor key={`${sku.id}:${sku.version}`} sku={sku} taxonomy={snapshot} supabaseUrl={auth.supabaseUrl} disabled={busy} onSave={updateSku} />)}</div>}
-      {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadPage(true)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 SKUs"}</button> : null}
-    </section>
+    <div className="admin-catalogue-toolbar">
+      <label className="admin-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search SKU, brand, alias or category" aria-label="Search catalogue" /></label>
+      <Select label="Department" value={categoryTypeId} onChange={chooseCategoryType}><option value="">All departments</option>{snapshot?.categoryTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}</Select>
+      <Select label="Category" value={categoryId} onChange={chooseCategory}><option value="">All categories</option>{visibleCategories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</Select>
+      <Select label="Subcategory" value={subcategoryId} onChange={setSubcategoryId}><option value="">All subcategories</option>{visibleSubcategories.map((subcategory) => <option value={subcategory.id} key={subcategory.id}>{subcategory.name}</option>)}</Select>
+      <Select label="Visibility" value={status} onChange={setStatus}><option value="">Any status</option><option value="ACTIVE">Active</option><option value="DRAFT">Draft</option><option value="INACTIVE">Inactive</option></Select>
+      <Select label="QA" value={qaStatus} onChange={setQaStatus}><option value="">Any QA state</option><option value="VERIFIED">Verified</option><option value="NEEDS_REVIEW">Needs review</option><option value="PENDING">Pending</option><option value="REJECTED">Rejected</option></Select>
+    </div>
+    {snapshot && !showProducts ? <div className="admin-catalogue-directory">{snapshot.categoryTypes.filter((type) => !categoryTypeId || type.id === categoryTypeId).map((type) => {
+      const categories = snapshot.categories.filter((category) => category.categoryTypeId === type.id);
+      return categories.length ? <section key={type.id}><header><h3>{type.name}</h3><span>{categories.length} categories</span></header><div>{categories.map((category) => <button type="button" key={category.id} onClick={() => { setCategoryTypeId(type.id); setCategoryId(category.id); setSubcategoryId(""); }}><AdminCategoryArtwork item={category} supabaseUrl={auth.supabaseUrl} /><strong>{category.name}</strong></button>)}</div></section> : null;
+    })}</div> : null}
+    {snapshot && showProducts ? <section className="v1-admin-skus">
+      <header><Tags size={20} /><div><h3>Customer-ready products</h3><p>Open a product to manage its exact record.</p></div></header>
+      {categoryId && visibleSubcategories.length ? <div className="admin-subcategory-rail"><button type="button" className={!subcategoryId ? "selected" : ""} onClick={() => setSubcategoryId("")}>All</button>{visibleSubcategories.map((subcategory) => <button type="button" className={subcategoryId === subcategory.id ? "selected" : ""} key={subcategory.id} onClick={() => setSubcategoryId(subcategory.id)}><AdminCategoryArtwork item={subcategory} supabaseUrl={auth.supabaseUrl} /><span>{subcategory.name}</span></button>)}</div> : null}
+      {loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : <div className="v1-admin-sku-grid">{skus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div>}
+      {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadPage(true)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 products"}</button> : null}
+    </section> : null}
+    {snapshot ? <details className="admin-catalogue-operations"><summary><Settings2 size={18} /><span><strong>Catalogue operations</strong><small>Counts, hierarchy and launch configuration</small></span><ChevronDown size={17} /></summary><div className="admin-catalogue-operations-body"><div className="v1-admin-summary"><Summary label="Departments" value={snapshot.categoryTypes.length} /><Summary label="Categories" value={snapshot.categories.length} /><Summary label="Subcategories" value={snapshot.subcategories.length} /><Summary label="Canonical SKUs" value={snapshot.skuCount} /><Summary label="Retail branches" value={snapshot.branches.length} /></div><section className="v1-admin-config"><header><Settings2 size={20} /><div><h3>Launch configuration</h3><p>Effective settings and validation state for the customer catalogue.</p></div></header><div>{snapshot.configuration.map((setting) => <article key={setting.key} className={!setting.valid || (setting.required && !setting.explicit) ? "attention" : ""}><code>{setting.key}</code><strong>{displayValue(setting.value)}</strong><span>{setting.explicit ? "Explicit" : "Default"} · {setting.valid ? "Valid" : "Invalid"}</span></article>)}</div></section></div></details> : null}
     <details className="v1-admin-import"><summary><Upload size={18} /><span><strong>Advanced atomic import</strong><small>Imports enter Draft and require taxonomy, QA, price and cleared imagery before activation</small></span><ChevronDown size={17} /></summary><form onSubmit={runImport}><label htmlFor="v1-catalogue-import">Catalogue JSON</label><textarea id="v1-catalogue-import" value={source} onChange={(event) => setSource(event.target.value)} rows={16} spellCheck={false} disabled={busy} /><p className="field-help">Use approved taxonomy slugs. A successful import does not make a product customer-visible.</p><button className="primary-button" type="submit" disabled={busy}>{busy ? "Importing…" : "Validate and import as Draft"}</button></form></details>
+    {editingSku ? <div className="v1-overlay admin-sku-overlay" role="presentation"><section className="v1-sheet admin-sku-sheet" role="dialog" aria-modal="true" aria-label={`Edit ${editingSku.name}`}><header><div><p>EXACT SKU</p><h2>{editingSku.name}</h2></div><button type="button" onClick={() => setEditingSku(undefined)} aria-label="Close product editor"><X size={19} /></button></header><SkuEditor sku={editingSku} taxonomy={snapshot} supabaseUrl={auth.supabaseUrl} disabled={busy} onSave={updateSku} /></section></div> : null}
   </section>;
+}
+
+function AdminCategoryArtwork({ item, supabaseUrl }: { item: { imageKey?: string; name: string }; supabaseUrl: string }) {
+  const source = item.imageKey ? catalogueImageUrl(supabaseUrl, item.imageKey) : undefined;
+  return <span className="admin-category-art" aria-hidden="true">{source
+    ? <img src={source} alt="" loading="lazy" decoding="async" />
+    : <Boxes size={25} />}</span>;
+}
+
+function AdminSkuTile({ sku, supabaseUrl }: { sku: V1AdminCataloguePageSku; supabaseUrl: string }) {
+  return <span className="admin-sku-tile">
+    <SkuArtwork sku={sku} supabaseUrl={supabaseUrl} />
+    <span className="admin-sku-tile-copy">
+      <small>{sku.brandName?.toUpperCase() ?? sku.categoryName.toUpperCase()}</small>
+      <strong>{sku.name}</strong>
+      <span>{[sku.variant, sku.packSize].filter(Boolean).join(" · ")}</span>
+      <b>{formatPaise(sku.sellingPricePaise)}</b>
+      <em className={sku.activationReady ? "ready" : "attention"}>{sku.activationReady ? "Verified" : label(sku.qaStatus)}</em>
+    </span>
+  </span>;
 }
 
 function SkuEditor({ sku, taxonomy, supabaseUrl, disabled, onSave }: { sku: V1AdminCataloguePageSku; taxonomy?: V1AdminSnapshot; supabaseUrl: string; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void> }) {

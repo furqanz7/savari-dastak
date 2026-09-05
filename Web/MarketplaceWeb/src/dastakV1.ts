@@ -1034,6 +1034,28 @@ export async function updateV1MerchantSkuSelection(
   }, input.idempotencyKey, fetcher));
 }
 
+export async function updateV1MerchantSkuSelections(
+  input: DastakV1Auth & {
+    branchId: string;
+    selections: Array<{ skuId: string; selected: boolean; expectedVersion: number }>;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  if (input.selections.length < 1 || input.selections.length > 1000) invalid("merchant SKU selection batch");
+  const selections = input.selections.map((selection) => ({
+    skuId: requiredUuid(selection.skuId),
+    selected: selection.selected,
+    expectedVersion: requiredInteger(selection.expectedVersion, 0),
+  }));
+  return requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "updateMerchantSelections",
+    branchId: requiredUuid(input.branchId),
+    selections,
+  }, input.idempotencyKey, fetcher));
+}
+
 export async function updateV1MerchantBranchState(
   input: DastakV1Auth & {
     branchId: string; isOpen: boolean; acceptingOrders: boolean; expectedVersion: number;

@@ -198,6 +198,34 @@ public struct DastakV1MerchantSelectionMutation: Codable, Equatable, Sendable {
     }
 }
 
+public struct DastakV1MerchantSelectionCommand: Codable, Equatable, Sendable {
+    public let skuID: UUID
+    public let selected: Bool
+    public let expectedVersion: Int
+
+    public init(skuID: UUID, selected: Bool, expectedVersion: Int) {
+        self.skuID = skuID
+        self.selected = selected
+        self.expectedVersion = expectedVersion
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case selected, expectedVersion
+        case skuID = "skuId"
+    }
+}
+
+public struct DastakV1MerchantSelectionBatchMutation: Codable, Equatable, Sendable {
+    public let branchID: UUID
+    public let updatedCount: Int
+    public let selections: [DastakV1MerchantSelectionMutation]
+
+    private enum CodingKeys: String, CodingKey {
+        case updatedCount, selections
+        case branchID = "branchId"
+    }
+}
+
 public struct DastakV1MerchantBranchStateMutation: Codable, Equatable, Sendable {
     public let branchID: UUID
     public let isOpen: Bool
@@ -242,6 +270,11 @@ public protocol DastakV1MerchantClient: Sendable {
         expectedVersion: Int,
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakV1MerchantSelectionMutation
+    func updateCatalogueSelections(
+        branchID: UUID,
+        selections: [DastakV1MerchantSelectionCommand],
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1MerchantSelectionBatchMutation
     func updateBranchState(
         branchID: UUID,
         isOpen: Bool,
@@ -272,6 +305,7 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
         let skuId: UUID?
         let selected: Bool?
         let expectedVersion: Int?
+        let selections: [DastakV1MerchantSelectionCommand]?
         let isOpen: Bool?
         let acceptingOrders: Bool?
     }
@@ -363,6 +397,7 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
                 skuId: nil,
                 selected: nil,
                 expectedVersion: nil,
+                selections: nil,
                 isOpen: nil,
                 acceptingOrders: nil
             ),
@@ -387,6 +422,31 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
                 skuId: skuID,
                 selected: selected,
                 expectedVersion: expectedVersion,
+                selections: nil,
+                isOpen: nil,
+                acceptingOrders: nil
+            ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func updateCatalogueSelections(
+        branchID: UUID,
+        selections: [DastakV1MerchantSelectionCommand],
+        idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1MerchantSelectionBatchMutation {
+        precondition((1...1_000).contains(selections.count))
+        precondition(selections.allSatisfy { $0.expectedVersion >= 0 })
+        return try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: CatalogueRequest(
+                operation: "updateMerchantSelections",
+                branchId: branchID,
+                limit: nil,
+                skuId: nil,
+                selected: nil,
+                expectedVersion: nil,
+                selections: selections,
                 isOpen: nil,
                 acceptingOrders: nil
             ),
@@ -411,6 +471,7 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
                 skuId: nil,
                 selected: nil,
                 expectedVersion: expectedVersion,
+                selections: nil,
                 isOpen: isOpen,
                 acceptingOrders: acceptingOrders
             ),

@@ -65,6 +65,16 @@ export type V1CatalogueDependencies = {
     expectedVersion: number;
     idempotencyKey: string;
   }) => Promise<unknown>;
+  updateMerchantSelections: (input: {
+    accessToken: string;
+    branchId: string;
+    selections: Array<{
+      skuId: string;
+      selected: boolean;
+      expectedVersion: number;
+    }>;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
   updateBranchOperationalState: (input: {
     accessToken: string;
     branchId: string;
@@ -201,6 +211,13 @@ export async function handleV1Catalogue(
           actor,
           dependencies,
         );
+      case "updateMerchantSelections":
+        return await updateMerchantSelections(
+          request,
+          body,
+          actor,
+          dependencies,
+        );
       case "updateBranchOperationalState":
         return await updateBranchOperationalState(
           request,
@@ -331,6 +348,53 @@ async function updateMerchantSelection(
       skuId,
       selected: body.selected,
       expectedVersion,
+      idempotencyKey,
+    }),
+  );
+}
+
+async function updateMerchantSelections(
+  request: Request,
+  body: Record<string, unknown>,
+  actor: V1Actor,
+  dependencies: V1CatalogueDependencies,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const branchId = requiredUUID(body.branchId);
+  if (
+    !idempotencyKey || idempotencyKey.length > 120 || !branchId ||
+    !Array.isArray(body.selections) || body.selections.length < 1 ||
+    body.selections.length > 1000
+  ) return validationError();
+
+  const selections = body.selections.map((value) => {
+    const item = record(value);
+    if (!item) return undefined;
+    const skuId = requiredUUID(item.skuId);
+    const expectedVersion = optionalInteger(
+      item.expectedVersion,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    );
+    if (!skuId || expectedVersion === undefined || typeof item.selected !== "boolean") {
+      return undefined;
+    }
+    return { skuId, selected: item.selected, expectedVersion };
+  });
+  if (
+    selections.some((item) => item === undefined) ||
+    new Set(selections.map((item) => item?.skuId)).size !== selections.length
+  ) return validationError();
+
+  return json(
+    await dependencies.updateMerchantSelections({
+      accessToken: actor.accessToken,
+      branchId,
+      selections: selections as Array<{
+        skuId: string;
+        selected: boolean;
+        expectedVersion: number;
+      }>,
       idempotencyKey,
     }),
   );
