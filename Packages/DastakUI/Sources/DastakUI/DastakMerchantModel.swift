@@ -243,6 +243,29 @@ final class DastakMerchantModel: ObservableObject {
         }
     }
 
+    func saveStockCount(_ sku: DastakV1MerchantCatalogueSnapshot.SKU, quantity: Int) async -> Bool {
+        guard let snapshot = canonicalCatalogue, !isBusy, (0...1_000_000).contains(quantity) else { return false }
+        busyIdentity = "stock:\(sku.id)"
+        errorMessage = nil
+        defer { busyIdentity = nil }
+        do {
+            _ = try await v1Client.updateCatalogueSelections(
+                branchID: snapshot.branch.branchID,
+                selections: [.init(skuID: sku.id, selected: quantity > 0, expectedVersion: sku.selectionVersion, stockQuantity: quantity)],
+                idempotencyKey: makeKey()
+            )
+            pendingCanonicalSelections.removeValue(forKey: sku.id)
+            canonicalSelectionSaveKey = nil
+            await refreshCanonicalCatalogue()
+            notice = "Stock count saved."
+            return true
+        } catch {
+            errorMessage = message(for: error, fallback: "Stock could not be saved. Check the latest count and try again.")
+            await refreshCanonicalCatalogue(reportFailure: false)
+            return false
+        }
+    }
+
     func setCanonicalBranch(isOpen: Bool, acceptingOrders: Bool) async {
         guard let snapshot = canonicalCatalogue else { return }
         let state = snapshot.branch.operationalState

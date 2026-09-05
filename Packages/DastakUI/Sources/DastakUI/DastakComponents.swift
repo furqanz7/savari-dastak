@@ -255,6 +255,7 @@ struct DastakRefreshNotice: View {
 }
 
 struct DastakProductArtwork: View {
+    private var detail = false
     private let kind: CatalogueKind?
     private let customSymbol: String?
     private let imageKey: String?
@@ -271,10 +272,11 @@ struct DastakProductArtwork: View {
         imageKey = nil
     }
 
-    init(imageKey: String?, fallbackSymbol: String = "basket") {
+    init(imageKey: String?, fallbackSymbol: String = "basket", detail: Bool = false) {
         kind = nil
         customSymbol = fallbackSymbol
         self.imageKey = imageKey
+        self.detail = detail
     }
 
     @Environment(\.colorScheme) private var colorScheme
@@ -290,6 +292,7 @@ struct DastakProductArtwork: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+            .opacity(detail ? 0 : 1)
             if let image = loader.image {
                 image
                     .resizable()
@@ -301,7 +304,7 @@ struct DastakProductArtwork: View {
                     .opacity(artworkRequest == nil ? 1 : 0.58)
             }
         }
-        .aspectRatio(1.18, contentMode: .fit)
+        .aspectRatio(detail ? 1 : 1.18, contentMode: .fit)
         .clipShape(
             RoundedRectangle(
                 cornerRadius: MarketplaceMetrics.compactCornerRadius,
@@ -314,6 +317,7 @@ struct DastakProductArtwork: View {
                 style: .continuous
             )
             .stroke(Color.primary.opacity(colorScheme == .dark ? 0.09 : 0.045), lineWidth: 0.75)
+            .opacity(detail ? 0 : 1)
         }
         .accessibilityHidden(true)
         .task(id: artworkRequest) {
@@ -333,7 +337,12 @@ struct DastakProductArtwork: View {
     }
 
     private var artworkRequest: DastakArtworkRequest? {
-        Self.artworkRequest(for: imageKey)
+        if detail {
+            return DastakArtworkURLFactory.request(for: imageKey,
+                baseURLString: Bundle.main.object(forInfoDictionaryKey: "MarketplaceSupabaseURL") as? String,
+                pixelSize: 1024)
+        }
+        return Self.artworkRequest(for: imageKey)
     }
 
     private static func artworkRequest(for imageKey: String?) -> DastakArtworkRequest? {

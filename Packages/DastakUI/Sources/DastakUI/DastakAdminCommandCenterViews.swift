@@ -1269,23 +1269,6 @@ private struct AdminSKUEditor: View {
                     TextField("Customer description", text: $productDescription, axis: .vertical)
                         .lineLimit(2...5)
                 }
-                Section("SKU quantity") {
-                    TextField("Quantity value", text: $quantityValue)
-#if os(iOS)
-                        .keyboardType(.decimalPad)
-#endif
-                    TextField("Unit (g, kg, ml, l, pc)", text: $quantityUnit)
-#if os(iOS)
-                        .textInputAutocapitalization(.never)
-#endif
-                    TextField("Items in pack", text: $packCount)
-#if os(iOS)
-                        .keyboardType(.numberPad)
-#endif
-                    Text("The pack label remains customer-facing; these fields keep quantity searchable and machine-readable.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 Section("Product details") {
                     TextField("Manufacturer", text: $manufacturer)
                     TextField("Country code", text: $countryOfOrigin)

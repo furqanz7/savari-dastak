@@ -281,6 +281,19 @@ Deno.test("V1 Admin catalogue page rejects malformed filters before database acc
   ]);
 });
 
+Deno.test("V1 merchant stock rejects invalid counts before database access", async () => {
+  let calls = 0;
+  const deps = dependencies({ updateMerchantSelections: () => { calls += 1; return Promise.resolve({}); } });
+  for (const stockQuantity of [-1, 1.5, 1_000_001, 0]) {
+    const response = await handleV1Catalogue(request({
+      operation: "updateMerchantSelections", branchId: categoryId,
+      selections: [{ skuId, selected: true, expectedVersion: 0, stockQuantity }],
+    }, "invalid-stock"), deps);
+    assertEquals(response.status, 400);
+  }
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 merchant catalogue exposes canonical selection and branch controls", async () => {
   let selection: unknown;
   let selections: unknown;
@@ -363,8 +376,8 @@ Deno.test("V1 merchant catalogue exposes canonical selection and branch controls
       operation: "updateMerchantSelections",
       branchId: categoryId,
       selections: [
-        { skuId, selected: true, expectedVersion: 0 },
-        { skuId: categoryId, selected: false, expectedVersion: 4 },
+        { skuId, selected: true, expectedVersion: 0, stockQuantity: 12 },
+        { skuId: categoryId, selected: false, expectedVersion: 4, stockQuantity: 0 },
       ],
     }, "selections-key"),
     dependencies({
@@ -379,8 +392,8 @@ Deno.test("V1 merchant catalogue exposes canonical selection and branch controls
     accessToken: actor.accessToken,
     branchId: categoryId,
     selections: [
-      { skuId, selected: true, expectedVersion: 0 },
-      { skuId: categoryId, selected: false, expectedVersion: 4 },
+      { skuId, selected: true, expectedVersion: 0, stockQuantity: 12 },
+      { skuId: categoryId, selected: false, expectedVersion: 4, stockQuantity: 0 },
     ],
     idempotencyKey: "selections-key",
   });

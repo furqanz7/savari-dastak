@@ -9,6 +9,8 @@ struct DastakHomeView: View {
     let openCart: () -> Void
     let sendParcel: () -> Void
     @State private var selectedRestaurant: DastakV1RestaurantMenu?
+    @State private var selectedProduct: DastakV1CatalogueSKU?
+    @State private var detailProducts: [DastakV1CatalogueSKU] = []
     @State private var selectedCategoryTypeID: UUID?
     @State private var selectedCategoryID: UUID?
     @State private var selectedSubcategoryID: UUID?
@@ -75,6 +77,11 @@ struct DastakHomeView: View {
             DastakRestaurantMenuView(model: model, restaurant: restaurant)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $selectedProduct) { product in
+            DastakCustomerProductDetailView(model: model, initial: product, products: detailProducts)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
         }
     }
 
@@ -418,7 +425,8 @@ struct DastakHomeView: View {
                         add: { model.addToCart(product) },
                         toggleWishlist: {
                             Task { await model.toggleWishlist(kind: .retailSKU, itemID: product.id) }
-                        }
+                        },
+                        openDetail: { detailProducts = products; selectedProduct = product }
                     )
                 }
         }
@@ -1012,11 +1020,17 @@ struct DastakV1ProductTile: View {
     let isUpdatingWishlist: Bool
     let add: () -> Void
     let toggleWishlist: () -> Void
+    var openDetail: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             DastakProductArtwork(imageKey: product.imageKey, fallbackSymbol: artworkSymbol)
                 .aspectRatio(1.04, contentMode: .fit)
+                .onTapGesture { openDetail?() }
+                .accessibilityHidden(false)
+                .accessibilityLabel("View \(product.name) details")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { openDetail?() }
                 .overlay(alignment: .topTrailing) {
                     Button(action: toggleWishlist) {
                         Image(systemName: isWishlisted ? "heart.fill" : "heart")
@@ -1041,6 +1055,7 @@ struct DastakV1ProductTile: View {
                 .font(.subheadline.bold())
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
+                .onTapGesture { openDetail?() }
             Text([product.variant, product.packSize].compactMap { $0 }.joined(separator: " · "))
                 .font(.caption)
                 .foregroundStyle(.secondary)

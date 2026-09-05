@@ -1,3 +1,4 @@
+import { ProductDetailCard, type DetailProduct } from "./ProductDetailCard";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -923,16 +924,30 @@ function catalogueNavigationGroups(categoryTypes: V1CatalogueCategoryType[]) {
 }
 
 function ProductGrid({ supabaseUrl, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
+  const [selectedId, setSelectedId] = useState<string>();
+  const selected = skus.find((sku) => sku.id === selectedId);
+  const [addedId, setAddedId] = useState<string>();
   if (!skus.length) return <EmptyState title="No products here yet" copy="Choose another category." />;
-  return <div className="v1-product-grid">{skus.map((sku) => <article className="v1-product-card" key={sku.id}>
-    <ProductImage className="v1-product-art" src={catalogueImageUrl(supabaseUrl, sku.imageKey ?? null)} alt="" />
+  return <><div className="v1-product-grid">{skus.map((sku) => <article className="v1-product-card" key={sku.id}>
+    <button type="button" className="product-open-button" onClick={() => setSelectedId(sku.id)} aria-label={`View ${sku.name} details`}><ProductImage className="v1-product-art" src={catalogueImageUrl(supabaseUrl, sku.imageKey ?? null)} alt="" /></button>
     <button className="v1-wishlist-button" type="button" disabled={wishlistUpdatingIds.has(sku.id)} onClick={() => onWishlist("RETAIL_SKU", sku.id)} aria-label={wishlistIds.has(`RETAIL_SKU:${sku.id}`) ? `Remove ${sku.name} from Wishlist` : `Save ${sku.name} to Wishlist`}>
       <Heart size={18} fill={wishlistIds.has(`RETAIL_SKU:${sku.id}`) ? "currentColor" : "none"} />
     </button>
-    <div className="v1-product-copy">{sku.brand ? <small>{sku.brand.name.toUpperCase()}</small> : null}<h3>{sku.name}</h3><p>{[sku.variant, sku.packSize].filter(Boolean).join(" · ")}</p>
+    <div className="v1-product-copy">{sku.brand ? <small>{sku.brand.name.toUpperCase()}</small> : null}<h3><button type="button" className="product-open-button" onClick={() => setSelectedId(sku.id)}>{sku.name}</button></h3><p>{[sku.variant, sku.packSize].filter(Boolean).join(" · ")}</p>
       <div><span><strong>{formatV1Price(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise ? <del>{formatV1Price(sku.listPricePaise)}</del> : null}</span><button type="button" onClick={() => onAdd(sku)} aria-label={`Add ${sku.name}`}><Plus size={18} /></button></div>
     </div>
-  </article>)}</div>;
+  </article>)}</div>{selected ? <ProductDetailCard
+    product={customerDetail(selected)} products={skus.filter((item) => item.categoryId === selected.categoryId).map(customerDetail)}
+    supabaseUrl={supabaseUrl} onSelect={setSelectedId} onClose={() => setSelectedId(undefined)}
+    saved={wishlistIds.has(`RETAIL_SKU:${selected.id}`)} savingWishlist={wishlistUpdatingIds.has(selected.id)}
+    onWishlist={() => onWishlist("RETAIL_SKU", selected.id)}
+    action={<button type="button" onClick={() => { onAdd(selected); setAddedId(selected.id); }}>ADD</button>}
+  >{addedId === selected.id ? <p className="product-share-status" role="status">Added to your basket</p> : null}</ProductDetailCard> : null}</>;
+}
+
+function customerDetail(sku: V1CatalogueSku): DetailProduct {
+  return { ...sku, brand: sku.brand?.name, price: sku.sellingPricePaise, listPrice: sku.listPricePaise,
+    facts: [["Manufacturer", sku.manufacturerName], ["Country of origin", sku.countryOfOriginCode], ["Diet", sku.dietType], ["Shelf life", sku.shelfLifeDays ? `${sku.shelfLifeDays} days` : undefined], ["Barcode", sku.barcode]] };
 }
 
 function CartSheet({ lines, foodLines, subtotal, address, busy, onDismiss, onAdd, onDecrement, onAddFood, onDecrementFood, onAddress, onSubmit }: {

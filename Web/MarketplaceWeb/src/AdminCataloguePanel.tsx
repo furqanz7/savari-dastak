@@ -265,9 +265,9 @@ function SkuEditor({ sku, taxonomy, supabaseUrl, disabled, onSave }: { sku: V1Ad
   const [subcategoryId, setSubcategoryId] = useState(sku.subcategoryId);
   const [brandId, setBrandId] = useState(sku.brandId ?? "");
   const [barcode, setBarcode] = useState(sku.barcode ?? "");
-  const [quantityValue, setQuantityValue] = useState(sku.quantityValue?.toString() ?? "");
-  const [quantityUnit, setQuantityUnit] = useState(sku.quantityUnit ?? "");
-  const [packCount, setPackCount] = useState(sku.packCount?.toString() ?? "");
+  const quantityValue = sku.quantityValue?.toString() ?? "";
+  const quantityUnit = sku.quantityUnit ?? "";
+  const packCount = sku.packCount?.toString() ?? "";
   const [manufacturerName, setManufacturerName] = useState(sku.manufacturerName ?? "");
   const [countryOfOriginCode, setCountryOfOriginCode] = useState(sku.countryOfOriginCode ?? "");
   const [hsnCode, setHsnCode] = useState(sku.hsnCode ?? "");
@@ -340,16 +340,13 @@ function SkuEditor({ sku, taxonomy, supabaseUrl, disabled, onSave }: { sku: V1Ad
       </div>
       <div className="admin-sku-technical"><span><strong>Country of origin</strong>{sku.countryOfOriginCode ?? "Not recorded"}</span><span><strong>SKU</strong>{sku.id}</span><span><strong>Slug</strong>{sku.slug}</span><span><strong>Updated</strong>{formatDate(sku.updatedAt)}</span><span className="wide"><strong>Logistics</strong>{readableObject(sku.logisticsAttributes)}</span><span className="wide"><strong>Attributes</strong>{readableObject(sku.attributes)}</span></div>
       <section className="admin-sku-master-fields" aria-label="Authoritative SKU controls">
-        <header><Package size={18} /><div><strong>Identity, quantity &amp; compliance</strong><small>These values become the shared customer, merchant and Admin product record.</small></div></header>
+        <header><Package size={18} /><div><strong>Identity &amp; compliance</strong><small>These values become the shared customer, merchant and Admin product record.</small></div></header>
         <label><span>Product name</span><input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} /></label>
         <label><span>Variant</span><input value={variant} maxLength={160} onChange={(event) => setVariant(event.target.value)} /></label>
         <label className="wide"><span>Description</span><textarea value={description} maxLength={1000} rows={3} onChange={(event) => setDescription(event.target.value)} /></label>
         <label><span>Subcategory</span><select value={subcategoryId} onChange={(event) => setSubcategoryId(event.target.value)}>{taxonomy?.subcategories.map((item) => <option key={item.id} value={item.id}>{taxonomy.categories.find((category) => category.id === item.categoryId)?.name ?? "Category"} · {item.name}</option>)}</select></label>
         <label><span>Brand</span><select value={brandId} onChange={(event) => setBrandId(event.target.value)}><option value="">No brand</option>{taxonomy?.brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label><span>Display pack</span><input value={packSize} maxLength={80} onChange={(event) => setPackSize(event.target.value)} placeholder="1 kg" /></label>
-        <label><span>Unit quantity</span><input inputMode="decimal" value={quantityValue} onChange={(event) => setQuantityValue(event.target.value)} placeholder="1000" /></label>
-        <label><span>Quantity unit</span><select value={quantityUnit} onChange={(event) => setQuantityUnit(event.target.value)}><option value="">Not structured</option>{["g","kg","ml","l","unit","pack","pair","sheet","roll","tablet","capsule"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label>
-        <label><span>Units per pack</span><input inputMode="numeric" value={packCount} onChange={(event) => setPackCount(event.target.value)} placeholder="1" /></label>
         <label><span>Manufacturer</span><input value={manufacturerName} maxLength={200} onChange={(event) => setManufacturerName(event.target.value)} /></label>
         <label><span>Barcode</span><input value={barcode} maxLength={64} onChange={(event) => setBarcode(event.target.value)} /></label>
         <label><span>HSN</span><input inputMode="numeric" value={hsnCode} maxLength={8} onChange={(event) => setHsnCode(event.target.value)} /></label>

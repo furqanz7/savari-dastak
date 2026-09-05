@@ -349,7 +349,7 @@ export type V1MerchantCanonicalCatalogue = {
     dietType?: string; searchTerms: string[];
     listPricePaise: number; sellingPricePaise: number; currencyCode: "INR";
     catalogueStatus: string; selected: boolean; selectionState?: string;
-    selectionVersion: number; selectionUpdatedAt?: string;
+    selectionVersion: number; selectionUpdatedAt?: string; stockQuantity?: number;
   }>;
   truncated: boolean;
 };
@@ -1040,17 +1040,19 @@ export async function updateV1MerchantSkuSelection(
 export async function updateV1MerchantSkuSelections(
   input: DastakV1Auth & {
     branchId: string;
-    selections: Array<{ skuId: string; selected: boolean; expectedVersion: number }>;
+    selections: Array<{ skuId: string; selected: boolean; expectedVersion: number; stockQuantity?: number }>;
     idempotencyKey: string;
     signal?: AbortSignal;
   },
   fetcher: Fetcher = fetch,
 ) {
   if (input.selections.length < 1 || input.selections.length > 1000) invalid("merchant SKU selection batch");
+  if (input.selections.some((item) => item.stockQuantity !== undefined && (!Number.isSafeInteger(item.stockQuantity) || item.stockQuantity < 0 || item.stockQuantity > 1_000_000 || (item.stockQuantity === 0 && item.selected)))) invalidInput("Enter a whole stock count from 0 to 1,000,000. Zero stock must be unavailable.");
   const selections = input.selections.map((selection) => ({
     skuId: requiredUuid(selection.skuId),
     selected: selection.selected,
     expectedVersion: requiredInteger(selection.expectedVersion, 0),
+    ...(selection.stockQuantity === undefined ? {} : { stockQuantity: selection.stockQuantity }),
   }));
   return requiredRecord(await invoke(input, "dastak-v1-catalogue", {
     operation: "updateMerchantSelections",
@@ -2274,6 +2276,7 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         selected: requiredBoolean(sku.selected),
         selectionState: optionalText(sku.selectionState, 40),
         selectionVersion: requiredInteger(sku.selectionVersion, 0),
+        stockQuantity: optionalInteger(sku.stockQuantity, 0),
         selectionUpdatedAt: optionalTimestamp(sku.selectionUpdatedAt),
       };
     }),

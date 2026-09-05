@@ -384,5 +384,37 @@ select ok(
   'canonical SKU selection is audited'
 );
 
+select set_config('request.jwt.claim.sub', 'a5000000-0000-4000-8000-000000000003', true);
+set local role authenticated;
+select is(public.dastak_v1_update_merchant_sku_selections(
+  'a5400000-0000-4000-8000-000000000001',
+  '[{"skuId":"a5800000-0000-4000-8000-000000000001","selected":true,"expectedVersion":2,"stockQuantity":24}]', 'stock-24'
+) #>> '{selections,0,stockQuantity}', '24', 'merchant saves the stock count inside the versioned selection command');
+select is(public.dastak_v1_update_merchant_sku_selections(
+  'a5400000-0000-4000-8000-000000000001',
+  '[{"skuId":"a5800000-0000-4000-8000-000000000001","selected":true,"expectedVersion":2,"stockQuantity":24}]', 'stock-24'
+) #>> '{selections,0,version}', '3', 'stock command replay does not increment twice');
+select ok(pg_catalog.jsonb_path_exists(public.dastak_v1_merchant_canonical_catalogue_snapshot(
+  'a5400000-0000-4000-8000-000000000001',100), '$.skus[*] ? (@.stockQuantity == 24)'), 'saved stock is returned in the merchant card snapshot');
+select throws_ok($$select public.dastak_v1_update_merchant_sku_selections('a5400000-0000-4000-8000-000000000001', '[{"skuId":"a5800000-0000-4000-8000-000000000001","selected":true,"expectedVersion":2,"stockQuantity":9}]', 'stock-stale')$$,
+  '40001', 'stale merchant SKU selection version', 'stale counts cannot overwrite a newer count');
+select is(public.dastak_v1_update_merchant_sku_selections(
+  'a5400000-0000-4000-8000-000000000001',
+  '[{"skuId":"a5800000-0000-4000-8000-000000000001","selected":false,"expectedVersion":3,"stockQuantity":0}]', 'stock-zero'
+) #>> '{selections,0,selected}', 'false', 'zero stock removes branch availability');
+select throws_ok($$select public.dastak_v1_update_merchant_sku_selection('a5400000-0000-4000-8000-000000000001','a5800000-0000-4000-8000-000000000001',true,4,'stock-zero-old-client')$$,
+  '22023', 'update stock count before selecting this product', 'old clients cannot make zero-stock products available');
+select is(public.dastak_v1_update_merchant_sku_selections(
+  'a5400000-0000-4000-8000-000000000001',
+  '[{"skuId":"a5800000-0000-4000-8000-000000000001","selected":true,"expectedVersion":4,"stockQuantity":12}]', 'stock-restock'
+) #>> '{selections,0,stockQuantity}', '12', 'restocking restores availability with a fresh count');
+select throws_ok($$select public.dastak_v1_update_merchant_sku_selections('a5400000-0000-4000-8000-000000000001','[{"skuId":"a5800000-0000-4000-8000-000000000001","selected":true,"expectedVersion":5,"stockQuantity":-1}]','stock-negative')$$,
+  '22023', 'stock quantity must be a whole number from 0 to 1000000; zero stock must be unavailable', 'negative counts rejected');
+select set_config('request.jwt.claim.sub', 'a5000000-0000-4000-8000-000000000004', true);
+select throws_ok($$select public.dastak_v1_update_merchant_sku_selections('a5400000-0000-4000-8000-000000000001','[{"skuId":"a5800000-0000-4000-8000-000000000001","selected":true,"expectedVersion":5,"stockQuantity":10}]','stock-outsider')$$,
+  '42501', 'permission denied', 'other accounts cannot edit branch stock');
+reset role;
+select is((select stock_quantity from dastak_v1.merchant_sku_selections where branch_id='a5400000-0000-4000-8000-000000000001' and sku_id='a5800000-0000-4000-8000-000000000001'),12,'failed edits leave saved stock intact');
+select is(has_function_privilege('anon','dastak_v1_api.update_merchant_stock_selection(uuid,uuid,uuid,boolean,bigint,text,integer)','EXECUTE'),false,'anonymous stock mutation denied');
 select * from finish();
 rollback;

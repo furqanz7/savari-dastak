@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CirclePause, Leaf, PackageCheck, Search, ShieldCheck, Store } from "lucide-react";
 import { catalogueImageUrl, formatPrice } from "./catalogue";
+import { ProductDetailCard, type DetailProduct } from "./ProductDetailCard";
 import { userFacingError } from "./userFacingError";
 import {
   getV1MerchantCanonicalCatalogue,
@@ -23,6 +24,7 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
   const [subcategoryId, setSubcategoryId] = useState<string>();
   const [selectedOnly, setSelectedOnly] = useState(false);
   const [pendingSelections, setPendingSelections] = useState<Record<string, boolean>>({});
+  const [detailId, setDetailId] = useState<string>();
   const selectionSaveKey = useRef<string | undefined>(undefined);
   const headingRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -82,6 +84,7 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
   }, [snapshot]);
 
   const setSelection = (sku: V1MerchantCanonicalCatalogue["skus"][number]) => {
+    if (sku.stockQuantity === 0 && !sku.selected) { setDetailId(sku.skuId); return; }
     if (busy === "catalogue" || sku.catalogueStatus !== "ACTIVE") return;
     setPendingSelections((current) => {
       const selected = !(current[sku.skuId] ?? sku.selected);
@@ -146,6 +149,20 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
     }
   };
 
+  const saveStock = async (sku: V1MerchantCanonicalCatalogue["skus"][number], quantity: number) => {
+    if (!snapshot || busy) return false;
+    setBusy("stock"); setError(undefined);
+    try {
+      await updateV1MerchantSkuSelections({ ...auth, branchId: snapshot.branch.branchId,
+        selections: [{ skuId: sku.skuId, selected: quantity > 0, expectedVersion: sku.selectionVersion, stockQuantity: quantity }], idempotencyKey: crypto.randomUUID() });
+      setPendingSelections((current) => { const next = { ...current }; delete next[sku.skuId]; return next; });
+      selectionSaveKey.current = undefined;
+      await refresh();
+      return true;
+    } catch (requestError) { await refresh(); setError(message(requestError)); return false; }
+    finally { setBusy(undefined); }
+  };
+
   if (loading) return <div className="catalogue-loading" role="status"><span /> Loading canonical catalogue</div>;
   if (!snapshot) return <section className="merchant-v1-control"><p className="order-error" role="alert">{error ?? "Merchant catalogue unavailable."}</p></section>;
 
@@ -155,6 +172,7 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
   const showDirectory = !categoryTypeId && !selectedOnly && !deferredQuery.trim();
   const railCategories = snapshot.categories.filter((category) => category.categoryTypeId === categoryTypeId);
   const productTypes = snapshot.subcategories.filter((item) => item.categoryId === categoryId);
+  const detailSku = snapshot.skus.find((sku) => sku.skuId === detailId);
   return <section className="merchant-v1-control">
     <header className="merchant-orders-heading">
       <div><p className="eyebrow">STORE &amp; CATALOGUE</p><h1>{branch.branchName}</h1><p>{branch.organizationName}</p></div>
@@ -196,27 +214,29 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
       </aside>
       <div className="merchant-v1-category-results" key={categoryId}><header><h2>{snapshot.categories.find((item) => item.categoryId === categoryId)?.name ?? "Products"}</h2><span>{visibleSkus.length} products</span></header>
         {productTypes.length ? <label className="merchant-v1-type-filter">Type<select aria-label="Product type" value={subcategoryId ?? ""} onChange={(event) => setSubcategoryId(event.target.value || undefined)}><option value="">All types</option>{productTypes.map((item) => <option key={item.subcategoryId} value={item.subcategoryId}>{item.name}</option>)}</select></label> : null}
-        <MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} /></div>
-    </section> : selectedOnly || deferredQuery.trim() ? <MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} /> : null}
+        <MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /></div>
+    </section> : selectedOnly || deferredQuery.trim() ? <MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /> : null}
     {Object.keys(pendingSelections).length ? <div className="merchant-v1-save-bar" role="status"><span><strong>{Object.keys(pendingSelections).length} unsaved {Object.keys(pendingSelections).length === 1 ? "change" : "changes"}</strong><small>Keep selecting, then save once.</small></span><button type="button" className="secondary-button" disabled={busy === "catalogue"} onClick={() => { setPendingSelections({}); selectionSaveKey.current = undefined; }}>Discard</button><button type="button" className="primary-button" disabled={busy === "catalogue"} onClick={() => void saveSelections()}>{busy === "catalogue" ? "Saving…" : "Save storefront"}</button></div> : null}
     {snapshot.truncated && <p className="merchant-v1-truncated">Showing the first 5,000 SKUs. Refine the canonical catalogue before launch.</p>}
+    {detailSku ? <MerchantProductDetail key={detailSku.skuId} sku={detailSku} products={snapshot.skus.filter((item) => item.categoryId === detailSku.categoryId)} branch={branch.branchName} supabaseUrl={auth.supabaseUrl} onSelect={(id) => { if (!busy) setDetailId(id); }} onClose={() => setDetailId(undefined)} onSave={saveStock} busy={Boolean(busy)} error={error} /> : null}
   </section>;
 }
 
-function MerchantSkuGallery({ auth, skus, subcategories, pendingSelections, busy, onSelection }: {
+function MerchantSkuGallery({ auth, skus, subcategories, pendingSelections, busy, onSelection, onDetail }: {
   auth: DastakV1Auth;
   skus: V1MerchantCanonicalCatalogue["skus"];
   subcategories: V1MerchantCanonicalCatalogue["subcategories"];
   pendingSelections: Record<string, boolean>;
   busy?: string;
   onSelection: (sku: V1MerchantCanonicalCatalogue["skus"][number]) => void;
+  onDetail: (id: string) => void;
 }) {
   if (!skus.length) return <div className="merchant-v1-empty-products"><PackageCheck size={28} /><strong>No matching products</strong><span>Choose another collection or change your search.</span></div>;
   const names = new Map(subcategories.map((item) => [item.subcategoryId, item.name]));
   return <div className="merchant-v1-sku-list merchant-v1-sku-gallery" aria-live="polite">{skus.map((sku) => {
     const selected = pendingSelections[sku.skuId] ?? sku.selected;
     return <article className={selected ? "selected" : ""} key={sku.skuId}>
-      <MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={sku.imageKey} />
+      <button type="button" className="product-open-button" onClick={() => onDetail(sku.skuId)} aria-label={`View ${sku.name} details and stock`}><MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={sku.imageKey} /></button>
       <span className={`merchant-v1-selection ${selected ? "selected" : ""}`} aria-hidden="true">{selected && <Check size={16} />}</span>
       <span className="merchant-v1-product-copy">{sku.brandName ? <b>{sku.brandName.toUpperCase()}</b> : null}<strong>{sku.name}</strong><small>{[sku.variant, sku.packSize, names.get(sku.subcategoryId)].filter(Boolean).join(" · ")}</small>{selected ? <em><Check size={13} /> {pendingSelections[sku.skuId] === undefined ? "In your store" : "Selected — not saved"}</em> : null}</span>
       <span className="merchant-v1-price"><strong>{formatPrice(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise && <small>{formatPrice(sku.listPricePaise)}</small>}</span>
@@ -276,4 +296,28 @@ function merchantNavigationGroups(categoryTypes: V1MerchantCanonicalCatalogue["c
 
 function message(error: unknown) {
   return userFacingError(error, "The merchant control could not be completed.");
+}
+
+function merchantDetail(sku: V1MerchantCanonicalCatalogue["skus"][number]): DetailProduct {
+  return { ...sku, id: sku.skuId, brand: sku.brandName, price: sku.sellingPricePaise, listPrice: sku.listPricePaise, facts: [["Diet", sku.dietType]] };
+}
+
+function MerchantProductDetail({ sku, products, branch, supabaseUrl, onSelect, onClose, onSave, busy, error }: {
+  sku: V1MerchantCanonicalCatalogue["skus"][number]; products: V1MerchantCanonicalCatalogue["skus"];
+  branch: string; supabaseUrl: string; onSelect: (id: string) => void; onClose: () => void;
+  onSave: (sku: V1MerchantCanonicalCatalogue["skus"][number], quantity: number) => Promise<boolean>; busy: boolean; error?: string;
+}) {
+  const [stock, setStock] = useState(sku.stockQuantity?.toString() ?? "");
+  const [saved, setSaved] = useState(false);
+  const quantity = Number(stock);
+  const valid = stock.trim() !== "" && /^\d+$/.test(stock) && Number.isSafeInteger(quantity) && quantity >= 0 && quantity <= 1_000_000;
+  const change = (value: string) => { setStock(value); setSaved(false); };
+  return <ProductDetailCard product={merchantDetail(sku)} products={products.map(merchantDetail)} supabaseUrl={supabaseUrl} onSelect={onSelect} onClose={onClose}
+    action={<button type="button" disabled={busy || !valid || sku.catalogueStatus !== "ACTIVE"} onClick={async () => { setSaved(await onSave(sku, quantity)); }}>{busy ? "Saving…" : "Save stock"}</button>}>
+    <section className="product-detail-info product-stock-editor"><h3>Stock quantity</h3><p>{branch} · units of {sku.packSize}</p>
+      <div className="product-stock-input"><button type="button" disabled={busy || quantity <= 0} aria-label="Decrease stock count" onClick={() => change(String(Math.max(0, (quantity || 0) - 1)))}>−</button><input inputMode="numeric" aria-label="Stock quantity" placeholder="Not set" value={stock} disabled={busy} onChange={(event) => change(event.target.value)} /><button type="button" disabled={busy || quantity >= 1_000_000} aria-label="Increase stock count" onClick={() => change(String(Math.min(1_000_000, (quantity || 0) + 1)))}>+</button></div>
+      <p>Update this recorded count after sales and restocks. Saving zero makes this product unavailable. Confirm physical quantities for each order.</p>
+      {error ? <p role="alert">{error}</p> : saved ? <p role="status">Stock count saved.</p> : null}
+    </section>
+  </ProductDetailCard>;
 }

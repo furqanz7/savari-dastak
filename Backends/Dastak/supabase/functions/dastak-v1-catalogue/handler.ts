@@ -72,6 +72,7 @@ export type V1CatalogueDependencies = {
       skuId: string;
       selected: boolean;
       expectedVersion: number;
+      stockQuantity?: number;
     }>;
     idempotencyKey: string;
   }) => Promise<unknown>;
@@ -379,7 +380,9 @@ async function updateMerchantSelections(
     if (!skuId || expectedVersion === undefined || typeof item.selected !== "boolean") {
       return undefined;
     }
-    return { skuId, selected: item.selected, expectedVersion };
+    const stockQuantity = item.stockQuantity === undefined ? undefined : optionalInteger(item.stockQuantity, 0, 1_000_000);
+    if (item.stockQuantity !== undefined && (stockQuantity === undefined || (stockQuantity === 0 && item.selected))) return undefined;
+    return { skuId, selected: item.selected, expectedVersion, ...(stockQuantity === undefined ? {} : { stockQuantity }) };
   });
   if (
     selections.some((item) => item === undefined) ||

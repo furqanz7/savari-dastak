@@ -49,6 +49,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     @State private var categoryTypeID: UUID?
     @State private var categoryID: UUID?
     @State private var subcategoryID: UUID?
+    @State private var selectedProduct: DastakV1MerchantCatalogueSnapshot.SKU?
 
     private let columns = [
         GridItem(.flexible(), spacing: MarketplaceSpacing.compact),
@@ -87,6 +88,11 @@ private struct DastakMerchantCanonicalCatalogueView: View {
             }
             .task(id: priorityArtworkKeys) {
                 await DastakProductArtwork.prefetch(imageKeys: priorityArtworkKeys)
+            }
+            .sheet(item: $selectedProduct) { sku in
+                DastakMerchantProductDetailView(model: model, initial: sku)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
             }
         }
     }
@@ -459,6 +465,11 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 DastakProductArtwork(imageKey: sku.imageKey, fallbackSymbol: "shippingbox")
                     .frame(maxWidth: .infinity)
                     .aspectRatio(1.04, contentMode: .fit)
+                    .onTapGesture { selectedProduct = sku }
+                    .accessibilityHidden(false)
+                    .accessibilityLabel("View \(sku.name) details and stock")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { selectedProduct = sku }
                 if selected {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(MarketplaceColors.success.color)
@@ -472,6 +483,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
             }
             Text(sku.name)
                 .font(.subheadline.bold())
+                .onTapGesture { selectedProduct = sku }
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
             Text([sku.variant, sku.packSize].compactMap { $0 }.joined(separator: " · "))
@@ -485,7 +497,8 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     .minimumScaleFactor(0.72)
                 Spacer(minLength: 2)
                 Button {
-                    model.stageCanonicalSelection(sku)
+                    if sku.stockQuantity == 0 && !selected { selectedProduct = sku }
+                    else { model.stageCanonicalSelection(sku) }
                 } label: {
                     Image(systemName: selected ? "minus" : "plus")
                         .font(.subheadline.bold())

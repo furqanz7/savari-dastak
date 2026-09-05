@@ -208,12 +208,12 @@ describe("Dastak V1 web contract", () => {
         skuId, categoryId, subcategoryId, brandName: null, name: "Rice", variant: null,
         packSize: "1 kg", description: null, imageKey: null, listPricePaise: 10000,
         sellingPricePaise: 9500, currencyCode: "INR", catalogueStatus: "ACTIVE",
-        selected: true, selectionState: "SELECTED", selectionVersion: 3,
+        selected: true, selectionState: "SELECTED", selectionVersion: 3, stockQuantity: 24,
         selectionUpdatedAt: "2026-08-24T00:00:00Z",
       }],
       truncated: false,
     }));
-    expect(catalogue.skus[0]).toMatchObject({ selected: true, sellingPricePaise: 9500 });
+    expect(catalogue.skus[0]).toMatchObject({ selected: true, sellingPricePaise: 9500, stockQuantity: 24 });
 
     const calls: Record<string, unknown>[] = [];
     const command = async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -227,7 +227,7 @@ describe("Dastak V1 web contract", () => {
     }, command);
     await updateV1MerchantSkuSelections({
       ...auth, branchId,
-      selections: [{ skuId, selected: true, expectedVersion: 4 }],
+      selections: [{ skuId, selected: true, expectedVersion: 4, stockQuantity: 12 }],
       idempotencyKey: "merchant-skus-1",
     }, command);
     await updateV1MerchantBranchState({
@@ -241,7 +241,7 @@ describe("Dastak V1 web contract", () => {
       },
       {
         operation: "updateMerchantSelections", branchId,
-        selections: [{ skuId, selected: true, expectedVersion: 4 }],
+        selections: [{ skuId, selected: true, expectedVersion: 4, stockQuantity: 12 }],
       },
       {
         operation: "updateBranchOperationalState", branchId,
