@@ -35,4 +35,11 @@ describe("customer saved, payment and merchant-entry experience", () => {
     expect(account).not.toContain("Store search radius");
     expect(account).not.toContain("changeDiscoveryRadius");
   });
+
+  it("loads and caches every page of a selected canonical category", () => {
+    expect(experience).toContain("loadCompleteV1Category");
+    expect(experience).toContain("result.nextCursor");
+    expect(experience).toContain("setCategorySkus((current)");
+    expect(experience).toContain("Loading this category");
+  });
 });

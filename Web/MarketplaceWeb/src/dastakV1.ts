@@ -54,6 +54,8 @@ export type V1CatalogueCategory = {
   slug: string;
   imageKey?: string;
   previewImageKeys: string[];
+  status?: string;
+  requiresControlledFlow?: boolean;
   sortOrder: number;
 };
 
@@ -334,10 +336,10 @@ export type V1MerchantCanonicalCatalogue = {
     };
     capacity: { limit: number; held: number; available: number };
   };
-  categoryTypes: Array<{ categoryTypeId: string; name: string; slug: string; imageKey?: string; sortOrder: number }>;
-  categories: Array<{ categoryId: string; categoryTypeId?: string; name: string; slug: string; imageKey?: string; sortOrder: number }>;
+  categoryTypes: Array<{ categoryTypeId: string; name: string; slug: string; imageKey?: string; status?: string; requiresControlledFlow?: boolean; sortOrder: number }>;
+  categories: Array<{ categoryId: string; categoryTypeId?: string; name: string; slug: string; imageKey?: string; status?: string; requiresControlledFlow?: boolean; sortOrder: number }>;
   subcategories: Array<{
-    subcategoryId: string; categoryId: string; name: string; slug: string; imageKey?: string; sortOrder: number;
+    subcategoryId: string; categoryId: string; name: string; slug: string; imageKey?: string; status?: string; requiresControlledFlow?: boolean; sortOrder: number;
   }>;
   skus: Array<{
     skuId: string; categoryTypeId?: string; categoryId: string; subcategoryId: string; brandName?: string;
@@ -771,7 +773,7 @@ export class DastakV1RequestError extends Error {
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export async function getV1Catalogue(
-  input: DastakV1Auth & { query?: string; categoryId?: string; subcategoryId?: string; limit?: number; signal?: AbortSignal },
+  input: DastakV1Auth & { query?: string; categoryId?: string; subcategoryId?: string; limit?: number; cursor?: V1CatalogueSnapshot["nextCursor"]; signal?: AbortSignal },
   fetcher: Fetcher = fetch,
 ) {
   return parseV1Catalogue(await invoke(input, "dastak-v1-catalogue", {
@@ -780,7 +782,7 @@ export async function getV1Catalogue(
     categoryId: input.categoryId ?? null,
     subcategoryId: input.subcategoryId ?? null,
     limit: input.limit ?? 250,
-    cursor: null,
+    cursor: input.cursor ?? null,
   }, undefined, fetcher));
 }
 
@@ -2197,7 +2199,10 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
       return {
         categoryTypeId: requiredUuid(type.categoryTypeId),
         name: requiredText(type.name, 100), slug: requiredText(type.slug, 120),
-        imageKey: optionalText(type.imageKey, 500), sortOrder: requiredInteger(type.sortOrder, 0),
+        imageKey: optionalText(type.imageKey, 500),
+        status: optionalText(type.status, 30),
+        requiresControlledFlow: optionalBoolean(type.requiresControlledFlow),
+        sortOrder: requiredInteger(type.sortOrder, 0),
       };
     }),
     categories: categories.map((item) => {
@@ -2209,6 +2214,8 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         name: requiredText(category.name, 100),
         slug: requiredText(category.slug, 120),
         imageKey: optionalText(category.imageKey, 500),
+        status: optionalText(category.status, 30),
+        requiresControlledFlow: optionalBoolean(category.requiresControlledFlow),
         sortOrder: requiredInteger(category.sortOrder, 0),
       };
     }),
@@ -2220,6 +2227,8 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         name: requiredText(subcategory.name, 100),
         slug: requiredText(subcategory.slug, 120),
         imageKey: optionalText(subcategory.imageKey, 500),
+        status: optionalText(subcategory.status, 30),
+        requiresControlledFlow: optionalBoolean(subcategory.requiresControlledFlow),
         sortOrder: requiredInteger(subcategory.sortOrder, 0),
       };
     }),
@@ -2599,6 +2608,8 @@ function parseCategory(value: unknown): V1CatalogueCategory {
     imageKey: optionalText(source.imageKey, 500),
     previewImageKeys: Array.isArray(source.previewImageKeys)
       ? source.previewImageKeys.map((item) => requiredText(item, 500)) : [],
+    status: optionalText(source.status, 30),
+    requiresControlledFlow: optionalBoolean(source.requiresControlledFlow),
     sortOrder: requiredInteger(source.sortOrder, 0),
   };
 }

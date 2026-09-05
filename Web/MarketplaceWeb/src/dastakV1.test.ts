@@ -57,14 +57,19 @@ const packageId = "99999999-9999-4999-8999-999999999999";
 describe("Dastak V1 web contract", () => {
   it("requests a canonical customer projection without merchant discovery fields", async () => {
     let requestBody: Record<string, unknown> | undefined;
-    const result = await getV1Catalogue({ ...auth, query: "rice" }, async (_url, init) => {
+    const result = await getV1Catalogue({
+      ...auth,
+      query: "rice",
+      categoryId,
+      cursor: { name: "Rice", skuId },
+    }, async (_url, init) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return Response.json(catalogueFixture());
     });
 
     expect(requestBody).toEqual({
-      operation: "customerCatalogue", query: "rice", categoryId: null,
-      subcategoryId: null, limit: 250, cursor: null,
+      operation: "customerCatalogue", query: "rice", categoryId,
+      subcategoryId: null, limit: 250, cursor: { name: "Rice", skuId },
     });
     expect(JSON.stringify(requestBody)).not.toMatch(/merchant|store|price/i);
     expect(result.skus[0]).not.toHaveProperty("merchantId");

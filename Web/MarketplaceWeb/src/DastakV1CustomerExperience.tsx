@@ -84,6 +84,22 @@ const liveStatuses = new Set([
 ]);
 const cancellableStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT"]);
 
+async function loadCompleteV1Category(
+  auth: DastakV1Auth,
+  categoryId: string,
+  signal: AbortSignal,
+) {
+  const skus = new Map<string, V1CatalogueSku>();
+  let cursor: { name: string; skuId: string } | undefined;
+  for (let page = 0; page < 20; page += 1) {
+    const result = await getV1Catalogue({ ...auth, categoryId, limit: 250, cursor, signal });
+    result.skus.forEach((sku) => skus.set(sku.id, sku));
+    if (!result.nextCursor || (cursor?.name === result.nextCursor.name && cursor.skuId === result.nextCursor.skuId)) break;
+    cursor = result.nextCursor;
+  }
+  return [...skus.values()];
+}
+
 export function DastakV1CustomerExperience(props: Props) {
   const auth = useMemo<DastakV1Auth>(() => ({
     accessToken: props.accessToken,
@@ -91,6 +107,8 @@ export function DastakV1CustomerExperience(props: Props) {
     supabaseUrl: props.supabaseUrl,
   }), [props.accessToken, props.publishableKey, props.supabaseUrl]);
   const [catalogue, setCatalogue] = useState<Awaited<ReturnType<typeof getV1Catalogue>>>();
+  const [categorySkus, setCategorySkus] = useState<Record<string, V1CatalogueSku[]>>({});
+  const [loadingCategoryId, setLoadingCategoryId] = useState<string>();
   const [restaurants, setRestaurants] = useState<V1RestaurantMenu[]>([]);
   const [selectedRestaurant, setSelectedRestaurant] = useState<V1RestaurantMenu>();
   const [searchResults, setSearchResults] = useState<V1CatalogueSku[]>([]);
@@ -134,7 +152,10 @@ export function DastakV1CustomerExperience(props: Props) {
       getV1Restaurants({ ...auth, limit: 50 }),
       getCustomerAddresses(auth),
     ]);
-    if (nextCatalogue.status === "fulfilled") setCatalogue(nextCatalogue.value);
+    if (nextCatalogue.status === "fulfilled") {
+      setCatalogue(nextCatalogue.value);
+      setCategorySkus({});
+    }
     if (nextRestaurants.status === "fulfilled") setRestaurants(nextRestaurants.value);
     if (nextAddresses.status === "fulfilled") setAddresses(nextAddresses.value.addresses);
     const firstFailure = [nextCatalogue, nextRestaurants, nextAddresses]
@@ -192,6 +213,31 @@ export function DastakV1CustomerExperience(props: Props) {
   }, [auth, loadingMoreOrders, ordersNextCursor]);
 
   useEffect(() => { void refreshStorefront(); }, [refreshStorefront]);
+  useEffect(() => {
+    if (!selectedCategory || Object.prototype.hasOwnProperty.call(categorySkus, selectedCategory)) {
+      setLoadingCategoryId(undefined);
+      return;
+    }
+    const categoryId = selectedCategory;
+    const controller = new AbortController();
+    setLoadingCategoryId(categoryId);
+    void loadCompleteV1Category(auth, categoryId, controller.signal)
+      .then((skus) => {
+        if (!controller.signal.aborted) {
+          setCategorySkus((current) => ({ ...current, [categoryId]: skus }));
+          setError(undefined);
+        }
+      })
+      .catch((categoryError) => {
+        if (!controller.signal.aborted) setError(message(categoryError));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoadingCategoryId((current) => current === categoryId ? undefined : current);
+        }
+      });
+    return () => controller.abort();
+  }, [auth, categorySkus, selectedCategory]);
   useEffect(() => { void refreshWishlist(); }, [refreshWishlist]);
   useEffect(() => {
     const controller = new AbortController();
@@ -283,9 +329,10 @@ export function DastakV1CustomerExperience(props: Props) {
   const skuById = useMemo(() => {
     const result = new Map<string, V1CatalogueSku>();
     catalogue?.skus.forEach((sku) => result.set(sku.id, sku));
+    Object.values(categorySkus).forEach((items) => items.forEach((sku) => result.set(sku.id, sku)));
     searchResults.forEach((sku) => result.set(sku.id, sku));
     return result;
-  }, [catalogue, searchResults]);
+  }, [catalogue, categorySkus, searchResults]);
   const menuItemById = useMemo(() => {
     const result = new Map<string, { restaurant: V1RestaurantMenu; item: V1RestaurantMenuItem }>();
     restaurants.forEach((restaurant) => restaurant.categories.forEach((category) =>
@@ -657,7 +704,8 @@ export function DastakV1CustomerExperience(props: Props) {
       categoryTypes={catalogue?.categoryTypes ?? []}
       categories={catalogue?.categories ?? []}
       subcategories={catalogue?.subcategories ?? []}
-      skus={catalogue?.skus ?? []}
+      skus={selectedCategory ? categorySkus[selectedCategory] ?? [] : catalogue?.skus ?? []}
+      loadingProducts={Boolean(selectedCategory && loadingCategoryId === selectedCategory)}
       selectedCategory={selectedCategory}
       selectedSubcategory={selectedSubcategory}
       onCategory={(id) => { setSelectedCategory(id); setSelectedSubcategory(undefined); }}
@@ -774,11 +822,12 @@ function CustomerHeader({ address, count, onCart }: { address?: CustomerDelivery
   </header>;
 }
 
-function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, selectedCategory, selectedSubcategory, onCategory, onSubcategory, onSearch, onOrders, onParcel, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, loadingProducts, selectedCategory, selectedSubcategory, onCategory, onSubcategory, onSearch, onOrders, onParcel, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
   supabaseUrl: string;
   restaurants: V1RestaurantMenu[];
   categoryTypes: V1CatalogueCategoryType[]; categories: V1CatalogueCategory[];
   subcategories: V1CatalogueSubcategory[]; skus: V1CatalogueSku[];
+  loadingProducts: boolean;
   selectedCategory?: string; selectedSubcategory?: string;
   onCategory: (id?: string) => void; onSubcategory: (id?: string) => void;
   onSearch: () => void; onOrders: () => void; onParcel: () => void;
@@ -806,13 +855,13 @@ function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subc
       {!selectedCategory ? <div className="v1-category-groups">{categoryTypes.map((type) => {
         const grouped = categories.filter((category) => category.categoryTypeId === type.id);
         if (!grouped.length) return null;
-        return <section key={type.id}><header><h3>{type.name}</h3><span>{grouped.length} categories</span></header><div className="v1-category-grid">{grouped.map((category) => <button type="button" key={category.id} onClick={() => onCategory(category.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={category} /><strong>{category.name}</strong><small>{subcategories.filter((item) => item.categoryId === category.id).length} collections</small></button>)}</div></section>;
+        return <section key={type.id}><header><h3>{type.name}</h3><span>{grouped.length} categories</span></header><div className="v1-category-grid">{grouped.map((category) => <button type="button" key={category.id} onClick={() => onCategory(category.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={category} /><strong>{category.name}</strong><small>{subcategories.filter((item) => item.categoryId === category.id).length} collections{category.status && category.status !== "ACTIVE" ? " · Coming soon" : ""}</small></button>)}</div></section>;
       })}</div> : <div className="v1-category-browser">
         <div className="v1-subcategory-rail" role="group" aria-label="Product collection">
           <button className={!selectedSubcategory ? "selected" : ""} type="button" onClick={() => onSubcategory(undefined)}><span className="v1-subcategory-all"><Sparkles size={23} /></span><strong>All</strong></button>
           {categorySubcategories.map((subcategory) => <button className={selectedSubcategory === subcategory.id ? "selected" : ""} type="button" key={subcategory.id} onClick={() => onSubcategory(subcategory.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={subcategory} /><strong>{subcategory.name}</strong></button>)}
         </div>
-        <div className="v1-category-results"><header><h3>{selectedSubcategory ? categorySubcategories.find((item) => item.id === selectedSubcategory)?.name ?? "Products" : "All products"}</h3><span>{visible.length} products</span></header><ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /></div>
+        <div className="v1-category-results"><header><h3>{selectedSubcategory ? categorySubcategories.find((item) => item.id === selectedSubcategory)?.name ?? "Products" : "All products"}</h3><span>{loadingProducts ? "Loading…" : `${visible.length} products`}</span></header>{loadingProducts ? <div className="v1-inline-loading" role="status"><span /> Loading this category</div> : <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />}</div>
       </div>}
     </section>
     {!selectedCategory ? <section className="v1-section"><header><div><p>POPULAR NOW</p><h2>Everyday essentials</h2></div><span>{visible.length} products</span></header>

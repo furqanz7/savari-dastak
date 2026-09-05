@@ -170,7 +170,7 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
       </div>
       {!categoryId ? <div className="merchant-v1-category-directory">{snapshot.categoryTypes.filter((type) => !categoryTypeId || type.categoryTypeId === categoryTypeId).map((type) => {
         const categories = snapshot.categories.filter((category) => category.categoryTypeId === type.categoryTypeId);
-        return categories.length ? <section key={type.categoryTypeId}><h2>{type.name}</h2><div className="merchant-v1-visual-categories" role="group" aria-label={`${type.name} categories`}>{categories.map((category) => <button key={category.categoryId} type="button" onClick={() => { setCategoryTypeId(type.categoryTypeId); setCategoryId(category.categoryId); setSubcategoryId(undefined); }}><MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={category.imageKey ?? artworkKeys.categories.get(category.categoryId)} /><span>{category.name}</span></button>)}</div></section> : null;
+        return categories.length ? <section key={type.categoryTypeId}><h2>{type.name}</h2><div className="merchant-v1-visual-categories" role="group" aria-label={`${type.name} categories`}>{categories.map((category) => <button key={category.categoryId} type="button" onClick={() => { setCategoryTypeId(type.categoryTypeId); setCategoryId(category.categoryId); setSubcategoryId(undefined); }}><MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={category.imageKey ?? artworkKeys.categories.get(category.categoryId)} /><span>{category.name}{category.status && category.status !== "ACTIVE" ? <small>Coming soon</small> : null}</span></button>)}</div></section> : null;
       })}</div> : null}
     </div>
 
@@ -182,7 +182,7 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
       <div className="merchant-v1-category-results"><header><h2>{subcategoryId ? snapshot.subcategories.find((item) => item.subcategoryId === subcategoryId)?.name : snapshot.categories.find((item) => item.categoryId === categoryId)?.name}</h2><span>{visibleSkus.length} products</span></header><MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} /></div>
     </section> : selectedOnly || deferredQuery.trim() ? <MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} /> : null}
     {Object.keys(pendingSelections).length ? <div className="merchant-v1-save-bar" role="status"><span><strong>{Object.keys(pendingSelections).length} unsaved {Object.keys(pendingSelections).length === 1 ? "change" : "changes"}</strong><small>Keep selecting, then save once.</small></span><button type="button" className="secondary-button" disabled={busy === "catalogue"} onClick={() => { setPendingSelections({}); selectionSaveKey.current = undefined; }}>Discard</button><button type="button" className="primary-button" disabled={busy === "catalogue"} onClick={() => void saveSelections()}>{busy === "catalogue" ? "Saving…" : "Save storefront"}</button></div> : null}
-    {snapshot.truncated && <p className="merchant-v1-truncated">Showing the first 1,000 SKUs. Refine the canonical catalogue before launch.</p>}
+    {snapshot.truncated && <p className="merchant-v1-truncated">Showing the first 5,000 SKUs. Refine the canonical catalogue before launch.</p>}
   </section>;
 }
 
