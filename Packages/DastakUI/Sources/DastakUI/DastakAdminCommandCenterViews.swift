@@ -324,65 +324,33 @@ private struct DastakAdminCatalogueView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                AdminPageIntro(
-                    eyebrow: "MASTER CATALOGUE",
-                    title: selectedCategory?.name ?? "Everything, beautifully organised",
-                    detail: "Browse the same image-led catalogue customers and merchants use. Open any product for governance, QA, pricing and visibility."
-                )
+            LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("MASTER CATALOGUE")
+                        .font(.caption2.bold())
+                        .tracking(1.3)
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                    Text(selectedCategory?.name ?? "Everything, beautifully organised")
+                        .font(.title.bold())
+                        .lineLimit(2)
+                    Text(selectedCategory == nil
+                         ? "The same image-led catalogue customers and merchants browse."
+                         : "Open any product to manage its exact record, visibility and readiness.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 catalogueToolbar
                 if categoryID == nil && trimmedQuery.isEmpty && status == nil && qaStatus == nil {
                     categoryDirectory
-                } else {
-                    selectedCategoryRail
-                }
-
-                if shouldShowProducts {
-                    if let issue = model.issue(for: .catalogue) {
-                        DastakAdminWorkspaceIssueCard(
-                            issue: issue,
-                            lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: .catalogue),
-                            isRefreshing: model.isLoadingCatalogue
-                        ) { Task { await load() } }
-                    }
-                    if model.isLoadingCatalogue, model.catalogueSKUs.isEmpty {
-                        ProgressView("Loading exact SKUs")
-                            .frame(maxWidth: .infinity, minHeight: 240)
-                    } else if model.catalogueSKUs.isEmpty,
-                              model.issue(for: .catalogue) == nil || model.lastSuccessfulRefresh(for: .catalogue) != nil {
-                        ContentUnavailableView(
-                            "No exact SKUs found",
-                            systemImage: "shippingbox.and.arrow.backward",
-                            description: Text("Change a category, filter or search term.")
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 240)
-                        .marketplaceFlatSurface()
-                    } else {
-                        AdminSectionHeader(eyebrow: "EXACT SKU LIBRARY", title: "Customer-ready products")
-                        LazyVGrid(
-                            columns: [GridItem(.flexible()), GridItem(.flexible())],
-                            alignment: .leading,
-                            spacing: MarketplaceSpacing.compact
-                        ) {
-                            ForEach(model.catalogueSKUs) { sku in
-                                Button { selectedSKU = sku } label: { AdminCatalogueGridCard(sku: sku) }
-                                    .buttonStyle(.plain)
-                            }
-                        }
-                        if model.catalogueHasMore {
-                            Button("Load next 40 products", systemImage: "chevron.down") {
-                                Task { await load(append: true) }
-                            }
-                            .buttonStyle(.bordered)
-                            .frame(maxWidth: .infinity)
-                            .disabled(model.isLoadingCatalogue)
-                        }
-                    }
+                } else if shouldShowProducts {
+                    catalogueResults
                 }
             }
             .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
-            .padding(MarketplaceSpacing.large)
+            .padding(MarketplaceSpacing.medium)
+            .padding(.bottom, 132)
             .frame(maxWidth: .infinity)
         }
         .navigationTitle("Catalogue")
@@ -434,25 +402,30 @@ private struct DastakAdminCatalogueView: View {
     }
 
     private var catalogueToolbar: some View {
-        HStack(spacing: MarketplaceSpacing.small) {
+        HStack(spacing: 8) {
             Button("Filters", systemImage: "line.3.horizontal.decrease") { showsFilters = true }
                 .buttonStyle(.bordered)
             if shouldShowProducts || categoryTypeID != nil {
-                Button("All categories", systemImage: "square.grid.2x2") {
+                Button {
                     categoryTypeID = nil
                     categoryID = nil
                     subcategoryID = nil
                     status = nil
                     qaStatus = nil
                     query = ""
+                } label: {
+                    Image(systemName: "square.grid.2x2")
                 }
                 .buttonStyle(.bordered)
+                .accessibilityLabel("Show all categories")
             }
             Spacer()
             if let taxonomy = model.catalogueTaxonomy {
                 Text("\(taxonomy.categories.count) categories · \(taxonomy.subcategories.count) collections")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
         }
     }
@@ -463,19 +436,22 @@ private struct DastakAdminCatalogueView: View {
             ForEach(taxonomy.categoryTypes.filter { categoryTypeID == nil || $0.id == categoryTypeID }) { type in
                 let categories = taxonomy.categories.filter { $0.categoryTypeID == type.id }
                 if !categories.isEmpty {
-                    VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                        Text(type.name).font(MarketplaceTypography.sectionTitle)
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                        Text(type.name).font(.title3.bold())
                         LazyVGrid(
                             columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
                             alignment: .leading,
-                            spacing: MarketplaceSpacing.compact
+                            spacing: MarketplaceSpacing.medium
                         ) {
                             ForEach(categories) { category in
                                 Button {
                                     categoryTypeID = type.id
                                     categoryID = category.id
                                 } label: {
-                                    AdminCatalogueCategoryTile(category: category)
+                                    AdminCatalogueCategoryTile(
+                                        category: category,
+                                        imageKey: category.imageKey ?? categoryArtworkKey(category.id)
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -492,21 +468,109 @@ private struct DastakAdminCatalogueView: View {
     @ViewBuilder
     private var selectedCategoryRail: some View {
         if categoryID != nil, !visibleSubcategories.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
-                    Button { subcategoryID = nil } label: {
-                        AdminCatalogueCollectionTile(title: "All", imageKey: selectedCategory?.imageKey, selected: subcategoryID == nil)
+            LazyVStack(spacing: MarketplaceSpacing.compact) {
+                Button { subcategoryID = nil } label: {
+                    AdminCatalogueCollectionTile(
+                        title: "All",
+                        imageKey: selectedCategory.flatMap { $0.imageKey ?? categoryArtworkKey($0.id) },
+                        selected: subcategoryID == nil
+                    )
+                }
+                .buttonStyle(.plain)
+                ForEach(visibleSubcategories) { subcategory in
+                    Button { subcategoryID = subcategory.id } label: {
+                        AdminCatalogueCollectionTile(
+                            title: subcategory.name,
+                            imageKey: subcategory.imageKey ?? subcategoryArtworkKey(subcategory.id),
+                            selected: subcategoryID == subcategory.id
+                        )
                     }
                     .buttonStyle(.plain)
-                    ForEach(visibleSubcategories) { subcategory in
-                        Button { subcategoryID = subcategory.id } label: {
-                            AdminCatalogueCollectionTile(title: subcategory.name, imageKey: subcategory.imageKey, selected: subcategoryID == subcategory.id)
-                        }
-                        .buttonStyle(.plain)
-                    }
                 }
             }
+            .frame(width: 72)
+        } else {
+            EmptyView()
         }
+    }
+
+    @ViewBuilder
+    private var catalogueResults: some View {
+        if let issue = model.issue(for: .catalogue) {
+            DastakAdminWorkspaceIssueCard(
+                issue: issue,
+                lastSuccessfulRefresh: model.lastSuccessfulRefresh(for: .catalogue),
+                isRefreshing: model.isLoadingCatalogue
+            ) { Task { await load() } }
+        }
+
+        if model.isLoadingCatalogue, model.catalogueSKUs.isEmpty {
+            ProgressView("Loading exact SKUs")
+                .frame(maxWidth: .infinity, minHeight: 240)
+        } else if model.catalogueSKUs.isEmpty,
+                  model.issue(for: .catalogue) == nil || model.lastSuccessfulRefresh(for: .catalogue) != nil {
+            ContentUnavailableView(
+                "No exact SKUs found",
+                systemImage: "shippingbox.and.arrow.backward",
+                description: Text("Change a category, filter or search term.")
+            )
+            .frame(maxWidth: .infinity, minHeight: 240)
+            .marketplaceFlatSurface()
+        } else {
+            AdminSectionHeader(eyebrow: "EXACT SKU LIBRARY", title: "Customer-ready products")
+            if categoryID != nil, !visibleSubcategories.isEmpty {
+                HStack(alignment: .top, spacing: 8) {
+                    selectedCategoryRail
+                    adminProductGrid
+                        .frame(maxWidth: .infinity, alignment: .top)
+                }
+            } else {
+                adminProductGrid
+            }
+            if model.catalogueHasMore {
+                Button("Load next 40 products", systemImage: "chevron.down") {
+                    Task { await load(append: true) }
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+                .disabled(model.isLoadingCatalogue)
+            }
+        }
+    }
+
+    private var adminProductGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
+            alignment: .leading,
+            spacing: MarketplaceSpacing.compact
+        ) {
+            ForEach(model.catalogueSKUs) { sku in
+                Button { selectedSKU = sku } label: { AdminCatalogueGridCard(sku: sku) }
+                    .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func categoryArtworkKey(_ categoryID: UUID) -> String? {
+        if let preview = model.catalogueTaxonomy?.skuPreviews?.first(where: {
+            $0.categoryID == categoryID && $0.imageKey != nil
+        })?.imageKey {
+            return preview
+        }
+        return model.catalogueSKUs.first {
+            $0.categoryID == categoryID && ($0.primaryImage?.imageKey ?? $0.imageKey) != nil
+        }.flatMap { $0.primaryImage?.imageKey ?? $0.imageKey }
+    }
+
+    private func subcategoryArtworkKey(_ subcategoryID: UUID) -> String? {
+        if let preview = model.catalogueTaxonomy?.skuPreviews?.first(where: {
+            $0.subcategoryID == subcategoryID && $0.imageKey != nil
+        })?.imageKey {
+            return preview
+        }
+        return model.catalogueSKUs.first {
+            $0.subcategoryID == subcategoryID && ($0.primaryImage?.imageKey ?? $0.imageKey) != nil
+        }.flatMap { $0.primaryImage?.imageKey ?? $0.imageKey }
     }
 
     private var catalogueFilters: some View {
@@ -1290,14 +1354,15 @@ private struct AdminPersonDetail: View { let person: DastakAdminNetworkPerson; v
 
 private struct AdminCatalogueCategoryTile: View {
     let category: DastakAdminCatalogueTaxonomy.Category
+    let imageKey: String?
 
     var body: some View {
         VStack(spacing: 7) {
-            DastakProductArtwork(imageKey: category.imageKey, fallbackSymbol: "square.grid.2x2.fill")
+            DastakProductArtwork(imageKey: imageKey, fallbackSymbol: "square.grid.2x2.fill")
                 .frame(maxWidth: .infinity)
                 .aspectRatio(1, contentMode: .fit)
             Text(category.name)
-                .font(.caption2.weight(.semibold))
+                .font(.caption2.weight(.bold))
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -1315,17 +1380,17 @@ private struct AdminCatalogueCollectionTile: View {
     var body: some View {
         VStack(spacing: 7) {
             DastakProductArtwork(imageKey: imageKey, fallbackSymbol: title == "All" ? "sparkles" : "shippingbox")
-                .frame(width: 76, height: 68)
+                .frame(width: 64, height: 58)
             Text(title)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
-                .frame(width: 82)
+                .frame(width: 68)
                 .frame(minHeight: 30, alignment: .top)
         }
-        .padding(6)
-        .background(selected ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 16))
+        .padding(4)
+        .background(selected ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 15))
     }
 }
 
@@ -1333,12 +1398,13 @@ private struct AdminCatalogueGridCard: View {
     let sku: DastakAdminCatalogueSKU
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 6) {
             DastakProductArtwork(
                 imageKey: sku.primaryImage?.imageKey ?? sku.imageKey,
                 fallbackSymbol: "shippingbox"
             )
             .frame(maxWidth: .infinity)
+            .aspectRatio(1.04, contentMode: .fit)
             .overlay(alignment: .topTrailing) {
                 Image(systemName: sku.activationReady ? "checkmark.seal.fill" : "clock.badge.exclamationmark")
                     .foregroundStyle(sku.activationReady ? MarketplaceColors.success.color : MarketplaceColors.warning.color)
@@ -1359,8 +1425,12 @@ private struct AdminCatalogueGridCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            HStack {
-                Text(priceLabel).font(.headline.monospacedDigit()).foregroundStyle(.primary)
+            HStack(spacing: 4) {
+                Text(priceLabel)
+                    .font(.subheadline.bold().monospacedDigit())
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
                 Spacer(minLength: 4)
                 Image(systemName: "slider.horizontal.3")
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -1368,7 +1438,7 @@ private struct AdminCatalogueGridCard: View {
                     .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 10))
             }
         }
-        .padding(MarketplaceSpacing.small)
+        .padding(8)
         .marketplaceFlatSurface()
         .contentShape(Rectangle())
     }

@@ -81,14 +81,21 @@ struct DastakProductArtwork: View {
 
     var body: some View {
         ZStack {
-            MarketplaceColors.accent(for: colorScheme).opacity(0.08)
+            LinearGradient(
+                colors: [
+                    MarketplaceColors.accent(for: colorScheme).opacity(colorScheme == .dark ? 0.13 : 0.07),
+                    Color.primary.opacity(colorScheme == .dark ? 0.035 : 0.018),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
             if let imageURL {
                 AsyncImage(url: imageURL) { phase in
                     if let image = phase.image {
                         image
                             .resizable()
                             .scaledToFit()
-                            .padding(6)
+                            .padding(7)
                     } else {
                         fallback
                     }
@@ -104,12 +111,19 @@ struct DastakProductArtwork: View {
                 style: .continuous
             )
         )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: MarketplaceMetrics.compactCornerRadius,
+                style: .continuous
+            )
+            .stroke(Color.primary.opacity(colorScheme == .dark ? 0.09 : 0.045), lineWidth: 0.75)
+        }
         .accessibilityHidden(true)
     }
 
     private var fallback: some View {
         Image(systemName: symbol)
-            .font(.system(size: 30, weight: .light))
+            .font(.system(size: 26, weight: .light))
             .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
     }
 

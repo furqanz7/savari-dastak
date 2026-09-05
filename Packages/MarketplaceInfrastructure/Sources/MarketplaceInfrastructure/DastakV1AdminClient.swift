@@ -281,6 +281,18 @@ public struct DastakAdminCatalogueSKU: Codable, Equatable, Identifiable, Sendabl
 }
 
 public struct DastakAdminCatalogueTaxonomy: Codable, Equatable, Sendable {
+    public struct SKUPreview: Codable, Equatable, Sendable {
+        public let categoryID: UUID?
+        public let subcategoryID: UUID?
+        public let imageKey: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case imageKey
+            case categoryID = "categoryId"
+            case subcategoryID = "subcategoryId"
+        }
+    }
+
     public struct CategoryType: Codable, Equatable, Identifiable, Sendable {
         public let id: UUID
         public let name: String
@@ -329,6 +341,12 @@ public struct DastakAdminCatalogueTaxonomy: Codable, Equatable, Sendable {
     public let categoryTypes: [CategoryType]
     public let categories: [Category]
     public let subcategories: [Subcategory]
+    public let skuPreviews: [SKUPreview]?
+
+    private enum CodingKeys: String, CodingKey {
+        case categoryTypes, categories, subcategories
+        case skuPreviews = "skus"
+    }
 }
 
 public struct DastakAdminCatalogueCursor: Codable, Equatable, Sendable {
@@ -982,7 +1000,7 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
             "dastak-v1-catalogue",
             request: CatalogueRequest(
                 operation: "adminSnapshot",
-                skuLimit: 1,
+                skuLimit: 1000,
                 query: nil,
                 categoryTypeId: nil,
                 categoryId: nil,

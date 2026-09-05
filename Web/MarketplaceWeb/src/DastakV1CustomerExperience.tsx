@@ -812,7 +812,7 @@ function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subc
           <button className={!selectedSubcategory ? "selected" : ""} type="button" onClick={() => onSubcategory(undefined)}><span className="v1-subcategory-all"><Sparkles size={23} /></span><strong>All</strong></button>
           {categorySubcategories.map((subcategory) => <button className={selectedSubcategory === subcategory.id ? "selected" : ""} type="button" key={subcategory.id} onClick={() => onSubcategory(subcategory.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={subcategory} /><strong>{subcategory.name}</strong></button>)}
         </div>
-        <div className="v1-category-results"><header><h3>{selectedName}</h3><span>{visible.length} products</span></header><ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /></div>
+        <div className="v1-category-results"><header><h3>{selectedSubcategory ? categorySubcategories.find((item) => item.id === selectedSubcategory)?.name ?? "Products" : "All products"}</h3><span>{visible.length} products</span></header><ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /></div>
       </div>}
     </section>
     {!selectedCategory ? <section className="v1-section"><header><div><p>POPULAR NOW</p><h2>Everyday essentials</h2></div><span>{visible.length} products</span></header>

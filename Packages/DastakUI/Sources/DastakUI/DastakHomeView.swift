@@ -26,7 +26,7 @@ struct DastakHomeView: View {
                     parcelBand
                 }
                 .padding(.horizontal, MarketplaceSpacing.medium)
-                .padding(.bottom, 104)
+                .padding(.bottom, 148)
             }
             .scrollIndicators(.hidden)
             .allowsHitTesting(!isSearchPresented)
@@ -193,14 +193,15 @@ struct DastakHomeView: View {
     private var categoryRail: some View {
         if !model.canonicalCategories.isEmpty {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                HStack {
+                HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.small) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("SHOP DASTAK")
                             .font(.caption2.bold())
                             .tracking(1.1)
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
                         Text(selectedCategory?.name ?? "Everything, beautifully organised")
-                            .font(MarketplaceTypography.sectionTitle)
+                            .font(.title2.bold())
+                            .lineLimit(2)
                     }
                     Spacer()
                     if selectedCategoryID != nil {
@@ -208,7 +209,7 @@ struct DastakHomeView: View {
                             selectedCategoryID = nil
                             selectedSubcategoryID = nil
                         }
-                        .font(.caption.weight(.semibold))
+                        .font(.caption2.weight(.bold))
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     }
                 }
@@ -217,11 +218,11 @@ struct DastakHomeView: View {
                     ForEach(model.canonicalCategoryTypes) { type in
                         let categories = model.canonicalCategories.filter { $0.categoryTypeID == type.id }
                         if !categories.isEmpty {
-                            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                                Text(type.name).font(.headline)
+                            VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                                Text(type.name).font(.title3.bold())
                                 LazyVGrid(
-                                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
-                                    spacing: MarketplaceSpacing.compact
+                                    columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4),
+                                    spacing: MarketplaceSpacing.medium
                                 ) {
                                     ForEach(categories) { category in
                                         Button {
@@ -285,7 +286,7 @@ struct DastakHomeView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             HStack(alignment: .firstTextBaseline) {
-                Text(category.name)
+                Text(selectedSubcategory?.name ?? "All products")
                     .font(MarketplaceTypography.sectionTitle)
                 Spacer()
                 Text("\(products.count) products")
@@ -293,21 +294,21 @@ struct DastakHomeView: View {
                     .foregroundStyle(.secondary)
             }
 
-            HStack(alignment: .top, spacing: MarketplaceSpacing.small) {
-                LazyVStack(spacing: MarketplaceSpacing.small) {
+            HStack(alignment: .top, spacing: 8) {
+                LazyVStack(spacing: MarketplaceSpacing.compact) {
                     Button { selectedSubcategoryID = nil } label: {
                         VStack(spacing: 7) {
                             Image(systemName: "sparkles")
-                                .font(.title2)
+                                .font(.title3)
                                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                                .frame(width: 74, height: 66)
-                                .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 15))
+                                .frame(width: 64, height: 58)
+                                .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 14))
                             Text("All")
                                 .font(.caption2.bold())
                                 .foregroundStyle(.primary)
                         }
-                        .padding(5)
-                        .background(selectedSubcategoryID == nil ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 16))
+                        .padding(4)
+                        .background(selectedSubcategoryID == nil ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 15))
                     }
                     .buttonStyle(.plain)
                     ForEach(visibleSubcategories) { subcategory in
@@ -320,7 +321,7 @@ struct DastakHomeView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .frame(width: 88)
+                .frame(width: 72)
 
                 productGrid(products)
                     .frame(maxWidth: .infinity, alignment: .top)
@@ -356,6 +357,10 @@ struct DastakHomeView: View {
 
     private var visibleSubcategories: [DastakV1CatalogueSubcategory] {
         model.canonicalSubcategories.filter { $0.categoryID == selectedCategoryID }
+    }
+
+    private var selectedSubcategory: DastakV1CatalogueSubcategory? {
+        visibleSubcategories.first { $0.id == selectedSubcategoryID }
     }
 
     private var selectedProducts: [DastakV1CatalogueSKU] {
@@ -659,11 +664,11 @@ private struct DastakCategoryTile: View {
             .frame(maxWidth: .infinity)
             .aspectRatio(1, contentMode: .fit)
             Text(category.name)
-                .font(.caption2.weight(.semibold))
+                .font(.caption2.weight(.bold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
+                .frame(maxWidth: .infinity, minHeight: 31, alignment: .top)
         }
         .contentShape(Rectangle())
     }
@@ -674,21 +679,22 @@ private struct DastakSubcategoryTile: View {
     let selected: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             DastakProductArtwork(
                 imageKey: subcategory.imageKey ?? subcategory.previewImageKeys?.first,
                 fallbackSymbol: "shippingbox.fill"
             )
-            .frame(width: 74, height: 66)
+            .frame(width: 64, height: 58)
             Text(subcategory.name)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .frame(width: 80)
+                .frame(width: 68)
+                .frame(minHeight: 30, alignment: .top)
         }
-        .padding(5)
-        .background(selected ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 16))
+        .padding(4)
+        .background(selected ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 15))
     }
 }
 
@@ -868,19 +874,20 @@ struct DastakV1ProductTile: View {
     let toggleWishlist: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+        VStack(alignment: .leading, spacing: 6) {
             DastakProductArtwork(imageKey: product.imageKey, fallbackSymbol: artworkSymbol)
+                .aspectRatio(1.04, contentMode: .fit)
                 .overlay(alignment: .topTrailing) {
                     Button(action: toggleWishlist) {
                         Image(systemName: isWishlisted ? "heart.fill" : "heart")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                            .frame(width: 42, height: 42)
+                            .frame(width: 36, height: 36)
                             .background(.ultraThinMaterial, in: Circle())
                     }
                     .buttonStyle(.plain)
                     .disabled(isUpdatingWishlist)
-                    .padding(7)
+                    .padding(6)
                     .accessibilityLabel(isWishlisted ? "Remove \(product.name) from Wishlist" : "Save \(product.name) to Wishlist")
                 }
 
@@ -891,9 +898,9 @@ struct DastakV1ProductTile: View {
                     .lineLimit(1)
             }
             Text(product.name)
-                .font(.headline)
+                .font(.subheadline.bold())
                 .lineLimit(2)
-                .frame(maxWidth: .infinity, minHeight: 42, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
             Text([product.variant, product.packSize].compactMap { $0 }.joined(separator: " · "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -902,7 +909,9 @@ struct DastakV1ProductTile: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(DastakFormatting.money(product.price))
-                        .font(.headline.monospacedDigit())
+                        .font(.subheadline.bold().monospacedDigit())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
                     if product.listPricePaise > product.sellingPricePaise {
                         Text(DastakFormatting.money(product.listPrice))
                             .font(.caption2.monospacedDigit())
@@ -914,18 +923,18 @@ struct DastakV1ProductTile: View {
                 Button(action: add) {
                     Image(systemName: "plus")
                         .font(.headline)
-                        .frame(width: 40, height: 40)
+                            .frame(width: 36, height: 36)
                         .foregroundStyle(.white)
                         .background(
                             MarketplaceColors.primaryAction.color,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: 11, style: .continuous)
                         )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Add \(product.name)")
             }
         }
-        .padding(MarketplaceSpacing.small)
+        .padding(8)
         .marketplaceFlatSurface()
     }
 

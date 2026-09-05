@@ -59,7 +59,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         NavigationStack {
             ScrollView {
                 if let snapshot = model.canonicalCatalogue {
-                    LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                    LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
                         storeHeader(snapshot)
                         operatingControls(snapshot)
                         libraryNote
@@ -68,7 +68,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     }
                     .frame(maxWidth: MarketplaceMetrics.contentMaxWidth)
                     .padding(.horizontal, MarketplaceSpacing.medium)
-                    .padding(.bottom, MarketplaceSpacing.xxLarge)
+                    .padding(.bottom, 148)
                     .frame(maxWidth: .infinity)
                 }
             }
@@ -111,17 +111,22 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     }
 
     private func storeHeader(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-            Text("YOUR STOREFRONT")
-                .font(.caption.bold())
-                .tracking(1.4)
-                .foregroundStyle(MarketplaceColors.dastakAccent.color)
-            Text(snapshot.branch.branchName)
-                .font(.largeTitle.bold())
-            Text(snapshot.branch.organizationName)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            HStack(spacing: MarketplaceSpacing.small) {
+        HStack(alignment: .center, spacing: MarketplaceSpacing.compact) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("YOUR STOREFRONT")
+                    .font(.caption2.bold())
+                    .tracking(1.2)
+                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                Text(snapshot.branch.branchName)
+                    .font(.title2.bold())
+                    .lineLimit(1)
+                Text(snapshot.branch.organizationName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: MarketplaceSpacing.small)
+            VStack(alignment: .trailing, spacing: 6) {
                 DastakStatusPill(
                     text: snapshot.branch.operationalState.isOpen ? "Open" : "Closed",
                     emphasis: snapshot.branch.operationalState.isOpen
@@ -137,22 +142,24 @@ private struct DastakMerchantCanonicalCatalogueView: View {
 
     private func operatingControls(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
         let state = snapshot.branch.operationalState
-        return HStack(spacing: MarketplaceSpacing.compact) {
-            merchantControl(
-                symbol: "storefront",
-                title: state.isOpen ? "Store open" : "Store closed",
-                detail: "Branch availability",
-                action: state.isOpen ? "Close" : "Open"
-            ) {
-                Task { await model.setCanonicalBranch(isOpen: !state.isOpen, acceptingOrders: false) }
-            }
-            merchantControl(
-                symbol: "shippingbox",
-                title: "\(snapshot.branch.capacity.available) slots",
-                detail: state.acceptingOrders ? "Taking new orders" : "New orders paused",
-                action: state.acceptingOrders ? "Pause" : "Accept"
-            ) {
-                Task { await model.setCanonicalBranch(isOpen: true, acceptingOrders: !state.acceptingOrders) }
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: MarketplaceSpacing.small) {
+                merchantControl(
+                    symbol: "storefront",
+                    title: state.isOpen ? "Store open" : "Store closed",
+                    detail: "Branch availability",
+                    action: state.isOpen ? "Close" : "Open"
+                ) {
+                    Task { await model.setCanonicalBranch(isOpen: !state.isOpen, acceptingOrders: false) }
+                }
+                merchantControl(
+                    symbol: "shippingbox",
+                    title: "\(snapshot.branch.capacity.available) slots",
+                    detail: state.acceptingOrders ? "Taking new orders" : "New orders paused",
+                    action: state.acceptingOrders ? "Pause" : "Accept"
+                ) {
+                    Task { await model.setCanonicalBranch(isOpen: true, acceptingOrders: !state.acceptingOrders) }
+                }
             }
         }
     }
@@ -164,34 +171,41 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         action: String,
         perform: @escaping () -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        HStack(spacing: MarketplaceSpacing.small) {
             Image(systemName: symbol)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
-            Text(title).font(.headline)
-            Text(detail).font(.caption).foregroundStyle(.secondary)
+                .frame(width: 34, height: 34)
+                .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.bold()).lineLimit(1)
+                Text(detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 2)
             Button(action, action: perform)
                 .buttonStyle(.bordered)
-                .controlSize(.small)
+                .controlSize(.mini)
                 .disabled(model.isBusy)
         }
-        .frame(maxWidth: .infinity, minHeight: 142, alignment: .leading)
-        .padding(MarketplaceSpacing.compact)
+        .frame(width: 250)
+        .frame(minHeight: 62, alignment: .leading)
+        .padding(MarketplaceSpacing.small)
         .marketplaceFlatSurface()
     }
 
     private var libraryNote: some View {
         Label {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Dastak product library").font(.headline)
-                Text("Select only what this store genuinely sells. Product identity, imagery, quantity and customer price remain consistent everywhere.")
-                    .font(.caption)
+                Text("Dastak product library").font(.subheadline.bold())
+                Text("Select freely, then save all storefront changes once.")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
             }
         } icon: {
             Image(systemName: "checkmark.shield")
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
         }
-        .padding(MarketplaceSpacing.medium)
+        .padding(MarketplaceSpacing.compact)
         .marketplaceFlatSurface()
     }
 
@@ -216,17 +230,8 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 }
             }
 
-            categoryDirectory(snapshot)
-
-            if let categoryID {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: MarketplaceSpacing.small) {
-                        filterChip("All", selected: subcategoryID == nil) { subcategoryID = nil }
-                        ForEach(snapshot.subcategories.filter { $0.categoryID == categoryID }) { item in
-                            filterChip(item.name, selected: subcategoryID == item.id) { subcategoryID = item.id }
-                        }
-                    }
-                }
+            if categoryID == nil {
+                categoryDirectory(snapshot)
             }
         }
     }
@@ -251,7 +256,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                                     subcategoryID = nil
                                 } label: {
                                     VStack(spacing: 7) {
-                                        DastakProductArtwork(imageKey: category.imageKey, fallbackSymbol: "square.grid.2x2")
+                                        DastakProductArtwork(imageKey: category.imageKey ?? categoryArtworkKey(category.id, in: snapshot), fallbackSymbol: "square.grid.2x2")
                                             .frame(maxWidth: .infinity)
                                             .aspectRatio(1, contentMode: .fit)
                                             .overlay {
@@ -288,6 +293,26 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     title: "No matching products",
                     message: "Try a different product, brand, pack or category."
                 )
+            } else if let categoryID {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(snapshot.categories.first { $0.id == categoryID }?.name ?? "Products")
+                            .font(.title3.bold())
+                        Spacer()
+                        Text("\(products.count) products")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(alignment: .top, spacing: 8) {
+                        merchantSubcategoryRail(categoryID: categoryID, snapshot: snapshot)
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                            ForEach(products) { sku in
+                                canonicalProductCard(sku)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .top)
+                    }
+                }
             } else {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) {
                     ForEach(products) { sku in
@@ -298,14 +323,54 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         }
     }
 
+    private func merchantSubcategoryRail(
+        categoryID: UUID,
+        snapshot: DastakV1MerchantCatalogueSnapshot
+    ) -> some View {
+        LazyVStack(spacing: MarketplaceSpacing.compact) {
+            Button { subcategoryID = nil } label: {
+                merchantCollectionTile(title: "All", imageKey: categoryArtworkKey(categoryID, in: snapshot), selected: subcategoryID == nil)
+            }
+            .buttonStyle(.plain)
+            ForEach(snapshot.subcategories.filter { $0.categoryID == categoryID }) { item in
+                Button { subcategoryID = item.id } label: {
+                    merchantCollectionTile(
+                        title: item.name,
+                        imageKey: item.imageKey ?? subcategoryArtworkKey(item.id, in: snapshot),
+                        selected: subcategoryID == item.id
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(width: 72)
+    }
+
+    private func merchantCollectionTile(title: String, imageKey: String?, selected: Bool) -> some View {
+        VStack(spacing: 6) {
+            DastakProductArtwork(imageKey: imageKey, fallbackSymbol: title == "All" ? "sparkles" : "shippingbox")
+                .frame(width: 64, height: 58)
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(width: 68)
+                .frame(minHeight: 30, alignment: .top)
+        }
+        .padding(4)
+        .background(selected ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 15))
+    }
+
     private func canonicalProductCard(
         _ sku: DastakV1MerchantCatalogueSnapshot.SKU
     ) -> some View {
         let selected = model.canonicalSelection(for: sku)
-        return VStack(alignment: .leading, spacing: 7) {
+        return VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
                 DastakProductArtwork(imageKey: sku.imageKey, fallbackSymbol: "shippingbox")
                     .frame(maxWidth: .infinity)
+                    .aspectRatio(1.04, contentMode: .fit)
                 if selected {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(MarketplaceColors.success.color)
@@ -317,25 +382,42 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     .font(.caption2.bold())
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
             }
-            Text(sku.name).font(.subheadline.bold()).lineLimit(2)
+            Text(sku.name)
+                .font(.subheadline.bold())
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
             Text([sku.variant, sku.packSize].compactMap { $0 }.joined(separator: " · "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Text(DastakFormatting.money(Money(paise: sku.sellingPricePaise)))
-                .font(.headline.monospacedDigit())
-            Button {
-                model.stageCanonicalSelection(sku)
-            } label: {
-                Text(selected ? "Remove" : "Select")
-                    .frame(maxWidth: .infinity)
+            HStack(spacing: 5) {
+                Text(DastakFormatting.money(Money(paise: sku.sellingPricePaise)))
+                    .font(.subheadline.bold().monospacedDigit())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Spacer(minLength: 2)
+                Button {
+                    model.stageCanonicalSelection(sku)
+                } label: {
+                    Image(systemName: selected ? "minus" : "plus")
+                        .font(.subheadline.bold())
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 11))
+                .tint(MarketplaceColors.dastakAccent.color)
+                .disabled(model.busyIdentity == "canonical-catalogue-save" || sku.catalogueStatus != "ACTIVE")
+                .accessibilityLabel(selected ? "Remove \(sku.name)" : "Select \(sku.name)")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(MarketplaceColors.dastakAccent.color)
-            .disabled(model.busyIdentity == "canonical-catalogue-save" || sku.catalogueStatus != "ACTIVE")
         }
-        .padding(MarketplaceSpacing.compact)
+        .padding(8)
         .marketplaceFlatSurface()
+        .overlay {
+            if selected {
+                RoundedRectangle(cornerRadius: MarketplaceMetrics.compactCornerRadius, style: .continuous)
+                    .stroke(MarketplaceColors.success.color.opacity(0.55), lineWidth: 1.5)
+            }
+        }
     }
 
     private func visibleProducts(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> [DastakV1MerchantCatalogueSnapshot.SKU] {
@@ -356,6 +438,14 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 .lowercased()
                 .contains(normalized)
         }
+    }
+
+    private func categoryArtworkKey(_ categoryID: UUID, in snapshot: DastakV1MerchantCatalogueSnapshot) -> String? {
+        snapshot.skus.first { $0.categoryID == categoryID && $0.imageKey != nil }?.imageKey
+    }
+
+    private func subcategoryArtworkKey(_ subcategoryID: UUID, in snapshot: DastakV1MerchantCatalogueSnapshot) -> String? {
+        snapshot.skus.first { $0.subcategoryID == subcategoryID && $0.imageKey != nil }?.imageKey
     }
 
     private func filterChip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {

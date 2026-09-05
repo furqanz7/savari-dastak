@@ -76,6 +76,18 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     (!categoryTypeId || visibleCategories.some((category) => category.id === subcategory.categoryId))) ?? [],
   [categoryId, categoryTypeId, snapshot, visibleCategories]);
 
+  const artworkKeys = useMemo(() => {
+    const categories = new Map<string, string>();
+    const subcategories = new Map<string, string>();
+    for (const sku of [...(snapshot?.skus ?? []), ...skus]) {
+      const imageKey = sku.imageKey;
+      if (!imageKey) continue;
+      if (!categories.has(sku.categoryId)) categories.set(sku.categoryId, imageKey);
+      if (!subcategories.has(sku.subcategoryId)) subcategories.set(sku.subcategoryId, imageKey);
+    }
+    return { categories, subcategories };
+  }, [skus, snapshot]);
+
   const loadMetadata = useCallback(async () => setSnapshot(await getV1AdminCatalogue(auth)), [auth]);
   const loadPage = useCallback(async (append: boolean, signal?: AbortSignal) => {
     if (append) setLoadingMore(true);
@@ -154,7 +166,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   const showProducts = Boolean(query.trim() || categoryId || subcategoryId || status || qaStatus);
 
   return <section className="admin-section v1-admin-catalogue" role="tabpanel">
-    <header className="admin-section-heading"><div><p className="eyebrow">MASTER CATALOGUE</p><h2>{categoryId ? snapshot?.categories.find((category) => category.id === categoryId)?.name : "Everything, beautifully organised"}</h2><p>Browse the same image-led catalogue customers and merchants use. Open a product for governance, QA, pricing and visibility.</p></div></header>
+    <header className="admin-section-heading admin-catalogue-heading"><div><p className="eyebrow">MASTER CATALOGUE</p><h2>{categoryId ? snapshot?.categories.find((category) => category.id === categoryId)?.name : "Everything, beautifully organised"}</h2><p>{categoryId ? "Open any product to manage its exact record, visibility and readiness." : "The same image-led catalogue customers and merchants browse."}</p></div></header>
     {error ? <p className="order-error" role="alert"><CircleAlert size={16} /> {error}</p> : null}
     {notice ? <p className="v1-admin-notice" role="status"><Check size={17} /> {notice}</p> : null}
     <div className="admin-catalogue-toolbar">
@@ -167,12 +179,14 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     </div>
     {snapshot && !showProducts ? <div className="admin-catalogue-directory">{snapshot.categoryTypes.filter((type) => !categoryTypeId || type.id === categoryTypeId).map((type) => {
       const categories = snapshot.categories.filter((category) => category.categoryTypeId === type.id);
-      return categories.length ? <section key={type.id}><header><h3>{type.name}</h3><span>{categories.length} categories</span></header><div>{categories.map((category) => <button type="button" key={category.id} onClick={() => { setCategoryTypeId(type.id); setCategoryId(category.id); setSubcategoryId(""); }}><AdminCategoryArtwork item={category} supabaseUrl={auth.supabaseUrl} /><strong>{category.name}</strong></button>)}</div></section> : null;
+      return categories.length ? <section key={type.id}><header><h3>{type.name}</h3><span>{categories.length} categories</span></header><div>{categories.map((category) => <button type="button" key={category.id} onClick={() => { setCategoryTypeId(type.id); setCategoryId(category.id); setSubcategoryId(""); }}><AdminCategoryArtwork item={{ ...category, imageKey: category.imageKey ?? artworkKeys.categories.get(category.id) }} supabaseUrl={auth.supabaseUrl} /><strong>{category.name}</strong></button>)}</div></section> : null;
     })}</div> : null}
     {snapshot && showProducts ? <section className="v1-admin-skus">
       <header><Tags size={20} /><div><h3>Customer-ready products</h3><p>Open a product to manage its exact record.</p></div></header>
-      {categoryId && visibleSubcategories.length ? <div className="admin-subcategory-rail"><button type="button" className={!subcategoryId ? "selected" : ""} onClick={() => setSubcategoryId("")}>All</button>{visibleSubcategories.map((subcategory) => <button type="button" className={subcategoryId === subcategory.id ? "selected" : ""} key={subcategory.id} onClick={() => setSubcategoryId(subcategory.id)}><AdminCategoryArtwork item={subcategory} supabaseUrl={auth.supabaseUrl} /><span>{subcategory.name}</span></button>)}</div> : null}
-      {loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : <div className="v1-admin-sku-grid">{skus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div>}
+      <div className={`admin-catalogue-browser ${categoryId && visibleSubcategories.length ? "with-rail" : ""}`}>
+        {categoryId && visibleSubcategories.length ? <div className="admin-subcategory-rail"><button type="button" className={!subcategoryId ? "selected" : ""} onClick={() => setSubcategoryId("")}><AdminCategoryArtwork item={{ name: "All products", imageKey: snapshot.categories.find((item) => item.id === categoryId)?.imageKey ?? artworkKeys.categories.get(categoryId) }} supabaseUrl={auth.supabaseUrl} /><strong>All</strong></button>{visibleSubcategories.map((subcategory) => <button type="button" className={subcategoryId === subcategory.id ? "selected" : ""} key={subcategory.id} onClick={() => setSubcategoryId(subcategory.id)}><AdminCategoryArtwork item={{ ...subcategory, imageKey: subcategory.imageKey ?? artworkKeys.subcategories.get(subcategory.id) }} supabaseUrl={auth.supabaseUrl} /><strong>{subcategory.name}</strong></button>)}</div> : null}
+        <div className="admin-catalogue-products">{loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : <div className="v1-admin-sku-grid">{skus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div>}</div>
+      </div>
       {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadPage(true)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 products"}</button> : null}
     </section> : null}
     {snapshot ? <details className="admin-catalogue-operations"><summary><Settings2 size={18} /><span><strong>Catalogue operations</strong><small>Counts, hierarchy and launch configuration</small></span><ChevronDown size={17} /></summary><div className="admin-catalogue-operations-body"><div className="v1-admin-summary"><Summary label="Departments" value={snapshot.categoryTypes.length} /><Summary label="Categories" value={snapshot.categories.length} /><Summary label="Subcategories" value={snapshot.subcategories.length} /><Summary label="Canonical SKUs" value={snapshot.skuCount} /><Summary label="Retail branches" value={snapshot.branches.length} /></div><section className="v1-admin-config"><header><Settings2 size={20} /><div><h3>Launch configuration</h3><p>Effective settings and validation state for the customer catalogue.</p></div></header><div>{snapshot.configuration.map((setting) => <article key={setting.key} className={!setting.valid || (setting.required && !setting.explicit) ? "attention" : ""}><code>{setting.key}</code><strong>{displayValue(setting.value)}</strong><span>{setting.explicit ? "Explicit" : "Default"} · {setting.valid ? "Valid" : "Invalid"}</span></article>)}</div></section></div></details> : null}

@@ -66,6 +66,17 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
     );
   }, [categoryId, categoryTypeId, deferredQuery, pendingSelections, selectedOnly, snapshot, subcategoryId]);
 
+  const artworkKeys = useMemo(() => {
+    const categories = new Map<string, string>();
+    const subcategories = new Map<string, string>();
+    for (const sku of snapshot?.skus ?? []) {
+      if (!sku.imageKey) continue;
+      if (!categories.has(sku.categoryId)) categories.set(sku.categoryId, sku.imageKey);
+      if (!subcategories.has(sku.subcategoryId)) subcategories.set(sku.subcategoryId, sku.imageKey);
+    }
+    return { categories, subcategories };
+  }, [snapshot]);
+
   const setSelection = (sku: V1MerchantCanonicalCatalogue["skus"][number]) => {
     if (busy === "catalogue" || sku.catalogueStatus !== "ACTIVE") return;
     setPendingSelections((current) => {
@@ -157,29 +168,44 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
         <button type="button" className={!categoryTypeId ? "selected" : ""} onClick={() => { setCategoryTypeId(undefined); setCategoryId(undefined); setSubcategoryId(undefined); }}>All departments</button>
         {snapshot.categoryTypes.map((type) => <button key={type.categoryTypeId} type="button" className={categoryTypeId === type.categoryTypeId ? "selected" : ""} onClick={() => { setCategoryTypeId(type.categoryTypeId); setCategoryId(undefined); setSubcategoryId(undefined); }}>{type.name}</button>)}
       </div>
-      <div className="merchant-v1-category-directory">{snapshot.categoryTypes.filter((type) => !categoryTypeId || type.categoryTypeId === categoryTypeId).map((type) => {
+      {!categoryId ? <div className="merchant-v1-category-directory">{snapshot.categoryTypes.filter((type) => !categoryTypeId || type.categoryTypeId === categoryTypeId).map((type) => {
         const categories = snapshot.categories.filter((category) => category.categoryTypeId === type.categoryTypeId);
-        return categories.length ? <section key={type.categoryTypeId}><h2>{type.name}</h2><div className="merchant-v1-visual-categories" role="group" aria-label={`${type.name} categories`}>{categories.map((category) => <button key={category.categoryId} type="button" className={categoryId === category.categoryId ? "selected" : ""} onClick={() => { setCategoryTypeId(type.categoryTypeId); setCategoryId(category.categoryId); setSubcategoryId(undefined); }}><MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={category.imageKey} /><span>{category.name}</span></button>)}</div></section> : null;
-      })}</div>
-      {categoryId ? <div role="group" aria-label="Catalogue collection"><button type="button" className={!subcategoryId ? "selected" : ""} onClick={() => setSubcategoryId(undefined)}>All</button>{snapshot.subcategories.filter((item) => item.categoryId === categoryId).map((item) => <button key={item.subcategoryId} type="button" className={subcategoryId === item.subcategoryId ? "selected" : ""} onClick={() => setSubcategoryId(item.subcategoryId)}>{item.name}</button>)}</div> : null}
+        return categories.length ? <section key={type.categoryTypeId}><h2>{type.name}</h2><div className="merchant-v1-visual-categories" role="group" aria-label={`${type.name} categories`}>{categories.map((category) => <button key={category.categoryId} type="button" onClick={() => { setCategoryTypeId(type.categoryTypeId); setCategoryId(category.categoryId); setSubcategoryId(undefined); }}><MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={category.imageKey ?? artworkKeys.categories.get(category.categoryId)} /><span>{category.name}</span></button>)}</div></section> : null;
+      })}</div> : null}
     </div>
 
-    {categoryId || selectedOnly || deferredQuery.trim() ? <div className="merchant-v1-sku-list merchant-v1-sku-gallery" aria-live="polite">
-      {visibleSkus.length === 0 ? <p>No matching canonical SKUs.</p> : visibleSkus.map((sku) => {
-        const subcategory = snapshot.subcategories.find((item) => item.subcategoryId === sku.subcategoryId);
-        const selected = pendingSelections[sku.skuId] ?? sku.selected;
-        return <article key={sku.skuId}>
-          <MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={sku.imageKey} />
-          <span className={`merchant-v1-selection ${selected ? "selected" : ""}`} aria-hidden="true">{selected && <Check size={16} />}</span>
-          <span><strong>{sku.name}</strong><small>{[sku.brandName, sku.variant, sku.packSize, subcategory?.name].filter(Boolean).join(" · ")}</small>{selected ? <em><Check size={13} /> {pendingSelections[sku.skuId] === undefined ? "Visible in your store" : "Selected — not saved yet"}</em> : null}</span>
-          <span className="merchant-v1-price"><strong>{formatPrice(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise && <small>{formatPrice(sku.listPricePaise)}</small>}</span>
-          <button type="button" className={selected ? "secondary-button" : "primary-button"} disabled={busy === "catalogue" || sku.catalogueStatus !== "ACTIVE"} aria-pressed={selected} onClick={() => setSelection(sku)}>{selected ? "Remove" : "Select"}</button>
-        </article>;
-      })}
-    </div> : null}
+    {categoryId ? <section className="merchant-v1-category-browser">
+      <aside className="merchant-v1-subcategory-rail" role="group" aria-label="Catalogue collection">
+        <button type="button" className={!subcategoryId ? "selected" : ""} onClick={() => setSubcategoryId(undefined)}><MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={snapshot.categories.find((item) => item.categoryId === categoryId)?.imageKey ?? artworkKeys.categories.get(categoryId)} /><strong>All</strong></button>
+        {snapshot.subcategories.filter((item) => item.categoryId === categoryId).map((item) => <button key={item.subcategoryId} type="button" className={subcategoryId === item.subcategoryId ? "selected" : ""} onClick={() => setSubcategoryId(item.subcategoryId)}><MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={item.imageKey ?? artworkKeys.subcategories.get(item.subcategoryId)} /><strong>{item.name}</strong></button>)}
+      </aside>
+      <div className="merchant-v1-category-results"><header><h2>{subcategoryId ? snapshot.subcategories.find((item) => item.subcategoryId === subcategoryId)?.name : snapshot.categories.find((item) => item.categoryId === categoryId)?.name}</h2><span>{visibleSkus.length} products</span></header><MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} /></div>
+    </section> : selectedOnly || deferredQuery.trim() ? <MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} /> : null}
     {Object.keys(pendingSelections).length ? <div className="merchant-v1-save-bar" role="status"><span><strong>{Object.keys(pendingSelections).length} unsaved {Object.keys(pendingSelections).length === 1 ? "change" : "changes"}</strong><small>Keep selecting, then save once.</small></span><button type="button" className="secondary-button" disabled={busy === "catalogue"} onClick={() => { setPendingSelections({}); selectionSaveKey.current = undefined; }}>Discard</button><button type="button" className="primary-button" disabled={busy === "catalogue"} onClick={() => void saveSelections()}>{busy === "catalogue" ? "Saving…" : "Save storefront"}</button></div> : null}
     {snapshot.truncated && <p className="merchant-v1-truncated">Showing the first 1,000 SKUs. Refine the canonical catalogue before launch.</p>}
   </section>;
+}
+
+function MerchantSkuGallery({ auth, skus, subcategories, pendingSelections, busy, onSelection }: {
+  auth: DastakV1Auth;
+  skus: V1MerchantCanonicalCatalogue["skus"];
+  subcategories: V1MerchantCanonicalCatalogue["subcategories"];
+  pendingSelections: Record<string, boolean>;
+  busy?: string;
+  onSelection: (sku: V1MerchantCanonicalCatalogue["skus"][number]) => void;
+}) {
+  if (!skus.length) return <div className="merchant-v1-empty-products"><PackageCheck size={28} /><strong>No matching products</strong><span>Choose another collection or change your search.</span></div>;
+  const names = new Map(subcategories.map((item) => [item.subcategoryId, item.name]));
+  return <div className="merchant-v1-sku-list merchant-v1-sku-gallery" aria-live="polite">{skus.map((sku) => {
+    const selected = pendingSelections[sku.skuId] ?? sku.selected;
+    return <article className={selected ? "selected" : ""} key={sku.skuId}>
+      <MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={sku.imageKey} />
+      <span className={`merchant-v1-selection ${selected ? "selected" : ""}`} aria-hidden="true">{selected && <Check size={16} />}</span>
+      <span className="merchant-v1-product-copy">{sku.brandName ? <b>{sku.brandName.toUpperCase()}</b> : null}<strong>{sku.name}</strong><small>{[sku.variant, sku.packSize, names.get(sku.subcategoryId)].filter(Boolean).join(" · ")}</small>{selected ? <em><Check size={13} /> {pendingSelections[sku.skuId] === undefined ? "In your store" : "Selected — not saved"}</em> : null}</span>
+      <span className="merchant-v1-price"><strong>{formatPrice(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise && <small>{formatPrice(sku.listPricePaise)}</small>}</span>
+      <button type="button" className={selected ? "secondary-button" : "primary-button"} disabled={busy === "catalogue" || sku.catalogueStatus !== "ACTIVE"} aria-pressed={selected} onClick={() => onSelection(sku)}>{selected ? "Remove" : "Select"}</button>
+    </article>;
+  })}</div>;
 }
 
 function MerchantImage({ supabaseUrl, imageKey }: { supabaseUrl: string; imageKey?: string }) {

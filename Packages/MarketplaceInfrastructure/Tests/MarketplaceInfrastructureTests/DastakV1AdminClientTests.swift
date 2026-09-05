@@ -110,9 +110,10 @@ final class DastakV1AdminClientTests: XCTestCase {
         XCTAssertEqual(taxonomy.categoryTypes.first?.name, "Groceries")
         XCTAssertEqual(taxonomy.categories.first?.categoryTypeID, categoryTypeID)
         XCTAssertEqual(taxonomy.subcategories.first?.categoryID, categoryID)
+        XCTAssertEqual(taxonomy.skuPreviews?.first?.imageKey, "catalogue/atta-preview.webp")
         var request = try await requestBody(functions, expectedName: "dastak-v1-catalogue")
         XCTAssertEqual(request["operation"] as? String, "adminSnapshot")
-        XCTAssertEqual(request["skuLimit"] as? Int, 1)
+        XCTAssertEqual(request["skuLimit"] as? Int, 1_000)
 
         let page = try await client.cataloguePage(
             query: "Atta",
@@ -410,7 +411,8 @@ private let adminCatalogueTaxonomyJSON = #"""
 {
   "categoryTypes":[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Groceries","slug":"groceries","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}],
   "categories":[{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","categoryTypeId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Flour","slug":"flour","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}],
-  "subcategories":[{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","categoryId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","name":"Wheat Flour","slug":"wheat-flour","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}]
+  "subcategories":[{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","categoryId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","name":"Wheat Flour","slug":"wheat-flour","imageKey":null,"status":"ACTIVE","sortOrder":1,"version":1,"updatedAt":"2026-08-31T12:00:00Z"}],
+  "skus":[{"categoryId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","subcategoryId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","imageKey":"catalogue/atta-preview.webp"}]
 }
 """#.data(using: .utf8)!
 private let adminCataloguePageJSON = #"""
