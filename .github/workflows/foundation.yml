@@ -3,6 +3,13 @@ name: Foundation
 on:
   pull_request:
   push:
+  workflow_dispatch:
+    inputs:
+      run_ios_simulator_tests:
+        description: 'Run iOS Simulator tests only when explicitly requested'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   swift-packages:
@@ -101,7 +108,7 @@ jobs:
         with:
           xcode-version: '26.6'
       - run: |
-          for scheme in Savari SavariAdmin; do
+          for scheme in Savari SavariAdmin Dastak DastakMerchant DastakAdmin; do
             xcodebuild \
               -workspace SavariDastak.xcworkspace \
               -scheme "$scheme" \
@@ -110,4 +117,6 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               build
           done
-      - run: scripts/test-dastak-ios.sh
+      - name: Explicitly requested iOS Simulator tests
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_ios_simulator_tests }}
+        run: scripts/test-dastak-ios.sh

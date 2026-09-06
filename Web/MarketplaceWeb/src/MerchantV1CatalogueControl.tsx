@@ -2,6 +2,8 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { Check, CirclePause, Leaf, PackageCheck, Search, ShieldCheck, Store } from "lucide-react";
 import { catalogueImageUrl, formatPrice } from "./catalogue";
 import { ProductDetailCard, type DetailProduct } from "./ProductDetailCard";
+import { ProductDetailOverlay } from "./ProductDetailOverlay";
+import { merchantStockAction } from "./productDetail";
 import { userFacingError } from "./userFacingError";
 import {
   getV1MerchantCanonicalCatalogue,
@@ -43,6 +45,7 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
         return retained;
       });
       setError(undefined);
+      return next;
     } catch (requestError) {
       setError(message(requestError));
     } finally {
@@ -150,16 +153,28 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
   };
 
   const saveStock = async (sku: V1MerchantCanonicalCatalogue["skus"][number], quantity: number) => {
-    if (!snapshot || busy) return false;
+    if (!snapshot || busy) return undefined;
     setBusy("stock"); setError(undefined);
     try {
       await updateV1MerchantSkuSelections({ ...auth, branchId: snapshot.branch.branchId,
         selections: [{ skuId: sku.skuId, selected: quantity > 0, expectedVersion: sku.selectionVersion, stockQuantity: quantity }], idempotencyKey: crypto.randomUUID() });
       setPendingSelections((current) => { const next = { ...current }; delete next[sku.skuId]; return next; });
       selectionSaveKey.current = undefined;
-      await refresh();
-      return true;
-    } catch (requestError) { await refresh(); setError(message(requestError)); return false; }
+      return (await refresh())?.skus.find((item) => item.skuId === sku.skuId);
+    } catch (requestError) { await refresh(); setError(message(requestError)); return undefined; }
+    finally { setBusy(undefined); }
+  };
+
+  const addSku = async (sku: V1MerchantCanonicalCatalogue["skus"][number]) => {
+    if (!snapshot || busy || sku.selected || sku.stockQuantity === 0 || sku.catalogueStatus !== "ACTIVE") return undefined;
+    setBusy("stock"); setError(undefined);
+    try {
+      await updateV1MerchantSkuSelections({ ...auth, branchId: snapshot.branch.branchId,
+        selections: [{ skuId: sku.skuId, selected: true, expectedVersion: sku.selectionVersion }], idempotencyKey: crypto.randomUUID() });
+      setPendingSelections((current) => { const next = { ...current }; delete next[sku.skuId]; return next; });
+      selectionSaveKey.current = undefined;
+      return (await refresh())?.skus.find((item) => item.skuId === sku.skuId);
+    } catch (requestError) { await refresh(); setError(message(requestError)); return undefined; }
     finally { setBusy(undefined); }
   };
 
@@ -218,7 +233,7 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
     </section> : selectedOnly || deferredQuery.trim() ? <MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /> : null}
     {Object.keys(pendingSelections).length ? <div className="merchant-v1-save-bar" role="status"><span><strong>{Object.keys(pendingSelections).length} unsaved {Object.keys(pendingSelections).length === 1 ? "change" : "changes"}</strong><small>Keep selecting, then save once.</small></span><button type="button" className="secondary-button" disabled={busy === "catalogue"} onClick={() => { setPendingSelections({}); selectionSaveKey.current = undefined; }}>Discard</button><button type="button" className="primary-button" disabled={busy === "catalogue"} onClick={() => void saveSelections()}>{busy === "catalogue" ? "Saving…" : "Save storefront"}</button></div> : null}
     {snapshot.truncated && <p className="merchant-v1-truncated">Showing the first 5,000 SKUs. Refine the canonical catalogue before launch.</p>}
-    {detailSku ? <MerchantProductDetail key={detailSku.skuId} sku={detailSku} products={snapshot.skus.filter((item) => item.categoryId === detailSku.categoryId)} branch={branch.branchName} supabaseUrl={auth.supabaseUrl} onSelect={(id) => { if (!busy) setDetailId(id); }} onClose={() => setDetailId(undefined)} onSave={saveStock} busy={Boolean(busy)} error={error} /> : null}
+    {detailSku ? <MerchantProductDetail sku={detailSku} products={snapshot.skus.filter((item) => item.categoryId === detailSku.categoryId)} branch={branch.branchName} supabaseUrl={auth.supabaseUrl} onSelect={(id) => { if (!busy) setDetailId(id); }} onClose={() => { if (!busy) setDetailId(undefined); }} onAdd={addSku} onSave={saveStock} busy={Boolean(busy)} error={error} /> : null}
   </section>;
 }
 
@@ -302,26 +317,69 @@ function merchantDetail(sku: V1MerchantCanonicalCatalogue["skus"][number]): Deta
   return { ...sku, id: sku.skuId, brand: sku.brandName, price: sku.sellingPricePaise, listPrice: sku.listPricePaise, facts: [["Diet", sku.dietType]] };
 }
 
-function MerchantProductDetail({ sku, products, branch, supabaseUrl, onSelect, onClose, onSave, busy, error }: {
-  sku: V1MerchantCanonicalCatalogue["skus"][number]; products: V1MerchantCanonicalCatalogue["skus"];
+type MerchantDetailSKU = V1MerchantCanonicalCatalogue["skus"][number];
+
+export function MerchantProductDetail({ sku, products, branch, supabaseUrl, onSelect, onClose, onSave, onAdd, busy, error }: {
+  sku: MerchantDetailSKU; products: MerchantDetailSKU[];
   branch: string; supabaseUrl: string; onSelect: (id: string) => void; onClose: () => void;
-  onSave: (sku: V1MerchantCanonicalCatalogue["skus"][number], quantity: number) => Promise<boolean>; busy: boolean; error?: string;
+  onSave: (sku: MerchantDetailSKU, quantity: number) => Promise<MerchantDetailSKU | undefined>;
+  onAdd: (sku: MerchantDetailSKU) => Promise<MerchantDetailSKU | undefined>; busy: boolean; error?: string;
 }) {
-  const [stock, setStock] = useState(sku.stockQuantity?.toString() ?? "");
-  const [stockVersion, setStockVersion] = useState(sku.selectionVersion);
-  const stale = stockVersion !== sku.selectionVersion;
-  const [saved, setSaved] = useState(false);
-  const quantity = Number(stock);
-  const valid = stock.trim() !== "" && /^\d+$/.test(stock) && Number.isSafeInteger(quantity) && quantity >= 0 && quantity <= 1_000_000;
-  const change = (value: string) => { setStock(value); setSaved(false); };
-  return <ProductDetailCard product={merchantDetail(sku)} products={products.map(merchantDetail)} supabaseUrl={supabaseUrl} onSelect={onSelect} onClose={onClose}
-    action={<button type="button" disabled={busy || stale || !valid || quantity + (sku.stockReservedQuantity ?? 0) > 1_000_000 || sku.catalogueStatus !== "ACTIVE"} onClick={async () => { setSaved(await onSave(sku, quantity)); }}>{busy ? "Saving…" : "Save stock"}</button>}>
-    <section className="product-detail-info product-stock-editor"><h3>Available stock</h3><p>{branch} · units of {sku.packSize}</p>
-      <p>Available: {sku.stockQuantity ?? "Not set"} · Reserved for orders: {sku.stockReservedQuantity ?? 0}</p>
-      <div className="product-stock-input"><button type="button" disabled={busy || quantity <= 0} aria-label="Decrease stock count" onClick={() => change(String(Math.max(0, (quantity || 0) - 1)))}>−</button><input inputMode="numeric" aria-label="Stock quantity" placeholder="Not set" value={stock} disabled={busy} onChange={(event) => change(event.target.value)} /><button type="button" disabled={busy || quantity >= 1_000_000} aria-label="Increase stock count" onClick={() => change(String(Math.min(1_000_000, (quantity || 0) + 1)))}>+</button></div>
-      <p>Accepted orders reduce available stock automatically. Cancelled reservations return to stock. Enter only unreserved units when restocking or correcting a count; do not deduct these orders again. Zero makes the product unavailable.</p>
-      {stale ? <p role="status">The stock count has changed. <button type="button" disabled={busy} onClick={() => { change(sku.stockQuantity?.toString() ?? ""); setStockVersion(sku.selectionVersion); }}>Use latest stock count</button></p> : null}
-      {error ? <p role="alert">{error}</p> : saved ? <p role="status">Stock count saved.</p> : null}
+  return <ProductDetailOverlay selectedId={sku.skuId} products={products.map(merchantDetail)} supabaseUrl={supabaseUrl}
+    onSelect={onSelect} onClose={onClose} disabled={busy} renderProduct={(product, select) => {
+      const item = products.find((candidate) => candidate.skuId === product.id);
+      return item ? <MerchantProductPage sku={item} products={products} branch={branch} supabaseUrl={supabaseUrl}
+        onSelect={select} onClose={onClose} onSave={onSave} onAdd={onAdd} busy={busy} error={error} /> : null;
+    }} />;
+}
+
+function MerchantProductPage({ sku, products, branch, supabaseUrl, onSelect, onClose, onSave, onAdd, busy, error }: {
+  sku: MerchantDetailSKU; products: MerchantDetailSKU[];
+  branch: string; supabaseUrl: string; onSelect: (id: string) => void; onClose: () => void;
+  onSave: (sku: MerchantDetailSKU, quantity: number) => Promise<MerchantDetailSKU | undefined>;
+  onAdd: (sku: MerchantDetailSKU) => Promise<MerchantDetailSKU | undefined>; busy: boolean; error?: string;
+}) {
+  const initialDraft = (item: MerchantDetailSKU) => ({
+    id: item.skuId, text: item.stockQuantity?.toString() ?? "", version: item.selectionVersion,
+    saved: false, addingEmptySKU: false,
+  });
+  const [storedDraft, setDraft] = useState(() => initialDraft(sku));
+  // Switching products never carries another SKU's stock draft or remounts the modal.
+  const draft = storedDraft.id === sku.skuId ? storedDraft : initialDraft(sku);
+  const stale = draft.version !== sku.selectionVersion;
+  const state = merchantStockAction({ text: draft.text, currentQuantity: sku.stockQuantity,
+    reserved: sku.stockReservedQuantity, selected: sku.selected, addingEmptySKU: draft.addingEmptySKU,
+    stale, busy, active: sku.catalogueStatus === "ACTIVE" });
+  const change = (text: string) => setDraft({ ...draft, text, saved: false });
+  const selectProduct = (id: string) => {
+    const next = products.find((item) => item.skuId === id);
+    if (busy || !next) return;
+    onSelect(id);
+  };
+  const submit = async () => {
+    if (!state.canSubmit) return;
+    if (!state.stockMode && sku.stockQuantity === 0) {
+      setDraft({ ...draft, addingEmptySKU: true });
+      return;
+    }
+    const latest = state.stockMode ? await onSave(sku, state.quantity) : await onAdd(sku);
+    if (latest) setDraft({ ...initialDraft(latest), saved: state.stockMode });
+  };
+  return <ProductDetailCard product={merchantDetail(sku)} products={products.map(merchantDetail)} supabaseUrl={supabaseUrl} onSelect={selectProduct} onClose={onClose}
+    action={<button type="button" disabled={!state.canSubmit} aria-busy={busy} onClick={() => void submit()}>{busy ? <span className="product-action-spinner" aria-hidden="true" /> : null}{state.title}</button>}>
+    <section className="product-detail-info product-stock-editor">
+      <div className="product-stock-heading"><h3>Available stock</h3><span>{sku.selected ? "In your store" : "Not available"}</span></div>
+      <p>{branch} · units of {sku.packSize}</p>
+      <div className="product-stock-summary"><span>{sku.stockQuantity === undefined ? "Count not set" : String(sku.stockQuantity) + " available"}</span><span>{sku.stockReservedQuantity ?? 0} reserved</span></div>
+      <div className="product-stock-input" data-product-swipe-ignore>
+        <button type="button" disabled={!state.canEdit || state.quantity <= 0} aria-label="Decrease stock count" onClick={() => change(String(Math.max(0, (state.quantity || 0) - 1)))}>−</button>
+        <input inputMode="numeric" pattern="[0-9]*" aria-label="Stock quantity" placeholder="Not set" value={draft.text} disabled={!state.canEdit} onChange={(event) => change(event.target.value)} />
+        <button type="button" disabled={!state.canEdit || state.quantity >= 1_000_000 - (sku.stockReservedQuantity ?? 0)} aria-label="Increase stock count" onClick={() => change(String(Math.min(1_000_000 - (sku.stockReservedQuantity ?? 0), (state.quantity || 0) + 1)))}>+</button>
+      </div>
+      <p>{!state.stockMode ? "Add this product to your store to manage stock." : draft.addingEmptySKU ? "Enter a positive stock count to finish adding this product." : "Orders update stock automatically. Change this count only for restocking or corrections."}</p>
+      <p>Enter available, unreserved units. Saving zero makes this product unavailable.</p>
+      {stale ? <p role="status">The stock count has changed. <button type="button" disabled={busy} onClick={() => setDraft(initialDraft(sku))}>Use latest stock count</button></p> : null}
+      {error ? <p role="alert">{error}</p> : draft.saved ? <p role="status" className="product-stock-saved">Stock count saved.</p> : null}
     </section>
   </ProductDetailCard>;
 }

@@ -9,8 +9,7 @@ struct DastakHomeView: View {
     let openCart: () -> Void
     let sendParcel: () -> Void
     @State private var selectedRestaurant: DastakV1RestaurantMenu?
-    @State private var selectedProduct: DastakV1CatalogueSKU?
-    @State private var detailProducts: [DastakV1CatalogueSKU] = []
+    @State private var selectedProduct: CustomerProductSelection?
     @State private var selectedCategoryTypeID: UUID?
     @State private var selectedCategoryID: UUID?
     @State private var selectedSubcategoryID: UUID?
@@ -78,10 +77,8 @@ struct DastakHomeView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .sheet(item: $selectedProduct) { product in
-            DastakCustomerProductDetailView(model: model, initial: product, products: detailProducts)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.hidden)
+        .dastakProductOverlay(item: $selectedProduct) { selection in
+            DastakCustomerProductDetailView(model: model, initial: selection.product, products: selection.products, close: { selectedProduct = nil })
         }
     }
 
@@ -426,7 +423,7 @@ struct DastakHomeView: View {
                         toggleWishlist: {
                             Task { await model.toggleWishlist(kind: .retailSKU, itemID: product.id) }
                         },
-                        openDetail: { detailProducts = products; selectedProduct = product }
+                        openDetail: { selectedProduct = CustomerProductSelection(product: product, products: products) }
                     )
                 }
         }
@@ -1099,6 +1096,14 @@ struct DastakV1ProductTile: View {
         default: product.logisticsAttributes.fragile == true ? "shippingbox" : "basket"
         }
     }
+}
+
+// Capture the chosen SKU and its browsing context in one presentation value.
+// Separate @State writes can leave the first full-screen cover with a stale list.
+private struct CustomerProductSelection: Identifiable {
+    let product: DastakV1CatalogueSKU
+    let products: [DastakV1CatalogueSKU]
+    var id: UUID { product.id }
 }
 
 #if DEBUG

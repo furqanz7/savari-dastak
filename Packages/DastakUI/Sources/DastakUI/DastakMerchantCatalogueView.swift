@@ -89,10 +89,8 @@ private struct DastakMerchantCanonicalCatalogueView: View {
             .task(id: priorityArtworkKeys) {
                 await DastakProductArtwork.prefetch(imageKeys: priorityArtworkKeys)
             }
-            .sheet(item: $selectedProduct) { sku in
-                DastakMerchantProductDetailView(model: model, initial: sku)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
+            .dastakProductOverlay(item: $selectedProduct) { sku in
+                DastakMerchantProductDetailView(model: model, initial: sku, close: { if !model.isBusy { selectedProduct = nil } })
             }
         }
     }
