@@ -37,12 +37,13 @@ final class MerchantNotificationDelegate: NSObject, UIApplicationDelegate, UNUse
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        UserDefaults.standard.set(token, forKey: "dastak.merchant.apns.deviceToken")
-        NotificationCenter.default.post(name: Notification.Name("dastak.merchant.deviceTokenRegistered"), object: nil)
+        UserDefaults.standard.removeObject(forKey: "dastak.merchant.apns.deviceToken")
+        NotificationCenter.default.post(name: Notification.Name("dastak.merchant.deviceTokenRegistered"), object: token)
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         UserDefaults.standard.removeObject(forKey: "dastak.merchant.apns.deviceToken")
+        NotificationCenter.default.post(name: Notification.Name("dastak.merchant.deviceTokenRegistrationFailed"), object: nil)
     }
 
     func userNotificationCenter(

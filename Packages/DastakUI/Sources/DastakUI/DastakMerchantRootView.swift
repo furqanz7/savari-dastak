@@ -48,7 +48,7 @@ public struct DastakMerchantRootView: View {
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
-            await model.refreshNotifications(registerWithApple: true)
+            await model.notifications.refresh()
             while !Task.isCancelled {
                 await model.refreshOrders()
                 try? await Task.sleep(for: .seconds(10))
@@ -58,8 +58,12 @@ public struct DastakMerchantRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.merchant.ordersChanged"))) { _ in
             Task { await model.refreshOrders() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.merchant.deviceTokenRegistered"))) { _ in
-            Task { await model.refreshNotifications() }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.merchant.deviceTokenRegistered"))) { event in
+            guard let token = event.object as? String else { return }
+            Task { await model.notifications.receiveDeviceToken(token) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.merchant.deviceTokenRegistrationFailed"))) { _ in
+            model.notifications.registrationFailed()
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.merchant.openOrders"))) { _ in
             openPendingOrders()

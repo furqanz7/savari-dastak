@@ -8,6 +8,8 @@ actor's branch heartbeat. A foreground poll runs every ten seconds; notification
 realtime and foreground events request another refresh. Polls are coalesced.
 Failures retain last-good data with an inline warning; catalogue, earnings and
 legacy-order failures cannot discard a successful current-order response.
+The Orders toolbar has no refresh button. Pull-to-refresh is the manual fallback;
+the small status row explains automatic updates without a continuously ticking label.
 
 Acceptance carries the server version, requested scope and selected preparation
 time. Physical item/selection confirmation is required by the UI before acceptance.
@@ -43,6 +45,46 @@ will not disable a registration refreshed after the delivery was claimed.
 Topic mismatch responses do not retire tokens. Legacy senders are restricted
 to Customer-app registrations and disable only explicitly unregistered tokens,
 without deleting notification history.
+
+### Registration feedback
+
+Merchant requests a fresh APNs registration on foreground/account entry and sends
+every callback through the authenticated registration endpoint, even when the token
+value has not changed. It no longer uses a disk-cached token or skips registration
+based solely on the last token string. The server remains the account authority.
+
+Notification permission, Apple registration and server registration are distinct.
+The inline alert prompt stays visible through connection, Apple failure, a missing
+callback (15-second timeout), server failure or a false registration acknowledgment.
+Disabled banners or sounds direct the merchant to iOS Settings. Successful server
+registration is not proof of delivery, and iOS Focus can still silence notifications.
+
+### Missing production route repair
+
+The September 8 investigation found recent `MERCHANT_OPPORTUNITY_OFFERED` events
+published with zero intents or deliveries. Production contained only the later
+cancellation and restaurant-request routes; the six original Merchant routes were
+absent. The registered Merchant device was bound to a different store from the
+recent retail requests at inspection time; historical device ownership cannot be
+inferred from its current registration.
+
+`20260907183353_restore_merchant_order_notification_routes.sql` restores only missing
+Merchant routes, uses pay-at-delivery preparation wording, and leaves existing route
+copy, versions, disabled states and other audiences untouched. It does not replay
+published events or change orders. This is a data-only seed repair, so a schema diff
+cannot generate its inserts. Other missing Customer/Rider route seeds require a
+separate scoped audit; this repair does not activate unrelated notifications.
+
+Before and after deployment run the read-only release gate from the repository root:
+
+```sh
+bash scripts/check-merchant-notifications.sh --linked
+```
+
+It fails for missing/disabled Merchant iOS routes or an inactive outbox cron and
+prints an aggregate active-device count without identifiers or tokens. The existing
+dispatcher runs once per minute; inbox updates and push dispatch are independent.
+The gate checks configuration, not actual Apple delivery or on-device permissions.
 
 ## Release and verification
 

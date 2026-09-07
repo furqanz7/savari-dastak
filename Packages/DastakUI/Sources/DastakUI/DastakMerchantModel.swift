@@ -58,8 +58,7 @@ final class DastakMerchantModel: ObservableObject {
     @Published private(set) var restaurantRequests: [DastakV1RestaurantRequest] = []
     @Published private(set) var orderRefreshFailures: [String] = []
     @Published private(set) var lastOrderRefresh: Date?
-    @Published private(set) var notificationPermission: DastakNotificationPermissionState = .notRequested
-    @Published private(set) var notificationRegistrationFailed = false
+    let notifications: DastakMerchantNotifications
     @Published private(set) var catalogue: CatalogueSnapshot?
     @Published private(set) var canonicalCatalogue: DastakV1MerchantCatalogueSnapshot?
     @Published private(set) var pendingCanonicalSelections: [UUID: Bool] = [:]
@@ -77,8 +76,6 @@ final class DastakMerchantModel: ObservableObject {
     private let earningsClient: any DastakEarningsClient
     private let v1Client: any DastakV1MerchantClient
     private let inboxClient: any DastakV1MerchantInboxClient
-    private var registeredDeviceToken: String?
-    private var registeringDeviceToken = false
     private var readyEvidencePaths: [String: String] = [:]
     private var actionKeys: [String: IdempotencyKey] = [:]
     private var ordersRefreshInFlight = false
@@ -95,6 +92,7 @@ final class DastakMerchantModel: ObservableObject {
         inboxClient: (any DastakV1MerchantInboxClient)? = nil
     ) {
         self.services = services
+        self.notifications = DastakMerchantNotifications(functions: services.functions)
         self.orderClient = orderClient
         self.catalogueClient = catalogueClient
         self.checkoutClient = checkoutClient
@@ -161,7 +159,7 @@ final class DastakMerchantModel: ObservableObject {
         async let orderRefresh: Void = refreshOrders()
         async let catalogueRefresh: Void = refreshStoreInformation()
         async let earningsRefresh: Void = refreshEarnings()
-        async let notificationRefresh: Void = refreshNotifications()
+        async let notificationRefresh: Void = notifications.refresh()
         _ = await (orderRefresh, catalogueRefresh, earningsRefresh, notificationRefresh)
     }
 
@@ -175,36 +173,6 @@ final class DastakMerchantModel: ObservableObject {
     private func refreshEarnings() async {
         if let snapshot = try? await earningsClient.merchantSnapshot(idempotencyKey: makeKey()) {
             earnings = snapshot
-        }
-    }
-
-    func refreshNotifications(registerWithApple: Bool = false) async {
-        notificationPermission = await DastakNotificationPreferences.status()
-        guard notificationPermission == .enabled else { return }
-        if registerWithApple { DastakNotificationPreferences.registerForRemoteNotifications() }
-        guard let token = UserDefaults.standard.string(forKey: "dastak.merchant.apns.deviceToken"),
-              token != registeredDeviceToken, !registeringDeviceToken else { return }
-        registeringDeviceToken = true
-        defer { registeringDeviceToken = false }
-        do {
-            _ = try await SupabaseDastakDeviceTokenClient(functions: services.functions).register(
-                token: token, applicationId: "com.dastak.merchant",
-                apnsEnvironment: DastakNotificationPreferences.apnsEnvironment,
-                idempotencyKey: makeKey()
-            )
-            registeredDeviceToken = token
-            notificationRegistrationFailed = false
-        } catch {
-            notificationRegistrationFailed = true
-        }
-    }
-
-    func enableNotifications() async {
-        if notificationPermission == .disabled {
-            DastakNotificationPreferences.openSystemSettings()
-        } else {
-            notificationPermission = await DastakNotificationPreferences.request()
-            await refreshNotifications()
         }
     }
 

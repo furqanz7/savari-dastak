@@ -113,14 +113,6 @@ struct DastakMerchantOrdersView: View {
             .refreshable { await model.refreshAll() }
             .navigationTitle("Orders")
             .dastakInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { Task { await model.refreshAll() } } label: {
-                        if model.isRefreshing { ProgressView() } else { Image(systemName: "arrow.clockwise") }
-                    }.disabled(model.isRefreshing)
-                    .accessibilityLabel("Refresh orders")
-                }
-            }
         }
         .sheet(item: $rejection) { rejection in
             DastakRejectOrderSheet(order: rejection.order) { reason in
@@ -136,8 +128,6 @@ struct DastakMerchantOrdersView: View {
                  ?? model.restaurantRequests.first?.branch.displayName
                  ?? model.v1Fulfilments.first?.branch.displayName ?? "Your store")
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
-            Text("A clear view of every request, from arrival to handoff.")
-                .font(.subheadline).foregroundStyle(.secondary)
         }.padding(.top, 12)
     }
 
@@ -152,27 +142,14 @@ struct DastakMerchantOrdersView: View {
             } else if let refreshed = model.lastOrderRefresh {
                 HStack(spacing: 6) {
                     Circle().fill(.green).frame(width: 6, height: 6)
-                    Text("Updated").font(.caption)
-                    Text(refreshed, style: .relative).font(.caption.monospacedDigit())
+                    Text("Updates automatically").font(.caption)
                     Spacer()
-                    Text("Auto-refresh on").font(.caption)
+                    Text("Pull to refresh").font(.caption)
                 }.foregroundStyle(.secondary)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text("Orders update automatically. Last updated \(refreshed, style: .relative). Pull down to refresh."))
             }
-            if model.notificationPermission != .enabled || model.notificationRegistrationFailed {
-                HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: "bell.badge").font(.title3).foregroundStyle(accent)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(model.notificationRegistrationFailed ? "Order alerts need a retry" : "Don't miss an order")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Enable alerts for requests while the app is in the background.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                    Button(model.notificationPermission == .disabled ? "Settings" : "Enable") {
-                        Task { await model.enableNotifications() }
-                    }.font(.subheadline.weight(.semibold)).buttonStyle(.bordered)
-                }.padding(14).marketplaceFlatSurface()
-            }
+            DastakMerchantAlertStatus(notifications: model.notifications)
             if let branch = model.canonicalCatalogue?.branch,
                !branch.operationalState.isOpen || !branch.operationalState.acceptingOrders {
                 Label("Your store is paused. Open Store to turn on order acceptance.", systemImage: "pause.circle")
@@ -280,6 +257,31 @@ struct DastakMerchantOrdersView: View {
             Text(title).font(.headline)
             Spacer()
             Text(count.formatted()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct DastakMerchantAlertStatus: View {
+    @ObservedObject var notifications: DastakMerchantNotifications
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if notifications.needsAttention {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: notifications.needsSettings ? "bell.slash" : "bell.badge")
+                    .font(.title3).foregroundStyle(MarketplaceColors.accent(for: colorScheme))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(notifications.title).font(.subheadline.weight(.semibold))
+                    Text(notifications.detail).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                if notifications.isConnecting {
+                    ProgressView().accessibilityLabel("Connecting order alerts")
+                } else {
+                    Button(notifications.actionTitle) { Task { await notifications.enable() } }
+                        .font(.subheadline.weight(.semibold)).buttonStyle(.bordered)
+                }
+            }.padding(14).marketplaceFlatSurface()
         }
     }
 }

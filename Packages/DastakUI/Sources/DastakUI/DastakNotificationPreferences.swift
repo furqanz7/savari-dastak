@@ -37,26 +37,36 @@ enum DastakNotificationPreferences {
     }
 
     static func status() async -> DastakNotificationPermissionState {
+        await alertSettings().permission
+    }
+
+    static func alertSettings() async -> DastakNotificationSettings {
         #if os(iOS)
         let settings = await UNUserNotificationCenter.current().notificationSettings()
+        let permission: DastakNotificationPermissionState
         switch settings.authorizationStatus {
-        case .notDetermined: return .notRequested
-        case .authorized, .provisional, .ephemeral: return .enabled
-        case .denied: return .disabled
-        @unknown default: return .unavailable
+        case .notDetermined: permission = .notRequested
+        case .authorized, .provisional, .ephemeral: permission = .enabled
+        case .denied: permission = .disabled
+        @unknown default: permission = .unavailable
         }
+        return DastakNotificationSettings(
+            permission: permission,
+            alertsEnabled: settings.alertSetting == .enabled && settings.authorizationStatus != .provisional,
+            soundEnabled: settings.soundSetting == .enabled
+        )
         #else
-        return .unavailable
+        return DastakNotificationSettings(permission: .unavailable, alertsEnabled: false, soundEnabled: false)
         #endif
     }
 
     @discardableResult
-    static func request() async -> DastakNotificationPermissionState {
+    static func request(registerWithApple: Bool = true) async -> DastakNotificationPermissionState {
         #if os(iOS)
         let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound, .badge]
         )) == true
-        if granted {
+        if granted && registerWithApple {
             UIApplication.shared.registerForRemoteNotifications()
         }
         return await status()
