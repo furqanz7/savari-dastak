@@ -68,7 +68,7 @@ absent. The registered Merchant device was bound to a different store from the
 recent retail requests at inspection time; historical device ownership cannot be
 inferred from its current registration.
 
-`20260907183353_restore_merchant_order_notification_routes.sql` restores only missing
+`20260907224352_restore_merchant_order_notification_routes.sql` restores only missing
 Merchant routes, uses pay-at-delivery preparation wording, and leaves existing route
 copy, versions, disabled states and other audiences untouched. It does not replay
 published events or change orders. This is a data-only seed repair, so a schema diff
@@ -88,6 +88,23 @@ The gate checks configuration, not actual Apple delivery or on-device permission
 
 ## Release and verification
 
+The route repair was deployed through the Supabase management connection after
+the CLI temporary-role login failed. Its CLI-created migration file was renamed
+to the applied migration version so local and production history stay aligned.
+The post-deployment read-only gate returned `routes_ready=true`, no missing routes,
+an active dispatcher and one active Merchant iOS registration. No Edge Function
+or web redeployment is required for this data-only repair.
+
+Fresh continuation checks passed all 61 native tests, Merchant Release generic-iOS
+compilation and Customer Debug generic-iOS compatibility compilation. Earlier in
+the task, Merchant Debug compilation and the local database suite passed (57 files,
+1,655 assertions), along with a rollback-only missing-route/idempotency check and
+the error-level security advisor. Those database gates were not repeated after
+the local Docker service became unavailable. No browser, simulator, physical-device
+or live-order notification tests were run. Native UI/registration changes still
+require distributing an updated Merchant binary; a backend release cannot update it.
+
+The preceding app-identity release prerequisites remain documented below.
 Apply `20260907172722_merchant_app_notifications.sql`, then deploy:
 
 - `register-device-token`
