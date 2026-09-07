@@ -1,5 +1,10 @@
 # Merchant iOS orders and notification routing
 
+The subsequent [Delivery workspace and notification release](delivery-ios-notifications.md)
+restores the Customer/Rider routes and adds a ten-second notification-only worker
+pass. The minute dispatcher and historical verification below describe the earlier
+Merchant-only release; refer to the linked report for the current schedule and gates.
+
 ## Order desk
 
 The native Merchant workspace requests `merchantOpportunities`, `restaurantRequests`

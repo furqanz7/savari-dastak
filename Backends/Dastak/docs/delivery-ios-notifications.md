@@ -68,4 +68,21 @@ delivery conditions remain relevant.
 
 ## Production result
 
-Pending the release commands and post-deployment read-only verification.
+Implementation commit: `6494fc394ff69200bd52c1c6cc94090c8a4bf019`, pushed to
+`origin/codex/dastak-v1-launch` and verified against the remote ref.
+
+`process-v1-outbox` version 10 deployed ACTIVE before both migrations were pushed
+through the CLI. Production now has 25 enabled Customer routes, five Rider routes
+and eight Merchant routes. The notification-only job is active every ten seconds;
+the original job remains active once a minute. A final migration dry run reports
+the remote database is up to date.
+
+Read-only post-deployment checks found nine successful fast-schedule runs and nine
+HTTP 200 worker responses explicitly reporting maintenance skipped. An unauthenticated
+POST to the notification-only endpoint returned HTTP 403 before work. The Merchant
+release gate returned no missing routes, `routes_ready=true`, an active dispatcher
+and one active Merchant iOS registration. Route RLS remains enabled and authenticated
+clients have no direct route INSERT privilege.
+
+These are deployed-backend checks, not an iPhone push-display test. No historical
+events were replayed and no live orders were created, cancelled or changed manually.
