@@ -1071,7 +1071,7 @@ struct DastakV1MatchingView: View {
     private func assuranceSymbol(_ status: DastakV1OrderStatus) -> String {
         switch status {
         case .fulfilmentFailure: "exclamationmark.shield.fill"
-        case .unavailable, .paymentExpired, .cancelledPrepayment: "exclamationmark.circle.fill"
+        case .unavailable, .paymentExpired, .cancelledPrepayment, .cancelled: "exclamationmark.circle.fill"
         default: "checkmark.shield.fill"
         }
     }
@@ -1140,7 +1140,7 @@ struct DastakV1MatchingView: View {
         case .pickupInProgress: ("Picking up", "In progress")
         case .outForDelivery: ("On the way", "In progress")
         case .delivered, .unavailable, .paymentExpired,
-             .cancelledPrepayment, .fulfilmentFailure: nil
+             .cancelledPrepayment, .cancelled, .fulfilmentFailure: nil
         }
     }
 

@@ -3,6 +3,7 @@ import { Camera, Clock3, PackageCheck, Route, ShieldCheck, WalletCards } from "l
 import { getEvidenceUrl } from "./admin";
 import {
   authorizeV1ExceptionalDeliveryHandoff,
+  adminCancelV1Order,
   assignV1ReturnRider,
   createV1ExactSkuRecoveryOffer,
   decideV1CustomerIssue,
@@ -31,6 +32,7 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   const loadTrace = useCallback(async (orderId: string) => {
     try {
       const result = await getV1AdminExecutionTrace({ ...auth, orderId });
+      if (selectedIdRef.current !== orderId) return;
       setTrace(result);
       setError(undefined);
     } catch (traceError) {
@@ -73,8 +75,61 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
     {error ? <p className="order-error" role="alert">{error}</p> : null}
     {loading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length === 0 ? <p className="admin-empty">No current-generation orders have been submitted.</p> : <div className="v1-execution-layout">
       <nav aria-label="Current orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>
-      <div className="v1-trace-detail">{trace ? <Trace trace={trace} auth={auth} onChanged={() => void loadTrace(trace.order.id)} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
+      <div className="v1-trace-detail">{trace ? <Trace trace={trace} auth={auth} onChanged={() => void refresh()} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
     </div>}
+  </section>;
+}
+
+function AdminCancellationAction({ trace, auth, onChanged }: {
+  trace: V1AdminExecutionTrace;
+  auth: DastakV1Auth;
+  onChanged: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [error, setError] = useState<string>();
+  const requestRef = useRef<{ reason: string; version: number; key: string } | undefined>(undefined);
+  const cancellation = trace.cancellation;
+  const saved = object(cancellation, "record");
+  if (saved) return <section className="v1-exceptional-handoff">
+    <strong>Order cancelled · {formatOptional(text(saved, "cancelledAt"))}</strong>
+    <p>{text(saved, "reason")}</p>
+    <small>No payment is due. Preparation and dispatch are closed.</small>
+  </section>;
+  if (boolean(cancellation, "canCancel") !== true) return null;
+  const cancel = async () => {
+    const trimmed = reason.trim();
+    if (busy || completed || trimmed.length < 10) return;
+    if (!window.confirm("Cancel " + trace.order.displayOrderNumber +
+      "? This permanently stops preparation and delivery and releases reserved stock.")) return;
+    const previous = requestRef.current;
+    const request = previous?.reason === trimmed && previous.version === trace.order.version
+      ? previous : { reason: trimmed, version: trace.order.version, key: crypto.randomUUID() };
+    requestRef.current = request;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await adminCancelV1Order({ ...auth, orderId: trace.order.id, reason: request.reason,
+        expectedVersion: request.version, idempotencyKey: request.key });
+      setCompleted(true);
+      onChanged();
+    } catch (actionError) {
+      setError(message(actionError));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <section className="v1-exceptional-handoff" aria-label="Cancel order">
+    <strong>Cancel unpaid order</strong>
+    <p>Available only before payment collection or package pickup. Stock and capacity are released together.</p>
+    <label>Cancellation reason
+      <textarea value={reason} minLength={10} maxLength={500} disabled={busy || completed}
+        onChange={(event) => setReason(event.target.value)} placeholder="Explain why this order should be cancelled." />
+    </label>
+    <button type="button" className="danger-button" disabled={busy || completed || reason.trim().length < 10}
+      onClick={() => void cancel()}>{completed ? "Order cancelled" : busy ? "Cancelling…" : "Cancel order"}</button>
+    {error ? <p className="order-error" role="alert">{error}</p> : null}
   </section>;
 }
 
@@ -93,6 +148,7 @@ function Trace({ trace, auth, onChanged }: {
     text(item, "status") === "READY" || text(item, "status") === "PICKED_UP").length ?? 0;
   return <>
     <header className="v1-trace-order"><span><strong>{trace.order.displayOrderNumber}</strong><small>Version {trace.order.version}</small></span><b>{trace.order.status.replaceAll("_", " ")}</b></header>
+    <AdminCancellationAction key={trace.order.id} trace={trace} auth={auth} onChanged={onChanged} />
     <div className="v1-trace-summary">
       <TraceMetric icon={<Clock3 size={17} />} label="Attempts" value={String(trace.matchingAttempts.length)} />
       <TraceMetric icon={<Route size={17} />} label="Plans" value={String(trace.plans.length)} />

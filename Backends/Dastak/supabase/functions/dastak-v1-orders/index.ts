@@ -164,6 +164,13 @@ Deno.serve((request) =>
           p_order_id: input.orderId,
         },
       ),
+    adminCancelOrder: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_cancel_order", {
+        p_order_id: input.orderId,
+        p_reason: input.reason,
+        p_expected_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     getAdminAccess: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

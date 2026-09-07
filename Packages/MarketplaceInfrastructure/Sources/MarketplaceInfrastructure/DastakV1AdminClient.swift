@@ -71,6 +71,23 @@ public struct DastakV1AdminLaunchPayment: Codable, Equatable, Sendable {
 public struct DastakV1AdminExecutionTrace: Codable, Equatable, Sendable {
     public let order: DastakV1AdminOrder
     public let launchPayment: DastakV1AdminLaunchPayment?
+    public let cancellation: DastakV1AdminCancellation?
+}
+
+public struct DastakV1AdminCancellation: Codable, Equatable, Sendable {
+    public struct Record: Codable, Equatable, Sendable {
+        public let reason: String
+        public let cancelledAt: String
+    }
+    public let canCancel: Bool
+    public let blocker: String?
+    public let record: Record?
+}
+
+public struct DastakV1AdminCancellationResult: Codable, Equatable, Sendable {
+    public let status: String
+    public let version: Int
+    public let cancelledAt: String
 }
 
 public enum DastakAdminRole: String, Codable, Equatable, Sendable {
@@ -643,6 +660,7 @@ public struct DastakAdminRoyaltyPayout: Codable, Equatable, Identifiable, Sendab
 public protocol DastakV1AdminClient: Sendable {
     func orders(limit: Int, idempotencyKey: IdempotencyKey) async throws -> [DastakV1AdminOrder]
     func trace(orderID: UUID, idempotencyKey: IdempotencyKey) async throws -> DastakV1AdminExecutionTrace
+    func cancelOrder(orderID: UUID, reason: String, expectedVersion: Int, idempotencyKey: IdempotencyKey) async throws -> DastakV1AdminCancellationResult
     func access(idempotencyKey: IdempotencyKey) async throws -> DastakAdminAccessSnapshot
     func commandCenter(idempotencyKey: IdempotencyKey) async throws -> DastakAdminCommandCenter
     func systemHealth(idempotencyKey: IdempotencyKey) async throws -> DastakAdminSystemHealth
@@ -837,6 +855,18 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
             request: Request(
                 operation: "adminAccess"
             ),
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    public func cancelOrder(
+        orderID: UUID, reason: String, expectedVersion: Int, idempotencyKey: IdempotencyKey
+    ) async throws -> DastakV1AdminCancellationResult {
+        try await functions.invoke(
+            "dastak-v1-orders",
+            request: Request(operation: "adminCancelOrder", orderId: orderID,
+                             expectedVersion: expectedVersion,
+                             reason: reason.trimmingCharacters(in: .whitespacesAndNewlines)),
             idempotencyKey: idempotencyKey
         )
     }

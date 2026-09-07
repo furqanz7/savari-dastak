@@ -300,6 +300,20 @@ final class DastakOwnerOperationsModel: ObservableObject {
         if let value = resolve(result, workspace: .liveOrders) { v1Trace = value }
     }
 
+    func cancelOrder(_ order: DastakV1AdminOrder, reason: String) async -> Bool {
+        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (10...500).contains(trimmed.count), v1Trace?.order.id == order.id,
+              v1Trace?.cancellation?.canCancel == true else { return false }
+        return await perform(
+            identity: "cancel:\(order.id):\(order.version):\(trimmed)",
+            success: "Order cancelled. Reserved stock and capacity released.",
+            refreshing: [.liveOrders, .commandCenter]
+        ) { key in
+            _ = try await self.v1Client.cancelOrder(orderID: order.id, reason: trimmed,
+                                                   expectedVersion: order.version, idempotencyKey: key)
+        }
+    }
+
     func resolveSupport(_ exception: OwnerOrderException, resolution: String) async -> Bool {
         guard let caseID = UUID(uuidString: exception.exceptionID.replacingOccurrences(of: "support:", with: "")) else {
             actionErrorMessage = "This support case reference is invalid."
@@ -1234,6 +1248,8 @@ struct DastakOwnerOperationsView: View {
 
                 if let trace = model.v1Trace,
                    let launch = trace.launchPayment {
+                    DastakAdminOrderCancellationView(model: model, trace: trace)
+                        .id(trace.order.id)
                     if let commitment = launch.commitment {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Pay via UPI/Cash on Delivery")
@@ -1378,6 +1394,45 @@ struct DastakOwnerOperationsView: View {
         case .refundReview: "arrow.uturn.backward.circle"
         case .handoffLocked: "lock.trianglebadge.exclamationmark"
         case .stalledOrder: "clock.badge.exclamationmark"
+        }
+    }
+}
+
+private struct DastakAdminOrderCancellationView: View {
+    @ObservedObject var model: DastakOwnerOperationsModel
+    let trace: DastakV1AdminExecutionTrace
+    @State private var reason = ""
+    @State private var confirming = false
+    @State private var completed = false
+
+    var body: some View {
+        if let record = trace.cancellation?.record {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Order cancelled", systemImage: "xmark.circle.fill").font(.headline)
+                Text(record.reason).font(.subheadline)
+                Text("No payment is due. Preparation and delivery are closed.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } else if trace.cancellation?.canCancel == true {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Cancel unpaid order").font(.headline)
+                Text("Only available before payment collection or package pickup. Reserved stock and capacity will be released.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                TextField("Cancellation reason (10–500 characters)", text: $reason, axis: .vertical)
+                    .lineLimit(2...5).textFieldStyle(.roundedBorder)
+                    .disabled(model.isBusy || completed)
+                Button(completed ? "Order cancelled" : "Cancel order", role: .destructive) { confirming = true }
+                    .buttonStyle(.bordered)
+                    .disabled(model.isBusy || completed || !(10...500).contains(reason.trimmingCharacters(in: .whitespacesAndNewlines).count))
+            }
+            .confirmationDialog("Cancel \(trace.order.displayOrderNumber)?", isPresented: $confirming, titleVisibility: .visible) {
+                Button("Cancel order", role: .destructive) {
+                    Task { completed = await model.cancelOrder(trace.order, reason: reason) }
+                }
+                Button("Keep order", role: .cancel) {}
+            } message: {
+                Text("This permanently stops preparation and delivery. This action cannot be undone.")
+            }
         }
     }
 }

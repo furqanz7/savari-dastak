@@ -1403,7 +1403,7 @@ function BasketReplacementDialog({ busy, onDismiss, onConfirm }: {
 function OrderStatusIcon({ status, size }: { status: V1Order["status"]; size: number }) {
   if (status === "UNAVAILABLE") return <PackageX size={size} />;
   if (status === "PAYMENT_EXPIRED") return <ClockAlert size={size} />;
-  if (status === "CANCELLED_PREPAYMENT") return <Ban size={size} />;
+  if (status === "CANCELLED_PREPAYMENT" || status === "CANCELLED") return <Ban size={size} />;
   if (status === "DASTAK_FULFILMENT_FAILURE") return <CircleAlert size={size} />;
   if (status === "DELIVERED") return <Check size={size} />;
   return <PackageCheck size={size} />;
@@ -1465,7 +1465,7 @@ async function copyText(value: string) {
 }
 
 function isFailureStatus(status: V1Order["status"]) {
-  return ["UNAVAILABLE", "PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT",
+  return ["UNAVAILABLE", "PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT", "CANCELLED",
     "DASTAK_FULFILMENT_FAILURE"].includes(status);
 }
 

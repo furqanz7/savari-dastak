@@ -25,6 +25,13 @@ export type V1OrderDependencies = {
     idempotencyKey: string;
     expectedVersion: number;
   }) => Promise<unknown>;
+  adminCancelOrder: (input: {
+    accessToken: string;
+    orderId: string;
+    reason: string;
+    idempotencyKey: string;
+    expectedVersion: number;
+  }) => Promise<unknown>;
   commitLaunchPayment: (input: {
     accessToken: string;
     orderId: string;
@@ -610,6 +617,17 @@ export async function handleV1Orders(
             orderId,
           }),
         );
+      }
+      case "adminCancelOrder": {
+        const orderId = requiredUUID(body.orderId);
+        const reason = requiredText(body.reason, 500);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const idempotencyKey = requiredIdempotencyKey(request);
+        if (!orderId || !reason || reason.trim().length < 10 ||
+          expectedVersion === undefined || !idempotencyKey) return validationError();
+        return json(await dependencies.adminCancelOrder({
+          accessToken: actor.accessToken, orderId, reason, expectedVersion, idempotencyKey,
+        }));
       }
       case "adminAccess":
         return json(

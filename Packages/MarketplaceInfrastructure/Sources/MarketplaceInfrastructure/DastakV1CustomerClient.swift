@@ -352,6 +352,7 @@ public enum DastakV1OrderStatus: String, Codable, Equatable, Sendable {
     case unavailable = "UNAVAILABLE"
     case paymentExpired = "PAYMENT_EXPIRED"
     case cancelledPrepayment = "CANCELLED_PREPAYMENT"
+    case cancelled = "CANCELLED"
     case fulfilmentFailure = "DASTAK_FULFILMENT_FAILURE"
 }
 

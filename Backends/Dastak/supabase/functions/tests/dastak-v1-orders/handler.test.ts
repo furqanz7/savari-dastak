@@ -2,6 +2,37 @@ import { assertEquals } from "jsr:@std/assert";
 import { V1RequestError } from "../../_shared/v1-rpc.ts";
 import { handleV1Orders, type V1OrderDependencies } from "../../dastak-v1-orders/handler.ts";
 
+Deno.test("admin cancellation binds authenticated identity and forwards audited intent", async () => {
+  let recorded: unknown;
+  const response = await handleV1Orders(request({
+    operation: "adminCancelOrder", orderId, reason: "  Owner requested cancellation  ",
+    expectedVersion: 5, actorId: "untrusted", status: "DELIVERED", stockQuantity: 999,
+  }, "admin-cancel-once"), dependencies({
+    adminCancelOrder: (input) => {
+      recorded = input;
+      return Promise.resolve({ orderId, status: "CANCELLED", version: 6 });
+    },
+  }));
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accessToken: actor.accessToken, orderId,
+    reason: "Owner requested cancellation", expectedVersion: 5, idempotencyKey: "admin-cancel-once" });
+});
+
+Deno.test("admin cancellation rejects invalid identity reason version and missing retry key", async () => {
+  let calls = 0;
+  const deps = dependencies({ adminCancelOrder: () => { calls += 1; return Promise.resolve({}); } });
+  const valid = { operation: "adminCancelOrder", orderId, reason: "Owner requested cancellation", expectedVersion: 5 };
+  for (const body of [
+    { ...valid, orderId: "bad" }, { ...valid, reason: "short" },
+    { ...valid, reason: "x".repeat(501) }, { ...valid, expectedVersion: 0 },
+    { ...valid, expectedVersion: 1.5 }, { ...valid, expectedVersion: null },
+  ]) {
+    assertEquals((await handleV1Orders(request(body, "cancel-key"), deps)).status, 400);
+  }
+  assertEquals((await handleV1Orders(request(valid), deps)).status, 400);
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 orders serves CORS preflight before authentication", async () => {
   let authCalls = 0;
   const response = await handleV1Orders(
@@ -1044,6 +1075,8 @@ function dependencies(
     getOrder: overrides.getOrder ?? (() => Promise.resolve(orderSnapshot)),
     cancelOrder: overrides.cancelOrder ??
       (() => Promise.resolve(orderSnapshot)),
+    adminCancelOrder: overrides.adminCancelOrder ??
+      (() => Promise.resolve({ orderId, status: "CANCELLED", version: 6 })),
     commitLaunchPayment: overrides.commitLaunchPayment ??
       (() => Promise.resolve(orderSnapshot)),
     listMerchantOpportunities: overrides.listMerchantOpportunities ??

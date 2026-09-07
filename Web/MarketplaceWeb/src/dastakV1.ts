@@ -133,7 +133,7 @@ export type V1RestaurantMenu = {
 export type V1OrderStatus =
   | "CREATED" | "MATCHING" | "FULLY_SECURED" | "AWAITING_PAYMENT"
   | "PAID" | "PREPARING" | "PICKUP_IN_PROGRESS" | "OUT_FOR_DELIVERY"
-  | "DELIVERED" | "UNAVAILABLE" | "PAYMENT_EXPIRED" | "CANCELLED_PREPAYMENT"
+  | "DELIVERED" | "UNAVAILABLE" | "PAYMENT_EXPIRED" | "CANCELLED_PREPAYMENT" | "CANCELLED"
   | "DASTAK_FULFILMENT_FAILURE";
 
 export type V1OrderLine = {
@@ -467,6 +467,7 @@ export type V1AdminExecutionOrder = {
 
 export type V1AdminExecutionTrace = {
   order: V1AdminExecutionOrder;
+  cancellation?: Record<string, unknown>;
   matchingAttempts: Record<string, unknown>[];
   provisionalHolds: Record<string, unknown>[];
   plans: Record<string, unknown>[];
@@ -840,6 +841,18 @@ export async function cancelV1Order(
   return parseV1Order(await invoke(input, "dastak-v1-orders", {
     operation: "cancel", orderId: requiredUuid(input.orderId), expectedVersion: input.expectedVersion,
   }, input.idempotencyKey, fetcher));
+}
+
+export async function adminCancelV1Order(
+  input: DastakV1Auth & {
+    orderId: string; reason: string; expectedVersion: number; idempotencyKey: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return invoke(input, "dastak-v1-orders", {
+    operation: "adminCancelOrder", orderId: requiredUuid(input.orderId),
+    reason: input.reason.trim(), expectedVersion: input.expectedVersion,
+  }, input.idempotencyKey, fetcher);
 }
 
 export async function commitV1LaunchPayment(
@@ -1477,6 +1490,7 @@ export async function getV1AdminExecutionTrace(
   ) invalid("execution trace");
   return {
     order: parseAdminExecutionOrder(source.order),
+    cancellation: source.cancellation == null ? undefined : requiredRecord(source.cancellation),
     matchingAttempts: source.matchingAttempts.map(requiredRecord),
     provisionalHolds: source.provisionalHolds.map(requiredRecord),
     plans: source.plans.map(requiredRecord),
@@ -3093,5 +3107,5 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 const orderStatuses = new Set<V1OrderStatus>([
   "CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT", "PAID", "PREPARING",
   "PICKUP_IN_PROGRESS", "OUT_FOR_DELIVERY", "DELIVERED", "UNAVAILABLE", "PAYMENT_EXPIRED",
-  "CANCELLED_PREPAYMENT", "DASTAK_FULFILMENT_FAILURE",
+  "CANCELLED_PREPAYMENT", "CANCELLED", "DASTAK_FULFILMENT_FAILURE",
 ]);

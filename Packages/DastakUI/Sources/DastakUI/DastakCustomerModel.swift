@@ -273,7 +273,7 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     nonisolated static func isActiveV1Order(_ status: DastakV1OrderStatus) -> Bool {
-        ![.delivered, .unavailable, .paymentExpired, .cancelledPrepayment,
+        ![.delivered, .unavailable, .paymentExpired, .cancelledPrepayment, .cancelled,
           .fulfilmentFailure].contains(status)
     }
 

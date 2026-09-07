@@ -8,7 +8,7 @@ final class DastakV1OrderPresentationTests: XCTestCase {
         let statuses: [DastakV1OrderStatus] = [
             .created, .matching, .fullySecured, .awaitingPayment, .paid, .preparing,
             .pickupInProgress, .outForDelivery, .delivered, .unavailable,
-            .paymentExpired, .cancelledPrepayment, .fulfilmentFailure,
+            .paymentExpired, .cancelledPrepayment, .cancelled, .fulfilmentFailure,
         ]
 
         for status in statuses {

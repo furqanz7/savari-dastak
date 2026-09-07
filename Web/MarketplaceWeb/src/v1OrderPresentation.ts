@@ -28,6 +28,7 @@ export function statusTitle(status: V1Order["status"]) {
     case "PAYMENT_EXPIRED":
       return "Payment window expired";
     case "CANCELLED_PREPAYMENT":
+    case "CANCELLED":
       return "Order cancelled";
     case "DASTAK_FULFILMENT_FAILURE":
       return "Order needs attention";
@@ -59,6 +60,9 @@ export function statusMessage(status: V1Order["status"]) {
   if (status === "CANCELLED_PREPAYMENT") {
     return "This order was cancelled before confirmation.";
   }
+  if (status === "CANCELLED") {
+    return "This order was cancelled. No payment is due, and preparation and delivery have stopped.";
+  }
   if (status === "PAYMENT_EXPIRED") {
     return "The reservation ended before the order was confirmed. Reserved items were released.";
   }
@@ -84,6 +88,7 @@ export function isV1OrderActive(status: V1Order["status"]) {
     "UNAVAILABLE",
     "PAYMENT_EXPIRED",
     "CANCELLED_PREPAYMENT",
+    "CANCELLED",
     "DASTAK_FULFILMENT_FAILURE",
   ].includes(status);
 }
@@ -145,7 +150,7 @@ export function orderItemCount(order: V1Order) {
 }
 
 export function canReorderV1Order(status: V1Order["status"]) {
-  return ["DELIVERED", "UNAVAILABLE", "PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(status);
+  return ["DELIVERED", "UNAVAILABLE", "PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT", "CANCELLED"].includes(status);
 }
 
 export function deliveredDurationLabel(order: V1Order) {

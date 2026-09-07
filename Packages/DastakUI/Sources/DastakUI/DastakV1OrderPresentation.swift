@@ -25,7 +25,7 @@ enum DastakV1OrderPresentation {
         case .delivered: "Delivered"
         case .unavailable: "Basket unavailable"
         case .paymentExpired: "Payment window expired"
-        case .cancelledPrepayment: "Order cancelled"
+        case .cancelledPrepayment, .cancelled: "Order cancelled"
         case .fulfilmentFailure: "Order needs attention"
         }
     }
@@ -50,6 +50,8 @@ enum DastakV1OrderPresentation {
             "The reservation ended before the order was confirmed. Reserved items were released."
         case .cancelledPrepayment:
             "This order was cancelled before confirmation."
+        case .cancelled:
+            "This order was cancelled. No payment is due, and preparation and delivery have stopped."
         case .fulfilmentFailure:
             "Dastak is protecting your payment and coordinating recovery. Follow the updates below."
         }
@@ -61,7 +63,7 @@ enum DastakV1OrderPresentation {
             "No charge now; pay at the doorstep after confirmation"
         case .paid, .preparing, .pickupInProgress, .outForDelivery, .delivered:
             "Secure package custody is tracked by Dastak"
-        case .unavailable, .paymentExpired, .cancelledPrepayment:
+        case .unavailable, .paymentExpired, .cancelledPrepayment, .cancelled:
             "No completed payment is attached to this order"
         case .fulfilmentFailure:
             "Payment protection and recovery remain with Dastak"
@@ -74,7 +76,7 @@ enum DastakV1OrderPresentation {
         case .paid, .preparing: "shippingbox.fill"
         case .pickupInProgress, .outForDelivery: "scooter"
         case .delivered: "checkmark.circle.fill"
-        case .cancelledPrepayment: "xmark.circle.fill"
+        case .cancelledPrepayment, .cancelled: "xmark.circle.fill"
         case .paymentExpired: "clock.badge.exclamationmark"
         case .unavailable: "cart.badge.minus"
         case .fulfilmentFailure: "exclamationmark.shield.fill"
@@ -90,7 +92,7 @@ enum DastakV1OrderPresentation {
         case .pickupInProgress: 3
         case .outForDelivery: 4
         case .delivered: 5
-        case .unavailable, .paymentExpired, .cancelledPrepayment, .fulfilmentFailure: nil
+        case .unavailable, .paymentExpired, .cancelledPrepayment, .cancelled, .fulfilmentFailure: nil
         }
     }
 
@@ -160,7 +162,7 @@ enum DastakV1OrderPresentation {
     }
 
     static func canReorder(_ status: DastakV1OrderStatus) -> Bool {
-        [.delivered, .unavailable, .paymentExpired, .cancelledPrepayment].contains(status)
+        [.delivered, .unavailable, .paymentExpired, .cancelledPrepayment, .cancelled].contains(status)
     }
 
     static func deliveredDuration(_ order: DastakV1OrderSnapshot) -> String? {

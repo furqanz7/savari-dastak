@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DastakV1RequestError,
+  adminCancelV1Order,
   addV1FulfilmentReadyEvidence,
   authorizeV1ExceptionalDeliveryHandoff,
   declareV1FulfilmentPackages,
@@ -39,6 +40,7 @@ import {
   updateV1MerchantSkuSelections,
   upsertV1RestaurantMenuEntity,
 } from "./dastakV1";
+import { isV1OrderActive, orderJourneyStep, statusTitle, statusMessage, canReorderV1Order } from "./v1OrderPresentation";
 
 const auth = {
   supabaseUrl: "http://127.0.0.1:54321",
@@ -55,6 +57,27 @@ const fulfilmentId = "66666666-6666-4666-8666-666666666666";
 const packageId = "99999999-9999-4999-8999-999999999999";
 
 describe("Dastak V1 web contract", () => {
+  it("sends an audited admin cancellation with optimistic version and retry identity", async () => {
+    let body: unknown;
+    const result = await adminCancelV1Order({ ...auth, orderId,
+      reason: "  Owner requested cancellation  ", expectedVersion: 5, idempotencyKey: "cancel-once",
+    }, async (_url, init) => {
+      body = JSON.parse(String(init?.body));
+      expect(new Headers(init?.headers).get("x-idempotency-key")).toBe("cancel-once");
+      return Response.json({ orderId, status: "CANCELLED", version: 6 });
+    });
+    expect(body).toEqual({ operation: "adminCancelOrder", orderId, reason: "Owner requested cancellation", expectedVersion: 5 });
+    expect(result).toMatchObject({ status: "CANCELLED", version: 6 });
+  });
+
+  it("decodes cancellation as terminal without a delivery journey or payment due message", () => {
+    const order = parseV1Order({ ...orderFixture(), status: "CANCELLED" });
+    expect(isV1OrderActive(order.status)).toBe(false);
+    expect(orderJourneyStep(order.status)).toBeUndefined();
+    expect(statusTitle(order.status)).toBe("Order cancelled");
+    expect(statusMessage(order.status)).toContain("No payment is due");
+    expect(canReorderV1Order(order.status)).toBe(true);
+  });
   it("requests a canonical customer projection without merchant discovery fields", async () => {
     let requestBody: Record<string, unknown> | undefined;
     const result = await getV1Catalogue({

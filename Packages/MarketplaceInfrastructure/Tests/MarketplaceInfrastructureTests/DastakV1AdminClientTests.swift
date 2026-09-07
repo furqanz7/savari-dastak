@@ -4,6 +4,23 @@ import XCTest
 @testable import MarketplaceInfrastructure
 
 final class DastakV1AdminClientTests: XCTestCase {
+    func testAdminCancellationUsesAuditedVersionAndReasonWithoutClientActor() async throws {
+        let functions = RecordingAdminFunctionClient()
+        let client = SupabaseDastakV1AdminClient(functions: functions)
+        let orderID = UUID()
+        let result = try await client.cancelOrder(orderID: orderID,
+            reason: "  Owner requested cancellation  ", expectedVersion: 5,
+            idempotencyKey: key("admin-cancel-once"))
+        XCTAssertEqual(result.status, "CANCELLED")
+        XCTAssertEqual(result.version, 6)
+        let request = try await requestBody(functions)
+        XCTAssertEqual(request["operation"] as? String, "adminCancelOrder")
+        XCTAssertEqual(request["orderId"] as? String, orderID.uuidString)
+        XCTAssertEqual(request["reason"] as? String, "Owner requested cancellation")
+        XCTAssertEqual(request["expectedVersion"] as? Int, 5)
+        XCTAssertNil(request["actorId"])
+    }
+
     func testLiveOrdersAndTraceDecodeProductionResponseShape() async throws {
         let functions = RecordingAdminFunctionClient()
         let client = SupabaseDastakV1AdminClient(functions: functions)
@@ -299,6 +316,8 @@ private actor RecordingAdminFunctionClient: FunctionClient {
         switch (name, operation) {
         case ("dastak-v1-orders", "adminExecutionOrders"): response = adminOrdersJSON
         case ("dastak-v1-orders", "adminExecutionTrace"): response = adminTraceJSON
+        case ("dastak-v1-orders", "adminCancelOrder"):
+            response = Data(#"{"status":"CANCELLED","version":6,"cancelledAt":"2026-09-07T00:00:00Z"}"#.utf8)
         case ("dastak-v1-orders", "adminAccess"): response = adminAccessJSON
         case ("dastak-v1-orders", "adminCommandCenter"): response = adminCommandCenterJSON
         case ("dastak-v1-orders", "adminNetworkPage"): response = adminNetworkPageJSON
