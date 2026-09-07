@@ -26,7 +26,9 @@ export function createApnsSender(
     return cachedToken.value;
   };
   return async (job: V1NotificationJob): Promise<V1ProviderDelivery> => {
-    const endpoint = configuration.environment === "production"
+    const environment = job.apnsEnvironment ?? configuration.environment;
+    const topic = job.applicationId ?? configuration.bundleId;
+    const endpoint = environment === "production"
       ? "https://api.push.apple.com"
       : "https://api.sandbox.push.apple.com";
     const response = await fetcher(`${endpoint}/3/device/${job.deviceToken}`, {
@@ -34,7 +36,7 @@ export function createApnsSender(
       signal: AbortSignal.timeout(8_000),
       headers: {
         authorization: `bearer ${await providerToken()}`,
-        "apns-topic": configuration.bundleId,
+        "apns-topic": topic,
         "apns-push-type": "alert",
         "apns-priority": "10",
         "apns-id": job.deliveryId,
@@ -54,12 +56,10 @@ export function createApnsSender(
     const reason = apnsReason(responseBody);
     return {
       succeeded: response.ok,
-      permanentTokenFailure: response.status === 410 ||
-        (response.status === 400 && [
-          "BadDeviceToken",
-          "DeviceTokenNotForTopic",
-          "Unregistered",
-        ].includes(reason)),
+      // A topic/environment mismatch is configuration failure, not permission
+      // to retire a token. Old registrations do not know their environment.
+      permanentTokenFailure: (response.status === 410 && reason === "Unregistered") ||
+        (response.status === 400 && reason === "BadDeviceToken" && job.apnsEnvironment != null),
       providerStatus: response.status,
       providerResponse: responseBody,
     };

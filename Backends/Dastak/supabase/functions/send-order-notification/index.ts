@@ -29,9 +29,11 @@ Deno.serve(async (request) => {
 
   const { data: tokens, error } = await supabase
     .from("dastak_device_tokens")
-    .select("device_token")
+    .select("id, device_token, apns_environment, version")
     .eq("account_id", accountId)
-    .eq("platform", "ios");
+    .eq("platform", "ios")
+    .eq("application_id", "com.dastak.app")
+    .is("disabled_at", null);
   if (error) return json({ error: { code: "token_lookup_failed" } }, 500);
 
   const jwt = await providerToken();
@@ -44,7 +46,12 @@ Deno.serve(async (request) => {
   for (const row of tokens ?? []) {
     const token = text(row.device_token);
     if (!token) continue;
-    const response = await fetch(`${endpoint}/3/device/${token}`, {
+    const tokenEndpoint = row.apns_environment === "production"
+      ? "https://api.push.apple.com"
+      : row.apns_environment === "sandbox"
+      ? "https://api.sandbox.push.apple.com"
+      : endpoint;
+    const response = await fetch(`${tokenEndpoint}/3/device/${token}`, {
       method: "POST",
       headers: {
         authorization: `bearer ${jwt}`,
@@ -59,13 +66,17 @@ Deno.serve(async (request) => {
       }),
     });
     if (response.ok) sent += 1;
-    else if (response.status === 400 || response.status === 410) invalidTokens.push(token);
+    else if (response.status === 410 && (await response.text()).includes('"Unregistered"')) {
+      await supabase.from("dastak_device_tokens").update({
+        disabled_at: new Date().toISOString(),
+        disabled_reason: "APNs unregistered",
+        version: row.version + 1,
+      }).eq("id", row.id).eq("account_id", accountId).eq("version", row.version);
+      invalidTokens.push(token);
+    }
   }
 
-  if (invalidTokens.length > 0) {
-    await supabase.from("dastak_device_tokens").delete().in("device_token", invalidTokens);
-  }
-  return json({ sent, removed: invalidTokens.length }, 200);
+  return json({ sent, disabled: invalidTokens.length }, 200);
 });
 
 async function providerToken() {

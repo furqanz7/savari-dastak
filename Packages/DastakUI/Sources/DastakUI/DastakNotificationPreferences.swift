@@ -22,6 +22,20 @@ enum DastakNotificationPermissionState: Equatable {
 
 @MainActor
 enum DastakNotificationPreferences {
+    static var apnsEnvironment: String {
+        #if DEBUG
+        "sandbox"
+        #else
+        "production"
+        #endif
+    }
+
+    static func registerForRemoteNotifications() {
+        #if os(iOS)
+        UIApplication.shared.registerForRemoteNotifications()
+        #endif
+    }
+
     static func status() async -> DastakNotificationPermissionState {
         #if os(iOS)
         let settings = await UNUserNotificationCenter.current().notificationSettings()

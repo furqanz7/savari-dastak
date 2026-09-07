@@ -92,9 +92,11 @@ async function sendNotification(
 ): Promise<{ sent: boolean; responses: string[] }> {
   const { data: tokens, error } = await supabase
     .from("dastak_device_tokens")
-    .select("device_token")
+    .select("id, device_token, apns_environment, version")
     .eq("account_id", event.accountId)
-    .eq("platform", "ios");
+    .eq("platform", "ios")
+    .eq("application_id", "com.dastak.app")
+    .is("disabled_at", null);
   if (error) throw error;
   if (!tokens?.length) return { sent: true, responses: [] };
 
@@ -106,8 +108,13 @@ async function sendNotification(
   const responses: string[] = [];
   let successful = false;
 
-  for (const { device_token: token } of tokens) {
-    const response = await fetch(`${endpoint}/3/device/${token}`, {
+  for (const { id, device_token: token, apns_environment, version } of tokens) {
+    const tokenEndpoint = apns_environment === "production"
+      ? "https://api.push.apple.com"
+      : apns_environment === "sandbox"
+      ? "https://api.sandbox.push.apple.com"
+      : endpoint;
+    const response = await fetch(`${tokenEndpoint}/3/device/${token}`, {
       method: "POST",
       signal: AbortSignal.timeout(8_000),
       headers: {
@@ -122,10 +129,15 @@ async function sendNotification(
         ...notificationPayload(event),
       }),
     });
-    responses.push(`${response.status}:${await response.text()}`);
+    const responseText = await response.text();
+    responses.push(`${response.status}:${responseText}`);
     if (response.ok) successful = true;
-    if (response.status === 400 || response.status === 410) {
-      await supabase.from("dastak_device_tokens").delete().eq("device_token", token);
+    if (response.status === 410 && responseText.includes('"Unregistered"')) {
+      await supabase.from("dastak_device_tokens").update({
+        disabled_at: new Date().toISOString(),
+        disabled_reason: "APNs unregistered",
+        version: version + 1,
+      }).eq("id", id).eq("account_id", event.accountId).eq("version", version);
     }
   }
   return { sent: successful, responses };

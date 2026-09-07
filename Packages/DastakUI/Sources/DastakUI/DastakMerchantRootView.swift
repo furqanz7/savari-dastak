@@ -41,19 +41,28 @@ public struct DastakMerchantRootView: View {
         .marketplacePage()
         .task {
             await model.bootstrap()
+            openPendingOrders()
         }
         .task {
             await observeOrderChanges()
         }
-        .task {
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await model.refreshNotifications(registerWithApple: true)
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
-                guard !Task.isCancelled else { return }
                 await model.refreshOrders()
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled else { return }
             }
         }
-        .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.merchant.ordersChanged"))) { _ in
+            Task { await model.refreshOrders() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.merchant.deviceTokenRegistered"))) { _ in
+            Task { await model.refreshNotifications() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.merchant.openOrders"))) { _ in
+            openPendingOrders()
             Task { await model.refreshOrders() }
         }
         .alert(
@@ -67,6 +76,12 @@ public struct DastakMerchantRootView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+    }
+
+    private func openPendingOrders() {
+        guard UserDefaults.standard.bool(forKey: "dastak.merchant.openOrders") else { return }
+        section = .orders
+        UserDefaults.standard.removeObject(forKey: "dastak.merchant.openOrders")
     }
 
     private func observeOrderChanges() async {

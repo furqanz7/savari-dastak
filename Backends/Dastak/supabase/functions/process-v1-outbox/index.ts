@@ -101,6 +101,10 @@ function jobs(value: unknown): V1NotificationJob[] {
       !isText(source.deliveryId) || !isText(source.eventId) ||
       !isText(source.notificationType) || !isText(source.recipientAccountId) ||
       !isText(source.deviceToken) || (platform !== "ios" && platform !== "web") ||
+      (source.applicationId != null &&
+        !["com.dastak.app", "com.dastak.merchant"].includes(source.applicationId as string)) ||
+      (source.apnsEnvironment != null &&
+        !["sandbox", "production"].includes(source.apnsEnvironment as string)) ||
       !isText(source.title) || !isText(source.body) ||
       !Number.isInteger(source.attempt) || (source.attempt as number) < 1
     ) throw new Error("invalid V1 notification job");
@@ -111,6 +115,8 @@ function jobs(value: unknown): V1NotificationJob[] {
       recipientAccountId: source.recipientAccountId,
       deviceToken: source.deviceToken,
       platform,
+      applicationId: source.applicationId as V1NotificationJob["applicationId"],
+      apnsEnvironment: source.apnsEnvironment as V1NotificationJob["apnsEnvironment"],
       title: source.title,
       body: source.body,
       payload,

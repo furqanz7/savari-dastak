@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import MarketplaceFoundation
 import MarketplaceInfrastructure
 
@@ -53,6 +54,12 @@ struct DastakMerchantProductDraft: Identifiable {
 final class DastakMerchantModel: ObservableObject {
     @Published private(set) var orders: [MerchantOrderSnapshot] = []
     @Published private(set) var v1Fulfilments: [DastakV1MerchantFulfilment] = []
+    @Published private(set) var opportunities: [DastakV1MerchantOpportunity] = []
+    @Published private(set) var restaurantRequests: [DastakV1RestaurantRequest] = []
+    @Published private(set) var orderRefreshFailures: [String] = []
+    @Published private(set) var lastOrderRefresh: Date?
+    @Published private(set) var notificationPermission: DastakNotificationPermissionState = .notRequested
+    @Published private(set) var notificationRegistrationFailed = false
     @Published private(set) var catalogue: CatalogueSnapshot?
     @Published private(set) var canonicalCatalogue: DastakV1MerchantCatalogueSnapshot?
     @Published private(set) var pendingCanonicalSelections: [UUID: Bool] = [:]
@@ -69,6 +76,10 @@ final class DastakMerchantModel: ObservableObject {
     private let checkoutClient: any DastakCheckoutClient
     private let earningsClient: any DastakEarningsClient
     private let v1Client: any DastakV1MerchantClient
+    private let inboxClient: any DastakV1MerchantInboxClient
+    private var registeredDeviceToken: String?
+    private var registeringDeviceToken = false
+    private var readyEvidencePaths: [String: String] = [:]
     private var actionKeys: [String: IdempotencyKey] = [:]
     private var ordersRefreshInFlight = false
     private var ordersRefreshQueued = false
@@ -80,7 +91,8 @@ final class DastakMerchantModel: ObservableObject {
         catalogueClient: any CatalogueClient,
         checkoutClient: any DastakCheckoutClient,
         earningsClient: any DastakEarningsClient,
-        v1Client: any DastakV1MerchantClient
+        v1Client: any DastakV1MerchantClient,
+        inboxClient: (any DastakV1MerchantInboxClient)? = nil
     ) {
         self.services = services
         self.orderClient = orderClient
@@ -88,6 +100,7 @@ final class DastakMerchantModel: ObservableObject {
         self.checkoutClient = checkoutClient
         self.earningsClient = earningsClient
         self.v1Client = v1Client
+        self.inboxClient = inboxClient ?? SupabaseDastakV1MerchantInboxClient(functions: services.functions)
     }
 
     convenience init(services: MarketplaceAuthenticatedServices) {
@@ -145,20 +158,53 @@ final class DastakMerchantModel: ObservableObject {
         isRefreshing = true
         defer { isRefreshing = false }
 
+        async let orderRefresh: Void = refreshOrders()
+        async let catalogueRefresh: Void = refreshStoreInformation()
+        async let earningsRefresh: Void = refreshEarnings()
+        async let notificationRefresh: Void = refreshNotifications()
+        _ = await (orderRefresh, catalogueRefresh, earningsRefresh, notificationRefresh)
+    }
+
+    private func refreshStoreInformation() async {
+        if let snapshot = try? await catalogueClient.merchantSnapshot(idempotencyKey: makeKey()) {
+            catalogue = snapshot
+        }
+        await refreshCanonicalCatalogue(reportFailure: false)
+    }
+
+    private func refreshEarnings() async {
+        if let snapshot = try? await earningsClient.merchantSnapshot(idempotencyKey: makeKey()) {
+            earnings = snapshot
+        }
+    }
+
+    func refreshNotifications(registerWithApple: Bool = false) async {
+        notificationPermission = await DastakNotificationPreferences.status()
+        guard notificationPermission == .enabled else { return }
+        if registerWithApple { DastakNotificationPreferences.registerForRemoteNotifications() }
+        guard let token = UserDefaults.standard.string(forKey: "dastak.merchant.apns.deviceToken"),
+              token != registeredDeviceToken, !registeringDeviceToken else { return }
+        registeringDeviceToken = true
+        defer { registeringDeviceToken = false }
         do {
-            async let orders = orderClient.merchantSnapshot(idempotencyKey: makeKey())
-            async let catalogue = catalogueClient.merchantSnapshot(idempotencyKey: makeKey())
-            async let earnings = earningsClient.merchantSnapshot(idempotencyKey: makeKey())
-            async let v1 = v1Client.fulfilments(limit: 50, idempotencyKey: makeKey())
-            let result = try await (orders, catalogue, earnings, v1)
-            self.orders = Self.sorted(result.0.orders)
-            self.catalogue = result.1
-            self.earnings = result.2
-            v1Fulfilments = result.3
-            errorMessage = nil
-            await refreshCanonicalCatalogue(reportFailure: false)
+            _ = try await SupabaseDastakDeviceTokenClient(functions: services.functions).register(
+                token: token, applicationId: "com.dastak.merchant",
+                apnsEnvironment: DastakNotificationPreferences.apnsEnvironment,
+                idempotencyKey: makeKey()
+            )
+            registeredDeviceToken = token
+            notificationRegistrationFailed = false
         } catch {
-            errorMessage = message(for: error, fallback: "Merchant information could not be refreshed.")
+            notificationRegistrationFailed = true
+        }
+    }
+
+    func enableNotifications() async {
+        if notificationPermission == .disabled {
+            DastakNotificationPreferences.openSystemSettings()
+        } else {
+            notificationPermission = await DastakNotificationPreferences.request()
+            await refreshNotifications()
         }
     }
 
@@ -321,26 +367,91 @@ final class DastakMerchantModel: ObservableObject {
 
         while ordersRefreshQueued, !Task.isCancelled {
             ordersRefreshQueued = false
-            do {
-                async let legacy = orderClient.merchantSnapshot(idempotencyKey: makeKey())
-                async let current = v1Client.fulfilments(limit: 50, idempotencyKey: makeKey())
-                let result = try await (legacy, current)
-                orders = Self.sorted(result.0.orders)
-                v1Fulfilments = result.1
-                errorMessage = nil
-            } catch {
-                errorMessage = message(for: error, fallback: "Orders could not be refreshed.")
-            }
+            async let incoming = refreshOpportunities()
+            async let restaurant = refreshRestaurantRequests()
+            async let current = refreshFulfilments()
+            async let legacy = refreshLegacyOrders()
+            let failures = await [incoming, restaurant, current, legacy].compactMap { $0 }
+            orderRefreshFailures = failures
+            if failures.isEmpty { lastOrderRefresh = Date() }
         }
     }
 
+    private func refreshOpportunities() async -> String? {
+        do {
+            opportunities = try await inboxClient.opportunities(idempotencyKey: makeKey())
+            isLoading = false
+            return nil
+        } catch { return "Incoming orders" }
+    }
+
+    private func refreshRestaurantRequests() async -> String? {
+        do {
+            restaurantRequests = try await inboxClient.restaurantRequests(idempotencyKey: makeKey())
+            isLoading = false
+            return nil
+        } catch { return "Food requests" }
+    }
+
+    private func refreshFulfilments() async -> String? {
+        do {
+            v1Fulfilments = try await v1Client.fulfilments(limit: 100, idempotencyKey: makeKey())
+            isLoading = false
+            return nil
+        } catch { return "Preparation and pickup" }
+    }
+
+    private func refreshLegacyOrders() async -> String? {
+        do {
+            orders = Self.sorted(try await orderClient.merchantSnapshot(idempotencyKey: makeKey()).orders)
+            return nil
+        } catch { return "Earlier orders" }
+    }
+
+    func respondToOpportunity(_ opportunity: DastakV1MerchantOpportunity, accept: Bool, prepMinutes: Int) async {
+        let identity = "opportunity:\(opportunity.id):\(opportunity.version):\(accept):\(prepMinutes)"
+        await respondToIncoming(identity: identity) {
+            let updated = try await self.inboxClient.respond(
+                opportunity: opportunity, accept: accept, prepMinutes: prepMinutes,
+                idempotencyKey: self.actionKey(for: identity)
+            )
+            self.opportunities = self.opportunities.map { $0.id == updated.id ? updated : $0 }
+        }
+    }
+
+    func respondToRestaurant(_ request: DastakV1RestaurantRequest, accept: Bool, prepMinutes: Int, reason: String?) async {
+        let identity = "restaurant:\(request.id):\(request.version):\(accept):\(prepMinutes):\(reason ?? "")"
+        await respondToIncoming(identity: identity) {
+            let updated = try await self.inboxClient.respond(
+                request: request, accept: accept, prepMinutes: prepMinutes, reason: reason,
+                idempotencyKey: self.actionKey(for: identity)
+            )
+            self.restaurantRequests = self.restaurantRequests.map { $0.id == updated.id ? updated : $0 }
+        }
+    }
+
+    private func respondToIncoming(identity: String, operation: () async throws -> Void) async {
+        guard !isBusy else { return }
+        busyIdentity = identity
+        defer { busyIdentity = nil }
+        do {
+            try await operation()
+            actionKeys[identity] = nil
+            notice = "Response saved. The order status has been refreshed."
+            errorMessage = nil
+        } catch {
+            errorMessage = message(for: error, fallback: "The request changed or could not be updated. Review the refreshed order before retrying.")
+        }
+        await refreshOrders()
+    }
+
     func declareV1Packages(_ fulfilment: DastakV1MerchantFulfilment, count: Int) async {
-        await performV1(identity: "packages:\(fulfilment.id):\(count)") {
+        await performV1(identity: "packages:\(fulfilment.id):\(fulfilment.version):\(count)") {
             try await self.v1Client.declarePackages(
                 fulfilmentID: fulfilment.id,
                 packageCount: count,
                 expectedVersion: fulfilment.version,
-                idempotencyKey: self.actionKey(for: "packages:\(fulfilment.id):\(count)")
+                idempotencyKey: self.actionKey(for: "packages:\(fulfilment.id):\(fulfilment.version):\(count)")
             )
         }
     }
@@ -355,16 +466,20 @@ final class DastakMerchantModel: ObservableObject {
             errorMessage = "Choose a clear Ready photo up to 10 MB."
             return
         }
-        let identity = "evidence:\(fulfilment.id):\(data.count)"
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let identity = "evidence:\(fulfilment.id):\(fulfilment.version):\(digest)"
         await performV1(identity: identity) {
             let accountID = try await self.services.accountID()
-            let path = "merchant-ready/\(accountID.uuidString.lowercased())/\(UUID().uuidString.lowercased()).\(fileExtension)"
-            try await self.services.uploadObject(
-                bucket: "dastak-evidence",
-                path: path,
-                data: data,
-                contentType: contentType
-            )
+            let path: String
+            if let uploaded = self.readyEvidencePaths[identity] {
+                path = uploaded
+            } else {
+                path = "merchant-ready/\(accountID.uuidString.lowercased())/\(UUID().uuidString.lowercased()).\(fileExtension)"
+                try await self.services.uploadObject(
+                    bucket: "dastak-evidence", path: path, data: data, contentType: contentType
+                )
+                self.readyEvidencePaths[identity] = path
+            }
             return try await self.v1Client.addEvidence(
                 fulfilmentID: fulfilment.id,
                 objectPath: path,
@@ -402,6 +517,7 @@ final class DastakMerchantModel: ObservableObject {
                 : "Preparation evidence saved."
         } catch {
             errorMessage = message(for: error, fallback: "The fulfilment could not be updated.")
+            await refreshOrders()
         }
     }
 

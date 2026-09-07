@@ -7,6 +7,8 @@ export type V1NotificationJob = {
   recipientAccountId: string;
   deviceToken: string;
   platform: "ios" | "web";
+  applicationId?: "com.dastak.app" | "com.dastak.merchant";
+  apnsEnvironment?: "sandbox" | "production" | null;
   title: string;
   body: string;
   payload: Record<string, unknown>;

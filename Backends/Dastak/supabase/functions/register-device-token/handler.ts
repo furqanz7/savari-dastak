@@ -3,7 +3,13 @@ import type { AuthenticateBearer } from "../bootstrap-account/handler.ts";
 
 export type RegisterDeviceTokenDependencies = {
   authenticateBearer: AuthenticateBearer;
-  upsertToken: (accountId: string, token: string, platform: "ios" | "web") => Promise<void>;
+  upsertToken: (
+    accountId: string,
+    token: string,
+    platform: "ios" | "web",
+    applicationId: "com.dastak.app" | "com.dastak.merchant",
+    apnsEnvironment: "sandbox" | "production" | null,
+  ) => Promise<void>;
 };
 
 export async function handleRegisterDeviceToken(
@@ -30,6 +36,14 @@ export async function handleRegisterDeviceToken(
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const token = typeof body?.token === "string" ? body.token.trim() : "";
   const platform = body?.platform === "ios" || body?.platform === "web" ? body.platform : null;
+  const applicationId = body?.applicationId ?? "com.dastak.app";
+  const apnsEnvironment = body?.apnsEnvironment ?? null;
+  if (
+    !["com.dastak.app", "com.dastak.merchant"].includes(applicationId as string) ||
+    (apnsEnvironment !== null && !["sandbox", "production"].includes(apnsEnvironment as string)) ||
+    (platform === "web" && (applicationId !== "com.dastak.app" || apnsEnvironment !== null)) ||
+    (applicationId === "com.dastak.merchant" && apnsEnvironment === null)
+  ) return json({ error: { code: "invalid_notification_application" } }, 400);
   if (
     !token || !platform ||
     (platform === "ios" && token.length > 512) ||
@@ -39,7 +53,13 @@ export async function handleRegisterDeviceToken(
   }
 
   try {
-    await dependencies.upsertToken(actor.accountId, token, platform);
+    await dependencies.upsertToken(
+      actor.accountId,
+      token,
+      platform,
+      applicationId as "com.dastak.app" | "com.dastak.merchant",
+      apnsEnvironment as "sandbox" | "production" | null,
+    );
     return json({ registered: true }, 200);
   } catch {
     return json({ error: { code: "device_token_registration_failed" } }, 500);

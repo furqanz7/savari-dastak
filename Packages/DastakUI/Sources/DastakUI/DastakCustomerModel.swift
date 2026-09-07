@@ -330,7 +330,10 @@ final class DastakCustomerModel: ObservableObject {
         guard let token = UserDefaults.standard.string(forKey: "dastak.apns.deviceToken"),
               !token.isEmpty,
               let deviceTokenClient else { return }
-        _ = try? await deviceTokenClient.register(token: token, idempotencyKey: makeKey())
+        _ = try? await deviceTokenClient.register(
+            token: token, apnsEnvironment: DastakNotificationPreferences.apnsEnvironment,
+            idempotencyKey: makeKey()
+        )
     }
 
     func completeOnboarding() {

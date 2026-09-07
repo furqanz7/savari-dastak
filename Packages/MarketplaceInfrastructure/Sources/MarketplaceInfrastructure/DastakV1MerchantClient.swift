@@ -10,11 +10,14 @@ public struct DastakV1MerchantLine: Codable, Equatable, Identifiable, Sendable {
     public let orderLineID: UUID
     public let name: String
     public let quantity: Int
+    public let variant: String?
+    public let packSize: String?
+    public let selection: DastakV1FoodSelection?
 
     public var id: UUID { orderLineID }
 
     private enum CodingKeys: String, CodingKey {
-        case name, quantity
+        case name, quantity, variant, packSize, selection
         case orderLineID = "orderLineId"
     }
 }
@@ -39,14 +42,28 @@ public struct DastakV1MerchantFulfilment: Codable, Equatable, Identifiable, Send
     public let canAddEvidence: Bool
     public let canMarkReady: Bool
     public let lines: [DastakV1MerchantLine]
+    public let delivery: DastakV1MerchantDelivery?
 
     private enum CodingKeys: String, CodingKey {
         case id, displayOrderNumber, orderStatus, status, version, branch
         case promisedPrepMinutes, prepStartedAt, estimatedReadyAt, actualReadyAt
         case secondsRemaining, runningLate, packageCount, evidence
-        case canDeclarePackages, canAddEvidence, canMarkReady, lines
+        case canDeclarePackages, canAddEvidence, canMarkReady, lines, delivery
         case orderID = "orderId"
     }
+}
+
+public struct DastakV1MerchantDelivery: Codable, Equatable, Sendable {
+    public struct Rider: Codable, Equatable, Sendable {
+        public let id: UUID
+        public let displayName: String
+    }
+    public let rider: Rider?
+    public let riderAssigned: Bool
+    public let transportType: String?
+    public let stopStatus: String?
+    public let pickupCode: String?
+    public let pickedUpAt: String?
 }
 
 public struct DastakV1MerchantEvidence: Codable, Equatable, Identifiable, Sendable {

@@ -10,6 +10,69 @@ const subscription = JSON.stringify({
   keys: { auth: "auth-key", p256dh: "p256dh-key" },
 });
 
+Deno.test("Merchant registers the signed-in account, application and APNs environment", async () => {
+  let recorded: unknown;
+  const result = await handleRegisterDeviceToken(
+    request({
+      token: "merchant-token",
+      platform: "ios",
+      applicationId: "com.dastak.merchant",
+      apnsEnvironment: "production",
+      accountId: "attacker-chosen-account",
+    }),
+    dependencies({
+      upsertToken: (...args) => {
+        recorded = args;
+        return Promise.resolve();
+      },
+    }),
+  );
+  assertEquals(result.status, 200);
+  assertEquals(recorded, [
+    "account-one",
+    "merchant-token",
+    "ios",
+    "com.dastak.merchant",
+    "production",
+  ]);
+});
+
+Deno.test("Registration rejects unknown applications and ambiguous Merchant environments", async () => {
+  for (
+    const override of [
+      { applicationId: "com.attacker.app", apnsEnvironment: "production" },
+      { applicationId: "com.dastak.merchant" },
+      { applicationId: "com.dastak.merchant", apnsEnvironment: "development" },
+      { applicationId: "com.dastak.merchant", apnsEnvironment: "production", platform: "web" },
+    ]
+  ) {
+    const result = await handleRegisterDeviceToken(
+      request({
+        token: "token",
+        platform: "ios",
+        ...override,
+      }),
+      dependencies(),
+    );
+    assertEquals(result.status, 400);
+  }
+});
+
+Deno.test("Existing Customer registration stays compatible", async () => {
+  let recorded: unknown;
+  const result = await handleRegisterDeviceToken(
+    request({ token: "old-token", platform: "ios" }),
+    dependencies({
+      upsertToken: (...args) => {
+        recorded = args;
+        return Promise.resolve();
+      },
+    }),
+  );
+  assertEquals(result.status, 200);
+  assertEquals(recorded, ["account-one", "old-token", "ios", "com.dastak.app", null]);
+});
+
 Deno.test("device token registration accepts an authenticated Web Push subscription", async () => {
   let registered: unknown;
   const response = await handleRegisterDeviceToken(
