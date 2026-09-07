@@ -335,7 +335,7 @@ describe("Dastak V1 web contract", () => {
       return Response.json({ orders: [orderFixture()], nextCursor: cursor });
     });
 
-    expect(requestBody).toEqual({ operation: "list", limit: 25, cursor });
+    expect(requestBody).toEqual({ operation: "list", limit: 25, cursor, supportsConfirmedCancellation: true });
     expect(result.orders).toHaveLength(1);
     expect(result.nextCursor).toEqual(cursor);
   });

@@ -753,6 +753,7 @@ public struct SupabaseDastakV1CustomerClient: DastakV1CustomerClient {
     }
 
     private struct OrderRequest: Encodable, Sendable {
+        let supportsConfirmedCancellation = true
         let operation: String
         let expectedVersion: Int?
         let order: DastakV1OrderSubmission?

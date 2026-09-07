@@ -124,6 +124,7 @@ final class DastakV1CustomerClientTests: XCTestCase {
         let call = try XCTUnwrap(recorded)
         let request = try JSONSerialization.jsonObject(with: call.body) as? [String: Any]
         XCTAssertEqual(request?["operation"] as? String, "cancel")
+        XCTAssertEqual(request?["supportsConfirmedCancellation"] as? Bool, true)
         XCTAssertEqual(request?["expectedVersion"] as? Int, 2)
         XCTAssertEqual(request?["orderId"] as? String, orderID.uuidString)
     }

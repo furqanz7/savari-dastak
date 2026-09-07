@@ -2,6 +2,16 @@ import { corsPreflight, json } from "../_shared/http.ts";
 import { V1RequestError } from "../_shared/v1-rpc.ts";
 import type { V1Actor } from "../dastak-v1-catalogue/handler.ts";
 
+// Older installed native builds decode a closed order-status enum. Keep their
+// cancelled/unpaid terminal presentation readable without changing stored state.
+// Updated clients opt into the canonical status; audit and Admin always use it.
+function legacyCancellationSnapshot(value: unknown): unknown {
+  const snapshot = record(value);
+  return snapshot?.status === "CANCELLED"
+    ? { ...snapshot, status: "CANCELLED_PREPAYMENT", canonicalStatus: "CANCELLED" }
+    : value;
+}
+
 export type V1OrderDependencies = {
   authenticateBearer: (authorization: string) => Promise<V1Actor>;
   submitOrder: (input: {
@@ -303,24 +313,25 @@ export async function handleV1Orders(
             cursor === undefined) ||
           (cursor !== undefined && (!beforeCreatedAt || !beforeOrderId))
         ) return validationError();
-        return json(
-          await dependencies.listOrders({
-            accessToken: actor.accessToken,
-            limit,
-            beforeCreatedAt,
-            beforeOrderId,
-          }),
-        );
+        const result = await dependencies.listOrders({
+          accessToken: actor.accessToken,
+          limit,
+          beforeCreatedAt,
+          beforeOrderId,
+        });
+        const collection = record(result);
+        return json(body.supportsConfirmedCancellation === true || !Array.isArray(collection?.orders)
+          ? result
+          : { ...collection, orders: collection.orders.map(legacyCancellationSnapshot) });
       }
       case "get": {
         const orderId = requiredUUID(body.orderId);
         if (!orderId) return validationError();
-        return json(
-          await dependencies.getOrder({
-            accessToken: actor.accessToken,
-            orderId,
-          }),
-        );
+        const result = await dependencies.getOrder({
+          accessToken: actor.accessToken,
+          orderId,
+        });
+        return json(body.supportsConfirmedCancellation === true ? result : legacyCancellationSnapshot(result));
       }
       case "cancel": {
         const orderId = requiredUUID(body.orderId);

@@ -33,6 +33,26 @@ Deno.test("admin cancellation rejects invalid identity reason version and missin
   assertEquals(calls, 0);
 });
 
+Deno.test("legacy customer builds can read cancelled orders without changing canonical data", async () => {
+  const cancelled = { id: orderId, status: "CANCELLED", version: 6, launchPayment: { state: "NOT_APPLICABLE" } };
+  const deps = dependencies({ getOrder: () => Promise.resolve(cancelled),
+    listOrders: () => Promise.resolve({ orders: [cancelled, orderSnapshot], nextCursor: null }) });
+  const single = await body(await handleV1Orders(request({ operation: "get", orderId }), deps));
+  assertEquals(single, { ...cancelled, status: "CANCELLED_PREPAYMENT", canonicalStatus: "CANCELLED" });
+  const list = await body(await handleV1Orders(request({ operation: "list" }), deps));
+  assertEquals(list, { orders: [single, orderSnapshot], nextCursor: null });
+  assertEquals(cancelled.status, "CANCELLED");
+});
+
+Deno.test("updated customer builds receive canonical cancellation status", async () => {
+  const cancelled = { id: orderId, status: "CANCELLED", version: 6 };
+  const deps = dependencies({ getOrder: () => Promise.resolve(cancelled),
+    listOrders: () => Promise.resolve({ orders: [cancelled], nextCursor: null }) });
+  assertEquals(await body(await handleV1Orders(request({ operation: "get", orderId, supportsConfirmedCancellation: true }), deps)), cancelled);
+  assertEquals(await body(await handleV1Orders(request({ operation: "list", supportsConfirmedCancellation: true }), deps)),
+    { orders: [cancelled], nextCursor: null });
+});
+
 Deno.test("V1 orders serves CORS preflight before authentication", async () => {
   let authCalls = 0;
   const response = await handleV1Orders(

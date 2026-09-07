@@ -805,7 +805,7 @@ export async function getV1Orders(
   fetcher: Fetcher = fetch,
 ) {
   const source = record(await invoke(input, "dastak-v1-orders", {
-    operation: "list", limit: input.limit ?? 50, cursor: input.cursor ?? null,
+    operation: "list", limit: input.limit ?? 50, cursor: input.cursor ?? null, supportsConfirmedCancellation: true,
   }, undefined, fetcher));
   if (!source || !Array.isArray(source.orders)) invalid("order collection");
   const cursor = source.nextCursor === null || source.nextCursor === undefined
@@ -821,7 +821,7 @@ export async function getV1Orders(
 
 export async function getV1Order(input: DastakV1Auth & { orderId: string; signal?: AbortSignal }, fetcher: Fetcher = fetch) {
   return parseV1Order(await invoke(input, "dastak-v1-orders", {
-    operation: "get", orderId: requiredUuid(input.orderId),
+    operation: "get", orderId: requiredUuid(input.orderId), supportsConfirmedCancellation: true,
   }, undefined, fetcher));
 }
 
