@@ -67,8 +67,8 @@ select is(
   'only one rider offer can win a mission'
 );
 
-select is(dastak_v1.rider_transport_type('walking')::text, null, 'retired walking does not map to current transport');
-select is(dastak_v1.rider_transport_type('bicycle')::text, null, 'retired bicycle does not map to current transport');
+select is(dastak_v1.rider_transport_type('walking')::text, 'WALKING', 'restored walking maps to walking transport');
+select is(dastak_v1.rider_transport_type('bicycle')::text, 'BICYCLE', 'restored bicycle maps to bicycle transport');
 select is(dastak_v1.rider_transport_type('bike')::text, 'MOTORBIKE', 'legacy bike maps to motorbike');
 select is(dastak_v1.rider_transport_type('motorbike')::text, 'MOTORBIKE', 'motorbike maps exactly');
 select is(dastak_v1.rider_transport_type('scooter')::text, 'SCOOTER', 'scooter maps exactly');

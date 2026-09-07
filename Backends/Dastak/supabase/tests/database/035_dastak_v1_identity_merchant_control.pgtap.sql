@@ -367,9 +367,10 @@ select is(
     from dastak_v1.domain_events_outbox event
     where event.event_type = 'MERCHANT_CANONICAL_SKU_SELECTION_CHANGED'
       and event.aggregate_type = 'MERCHANT_SKU_SELECTION'
+      -- Stock events are scoped to the branch/SKU pair, not the shared SKU.
       and event.aggregate_id in (
-        'a5800000-0000-4000-8000-000000000001',
-        'a5800000-0000-4000-8000-000000000002'
+        pg_catalog.md5('a5400000-0000-4000-8000-000000000001:a5800000-0000-4000-8000-000000000001')::uuid,
+        pg_catalog.md5('a5400000-0000-4000-8000-000000000001:a5800000-0000-4000-8000-000000000002')::uuid
       )
   ),
   4::bigint,
