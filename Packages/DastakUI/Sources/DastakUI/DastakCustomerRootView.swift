@@ -7,7 +7,6 @@ import MarketplaceInfrastructure
 import SwiftUI
 
 private let dastakOrderNotificationOpened = Notification.Name("dastak.notification.orderOpened")
-private let dastakDeviceTokenRegistered = Notification.Name("dastak.notification.deviceTokenRegistered")
 private let dastakPendingEntityTypeKey = "dastak.notification.pendingEntityType"
 private let dastakPendingEntityIDKey = "dastak.notification.pendingEntityID"
 private let dastakLegacyPendingOrderIDKey = "dastak.notification.pendingOrderID"
@@ -199,9 +198,6 @@ public struct DastakCustomerRootView: View {
             let notificationState = await DastakNotificationPreferences.status()
             if notificationState != .notRequested {
                 model.completeOnboarding()
-                if notificationState == .enabled {
-                    await model.registerDeviceTokenIfAvailable()
-                }
             }
             onboardingStep = DastakCustomerOnboardingStep.next(
                 hasCompleted: model.hasCompletedOnboarding,
@@ -234,9 +230,6 @@ public struct DastakCustomerRootView: View {
             ) else { return }
             open(destination)
         }
-        .onReceive(NotificationCenter.default.publisher(for: dastakDeviceTokenRegistered)) { _ in
-            Task { await model.registerDeviceTokenIfAvailable() }
-        }
         .sheet(isPresented: $showingDeliveryAddressEditor) {
             DastakAddressBookView(
                 model: model,
@@ -263,7 +256,6 @@ public struct DastakCustomerRootView: View {
                 DastakNotificationOnboardingView(
                     enableNotifications: {
                         _ = await DastakNotificationPreferences.request()
-                        await model.registerDeviceTokenIfAvailable()
                         model.completeOnboarding()
                         onboardingStep = nil
                     },
@@ -414,6 +406,7 @@ public struct DastakCustomerRootView: View {
 
     private func consumePendingDestination() -> DastakCustomerDestination? {
         let defaults = UserDefaults.standard
+        guard defaults.string(forKey: dastakPendingEntityTypeKey) != "delivery" else { return nil }
         defer {
             defaults.removeObject(forKey: dastakPendingEntityTypeKey)
             defaults.removeObject(forKey: dastakPendingEntityIDKey)

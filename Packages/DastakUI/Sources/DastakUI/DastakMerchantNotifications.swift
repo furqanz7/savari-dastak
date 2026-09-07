@@ -40,14 +40,16 @@ final class DastakMerchantNotifications: ObservableObject {
     private let system: DastakMerchantNotificationSystem
     private let client: SupabaseDastakDeviceTokenClient
     private let registrationTimeout: Duration
+    private let applicationID: String
     private var timeoutTask: Task<Void, Never>?
     private var attempt = UUID()
 
     init(functions: any FunctionClient, system: DastakMerchantNotificationSystem = .live,
-         registrationTimeout: Duration = .seconds(15)) {
+         registrationTimeout: Duration = .seconds(15), applicationID: String = "com.dastak.merchant") {
         self.client = SupabaseDastakDeviceTokenClient(functions: functions)
         self.system = system
         self.registrationTimeout = registrationTimeout
+        self.applicationID = applicationID
     }
 
     var isConnecting: Bool { registration == .waitingForDevice || registration == .registering }
@@ -68,7 +70,7 @@ final class DastakMerchantNotifications: ObservableObject {
     var detail: String {
         if needsSettings { return "Turn on banners and sounds in iOS Settings." }
         if settings.permission != .enabled { return "Allow notifications for new requests, even outside the app." }
-        if isConnecting { return "Linking this device to your signed-in Merchant account." }
+        if isConnecting { return "Linking this device to your signed-in account." }
         return "Orders still update here. Reconnect alerts for background notifications."
     }
     var actionTitle: String {
@@ -105,9 +107,12 @@ final class DastakMerchantNotifications: ObservableObject {
         attempt = currentAttempt
         guard !token.isEmpty else { registration = .failed; return }
         registration = .registering
+        settings = await system.settings()
+        guard attempt == currentAttempt else { return }
+        guard settings.permission == .enabled else { registration = .notRegistered; return }
         do {
             let registered = try await client.register(
-                token: token, applicationId: "com.dastak.merchant",
+                token: token, applicationId: applicationID,
                 apnsEnvironment: system.environment,
                 idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
             )

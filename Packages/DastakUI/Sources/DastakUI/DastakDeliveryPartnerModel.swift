@@ -30,6 +30,8 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     @Published private(set) var earnings: DastakEarningsSnapshot?
     @Published private(set) var isLoading = true
     @Published private(set) var isRefreshing = false
+    @Published private(set) var refreshFailure: String?
+    @Published private(set) var lastRefreshedAt: Date?
     @Published private(set) var busyOperation: String?
     @Published var errorMessage: String?
     @Published var noticeMessage: String?
@@ -93,21 +95,24 @@ final class DastakDeliveryPartnerModel: ObservableObject {
 
         while refreshQueued, !Task.isCancelled {
             refreshQueued = false
-            do {
-                async let partnerSnapshot = partnerClient.selfSnapshot(idempotencyKey: makeKey())
-                async let courierSnapshot = courierClient.partnerSnapshot(idempotencyKey: makeKey())
-                async let parcelSnapshot = parcelClient.partnerSnapshot(idempotencyKey: makeKey())
-                async let v1Snapshot = v1Client.snapshot(idempotencyKey: makeKey())
-                async let earningsSnapshot = earningsClient.deliveryPartnerSnapshot(idempotencyKey: makeKey())
-                let snapshots = try await (partnerSnapshot, courierSnapshot, parcelSnapshot, v1Snapshot, earningsSnapshot)
-                partner = snapshots.0
-                courierDispatch = snapshots.1
-                parcelDispatch = snapshots.2
-                v1Dispatch = snapshots.3
-                earnings = snapshots.4
-                errorMessage = nil
-            } catch {
-                errorMessage = message(for: error, fallback: "The delivery queue could not be refreshed.")
+            // An earnings or legacy-service outage must not hide a new V1 job.
+            async let partnerSnapshot = try? partnerClient.selfSnapshot(idempotencyKey: makeKey())
+            async let courierSnapshot = try? courierClient.partnerSnapshot(idempotencyKey: makeKey())
+            async let parcelSnapshot = try? parcelClient.partnerSnapshot(idempotencyKey: makeKey())
+            async let v1Snapshot = try? v1Client.snapshot(idempotencyKey: makeKey())
+            async let earningsSnapshot = try? earningsClient.deliveryPartnerSnapshot(idempotencyKey: makeKey())
+            let snapshots = await (partnerSnapshot, courierSnapshot, parcelSnapshot, v1Snapshot, earningsSnapshot)
+            guard !Task.isCancelled else { return }
+            if let value = snapshots.0 { partner = value }
+            if let value = snapshots.1 { courierDispatch = value }
+            if let value = snapshots.2 { parcelDispatch = value }
+            if let value = snapshots.3 { v1Dispatch = value }
+            if let value = snapshots.4 { earnings = value }
+            if snapshots.0 != nil, snapshots.1 != nil, snapshots.2 != nil, snapshots.3 != nil, snapshots.4 != nil {
+                refreshFailure = nil
+                lastRefreshedAt = .now
+            } else {
+                refreshFailure = "Some updates are unavailable. Last-known details are kept while we reconnect. Pull to refresh."
             }
         }
     }
@@ -226,6 +231,10 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     }
 
     func respondToV1Offer(_ offer: DastakV1RiderOffer, accept: Bool) async {
+        guard DastakDeliveryPresentation.secondsRemaining(until: offer.respondBy, now: .now) > 0 else {
+            await refresh()
+            return
+        }
         let identity = "v1-offer:\(accept):\(offer.id)"
         guard busyOperation == nil else { return }
         busyOperation = identity
@@ -241,9 +250,9 @@ final class DastakDeliveryPartnerModel: ObservableObject {
                 )
             actionKeys[identity] = nil
             errorMessage = nil
-            if accept { noticeMessage = "Mission assigned. Collect every declared package." }
+            if accept { noticeMessage = "Delivery accepted. Continue to your pickup stops." }
         } catch {
-            errorMessage = message(for: error, fallback: "The Dastak mission offer could not be updated.")
+            errorMessage = message(for: error, fallback: "The delivery offer could not be updated.")
         }
     }
 

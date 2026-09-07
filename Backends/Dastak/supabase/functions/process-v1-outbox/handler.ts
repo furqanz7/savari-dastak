@@ -61,7 +61,10 @@ export async function handleV1OutboxWorker(
   }
 
   try {
-    const deletionJobs = await dependencies.claimAccountDeletions();
+    // The short-interval notification pass uses the same durable claims, but
+    // must not multiply account deletion or invariant-monitor frequency.
+    const notificationsOnly = new URL(request.url).searchParams.get("notificationsOnly") === "true";
+    const deletionJobs = notificationsOnly ? [] : await dependencies.claimAccountDeletions();
     const deletionOutcomes = await mapWithConcurrency(deletionJobs, 5, async (job) => {
       try {
         await dependencies.deleteAuthAccount(job);
@@ -97,7 +100,9 @@ export async function handleV1OutboxWorker(
     });
     const sent = outcomes.filter(Boolean).length;
     const retriedOrDeadLettered = outcomes.length - sent;
-    const invariants = await dependencies.runInvariantMonitors();
+    const invariants = notificationsOnly
+      ? { skipped: true }
+      : await dependencies.runInvariantMonitors();
     return json({
       workerId: dependencies.workerId,
       accountDeletions: {

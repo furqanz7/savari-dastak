@@ -6,6 +6,33 @@ import MarketplaceFoundation
 
 @MainActor
 final class DastakMerchantNotificationTests: XCTestCase {
+    func testSharedCustomerDeliveryAppRegistersFreshTokenWithCorrectTopic() async throws {
+        let functions = NotificationFunctionsStub()
+        let system = NotificationSystemStub()
+        system.currentSettings.permission = .notRequested
+        let alerts = DastakMerchantNotifications(functions: functions, system: system.dependencies, applicationID: "com.dastak.app")
+        await alerts.refresh()
+        system.currentSettings.permission = .enabled // Permission granted by onboarding.
+        await alerts.receiveDeviceToken("new-token")
+        XCTAssertEqual(alerts.registration, .registered)
+        XCTAssertFalse(alerts.needsAttention)
+        let calls = await functions.calls
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(calls.first)) as? [String: String])
+        XCTAssertEqual(body["applicationId"], "com.dastak.app")
+        XCTAssertEqual(body["apnsEnvironment"], "sandbox")
+    }
+
+    func testLateTokenDoesNotRegisterAfterPermissionIsRevoked() async {
+        let functions = NotificationFunctionsStub()
+        let system = NotificationSystemStub()
+        let alerts = controller(system, functions: functions)
+        await alerts.refresh()
+        system.currentSettings.permission = .disabled
+        await alerts.receiveDeviceToken("late-token")
+        XCTAssertEqual(alerts.registration, .notRegistered)
+        let calls = await functions.calls
+        XCTAssertTrue(calls.isEmpty)
+    }
     func testPermissionAloneDoesNotHideRegistrationPrompt() async {
         let system = NotificationSystemStub()
         let alerts = controller(system)

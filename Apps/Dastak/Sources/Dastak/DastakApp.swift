@@ -36,6 +36,7 @@ struct DastakApp: App {
             showsPersistentSignOut: false,
             authenticatedServicesContent: { services in
                 DastakCustomerPartnerRoot(services: services)
+                    .dastakAppNotifications(functions: services.functions)
             },
             restrictedContent: { _, _ in EmptyView() }
         )
@@ -48,6 +49,7 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        UserDefaults.standard.removeObject(forKey: "dastak.apns.deviceToken")
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-DastakUPIDiscoveryProbe") {
             Task { @MainActor in DastakRazorpayDiagnostics.runUPIDiscoveryProbe() }
@@ -65,6 +67,7 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         UserDefaults.standard.removeObject(forKey: "dastak.apns.deviceToken")
+        NotificationCenter.default.post(name: Notification.Name("dastak.notification.deviceTokenFailed"), object: nil)
     }
 
     func application(
@@ -101,6 +104,10 @@ enum DastakNotificationRoute {
     private static let pendingEntityIDKey = "dastak.notification.pendingEntityID"
 
     nonisolated static func route(from payload: [AnyHashable: Any]) -> (type: String, id: String)? {
+        if let kind = payload["notificationType"] as? String, kind.hasPrefix("rider."),
+           let id = payload["orderId"] as? String, UUID(uuidString: id) != nil {
+            return ("delivery", id)
+        }
         if let entityType = payload["entityType"] as? String,
            ["dastakV1Order", "merchantOrder", "parcel"].contains(entityType),
            let entityID = (payload["entityId"] as? String) ??
@@ -118,8 +125,7 @@ enum DastakNotificationRoute {
     }
 
     static func register(deviceToken: String) {
-        UserDefaults.standard.set(deviceToken, forKey: "dastak.apns.deviceToken")
-        NotificationCenter.default.post(name: deviceTokenRegistered, object: nil)
+        NotificationCenter.default.post(name: deviceTokenRegistered, object: deviceToken)
     }
 
     static func open(type: String, id: String) {
@@ -292,6 +298,11 @@ private struct DastakCustomerPartnerRoot: View {
             }
             .task {
                 await refreshMerchantAccess()
+                await openPendingDeliveryNotification()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: DastakNotificationRoute.orderOpened)) { event in
+                guard event.userInfo?["entityType"] as? String == "delivery" else { return }
+                Task { await openPendingDeliveryNotification() }
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
@@ -387,6 +398,15 @@ private struct DastakCustomerPartnerRoot: View {
         case .merchant, .admin:
             EmptyView()
         }
+    }
+
+    @MainActor
+    private func openPendingDeliveryNotification() async {
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: "dastak.notification.pendingEntityType") == "delivery" else { return }
+        defaults.removeObject(forKey: "dastak.notification.pendingEntityType")
+        defaults.removeObject(forKey: "dastak.notification.pendingEntityID")
+        await model.openDeliveryPartner()
     }
 
     @MainActor

@@ -102,6 +102,44 @@ Deno.test("provider exceptions become durable retry completions", async () => {
   assertEquals(completion?.providerResponse, "network unavailable");
 });
 
+Deno.test("fast notification pass preserves authentication and skips only maintenance", async () => {
+  const calls: string[] = [];
+  const fastRequest = (secret: string) =>
+    new Request(
+      "http://localhost/functions/v1/process-v1-outbox?notificationsOnly=true",
+      { method: "POST", headers: { "x-dastak-internal-secret": secret } },
+    );
+  const deps = dependencies({
+    claimAccountDeletions: () => {
+      throw new Error("Fast pass must not claim account deletions");
+    },
+    runInvariantMonitors: () => {
+      throw new Error("Fast pass must not run monitors");
+    },
+    fanout: () => {
+      calls.push("fanout");
+      return Promise.resolve({});
+    },
+    claim: () => {
+      calls.push("claim");
+      return Promise.resolve([job]);
+    },
+    complete: () => {
+      calls.push("complete");
+      return Promise.resolve();
+    },
+  });
+  assertEquals((await handleV1OutboxWorker(fastRequest("wrong"), deps)).status, 403);
+  assertEquals(calls, []);
+  const response = await handleV1OutboxWorker(fastRequest("secret"), deps);
+  assertEquals(response.status, 200);
+  assertEquals(calls, ["fanout", "claim", "complete"]);
+  const result = await response.json();
+  assertEquals(result.sent, 1);
+  assertEquals(result.accountDeletions.claimed, 0);
+  assertEquals(result.invariants, { skipped: true });
+});
+
 Deno.test("account deletion credentials are durably completed before notification work", async () => {
   const calls: string[] = [];
   const response = await handleV1OutboxWorker(

@@ -30,5 +30,8 @@ public struct DastakDeliveryPartnerRootView: View {
             .tag(Tab.account)
         }
         .tint(MarketplaceColors.dastakAccent.color)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.notification.orderOpened"))) { event in
+            if event.userInfo?["entityType"] as? String == "delivery" { selectedTab = .deliveries }
+        }
     }
 }

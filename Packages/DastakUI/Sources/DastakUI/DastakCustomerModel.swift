@@ -123,7 +123,6 @@ final class DastakCustomerModel: ObservableObject {
     private let checkoutClient: any DastakCheckoutClient
     private let addressClient: any CustomerAddressClient
     private let accountProfileClient: any AccountProfileClient
-    private let deviceTokenClient: SupabaseDastakDeviceTokenClient?
     private let checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)?
     private let accountIDProvider: (@Sendable () async throws -> UUID)?
     private let issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)?
@@ -152,7 +151,6 @@ final class DastakCustomerModel: ObservableObject {
         checkoutClient: any DastakCheckoutClient,
         addressClient: any CustomerAddressClient,
         accountProfileClient: any AccountProfileClient,
-        deviceTokenClient: SupabaseDastakDeviceTokenClient? = nil,
         checkoutCustomerProvider: (@Sendable () async throws -> MarketplaceCheckoutCustomer?)? = nil,
         accountIDProvider: (@Sendable () async throws -> UUID)? = nil,
         issueEvidenceUploader: (@Sendable (Data, String) async throws -> String)? = nil,
@@ -166,7 +164,6 @@ final class DastakCustomerModel: ObservableObject {
         self.checkoutClient = checkoutClient
         self.addressClient = addressClient
         self.accountProfileClient = accountProfileClient
-        self.deviceTokenClient = deviceTokenClient
         self.checkoutCustomerProvider = checkoutCustomerProvider
         self.accountIDProvider = accountIDProvider
         self.issueEvidenceUploader = issueEvidenceUploader
@@ -189,7 +186,6 @@ final class DastakCustomerModel: ObservableObject {
             checkoutClient: SupabaseDastakCheckoutClient(functions: functions),
             addressClient: SupabaseCustomerAddressClient(functions: functions),
             accountProfileClient: SupabaseAccountProfileClient(functions: functions),
-            deviceTokenClient: SupabaseDastakDeviceTokenClient(functions: functions),
             checkoutCustomerProvider: checkoutCustomerProvider,
             accountIDProvider: accountIDProvider,
             issueEvidenceUploader: issueEvidenceUploader,
@@ -284,7 +280,6 @@ final class DastakCustomerModel: ObservableObject {
         async let v1Catalogue: Void = refreshV1Catalogue()
         async let wishlist: Void = refreshWishlist()
         async let parcels: Void = refreshParcels()
-        async let deviceToken: Void = registerDeviceTokenIfAvailable()
         async let checkoutCustomer: Void = refreshCheckoutCustomer()
         _ = await (
             orders,
@@ -292,7 +287,6 @@ final class DastakCustomerModel: ObservableObject {
             v1Catalogue,
             wishlist,
             parcels,
-            deviceToken,
             checkoutCustomer
         )
     }
@@ -324,16 +318,6 @@ final class DastakCustomerModel: ObservableObject {
         } catch {
             presentError(for: error, fallback: "Your Wishlist could not be updated.")
         }
-    }
-
-    func registerDeviceTokenIfAvailable() async {
-        guard let token = UserDefaults.standard.string(forKey: "dastak.apns.deviceToken"),
-              !token.isEmpty,
-              let deviceTokenClient else { return }
-        _ = try? await deviceTokenClient.register(
-            token: token, apnsEnvironment: DastakNotificationPreferences.apnsEnvironment,
-            idempotencyKey: makeKey()
-        )
     }
 
     func completeOnboarding() {

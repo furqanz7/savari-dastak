@@ -10,7 +10,9 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     @StateObject private var locationManager = DastakLocationManager()
     @State private var handoffCode = ""
     @State private var pendingOnlineRequest = false
+    @State private var showingEarnings = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     private let services: MarketplaceAuthenticatedServices
 
     init(services: MarketplaceAuthenticatedServices) {
@@ -31,13 +33,14 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 guard !Task.isCancelled else { return }
+                guard scenePhase == .active else { continue }
                 await model.refresh()
             }
         }
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(15))
-                guard !Task.isCancelled, model.isOnline else { continue }
+                guard !Task.isCancelled, model.isOnline, scenePhase == .active else { continue }
                 locationManager.requestLocation()
             }
         }
@@ -53,6 +56,12 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             } else if model.isOnline {
                 Task { await model.publishLocation(location) }
             }
+        }
+        .onReceive(locationManager.$errorMessage) { error in
+            if error != nil { pendingOnlineRequest = false }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("dastak.notification.orderOpened"))) { event in
+            if event.userInfo?["entityType"] as? String == "delivery" { Task { await model.refresh() } }
         }
         .alert(
             "Dastak",
@@ -97,18 +106,9 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 .frame(maxWidth: .infinity)
             }
             .refreshable { await model.refresh() }
-            .navigationTitle("Delivery Partner")
+            .navigationTitle("Deliveries")
             .dastakInlineNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { Task { await model.refresh() } } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(MarketplaceIconButtonStyle())
-                    .disabled(model.isRefreshing || model.isBusy)
-                    .accessibilityLabel("Refresh delivery queue")
-                }
-            }
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
@@ -124,10 +124,14 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                     model.noticeMessage = nil
                 }
             }
-            if let earnings = model.earnings {
-                DastakEarningsCard(earnings: earnings, title: "Earnings")
+            if let failure = model.refreshFailure {
+                Label(failure, systemImage: "wifi.exclamationmark")
+                    .font(.footnote)
+                    .padding(16)
+                    .marketplaceFlatSurface()
             }
             availability
+            DastakAppNotificationStatus()
             if let mission = model.v1Dispatch?.currentMission {
                 DastakV1MissionCard(
                     mission: mission,
@@ -159,6 +163,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                         Task { await captureV1Evidence(item, mission: mission) }
                     }
                 )
+                .id(mission.id)
             }
             if let currentJob = model.courierDispatch?.currentJob { courierJob(currentJob) }
             if let currentJob = model.parcelDispatch?.currentJob { parcelJob(currentJob) }
@@ -170,25 +175,53 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             if hasNoAssignment {
                 DastakEmptyState(
                     symbol: model.isOnline ? "dot.radiowaves.left.and.right" : "power",
-                    title: model.isOnline ? "Waiting for assignments" : "You are offline",
+                    title: model.isOnline ? "Ready for your next delivery" : "Your next delivery starts here",
                     message: model.isOnline
-                        ? "Ready merchant orders and parcels nearby will appear here."
-                        : "Go online when you are ready to deliver."
+                        ? "Nearby offers appear automatically. Keep location and delivery alerts on."
+                        : "Go online when you’re ready. You’ll see the pickup and available earnings before you accept."
                 )
                 .frame(minHeight: 260)
+            }
+            if let earnings = model.earnings {
+                DisclosureGroup(isExpanded: $showingEarnings) {
+                    DastakEarningsCard(earnings: earnings, title: "Earnings breakdown")
+                        .padding(.top, 12)
+                } label: {
+                    HStack {
+                        Label("This week", systemImage: "indianrupeesign.circle")
+                        Spacer()
+                        Text(DastakFormatting.money(.init(paise: earnings.thisWeekPaise)))
+                            .monospacedDigit()
+                    }.font(.subheadline.weight(.semibold))
+                }
+                .padding(16)
+                .marketplaceFlatSurface()
             }
         }
     }
 
     private var partnerHeader: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                DastakWordmark(size: 30)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("YOUR DELIVERY DESK")
+                    .font(.caption.weight(.bold)).tracking(2)
+                    .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
+                Spacer()
                 Text(model.partner?.deliveryMethod.map(DastakPartnerFormatting.method) ?? "Delivery Partner")
-                    .font(MarketplaceTypography.supporting)
-                    .foregroundStyle(.secondary)
+                    .font(.caption.weight(.medium)).foregroundStyle(.secondary)
             }
-            Spacer()
+            Text(model.hasActiveJob ? "Let’s get it delivered." : "Ready when you are.")
+                .font(.system(.title, design: .rounded, weight: .bold))
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                Circle().fill(model.refreshFailure == nil ? MarketplaceColors.success.color : MarketplaceColors.warning.color)
+                    .frame(width: 6, height: 6)
+                Text(model.refreshFailure == nil ? "Updates automatically" : "Reconnecting")
+                Spacer()
+                if model.isRefreshing { ProgressView().controlSize(.mini) }
+                else { Text("Pull to refresh") }
+            }
+            .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.top, MarketplaceSpacing.compact)
     }
@@ -206,7 +239,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                     .frame(width: 36)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.isOnline ? "Online" : "Offline")
+                    Text(pendingOnlineRequest ? "Finding your location…" : model.isOnline ? "You’re online" : "You’re offline")
                         .font(MarketplaceTypography.itemTitle)
                     Text(availabilityMessage)
                         .font(.caption)
@@ -215,6 +248,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
 
                 Spacer()
 
+                if pendingOnlineRequest { ProgressView() }
                 Toggle(
                     "Online",
                     isOn: Binding(
@@ -224,10 +258,13 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 )
                 .labelsHidden()
                 .tint(MarketplaceColors.success.color)
-                .disabled(model.isBusy || (model.isOnline && model.hasActiveJob))
+                .disabled(pendingOnlineRequest || model.isBusy || (model.isOnline && model.hasActiveJob))
             }
 
-            if model.isOnline {
+            if model.hasActiveJob {
+                Label("Finish your current delivery before going offline.", systemImage: "lock.fill")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if model.isOnline {
                 Label(
                     "Dastak automatically takes you offline after 15 minutes without activity.",
                     systemImage: "clock"
@@ -240,8 +277,8 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                     .foregroundStyle(MarketplaceColors.destructive.color)
             }
         }
-        .padding(.vertical, MarketplaceSpacing.medium)
-        .overlay(alignment: .bottom) { Divider() }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
     }
 
     private var availabilityMessage: String {
@@ -317,7 +354,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             payout: nil,
             distanceMeters: offer.distanceMeters,
             respondBy: offer.respondBy,
-            itemSummary: "Collect the complete secured order before final delivery.",
+            itemSummary: "\(offer.transportType.replacingOccurrences(of: "_", with: " ").capitalized) · Verify every package at pickup, then deliver to the customer.",
             busy: model.isBusy,
             accept: { Task { await model.respondToV1Offer(offer, accept: true) } },
             decline: { Task { await model.respondToV1Offer(offer, accept: false) } }
@@ -402,17 +439,40 @@ private struct DastakV1MissionCard: View {
     @State private var collectionReference = ""
     @State private var failureReason = ""
     @State private var evidenceItem: PhotosPickerItem?
+    @State private var confirmRelease = false
+    @State private var confirmCollection = false
+    @State private var showingCollectionFailure = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
             DastakPartnerJobHeader(
-                title: "Active Dastak mission",
-                status: missionStatus,
+                title: "CURRENT DELIVERY",
+                status: DastakDeliveryPresentation.title(mission.status),
                 payout: nil
             )
             Text(mission.displayOrderNumber)
                 .font(.caption.monospaced().weight(.semibold))
                 .foregroundStyle(.secondary)
+            if let step = DastakDeliveryPresentation.step(mission.status) {
+                HStack(spacing: 8) {
+                    ForEach(Array(["Pickup", "Route", "Handoff"].enumerated()), id: \.offset) { index, label in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Capsule().fill(index <= step ? MarketplaceColors.accent(for: colorScheme) : Color.secondary.opacity(0.15))
+                                .frame(height: 4)
+                            Label(label, systemImage: index < step ? "checkmark.circle.fill" : "\(index + 1).circle")
+                                .font(.caption.weight(index == step ? .bold : .regular))
+                                .foregroundStyle(index == step ? Color.primary : Color.secondary)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Step \(step + 1) of 3. \(DastakDeliveryPresentation.title(mission.status))")
+            }
+            Text(DastakDeliveryPresentation.instruction(mission.status))
+                .font(.subheadline).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider()
 
             if mission.status == .assigned {
                 Button("Start pickups") {
@@ -467,7 +527,7 @@ private struct DastakV1MissionCard: View {
                    mission.canCaptureDeliveryEvidence,
                    mission.finalVerification?.evidencePresent != true {
                     PhotosPicker(selection: $evidenceItem, matching: .images) {
-                        Label("Capture package handoff photo", systemImage: "camera.fill")
+                        Label("Add package handoff photo", systemImage: "photo.badge.plus")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(MarketplaceSecondaryButtonStyle())
@@ -506,16 +566,9 @@ private struct DastakV1MissionCard: View {
             }
 
             if mission.canCancelBeforePickup {
-                Button("Release mission before pickup", role: .destructive) {
-                    advance(
-                        "v1CancelBeforePickup",
-                        nil,
-                        nil,
-                        nil,
-                        "Rider cannot continue before pickup"
-                    )
-                }
-                .buttonStyle(MarketplaceSecondaryButtonStyle())
+                Button("Can’t continue this delivery?", role: .destructive) { confirmRelease = true }
+                .font(.footnote.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .disabled(busy)
             }
             if mission.mustUseDeliveryRecovery {
@@ -529,10 +582,28 @@ private struct DastakV1MissionCard: View {
         }
         .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
+        .confirmationDialog("Release this delivery?", isPresented: $confirmRelease, titleVisibility: .visible) {
+            Button("Release delivery", role: .destructive) {
+                advance("v1CancelBeforePickup", nil, nil, nil, "Rider cannot continue before pickup")
+            }
+            Button("Keep delivery", role: .cancel) {}
+        } message: {
+            Text("Only release before collecting any packages. The delivery will return for reassignment.")
+        }
+        .confirmationDialog("Confirm payment received", isPresented: $confirmCollection, titleVisibility: .visible) {
+            Button("Payment received") {
+                guard !busy, mission.launchCollection?.canRecord == true else { return }
+                recordCollection(.collected, collectionMethod, collectionReference.isEmpty ? nil : collectionReference, nil)
+            }
+            Button("Not yet", role: .cancel) {}
+        } message: {
+            Text("Confirm you actually received the full amount by \(collectionMethod == .cash ? "cash" : "UPI"). Do not confirm a pending payment.")
+        }
         .onChange(of: mission.status) { _, _ in
             deliveryCode = ""
             collectionReference = ""
             failureReason = ""
+            showingCollectionFailure = false
         }
         .accessibilityElement(children: .contain)
     }
@@ -547,18 +618,6 @@ private struct DastakV1MissionCard: View {
         return !collection.required || collection.state == .collected
     }
 
-    private var missionStatus: String {
-        switch mission.status {
-        case .assigned: "Assigned"
-        case .enRouteToPickups: "Heading to pickups"
-        case .pickupInProgress: "Collecting packages"
-        case .allPackagesPickedUp: "All packages in custody"
-        case .outForDelivery: "On the way"
-        case .arrived: "At the customer"
-        case .deliveryRecovery: "Delivery recovery"
-        }
-    }
-
     @ViewBuilder
     private func pickupStop(_ stop: DastakV1MissionPickupStop) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
@@ -568,6 +627,12 @@ private struct DastakV1MissionCard: View {
                 address: stop.branch.address,
                 symbol: stop.status == .completed ? "checkmark.circle.fill" : "storefront"
             )
+            Label(
+                stop.status == .completed ? "Pickup verified" : stop.ready ? "Packages ready" : stop.runningLate ? "Merchant is running late" : "Merchant is preparing",
+                systemImage: stop.status == .completed ? "checkmark.seal.fill" : stop.ready ? "shippingbox.fill" : "clock"
+            )
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(stop.ready || stop.status == .completed ? MarketplaceColors.success.color : Color.secondary)
             if stop.status == .pending, mission.status != .assigned {
                 Button("I’ve arrived") {
                     advance("v1ArriveAtPickup", stop.id, nil, nil, nil)
@@ -576,6 +641,10 @@ private struct DastakV1MissionCard: View {
                 .disabled(busy)
             }
             if stop.status == .arrived {
+                if !stop.ready {
+                    Text("Wait for the merchant to mark all packages ready before verifying pickup.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Stepper(
                     "Packages accounted: \(packageCounts[stop.id] ?? stop.packageCount ?? 1)",
                     value: Binding(
@@ -602,11 +671,11 @@ private struct DastakV1MissionCard: View {
                     )
                 }
                 .buttonStyle(MarketplacePrimaryButtonStyle())
-                .disabled(busy || pickupCodes[stop.id]?.count != 6)
+                .disabled(busy || !stop.ready || pickupCodes[stop.id]?.count != 6)
             }
         }
-        .padding(MarketplaceSpacing.compact)
-        .background(MarketplaceColors.dastakAccentSoft.color.opacity(0.45))
+        .padding(MarketplaceSpacing.medium)
+        .background(MarketplaceColors.accent(for: colorScheme).opacity(colorScheme == .dark ? 0.10 : 0.07))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
@@ -614,11 +683,11 @@ private struct DastakV1MissionCard: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("AUTHORITATIVE AMOUNT DUE")
+                    Text(collection.state == .collected ? "PAYMENT RECEIVED" : "COLLECT AT THE DOOR")
                         .font(.caption2.bold())
                         .tracking(1)
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    Text(DastakFormatting.money(collection.amount ?? Money(paise: 0)))
+                    Text(collection.amount.map(DastakFormatting.money) ?? "Amount unavailable")
                         .font(.title2.bold().monospacedDigit())
                 }
                 Spacer()
@@ -648,7 +717,9 @@ private struct DastakV1MissionCard: View {
                     .font(.footnote)
                     .foregroundStyle(MarketplaceColors.warning.color)
                 }
-                Picker("Actual payment method", selection: $collectionMethod) {
+                Text("Confirm payment only after receiving the full amount.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Picker("Received by", selection: $collectionMethod) {
                     ForEach(collection.methods, id: \.self) { method in
                         Text(method == .cash ? "Cash" : "UPI").tag(method)
                     }
@@ -661,10 +732,14 @@ private struct DastakV1MissionCard: View {
                         .textInputAutocapitalization(.never)
                         #endif
                 }
-                TextField("Reason if collection fails", text: $failureReason, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(2...4)
-                HStack(spacing: MarketplaceSpacing.compact) {
+                Button("Confirm payment received") { confirmCollection = true }
+                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                    .disabled(busy || !collection.canRecord || collection.amount == nil || !collection.methods.contains(collectionMethod))
+                DisclosureGroup("Having trouble collecting?", isExpanded: $showingCollectionFailure) {
+                    TextField("What went wrong?", text: $failureReason, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(2...4)
+                        .padding(.vertical, 8)
                     Button("Couldn’t collect") {
                         recordCollection(
                             .failed,
@@ -674,22 +749,12 @@ private struct DastakV1MissionCard: View {
                         )
                     }
                     .buttonStyle(MarketplaceSecondaryButtonStyle())
-                    .disabled(busy || failureReason.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
-                    Button("Record collected") {
-                        recordCollection(
-                            .collected,
-                            collectionMethod,
-                            collectionReference.isEmpty ? nil : collectionReference,
-                            nil
-                        )
-                    }
-                    .buttonStyle(MarketplacePrimaryButtonStyle())
-                    .disabled(busy || !collection.canRecord)
+                    .disabled(busy || !collection.canRecord || failureReason.trimmingCharacters(in: .whitespacesAndNewlines).count < 3)
                 }
             }
         }
         .padding(MarketplaceSpacing.medium)
-        .background(MarketplaceColors.dastakAccentSoft.color)
+        .background(MarketplaceColors.accent(for: colorScheme).opacity(colorScheme == .dark ? 0.10 : 0.07))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -731,15 +796,18 @@ private struct DastakPartnerOfferCard: View {
     let busy: Bool
     let accept: () -> Void
     let decline: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let expired = DastakDeliveryPresentation.secondsRemaining(until: respondBy, now: context.date) == 0
         VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
             HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
                 Image(systemName: symbol)
                     .font(.title3)
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    .frame(width: 40, height: 40)
-                    .background(MarketplaceColors.dastakAccentSoft.color)
+                    .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
+                    .frame(width: 48, height: 48)
+                    .background(MarketplaceColors.accent(for: colorScheme).opacity(0.12))
                     .clipShape(
                         RoundedRectangle(
                             cornerRadius: MarketplaceMetrics.compactCornerRadius,
@@ -748,15 +816,16 @@ private struct DastakPartnerOfferCard: View {
                     )
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("New offer")
+                    Text(expired ? "OFFER ENDED" : "NEW DELIVERY")
                         .font(.caption.bold())
-                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        .tracking(1)
+                        .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
                     Text(title)
                         .font(MarketplaceTypography.itemTitle)
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
@@ -782,20 +851,26 @@ private struct DastakPartnerOfferCard: View {
                 .foregroundStyle(.secondary)
             }
 
-            Text(itemSummary)
+            Divider()
+            Text(expired ? "This offer has expired. Your next available offer will appear automatically." : itemSummary)
                 .font(.subheadline)
-                .lineLimit(3)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: MarketplaceSpacing.compact) {
                 Button("Decline", role: .destructive, action: decline)
                     .buttonStyle(MarketplaceSecondaryButtonStyle())
-                Button("Accept", action: accept)
+                Button(expired ? "Offer expired" : "Accept delivery", action: accept)
                     .buttonStyle(MarketplacePrimaryButtonStyle())
             }
-            .disabled(busy)
+            .disabled(busy || expired)
         }
         .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
+        .overlay {
+            RoundedRectangle(cornerRadius: 24).stroke(MarketplaceColors.accent(for: colorScheme).opacity(0.30), lineWidth: 1)
+        }
+        }
     }
 }
 
@@ -804,7 +879,7 @@ private struct DastakOfferTimer: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            Text("\(DastakPartnerFormatting.secondsRemaining(until: respondBy, now: context.date))s")
+            Text("\(DastakDeliveryPresentation.secondsRemaining(until: respondBy, now: context.date))s")
                 .font(.caption.monospacedDigit().bold())
                 .foregroundStyle(MarketplaceColors.warning.color)
                 .frame(minWidth: 38, minHeight: 30)
@@ -1002,6 +1077,7 @@ private struct DastakPartnerJobHeader: View {
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 Text(status)
                     .font(MarketplaceTypography.sectionTitle)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
             if let payout {
@@ -1035,8 +1111,9 @@ private struct DastakPartnerStop: View {
                 Text(name)
                     .font(.subheadline.bold())
                 Text(address)
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -1051,7 +1128,7 @@ private struct DastakMapRouteButton: View {
     var body: some View {
         Button {
             guard let url = URL(
-                string: "https://maps.apple.com/?daddr=\(point.latitude),\(point.longitude)&dirflg=d"
+                string: "https://maps.apple.com/?daddr=\(point.latitude),\(point.longitude)"
             ) else { return }
             openURL(url)
         } label: {
@@ -1070,17 +1147,20 @@ private struct DastakHandoffCodeField: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
             Text(title)
                 .font(.subheadline.bold())
-            TextField(String(repeating: "0", count: length), text: $code)
+            TextField("\(length)-digit code", text: $code)
                 .textFieldStyle(.roundedBorder)
                 .font(.title2.monospacedDigit())
                 .multilineTextAlignment(.center)
                 .onChange(of: code) { _, value in
-                    code = String(value.filter(\.isNumber).prefix(length))
+                    code = DastakDeliveryPresentation.code(value, length: length)
                 }
                 #if os(iOS)
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
                 #endif
+                .accessibilityLabel(title)
+            Text("Ask for this code only when the packages are ready for handoff.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -1132,11 +1212,6 @@ private enum DastakPartnerFormatting {
         meters < 1_000
             ? "\(Int(meters.rounded())) m to pickup"
             : String(format: "%.1f km to pickup", meters / 1_000)
-    }
-
-    static func secondsRemaining(until value: String, now: Date) -> Int {
-        guard let date = date(value) else { return 0 }
-        return max(0, Int(ceil(date.timeIntervalSince(now))))
     }
 
     static func time(_ value: String) -> String {

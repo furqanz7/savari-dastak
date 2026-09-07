@@ -50,6 +50,7 @@ export function createApnsSender(
           badge: 1,
         },
         ...job.payload,
+        notificationType: job.notificationType,
       }),
     });
     const responseBody = await response.text();

@@ -23,6 +23,7 @@ Deno.test("APNs request carries only the safe V1 order route and deterministic d
   assertEquals(request?.headers.get("apns-id"), job().deliveryId);
   assertEquals(payload.entityType, "dastakV1Order");
   assertEquals(payload.orderId, job().payload.orderId);
+  assertEquals(payload.notificationType, "customer.out_for_delivery");
   assertEquals("branchId" in payload, false);
 });
 
