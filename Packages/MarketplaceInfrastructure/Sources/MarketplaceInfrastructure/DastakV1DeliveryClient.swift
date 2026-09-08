@@ -71,7 +71,7 @@ public struct DastakV1CustomerDestination: Codable, Equatable, Sendable {
 public struct DastakV1MissionBranch: Codable, Equatable, Sendable {
     public let id: UUID?
     public let displayName: String
-    public let address: String
+    public let address: DastakV1MissionAddress
 }
 
 public struct DastakV1MissionPickupStop: Codable, Equatable, Identifiable, Sendable {

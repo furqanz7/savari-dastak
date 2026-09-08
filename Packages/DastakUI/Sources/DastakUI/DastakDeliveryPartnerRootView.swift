@@ -624,7 +624,7 @@ private struct DastakV1MissionCard: View {
             DastakPartnerStop(
                 title: "Pickup \(stop.sequence) of \(mission.pickupCount)",
                 name: stop.branch.displayName,
-                address: stop.branch.address,
+                address: stop.branch.address.displayLine,
                 symbol: stop.status == .completed ? "checkmark.circle.fill" : "storefront"
             )
             Label(

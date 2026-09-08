@@ -11,6 +11,10 @@ final class DastakDeliveryRefreshTests: XCTestCase {
         let model = DastakDeliveryPartnerModel(functions: functions)
         await model.bootstrap()
         XCTAssertEqual(model.v1Dispatch?.currentMission?.displayOrderNumber, "D-123")
+        XCTAssertEqual(
+            model.v1Dispatch?.currentMission?.pickupStops.first?.branch.address.displayLine,
+            "128, Mandi Street, Vaniyambadi"
+        )
         XCTAssertTrue(model.hasActiveJob)
         XCTAssertFalse(model.isLoading)
         XCTAssertFalse(model.isRefreshing)
@@ -49,7 +53,20 @@ private actor DeliveryRefreshFunctionsStub: FunctionClient {
         {"currentMission":{
           "id":"00000000-0000-0000-0000-000000000001",
           "displayOrderNumber":"D-123","status":"ASSIGNED","version":1,
-          "pickupCount":1,"pickupStops":[],"canStartFinalDelivery":false,
+          "pickupCount":1,"pickupStops":[{
+            "id":"00000000-0000-0000-0000-000000000002",
+            "sequence":1,"status":"PENDING","ready":true,"runningLate":false,
+            "packageCount":1,"waitingSeconds":0,
+            "branch":{
+              "id":"00000000-0000-0000-0000-000000000003",
+              "displayName":"Zuper",
+              "address":{
+                "line1":"128, Mandi Street, Vaniyambadi",
+                "latitude":12.6811386362372,"longitude":78.6154330651743
+              },
+              "location":{"latitude":12.6811386362372,"longitude":78.6154330651743}
+            }
+          }],"canStartFinalDelivery":false,
           "canArriveCustomer":false,"canCaptureDeliveryEvidence":false,
           "canVerifyDelivery":false,"canCancelBeforePickup":true,
           "mustUseDeliveryRecovery":false
