@@ -729,7 +729,7 @@
 				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Supporting/Info.plist;
+				INFOPLIST_FILE = "Supporting/CustomerPartner-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -976,7 +976,7 @@
 				CODE_SIGN_ENTITLEMENTS = Supporting/SignInWithApple.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Supporting/Info.plist;
+				INFOPLIST_FILE = "Supporting/CustomerPartner-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

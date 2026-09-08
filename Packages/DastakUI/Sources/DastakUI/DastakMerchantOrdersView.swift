@@ -333,6 +333,10 @@ private struct DastakV1MerchantFulfilmentCard: View {
             .overlay(alignment: .top) { Divider() }
             .overlay(alignment: .bottom) { Divider() }
 
+            if let tracking = fulfilment.tracking {
+                DastakDeliveryTrackingView(tracking: tracking)
+            }
+
             if isHistory {
                 Label("No preparation action needed", systemImage: "checkmark.circle")
                     .font(.footnote).foregroundStyle(.secondary)

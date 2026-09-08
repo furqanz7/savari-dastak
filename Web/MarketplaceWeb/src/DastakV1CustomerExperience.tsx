@@ -1243,8 +1243,6 @@ export function MatchingSheet({
   const matching = matchingStatuses.has(order.status);
   const paid = Boolean(order.paidAt);
   const launchPayment = order.launchPayment;
-  const launchCollectionSatisfied = !launchPayment || launchPayment.state === "NOT_APPLICABLE" ||
-    launchPayment.state === "PAYMENT_COLLECTED";
   const currentTimelineItem = activeTimelineItem(order.status);
   const [now, setNow] = useState(() => Date.now());
   const [reportingIssue, setReportingIssue] = useState(false);
@@ -1324,10 +1322,10 @@ export function MatchingSheet({
     {order.status === "OUT_FOR_DELIVERY" && launchPayment?.state === "PAYMENT_DUE_AT_DELIVERY" ? <p className="v1-payment-message" role="status"><strong>Payment due at delivery.</strong> Pay your delivery partner {formatV1Price(launchPayment.amountPaise ?? order.price.totalPaise)} by UPI or cash.</p> : null}
     {order.status === "OUT_FOR_DELIVERY" && launchPayment?.state === "COLLECTION_RETRY_NEEDED" ? <p className="v1-payment-retry" role="status">Payment was not confirmed. Your delivery partner can safely retry the doorstep collection before delivery.</p> : null}
     {launchPayment?.state === "PAYMENT_COLLECTED" ? <p className="v1-payment-message" role="status"><strong>Payment collected.</strong> {launchPayment.collectionMethod ? `${launchPayment.collectionMethod === "CASH" ? "Cash" : "UPI"} recorded` : "Collection recorded"} at the doorstep.</p> : null}
-    {order.status === "OUT_FOR_DELIVERY" && order.delivery?.deliveryCode && launchCollectionSatisfied ? <div className="v1-delivery-code" role="status">
+    {order.status === "OUT_FOR_DELIVERY" && order.delivery?.deliveryCode && !order.delivery.pinVerified ? <div className="v1-delivery-code" role="status">
       <header><ShieldCheck size={20} /><span><small>DELIVERY CODE</small><b>Share only after every package arrives</b></span></header>
       <strong>{order.delivery.deliveryCode}</strong>
-      <p>A trusted recipient may use this in-app code without a Dastak account. No SMS code is used.</p>
+      <p>Share this PIN once your rider and every package arrive. The rider then takes the package photo, collects payment and completes delivery. A trusted recipient can use this PIN without an account.</p>
     </div> : null}
     {order.status === "OUT_FOR_DELIVERY" && order.delivery?.verificationStatus === "BLOCKED" ? <p className="v1-payment-retry" role="status">Delivery verification needs Operations support. Your rider must keep every package secure.</p> : null}
     {order.support?.recovery.map((recovery) => <p className="v1-payment-retry" role="status" key={recovery.id}>{recovery.customerMessage}</p>)}

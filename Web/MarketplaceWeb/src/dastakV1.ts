@@ -218,6 +218,7 @@ export type V1Order = {
     state: "ON_THE_WAY" | "DELIVERED";
     verificationStatus: "ACTIVE" | "BLOCKED" | "CONSUMED" | "OVERRIDDEN";
     deliveryCode?: string;
+    pinVerified?: boolean;
     riderArrivedAt?: string;
     outForDeliveryAt?: string;
     deliveredAt?: string;
@@ -2050,6 +2051,7 @@ function parseOrderDelivery(source: Record<string, unknown>): NonNullable<V1Orde
     state: state as NonNullable<V1Order["delivery"]>["state"],
     verificationStatus: verificationStatus as NonNullable<V1Order["delivery"]>["verificationStatus"],
     deliveryCode,
+    pinVerified: source.pinVerified === true,
     riderArrivedAt: optionalTimestamp(source.riderArrivedAt),
     outForDeliveryAt: optionalTimestamp(source.outForDeliveryAt),
     deliveredAt: optionalTimestamp(source.deliveredAt),

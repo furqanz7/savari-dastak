@@ -83,6 +83,7 @@ public struct DastakV1MissionPickupStop: Codable, Equatable, Identifiable, Senda
     public let packageCount: Int?
     public let waitingSeconds: Int
     public let branch: DastakV1MissionBranch
+    public var arrival: DastakArrivalEligibility?
 }
 
 public enum DastakV1CollectionState: String, Codable, Equatable, Sendable {
@@ -122,6 +123,7 @@ public struct DastakV1FinalVerification: Codable, Equatable, Sendable {
     public let status: String
     public let failedAttempts: Int
     public let evidencePresent: Bool
+    public var pinVerified: Bool?
 }
 
 public struct DastakV1DeliveryMissionSnapshot: Codable, Equatable, Identifiable, Sendable {
@@ -140,6 +142,9 @@ public struct DastakV1DeliveryMissionSnapshot: Codable, Equatable, Identifiable,
     public let canVerifyDelivery: Bool
     public let canCancelBeforePickup: Bool
     public let mustUseDeliveryRecovery: Bool
+    public var customerArrival: DastakArrivalEligibility?
+    public var canVerifyCustomerPIN: Bool?
+    public var canCompleteDelivery: Bool?
 }
 
 public struct DastakV1DeliveryDispatchSnapshot: Codable, Equatable, Sendable {

@@ -95,13 +95,17 @@ struct DastakV1MatchingView: View {
                         if [.paid, .preparing].contains(order.status) {
                             preparationETACard(order)
                         }
+                        if let tracking = order.tracking {
+                            DastakDeliveryTrackingView(tracking: tracking, destination: order.deliveryAddress.map {
+                                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                            })
+                        }
                         if order.status == .outForDelivery,
                            let delivery = order.delivery {
-                            liveDeliveryCard(order: order, delivery: delivery)
-                            launchCollectionCard(order)
-                            if launchCollectionSatisfied(order) {
+                            if delivery.pinVerified != true {
                                 deliveryCard(delivery)
                             }
+                            launchCollectionCard(order)
                         }
                         orderSummary(order)
                         receiptCard(order)
@@ -436,101 +440,6 @@ struct DastakV1MatchingView: View {
                         .multilineTextAlignment(.trailing)
                 }
                 .accessibilityElement(children: .combine)
-            }
-            .padding(MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
-        }
-    }
-
-    @ViewBuilder
-    private func liveDeliveryCard(
-        order: DastakV1OrderSnapshot,
-        delivery: DastakV1DeliveryProgress
-    ) -> some View {
-        if let address = order.deliveryAddress {
-            let destination = CLLocationCoordinate2D(
-                latitude: address.latitude,
-                longitude: address.longitude
-            )
-            let rider = delivery.riderLocation.map {
-                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-            }
-            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("LIVE DELIVERY")
-                            .font(.caption2.weight(.bold))
-                            .tracking(1.1)
-                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                        Text(rider == nil ? "Waiting for a fresh rider location" : "Your rider is on the way")
-                            .font(.headline)
-                    }
-                    Spacer()
-                    if let meters = delivery.distanceToDestinationMeters {
-                        Text(distanceLabel(meters))
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
-                    }
-                }
-
-                Map(initialPosition: .region(mapRegion(destination: destination, rider: rider))) {
-                    if let rider {
-                        MapPolyline(coordinates: [rider, destination])
-                            .stroke(
-                                MarketplaceColors.dastakAccent.color.opacity(0.84),
-                                style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [3, 7])
-                            )
-                    }
-                    Marker(address.label ?? "Delivery address", coordinate: destination)
-                        .tint(MarketplaceColors.dastakAccent.color)
-                    if let rider {
-                        Annotation("Delivery partner", coordinate: rider) {
-                            Image(systemName: "scooter")
-                                .font(.headline)
-                                .padding(9)
-                                .foregroundStyle(.white)
-                                .background(MarketplaceColors.dastakAccent.color, in: Circle())
-                                .shadow(radius: 4, y: 2)
-                        }
-                    }
-                }
-                .mapStyle(.standard(pointsOfInterest: .excludingAll, showsTraffic: false))
-                .frame(height: 250)
-                .id(delivery.riderLocationUpdatedAt ?? "delivery-destination")
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(alignment: .topLeading) {
-                    Label(
-                        rider == nil ? "Awaiting live location" : "Live location",
-                        systemImage: rider == nil ? "location.slash" : "dot.radiowaves.left.and.right"
-                    )
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .padding(12)
-                }
-                .accessibilityLabel(rider == nil
-                                    ? "Map showing the delivery address"
-                                    : "Live map showing your delivery partner and delivery address")
-
-                HStack {
-                    if let updated = DastakV1OrderPresentation.date(
-                        delivery.riderLocationUpdatedAt
-                    ) {
-                        Label {
-                            Text("Updated \(updated, style: .relative)")
-                        } icon: {
-                            Image(systemName: "location.fill")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Open destination in Maps") {
-                        openDestinationInMaps(address)
-                    }
-                    .font(.caption.weight(.semibold))
-                }
             }
             .padding(MarketplaceSpacing.medium)
             .marketplaceFlatSurface()
@@ -1031,20 +940,15 @@ struct DastakV1MatchingView: View {
         return String(format: "%d:%02d to confirm · no charge now", remaining / 60, remaining % 60)
     }
 
-    private func launchCollectionSatisfied(_ order: DastakV1OrderSnapshot) -> Bool {
-        guard let launch = order.launchPayment else { return true }
-        return launch.state == .notApplicable || launch.state == .paymentCollected
-    }
-
     private func launchCollectionMessage(_ launch: DastakV1LaunchPayment) -> String {
         switch launch.state {
         case .paymentCollected:
             let method = launch.collectionMethod.map { $0 == .cash ? "cash" : "UPI" }
-            return "Your delivery partner recorded the doorstep payment\(method.map { " by \($0)" } ?? ""). You may now share the delivery code after every package arrives."
+            return "Your delivery partner recorded the doorstep payment\(method.map { " by \($0)" } ?? ""). The verified delivery can now be completed."
         case .collectionRetryNeeded:
             return "The last collection was not completed. Your delivery partner can safely retry before delivery."
         default:
-            return "Pay your delivery partner by UPI or cash. The delivery code appears only after collection is confirmed."
+            return "When the rider arrives with every package, verify your delivery PIN first. The rider then records the package photo and collects payment by UPI or cash."
         }
     }
 
@@ -1076,30 +980,6 @@ struct DastakV1MatchingView: View {
         }
     }
 
-    private func mapRegion(
-        destination: CLLocationCoordinate2D,
-        rider: CLLocationCoordinate2D?
-    ) -> MKCoordinateRegion {
-        guard let rider else {
-            return MKCoordinateRegion(
-                center: destination,
-                span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
-            )
-        }
-        let latitudeDelta = max(0.012, abs(destination.latitude - rider.latitude) * 1.8)
-        let longitudeDelta = max(0.012, abs(destination.longitude - rider.longitude) * 1.8)
-        return MKCoordinateRegion(
-            center: CLLocationCoordinate2D(
-                latitude: (destination.latitude + rider.latitude) / 2,
-                longitude: (destination.longitude + rider.longitude) / 2
-            ),
-            span: MKCoordinateSpan(
-                latitudeDelta: min(latitudeDelta, 0.2),
-                longitudeDelta: min(longitudeDelta, 0.2)
-            )
-        )
-    }
-
     private func openDestinationInMaps(_ address: DastakV1DeliveryAddressInput) {
         let coordinate = CLLocationCoordinate2D(
             latitude: address.latitude,
@@ -1112,10 +992,6 @@ struct DastakV1MatchingView: View {
         ])
     }
 
-    private func distanceLabel(_ meters: Int) -> String {
-        if meters < 1_000 { return "\(meters) m away" }
-        return String(format: "%.1f km away", Double(meters) / 1_000)
-    }
 
     private func preparationCountdown(_ readyAt: Date, at now: Date) -> String {
         let minutes = max(1, Int((readyAt.timeIntervalSince(now) / 60.0).rounded(.up)))

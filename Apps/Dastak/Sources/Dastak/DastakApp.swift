@@ -281,6 +281,7 @@ final class DastakRootModel: ObservableObject {
 
 private struct DastakCustomerPartnerRoot: View {
     @StateObject private var model: DastakRootModel
+    @StateObject private var deliveryTracker: DastakActiveDeliveryTracker
     @State private var showingMerchantApplication = false
     @State private var merchantOnboardingState: MerchantOnboardingState?
     @State private var isMerchantAccessLoading = true
@@ -289,6 +290,7 @@ private struct DastakCustomerPartnerRoot: View {
 
     init(services: MarketplaceAuthenticatedServices) {
         self.services = services
+        _deliveryTracker = StateObject(wrappedValue: DastakActiveDeliveryTracker(functions: services.functions))
         _model = StateObject(
             wrappedValue: DastakRootModel(
                 accessProvider: LiveDeliveryPartnerAccessProvider(
@@ -299,8 +301,20 @@ private struct DastakCustomerPartnerRoot: View {
     }
 
     var body: some View {
-        activeRoot
+        ZStack { activeRoot }
+            .environmentObject(deliveryTracker)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .task(id: model.rootState.deliveryPartnerAccess) {
+                guard model.rootState.deliveryPartnerAccess == .approved else {
+                    deliveryTracker.stop()
+                    return
+                }
+                while !Task.isCancelled {
+                    if scenePhase == .active { await deliveryTracker.refresh() }
+                    try? await Task.sleep(for: .seconds(15))
+                }
+            }
+            .onDisappear { deliveryTracker.stop() }
             .task {
                 guard !model.hasLoadedPartnerAccess else { return }
                 await model.refreshPartnerAccess()
@@ -316,6 +330,9 @@ private struct DastakCustomerPartnerRoot: View {
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 Task { await refreshMerchantAccess() }
+                if model.rootState.deliveryPartnerAccess == .approved {
+                    Task { await deliveryTracker.refresh() }
+                }
             }
             .sheet(isPresented: $showingMerchantApplication) {
                 DastakMerchantAccessView(route: .accessDenied, services: services)

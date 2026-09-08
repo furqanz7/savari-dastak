@@ -69,6 +69,19 @@ export type V1OrderLoad = {
   containsBulky: boolean;
   eligibleTransportTypes: V1TransportType[];
 };
+export type V1ArrivalEligibility = {
+  eligible: boolean;
+  reason: string;
+  distanceMeters: number | null;
+  radiusMeters: number;
+  validUntil: string | null;
+};
+
+export function canArriveAtDestination(arrival: V1ArrivalEligibility | null | undefined, now = Date.now()) {
+  return arrival?.eligible === true && arrival.validUntil !== null &&
+    Date.parse(arrival.validUntil) > now;
+}
+
 export type V1PickupStop = {
   id: string;
   sequence: number;
@@ -80,6 +93,7 @@ export type V1PickupStop = {
   packageCount: number | null;
   arrivedAt: string | null;
   waitingSeconds: number;
+  arrival?: V1ArrivalEligibility | null;
   branch: {
     id: string | null;
     displayName: string;
@@ -139,6 +153,7 @@ export type V1DeliveryMission = {
     blockedAt: string | null;
     evidenceRequired: true;
     evidencePresent: boolean;
+    pinVerified?: boolean;
   } | null;
   deliveryEvidence: Array<{
     id: string;
@@ -165,6 +180,9 @@ export type V1DeliveryMission = {
   canArriveCustomer: boolean;
   canCaptureDeliveryEvidence: boolean;
   canVerifyDelivery: boolean;
+  canVerifyCustomerPIN?: boolean;
+  canCompleteDelivery?: boolean;
+  customerArrival?: V1ArrivalEligibility | null;
   riderSafety: {
     lastContactAt: string;
     lastProgressAt: string;
@@ -480,6 +498,27 @@ export async function getV1DeliveryDispatch(
   ));
 }
 
+export async function publishV1MissionLocation(
+  input: AuthenticatedInput & {
+    missionId: string; latitude: number; longitude: number;
+    accuracyMeters: number; recordedAt: string;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  if (!uuidPattern.test(input.missionId) ||
+    !Number.isFinite(input.latitude) || Math.abs(input.latitude) > 90 ||
+    !Number.isFinite(input.longitude) || Math.abs(input.longitude) > 180 ||
+    !Number.isFinite(input.accuracyMeters) || input.accuracyMeters < 0 ||
+    input.accuracyMeters > 200 || !Number.isFinite(Date.parse(input.recordedAt))) {
+    throw validationError("An accurate current location is required.");
+  }
+  return parseV1Dispatch(await call("courier-dispatch", input, {
+    operation: "v1PublishLocation", missionId: input.missionId,
+    latitude: input.latitude, longitude: input.longitude,
+    accuracyMeters: input.accuracyMeters, recordedAt: input.recordedAt,
+  }, undefined, fetcher));
+}
+
 export async function acceptV1DeliveryOffer(
   input: AuthenticatedInput & { offerId: string; idempotencyKey: string },
   fetcher: Fetcher = fetch,
@@ -524,6 +563,8 @@ export type V1DeliveryMissionOperation =
   | "v1StartFinalDelivery"
   | "v1ArriveAtCustomer"
   | "v1AddDeliveryEvidence"
+  | "v1VerifyCustomerPIN"
+  | "v1CompleteDelivery"
   | "v1VerifyDelivery";
 
 export async function advanceV1DeliveryMission(
@@ -550,7 +591,7 @@ export async function advanceV1DeliveryMission(
     input.operation === "v1AddDeliveryEvidence" &&
     !input.objectPath?.startsWith("rider-delivery/")
   ) throw validationError("Capture the package photo before continuing.");
-  if (input.operation === "v1VerifyDelivery" && !/^\d{6}$/.test(input.verificationCode ?? "")) {
+  if (["v1VerifyDelivery", "v1VerifyCustomerPIN"].includes(input.operation) && !/^\d{6}$/.test(input.verificationCode ?? "")) {
     throw validationError("Enter the six-digit customer delivery code.");
   }
   return v1DispatchMutation(input, {
@@ -934,6 +975,9 @@ function v1Mission(value: unknown): V1DeliveryMission {
     canArriveCustomer: requiredBoolean(source.canArriveCustomer),
     canCaptureDeliveryEvidence: requiredBoolean(source.canCaptureDeliveryEvidence),
     canVerifyDelivery: requiredBoolean(source.canVerifyDelivery),
+    canVerifyCustomerPIN: source.canVerifyCustomerPIN === true,
+    canCompleteDelivery: source.canCompleteDelivery === true,
+    customerArrival: v1Arrival(source.customerArrival),
     riderSafety: {
       lastContactAt: timestamp(riderSafety.lastContactAt),
       lastProgressAt: timestamp(riderSafety.lastProgressAt),
@@ -1027,6 +1071,7 @@ function v1FinalVerification(value: unknown): NonNullable<V1DeliveryMission["fin
     blockedAt: nullableTimestamp(source.blockedAt),
     evidenceRequired: true,
     evidencePresent: source.evidencePresent,
+    pinVerified: source.pinVerified === true,
   };
 }
 
@@ -1061,12 +1106,26 @@ function v1PickupStop(value: unknown, includeState: boolean): V1PickupStop {
       : null,
     arrivedAt: includeState ? nullableTimestamp(source.arrivedAt) : null,
     waitingSeconds: includeState ? nonNegativeInteger(source.waitingSeconds) : 0,
+    arrival: v1Arrival(source.arrival),
     branch: {
       id: includeState ? requiredUUID(branch.id) : null,
       displayName: requiredText(branch.displayName, 160),
       address: addressLabel(branch.address),
       location: branch.location === null ? null : location(branch.location),
     },
+  };
+}
+
+function v1Arrival(value: unknown): V1ArrivalEligibility | null {
+  if (value === null || value === undefined) return null;
+  const source = record(value);
+  if (!source) invalid();
+  return {
+    eligible: requiredBoolean(source.eligible),
+    reason: requiredText(source.reason, 80),
+    distanceMeters: source.distanceMeters === null ? null : nonNegativeNumber(source.distanceMeters),
+    radiusMeters: nonNegativeNumber(source.radiusMeters),
+    validUntil: nullableTimestamp(source.validUntil),
   };
 }
 

@@ -55,7 +55,18 @@ export type V1FinalDeliveryAction =
   | "START_FINAL_DELIVERY"
   | "ARRIVE_CUSTOMER"
   | "ADD_DELIVERY_EVIDENCE"
-  | "VERIFY_DELIVERY";
+  | "VERIFY_DELIVERY"
+  | "VERIFY_CUSTOMER_PIN"
+  | "COMPLETE_DELIVERY";
+
+export type V1MissionLocationInput = {
+  accountId: string;
+  missionId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  recordedAt: string;
+};
 
 export type V1FinalDeliveryMutationInput = {
   accountId: string;
@@ -122,6 +133,7 @@ export type CourierDispatchDependencies = {
   acceptV1Offer: (input: V1RiderOfferMutationInput) => Promise<RpcResult>;
   declineV1Offer: (input: V1RiderOfferDeclineInput) => Promise<RpcResult>;
   heartbeatV1Mission: (input: V1RiderHeartbeatInput) => Promise<unknown>;
+  publishV1Location: (input: V1MissionLocationInput) => Promise<unknown>;
   advanceV1Mission: (input: V1DeliveryMissionMutationInput) => Promise<RpcResult>;
   advanceV1FinalDelivery: (input: V1FinalDeliveryMutationInput) => Promise<RpcResult>;
   recordV1LaunchCollection: (input: V1LaunchCollectionInput) => Promise<RpcResult>;
@@ -237,6 +249,23 @@ export async function handleCourierDispatch(
           "START_FINAL_DELIVERY",
           dependencies.advanceV1FinalDelivery,
         );
+      case "v1PublishLocation": {
+        const missionId = validUUID(body.missionId);
+        const { latitude, longitude, accuracyMeters, recordedAt } = body;
+        if (!missionId || typeof latitude !== "number" || !Number.isFinite(latitude) ||
+          Math.abs(latitude) > 90 || typeof longitude !== "number" || !Number.isFinite(longitude) ||
+          Math.abs(longitude) > 180 || typeof accuracyMeters !== "number" ||
+          !Number.isFinite(accuracyMeters) || accuracyMeters < 0 || accuracyMeters > 200 ||
+          typeof recordedAt !== "string" || !Number.isFinite(Date.parse(recordedAt))) return validationError();
+        return json(await dependencies.publishV1Location({
+          accountId: actor.accountId, missionId, latitude, longitude, accuracyMeters, recordedAt,
+        }), 200);
+      }
+      case "v1VerifyCustomerPIN":
+      case "v1CompleteDelivery":
+        return await v1FinalDeliveryMutation(request, body, actor.accountId,
+          body.operation === "v1VerifyCustomerPIN" ? "VERIFY_CUSTOMER_PIN" : "COMPLETE_DELIVERY",
+          dependencies.advanceV1FinalDelivery);
       case "v1ArriveAtCustomer":
         return await v1FinalDeliveryMutation(
           request,
@@ -366,7 +395,21 @@ export async function handleCourierDispatch(
       default:
         return validationError();
     }
-  } catch {
+  } catch (error) {
+    // Only expose allowlisted domain errors, never raw SQL/internal details.
+    const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
+    const known: Record<string, string> = {
+      ARRIVAL_LOCATION_REQUIRED: "Move within 50 metres and wait for a fresh, accurate location before arriving.",
+      DELIVERY_PIN_REQUIRED: "Verify the customer PIN before taking the delivery photo.",
+      DELIVERY_PHOTO_REQUIRED: "Take the package photo after PIN verification before collecting payment.",
+      DELIVERY_HANDOFF_SEQUENCE_REQUIRED: "Complete arrival, PIN verification, photo and payment in order.",
+      LAUNCH_PAYMENT_COLLECTION_REQUIRED: "Confirm doorstep payment before completing delivery.",
+      STALE_MISSION_VERSION: "This delivery was updated. Refresh and try again.",
+      "stale mission version": "This delivery was updated. Refresh and try again.",
+      INVALID_LOCATION_SAMPLE: "Waiting for a fresh GPS location.",
+      MISSION_NOT_ASSIGNED: "This delivery is no longer assigned to you.",
+    };
+    if (known[message]) return json({ error: { code: message.toLowerCase(), message: known[message] } }, 409);
     return internalError();
   }
 }
@@ -417,13 +460,14 @@ async function v1FinalDeliveryMutation(
   const objectPath = action === "ADD_DELIVERY_EVIDENCE"
     ? validRiderDeliveryEvidencePath(body.objectPath, accountId)
     : null;
-  const verificationCode = action === "VERIFY_DELIVERY"
+  const needsCode = action === "VERIFY_DELIVERY" || action === "VERIFY_CUSTOMER_PIN";
+  const verificationCode = needsCode
     ? validV1VerificationCode(body.verificationCode)
     : null;
   if (
     !idempotencyKey || !missionId ||
     (action === "ADD_DELIVERY_EVIDENCE" && !objectPath) ||
-    (action === "VERIFY_DELIVERY" && !verificationCode)
+    (needsCode && !verificationCode)
   ) return validationError();
 
   const normalized = { missionId, action, objectPath, verificationCode };

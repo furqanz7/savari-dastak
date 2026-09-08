@@ -11,6 +11,7 @@ import {
   type V1LaunchCollectionInput,
   type V1ReturnMissionMutationInput,
   type V1RiderHeartbeatInput,
+  type V1MissionLocationInput,
   type V1RiderOfferDeclineInput,
   type V1RiderOfferMutationInput,
 } from "./handler.ts";
@@ -33,12 +34,23 @@ Deno.serve((request) =>
     acceptV1Offer,
     declineV1Offer,
     heartbeatV1Mission,
+    publishV1Location,
     advanceV1Mission,
     advanceV1FinalDelivery,
     recordV1LaunchCollection,
     advanceV1ReturnMission,
   })
 );
+
+async function publishV1Location(input: V1MissionLocationInput) {
+  const { data, error } = await serviceClient.rpc("dastak_v1_publish_mission_location", {
+    p_account_id: input.accountId, p_mission_id: input.missionId,
+    p_latitude: input.latitude, p_longitude: input.longitude,
+    p_accuracy: input.accuracyMeters, p_recorded_at: input.recordedAt,
+  });
+  if (error) throw error;
+  return data;
+}
 
 async function heartbeatV1Mission(input: V1RiderHeartbeatInput) {
   const { data, error } = await serviceClient.rpc("dastak_v1_rider_heartbeat", {

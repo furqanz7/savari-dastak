@@ -6,6 +6,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct DastakDeliveryPartnerWorkspaceView: View {
+    @EnvironmentObject private var deliveryTracker: DastakActiveDeliveryTracker
     @StateObject private var model: DastakDeliveryPartnerModel
     @StateObject private var locationManager = DastakLocationManager()
     @State private var handoffCode = ""
@@ -25,6 +26,10 @@ struct DastakDeliveryPartnerWorkspaceView: View {
         .marketplacePage()
         .task {
             await model.bootstrap()
+            if let snapshot = model.v1Dispatch { deliveryTracker.adopt(snapshot.currentMission) }
+        }
+        .onChange(of: model.v1Dispatch) { _, snapshot in
+            if let snapshot { deliveryTracker.adopt(snapshot.currentMission) }
         }
         .task {
             await observeOrderChanges()
@@ -133,8 +138,12 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             availability
             DastakAppNotificationStatus()
             if let mission = model.v1Dispatch?.currentMission {
+                if let message = deliveryTracker.statusMessage {
+                    Label(message, systemImage: "location.circle").font(.footnote).foregroundStyle(.secondary)
+                }
                 DastakV1MissionCard(
                     mission: mission,
+                    trackingMission: deliveryTracker.mission,
                     busy: model.isBusy,
                     advance: { operation, stopID, packageCount, code, reason in
                         Task {
@@ -423,6 +432,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
 
 private struct DastakV1MissionCard: View {
     let mission: DastakV1DeliveryMissionSnapshot
+    let trackingMission: DastakV1DeliveryMissionSnapshot?
     let busy: Bool
     let advance: (String, UUID?, Int?, String?, String?) -> Void
     let recordCollection: (
@@ -511,20 +521,28 @@ private struct DastakV1MissionCard: View {
                     .disabled(busy)
                 }
                 if mission.canArriveCustomer {
-                    Button("I’ve arrived") {
+                    DastakArrivalButton(eligibility: liveMission.customerArrival, busy: busy) {
                         advance("v1ArriveAtCustomer", nil, nil, nil, nil)
                     }
+                }
+
+                if mission.status == .arrived {
+                    Text("HANDOFF · PIN → PHOTO → PAYMENT → COMPLETE")
+                        .font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                }
+                if mission.canVerifyCustomerPIN == true {
+                    DastakHandoffCodeField(title: "Customer delivery PIN", length: 6, code: $deliveryCode)
+                    Button("Verify customer PIN") {
+                        advance("v1VerifyCustomerPIN", nil, nil, deliveryCode, nil)
+                    }
                     .buttonStyle(MarketplacePrimaryButtonStyle())
-                    .disabled(busy)
+                    .disabled(busy || deliveryCode.count != 6)
                 }
-
-                if let collection = mission.launchCollection,
-                   collection.state != .notRequired {
-                    collectionCard(collection)
+                if mission.finalVerification?.pinVerified == true {
+                    Label("Customer PIN verified", systemImage: "checkmark.shield.fill")
+                        .font(.footnote.weight(.semibold)).foregroundStyle(MarketplaceColors.success.color)
                 }
-
-                if collectionSatisfied,
-                   mission.canCaptureDeliveryEvidence,
+                if mission.canCaptureDeliveryEvidence,
                    mission.finalVerification?.evidencePresent != true {
                     PhotosPicker(selection: $evidenceItem, matching: .images) {
                         Label("Add package handoff photo", systemImage: "photo.badge.plus")
@@ -544,24 +562,15 @@ private struct DastakV1MissionCard: View {
                         .foregroundStyle(MarketplaceColors.success.color)
                 }
 
-                if collectionSatisfied, mission.canVerifyDelivery {
-                    DastakHandoffCodeField(
-                        title: "Customer delivery code",
-                        length: 6,
-                        code: $deliveryCode
-                    )
-                    Button("Verify delivery") {
-                        advance("v1VerifyDelivery", nil, nil, deliveryCode, nil)
+                if let collection = mission.launchCollection, collection.state != .notRequired {
+                    collectionCard(collection)
+                }
+                if mission.status == .arrived {
+                    Button("Complete delivery") {
+                        advance("v1CompleteDelivery", nil, nil, nil, nil)
                     }
                     .buttonStyle(MarketplacePrimaryButtonStyle())
-                    .disabled(busy || deliveryCode.count != 6)
-                } else if mission.status == .arrived, !collectionSatisfied {
-                    Label(
-                        "Record the doorstep collection before the photo and customer delivery code.",
-                        systemImage: "lock.fill"
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .disabled(busy || mission.canCompleteDelivery != true)
                 }
             }
 
@@ -613,9 +622,10 @@ private struct DastakV1MissionCard: View {
             .contains(mission.status)
     }
 
-    private var collectionSatisfied: Bool {
-        guard let collection = mission.launchCollection else { return true }
-        return !collection.required || collection.state == .collected
+    private var liveMission: DastakV1DeliveryMissionSnapshot {
+        if let trackingMission, trackingMission.id == mission.id,
+           trackingMission.status == mission.status { return trackingMission }
+        return mission
     }
 
     @ViewBuilder
@@ -633,12 +643,17 @@ private struct DastakV1MissionCard: View {
             )
             .font(.caption.weight(.semibold))
             .foregroundStyle(stop.ready || stop.status == .completed ? MarketplaceColors.success.color : Color.secondary)
+            if stop.status != .completed {
+                DastakMapRouteButton(point: GeoPoint(latitude: stop.branch.address.latitude,
+                    longitude: stop.branch.address.longitude), label: "Open merchant route")
+            }
             if stop.status == .pending, mission.status != .assigned {
-                Button("I’ve arrived") {
+                DastakArrivalButton(
+                    eligibility: liveMission.pickupStops.first(where: { $0.id == stop.id })?.arrival,
+                    busy: busy
+                ) {
                     advance("v1ArriveAtPickup", stop.id, nil, nil, nil)
                 }
-                .buttonStyle(MarketplaceSecondaryButtonStyle())
-                .disabled(busy)
             }
             if stop.status == .arrived {
                 if !stop.ready {
@@ -698,13 +713,13 @@ private struct DastakV1MissionCard: View {
             if collection.state == .collected {
                 let method = collection.lastMethod.map { $0 == .cash ? "cash" : "UPI" }
                 Label(
-                    "Payment collected\(method.map { " by \($0)" } ?? ""). Delivery verification is unlocked.",
+                    "Payment collected\(method.map { " by \($0)" } ?? ""). You can complete delivery.",
                     systemImage: "checkmark.seal.fill"
                 )
                 .font(.footnote)
                 .foregroundStyle(MarketplaceColors.success.color)
-            } else if mission.status != .arrived {
-                Text("Collection unlocks after arrival with complete package custody.")
+            } else if !collection.canRecord {
+                Text("Collection unlocks after arrival, customer PIN verification and the package photo.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {

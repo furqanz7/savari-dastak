@@ -115,6 +115,29 @@ describe("customer V1 Orders experience", () => {
     expect(markup).not.toMatch(/retail merchant|pickup route/i);
   });
 
+  it("shows the customer PIN before collection and retires it once verified", () => {
+    const order = orderFixture();
+    order.status = "OUT_FOR_DELIVERY";
+    order.launchPayment = {
+      optionLabel: "Pay via UPI/Cash on Delivery", state: "PAYMENT_DUE_AT_DELIVERY",
+      amountPaise: 25500, currencyCode: "INR", reservationSecondsRemaining: 0,
+      reservationState: "COMMITTED",
+      canCommit: false, noChargeNow: true, payAtDoorstep: true,
+    };
+    order.delivery = {
+      state: "ON_THE_WAY", verificationStatus: "ACTIVE", deliveryCode: "654321",
+      recipientAccountRequired: false, pinVerified: false,
+    };
+    const render = () => renderToStaticMarkup(<MatchingSheet order={order} busy={false}
+      imageUrlForLine={() => null} onDismiss={() => undefined} onCancel={() => undefined}
+      onPay={() => undefined} onReorder={() => undefined} onRefresh={() => undefined}
+      onReportIssue={async () => true} />);
+    expect(render()).toContain("654321");
+    expect(render()).toContain("then takes the package photo, collects payment");
+    order.delivery.pinVerified = true;
+    expect(render()).not.toContain("654321");
+  });
+
   it("presents an unpaid matching order as an in-progress order, not a receipt", () => {
     const order = orderFixture();
     order.status = "MATCHING";

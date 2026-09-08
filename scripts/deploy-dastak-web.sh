@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  printf 'usage: %s customer|delivery|merchant|admin|all --check|--preview|--production\n' "$0" >&2
+  printf 'usage: %s customer|delivery|merchant|admin|all --check|--preview|--staged-production|--production\n' "$0" >&2
   exit 64
 }
 
@@ -10,7 +10,7 @@ role="${1:-}"
 mode="${2:-}"
 [[ -n "$role" && -n "$mode" ]] || usage
 case "$mode" in
-  --check|--preview|--production) ;;
+  --check|--preview|--staged-production|--production) ;;
   *) usage ;;
 esac
 if [[ "$role" == "all" && "$mode" != "--check" ]]; then
@@ -123,7 +123,13 @@ rsync -a \
   "$deploy_root/Web/MarketplaceWeb/"
 
 deploy_args=(deploy "$deploy_root" --project "$project" --scope "$team_slug" --archive=tgz --yes)
-if [[ "$mode" == "--production" ]]; then
+deploy_args+=(--meta "gitCommitSha=$(git -C "$repo_root" rev-parse HEAD)")
+if [[ "$mode" == "--production" || "$mode" == "--staged-production" ]]; then
   deploy_args+=(--prod)
+fi
+if [[ "$mode" == "--staged-production" ]]; then
+  # Build with production configuration without switching traffic before a
+  # coordinated native/backend rollout. Promote this exact artifact afterwards.
+  deploy_args+=(--skip-domain)
 fi
 VERCEL_ORG_ID="$org_id" VERCEL_PROJECT_ID="$project_id" vercel "${deploy_args[@]}"

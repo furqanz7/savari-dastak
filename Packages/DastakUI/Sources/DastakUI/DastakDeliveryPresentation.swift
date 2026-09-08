@@ -22,7 +22,7 @@ enum DastakDeliveryPresentation {
         case .pickupInProgress: "Count every package and ask the merchant for the pickup code."
         case .allPackagesPickedUp: "All pickups are verified. Start the route to your customer."
         case .outForDelivery: "Keep every package secure. Mark arrival at the destination."
-        case .arrived: "Complete payment if due, add a package photo, then verify the customer code."
+        case .arrived: "Verify the customer PIN, take the package photo, collect payment if due, then complete delivery."
         case .deliveryRecovery: "Keep the packages with you. Contact Operations for the next steps."
         }
     }

@@ -125,10 +125,10 @@ select ok(pg_catalog.pg_get_functiondef(
   'dastak_v1_api.complete_final_delivery_locked(uuid,uuid,uuid,dastak_v1.verification_handoff_status,timestamp with time zone)'::regprocedure
   ) ~ 'SUCCEEDED', 'historical legitimate provider payments remain deliverable');
 select ok(pg_catalog.pg_get_functiondef(
-  'dastak_v1_api.order_json(uuid,uuid)'::regprocedure) ~ '''launchPayment''',
+  'dastak_v1_api.order_json_pre_tracking(uuid,uuid)'::regprocedure) ~ '''launchPayment''',
   'customer projection exposes only the safe launch state');
 select ok(pg_catalog.pg_get_functiondef(
-  'dastak_v1_api.order_json(uuid,uuid)'::regprocedure
+  'dastak_v1_api.order_json_pre_tracking(uuid,uuid)'::regprocedure
   ) ~ 'snapshot[[:space:]]*-[[:space:]]*''payment''',
   'launch orders omit dormant provider-attempt metadata from the customer projection');
 select ok(pg_catalog.pg_get_functiondef(

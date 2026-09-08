@@ -286,11 +286,20 @@ final class DastakDeliveryPartnerModel: ObservableObject {
             errorMessage = nil
             if operation == "v1VerifyPickup" {
                 noticeMessage = "Pickup verified. The declared packages are now in your custody."
-            } else if operation == "v1VerifyDelivery" {
+            } else if operation == "v1VerifyCustomerPIN" {
+                noticeMessage = "Customer PIN verified. Take the package photo next."
+            } else if operation == "v1CompleteDelivery" || operation == "v1VerifyDelivery" {
                 noticeMessage = "Delivery verified and completed."
             }
         } catch {
             errorMessage = message(for: error, fallback: "The Dastak mission could not be updated.")
+            if case let FunctionClientError.api(status, _, _) = error,
+               (400..<500).contains(status), status != 408, status != 429 {
+                // Definitive rejections are safe to retry after location/state
+                // changes. Keep the same key only for uncertain network outcomes.
+                actionKeys[identity] = nil
+                await refresh()
+            }
         }
     }
 
@@ -321,10 +330,15 @@ final class DastakDeliveryPartnerModel: ObservableObject {
             actionKeys[identity] = nil
             errorMessage = nil
             noticeMessage = outcome == .collected
-                ? "Payment collected. Complete the customer delivery verification."
+                ? "Payment collected. You can now complete delivery."
                 : "Failed collection recorded. Keep the packages secure and retry before delivery."
         } catch {
             errorMessage = message(for: error, fallback: "The doorstep collection result could not be recorded.")
+            if case let FunctionClientError.api(status, _, _) = error,
+               (400..<500).contains(status), status != 408, status != 429 {
+                actionKeys[identity] = nil
+                await refresh()
+            }
         }
     }
 

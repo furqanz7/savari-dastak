@@ -443,6 +443,7 @@ public struct DastakV1DeliveryProgress: Codable, Equatable, Sendable {
     public let riderLocation: DastakV1Coordinate?
     public let riderLocationUpdatedAt: String?
     public let distanceToDestinationMeters: Int?
+    public var pinVerified: Bool?
 }
 
 public struct DastakV1Coordinate: Codable, Equatable, Sendable {
@@ -642,6 +643,7 @@ public struct DastakV1OrderSnapshot: Codable, Equatable, Identifiable, Sendable 
     public let payment: DastakV1PaymentReservation?
     public let launchPayment: DastakV1LaunchPayment?
     public let delivery: DastakV1DeliveryProgress?
+    public var tracking: DastakDeliveryTracking?
     public let support: DastakV1OrderSupport?
     public let deliveryAddress: DastakV1DeliveryAddressInput?
     public let recipient: DastakV1RecipientInput?

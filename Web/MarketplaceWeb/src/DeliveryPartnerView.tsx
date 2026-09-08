@@ -7,6 +7,7 @@ import {
   advanceV1DeliveryMission,
   advanceV1ReturnMission,
   advanceDeliveryJob,
+  canArriveAtDestination,
   declineV1DeliveryOffer,
   declineDeliveryOffer,
   getDeliveryDispatch,
@@ -14,6 +15,7 @@ import {
   getV1DeliveryDispatch,
   heartbeatV1DeliveryMission,
   publishDeliveryPartnerLocation,
+  publishV1MissionLocation,
   recordV1LaunchCollection,
   setDeliveryPartnerAvailability,
   uploadV1DeliveryEvidence,
@@ -26,6 +28,7 @@ import {
   type V1DeliveryDispatchSnapshot,
   type V1DeliveryMission,
   type V1DeliveryMissionOperation,
+  type V1ArrivalEligibility,
   type V1PickupStop,
   type V1RiderOffer,
   type V1ReturnMission,
@@ -74,6 +77,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [trackingError, setTrackingError] = useState<string>();
   const [verificationCode, setVerificationCode] = useState("");
   const [section, setSection] = useState<"deliveries" | "royalty" | "account">("deliveries");
   const refreshQueue = useRef(new RefreshQueue());
@@ -121,24 +125,68 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     };
   }, [refresh]);
 
+  // Preserve operational liveness when precise GPS is temporarily unavailable.
+  // Successful mission-location updates also refresh the server contact time.
   useEffect(() => {
     const mission = v1Dispatch.currentMission;
     if (!mission || mission.status === "DELIVERY_RECOVERY") return;
     const heartbeat = async () => {
       try {
         await heartbeatV1DeliveryMission({
-          ...auth,
-          missionId: mission.id,
-          expectedVersion: mission.version,
+          ...auth, missionId: mission.id, expectedVersion: mission.version,
         });
-        await refresh();
-      } catch {
+      } finally {
         await refresh();
       }
     };
-    const interval = window.setInterval(() => void heartbeat(), 20_000);
-    return () => window.clearInterval(interval);
+    const timer = window.setInterval(() => { void heartbeat().catch(() => undefined); }, 20_000);
+    return () => window.clearInterval(timer);
   }, [auth, refresh, v1Dispatch.currentMission]);
+
+  const trackingMissionId = v1Dispatch.currentMission?.id;
+  useEffect(() => {
+    setTrackingError(undefined);
+    if (!trackingMissionId) return;
+    if (!navigator.geolocation) {
+      setTrackingError("This browser cannot share location. Use the Dastak iOS app for delivery.");
+      return;
+    }
+    let cancelled = false;
+    let uploading = false;
+    let lastUpload = 0;
+    const watch = navigator.geolocation.watchPosition(async (position) => {
+      if (cancelled || uploading || Date.now() - lastUpload < 8_000) return;
+      if (Math.abs(Date.now() - position.timestamp) > 25_000 || position.coords.accuracy > 200) {
+        setTrackingError("Waiting for a fresh, precise GPS position. Arrival remains locked.");
+        return;
+      }
+      uploading = true;
+      lastUpload = Date.now();
+      try {
+        const snapshot = await publishV1MissionLocation({
+          ...auth, missionId: trackingMissionId,
+          latitude: position.coords.latitude, longitude: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
+          recordedAt: new Date(position.timestamp).toISOString(),
+        });
+        if (cancelled) return;
+        setTrackingError(undefined);
+        // An in-flight fix must never resurrect a completed/reassigned mission,
+        // or replace a newer action response with an older version.
+        setV1Dispatch((current) => current.currentMission?.id === trackingMissionId &&
+          snapshot.currentMission?.id === trackingMissionId &&
+          snapshot.currentMission.version >= current.currentMission.version
+          ? { ...current, currentMission: snapshot.currentMission } : current);
+      } catch {
+        if (!cancelled) setTrackingError("Location sharing interrupted. Arrival stays locked until GPS reconnects.");
+      } finally {
+        uploading = false;
+      }
+    }, () => {
+      if (!cancelled) setTrackingError("Allow precise location in your browser settings to confirm arrival.");
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 });
+    return () => { cancelled = true; navigator.geolocation.clearWatch(watch); };
+  }, [auth, trackingMissionId]);
 
   const changeAvailability = async (online: boolean) => {
     setBusy("availability");
@@ -289,10 +337,18 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       if (operation === "v1VerifyPickup") {
         setNotice("Pickup verified. Every declared package is now in your custody.");
       }
-      if (operation === "v1VerifyDelivery") {
+      if (operation === "v1VerifyCustomerPIN") {
+        setNotice("Customer PIN verified. Capture the delivery/package photo next.");
+      }
+      if (operation === "v1CompleteDelivery" || operation === "v1VerifyDelivery") {
         setNotice("Delivery verified. Every package is now in the customer’s custody.");
       }
     } catch (actionError) {
+      if (actionError instanceof DeliveryRequestError && actionError.status >= 400 &&
+        actionError.status < 500 && ![408, 429].includes(actionError.status)) {
+        actionKeys.current.delete(requestIdentity);
+        await refresh();
+      }
       setError(message(actionError));
     } finally {
       setBusy(undefined);
@@ -316,7 +372,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       });
       actionKeys.current.delete(requestIdentity);
       setV1Dispatch(snapshot);
-      setNotice("Package photo captured. Ask the recipient for their in-app delivery code.");
+      setNotice("Package photo secured. Record the pay-at-delivery collection next.");
     } catch (actionError) {
       setError(message(actionError));
     } finally {
@@ -349,9 +405,14 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       actionKeys.current.delete(requestIdentity);
       setV1Dispatch(snapshot);
       setNotice(input.outcome === "COLLECTED"
-        ? "Payment collected and recorded. Complete the customer delivery verification."
+        ? "Payment collected and recorded. You can now complete the delivery."
         : "Collection attempt recorded. Keep the order secure and retry before delivery.");
     } catch (actionError) {
+      if (actionError instanceof DeliveryRequestError && actionError.status >= 400 &&
+        actionError.status < 500 && ![408, 429].includes(actionError.status)) {
+        actionKeys.current.delete(requestIdentity);
+        await refresh();
+      }
       setError(message(actionError));
     } finally {
       setBusy(undefined);
@@ -478,6 +539,8 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       </header>
 
       {error && <p className="order-error" role="alert">{error}</p>}
+      {trackingMissionId && <p className="delivery-notice" role="status">{trackingError ??
+        "Keep this browser tab open for location sharing. Use the Dastak iOS app for background delivery tracking."}</p>}
       {notice && <div className="delivery-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div>}
       {loading ? <div className="catalogue-loading" role="status"><span /> Loading delivery queue</div> : (
         <>
@@ -710,7 +773,6 @@ function CurrentV1Mission({
   const [collectionReference, setCollectionReference] = useState("");
   const [collectionFailureReason, setCollectionFailureReason] = useState("");
   const collection = mission.launchCollection;
-  const collectionSatisfied = !collection?.required || collection.state === "PAYMENT_COLLECTED";
   const finalStage = ["ALL_PACKAGES_PICKED_UP", "OUT_FOR_DELIVERY", "ARRIVED"].includes(
     mission.status,
   );
@@ -787,25 +849,37 @@ function CurrentV1Mission({
             </button>
           )}
           {mission.canArriveCustomer && (
-            <button className="primary-button delivery-next-action" type="button" disabled={busy} onClick={() => onAction("v1ArriveAtCustomer") }>
-              <MapPin size={18} /> I’ve arrived
-            </button>
+            <ArrivalAction arrival={mission.customerArrival} busy={busy} onArrive={() => onAction("v1ArriveAtCustomer")} />
           )}
-          {collection && collection.state !== "NOT_REQUIRED" && (
-            <section className={`v1-doorstep-collection ${collection.state === "COLLECTION_RETRY_NEEDED" ? "retry" : ""}`} aria-labelledby="doorstep-collection-title">
-              <header><span><Banknote size={21} /></span><div><small>AUTHORITATIVE AMOUNT DUE</small><h3 id="doorstep-collection-title">{formatPrice(collection.amountPaise ?? 0)}</h3></div><b>{collection.state === "PAYMENT_COLLECTED" ? "COLLECTED" : "PAY AT DELIVERY"}</b></header>
-              {collection.state === "PAYMENT_COLLECTED" ? <p className="delivery-notice" role="status"><Check size={18} /> Payment collected by {collection.lastMethod === "CASH" ? "cash" : "UPI"}. Delivery verification is unlocked.</p> : mission.status !== "ARRIVED" ? <p>Collection unlocks after you arrive at the customer. Never collect before complete package custody.</p> : <>
-                {collection.state === "COLLECTION_RETRY_NEEDED" ? <p className="order-error" role="status"><CircleAlert size={17} /> The last collection failed{collection.failureReason ? `: ${collection.failureReason}` : "."} Keep every package secure and retry.</p> : <p>Ask the recipient whether they are paying by cash or UPI, then record the actual result.</p>}
-                <div className="v1-collection-methods" role="group" aria-label="Actual payment method">
-                  {collection.methods.map((method) => <button type="button" key={method} aria-pressed={collectionMethod === method} disabled={busy} onClick={() => setCollectionMethod(method)}>{method === "CASH" ? <Banknote size={18} /> : <WalletCards size={18} />}{method === "CASH" ? "Cash" : "UPI"}</button>)}
-                </div>
-                {collectionMethod === "UPI" ? <label className="handoff-input">UPI reference (optional)<input value={collectionReference} maxLength={200} autoComplete="off" placeholder="Recipient reference" onChange={(event) => setCollectionReference(event.target.value)} /></label> : null}
-                <label className="handoff-input">If collection fails, add a reason<textarea value={collectionFailureReason} maxLength={500} rows={2} placeholder="For example, recipient could not complete payment" onChange={(event) => setCollectionFailureReason(event.target.value)} /></label>
-                <div className="v1-collection-actions"><button className="secondary-button" type="button" disabled={busy || collectionFailureReason.trim().length < 3 || !collection.canRecord} onClick={() => onCollection({ outcome: "FAILED", method: collectionMethod, collectionReference: collectionReference || undefined, failureReason: collectionFailureReason.trim() })}>Couldn’t collect</button><button className="primary-button" type="button" disabled={busy || !collection.canRecord} onClick={() => onCollection({ outcome: "COLLECTED", method: collectionMethod, collectionReference: collectionReference || undefined })}><Check size={18} /> Record collected</button></div>
-              </>}
-            </section>
+          {mission.canVerifyCustomerPIN && (
+            <div className="v1-pickup-verification">
+              <label className="handoff-input">
+                Customer delivery PIN
+                <input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={deliveryCode}
+                  onChange={(event) =>
+                    setDeliveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                />
+              </label>
+              <p className="delivery-return-note">The buyer may share this in-app code with another recipient.</p>
+              <button
+                className="primary-button delivery-next-action"
+                type="button"
+                disabled={busy || deliveryCode.length !== 6}
+                onClick={() => onAction("v1VerifyCustomerPIN", { verificationCode: deliveryCode })}
+              >
+                <PackageCheck size={18} /> Verify customer PIN
+              </button>
+            </div>
           )}
-          {mission.canCaptureDeliveryEvidence && collectionSatisfied && !mission.finalVerification?.evidencePresent && (
+          {mission.finalVerification?.pinVerified && (
+            <p className="delivery-notice" role="status"><Check size={18} /> Customer PIN verified.</p>
+          )}
+          {mission.canCaptureDeliveryEvidence && !mission.finalVerification?.evidencePresent && (
             <label className="v1-delivery-photo">
               <Camera size={20} />
               <span><strong>Capture package photo</strong><small>Required before customer handoff</small></span>
@@ -825,33 +899,24 @@ function CurrentV1Mission({
           {mission.finalVerification?.evidencePresent && (
             <p className="delivery-notice" role="status"><Check size={18} /> Package photo secured.</p>
           )}
-          {mission.canVerifyDelivery && collectionSatisfied && (
-            <div className="v1-pickup-verification">
-              <label className="handoff-input">
-                Customer delivery code
-                <input
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={deliveryCode}
-                  onChange={(event) =>
-                    setDeliveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="000000"
-                />
-              </label>
-              <p className="delivery-return-note">The buyer may share this in-app code with another recipient.</p>
-              <button
-                className="primary-button delivery-next-action"
-                type="button"
-                disabled={busy || deliveryCode.length !== 6}
-                onClick={() => onAction("v1VerifyDelivery", { verificationCode: deliveryCode })}
-              >
-                <PackageCheck size={18} /> Verify handoff
-              </button>
-            </div>
+          {collection && collection.state !== "NOT_REQUIRED" && (
+            <section className={`v1-doorstep-collection ${collection.state === "COLLECTION_RETRY_NEEDED" ? "retry" : ""}`} aria-labelledby="doorstep-collection-title">
+              <header><span><Banknote size={21} /></span><div><small>AUTHORITATIVE AMOUNT DUE</small><h3 id="doorstep-collection-title">{formatPrice(collection.amountPaise ?? 0)}</h3></div><b>{collection.state === "PAYMENT_COLLECTED" ? "COLLECTED" : "PAY AT DELIVERY"}</b></header>
+              {collection.state === "PAYMENT_COLLECTED" ? <p className="delivery-notice" role="status"><Check size={18} /> Payment collected by {collection.lastMethod === "CASH" ? "cash" : "UPI"}. Delivery completion is unlocked.</p> : !collection.canRecord ? <p>First confirm arrival, verify the customer PIN and secure the package photo. Payment collection unlocks after those steps.</p> : <>
+                {collection.state === "COLLECTION_RETRY_NEEDED" ? <p className="order-error" role="status"><CircleAlert size={17} /> The last collection failed{collection.failureReason ? `: ${collection.failureReason}` : "."} Keep every package secure and retry.</p> : <p>Ask the recipient whether they are paying by cash or UPI, then record the actual result.</p>}
+                <div className="v1-collection-methods" role="group" aria-label="Actual payment method">
+                  {collection.methods.map((method) => <button type="button" key={method} aria-pressed={collectionMethod === method} disabled={busy} onClick={() => setCollectionMethod(method)}>{method === "CASH" ? <Banknote size={18} /> : <WalletCards size={18} />}{method === "CASH" ? "Cash" : "UPI"}</button>)}
+                </div>
+                {collectionMethod === "UPI" ? <label className="handoff-input">UPI reference (optional)<input value={collectionReference} maxLength={200} autoComplete="off" placeholder="Recipient reference" onChange={(event) => setCollectionReference(event.target.value)} /></label> : null}
+                <label className="handoff-input">If collection fails, add a reason<textarea value={collectionFailureReason} maxLength={500} rows={2} placeholder="For example, recipient could not complete payment" onChange={(event) => setCollectionFailureReason(event.target.value)} /></label>
+                <div className="v1-collection-actions"><button className="secondary-button" type="button" disabled={busy || collectionFailureReason.trim().length < 3 || !collection.canRecord} onClick={() => onCollection({ outcome: "FAILED", method: collectionMethod, collectionReference: collectionReference || undefined, failureReason: collectionFailureReason.trim() })}>Couldn’t collect</button><button className="primary-button" type="button" disabled={busy || !collection.canRecord} onClick={() => onCollection({ outcome: "COLLECTED", method: collectionMethod, collectionReference: collectionReference || undefined })}><Check size={18} /> Record collected</button></div>
+              </>}
+            </section>
           )}
-          {mission.status === "ARRIVED" && !collectionSatisfied && (
-            <p className="delivery-notice" role="status"><CircleAlert size={18} /> Record the doorstep collection before taking the delivery photo or asking for the customer code.</p>
+          {mission.canCompleteDelivery && (
+            <button className="primary-button delivery-next-action" type="button" disabled={busy} onClick={() => onAction("v1CompleteDelivery")}>
+              <PackageCheck size={18} /> Complete delivery
+            </button>
           )}
           {mission.finalVerification?.status === "BLOCKED" && (
             <p className="order-error" role="alert">Normal code attempts are blocked. Keep the packages secure and report the problem to Operations.</p>
@@ -884,6 +949,30 @@ function CurrentV1Mission({
   );
 }
 
+function ArrivalAction({ arrival, busy, onArrive }: {
+  arrival: V1ArrivalEligibility | null | undefined;
+  busy: boolean;
+  onArrive: () => void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const eligible = canArriveAtDestination(arrival, now);
+  const fresh = arrival?.validUntil && Date.parse(arrival.validUntil) > now;
+  const hint = eligible ? "Within 50 metres. You can confirm arrival." :
+    fresh && arrival?.reason === "TOO_FAR" && arrival.distanceMeters !== null
+      ? `Move within 50 metres to confirm arrival · ${Math.ceil(arrival.distanceMeters)} m away.`
+      : "A fresh, precise GPS position within 50 metres is required to confirm arrival.";
+  return <div>
+    <button className="primary-button delivery-next-action" type="button" disabled={busy || !eligible} onClick={onArrive}>
+      <MapPin size={18} /> I’ve arrived
+    </button>
+    <p className="delivery-return-note" role="status">{hint}</p>
+  </div>;
+}
+
 function V1PickupStopCard({
   stop,
   missionStarted,
@@ -914,12 +1003,10 @@ function V1PickupStopCard({
         <em>{stop.status === "COMPLETED" ? "Picked up" : stop.ready ? "Ready" : stop.runningLate ? "Merchant running late" : "Preparing"}</em>
       </header>
       {stop.branch.location && stop.status !== "COMPLETED" && (
-        <MapLink location={stop.branch.location} label="Open pickup route" />
+        <MapLink location={stop.branch.location} label="Open merchant route" />
       )}
       {missionStarted && stop.status === "PENDING" && (
-        <button className="secondary-button" type="button" disabled={busy} onClick={onArrive}>
-          <MapPin size={17} /> I’ve arrived
-        </button>
+        <ArrivalAction arrival={stop.arrival} busy={busy} onArrive={onArrive} />
       )}
       {stop.status === "ARRIVED" && !stop.ready && (
         <p className="delivery-return-note">Waiting for the merchant to mark this pickup Ready · {formatDuration(stop.waitingSeconds)}</p>
