@@ -27,12 +27,18 @@ struct DastakMerchantApp: App {
 }
 
 final class MerchantNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    private let notificationInbox = DastakNotificationInbox()
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        notificationInbox.clear()
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
@@ -49,13 +55,15 @@ final class MerchantNotificationDelegate: NSObject, UIApplicationDelegate, UNUse
     func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
+        notificationInbox.clear()
         NotificationCenter.default.post(name: Notification.Name("dastak.merchant.ordersChanged"), object: nil)
-        return [.banner, .sound, .badge]
+        return [.banner, .sound]
     }
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
+        notificationInbox.clear()
         // Persist cold-launch navigation until authentication has restored the workspace.
         UserDefaults.standard.set(true, forKey: "dastak.merchant.openOrders")
         NotificationCenter.default.post(name: Notification.Name("dastak.merchant.openOrders"), object: nil)

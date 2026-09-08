@@ -44,6 +44,8 @@ struct DastakApp: App {
 }
 
 final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    private let notificationInbox = DastakNotificationInbox()
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -56,6 +58,10 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         }
         #endif
         return true
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        notificationInbox.clear()
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
@@ -82,13 +88,15 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .badge]
+        notificationInbox.clear()
+        return [.banner, .sound]
     }
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
+        notificationInbox.clear()
         guard let route = DastakNotificationRoute.route(
             from: response.notification.request.content.userInfo
         ) else { return }
