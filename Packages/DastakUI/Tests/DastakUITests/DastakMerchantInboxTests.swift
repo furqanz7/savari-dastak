@@ -92,6 +92,23 @@ final class DastakMerchantInboxTests: XCTestCase {
         XCTAssertEqual(DastakMerchantOrderClock.remaining("2026-09-07T11:59:59Z", now: now), "0:00")
     }
 
+    func testReadyConflictRefreshesInlineWithoutBlockingAlert() async throws {
+        let functions = MerchantInboxFunctions()
+        let model = model(functions)
+        await model.refreshOrders()
+        await functions.failReadyAsChanged()
+
+        await model.markV1Ready(try XCTUnwrap(model.v1Fulfilments.first))
+
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(
+            model.notice,
+            "This order changed while you were working. The latest status is now shown."
+        )
+        let calls = await functions.operations
+        XCTAssertGreaterThanOrEqual(calls.filter { $0 == "merchantFulfilments" }.count, 2)
+    }
+
     private func model(_ functions: MerchantInboxFunctions) -> DastakMerchantModel {
         DastakMerchantModel(services: MarketplaceAuthenticatedServices(
             functions: functions, accountIDProvider: { UUID() },
@@ -105,7 +122,9 @@ private actor MerchantInboxFunctions: FunctionClient {
     var operations: [String] = []
     var responses: [ResponseCall] = []
     private var failures: Set<String> = []
+    private var readyChanged = false
     func fail(_ operation: String) { failures.insert(operation) }
+    func failReadyAsChanged() { readyChanged = true }
     func invoke<Request: Encodable & Sendable, Response: Decodable & Sendable>(
         _ name: String, request: Request, idempotencyKey: IdempotencyKey
     ) async throws -> Response {
@@ -113,6 +132,13 @@ private actor MerchantInboxFunctions: FunctionClient {
         let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         let operation = object?["operation"] as? String ?? name
         operations.append(operation)
+        if operation == "markFulfilmentReady", readyChanged {
+            throw FunctionClientError.api(
+                statusCode: 409,
+                code: "invalid_state",
+                message: "That action is not available in the current state."
+            )
+        }
         if operation.hasPrefix("accept") || operation.hasPrefix("decline") || operation == "respondRestaurantRequest" {
             responses.append(ResponseCall(key: idempotencyKey.rawValue, body: body))
             throw URLError(.timedOut)

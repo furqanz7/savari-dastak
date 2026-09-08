@@ -484,9 +484,21 @@ final class DastakMerchantModel: ObservableObject {
                 ? "Ready recorded. The delivery partner can now complete pickup."
                 : "Preparation evidence saved."
         } catch {
-            errorMessage = message(for: error, fallback: "The fulfilment could not be updated.")
-            await refreshOrders()
+            if isRecoverableOrderConflict(error) {
+                actionKeys[identity] = nil
+                errorMessage = nil
+                await refreshOrders()
+                notice = "This order changed while you were working. The latest status is now shown."
+            } else {
+                errorMessage = message(for: error, fallback: "The fulfilment could not be updated.")
+                await refreshOrders()
+            }
         }
+    }
+
+    private func isRecoverableOrderConflict(_ error: Error) -> Bool {
+        guard case let FunctionClientError.api(_, code, _) = error else { return false }
+        return ["invalid_state", "not_found", "stale_version"].contains(code)
     }
 
     func perform(
