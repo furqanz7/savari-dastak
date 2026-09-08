@@ -59,16 +59,28 @@ Directly run in this task:
 
 No browser, simulator or iPhone runtime tests were run. No live order, stock, payment or assignment was changed as a test.
 
-## Coordinated activation
+## Production activation — 9 September 2026
 
-**Do not activate strict backend gates while active riders still use an old native build.** Build 2 lacks the mission GPS publisher and separate PIN command. Applying these guards alone would make arrival or handoff unavailable to that build. This is a release-coordination dependency, not a need for a new order architecture.
+The owner confirmed that native apps are installed through Xcode. A read-only production preflight found **zero active orders and zero active delivery missions**. The release was activated with no in-progress deliveries to interrupt; no order was cancelled or modified for the rollout.
 
-1. Distribute Dastak and DastakMerchant build 3 through the owner's selected signing/install channel. Keep the backend unchanged until the updated riders are ready.
-2. Prepare the affected web artifacts using `scripts/deploy-dastak-web.sh customer --staged-production` and the equivalent `delivery` command. This uses production configuration but leaves existing aliases unchanged. Record their returned deployment URLs and commit metadata.
-3. In the agreed activation window, apply the reviewed migration with `supabase db push --linked` from `Backends/Dastak`, deploy only `courier-dispatch` with its existing JWT setting, and promote the exact staged web artifacts.
-4. Re-run read-only migration/function/role checks. Do not create or mutate live orders as an unauthorized smoke test.
-5. With owner authorization, exercise assignment, Maps navigation, background/lock screen, weak GPS, reconnect, merchant/customer tracking, 50-metre arrival, the complete handoff, and notification behavior on devices.
+**Install Dastak and DastakMerchant build 3 before starting a new delivery.** Build 2 lacks the mission GPS publisher and separate PIN command and cannot satisfy the new server gates. No remote native install is implied by these deployments. The unsigned archives are build evidence, not installable distribution packages.
 
-The production database and courier function are intentionally not marked deployed until native rollout readiness is confirmed. The repository currently has no configured TestFlight/App Store upload pipeline or Apple Distribution signing identity; generic builds alone do not update installed apps.
+- Source commit: `01852318958a10e3f658910c5e6608d17e89bf30`, pushed to `codex/dastak-v1-launch`.
+- Production migration `20260908201530` applied; the subsequent linked dry run reported the remote database up to date.
+- `courier-dispatch` deployed as version 24, ACTIVE, with `verify_jwt=true` unchanged. Anonymous POST returned 401; OPTIONS returned 204.
+- Production read-only checks confirmed the new arrival/consumption/cleanup triggers enabled, no authenticated-client execute permission on the GPS-writing RPC, no raw GPS table read permission, and service-role execute permission present.
+- Customer and Delivery web were built as staged production artifacts, then promoted after the database/API rollout. Merchant and Admin web were also deployed. All four Vite deployments were verified READY with the exact source commit metadata.
+- The four public production URLs returned HTTP 200. Customer/Delivery canonical URLs were also resolved through the deployment API to the exact new deployment IDs; protected team-scoped aliases were not mistaken for the public URLs. These are HTTP/release checks, not browser or authenticated order-flow tests.
+
+| Web app | Production URL | Deployment |
+| --- | --- | --- |
+| Customer | https://dastak-customer.vercel.app | `dpl_CXCKKDKCCY1eeogenBLwzu4bZmiE` |
+| Delivery Partner | https://dastak-delivery.vercel.app | `dpl_21HhzaGgh9BgcGTUk4qeFki91cZ2` |
+| Merchant | https://dastak-merchant.vercel.app | `dpl_5oXkoJ5Z2iNs4cBG9QyGiuzPh4y6` |
+| Admin | https://dastak-admin.vercel.app | `dpl_BuQmwU3io2zrsdLtUH1A2KkDoxkX` |
+
+Open `SavariDastak.xcworkspace` from this worktree in Xcode. Install the `Dastak` scheme for Customer and Delivery Partner, and `DastakMerchant` for Merchant. Both are version 1.0.0, build 3.
+
+With owner authorization, the remaining device acceptance gate is assignment, Maps navigation, background/lock screen, weak GPS, reconnect, merchant/customer tracking, 50-metre arrival, the complete handoff, and notification behavior. These runtime checks were deliberately not performed; successful compilation and server tests are not a substitute for physical-device acceptance.
 
 If activation causes a problem, do not remove verification records, reset order states, or revert consumed payment/custody history. Keep gates fail-closed and fix forward; use existing Operations recovery for affected missions.
