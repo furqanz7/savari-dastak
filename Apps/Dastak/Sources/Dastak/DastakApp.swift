@@ -311,7 +311,11 @@ private struct DastakCustomerPartnerRoot: View {
                 }
                 while !Task.isCancelled {
                     if scenePhase == .active { await deliveryTracker.refresh() }
-                    try? await Task.sleep(for: .seconds(15))
+                    // Active GPS uploads already return the authoritative
+                    // mission snapshot. Poll quickly only while waiting for an
+                    // assignment; use a quiet reconciliation while tracking.
+                    let interval = deliveryTracker.mission == nil ? 15.0 : 45.0
+                    try? await Task.sleep(for: .seconds(interval))
                 }
             }
             .onDisappear { deliveryTracker.stop() }

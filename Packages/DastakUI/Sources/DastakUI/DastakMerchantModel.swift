@@ -369,6 +369,16 @@ final class DastakMerchantModel: ObservableObject {
         } catch { return "Preparation and pickup" }
     }
 
+    /// Realtime rider tracking changes affect the V1 fulfilment projection only.
+    /// Keeping this narrow avoids refetching the inbox, food requests and legacy
+    /// order history on every GPS sample.
+    func refreshV1Fulfilments() async {
+        let failure = await refreshFulfilments()
+        orderRefreshFailures.removeAll { $0 == "Preparation and pickup" }
+        if let failure { orderRefreshFailures.append(failure) }
+        if failure == nil { lastOrderRefresh = .now }
+    }
+
     private func refreshLegacyOrders() async -> String? {
         do {
             orders = Self.sorted(try await orderClient.merchantSnapshot(idempotencyKey: makeKey()).orders)

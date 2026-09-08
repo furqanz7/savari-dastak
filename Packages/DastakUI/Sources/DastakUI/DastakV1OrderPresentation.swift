@@ -15,8 +15,14 @@ enum DastakV1OrderPresentation {
         DastakCustomerModel.isActiveV1Order(status)
     }
 
-    static func title(_ status: DastakV1OrderStatus) -> String {
-        switch status {
+    static func title(
+        _ status: DastakV1OrderStatus,
+        trackingPhase: String? = nil
+    ) -> String {
+        if status == .outForDelivery, trackingPhase == "ARRIVED" {
+            return "Rider arrived"
+        }
+        return switch status {
         case .created, .matching: "Finding every item"
         case .fullySecured, .awaitingPayment: "Your basket is secured"
         case .paid, .preparing: "Preparing your order"
@@ -30,8 +36,14 @@ enum DastakV1OrderPresentation {
         }
     }
 
-    static func message(_ status: DastakV1OrderStatus) -> String {
-        switch status {
+    static func message(
+        _ status: DastakV1OrderStatus,
+        trackingPhase: String? = nil
+    ) -> String {
+        if status == .outForDelivery, trackingPhase == "ARRIVED" {
+            return "Your delivery partner is at the delivery destination. Share the PIN only when you have every package."
+        }
+        return switch status {
         case .created, .matching:
             "We’re checking availability for every exact item in your basket. You’ll pay only after everything is secured."
         case .fullySecured, .awaitingPayment:
@@ -58,7 +70,7 @@ enum DastakV1OrderPresentation {
     }
 
     static func assurance(_ status: DastakV1OrderStatus) -> String {
-        switch status {
+        return switch status {
         case .created, .matching, .fullySecured, .awaitingPayment:
             "No charge now; pay at the doorstep after confirmation"
         case .paid, .preparing, .pickupInProgress, .outForDelivery, .delivered:
@@ -70,8 +82,14 @@ enum DastakV1OrderPresentation {
         }
     }
 
-    static func symbol(_ status: DastakV1OrderStatus) -> String {
-        switch status {
+    static func symbol(
+        _ status: DastakV1OrderStatus,
+        trackingPhase: String? = nil
+    ) -> String {
+        if status == .outForDelivery, trackingPhase == "ARRIVED" {
+            return "mappin.and.ellipse"
+        }
+        return switch status {
         case .fullySecured, .awaitingPayment: "checkmark.shield.fill"
         case .paid, .preparing: "shippingbox.fill"
         case .pickupInProgress, .outForDelivery: "scooter"
@@ -96,7 +114,13 @@ enum DastakV1OrderPresentation {
         }
     }
 
-    static func journeyLabel(_ status: DastakV1OrderStatus) -> String? {
+    static func journeyLabel(
+        _ status: DastakV1OrderStatus,
+        trackingPhase: String? = nil
+    ) -> String? {
+        if status == .outForDelivery, trackingPhase == "ARRIVED" {
+            return "Rider arrived"
+        }
         guard let step = journeyStep(status) else { return nil }
         return journeySteps[step]
     }

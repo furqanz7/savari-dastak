@@ -54,6 +54,29 @@ final class DastakV1OrderPresentationTests: XCTestCase {
         )
     }
 
+    func testArrivedTrackingPhaseOverridesBroadOutForDeliveryCopy() {
+        XCTAssertEqual(
+            DastakV1OrderPresentation.title(.outForDelivery, trackingPhase: "ARRIVED"),
+            "Rider arrived"
+        )
+        XCTAssertEqual(
+            DastakV1OrderPresentation.journeyLabel(.outForDelivery, trackingPhase: "ARRIVED"),
+            "Rider arrived"
+        )
+        XCTAssertEqual(
+            DastakV1OrderPresentation.symbol(.outForDelivery, trackingPhase: "ARRIVED"),
+            "mappin.and.ellipse"
+        )
+        XCTAssertTrue(
+            DastakV1OrderPresentation.message(.outForDelivery, trackingPhase: "ARRIVED")
+                .contains("delivery destination")
+        )
+        XCTAssertEqual(
+            DastakV1OrderPresentation.title(.outForDelivery, trackingPhase: "OUT_FOR_DELIVERY"),
+            "On the way"
+        )
+    }
+
     func testMatchingCopyKeepsInternalMerchantAndWaveDetailsPrivate() {
         let copy = DastakV1OrderPresentation.message(.matching).lowercased()
         XCTAssertTrue(copy.contains("every exact item"))

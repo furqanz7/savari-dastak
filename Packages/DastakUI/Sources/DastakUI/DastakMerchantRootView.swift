@@ -51,7 +51,8 @@ public struct DastakMerchantRootView: View {
             await model.notifications.refresh()
             while !Task.isCancelled {
                 await model.refreshOrders()
-                try? await Task.sleep(for: .seconds(10))
+                // Realtime is primary; this slower pass is outage recovery.
+                try? await Task.sleep(for: .seconds(30))
                 guard !Task.isCancelled else { return }
             }
         }
@@ -92,9 +93,14 @@ public struct DastakMerchantRootView: View {
         while !Task.isCancelled {
             do {
                 let accountID = try await services.accountID()
-                for try await _ in services.orderEvents.events(accountID: accountID) {
+                for try await event in services.orderEvents.events(accountID: accountID) {
                     guard !Task.isCancelled else { return }
-                    await model.refreshOrders()
+                    if event.entityKind == .merchantOrder,
+                       model.v1Fulfilments.contains(where: { $0.orderID == event.entityID }) {
+                        await model.refreshV1Fulfilments()
+                    } else {
+                        await model.refreshOrders()
+                    }
                 }
             } catch is CancellationError {
                 return

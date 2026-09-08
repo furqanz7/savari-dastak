@@ -286,6 +286,8 @@ final class DastakDeliveryPartnerModel: ObservableObject {
             errorMessage = nil
             if operation == "v1VerifyPickup" {
                 noticeMessage = "Pickup verified. The declared packages are now in your custody."
+            } else if operation == "v1ArriveAtCustomer" {
+                noticeMessage = "Arrival confirmed. Ask the customer for the delivery PIN."
             } else if operation == "v1VerifyCustomerPIN" {
                 noticeMessage = "Customer PIN verified. Take the package photo next."
             } else if operation == "v1CompleteDelivery" || operation == "v1VerifyDelivery" {

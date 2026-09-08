@@ -9,66 +9,47 @@ struct DastakDeliveryTrackingView: View {
     @State private var camera: MapCameraPosition = .automatic
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let live = tracking.isLive(at: context.date)
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 34)).foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(tracking.riderName).font(.headline)
-                        Text(phase).font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Label(live ? "Live" : "Delayed", systemImage: live ? "location.fill" : "location.slash")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(live ? MarketplaceColors.success.color : Color.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 34)).foregroundStyle(MarketplaceColors.dastakAccent.color)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(tracking.riderName).font(.headline)
+                    Text(phase).font(.subheadline).foregroundStyle(.secondary)
                 }
-                if tracking.location != nil || destination != nil {
-                    Map(position: $camera) {
-                        if let destination { Marker("Delivery destination", coordinate: destination) }
-                        if let point = tracking.location {
-                            Annotation(tracking.riderName, coordinate: CLLocationCoordinate2D(
-                                latitude: point.latitude, longitude: point.longitude)) {
-                                Image(systemName: riderSymbol)
-                                    .font(.headline).foregroundStyle(.white).padding(11)
-                                    .background(live ? MarketplaceColors.dastakAccent.color : Color.gray, in: Circle())
-                                    .overlay(Circle().stroke(.white, lineWidth: 3))
-                                    .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
-                            }
-                        }
-                    }
-                    .mapStyle(.standard(pointsOfInterest: .excludingAll))
-                    .mapControls { MapCompass() }
-                    .frame(height: 230)
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
-                    .overlay(alignment: .bottomTrailing) {
-                        Button { withAnimation { camera = .automatic } } label: {
-                            Image(systemName: "scope").padding(10).background(.regularMaterial, in: Circle())
-                        }
-                        .accessibilityLabel("Recenter delivery map").padding(12)
-                    }
-                    .onChange(of: tracking.missionId) { _, _ in camera = .automatic }
-                }
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: live ? "dot.radiowaves.left.and.right" : "clock")
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(live ? "Location updates automatically" :
-                            tracking.location == nil ? "Waiting for the rider’s first location" : "Last-known location · not live")
-                        if !live {
-                            Text("The rider may have weak GPS or no connection. We’ll update this map when a fresh location arrives.")
-                        }
-                        if let updated = DastakDeliveryTracking.date(tracking.recordedAt) {
-                            Text("Updated \(updated, style: .relative) ago")
-                        }
-                    }
-                }
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                DastakTrackingLivenessBadge(tracking: tracking)
             }
-            .padding(MarketplaceSpacing.medium)
-            .marketplaceFlatSurface()
+            if tracking.location != nil || destination != nil {
+                Map(position: $camera) {
+                    if let destination { Marker("Delivery destination", coordinate: destination) }
+                    if let point = tracking.location {
+                        Annotation(tracking.riderName, coordinate: CLLocationCoordinate2D(
+                            latitude: point.latitude, longitude: point.longitude)) {
+                            Image(systemName: riderSymbol)
+                                .font(.headline).foregroundStyle(.white).padding(11)
+                                .background(MarketplaceColors.dastakAccent.color, in: Circle())
+                                .overlay(Circle().stroke(.white, lineWidth: 3))
+                                .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
+                        }
+                    }
+                }
+                .mapStyle(.standard(pointsOfInterest: .excludingAll))
+                .mapControls { MapCompass() }
+                .frame(height: 230)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(alignment: .bottomTrailing) {
+                    Button { withAnimation { camera = .automatic } } label: {
+                        Image(systemName: "scope").padding(10).background(.regularMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("Recenter delivery map").padding(12)
+                }
+                .onChange(of: tracking.missionId) { _, _ in camera = .automatic }
+            }
+            DastakTrackingFreshness(tracking: tracking)
         }
+        .padding(MarketplaceSpacing.medium)
+        .marketplaceFlatSurface()
     }
 
     private var phase: String {
@@ -88,6 +69,45 @@ struct DastakDeliveryTrackingView: View {
         case "BICYCLE": "bicycle"
         case "CAR", "GOODS_VEHICLE": "car.fill"
         default: "scooter"
+        }
+    }
+}
+
+/// The freshness clock changes independently so MapKit is not rebuilt every second.
+private struct DastakTrackingLivenessBadge: View {
+    let tracking: DastakDeliveryTracking
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let live = tracking.isLive(at: context.date)
+            Label(live ? "Live" : "Delayed", systemImage: live ? "location.fill" : "location.slash")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(live ? MarketplaceColors.success.color : Color.secondary)
+        }
+    }
+}
+
+private struct DastakTrackingFreshness: View {
+    let tracking: DastakDeliveryTracking
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let live = tracking.isLive(at: context.date)
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: live ? "dot.radiowaves.left.and.right" : "clock")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(live ? "Location updates automatically" :
+                        tracking.location == nil ? "Waiting for the rider’s first location" : "Last-known location · not live")
+                    if !live {
+                        Text("The rider may have weak GPS or no connection. We’ll update this map when a fresh location arrives.")
+                    }
+                    if let updated = DastakDeliveryTracking.date(tracking.recordedAt) {
+                        Text("Updated \(updated, style: .relative) ago")
+                    }
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

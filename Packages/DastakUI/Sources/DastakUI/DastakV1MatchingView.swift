@@ -158,16 +158,25 @@ struct DastakV1MatchingView: View {
                     if isMatching(order.status) {
                         ProgressView().tint(MarketplaceColors.dastakAccent.color)
                     } else {
-                        Image(systemName: DastakV1OrderPresentation.symbol(order.status))
+                        Image(systemName: DastakV1OrderPresentation.symbol(
+                            order.status,
+                            trackingPhase: order.tracking?.phase
+                        ))
                             .font(.system(size: 21, weight: .bold))
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     }
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(DastakV1OrderPresentation.deliveredDuration(order) ??
-                         DastakV1OrderPresentation.title(order.status))
+                         DastakV1OrderPresentation.title(
+                            order.status,
+                            trackingPhase: order.tracking?.phase
+                         ))
                         .font(.title2.bold())
-                    Text(DastakV1OrderPresentation.message(order.status))
+                    Text(DastakV1OrderPresentation.message(
+                        order.status,
+                        trackingPhase: order.tracking?.phase
+                    ))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -190,7 +199,10 @@ struct DastakV1MatchingView: View {
             }
 
             if DastakV1OrderPresentation.isActive(order.status) {
-                DastakV1JourneyProgress(status: order.status)
+                DastakV1JourneyProgress(
+                    status: order.status,
+                    deliveryPhase: order.tracking?.phase
+                )
             }
 
             Label(
@@ -909,7 +921,9 @@ struct DastakV1MatchingView: View {
     private func pollWhileActive() async {
         while !Task.isCancelled {
             guard let order = model.activeV1Order, shouldPoll(order.status) else { return }
-            try? await Task.sleep(for: .seconds(3))
+            // Realtime is the primary path. This is only a quiet recovery poll
+            // for interrupted channels, so it must not compete with live GPS.
+            try? await Task.sleep(for: .seconds(10))
             guard !Task.isCancelled else { return }
             await model.refreshActiveV1Order()
         }

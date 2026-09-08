@@ -139,6 +139,8 @@ final class DastakCustomerModel: ObservableObject {
     private var parcelPlacementAttempt = DastakOrderPlacementAttempt()
     private var ordersRefreshQueued = false
     private var v1OrdersRefreshQueued = false
+    private var activeV1OrderRefreshQueued = false
+    private var activeV1OrderRefreshInFlight = false
     private var parcelsRefreshQueued = false
     private var v1OrdersNextCursor: DastakV1OrderCursor?
 
@@ -666,21 +668,32 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func refreshActiveV1Order() async {
-        guard let activeV1Order else { return }
-        do {
-            let refreshed = try await v1Client.order(
-                id: activeV1Order.id,
-                idempotencyKey: makeKey()
-            )
-            guard refreshed.version >= activeV1Order.version else { return }
-            self.activeV1Order = refreshed
-            v1Orders = [refreshed] + v1Orders.filter { $0.id != refreshed.id }
-            v1OrderErrorMessage = nil
-        } catch {
-            v1OrderErrorMessage = message(
-                for: error,
-                fallback: "Your matching status could not be refreshed."
-            )
+        activeV1OrderRefreshQueued = true
+        guard !activeV1OrderRefreshInFlight else { return }
+        activeV1OrderRefreshInFlight = true
+        defer { activeV1OrderRefreshInFlight = false }
+
+        while activeV1OrderRefreshQueued, !Task.isCancelled {
+            activeV1OrderRefreshQueued = false
+            guard let requestedOrder = activeV1Order else { return }
+            do {
+                let refreshed = try await v1Client.order(
+                    id: requestedOrder.id,
+                    idempotencyKey: makeKey()
+                )
+                guard activeV1Order?.id == requestedOrder.id,
+                      refreshed.version >= (activeV1Order?.version ?? requestedOrder.version) else {
+                    continue
+                }
+                activeV1Order = refreshed
+                v1Orders = [refreshed] + v1Orders.filter { $0.id != refreshed.id }
+                v1OrderErrorMessage = nil
+            } catch {
+                v1OrderErrorMessage = message(
+                    for: error,
+                    fallback: "Your matching status could not be refreshed."
+                )
+            }
         }
     }
 

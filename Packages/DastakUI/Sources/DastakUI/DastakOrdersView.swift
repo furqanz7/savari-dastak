@@ -414,6 +414,7 @@ private struct DastakV1OrderHistoryRow: View {
 
 struct DastakV1JourneyProgress: View {
     let status: DastakV1OrderStatus
+    var deliveryPhase: String? = nil
     var compact = false
 
     var body: some View {
@@ -428,14 +429,22 @@ struct DastakV1JourneyProgress: View {
                             .frame(height: compact ? 4 : 5)
                     }
                 }
-                if let label = DastakV1OrderPresentation.journeyLabel(status) {
+                if let label = DastakV1OrderPresentation.journeyLabel(
+                    status,
+                    trackingPhase: deliveryPhase
+                ) {
                     Text(label)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(DastakV1OrderPresentation.journeyLabel(status) ?? "Order progress")
+            .accessibilityLabel(
+                DastakV1OrderPresentation.journeyLabel(
+                    status,
+                    trackingPhase: deliveryPhase
+                ) ?? "Order progress"
+            )
         }
     }
 }

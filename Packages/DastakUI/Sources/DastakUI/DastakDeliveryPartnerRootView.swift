@@ -6,7 +6,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct DastakDeliveryPartnerWorkspaceView: View {
-    @EnvironmentObject private var deliveryTracker: DastakActiveDeliveryTracker
     @StateObject private var model: DastakDeliveryPartnerModel
     @StateObject private var locationManager = DastakLocationManager()
     @State private var handoffCode = ""
@@ -24,12 +23,14 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     var body: some View {
         deliveryWorkspace
         .marketplacePage()
+        .background {
+            DastakDeliveryTrackerBridge(
+                mission: model.v1Dispatch?.currentMission,
+                isAuthoritative: !model.isLoading
+            )
+        }
         .task {
             await model.bootstrap()
-            if let snapshot = model.v1Dispatch { deliveryTracker.adopt(snapshot.currentMission) }
-        }
-        .onChange(of: model.v1Dispatch) { _, snapshot in
-            if let snapshot { deliveryTracker.adopt(snapshot.currentMission) }
         }
         .task {
             await observeOrderChanges()
@@ -45,7 +46,8 @@ struct DastakDeliveryPartnerWorkspaceView: View {
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(15))
-                guard !Task.isCancelled, model.isOnline, scenePhase == .active else { continue }
+                guard !Task.isCancelled, model.isOnline, scenePhase == .active,
+                      model.v1Dispatch?.currentMission == nil else { continue }
                 locationManager.requestLocation()
             }
         }
@@ -58,7 +60,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             if pendingOnlineRequest {
                 pendingOnlineRequest = false
                 Task { await model.setAvailability(online: true, location: location) }
-            } else if model.isOnline {
+            } else if model.isOnline, model.v1Dispatch?.currentMission == nil {
                 Task { await model.publishLocation(location) }
             }
         }
@@ -138,12 +140,9 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             availability
             DastakAppNotificationStatus()
             if let mission = model.v1Dispatch?.currentMission {
-                if let message = deliveryTracker.statusMessage {
-                    Label(message, systemImage: "location.circle").font(.footnote).foregroundStyle(.secondary)
-                }
+                DastakDeliveryTrackingNotice(missionID: mission.id)
                 DastakV1MissionCard(
                     mission: mission,
-                    trackingMission: deliveryTracker.mission,
                     busy: model.isBusy,
                     advance: { operation, stopID, packageCount, code, reason in
                         Task {
@@ -432,7 +431,6 @@ struct DastakDeliveryPartnerWorkspaceView: View {
 
 private struct DastakV1MissionCard: View {
     let mission: DastakV1DeliveryMissionSnapshot
-    let trackingMission: DastakV1DeliveryMissionSnapshot?
     let busy: Bool
     let advance: (String, UUID?, Int?, String?, String?) -> Void
     let recordCollection: (
@@ -521,7 +519,12 @@ private struct DastakV1MissionCard: View {
                     .disabled(busy)
                 }
                 if mission.canArriveCustomer {
-                    DastakArrivalButton(eligibility: liveMission.customerArrival, busy: busy) {
+                    DastakTrackedArrivalButton(
+                        missionID: mission.id,
+                        stopID: nil,
+                        fallback: mission.customerArrival,
+                        busy: busy
+                    ) {
                         advance("v1ArriveAtCustomer", nil, nil, nil, nil)
                     }
                 }
@@ -622,12 +625,6 @@ private struct DastakV1MissionCard: View {
             .contains(mission.status)
     }
 
-    private var liveMission: DastakV1DeliveryMissionSnapshot {
-        if let trackingMission, trackingMission.id == mission.id,
-           trackingMission.status == mission.status { return trackingMission }
-        return mission
-    }
-
     @ViewBuilder
     private func pickupStop(_ stop: DastakV1MissionPickupStop) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
@@ -648,8 +645,10 @@ private struct DastakV1MissionCard: View {
                     longitude: stop.branch.address.longitude), label: "Open merchant route")
             }
             if stop.status == .pending, mission.status != .assigned {
-                DastakArrivalButton(
-                    eligibility: liveMission.pickupStops.first(where: { $0.id == stop.id })?.arrival,
+                DastakTrackedArrivalButton(
+                    missionID: mission.id,
+                    stopID: stop.id,
+                    fallback: stop.arrival,
                     busy: busy
                 ) {
                     advance("v1ArriveAtPickup", stop.id, nil, nil, nil)
@@ -775,6 +774,66 @@ private struct DastakV1MissionCard: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(MarketplaceColors.dastakAccent.color.opacity(0.35), lineWidth: 1)
         }
+    }
+}
+
+/// Synchronizes workspace state into the process-owned background tracker
+/// without making the entire delivery screen observe every GPS response.
+private struct DastakDeliveryTrackerBridge: View {
+    @EnvironmentObject private var tracker: DastakActiveDeliveryTracker
+    let mission: DastakV1DeliveryMissionSnapshot?
+    let isAuthoritative: Bool
+
+    private var revision: String {
+        guard isAuthoritative else { return "loading" }
+        guard let mission else { return "none" }
+        return "\(mission.id.uuidString):\(mission.version):\(mission.status.rawValue)"
+    }
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .task(id: revision) {
+                guard isAuthoritative else { return }
+                tracker.adopt(mission)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+private struct DastakDeliveryTrackingNotice: View {
+    @EnvironmentObject private var tracker: DastakActiveDeliveryTracker
+    let missionID: UUID
+
+    var body: some View {
+        if tracker.mission?.id == missionID, let message = tracker.statusMessage {
+            Label(message, systemImage: "location.circle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Only this compact control observes the high-frequency tracking snapshot.
+/// The rest of the mission card stays stable while GPS eligibility changes.
+private struct DastakTrackedArrivalButton: View {
+    @EnvironmentObject private var tracker: DastakActiveDeliveryTracker
+    let missionID: UUID
+    let stopID: UUID?
+    let fallback: DastakArrivalEligibility?
+    let busy: Bool
+    let action: () -> Void
+
+    private var eligibility: DastakArrivalEligibility? {
+        guard let mission = tracker.mission, mission.id == missionID else { return fallback }
+        if let stopID {
+            return mission.pickupStops.first(where: { $0.id == stopID })?.arrival ?? fallback
+        }
+        return mission.customerArrival ?? fallback
+    }
+
+    var body: some View {
+        DastakArrivalButton(eligibility: eligibility, busy: busy, action: action)
     }
 }
 

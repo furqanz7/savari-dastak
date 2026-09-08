@@ -430,9 +430,30 @@ public struct DastakCustomerRootView: View {
         while !Task.isCancelled {
             do {
                 let accountID = try await accountIDProvider()
-                for try await _ in orderEvents.events(accountID: accountID) {
+                for try await event in orderEvents.events(accountID: accountID) {
                     guard !Task.isCancelled else { return }
-                    await model.refreshOrdersAndParcels()
+                    switch event.entityKind {
+                    case .parcel:
+                        if model.customerParcel(withID: event.entityID) != nil {
+                            await model.refreshParcelDetail(parcelID: event.entityID)
+                        } else {
+                            await model.refreshParcels()
+                        }
+                    case .merchantOrder:
+                        if model.activeV1Order?.id == event.entityID {
+                            await model.refreshActiveV1Order()
+                        } else if model.v1Orders.contains(where: { $0.id == event.entityID }) {
+                            await model.refreshV1Orders()
+                        } else if model.order(withID: event.entityID) != nil {
+                            await model.refreshOrderDetail(orderID: event.entityID)
+                        } else {
+                            // The first event for a newly-created order is
+                            // ambiguous across the legacy and V1 contracts.
+                            async let legacy: Void = model.refreshOrders()
+                            async let v1: Void = model.refreshV1Orders()
+                            _ = await (legacy, v1)
+                        }
+                    }
                 }
             } catch is CancellationError {
                 return
@@ -445,7 +466,7 @@ public struct DastakCustomerRootView: View {
 
     private func pollOrderChanges() async {
         while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(30))
+            try? await Task.sleep(for: .seconds(45))
             guard !Task.isCancelled else { return }
             await model.refreshOrdersAndParcels()
         }
