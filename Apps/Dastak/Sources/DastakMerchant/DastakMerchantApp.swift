@@ -34,6 +34,7 @@ final class MerchantNotificationDelegate: NSObject, UIApplicationDelegate, UNUse
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        notificationInbox.clear()
         return true
     }
 

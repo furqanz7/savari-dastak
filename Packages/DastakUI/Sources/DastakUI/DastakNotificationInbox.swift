@@ -13,7 +13,20 @@ public final class DastakNotificationInbox {
                 center.removeAllDeliveredNotifications()
             },
             resetBadge: {
-                Task {
+                Task { @MainActor in
+                    // APNs can finish applying a badge just after an app becomes
+                    // active. Clear immediately, then reassert after the launch
+                    // transition so a late payload cannot leave stale state.
+                    try? await center.setBadgeCount(0)
+
+                    try? await Task.sleep(for: .milliseconds(250))
+                    guard !Task.isCancelled else { return }
+                    center.removeAllDeliveredNotifications()
+                    try? await center.setBadgeCount(0)
+
+                    try? await Task.sleep(for: .milliseconds(750))
+                    guard !Task.isCancelled else { return }
+                    center.removeAllDeliveredNotifications()
                     try? await center.setBadgeCount(0)
                 }
             }

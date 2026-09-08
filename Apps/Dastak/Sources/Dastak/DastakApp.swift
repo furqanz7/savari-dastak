@@ -51,6 +51,7 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        notificationInbox.clear()
         UserDefaults.standard.removeObject(forKey: "dastak.apns.deviceToken")
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-DastakUPIDiscoveryProbe") {
