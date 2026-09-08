@@ -42,7 +42,9 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     private let v1Client: any DastakV1DeliveryClient
     private let earningsClient: any DastakEarningsClient
     private var actionKeys: [String: IdempotencyKey] = [:]
-    private var refreshQueued = false
+    private var fullRefreshQueued = false
+    private var merchantOrderRefreshQueued = false
+    private var parcelRefreshQueued = false
     private var lastLocationPublishedAt: Date?
 
     init(
@@ -88,32 +90,98 @@ final class DastakDeliveryPartnerModel: ObservableObject {
     }
 
     func refresh() async {
-        refreshQueued = true
+        fullRefreshQueued = true
+        await drainRefreshQueue()
+    }
+
+    /// Realtime order events arrive much more frequently than the recovery poll,
+    /// especially while a rider is publishing live location. Refresh only the
+    /// projections affected by the event instead of invoking every partner
+    /// service for every GPS sample.
+    func refreshOrderChange(_ entityKind: OrderChangeEvent.EntityKind) async {
+        switch entityKind {
+        case .merchantOrder:
+            merchantOrderRefreshQueued = true
+        case .parcel:
+            parcelRefreshQueued = true
+        }
+        await drainRefreshQueue()
+    }
+
+    private func drainRefreshQueue() async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
-        while refreshQueued, !Task.isCancelled {
-            refreshQueued = false
-            // An earnings or legacy-service outage must not hide a new V1 job.
-            async let partnerSnapshot = try? partnerClient.selfSnapshot(idempotencyKey: makeKey())
-            async let courierSnapshot = try? courierClient.partnerSnapshot(idempotencyKey: makeKey())
-            async let parcelSnapshot = try? parcelClient.partnerSnapshot(idempotencyKey: makeKey())
-            async let v1Snapshot = try? v1Client.snapshot(idempotencyKey: makeKey())
-            async let earningsSnapshot = try? earningsClient.deliveryPartnerSnapshot(idempotencyKey: makeKey())
-            let snapshots = await (partnerSnapshot, courierSnapshot, parcelSnapshot, v1Snapshot, earningsSnapshot)
-            guard !Task.isCancelled else { return }
-            if let value = snapshots.0 { partner = value }
-            if let value = snapshots.1 { courierDispatch = value }
-            if let value = snapshots.2 { parcelDispatch = value }
-            if let value = snapshots.3 { v1Dispatch = value }
-            if let value = snapshots.4 { earnings = value }
-            if snapshots.0 != nil, snapshots.1 != nil, snapshots.2 != nil, snapshots.3 != nil, snapshots.4 != nil {
-                refreshFailure = nil
-                lastRefreshedAt = .now
-            } else {
-                refreshFailure = "Some updates are unavailable. Last-known details are kept while we reconnect. Pull to refresh."
+        while (fullRefreshQueued || merchantOrderRefreshQueued || parcelRefreshQueued),
+              !Task.isCancelled {
+            if fullRefreshQueued {
+                fullRefreshQueued = false
+                merchantOrderRefreshQueued = false
+                parcelRefreshQueued = false
+                await performFullRefresh()
+                continue
             }
+
+            let refreshMerchantOrders = merchantOrderRefreshQueued
+            let refreshParcels = parcelRefreshQueued
+            merchantOrderRefreshQueued = false
+            parcelRefreshQueued = false
+
+            var succeeded = true
+            if refreshMerchantOrders {
+                succeeded = await performMerchantOrderRefresh() && succeeded
+            }
+            if refreshParcels {
+                succeeded = await performParcelRefresh() && succeeded
+            }
+            recordRefreshResult(succeeded: succeeded)
+        }
+    }
+
+    private func performFullRefresh() async {
+        // An earnings or legacy-service outage must not hide a new V1 job.
+        async let partnerSnapshot = try? partnerClient.selfSnapshot(idempotencyKey: makeKey())
+        async let courierSnapshot = try? courierClient.partnerSnapshot(idempotencyKey: makeKey())
+        async let parcelSnapshot = try? parcelClient.partnerSnapshot(idempotencyKey: makeKey())
+        async let v1Snapshot = try? v1Client.snapshot(idempotencyKey: makeKey())
+        async let earningsSnapshot = try? earningsClient.deliveryPartnerSnapshot(idempotencyKey: makeKey())
+        let snapshots = await (partnerSnapshot, courierSnapshot, parcelSnapshot, v1Snapshot, earningsSnapshot)
+        guard !Task.isCancelled else { return }
+        if let value = snapshots.0 { partner = value }
+        if let value = snapshots.1 { courierDispatch = value }
+        if let value = snapshots.2 { parcelDispatch = value }
+        if let value = snapshots.3 { v1Dispatch = value }
+        if let value = snapshots.4 { earnings = value }
+        recordRefreshResult(
+            succeeded: snapshots.0 != nil && snapshots.1 != nil && snapshots.2 != nil &&
+                snapshots.3 != nil && snapshots.4 != nil
+        )
+    }
+
+    private func performMerchantOrderRefresh() async -> Bool {
+        async let courierSnapshot = try? courierClient.partnerSnapshot(idempotencyKey: makeKey())
+        async let v1Snapshot = try? v1Client.snapshot(idempotencyKey: makeKey())
+        let snapshots = await (courierSnapshot, v1Snapshot)
+        guard !Task.isCancelled else { return false }
+        if let value = snapshots.0 { courierDispatch = value }
+        if let value = snapshots.1 { v1Dispatch = value }
+        return snapshots.0 != nil && snapshots.1 != nil
+    }
+
+    private func performParcelRefresh() async -> Bool {
+        let snapshot = try? await parcelClient.partnerSnapshot(idempotencyKey: makeKey())
+        guard !Task.isCancelled else { return false }
+        if let snapshot { parcelDispatch = snapshot }
+        return snapshot != nil
+    }
+
+    private func recordRefreshResult(succeeded: Bool) {
+        if succeeded {
+            refreshFailure = nil
+            lastRefreshedAt = .now
+        } else {
+            refreshFailure = "Some updates are unavailable. Last-known details are kept while Dastak reconnects automatically."
         }
     }
 

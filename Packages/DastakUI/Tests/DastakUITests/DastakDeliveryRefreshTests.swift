@@ -34,6 +34,61 @@ final class DastakDeliveryRefreshTests: XCTestCase {
         XCTAssertFalse(model.hasActiveJob)
         XCTAssertNil(model.v1Dispatch?.currentMission)
     }
+
+    func testMerchantRealtimeEventRefreshesOnlyOrderDispatchProjections() async {
+        let functions = DeliveryRealtimeFunctionsStub()
+        let model = DastakDeliveryPartnerModel(functions: functions)
+
+        await model.refreshOrderChange(.merchantOrder)
+
+        let requests = await functions.requests
+            .map { "\($0.function):\($0.operation)" }
+            .sorted()
+        XCTAssertEqual(
+            requests,
+            [
+                "courier-dispatch:partnerSnapshot",
+                "courier-dispatch:v1PartnerSnapshot"
+            ].sorted()
+        )
+        XCTAssertFalse(model.isRefreshing)
+        XCTAssertNil(model.refreshFailure)
+    }
+
+    func testParcelRealtimeEventDoesNotFanOutAcrossUnrelatedServices() async {
+        let functions = DeliveryRealtimeFunctionsStub()
+        let model = DastakDeliveryPartnerModel(functions: functions)
+
+        await model.refreshOrderChange(.parcel)
+
+        let requests = await functions.requests
+        XCTAssertEqual(requests.map { "\($0.function):\($0.operation)" }, ["parcel-deliveries:partnerSnapshot"])
+        XCTAssertFalse(model.isRefreshing)
+        XCTAssertNil(model.refreshFailure)
+    }
+}
+
+private actor DeliveryRealtimeFunctionsStub: FunctionClient {
+    struct Request: Equatable {
+        let function: String
+        let operation: String
+    }
+
+    private(set) var requests: [Request] = []
+
+    func invoke<Input: Encodable & Sendable, Result: Decodable & Sendable>(
+        _ name: String,
+        request: Input,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> Result {
+        let encoded = try JSONEncoder().encode(request)
+        let body = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        guard let operation = body?["operation"] as? String else {
+            throw URLError(.cannotParseResponse)
+        }
+        requests.append(.init(function: name, operation: operation))
+        return try JSONDecoder().decode(Result.self, from: Data("{}".utf8))
+    }
 }
 
 private actor DeliveryRefreshFunctionsStub: FunctionClient {

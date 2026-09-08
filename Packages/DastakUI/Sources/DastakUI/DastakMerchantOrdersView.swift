@@ -110,6 +110,7 @@ struct DastakMerchantOrdersView: View {
                 .padding(.horizontal, 18).padding(.bottom, 32)
                 .frame(maxWidth: .infinity)
             }
+            .id(orderDeskLayoutRevision)
             .refreshable { await model.refreshAll() }
             .navigationTitle("Orders")
             .dastakInlineNavigationTitle()
@@ -119,6 +120,29 @@ struct DastakMerchantOrdersView: View {
                 Task { await model.perform(.reject, order: rejection.order, reason: reason) }
             }
         }
+    }
+
+    /// Reset retained scroll state when cards enter, leave, or change queue.
+    /// Tracking samples intentionally do not participate in this key.
+    private var orderDeskLayoutRevision: String {
+        var parts = [
+            "loading:\(model.isLoading)",
+            "queue:\(queue.rawValue)"
+        ]
+        parts.append(contentsOf: model.opportunities.map {
+            "opportunity:\($0.id.uuidString):\($0.status):\($0.reservationState ?? "none")"
+        })
+        parts.append(contentsOf: model.restaurantRequests.map {
+            "restaurant:\($0.id.uuidString):\($0.status)"
+        })
+        parts.append(contentsOf: model.v1Fulfilments.map {
+            "fulfilment:\($0.id.uuidString):\($0.status):\($0.orderStatus):" +
+                "\($0.delivery?.stopStatus ?? "no-stop"):\($0.tracking?.phase ?? "no-tracking")"
+        })
+        parts.append(contentsOf: model.orders.map {
+            "legacy:\($0.orderID.uuidString):\($0.status.rawValue)"
+        })
+        return parts.joined(separator: "|")
     }
 
     private var header: some View {

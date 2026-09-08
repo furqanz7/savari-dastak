@@ -14,9 +14,11 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     private let services: MarketplaceAuthenticatedServices
+    private let refreshToken: Int
 
-    init(services: MarketplaceAuthenticatedServices) {
+    init(services: MarketplaceAuthenticatedServices, refreshToken: Int = 0) {
         self.services = services
+        self.refreshToken = refreshToken
         _model = StateObject(wrappedValue: DastakDeliveryPartnerModel(functions: services.functions))
     }
 
@@ -34,6 +36,10 @@ struct DastakDeliveryPartnerWorkspaceView: View {
         }
         .task {
             await observeOrderChanges()
+        }
+        .task(id: refreshToken) {
+            guard refreshToken > 0 else { return }
+            await model.refresh()
         }
         .task {
             while !Task.isCancelled {
@@ -87,9 +93,9 @@ struct DastakDeliveryPartnerWorkspaceView: View {
         while !Task.isCancelled {
             do {
                 let accountID = try await services.accountID()
-                for try await _ in services.orderEvents.events(accountID: accountID) {
+                for try await event in services.orderEvents.events(accountID: accountID) {
                     guard !Task.isCancelled else { return }
-                    await model.refresh()
+                    await model.refreshOrderChange(event.entityKind)
                 }
             } catch is CancellationError {
                 return
@@ -103,7 +109,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     private var deliveryWorkspace: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                     partnerHeader
                     deliveryContent
                 }
@@ -112,11 +118,44 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 .padding(.bottom, MarketplaceSpacing.xxLarge)
                 .frame(maxWidth: .infinity)
             }
+            .id(deliveryLayoutRevision)
             .refreshable { await model.refresh() }
             .navigationTitle("Deliveries")
             .dastakInlineNavigationTitle()
             .scrollDismissesKeyboard(.interactively)
         }
+    }
+
+    /// Rebuild the scroll container only when its content hierarchy changes.
+    /// This clamps a retained deep scroll offset after a completed mission or
+    /// expired offer disappears, without disrupting frequent rider GPS updates.
+    private var deliveryLayoutRevision: String {
+        var parts = [
+            "loading:\(model.isLoading)",
+            "online:\(model.isOnline)",
+            "failure:\(model.refreshFailure != nil)"
+        ]
+        if let mission = model.v1Dispatch?.currentMission {
+            parts.append("mission:\(mission.id.uuidString):\(mission.status.rawValue)")
+            parts.append(contentsOf: mission.pickupStops.map {
+                "stop:\($0.id.uuidString):\($0.status?.rawValue ?? "unknown")"
+            })
+            parts.append("pin:\(mission.finalVerification?.pinVerified == true)")
+            parts.append("evidence:\(mission.finalVerification?.evidencePresent == true)")
+            parts.append("collection:\(mission.launchCollection?.state.rawValue ?? "none")")
+        } else {
+            parts.append("mission:none")
+        }
+        if let offer = model.v1Dispatch?.offer {
+            parts.append("v1-offer:\(offer.id.uuidString)")
+        }
+        if let assignment = model.courierDispatch?.currentJob ?? model.courierDispatch?.offer {
+            parts.append("courier:\(assignment.assignmentID.uuidString):\(assignment.orderStatus.rawValue)")
+        }
+        if let assignment = model.parcelDispatch?.currentJob ?? model.parcelDispatch?.offer {
+            parts.append("parcel:\(assignment.assignmentID.uuidString):\(assignment.parcel.status.rawValue)")
+        }
+        return parts.joined(separator: "|")
     }
 
     @ViewBuilder
@@ -226,8 +265,14 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                     .frame(width: 6, height: 6)
                 Text(model.refreshFailure == nil ? "Updates automatically" : "Reconnecting")
                 Spacer()
-                if model.isRefreshing { ProgressView().controlSize(.mini) }
-                else { Text("Pull to refresh") }
+                if model.isRefreshing {
+                    HStack(spacing: 5) {
+                        ProgressView().controlSize(.mini)
+                        Text("Syncing")
+                    }
+                } else {
+                    Text(model.refreshFailure == nil ? "Live sync on" : "Retrying")
+                }
             }
             .font(.caption).foregroundStyle(.secondary)
         }

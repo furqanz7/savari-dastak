@@ -169,6 +169,21 @@ public struct DastakCustomerRootView: View {
         }
         .tint(MarketplaceColors.dastakAccent.color)
         .marketplacePage()
+        .onChange(of: selectedTab) { _, tab in
+            guard !isPreview else { return }
+            Task {
+                switch tab {
+                case .home:
+                    await model.refreshV1Catalogue()
+                case .orders:
+                    await model.refreshOrdersAndParcels()
+                case .account:
+                    async let customer: Void = model.refreshCheckoutCustomer()
+                    async let identities: Bool = model.refreshCustomerIdentities()
+                    _ = await (customer, identities)
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let message = model.errorMessage {
                 DastakCustomerNotice(message: message) {

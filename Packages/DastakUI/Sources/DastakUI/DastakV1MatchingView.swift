@@ -135,6 +135,7 @@ struct DastakV1MatchingView: View {
                     }
                     .padding(MarketplaceSpacing.medium)
                 }
+                .id(activeOrderLayoutRevision(order))
             } else {
                 DastakEmptyState(
                     symbol: "clock",
@@ -146,6 +147,20 @@ struct DastakV1MatchingView: View {
         .navigationTitle("Order status")
         .dastakInlineNavigationTitle()
         .dastakOpaqueNavigationBar()
+    }
+
+    /// Stage changes can remove several tall cards at once. Recreating the
+    /// scroll container clamps any now-invalid offset while live map locations
+    /// continue to update in place.
+    private func activeOrderLayoutRevision(_ order: DastakV1OrderSnapshot) -> String {
+        [
+            order.id.uuidString,
+            order.status.rawValue,
+            order.tracking?.phase ?? "no-tracking",
+            order.delivery?.state ?? "no-delivery",
+            String(order.delivery?.pinVerified == true),
+            order.launchPayment?.state.rawValue ?? "no-collection"
+        ].joined(separator: "|")
     }
 
     private func statusCard(_ order: DastakV1OrderSnapshot) -> some View {

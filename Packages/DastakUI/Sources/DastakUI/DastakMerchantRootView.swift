@@ -39,6 +39,18 @@ public struct DastakMerchantRootView: View {
         }
         .tint(MarketplaceColors.dastakAccent.color)
         .marketplacePage()
+        .onChange(of: section) { _, selectedSection in
+            Task {
+                switch selectedSection {
+                case .orders:
+                    await model.refreshOrders()
+                case .store:
+                    await model.refreshCanonicalCatalogue(reportFailure: false)
+                case .account:
+                    await model.notifications.refresh()
+                }
+            }
+        }
         .task {
             await model.bootstrap()
             openPendingOrders()
