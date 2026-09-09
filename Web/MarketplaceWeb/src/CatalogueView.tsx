@@ -1311,6 +1311,7 @@ export function CatalogueView({
         onSave={saveAddress}
       />}
       {profileEditorOpen && <AccountProfileSheet
+        presentation="customer"
         profile={accountProfile}
         busy={profileBusy}
         error={profileError}

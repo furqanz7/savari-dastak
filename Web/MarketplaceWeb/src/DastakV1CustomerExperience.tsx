@@ -933,11 +933,10 @@ export function DastakV1CustomerExperience(props: Props) {
   </div>;
 }
 
-function CustomerHeader({ address, count, onAddress, onSearch, onCart }: { address?: CustomerDeliveryAddress; count: number; onAddress: () => void; onSearch: () => void; onCart: () => void }) {
+export function CustomerHeader({ address, count, onAddress, onSearch, onCart }: { address?: CustomerDeliveryAddress; count: number; onAddress: () => void; onSearch: () => void; onCart: () => void }) {
   return <header className="v1-customer-header">
     <button type="button" className="v1-deliver-to" onClick={onAddress}><MapPin size={21} /><span><small>Deliver to</small><strong>{address?.label ?? "Set your location"}<ChevronRight size={15} /></strong>{address ? <em>{address.displayAddress}</em> : null}</span></button>
-    <button type="button" className="customer-header-search" onClick={onSearch}><Search size={20} /><span>Search products, brands &amp; more</span><ArrowRight size={18} /></button>
-    <div className="v1-header-actions"><button className="customer-mobile-search" type="button" onClick={onSearch} aria-label="Search Dastak"><Search size={21} /></button><button className="customer-basket-button" type="button" onClick={onCart} aria-label={`Basket, ${count} items`}><ShoppingBag size={21} /><span>Basket</span>{count > 0 ? <b>{count}</b> : null}</button></div>
+    <div className="v1-header-actions"><button className="customer-header-search-icon" type="button" onClick={onSearch} aria-label="Search Dastak" title="Search"><Search size={21} /></button><button className="customer-basket-button" type="button" onClick={onCart} aria-label={`Basket, ${count} items`}><ShoppingBag size={21} /><span>Basket</span>{count > 0 ? <b>{count}</b> : null}</button></div>
   </header>;
 }
 

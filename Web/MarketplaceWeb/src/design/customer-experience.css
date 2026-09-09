@@ -56,17 +56,14 @@
 .customer-content { max-width: 1280px; min-width: 0; margin: 0 auto; padding: 0 40px 100px; outline: none; }
 .customer-content > .customer-notice { margin-top: 20px; }
 .customer-experience .v1-customer-shell { max-width: none; padding-bottom: 32px; }
-.customer-experience .v1-customer-header { grid-template-columns: minmax(180px, 1fr) minmax(220px, 480px) auto; gap: 24px; min-height: 94px; padding: 20px 0; border: 0; }
+.customer-experience .v1-customer-header { grid-template-columns: minmax(0, 1fr) auto; gap: 24px; min-height: 94px; padding: 20px 0; border: 0; }
 .customer-experience .v1-deliver-to { display: flex; width: 100%; min-width: 0; min-height: 48px; padding: 0; border: 0; background: transparent; text-align: left; }
 .customer-experience .v1-deliver-to > svg { flex: 0 0 auto; }
 .customer-experience .v1-deliver-to small { font-size: 12px; text-transform: none; font-weight: 500; letter-spacing: 0; }
 .customer-experience .v1-deliver-to strong { display: flex; align-items: center; gap: 4px; font-size: 15px; line-height: 1.45; }
 .customer-experience .v1-deliver-to strong svg { flex-shrink: 0; }
 .customer-experience .v1-deliver-to em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-style: normal; color: var(--text-secondary); max-width: 280px; }
-.customer-header-search { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 52px; padding: 0 18px; border: 1px solid var(--divider); border-radius: 999px; color: var(--text-secondary); background: var(--surface-raised); text-align: left; font-size: 14px; }
-.customer-header-search span { flex: 1; }
-.customer-header-search svg { flex-shrink: 0; color: var(--dastak-accent); }
-.customer-experience .v1-header-actions .customer-mobile-search { display: none; }
+.customer-experience .v1-header-actions .customer-header-search-icon { display: grid; place-items: center; flex: 0 0 auto; width: 48px; height: 48px; padding: 0; border: 1px solid var(--divider); border-radius: 50%; color: var(--text-primary); background: var(--surface-raised); }
 .customer-experience .v1-header-actions .customer-basket-button { display: flex; width: auto; gap: 9px; padding: 0 17px; height: 48px; border-radius: 999px; background: var(--primary-action); color: var(--primary-action-foreground); font-size: 14px; }
 .customer-experience .v1-header-actions button b { position: static; min-width: 23px; height: 23px; font-size: 12px; background: #e8cc96; color: #332616; }
 .customer-back-link { display: flex; align-items: center; gap: 7px; width: fit-content; min-height: 44px; padding: 0; color: var(--text-secondary); background: transparent; border: 0; font-weight: 600; }
@@ -355,7 +352,7 @@
 @media (hover: hover) {
   .customer-experience :is(.v1-product-card, .v1-restaurant-rail > button):hover { border-color: color-mix(in srgb, var(--dastak-accent) 52%, var(--divider)); box-shadow: var(--customer-shadow); }
   .customer-experience .customer-add-product:hover { color: var(--primary-action-foreground); background: var(--primary-action); }
-  .customer-experience :is(.customer-discovery-shortcuts > button, .customer-header-search):hover { border-color: var(--dastak-accent); }
+  .customer-experience :is(.customer-discovery-shortcuts > button, .customer-header-search-icon):hover { border-color: var(--dastak-accent); }
 }
 @media (prefers-color-scheme: dark) {
   .variant-dastak-customer { --canvas: #141311; --surface: #1d1b18; --surface-raised: #25221e; --surface-muted: #302b24; --surface-subtle: #27231d; --text-primary: #f4efe5; --text-secondary: #b9b0a2; --text-tertiary: #aaa191; --divider: #3e372e; --dastak-accent: #d6b77c; --dastak-accent-soft: #3a3021; --primary-action: #e9d7b2; --primary-action-foreground: #292216; --success: #a9c49a; --destructive: #eeab97; --customer-shadow: 0 8px 28px rgb(0 0 0 / 10%); }
@@ -371,7 +368,7 @@
 @media (max-width: 1000px) {
   .customer-app-header { padding-inline: 24px; }
   .customer-content { padding-inline: 24px; }
-  .customer-experience .v1-customer-header { gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(220px, 1.3fr) auto; }
+  .customer-experience .v1-customer-header { gap: 16px; }
   .customer-hero-display { height: 280px; }
   .customer-experience .v1-category-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .customer-experience .v1-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
@@ -388,8 +385,7 @@
   .customer-experience .customer-navigation button span { font-size: 12px; }
   .customer-experience .customer-navigation button svg { width: 20px; height: 20px; }
   .customer-experience .v1-customer-header { min-height: 80px; padding: 16px 0; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
-  .customer-header-search { display: none; }
-  .customer-experience .v1-header-actions .customer-mobile-search { display: grid; width: 44px; height: 44px; }
+  .customer-experience .v1-header-actions .customer-header-search-icon { width: 44px; height: 44px; }
   .customer-experience .v1-header-actions .customer-basket-button { min-width: 44px; height: 44px; padding: 0 12px; }
   .customer-basket-button > span { display: none; }
   .customer-experience .v1-deliver-to { display: flex; gap: 8px; }
@@ -508,6 +504,52 @@
   .customer-experience .v1-cart-bar span { gap: 5px; }
   .customer-experience .customer-profile-edit { font-size: 0; }
 }
+/* Profile editor only: shared account sheets and other approved surfaces are unchanged. */
+.customer-experience .customer-profile-backdrop { place-items: center; padding: 24px; }
+.customer-experience .customer-profile-editor { display: flex; flex-direction: column; width: min(540px, 100%); max-height: calc(100dvh - 48px); overflow: hidden; padding: 0; border: 1px solid var(--divider); border-radius: var(--customer-radius-lg); }
+.customer-experience .customer-profile-editor-heading { flex: 0 0 auto; align-items: center; gap: 16px; padding: 28px 30px 20px; border-bottom: 1px solid var(--divider); }
+.customer-experience .customer-profile-editor-heading > div { min-width: 0; }
+.customer-experience .customer-profile-editor h2 { margin: 7px 0 0; font: 400 36px/1.1 var(--font-dastak-wordmark); letter-spacing: -.02em; }
+.customer-experience .customer-profile-close { display: grid; place-items: center; flex: 0 0 auto; width: 44px; height: 44px; padding: 0; border: 1px solid var(--divider); border-radius: 50%; background: var(--surface-raised); color: var(--text-secondary); }
+.customer-experience .customer-profile-editor-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px 30px 30px; }
+.customer-experience .customer-profile-editor-body > p { margin: 0 0 26px; font-size: 15px; color: var(--text-secondary); }
+.customer-experience .customer-profile-field { display: grid; gap: 10px; }
+.customer-experience .customer-profile-field label { margin: 0; font-size: 14px; font-weight: 650; color: var(--text-primary); }
+.customer-experience .customer-profile-name-control { position: relative; min-width: 0; }
+.customer-experience .customer-profile-name-control > svg { position: absolute; top: 18px; left: 16px; pointer-events: none; color: var(--text-tertiary); }
+.customer-experience .customer-profile-name-control input { display: block; width: 100%; min-width: 0; min-height: 56px; margin: 0; padding: 14px 16px 14px 48px; border: 1px solid var(--divider); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--text-primary); font: inherit; font-size: 16px; line-height: 1.5; transition: border-color var(--customer-ease), box-shadow var(--customer-ease); }
+.customer-experience .customer-profile-name-control input:focus { outline: 2px solid var(--dastak-accent); outline-offset: 2px; border-color: var(--dastak-accent); box-shadow: 0 0 0 5px var(--dastak-accent-soft); }
+.customer-experience .customer-profile-name-control input[aria-invalid="true"] { border-color: var(--destructive); }
+.customer-experience .customer-profile-field small { color: var(--text-secondary); font-size: 13px; }
+.customer-experience .customer-profile-field .customer-profile-field-error { color: var(--destructive); }
+.customer-experience .customer-profile-contact { margin-top: 26px; padding: 20px; border: 1px solid var(--divider); border-radius: 18px; background: var(--surface-subtle); }
+.customer-experience .customer-profile-contact-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.customer-experience .customer-profile-contact h3 { margin: 0; font: 650 14px/1.5 var(--font-system); color: var(--text-primary); }
+.customer-experience .customer-profile-contact-heading > span { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); }
+.customer-experience .customer-profile-phone { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--text-primary); }
+.customer-experience .customer-profile-phone > svg { flex: 0 0 auto; color: var(--dastak-accent); }
+.customer-experience .customer-profile-phone output { min-width: 0; overflow-wrap: anywhere; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.customer-experience .customer-profile-contact p { margin: 12px 0 0; color: var(--text-secondary); font-size: 13px; }
+.customer-experience .customer-profile-save-error { margin-top: 20px; padding: 15px 16px; border: 1px solid color-mix(in srgb, var(--destructive) 35%, var(--divider)); border-radius: var(--customer-radius-sm); background: var(--surface-raised); color: var(--destructive); font-size: 14px; }
+.customer-experience .customer-profile-save-error p { margin: 5px 0 0; color: var(--text-secondary); }
+.customer-experience .customer-profile-editor-actions { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr); gap: 12px; margin: 0; padding: 20px 30px; border-top: 1px solid var(--divider); background: var(--surface-raised); }
+.customer-experience .customer-profile-editor-actions button { width: 100%; min-width: 0; min-height: 50px; margin: 0; padding: 12px; }
+.customer-experience .customer-profile-editor button:disabled { opacity: .65; cursor: wait; }
+.customer-experience .customer-profile-saving { animation: customer-profile-spin 1s linear infinite; flex-shrink: 0; }
+@media (hover: hover) {
+  .customer-experience .customer-profile-close:not(:disabled):hover { background: var(--surface-muted); border-color: var(--dastak-accent); }
+  .customer-experience .customer-profile-editor-actions .secondary-button:not(:disabled):hover { background: var(--surface-muted); }
+}
+@media (max-width: 700px) {
+  .customer-experience .customer-profile-backdrop { place-items: end center; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+  .customer-experience .customer-profile-editor { max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom))); border-radius: 26px; }
+  .customer-experience .customer-profile-editor-heading { padding: 22px 20px 18px; }
+  .customer-experience .customer-profile-editor h2 { font-size: 32px; }
+  .customer-experience .customer-profile-editor-body { padding: 20px; }
+  .customer-experience .customer-profile-contact { padding: 17px; }
+  .customer-experience .customer-profile-editor-actions { padding: 16px 20px; gap: 10px; }
+}
+@keyframes customer-profile-spin { to { transform: rotate(360deg); } }
 @keyframes customer-breathe { from { opacity: .5; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .customer-experience *, .variant-dastak-customer .product-detail-dialog * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
