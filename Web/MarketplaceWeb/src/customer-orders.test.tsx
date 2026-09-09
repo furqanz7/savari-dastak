@@ -44,6 +44,7 @@ describe("customer V1 Orders experience", () => {
       onLoadMore={() => undefined}
       onOpen={() => undefined}
       onReorder={() => undefined}
+      onSessionExpired={() => undefined}
     />);
 
     expect(markup).toContain("Dastak Cafe");
@@ -56,6 +57,76 @@ describe("customer V1 Orders experience", () => {
     expect(markup).not.toContain(">All<");
     expect(markup).not.toContain("Retail order");
     expect(markup).not.toContain("lucide-chevron-right");
+  });
+
+  it("renders exactly one primary Orders state and never reports an error as an empty result", () => {
+    const render = (input: {
+      orders?: V1Order[];
+      loading?: boolean;
+      error?: Parameters<typeof OrdersSection>[0]["error"];
+    }) => renderToStaticMarkup(<OrdersSection
+      orders={input.orders ?? []}
+      loading={input.loading ?? false}
+      loadingMore={false}
+      canLoadMore={false}
+      error={input.error}
+      imageUrlForLine={() => null}
+      onRefresh={() => undefined}
+      onLoadMore={() => undefined}
+      onOpen={() => undefined}
+      onReorder={() => undefined}
+      onSessionExpired={() => undefined}
+    />);
+
+    const loading = render({ loading: true });
+    expect(loading).toContain("Loading your orders");
+    expect(loading).not.toContain("No active orders");
+
+    const failed = render({
+      error: {
+        kind: "unavailable",
+        title: "Updates are unavailable",
+        message: "Dastak could not refresh this information. Please try again.",
+        action: "retry",
+      },
+    });
+    expect(failed).toContain("Updates are unavailable");
+    expect(failed).not.toContain("No active orders");
+    expect(failed).not.toContain("v1-order-list");
+
+    const empty = render({});
+    expect(empty).toContain("No active orders");
+    expect(empty).not.toContain("v1-orders-error");
+
+    const populated = render({ orders: [orderFixture()] });
+    expect(populated).toContain("v1-order-list");
+    expect(populated).not.toContain("No active orders");
+  });
+
+  it("offers existing sign-in recovery for an expired Orders session", () => {
+    const markup = renderToStaticMarkup(<OrdersSection
+      orders={[]}
+      loading={false}
+      loadingMore={false}
+      canLoadMore={false}
+      error={{
+        kind: "session",
+        title: "Your session expired",
+        message: "Sign in again to view your latest orders and deliveries.",
+        action: "sign_in",
+      }}
+      imageUrlForLine={() => null}
+      onRefresh={() => undefined}
+      onLoadMore={() => undefined}
+      onOpen={() => undefined}
+      onReorder={() => undefined}
+      onSessionExpired={() => undefined}
+    />);
+
+    expect(markup).toContain("Your session expired");
+    expect(markup).toContain("Sign in again");
+    expect(markup).not.toContain("Try again");
+    expect(markup).not.toContain("No active orders");
   });
 
   it("renders immutable destination, food options, receipt, timeline, ETA and live map", () => {

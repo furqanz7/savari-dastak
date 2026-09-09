@@ -14,6 +14,7 @@ import {
   getV1AdminSystemHealth,
   getV1AdminOperationalSafety,
   getV1Catalogue,
+  getV1Order,
   getV1Orders,
   getV1Restaurants,
   getV1MerchantCanonicalCatalogue,
@@ -338,6 +339,37 @@ describe("Dastak V1 web contract", () => {
     expect(requestBody).toEqual({ operation: "list", limit: 25, cursor, supportsConfirmedCancellation: true });
     expect(result.orders).toHaveLength(1);
     expect(result.nextCursor).toEqual(cursor);
+  });
+
+  it("lists the canonical cancelled-order payment shape without rejecting false doorstep authority", async () => {
+    const result = await getV1Orders({ ...auth, limit: 50 }, async () => Response.json({
+      orders: [cancelledOrderFixture()],
+      nextCursor: null,
+    }));
+
+    expect(result.orders).toHaveLength(1);
+    expect(result.orders[0]).toMatchObject({ status: "CANCELLED" });
+    expect(result.orders[0].launchPayment).toMatchObject({
+      state: "NOT_APPLICABLE",
+      payAtDoorstep: false,
+      canCommit: false,
+    });
+  });
+
+  it("gets canonical cancelled-order detail and preserves false doorstep authority", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const result = await getV1Order({ ...auth, orderId }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json(cancelledOrderFixture());
+    });
+
+    expect(requestBody).toEqual({
+      operation: "get",
+      orderId,
+      supportsConfirmedCancellation: true,
+    });
+    expect(result.launchPayment?.state).toBe("NOT_APPLICABLE");
+    expect(result.launchPayment?.payAtDoorstep).toBe(false);
   });
 
   it("decodes mixed food selections and authoritative preparation timing", () => {
@@ -1113,6 +1145,31 @@ function orderFixture() {
     recipient: { name: "A Customer", phoneNumber: "+919876543210" },
     submittedAt: "2026-08-22T00:00:00Z", fullySecuredAt: null, paymentExpiresAt: null,
     paidAt: null, deliveredAt: null, createdAt: "2026-08-22T00:00:00Z", updatedAt: "2026-08-22T00:00:00Z",
+  };
+}
+
+function cancelledOrderFixture() {
+  return {
+    ...orderFixture(),
+    status: "CANCELLED",
+    version: 2,
+    fulfilmentProgress: { state: "CANCELLED" },
+    launchPayment: {
+      optionLabel: "Pay via UPI/Cash on Delivery",
+      state: "NOT_APPLICABLE",
+      amountPaise: 19000,
+      currencyCode: "INR",
+      securedAt: null,
+      reservationExpiresAt: "2026-08-22T00:06:00Z",
+      reservationSecondsRemaining: 0,
+      reservationState: "EXPIRED",
+      committedAt: null,
+      collectedAt: null,
+      collectionMethod: null,
+      canCommit: false,
+      noChargeNow: true,
+      payAtDoorstep: false,
+    },
   };
 }
 

@@ -212,7 +212,7 @@ export type V1Order = {
     collectionMethod?: "CASH" | "UPI";
     canCommit: boolean;
     noChargeNow: boolean;
-    payAtDoorstep: true;
+    payAtDoorstep: boolean;
   };
   delivery?: {
     state: "ON_THE_WAY" | "DELIVERED";
@@ -2114,7 +2114,7 @@ function parseLaunchPayment(value: unknown): NonNullable<V1Order["launchPayment"
     invalid("launch collection method");
   }
   const payAtDoorstep = requiredBoolean(source.payAtDoorstep);
-  if (!payAtDoorstep) invalid("launch payment authority");
+  if (!payAtDoorstep && state !== "NOT_APPLICABLE") invalid("launch payment authority");
   return {
     optionLabel,
     state: state as NonNullable<V1Order["launchPayment"]>["state"],
@@ -2130,7 +2130,7 @@ function parseLaunchPayment(value: unknown): NonNullable<V1Order["launchPayment"
     collectionMethod: collectionMethod as NonNullable<V1Order["launchPayment"]>["collectionMethod"],
     canCommit: requiredBoolean(source.canCommit),
     noChargeNow: requiredBoolean(source.noChargeNow),
-    payAtDoorstep: true,
+    payAtDoorstep,
   };
 }
 

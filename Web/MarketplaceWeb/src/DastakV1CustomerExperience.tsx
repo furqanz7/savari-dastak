@@ -9,6 +9,11 @@ import {
   UserRound, X,
 } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
+import {
+  foodCartKey, loadCustomerCart, persistedFoodCart, resolveFoodCart, saveCustomerCart,
+  validateRetailCart, type PersistedFoodCartLine, type ResolvedFoodCartLine, type RetailCart,
+} from "./customerCartPersistence";
+import { customerDataIssue, type CustomerDataIssue } from "./customerDataState";
 import { CustomerAddressBookSheet } from "./CustomerAddressBookSheet";
 import { CustomerAddressSheet, type CustomerAddressDraft } from "./CustomerAddressSheet";
 import {
@@ -66,19 +71,11 @@ type Props = DastakV1Auth & {
   onOpenParcel: () => void;
   onOpenOrder: (orderId: string) => void;
   onCloseOrder: () => void;
+  onSessionExpired: () => void;
 };
 
-type Cart = Record<string, number>;
-type FoodCartLine = {
-  key: string;
-  branchId: string;
-  restaurantName: string;
-  item: V1RestaurantMenuItem;
-  optionIds: string[];
-  optionNames: string[];
-  unitPricePaise: number;
-  quantity: number;
-};
+type Cart = RetailCart;
+type FoodCartLine = ResolvedFoodCartLine;
 const matchingStatuses = new Set(["CREATED", "MATCHING"]);
 const liveStatuses = new Set([
   "CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT", "PAID", "PREPARING",
@@ -122,8 +119,9 @@ export function DastakV1CustomerExperience(props: Props) {
   const [selectedCategoryType, setSelectedCategoryType] = useState<string>();
   const [selectedCategory, setSelectedCategory] = useState<string>();
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>();
-  const [cart, setCart] = useState<Cart>(() => loadCart(props.accountId));
-  const [foodCart, setFoodCart] = useState<FoodCartLine[]>([]);
+  const [initialCart] = useState(() => loadCustomerCart(props.accountId));
+  const [cart, setCart] = useState<Cart>(() => initialCart.retail);
+  const [foodCartEntries, setFoodCartEntries] = useState<PersistedFoodCartLine[]>(() => initialCart.food);
   const [loading, setLoading] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loadingMoreOrders, setLoadingMoreOrders] = useState(false);
@@ -135,7 +133,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const [orderActionError, setOrderActionError] = useState<string>();
   const [paymentMessage, setPaymentMessage] = useState<string>();
   const [showingLaunchPayment, setShowingLaunchPayment] = useState(false);
-  const [ordersError, setOrdersError] = useState<string>();
+  const [ordersError, setOrdersError] = useState<CustomerDataIssue>();
   const [liveOrderError, setLiveOrderError] = useState<string>();
   const [showingCart, setShowingCart] = useState(false);
   const [showingAddressBook, setShowingAddressBook] = useState(false);
@@ -148,6 +146,15 @@ export function DastakV1CustomerExperience(props: Props) {
   const selectedOrderId = selectedOrder?.id;
   const selectedOrderStatus = selectedOrder?.status;
   const onCloseOrder = props.onCloseOrder;
+  const onSessionExpired = props.onSessionExpired;
+  const presentRequestFailure = useCallback((requestError: unknown, setter = setError) => {
+    const issue = customerDataIssue(requestError);
+    if (issue.action === "sign_in") {
+      onSessionExpired();
+      return;
+    }
+    setter(message(requestError));
+  }, [onSessionExpired]);
 
   const refreshStorefront = useCallback(async () => {
     const [nextCatalogue, nextRestaurants, nextAddresses] = await Promise.allSettled([
@@ -158,19 +165,28 @@ export function DastakV1CustomerExperience(props: Props) {
     if (nextCatalogue.status === "fulfilled") {
       setCatalogue(nextCatalogue.value);
       setCategorySkus({});
+      setCart((current) => validateRetailCart(
+        current,
+        nextCatalogue.value.skus,
+        !nextCatalogue.value.nextCursor,
+      ));
     }
-    if (nextRestaurants.status === "fulfilled") setRestaurants(nextRestaurants.value);
+    if (nextRestaurants.status === "fulfilled") {
+      setRestaurants(nextRestaurants.value);
+      setFoodCartEntries((current) => persistedFoodCart(resolveFoodCart(current, nextRestaurants.value)));
+    }
     if (nextAddresses.status === "fulfilled") setAddresses(nextAddresses.value.addresses);
     const firstFailure = [nextCatalogue, nextRestaurants, nextAddresses]
       .find((result) => result.status === "rejected");
-    if (firstFailure?.status === "rejected") setError(message(firstFailure.reason));
+    if (firstFailure?.status === "rejected") presentRequestFailure(firstFailure.reason);
     else setError(undefined);
     setLoading(false);
-  }, [auth]);
+  }, [auth, presentRequestFailure]);
 
   const refreshOrders = useCallback(async (signal?: AbortSignal) => {
     const requestVersion = ++ordersRequestVersion.current;
     setLoadingOrders(true);
+    setOrdersError(undefined);
     try {
       const result = await getV1Orders({ ...auth, limit: 50, signal });
       if (requestVersion !== ordersRequestVersion.current || signal?.aborted) return;
@@ -179,7 +195,7 @@ export function DastakV1CustomerExperience(props: Props) {
       setOrdersError(undefined);
     } catch (requestError) {
       if (signal?.aborted || requestVersion !== ordersRequestVersion.current) return;
-      setOrdersError(message(requestError));
+      setOrdersError(customerDataIssue(requestError));
     } finally {
       if (requestVersion === ordersRequestVersion.current && !signal?.aborted) {
         setLoadingOrders(false);
@@ -193,11 +209,11 @@ export function DastakV1CustomerExperience(props: Props) {
       const result = await getCustomerWishlist(auth);
       setWishlistItems(result.items);
     } catch (wishlistError) {
-      setError(message(wishlistError));
+      presentRequestFailure(wishlistError);
     } finally {
       setLoadingWishlist(false);
     }
-  }, [auth]);
+  }, [auth, presentRequestFailure]);
 
   const loadMoreOrders = useCallback(async () => {
     if (!ordersNextCursor || loadingMoreOrders) return;
@@ -209,7 +225,7 @@ export function DastakV1CustomerExperience(props: Props) {
       setOrdersNextCursor(result.nextCursor);
       setOrdersError(undefined);
     } catch (requestError) {
-      setOrdersError(message(requestError));
+      setOrdersError(customerDataIssue(requestError));
     } finally {
       setLoadingMoreOrders(false);
     }
@@ -232,7 +248,7 @@ export function DastakV1CustomerExperience(props: Props) {
         }
       })
       .catch((categoryError) => {
-        if (!controller.signal.aborted) setError(message(categoryError));
+        if (!controller.signal.aborted) presentRequestFailure(categoryError);
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -240,7 +256,7 @@ export function DastakV1CustomerExperience(props: Props) {
         }
       });
     return () => controller.abort();
-  }, [auth, categorySkus, selectedCategory]);
+  }, [auth, categorySkus, presentRequestFailure, selectedCategory]);
   useEffect(() => { void refreshWishlist(); }, [refreshWishlist]);
   useEffect(() => {
     const controller = new AbortController();
@@ -263,15 +279,17 @@ export function DastakV1CustomerExperience(props: Props) {
         setLiveOrderError(undefined);
       })
       .catch((requestError) => {
-        if (!controller.signal.aborted) setLiveOrderError(message(requestError));
+        if (!controller.signal.aborted) presentRequestFailure(requestError, setLiveOrderError);
       });
     return () => controller.abort();
-  }, [auth, props.initialOrderId]);
+  }, [auth, presentRequestFailure, props.initialOrderId]);
   useEffect(() => {
     if (props.orderRefreshToken === 0) return;
     void refreshOrders();
   }, [props.orderRefreshToken, refreshOrders]);
-  useEffect(() => { saveCart(props.accountId, cart); }, [cart, props.accountId]);
+  useEffect(() => {
+    saveCustomerCart(props.accountId, { retail: cart, food: foodCartEntries });
+  }, [cart, foodCartEntries, props.accountId]);
 
   useEffect(() => {
     const dismiss = (event: KeyboardEvent) => {
@@ -295,12 +313,12 @@ export function DastakV1CustomerExperience(props: Props) {
       void getV1Catalogue({ ...auth, query: normalized, limit: 100, signal: controller.signal })
         .then((result) => { setSearchResults(result.skus); setError(undefined); })
         .catch((searchError) => {
-          if (!(searchError instanceof DOMException && searchError.name === "AbortError")) setError(message(searchError));
+          if (!(searchError instanceof DOMException && searchError.name === "AbortError")) presentRequestFailure(searchError);
         })
         .finally(() => { if (!controller.signal.aborted) setSearching(false); });
     }, 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [auth, query]);
+  }, [auth, presentRequestFailure, query]);
 
   useEffect(() => {
     if (!selectedOrderId || !selectedOrderStatus || !liveStatuses.has(selectedOrderStatus)) return;
@@ -317,7 +335,7 @@ export function DastakV1CustomerExperience(props: Props) {
         if (liveStatuses.has(order.status)) timer = window.setTimeout(poll, 3_000);
       } catch (requestError) {
         if (stopped || controller.signal.aborted) return;
-        setLiveOrderError(message(requestError));
+        presentRequestFailure(requestError, setLiveOrderError);
         timer = window.setTimeout(poll, 5_000);
       }
     };
@@ -327,7 +345,7 @@ export function DastakV1CustomerExperience(props: Props) {
       if (timer !== undefined) window.clearTimeout(timer);
       controller.abort();
     };
-  }, [auth, selectedOrderId, selectedOrderStatus]);
+  }, [auth, presentRequestFailure, selectedOrderId, selectedOrderStatus]);
 
   const skuById = useMemo(() => {
     const result = new Map<string, V1CatalogueSku>();
@@ -343,6 +361,10 @@ export function DastakV1CustomerExperience(props: Props) {
     ));
     return result;
   }, [restaurants]);
+  const foodCart = useMemo(
+    () => resolveFoodCart(foodCartEntries, restaurants),
+    [foodCartEntries, restaurants],
+  );
   const wishlistIds = useMemo(
     () => new Set(wishlistItems.map((item) => `${item.kind}:${item.itemId}`)),
     [wishlistItems],
@@ -371,7 +393,7 @@ export function DastakV1CustomerExperience(props: Props) {
       setWishlistItems(result.items);
       setError(undefined);
     } catch (wishlistError) {
-      setError(message(wishlistError));
+      presentRequestFailure(wishlistError);
     } finally {
       setWishlistUpdatingIds((current) => {
         const next = new Set(current);
@@ -405,38 +427,34 @@ export function DastakV1CustomerExperience(props: Props) {
     const options = item.optionGroups.flatMap((group) => group.options)
       .filter((option) => optionIds.includes(option.id));
     const normalizedIds = options.map((option) => option.id).sort();
-    const key = `${item.id}:${normalizedIds.join(",")}`;
-    const unitPricePaise = item.basePricePaise +
-      options.reduce((total, option) => total + option.priceDeltaPaise, 0);
-    setFoodCart((current) => {
-      const found = current.find((line) => line.key === key);
+    const key = foodCartKey(item.id, normalizedIds);
+    setFoodCartEntries((current) => {
+      const found = current.find((line) => foodCartKey(line.itemId, line.optionIds) === key);
       if (found) {
-        return current.map((line) => line.key === key
+        return current.map((line) => foodCartKey(line.itemId, line.optionIds) === key
           ? { ...line, quantity: Math.min(line.quantity + 1, 99) }
           : line);
       }
       return [...current, {
-        key,
         branchId: restaurant.restaurant.branchId,
-        restaurantName: restaurant.restaurant.name,
-        item,
+        itemId: item.id,
         optionIds: normalizedIds,
-        optionNames: options.map((option) => option.name),
-        unitPricePaise,
         quantity: 1,
       }];
     });
     setError(undefined);
   };
-  const decrementFood = (key: string) => setFoodCart((current) => current.flatMap((line) =>
-    line.key !== key
+  const decrementFood = (key: string) => setFoodCartEntries((current) => current.flatMap((line) =>
+    foodCartKey(line.itemId, line.optionIds) !== key
       ? [line]
       : line.quantity > 1
         ? [{ ...line, quantity: line.quantity - 1 }]
         : []
   ));
-  const incrementFood = (key: string) => setFoodCart((current) => current.map((line) =>
-    line.key === key ? { ...line, quantity: Math.min(line.quantity + 1, 99) } : line
+  const incrementFood = (key: string) => setFoodCartEntries((current) => current.map((line) =>
+    foodCartKey(line.itemId, line.optionIds) === key
+      ? { ...line, quantity: Math.min(line.quantity + 1, 99) }
+      : line
   ));
 
   const imageUrlForLine = useCallback((line: V1Order["lines"][number]) => {
@@ -471,7 +489,7 @@ export function DastakV1CustomerExperience(props: Props) {
               .filter((option) => optionIds.includes(option.id));
             const normalizedIds = options.map((option) => option.id).sort();
             nextFoodCart.push({
-              key: `${current.item.id}:${normalizedIds.join(",")}`,
+              key: foodCartKey(current.item.id, normalizedIds),
               branchId: current.restaurant.restaurant.branchId,
               restaurantName: current.restaurant.restaurant.name,
               item: current.item,
@@ -495,7 +513,7 @@ export function DastakV1CustomerExperience(props: Props) {
       return;
     }
     setCart(nextCart);
-    setFoodCart(nextFoodCart);
+    setFoodCartEntries(persistedFoodCart(nextFoodCart));
     if (selectedOrderId === order.id) {
       setSelectedOrder(undefined);
       setOrderActionError(undefined);
@@ -560,12 +578,12 @@ export function DastakV1CustomerExperience(props: Props) {
       submissionKeys.current.delete(fingerprint);
       setOrders((current) => mergeV1Orders([order], current));
       setCart({});
-      setFoodCart([]);
+      setFoodCartEntries([]);
       setShowingCart(false);
       setSelectedOrder(order);
       props.onOpenOrder(order.id);
     } catch (submitError) {
-      setError(message(submitError));
+      presentRequestFailure(submitError);
     } finally {
       setBusy(false);
     }
@@ -582,7 +600,7 @@ export function DastakV1CustomerExperience(props: Props) {
       setSelectedOrder((current) => newerOrder(current, order));
       setOrders((current) => mergeV1Orders([order], current));
     } catch (cancelError) {
-      setOrderActionError(message(cancelError));
+      presentRequestFailure(cancelError, setOrderActionError);
     } finally {
       setBusy(false);
     }
@@ -630,7 +648,7 @@ export function DastakV1CustomerExperience(props: Props) {
       await refreshSelectedOrder(selectedOrder.id);
       return true;
     } catch (issueError) {
-      setOrderActionError(message(issueError));
+      presentRequestFailure(issueError, setOrderActionError);
       return false;
     } finally {
       setBusy(false);
@@ -651,7 +669,7 @@ export function DastakV1CustomerExperience(props: Props) {
       setEditingAddress(undefined);
       setShowingAddressBook(false);
     } catch (addressError) {
-      setError(message(addressError));
+      presentRequestFailure(addressError);
     } finally {
       setBusy(false);
     }
@@ -664,7 +682,7 @@ export function DastakV1CustomerExperience(props: Props) {
       const result = await setDefaultCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: crypto.randomUUID() });
       setAddresses(result.addresses);
       setShowingAddressBook(false);
-    } catch (addressError) { setError(message(addressError)); }
+    } catch (addressError) { presentRequestFailure(addressError); }
     finally { setBusy(false); }
   };
 
@@ -673,7 +691,7 @@ export function DastakV1CustomerExperience(props: Props) {
     try {
       const result = await deleteCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: crypto.randomUUID() });
       setAddresses(result.addresses);
-    } catch (addressError) { setError(message(addressError)); }
+    } catch (addressError) { presentRequestFailure(addressError); }
     finally { setBusy(false); }
   };
 
@@ -685,9 +703,10 @@ export function DastakV1CustomerExperience(props: Props) {
     return <LaunchPaymentScreen
       auth={auth}
       order={selectedOrder}
+      onSessionExpired={props.onSessionExpired}
       onDismiss={() => {
         setShowingLaunchPayment(false);
-        void refreshSelectedOrder(selectedOrder.id).catch((requestError) => setOrderActionError(message(requestError)));
+        void refreshSelectedOrder(selectedOrder.id).catch((requestError) => presentRequestFailure(requestError, setOrderActionError));
       }}
       onCommitted={(order) => {
         setSelectedOrder(order);
@@ -763,6 +782,7 @@ export function DastakV1CustomerExperience(props: Props) {
       loadingMore={loadingMoreOrders}
       canLoadMore={Boolean(ordersNextCursor)}
       error={ordersError}
+      onSessionExpired={props.onSessionExpired}
       onRefresh={() => void refreshOrders()}
       onLoadMore={() => void loadMoreOrders()}
       onReorder={requestReorder}
@@ -805,7 +825,7 @@ export function DastakV1CustomerExperience(props: Props) {
       }}
       onCancel={cancelOrder} onPay={payOrder}
       onRefresh={() => void refreshSelectedOrder(selectedOrder.id).catch((requestError) => {
-        setLiveOrderError(message(requestError));
+        presentRequestFailure(requestError, setLiveOrderError);
       })}
       onReportIssue={reportIssue}
       onReorder={() => requestReorder(selectedOrder)}
@@ -1073,11 +1093,12 @@ function WishlistSection({
   </section>;
 }
 
-function LaunchPaymentScreen({ auth, order, onDismiss, onCommitted }: {
+function LaunchPaymentScreen({ auth, order, onDismiss, onCommitted, onSessionExpired }: {
   auth: DastakV1Auth;
   order: V1Order;
   onDismiss: () => void;
   onCommitted: (order: V1Order) => void;
+  onSessionExpired: () => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [state, setState] = useState<"ready" | "confirming" | "committed" | "failure">("ready");
@@ -1108,6 +1129,11 @@ function LaunchPaymentScreen({ auth, order, onDismiss, onCommitted }: {
       window.setTimeout(() => onCommitted(committed), 450);
     } catch (requestError) {
       key.current = crypto.randomUUID();
+      const issue = customerDataIssue(requestError);
+      if (issue.action === "sign_in") {
+        onSessionExpired();
+        return;
+      }
       setState("failure");
       setError(message(requestError));
     }
@@ -1153,18 +1179,19 @@ type OrderScope = "active" | "past";
 
 export function OrdersSection({
   orders, loading, loadingMore, canLoadMore, error, imageUrlForLine,
-  onRefresh, onLoadMore, onOpen, onReorder,
+  onRefresh, onLoadMore, onOpen, onReorder, onSessionExpired,
 }: {
   orders: V1Order[];
   loading: boolean;
   loadingMore: boolean;
   canLoadMore: boolean;
-  error?: string;
+  error?: CustomerDataIssue;
   imageUrlForLine: (line: V1Order["lines"][number]) => string | null;
   onRefresh: () => void;
   onLoadMore: () => void;
   onOpen: (order: V1Order) => void;
   onReorder: (order: V1Order) => void;
+  onSessionExpired: () => void;
 }) {
   const [scope, setScope] = useState<OrderScope>("active");
   const scopeWasChosen = useRef(false);
@@ -1186,8 +1213,9 @@ export function OrdersSection({
     <div className="v1-order-scopes" role="group" aria-label="Filter orders">
       {(["active", "past"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => { scopeWasChosen.current = true; setScope(value); }}><span>{value[0].toUpperCase() + value.slice(1)}</span></button>)}
     </div>
-    {error ? <div className="v1-orders-error" role="alert"><CircleAlert size={18} /><span>{error}</span><button type="button" onClick={onRefresh}>Try again</button></div> : null}
-    {loading && orders.length === 0 ? <div className="v1-orders-loading" role="status"><span /> Loading your orders</div> : visible.length ? <div className="v1-order-list">{visible.map((order) => {
+    {error ? <div className="v1-orders-error" role="alert"><CircleAlert size={18} /><span><strong>{error.title}</strong>{error.message}</span><button type="button" onClick={error.action === "sign_in" ? onSessionExpired : onRefresh}>{error.action === "sign_in" ? "Sign in again" : "Try again"}</button></div>
+      : loading && orders.length === 0 ? <div className="v1-orders-loading" role="status"><span /> Loading your orders</div>
+        : visible.length ? <div className="v1-order-list">{visible.map((order) => {
       const active = isV1OrderActive(order.status);
       const duration = deliveredDurationLabel(order);
       const itemCount = orderItemCount(order);
@@ -1203,8 +1231,9 @@ export function OrdersSection({
         </button>
         <footer>{canReorderV1Order(order.status) ? <button type="button" onClick={() => onReorder(order)}><RotateCcw size={16} /> Order again</button> : null}<button type="button" onClick={() => onOpen(order)}>{active ? "Track order" : "Details"}</button></footer>
       </article>;
-    })}</div> : <EmptyState title={scope === "active" ? "No active orders" : "No past orders"} copy={scope === "active" ? "When an order is in progress, you can track it here." : "Completed and cancelled orders will appear here."} />}
-    {scope === "past" && canLoadMore ? <button className="secondary-button v1-load-more" type="button" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading earlier orders…" : "Load earlier orders"}</button> : null}
+        })}</div>
+          : <EmptyState title={scope === "active" ? "No active orders" : "No past orders"} copy={scope === "active" ? "When an order is in progress, you can track it here." : "Completed and cancelled orders will appear here."} />}
+    {!error && scope === "past" && canLoadMore ? <button className="secondary-button v1-load-more" type="button" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading earlier orders…" : "Load earlier orders"}</button> : null}
   </section>;
 }
 
@@ -1558,17 +1587,4 @@ function formatDuration(seconds: number) {
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function loadCart(accountId: string): Cart {
-  try {
-    const value = JSON.parse(localStorage.getItem(cartKey(accountId)) ?? "null") as unknown;
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    const source = value as Record<string, unknown>;
-    if (source.version !== 1 || !source.quantities || typeof source.quantities !== "object" || Array.isArray(source.quantities)) return {};
-    return Object.fromEntries(Object.entries(source.quantities as Record<string, unknown>).filter(([, quantity]) => typeof quantity === "number" && Number.isInteger(quantity) && quantity > 0 && quantity <= 99)) as Cart;
-  } catch { return {}; }
-}
-function saveCart(accountId: string, cart: Cart) {
-  try { localStorage.setItem(cartKey(accountId), JSON.stringify({ version: 1, quantities: cart })); } catch { /* Private storage may be unavailable. */ }
-}
-function cartKey(accountId: string) { return `dastak:v1-cart:${accountId}`; }
 function message(error: unknown) { return userFacingError(error, "Dastak could not complete this request."); }

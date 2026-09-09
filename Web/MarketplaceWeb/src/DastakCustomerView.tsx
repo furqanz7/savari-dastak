@@ -104,6 +104,7 @@ export function DastakCustomerView(props: Props) {
             section: "orders", entityType: "dastakV1Order", entityId: orderId,
           })}
           onCloseOrder={() => navigate({ section: "orders" })}
+          onSessionExpired={props.onSignOut}
         />
       </div>
       {section === "account" && <div className="customer-view">
