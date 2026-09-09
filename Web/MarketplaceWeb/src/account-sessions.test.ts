@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   endCurrentAccountSession,
   getAccountSessions,
+  registerAccountSessionWithRetry,
   revokeAccountSession,
   signOutOtherSessions,
 } from "./accountSessions";
@@ -64,5 +65,29 @@ describe("account sessions", () => {
     });
     expect(body).toEqual({ operation: "revoke", sessionId: otherSessionId });
     expect(result.sessions).toEqual([session]);
+  });
+
+  it("retries transient account-session registration a bounded number of times", async () => {
+    let attempts = 0;
+    const waits: number[] = [];
+    const result = await registerAccountSessionWithRetry({ ...auth, ...metadata }, async () => {
+      attempts += 1;
+      if (attempts < 3) throw new TypeError("network unavailable");
+      return new Response(JSON.stringify({ sessions: [session] }), { status: 200 });
+    }, {
+      wait: async (milliseconds) => { waits.push(milliseconds); },
+    });
+    expect(attempts).toBe(3);
+    expect(waits).toEqual([750, 2_000]);
+    expect(result.sessions).toEqual([session]);
+  });
+
+  it("does not retry a rejected account session", async () => {
+    let attempts = 0;
+    await expect(registerAccountSessionWithRetry({ ...auth, ...metadata }, async () => {
+      attempts += 1;
+      return new Response(JSON.stringify({ error: { code: "invalid_session", message: "Sign in again." } }), { status: 401 });
+    }, { wait: async () => undefined })).rejects.toMatchObject({ status: 401 });
+    expect(attempts).toBe(1);
   });
 });

@@ -1,4 +1,8 @@
 export type CustomerSection = "home" | "search" | "orders" | "wishlist" | "payments" | "account" | "parcel";
+
+export function shouldMountV1CustomerExperience(section: CustomerSection) {
+  return section !== "parcel" && section !== "account";
+}
 export type CustomerEntityType = "dastakV1Order" | "merchantOrder" | "parcel";
 export type CustomerDestination = {
   section: CustomerSection;

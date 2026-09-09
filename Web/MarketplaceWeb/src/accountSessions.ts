@@ -1,3 +1,5 @@
+import { isAbortError, requestDeadline } from "./requestDeadline";
+
 export type AccountSession = {
   sessionId: string;
   deviceName: string;
@@ -16,7 +18,7 @@ export type AccountSessionMetadata = {
   userAgent?: string;
 };
 
-type AuthenticatedInput = { supabaseUrl: string; publishableKey: string; accessToken: string };
+type AuthenticatedInput = { supabaseUrl: string; publishableKey: string; accessToken: string; signal?: AbortSignal };
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export class AccountSessionRequestError extends Error {
@@ -40,6 +42,32 @@ export function getAccountSessions(
   fetcher: Fetcher = fetch,
 ) {
   return sessionOperation(input, "snapshot", fetcher);
+}
+
+export async function registerAccountSessionWithRetry(
+  input: AuthenticatedInput & AccountSessionMetadata,
+  fetcher: Fetcher = fetch,
+  options: {
+    maximumAttempts?: number;
+    retryDelaysMs?: number[];
+    wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+  } = {},
+) {
+  const maximumAttempts = Math.max(1, Math.min(options.maximumAttempts ?? 3, 5));
+  const retryDelaysMs = options.retryDelaysMs ?? [750, 2_000, 5_000];
+  const wait = options.wait ?? waitForRetry;
+  let latestError: unknown;
+
+  for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
+    try {
+      return await getAccountSessions(input, fetcher);
+    } catch (error) {
+      latestError = error;
+      if (input.signal?.aborted || !retryableRegistrationError(error) || attempt + 1 >= maximumAttempts) throw error;
+      await wait(retryDelaysMs[Math.min(attempt, retryDelaysMs.length - 1)] ?? 5_000, input.signal);
+    }
+  }
+  throw latestError;
 }
 
 export function signOutOtherSessions(
@@ -81,7 +109,9 @@ async function sessionOperation(
 }
 
 async function call(auth: AuthenticatedInput, body: unknown, fetcher: Fetcher) {
+  const deadline = requestDeadline(auth.signal);
   let response: Response;
+  let payload: unknown;
   try {
     response = await fetcher(`${auth.supabaseUrl.replace(/\/$/, "")}/functions/v1/account-sessions`, {
       method: "POST",
@@ -91,11 +121,19 @@ async function call(auth: AuthenticatedInput, body: unknown, fetcher: Fetcher) {
         "content-type": "application/json",
       },
       body: JSON.stringify(body),
+      signal: deadline.signal,
     });
-  } catch {
+    payload = await response.json().catch((error: unknown) => {
+      if (deadline.timedOut()) throw error;
+      return undefined;
+    });
+  } catch (error) {
+    if (deadline.timedOut()) throw new AccountSessionRequestError("request_timeout", "Account sessions took too long to respond.", 0);
+    if (isAbortError(error) || auth.signal?.aborted) throw error;
     throw new AccountSessionRequestError("network_error", "Dastak could not reach account sessions.", 0);
+  } finally {
+    deadline.dispose();
   }
-  const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
     const error = record(record(payload)?.error);
     throw new AccountSessionRequestError(
@@ -105,6 +143,29 @@ async function call(auth: AuthenticatedInput, body: unknown, fetcher: Fetcher) {
     );
   }
   return payload;
+}
+
+function retryableRegistrationError(error: unknown) {
+  return error instanceof AccountSessionRequestError &&
+    (error.status === 0 || error.status === 429 || error.status >= 500);
+}
+
+function waitForRetry(milliseconds: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal?.reason ?? new DOMException("The request was aborted.", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new DOMException("The request was aborted.", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function parseCollection(value: unknown): AccountSessionCollection {

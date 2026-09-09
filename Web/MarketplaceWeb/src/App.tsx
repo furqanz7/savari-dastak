@@ -32,7 +32,7 @@ import {
   type AccessResult,
 } from "./access";
 import { AccountActionDialog } from "./AccountActionDialog";
-import { endCurrentAccountSession, getAccountSessions, webSessionMetadata } from "./accountSessions";
+import { endCurrentAccountSession, registerAccountSessionWithRetry, webSessionMetadata } from "./accountSessions";
 import {
   callbackFailureMessage,
   readAuthCallback,
@@ -170,15 +170,18 @@ export default function App() {
     if (config.product !== "dastak") return;
     const session = view.phase === "ready" || view.phase === "restricted" ? view.session : undefined;
     if (!session || registeredSessionToken.current === session.access_token) return;
+    const controller = new AbortController();
     registeredSessionToken.current = session.access_token;
-    void getAccountSessions({
+    void registerAccountSessionWithRetry({
       accessToken: session.access_token,
       supabaseUrl: config.supabaseUrl,
       publishableKey: config.supabasePublishableKey,
+      signal: controller.signal,
       ...webSessionMetadata(config.roleLabel),
     }).catch(() => {
-      registeredSessionToken.current = undefined;
+      if (!controller.signal.aborted) registeredSessionToken.current = undefined;
     });
+    return () => controller.abort();
   }, [view]);
 
   const signIn = async (provider: Provider) => {

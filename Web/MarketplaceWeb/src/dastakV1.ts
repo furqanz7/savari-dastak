@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isAbortError, requestDeadline } from "./requestDeadline";
 
 export type DastakV1Auth = {
   supabaseUrl: string;
@@ -2602,7 +2603,9 @@ async function invoke(
   idempotencyKey: string | undefined,
   fetcher: Fetcher,
 ) {
+  const deadline = requestDeadline(input.signal);
   let response: Response;
+  let payload: unknown;
   try {
     response = await fetcher(`${input.supabaseUrl.replace(/\/$/, "")}/functions/v1/${functionName}`, {
       method: "POST",
@@ -2613,13 +2616,21 @@ async function invoke(
         ...(idempotencyKey ? { "x-idempotency-key": idempotencyKey } : {}),
       },
       body: JSON.stringify(body),
-      signal: input.signal,
+      signal: deadline.signal,
+    });
+    payload = await response.json().catch((error: unknown) => {
+      if (deadline.timedOut()) throw error;
+      return undefined;
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (deadline.timedOut()) {
+      throw new DastakV1RequestError("request_timeout", "Dastak took too long to respond. Try again.", 0);
+    }
+    if (isAbortError(error) || input.signal?.aborted) throw error;
     throw new DastakV1RequestError("network_error", "Dastak could not be reached. Check your connection.", 0);
+  } finally {
+    deadline.dispose();
   }
-  const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
     const failure = record(record(payload)?.error);
     throw new DastakV1RequestError(

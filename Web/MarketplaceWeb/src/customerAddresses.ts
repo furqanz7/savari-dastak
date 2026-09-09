@@ -1,3 +1,5 @@
+import { isAbortError, requestDeadline } from "./requestDeadline";
+
 export type CustomerDeliveryAddress = {
   addressId: string;
   label: string;
@@ -25,7 +27,7 @@ export class CustomerAddressRequestError extends Error {
   }
 }
 
-export async function getCustomerAddresses(input: AuthenticatedInput, fetcher: Fetcher = fetch) {
+export async function getCustomerAddresses(input: AuthenticatedInput & { signal?: AbortSignal }, fetcher: Fetcher = fetch) {
   return parseCollection(await call(input, { operation: "snapshot" }, undefined, fetcher));
 }
 
@@ -98,8 +100,10 @@ export async function saveDefaultCustomerAddress(
   }, fetcher);
 }
 
-async function call(auth: AuthenticatedInput, body: unknown, idempotencyKey: string | undefined, fetcher: Fetcher) {
+async function call(auth: AuthenticatedInput & { signal?: AbortSignal }, body: unknown, idempotencyKey: string | undefined, fetcher: Fetcher) {
+  const deadline = requestDeadline(auth.signal);
   let response: Response;
+  let payload: unknown;
   try {
     response = await fetcher(`${auth.supabaseUrl.replace(/\/$/, "")}/functions/v1/customer-addresses`, {
       method: "POST",
@@ -110,11 +114,19 @@ async function call(auth: AuthenticatedInput, body: unknown, idempotencyKey: str
         ...(idempotencyKey ? { "x-idempotency-key": idempotencyKey } : {}),
       },
       body: JSON.stringify(body),
+      signal: deadline.signal,
     });
-  } catch {
+    payload = await response.json().catch((error: unknown) => {
+      if (deadline.timedOut()) throw error;
+      return undefined;
+    });
+  } catch (error) {
+    if (deadline.timedOut()) throw new CustomerAddressRequestError("request_timeout", "Saved addresses took too long to respond.", 0);
+    if (isAbortError(error) || auth.signal?.aborted) throw error;
     throw new CustomerAddressRequestError("network_error", "Dastak could not reach saved addresses.", 0);
+  } finally {
+    deadline.dispose();
   }
-  const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
     const error = record(record(payload)?.error);
     throw new CustomerAddressRequestError(

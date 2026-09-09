@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DastakV1RequestError,
   adminCancelV1Order,
@@ -58,6 +58,18 @@ const fulfilmentId = "66666666-6666-4666-8666-666666666666";
 const packageId = "99999999-9999-4999-8999-999999999999";
 
 describe("Dastak V1 web contract", () => {
+  it("aborts and classifies a stalled backend request after the client deadline", async () => {
+    vi.useFakeTimers();
+    const request = getV1Catalogue(auth, async (_url, init) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }));
+    const assertion = expect(request).rejects.toMatchObject({ code: "request_timeout", status: 0 });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
+    vi.useRealTimers();
+  });
+
   it("sends an audited admin cancellation with optimistic version and retry identity", async () => {
     let body: unknown;
     const result = await adminCancelV1Order({ ...auth, orderId,

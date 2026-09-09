@@ -38,6 +38,7 @@ import {
   CustomerRouteMap, CustomerTimeline, type CustomerMapPoint,
 } from "./CustomerDeliveryDetails";
 import { useModalDialog } from "./useModalDialog";
+import { RefreshQueue } from "./orderRealtime";
 import { userFacingError } from "./userFacingError";
 import {
   canReorderV1Order,
@@ -122,7 +123,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const [initialCart] = useState(() => loadCustomerCart(props.accountId));
   const [cart, setCart] = useState<Cart>(() => initialCart.retail);
   const [foodCartEntries, setFoodCartEntries] = useState<PersistedFoodCartLine[]>(() => initialCart.food);
-  const [loading, setLoading] = useState(true);
+  const [loadingCatalogue, setLoadingCatalogue] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loadingMoreOrders, setLoadingMoreOrders] = useState(false);
   const [loadingWishlist, setLoadingWishlist] = useState(true);
@@ -130,6 +131,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [storefrontIssues, setStorefrontIssues] = useState<Partial<Record<"catalogue" | "restaurants" | "addresses", string>>>({});
   const [orderActionError, setOrderActionError] = useState<string>();
   const [paymentMessage, setPaymentMessage] = useState<string>();
   const [showingLaunchPayment, setShowingLaunchPayment] = useState(false);
@@ -143,6 +145,14 @@ export function DastakV1CustomerExperience(props: Props) {
   const submissionKeys = useRef(new Map<string, string>());
   const ordersRequestVersion = useRef(0);
   const ordersPaginationAdvanced = useRef(false);
+  const catalogueRefreshQueue = useRef(new RefreshQueue());
+  const restaurantRefreshQueue = useRef(new RefreshQueue());
+  const addressRefreshQueue = useRef(new RefreshQueue());
+  const ordersRefreshQueue = useRef(new RefreshQueue());
+  const catalogueController = useRef<AbortController | undefined>(undefined);
+  const restaurantController = useRef<AbortController | undefined>(undefined);
+  const addressController = useRef<AbortController | undefined>(undefined);
+  const ordersController = useRef<AbortController | undefined>(undefined);
   const selectedOrderId = selectedOrder?.id;
   const selectedOrderStatus = selectedOrder?.status;
   const onCloseOrder = props.onCloseOrder;
@@ -156,62 +166,112 @@ export function DastakV1CustomerExperience(props: Props) {
     setter(message(requestError));
   }, [onSessionExpired]);
 
-  const refreshStorefront = useCallback(async () => {
-    const [nextCatalogue, nextRestaurants, nextAddresses] = await Promise.allSettled([
-      getV1Catalogue({ ...auth, limit: 250 }),
-      getV1Restaurants({ ...auth, limit: 50 }),
-      getCustomerAddresses(auth),
-    ]);
-    if (nextCatalogue.status === "fulfilled") {
-      setCatalogue(nextCatalogue.value);
-      setCategorySkus({});
-      setCart((current) => validateRetailCart(
-        current,
-        nextCatalogue.value.skus,
-        !nextCatalogue.value.nextCursor,
-      ));
+  const recordStorefrontFailure = useCallback((source: "catalogue" | "restaurants" | "addresses", requestError: unknown) => {
+    const issue = customerDataIssue(requestError);
+    if (issue.action === "sign_in") {
+      onSessionExpired();
+      return;
     }
-    if (nextRestaurants.status === "fulfilled") {
-      setRestaurants(nextRestaurants.value);
-      setFoodCartEntries((current) => persistedFoodCart(resolveFoodCart(current, nextRestaurants.value)));
-    }
-    if (nextAddresses.status === "fulfilled") setAddresses(nextAddresses.value.addresses);
-    const firstFailure = [nextCatalogue, nextRestaurants, nextAddresses]
-      .find((result) => result.status === "rejected");
-    if (firstFailure?.status === "rejected") presentRequestFailure(firstFailure.reason);
-    else setError(undefined);
-    setLoading(false);
-  }, [auth, presentRequestFailure]);
+    setStorefrontIssues((current) => ({ ...current, [source]: message(requestError) }));
+  }, [onSessionExpired]);
+  const clearStorefrontFailure = useCallback((source: "catalogue" | "restaurants" | "addresses") => {
+    setStorefrontIssues((current) => {
+      if (!current[source]) return current;
+      const next = { ...current };
+      delete next[source];
+      return next;
+    });
+  }, []);
 
-  const refreshOrders = useCallback(async (signal?: AbortSignal) => {
-    const requestVersion = ++ordersRequestVersion.current;
-    setLoadingOrders(true);
-    setOrdersError(undefined);
-    try {
-      const result = await getV1Orders({ ...auth, limit: 50, signal });
-      if (requestVersion !== ordersRequestVersion.current || signal?.aborted) return;
-      setOrders((current) => mergeV1Orders(result.orders, current));
-      if (!ordersPaginationAdvanced.current) setOrdersNextCursor(result.nextCursor);
-      setOrdersError(undefined);
-    } catch (requestError) {
-      if (signal?.aborted || requestVersion !== ordersRequestVersion.current) return;
-      setOrdersError(customerDataIssue(requestError));
-    } finally {
-      if (requestVersion === ordersRequestVersion.current && !signal?.aborted) {
-        setLoadingOrders(false);
+  const refreshCatalogue = useCallback(async () => {
+    await catalogueRefreshQueue.current.request(false, async () => {
+      const controller = new AbortController();
+      catalogueController.current = controller;
+      setLoadingCatalogue(true);
+      try {
+        const next = await getV1Catalogue({ ...auth, limit: 250, signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setCatalogue(next);
+        setCategorySkus({});
+        setCart((current) => validateRetailCart(current, next.skus, !next.nextCursor));
+        clearStorefrontFailure("catalogue");
+      } catch (requestError) {
+        if (!controller.signal.aborted) recordStorefrontFailure("catalogue", requestError);
+      } finally {
+        if (!controller.signal.aborted) setLoadingCatalogue(false);
+        if (catalogueController.current === controller) catalogueController.current = undefined;
       }
-    }
+    });
+  }, [auth, clearStorefrontFailure, recordStorefrontFailure]);
+
+  const refreshRestaurants = useCallback(async () => {
+    await restaurantRefreshQueue.current.request(false, async () => {
+      const controller = new AbortController();
+      restaurantController.current = controller;
+      try {
+        const next = await getV1Restaurants({ ...auth, limit: 50, signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setRestaurants(next);
+        setFoodCartEntries((current) => persistedFoodCart(resolveFoodCart(current, next)));
+        clearStorefrontFailure("restaurants");
+      } catch (requestError) {
+        if (!controller.signal.aborted) recordStorefrontFailure("restaurants", requestError);
+      } finally {
+        if (restaurantController.current === controller) restaurantController.current = undefined;
+      }
+    });
+  }, [auth, clearStorefrontFailure, recordStorefrontFailure]);
+
+  const refreshAddresses = useCallback(async () => {
+    await addressRefreshQueue.current.request(false, async () => {
+      const controller = new AbortController();
+      addressController.current = controller;
+      try {
+        const next = await getCustomerAddresses({ ...auth, signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setAddresses(next.addresses);
+        clearStorefrontFailure("addresses");
+      } catch (requestError) {
+        if (!controller.signal.aborted) recordStorefrontFailure("addresses", requestError);
+      } finally {
+        if (addressController.current === controller) addressController.current = undefined;
+      }
+    });
+  }, [auth, clearStorefrontFailure, recordStorefrontFailure]);
+
+  const refreshOrders = useCallback(async () => {
+    await ordersRefreshQueue.current.request(false, async () => {
+      const controller = new AbortController();
+      ordersController.current = controller;
+      const requestVersion = ++ordersRequestVersion.current;
+      setLoadingOrders(true);
+      setOrdersError(undefined);
+      try {
+        const result = await getV1Orders({ ...auth, limit: 50, signal: controller.signal });
+        if (requestVersion !== ordersRequestVersion.current || controller.signal.aborted) return;
+        setOrders((current) => mergeV1Orders(result.orders, current));
+        if (!ordersPaginationAdvanced.current) setOrdersNextCursor(result.nextCursor);
+        setOrdersError(undefined);
+      } catch (requestError) {
+        if (!controller.signal.aborted && requestVersion === ordersRequestVersion.current) {
+          setOrdersError(customerDataIssue(requestError));
+        }
+      } finally {
+        if (requestVersion === ordersRequestVersion.current && !controller.signal.aborted) setLoadingOrders(false);
+        if (ordersController.current === controller) ordersController.current = undefined;
+      }
+    });
   }, [auth]);
 
-  const refreshWishlist = useCallback(async () => {
+  const refreshWishlist = useCallback(async (signal?: AbortSignal) => {
     setLoadingWishlist(true);
     try {
-      const result = await getCustomerWishlist(auth);
+      const result = await getCustomerWishlist({ ...auth, signal });
       setWishlistItems(result.items);
     } catch (wishlistError) {
-      presentRequestFailure(wishlistError);
+      if (!signal?.aborted) presentRequestFailure(wishlistError);
     } finally {
-      setLoadingWishlist(false);
+      if (!signal?.aborted) setLoadingWishlist(false);
     }
   }, [auth, presentRequestFailure]);
 
@@ -231,7 +291,30 @@ export function DastakV1CustomerExperience(props: Props) {
     }
   }, [auth, loadingMoreOrders, ordersNextCursor]);
 
-  useEffect(() => { void refreshStorefront(); }, [refreshStorefront]);
+  useEffect(() => {
+    const refreshStorefront = () => {
+      void refreshCatalogue();
+      void refreshRestaurants();
+      void refreshAddresses();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshStorefront();
+    };
+    refreshStorefront();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine !== false) refreshStorefront();
+    }, 300_000);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", refreshStorefront);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", refreshStorefront);
+      catalogueController.current?.abort();
+      restaurantController.current?.abort();
+      addressController.current?.abort();
+    };
+  }, [refreshAddresses, refreshCatalogue, refreshRestaurants]);
   useEffect(() => {
     if (!selectedCategory || Object.prototype.hasOwnProperty.call(categorySkus, selectedCategory)) {
       setLoadingCategoryId(undefined);
@@ -257,11 +340,14 @@ export function DastakV1CustomerExperience(props: Props) {
       });
     return () => controller.abort();
   }, [auth, categorySkus, presentRequestFailure, selectedCategory]);
-  useEffect(() => { void refreshWishlist(); }, [refreshWishlist]);
   useEffect(() => {
     const controller = new AbortController();
-    void refreshOrders(controller.signal);
+    void refreshWishlist(controller.signal);
     return () => controller.abort();
+  }, [refreshWishlist]);
+  useEffect(() => {
+    void refreshOrders();
+    return () => ordersController.current?.abort();
   }, [refreshOrders]);
   useEffect(() => {
     if (!props.initialOrderId) {
@@ -695,7 +781,7 @@ export function DastakV1CustomerExperience(props: Props) {
     finally { setBusy(false); }
   };
 
-  if (loading && props.section !== "orders") {
+  if (loadingCatalogue && !catalogue && props.section === "home") {
     return <div className="v1-loading" role="status"><span /> Opening Dastak catalogue</div>;
   }
 
@@ -719,7 +805,7 @@ export function DastakV1CustomerExperience(props: Props) {
 
   return <main className="v1-customer-shell">
     <CustomerHeader address={defaultAddress} count={cartCount} onSearch={() => props.onNavigate("search")} onCart={() => setShowingCart(true)} />
-    {error && <div className="v1-alert" role="alert"><CircleAlert size={18} /><span>{error}</span><button type="button" onClick={() => setError(undefined)} aria-label="Dismiss error"><X size={16} /></button></div>}
+    {(error ?? Object.values(storefrontIssues)[0]) && <div className="v1-alert" role="alert"><CircleAlert size={18} /><span>{error ?? Object.values(storefrontIssues)[0]}</span><button type="button" onClick={() => { setError(undefined); setStorefrontIssues({}); }} aria-label="Dismiss error"><X size={16} /></button></div>}
     {props.section === "home" ? <HomeSection
       supabaseUrl={props.supabaseUrl}
       restaurants={restaurants}
@@ -753,7 +839,7 @@ export function DastakV1CustomerExperience(props: Props) {
     /> : props.section === "search" ? <SearchSection
       supabaseUrl={props.supabaseUrl}
       query={query} onQuery={setQuery} searching={searching}
-      skus={query.trim() ? searchResults : catalogue?.skus ?? []} onAdd={add}
+      skus={query.trim() ? searchResults : []} onAdd={add}
       wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={toggleWishlist}
     /> : props.section === "wishlist" ? <WishlistSection
       supabaseUrl={props.supabaseUrl}
@@ -909,11 +995,11 @@ export function HomeSection({ supabaseUrl, restaurants, categoryTypes, categorie
   </>;
 }
 
-function SearchSection({ supabaseUrl, query, onQuery, searching, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; query: string; onQuery: (value: string) => void; searching: boolean; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
+export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; query: string; onQuery: (value: string) => void; searching: boolean; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
   const submit = (event: FormEvent) => event.preventDefault();
   return <section className="v1-search-page"><header><p>SEARCH DASTAK</p><h1>What are you looking for?</h1><span>Search products, brands, pack sizes, categories, common names or barcodes.</span></header>
     <form className="v1-search-field" role="search" onSubmit={submit}><Search size={20} /><input autoFocus value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Products, brands and categories" aria-label="Search Dastak products" />{query ? <button type="button" onClick={() => onQuery("")} aria-label="Clear search"><X size={17} /></button> : null}</form>
-    {searching ? <div className="v1-inline-loading" role="status"><span /> Searching Dastak</div> : skus.length ? <ProductGrid supabaseUrl={supabaseUrl} skus={skus} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <EmptyState title={query ? "No exact matches" : "Catalogue is empty"} copy={query ? "Try another product, brand or category." : "Dastak is preparing launch products."} />}
+    {searching ? <div className="v1-inline-loading" role="status"><span /> Searching Dastak</div> : skus.length ? <ProductGrid supabaseUrl={supabaseUrl} skus={skus} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <EmptyState title={query ? "No exact matches" : "Search Dastak"} copy={query ? "Try another product, brand or category." : "Start typing to find a product, brand or category."} />}
   </section>;
 }
 
@@ -1213,7 +1299,8 @@ export function OrdersSection({
     <div className="v1-order-scopes" role="group" aria-label="Filter orders">
       {(["active", "past"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => { scopeWasChosen.current = true; setScope(value); }}><span>{value[0].toUpperCase() + value.slice(1)}</span></button>)}
     </div>
-    {error ? <div className="v1-orders-error" role="alert"><CircleAlert size={18} /><span><strong>{error.title}</strong>{error.message}</span><button type="button" onClick={error.action === "sign_in" ? onSessionExpired : onRefresh}>{error.action === "sign_in" ? "Sign in again" : "Try again"}</button></div>
+    {error && orders.length > 0 ? <div className="v1-orders-error" role="status"><CircleAlert size={18} /><span><strong>{error.title}</strong>{error.message}</span><button type="button" onClick={error.action === "sign_in" ? onSessionExpired : onRefresh}>{error.action === "sign_in" ? "Sign in again" : "Try again"}</button></div> : null}
+    {error && orders.length === 0 ? <div className="v1-orders-error" role="alert"><CircleAlert size={18} /><span><strong>{error.title}</strong>{error.message}</span><button type="button" onClick={error.action === "sign_in" ? onSessionExpired : onRefresh}>{error.action === "sign_in" ? "Sign in again" : "Try again"}</button></div>
       : loading && orders.length === 0 ? <div className="v1-orders-loading" role="status"><span /> Loading your orders</div>
         : visible.length ? <div className="v1-order-list">{visible.map((order) => {
       const active = isV1OrderActive(order.status);

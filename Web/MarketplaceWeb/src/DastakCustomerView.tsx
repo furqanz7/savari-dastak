@@ -7,6 +7,7 @@ import { ParcelCustomerView } from "./ParcelCustomerView";
 import {
   parseCustomerDestination,
   serializeCustomerDestination,
+  shouldMountV1CustomerExperience,
   type CustomerDestination,
   type CustomerSection,
 } from "./customerNavigation";
@@ -47,13 +48,24 @@ export function DastakCustomerView(props: Props) {
     publicKey: props.webPushPublicKey,
   }), [props.accountId, props.accessToken, props.publishableKey, props.supabaseUrl, props.webPushPublicKey]);
   const webPush = useDastakWebPush(webPushAuthentication);
+  const reconcileOrders = useCallback(() => {
+    setOrderRefreshToken((current) => current + 1);
+  }, []);
 
-  useOrderRealtime({
+  const realtimeHealth = useOrderRealtime({
     client: props.client,
     accountId: props.accountId,
     accessToken: props.accessToken,
-    onChange: () => setOrderRefreshToken((current) => current + 1),
+    onChange: reconcileOrders,
   });
+
+  useEffect(() => {
+    const fallbackCadence = realtimeHealth === "subscribed" ? 60_000 : 45_000;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine !== false) reconcileOrders();
+    }, fallbackCadence);
+    return () => window.clearInterval(interval);
+  }, [realtimeHealth, reconcileOrders]);
 
   const navigate = useCallback((next: CustomerDestination, replace = false) => {
     const hash = serializeCustomerDestination(next);
@@ -85,7 +97,7 @@ export function DastakCustomerView(props: Props) {
         <CustomerNavigationButton icon={<ReceiptText />} label="Orders" selected={section === "orders"} onClick={() => navigateSection("orders")} />
         <CustomerNavigationButton icon={<UserRound />} label="Account" selected={section === "account" || section === "wishlist" || section === "payments"} onClick={() => navigateSection("account")} />
       </nav>
-      <div className="customer-view" hidden={section === "parcel" || section === "account"}>
+      {shouldMountV1CustomerExperience(section) ? <div className="customer-view">
         <DastakV1CustomerExperience
           accessToken={props.accessToken}
           accountId={props.accountId}
@@ -106,7 +118,7 @@ export function DastakCustomerView(props: Props) {
           onCloseOrder={() => navigate({ section: "orders" })}
           onSessionExpired={props.onSignOut}
         />
-      </div>
+      </div> : null}
       {section === "account" && <div className="customer-view">
         <CatalogueView
           {...props}

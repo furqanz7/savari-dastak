@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { parseOrderChangeSignal, RefreshQueue } from "./orderRealtime";
+import { describe, expect, it, vi } from "vitest";
+import { parseOrderChangeSignal, realtimeRetryDelay, RefreshCoalescer, RefreshQueue } from "./orderRealtime";
 
 describe("order realtime", () => {
   it("accepts only a minimal valid order invalidation", () => {
@@ -41,5 +41,39 @@ describe("order realtime", () => {
     await first;
 
     expect(runs).toBe(2);
+  });
+
+  it("uses the latest task for the trailing refresh", async () => {
+    const queue = new RefreshQueue();
+    let releaseFirst: (() => void) | undefined;
+    const runs: string[] = [];
+    const first = queue.request(false, async () => {
+      runs.push("first");
+      await new Promise<void>((resolve) => { releaseFirst = resolve; });
+    });
+    await Promise.resolve();
+    await queue.request(false, async () => { runs.push("latest"); });
+    releaseFirst?.();
+    await first;
+    expect(runs).toEqual(["first", "latest"]);
+  });
+
+  it("bounds realtime reconnect backoff", () => {
+    expect([0, 1, 2, 3, 20].map(realtimeRetryDelay)).toEqual([
+      1_000, 3_000, 10_000, 30_000, 30_000,
+    ]);
+  });
+
+  it("coalesces an event burst into one trailing reconciliation", () => {
+    vi.useFakeTimers();
+    const values: number[] = [];
+    const coalescer = new RefreshCoalescer<number>((value) => values.push(value ?? -1));
+    coalescer.request(1);
+    coalescer.request(2);
+    coalescer.request(3);
+    vi.advanceTimersByTime(150);
+    expect(values).toEqual([3]);
+    coalescer.cancel();
+    vi.useRealTimers();
   });
 });

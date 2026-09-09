@@ -101,6 +101,19 @@ describe("customer V1 Orders experience", () => {
     const populated = render({ orders: [orderFixture()] });
     expect(populated).toContain("v1-order-list");
     expect(populated).not.toContain("No active orders");
+
+    const nonBlockingFailure = render({
+      orders: [orderFixture()],
+      error: {
+        kind: "offline",
+        title: "You are offline",
+        message: "Reconnect to refresh your latest orders and deliveries.",
+        action: "retry",
+      },
+    });
+    expect(nonBlockingFailure).toContain("You are offline");
+    expect(nonBlockingFailure).toContain("v1-order-list");
+    expect(nonBlockingFailure).not.toContain("No active orders");
   });
 
   it("offers existing sign-in recovery for an expired Orders session", () => {
