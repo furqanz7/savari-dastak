@@ -7,7 +7,7 @@ import {
 import {
   addV1FulfilmentReadyEvidence,
   declareV1FulfilmentPackages,
-  getV1MerchantOperations,
+  getV1MerchantOperationFeeds,
   getV1MerchantOpportunities,
   getV1RestaurantRequests,
   markV1FulfilmentReady,
@@ -23,24 +23,44 @@ import {
   type V1RecoveryOpportunity,
   type V1RestaurantRequest,
 } from "./dastakV1";
+import {
+  initialMerchantFeedStates,
+  isMerchantConcurrencyReconciliation,
+  merchantDataIssue,
+  merchantFallbackCadence,
+  merchantFeedFailed,
+  merchantFeedFailures,
+  merchantFeedStarted,
+  merchantFeedSucceeded,
+  merchantFeedsLoading,
+  merchantFeedsSettledWithoutErrors,
+  shouldRunMerchantFallback,
+  type MerchantFeedKey,
+  type MerchantFeedStates,
+} from "./merchantOperationsState";
+import { RefreshCoalescer, RefreshQueue, useOrderRealtime } from "./orderRealtime";
 
 type Props = {
   auth: DastakV1Auth;
   client: SupabaseClient;
   accountId: string;
+  onSessionExpired: () => void;
 };
 
-export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
+const operationFeedKeys: MerchantFeedKey[] = ["fulfilments", "recovery", "returns", "settlements"];
+
+export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpired }: Props) {
   const [opportunities, setOpportunities] = useState<V1MerchantOpportunity[]>([]);
   const [restaurantRequests, setRestaurantRequests] = useState<V1RestaurantRequest[]>([]);
   const [fulfilments, setFulfilments] = useState<V1MerchantFulfilment[]>([]);
   const [recoveryOpportunities, setRecoveryOpportunities] = useState<V1RecoveryOpportunity[]>([]);
   const [returnReceipts, setReturnReceipts] = useState<Record<string, unknown>[]>([]);
   const [settlements, setSettlements] = useState<Record<string, unknown>[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [feedStates, setFeedStates] = useState<MerchantFeedStates>(initialMerchantFeedStates);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string>();
-  const [error, setError] = useState<string>();
+  const [actionError, setActionError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const [confirmed, setConfirmed] = useState<Set<string>>(() => new Set());
   const [readyConfirmed, setReadyConfirmed] = useState<Set<string>>(() => new Set());
   const [prepMinutes, setPrepMinutes] = useState<Record<string, number>>({});
@@ -51,70 +71,162 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   const [problemReason, setProblemReason] = useState("");
   const [recoveryLineId, setRecoveryLineId] = useState<string>();
   const [recoveryPrepMinutes, setRecoveryPrepMinutes] = useState<Record<string, number>>({});
-  const [now, setNow] = useState(() => Date.now());
   const keys = useRef(new Map<string, string>());
   const uploadedEvidence = useRef(new Map<string, string>());
+  const sessionRecoveryStarted = useRef(false);
+  const retailRefreshQueue = useRef(new RefreshQueue());
+  const restaurantRefreshQueue = useRef(new RefreshQueue());
+  const operationsRefreshQueue = useRef(new RefreshQueue());
+
+  const recoverSession = useCallback((requestError: unknown) => {
+    const issue = merchantDataIssue(requestError);
+    if (issue.action !== "sign_in") return false;
+    if (!sessionRecoveryStarted.current) {
+      sessionRecoveryStarted.current = true;
+      onSessionExpired();
+    }
+    return true;
+  }, [onSessionExpired]);
+
+  const recordFeedFailure = useCallback((key: MerchantFeedKey, requestError: unknown) => {
+    setFeedStates((current) => merchantFeedFailed(current, key, requestError));
+    recoverSession(requestError);
+  }, [recoverSession]);
+
+  const refreshRetail = useCallback(async () => {
+    await retailRefreshQueue.current.request(false, async () => {
+      setFeedStates((current) => merchantFeedStarted(current, ["retail"]));
+      try {
+        const result = await getV1MerchantOpportunities({ ...auth, limit: 50 });
+        setOpportunities(result);
+        setPrepMinutes((current) => {
+          const next = { ...current };
+          result.forEach((opportunity) => {
+            next[opportunity.id] ??= opportunity.promisedPrepMinutes ?? opportunity.prepTimeOptionsMinutes[0] ?? 10;
+          });
+          return next;
+        });
+        setFeedStates((current) => merchantFeedSucceeded(current, "retail"));
+      } catch (requestError) {
+        recordFeedFailure("retail", requestError);
+      }
+    });
+  }, [auth, recordFeedFailure]);
+
+  const refreshRestaurants = useCallback(async () => {
+    await restaurantRefreshQueue.current.request(false, async () => {
+      setFeedStates((current) => merchantFeedStarted(current, ["restaurant"]));
+      try {
+        const result = await getV1RestaurantRequests({ ...auth, limit: 50 });
+        setRestaurantRequests(result);
+        setRestaurantPrepMinutes((current) => {
+          const next = { ...current };
+          result.forEach((request) => { next[request.id] ??= request.promisedPrepMinutes ?? 15; });
+          return next;
+        });
+        setFeedStates((current) => merchantFeedSucceeded(current, "restaurant"));
+      } catch (requestError) {
+        recordFeedFailure("restaurant", requestError);
+      }
+    });
+  }, [auth, recordFeedFailure]);
+
+  const refreshOperations = useCallback(async () => {
+    await operationsRefreshQueue.current.request(false, async () => {
+      setFeedStates((current) => merchantFeedStarted(current, operationFeedKeys));
+      try {
+        const result = await getV1MerchantOperationFeeds({ ...auth, limit: 50 });
+        if (result.fulfilments.ok) {
+          const values = result.fulfilments.value;
+          setFulfilments(values);
+          setPackageCounts((current) => {
+            const next = { ...current };
+            values.forEach((fulfilment) => {
+              next[fulfilment.id] ??= fulfilment.packageCount ?? 1;
+            });
+            return next;
+          });
+          setFeedStates((current) => merchantFeedSucceeded(current, "fulfilments"));
+        } else recordFeedFailure("fulfilments", result.fulfilments.error);
+
+        if (result.recoveryOpportunities.ok) {
+          const values = result.recoveryOpportunities.value;
+          setRecoveryOpportunities(values);
+          setRecoveryPrepMinutes((current) => {
+            const next = { ...current };
+            values.forEach((opportunity) => {
+              next[opportunity.id] ??= opportunity.promisedPrepMinutes ?? 10;
+            });
+            return next;
+          });
+          setFeedStates((current) => merchantFeedSucceeded(current, "recovery"));
+        } else recordFeedFailure("recovery", result.recoveryOpportunities.error);
+
+        if (result.returnReceipts.ok) {
+          setReturnReceipts(result.returnReceipts.value);
+          setFeedStates((current) => merchantFeedSucceeded(current, "returns"));
+        } else recordFeedFailure("returns", result.returnReceipts.error);
+
+        if (result.settlements.ok) {
+          setSettlements(result.settlements.value);
+          setFeedStates((current) => merchantFeedSucceeded(current, "settlements"));
+        } else recordFeedFailure("settlements", result.settlements.error);
+      } catch (requestError) {
+        operationFeedKeys.forEach((key) => recordFeedFailure(key, requestError));
+      }
+    });
+  }, [auth, recordFeedFailure]);
 
   const refresh = useCallback(async (showProgress = false) => {
     if (showProgress) setRefreshing(true);
     try {
-      const [opportunityResult, restaurantResult, operations] = await Promise.all([
-        getV1MerchantOpportunities({ ...auth, limit: 50 }),
-        getV1RestaurantRequests({ ...auth, limit: 50 }),
-        getV1MerchantOperations({ ...auth, limit: 50 }),
-      ]);
-      setOpportunities(opportunityResult);
-      setRestaurantRequests(restaurantResult);
-      setFulfilments(operations.fulfilments);
-      setRecoveryOpportunities(operations.recoveryOpportunities);
-      setReturnReceipts(operations.returnReceipts);
-      setSettlements(operations.settlements);
-      setPrepMinutes((current) => {
-        const next = { ...current };
-        opportunityResult.forEach((opportunity) => {
-          next[opportunity.id] ??= opportunity.promisedPrepMinutes ?? opportunity.prepTimeOptionsMinutes[0] ?? 10;
-        });
-        return next;
-      });
-      setRestaurantPrepMinutes((current) => {
-        const next = { ...current };
-        restaurantResult.forEach((request) => {
-          next[request.id] ??= request.promisedPrepMinutes ?? 15;
-        });
-        return next;
-      });
-      setPackageCounts((current) => {
-        const next = { ...current };
-        operations.fulfilments.forEach((fulfilment) => {
-          next[fulfilment.id] ??= fulfilment.packageCount ?? 1;
-        });
-        return next;
-      });
-      setRecoveryPrepMinutes((current) => {
-        const next = { ...current };
-        operations.recoveryOpportunities.forEach((opportunity) => {
-          next[opportunity.id] ??= opportunity.promisedPrepMinutes ?? 10;
-        });
-        return next;
-      });
-      setError(undefined);
-    } catch (refreshError) {
-      setError(message(refreshError));
+      await Promise.allSettled([refreshRetail(), refreshRestaurants(), refreshOperations()]);
     } finally {
-      setLoading(false);
       if (showProgress) setRefreshing(false);
     }
-  }, [auth]);
+  }, [refreshOperations, refreshRestaurants, refreshRetail]);
+
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  const reconcileCoalescer = useRef<RefreshCoalescer<void> | undefined>(undefined);
+  if (!reconcileCoalescer.current) {
+    reconcileCoalescer.current = new RefreshCoalescer(() => void refreshRef.current(false));
+  }
+  const requestReconciliation = useCallback(() => reconcileCoalescer.current?.request(), []);
+  const realtimeHealth = useOrderRealtime({
+    client,
+    accountId,
+    accessToken: auth.accessToken,
+    onChange: requestReconciliation,
+  });
 
   useEffect(() => {
     void refresh();
-    const poll = window.setInterval(() => void refresh(), 10_000);
-    const clock = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => {
-      window.clearInterval(poll);
-      window.clearInterval(clock);
-    };
+    return () => reconcileCoalescer.current?.cancel();
   }, [refresh]);
+
+  useEffect(() => {
+    let fallback: number | undefined;
+    const stop = () => {
+      if (fallback !== undefined) window.clearInterval(fallback);
+      fallback = undefined;
+    };
+    const start = () => {
+      stop();
+      if (!shouldRunMerchantFallback(document.visibilityState, navigator.onLine !== false)) return;
+      fallback = window.setInterval(requestReconciliation, merchantFallbackCadence(realtimeHealth));
+    };
+    start();
+    document.addEventListener("visibilitychange", start);
+    window.addEventListener("online", start);
+    window.addEventListener("offline", stop);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", start);
+      window.removeEventListener("online", start);
+      window.removeEventListener("offline", stop);
+    };
+  }, [realtimeHealth, requestReconciliation]);
 
   const keyFor = (identity: string) => {
     const key = keys.current.get(identity) ?? crypto.randomUUID();
@@ -122,11 +234,21 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
     return key;
   };
 
+  const handleActionFailure = useCallback(async (actionFailure: unknown) => {
+    if (isMerchantConcurrencyReconciliation(actionFailure)) {
+      setNotice("This order changed elsewhere. Dastak has reconciled the latest status.");
+    } else if (!recoverSession(actionFailure)) {
+      setActionError(message(actionFailure));
+    }
+    await refresh();
+  }, [recoverSession, refresh]);
+
   const respond = async (opportunity: V1MerchantOpportunity, action: "accept" | "unavailable") => {
     if (busyId || (action === "accept" && !confirmed.has(opportunity.id))) return;
     const identity = `${action}:${opportunity.id}:${opportunity.version}`;
     setBusyId(opportunity.id);
-    setError(undefined);
+    setActionError(undefined);
+    setNotice(undefined);
     try {
       await respondToV1MerchantOpportunity({
         ...auth,
@@ -140,8 +262,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
       keys.current.delete(identity);
       await refresh();
     } catch (responseError) {
-      setError(message(responseError));
-      await refresh();
+      await handleActionFailure(responseError);
     } finally {
       setBusyId(undefined);
     }
@@ -151,7 +272,8 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
     if (busyId) return;
     const identity = `restaurant:${response}:${request.id}:${request.version}`;
     setBusyId(request.id);
-    setError(undefined);
+    setActionError(undefined);
+    setNotice(undefined);
     try {
       await respondV1RestaurantRequest({
         ...auth,
@@ -165,8 +287,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
       keys.current.delete(identity);
       await refresh();
     } catch (responseError) {
-      setError(message(responseError));
-      await refresh();
+      await handleActionFailure(responseError);
     } finally {
       setBusyId(undefined);
     }
@@ -199,7 +320,8 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   const markReady = async (fulfilment: V1MerchantFulfilment) => {
     if (busyId || !readyConfirmed.has(fulfilment.id)) return;
     setBusyId(fulfilment.id);
-    setError(undefined);
+    setActionError(undefined);
+    setNotice(undefined);
     try {
       let current = fulfilment;
       if (!current.packageCount) {
@@ -230,8 +352,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
       setFulfilments((values) => values.map((item) => item.id === ready.id ? ready : item));
       setReadyConfirmed((values) => without(values, ready.id));
     } catch (readyError) {
-      setError(message(readyError));
-      await refresh();
+      await handleActionFailure(readyError);
     } finally {
       setBusyId(undefined);
     }
@@ -240,12 +361,12 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   const addPhoto = async (fulfilment: V1MerchantFulfilment) => {
     if (busyId || !fulfilment.packageCount) return;
     setBusyId(fulfilment.id);
-    setError(undefined);
+    setActionError(undefined);
+    setNotice(undefined);
     try {
       await captureEvidence(fulfilment);
     } catch (evidenceError) {
-      setError(message(evidenceError));
-      await refresh();
+      await handleActionFailure(evidenceError);
     } finally {
       setBusyId(undefined);
     }
@@ -256,7 +377,8 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
     if (busyId || reason.length < 3) return;
     const identity = `problem:${fulfilment.id}:${fulfilment.version}:${reason}`;
     setBusyId(fulfilment.id);
-    setError(undefined);
+    setActionError(undefined);
+    setNotice(undefined);
     try {
       if (fulfilment.canReportExactSkuFailure) {
         const orderLineId = recoveryLineId ?? fulfilment.lines[0]?.orderLineId;
@@ -279,8 +401,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
       setRecoveryLineId(undefined);
       await refresh();
     } catch (problemError) {
-      setError(message(problemError));
-      await refresh();
+      await handleActionFailure(problemError);
     } finally {
       setBusyId(undefined);
     }
@@ -292,7 +413,8 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
   ) => {
     if (busyId || (response === "ACCEPT" && !confirmed.has(opportunity.id))) return;
     setBusyId(opportunity.id);
-    setError(undefined);
+    setActionError(undefined);
+    setNotice(undefined);
     const identity = `recovery:${response}:${opportunity.id}:${opportunity.version}`;
     try {
       await respondV1ExactSkuRecoveryOffer({
@@ -305,8 +427,7 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
       keys.current.delete(identity);
       await refresh();
     } catch (responseError) {
-      setError(message(responseError));
-      await refresh();
+      await handleActionFailure(responseError);
     } finally {
       setBusyId(undefined);
     }
@@ -326,16 +447,23 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
       fulfilment.status === "PICKED_UP"),
     [fulfilments],
   );
+  const offeredRestaurants = restaurantRequests.filter((request) => request.status === "OFFERED");
+  const offeredRecovery = recoveryOpportunities.filter((item) => item.status === "OFFERED");
+  const hasContent = offeredRestaurants.length > 0 || activeFulfilments.length > 0 ||
+    offeredRecovery.length > 0 || visibleOpportunities.length > 0 ||
+    returnReceipts.length > 0 || settlements.length > 0;
 
   return <section className="v1-merchant-panel" aria-labelledby="v1-merchant-title">
     <header>
       <div><p className="eyebrow">LIVE OPERATIONS</p><h2 id="v1-merchant-title">Current fulfilments</h2><span>Confirm exact items, then prepare every declared package as soon as the customer confirms the order.</span></div>
       <button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={refreshing} aria-label="Refresh fulfilments"><RefreshCw size={18} /></button>
     </header>
-    {error ? <p className="order-error" role="alert">{error}</p> : null}
-    {loading ? <div className="catalogue-loading" role="status"><span /> Loading fulfilments</div> : <>
-      {restaurantRequests.some((request) => request.status === "OFFERED") ? <div className="v1-opportunity-list">
-        {restaurantRequests.filter((request) => request.status === "OFFERED").map((request) => <article className="v1-opportunity-card" key={request.id}>
+    {realtimeHealth !== "subscribed" ? <p className="v1-reservation-state" role="status">Live updates are reconnecting. Dastak will reconcile this order desk automatically.</p> : null}
+    {notice ? <p className="v1-reservation-state" role="status">{notice}</p> : null}
+    {actionError ? <p className="order-error" role="alert">{actionError}</p> : null}
+    <MerchantOperationsStatus states={feedStates} hasContent={hasContent} />
+    {offeredRestaurants.length > 0 ? <div className="v1-opportunity-list">
+        {offeredRestaurants.map((request) => <article className="v1-opportunity-card" key={request.id}>
           <header><span className="v1-opportunity-icon"><PackageCheck size={20} /></span><span><strong>{request.displayOrderNumber}</strong><small>Exact Restaurant/Cafe request · {request.branch.displayName}</small></span><b>CONFIRM FOOD</b></header>
           <ul>{request.lines.map((line) => <li key={line.orderLineId}><span><strong>{line.quantity}× {line.name}</strong><small>{selectionSummary(line.selection)}</small></span><b>{formatPaise(line.unitPricePaise * line.quantity)}</b></li>)}</ul>
           {request.softThresholdWarning ? <p className="v1-reservation-state">{request.activeOrderCount} active orders exceeds the default soft threshold of {request.softActiveOrderThreshold}. You may still accept if the kitchen can handle it.</p> : null}
@@ -348,7 +476,6 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
         {activeFulfilments.map((fulfilment) => <FulfilmentCard
           key={fulfilment.id}
           fulfilment={fulfilment}
-          now={now}
           busy={busyId === fulfilment.id}
           packageCount={packageCounts[fulfilment.id] ?? 1}
           evidenceFile={evidenceFiles[fulfilment.id]}
@@ -379,43 +506,32 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
           onReportProblem={() => void reportProblem(fulfilment)}
         />)}
       </div> : null}
-      {recoveryOpportunities.some((item) => item.status === "OFFERED") ? <div className="v1-opportunity-list">
-        {recoveryOpportunities.filter((item) => item.status === "OFFERED").map((opportunity) => {
-          const seconds = Math.max(0, Math.ceil((Date.parse(opportunity.expiresAt) - now) / 1_000));
-          const busy = busyId === opportunity.id;
-          return <article className="v1-opportunity-card running-late" key={opportunity.id}>
-            <header>
-              <span className="v1-opportunity-icon"><AlertTriangle size={20} /></span>
-              <span><strong>Exact-item recovery</strong><small>{opportunity.branch.displayName}</small></span>
-              <b><Clock3 size={14} /> {formatDuration(seconds)}</b>
-            </header>
-            <ul><li><span><strong>{opportunity.requestedQuantity}× {opportunity.sku.name}</strong><small>{[opportunity.sku.variantName, opportunity.sku.packSize].filter(Boolean).join(" · ")}</small></span></li></ul>
-            <label className="v1-physical-check"><input type="checkbox" checked={confirmed.has(opportunity.id)} onChange={(event) => setConfirmed((current) => event.target.checked ? withValue(current, opportunity.id) : without(current, opportunity.id))} /><span>I physically hold this exact SKU and full quantity. No substitution.</span></label>
-            <label className="v1-prep-choice"><span>Preparation promise</span><input type="number" min={1} max={180} value={recoveryPrepMinutes[opportunity.id] ?? 10} onChange={(event) => setRecoveryPrepMinutes((current) => ({ ...current, [opportunity.id]: Number(event.target.value) }))} /></label>
-            <div className="v1-opportunity-actions"><button className="secondary-button" type="button" disabled={busy} onClick={() => void respondRecovery(opportunity, "UNAVAILABLE")}><X size={17} /> Unavailable</button><button className="primary-button" type="button" disabled={busy || !confirmed.has(opportunity.id) || seconds === 0} onClick={() => void respondRecovery(opportunity, "ACCEPT")}><Check size={17} /> Accept exact item</button></div>
-          </article>;
-        })}
+      {offeredRecovery.length > 0 ? <div className="v1-opportunity-list">
+        {offeredRecovery.map((opportunity) => <RecoveryOpportunityCard
+          key={opportunity.id}
+          opportunity={opportunity}
+          busy={busyId === opportunity.id}
+          confirmed={confirmed.has(opportunity.id)}
+          prepMinutes={recoveryPrepMinutes[opportunity.id] ?? 10}
+          onConfirmed={(checked) => setConfirmed((current) => checked ? withValue(current, opportunity.id) : without(current, opportunity.id))}
+          onPrepMinutes={(value) => setRecoveryPrepMinutes((current) => ({ ...current, [opportunity.id]: value }))}
+          onUnavailable={() => void respondRecovery(opportunity, "UNAVAILABLE")}
+          onAccept={() => void respondRecovery(opportunity, "ACCEPT")}
+        />)}
       </div> : null}
-      {visibleOpportunities.length === 0 ? <p className="v1-merchant-empty">You’re online. New exact-item requests will appear here.</p> : <div className="v1-opportunity-list">
-        {visibleOpportunities.map((opportunity) => {
-          const seconds = Math.max(0, Math.ceil((Date.parse(opportunity.expiresAt) - now) / 1_000));
-          const offered = opportunity.status === "OFFERED" && seconds > 0;
-          const busy = busyId === opportunity.id;
-          return <article className="v1-opportunity-card" key={opportunity.id}>
-            <header>
-              <span className="v1-opportunity-icon"><PackageCheck size={20} /></span>
-              <span><strong>{opportunity.displayOrderNumber}</strong><small>{opportunity.requestScope === "FULL_BASKET" ? "Complete basket request" : "Exact subset request"} · {opportunity.branch.displayName}</small></span>
-              {offered ? <b><Clock3 size={14} /> {formatDuration(seconds)}</b> : <b>{reservationLabel(opportunity)}</b>}
-            </header>
-            <LineList lines={opportunity.lines} />
-            {offered ? <>
-              <label className="v1-physical-check"><input type="checkbox" checked={confirmed.has(opportunity.id)} onChange={(event) => setConfirmed((current) => event.target.checked ? withValue(current, opportunity.id) : without(current, opportunity.id))} /><span>I physically confirmed every exact SKU and quantity above.</span></label>
-              <label className="v1-prep-choice"><span>Preparation promise</span><select value={prepMinutes[opportunity.id] ?? opportunity.prepTimeOptionsMinutes[0]} onChange={(event) => setPrepMinutes((current) => ({ ...current, [opportunity.id]: Number(event.target.value) }))}>{opportunity.prepTimeOptionsMinutes.map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}</select></label>
-              <div className="v1-opportunity-actions"><button className="secondary-button" type="button" disabled={busy} onClick={() => void respond(opportunity, "unavailable")}><X size={17} /> Unavailable</button><button className="primary-button" type="button" disabled={busy || !confirmed.has(opportunity.id)} onClick={() => void respond(opportunity, "accept")}><Check size={17} /> {busy ? "Confirming…" : "Accept and hold items"}</button></div>
-            </> : <p className={`v1-reservation-state ${opportunity.reservationState.toLowerCase()}`}>{reservationCopy(opportunity)}</p>}
-          </article>;
-        })}
-      </div>}
+      {visibleOpportunities.length > 0 ? <div className="v1-opportunity-list">
+        {visibleOpportunities.map((opportunity) => <MerchantOpportunityCard
+          key={opportunity.id}
+          opportunity={opportunity}
+          busy={busyId === opportunity.id}
+          confirmed={confirmed.has(opportunity.id)}
+          prepMinutes={prepMinutes[opportunity.id] ?? opportunity.prepTimeOptionsMinutes[0] ?? 10}
+          onConfirmed={(checked) => setConfirmed((current) => checked ? withValue(current, opportunity.id) : without(current, opportunity.id))}
+          onPrepMinutes={(value) => setPrepMinutes((current) => ({ ...current, [opportunity.id]: value }))}
+          onUnavailable={() => void respond(opportunity, "unavailable")}
+          onAccept={() => void respond(opportunity, "accept")}
+        />)}
+      </div> : null}
       {returnReceipts.length > 0 ? <div className="v1-preparation-list">
         {returnReceipts.map((receipt, index) => <article className="v1-preparation-card" key={recordText(receipt, "returnStopId") ?? index}>
           <header><span className="v1-opportunity-icon"><PackageCheck size={20} /></span><span><strong>Return receipt</strong><small>{recordText(recordObject(receipt, "branch"), "displayName") ?? "Merchant branch"}</small></span><b>{(recordText(receipt, "status") ?? "PENDING").replaceAll("_", " ")}</b></header>
@@ -428,13 +544,97 @@ export function MerchantV1Opportunities({ auth, client, accountId }: Props) {
         <span><small>Eligible</small><strong>{settlements.filter((item) => recordText(item, "status") === "ELIGIBLE").length}</strong></span>
         <span><small>Settled</small><strong>{settlements.filter((item) => recordText(item, "status") === "SETTLED").length}</strong></span>
       </div> : null}
-    </>}
   </section>;
+}
+
+export function MerchantOperationsStatus({ states, hasContent }: {
+  states: MerchantFeedStates;
+  hasContent: boolean;
+}) {
+  const failures = merchantFeedFailures(states);
+  if (failures.length > 0) {
+    const labels = failures.map((failure) => failure.label).join(", ");
+    const sessionExpired = failures.some((failure) => failure.issue.action === "sign_in");
+    return <p className="order-error" role={hasContent ? "status" : "alert"}>
+      {sessionExpired
+        ? "Your session expired. Dastak is returning you to sign in."
+        : `${labels} could not update. ${hasContent ? "Previously loaded information remains visible." : "Dastak will retry automatically."}`}
+    </p>;
+  }
+  if (!hasContent && merchantFeedsLoading(states)) {
+    return <div className="catalogue-loading" role="status"><span /> Loading fulfilments</div>;
+  }
+  if (!hasContent && merchantFeedsSettledWithoutErrors(states)) {
+    return <p className="v1-merchant-empty">You’re online. New exact-item requests will appear here.</p>;
+  }
+  return null;
+}
+
+type OpportunityCardProps = {
+  opportunity: V1MerchantOpportunity;
+  busy: boolean;
+  confirmed: boolean;
+  prepMinutes: number;
+  onConfirmed: (checked: boolean) => void;
+  onPrepMinutes: (minutes: number) => void;
+  onUnavailable: () => void;
+  onAccept: () => void;
+};
+
+function MerchantOpportunityCard({
+  opportunity, busy, confirmed, prepMinutes,
+  onConfirmed, onPrepMinutes, onUnavailable, onAccept,
+}: OpportunityCardProps) {
+  const now = useTickingNow();
+  const seconds = Math.max(0, Math.ceil((Date.parse(opportunity.expiresAt) - now) / 1_000));
+  const offered = opportunity.status === "OFFERED" && seconds > 0;
+  return <article className="v1-opportunity-card">
+    <header>
+      <span className="v1-opportunity-icon"><PackageCheck size={20} /></span>
+      <span><strong>{opportunity.displayOrderNumber}</strong><small>{opportunity.requestScope === "FULL_BASKET" ? "Complete basket request" : "Exact subset request"} · {opportunity.branch.displayName}</small></span>
+      {offered ? <b><Clock3 size={14} /> {formatDuration(seconds)}</b> : <b>{reservationLabel(opportunity)}</b>}
+    </header>
+    <LineList lines={opportunity.lines} />
+    {offered ? <>
+      <label className="v1-physical-check"><input type="checkbox" checked={confirmed} onChange={(event) => onConfirmed(event.target.checked)} /><span>I physically confirmed every exact SKU and quantity above.</span></label>
+      <label className="v1-prep-choice"><span>Preparation promise</span><select value={prepMinutes} onChange={(event) => onPrepMinutes(Number(event.target.value))}>{opportunity.prepTimeOptionsMinutes.map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}</select></label>
+      <div className="v1-opportunity-actions"><button className="secondary-button" type="button" disabled={busy} onClick={onUnavailable}><X size={17} /> Unavailable</button><button className="primary-button" type="button" disabled={busy || !confirmed} onClick={onAccept}><Check size={17} /> {busy ? "Confirming…" : "Accept and hold items"}</button></div>
+    </> : <p className={`v1-reservation-state ${opportunity.reservationState.toLowerCase()}`}>{reservationCopy(opportunity)}</p>}
+  </article>;
+}
+
+type RecoveryOpportunityCardProps = {
+  opportunity: V1RecoveryOpportunity;
+  busy: boolean;
+  confirmed: boolean;
+  prepMinutes: number;
+  onConfirmed: (checked: boolean) => void;
+  onPrepMinutes: (minutes: number) => void;
+  onUnavailable: () => void;
+  onAccept: () => void;
+};
+
+function RecoveryOpportunityCard({
+  opportunity, busy, confirmed, prepMinutes,
+  onConfirmed, onPrepMinutes, onUnavailable, onAccept,
+}: RecoveryOpportunityCardProps) {
+  const now = useTickingNow();
+  const seconds = Math.max(0, Math.ceil((Date.parse(opportunity.expiresAt) - now) / 1_000));
+  return <article className="v1-opportunity-card running-late">
+    <header>
+      <span className="v1-opportunity-icon"><AlertTriangle size={20} /></span>
+      <span><strong>Exact-item recovery</strong><small>{opportunity.branch.displayName}</small></span>
+      <b><Clock3 size={14} /> {formatDuration(seconds)}</b>
+    </header>
+    <ul><li><span><strong>{opportunity.requestedQuantity}× {opportunity.sku.name}</strong><small>{[opportunity.sku.variantName, opportunity.sku.packSize].filter(Boolean).join(" · ")}</small></span></li></ul>
+    <label className="v1-physical-check"><input type="checkbox" checked={confirmed} onChange={(event) => onConfirmed(event.target.checked)} /><span>I physically hold this exact SKU and full quantity. No substitution.</span></label>
+    <label className="v1-prep-choice"><span>Preparation promise</span><input type="number" min={1} max={180} value={prepMinutes} onChange={(event) => onPrepMinutes(Number(event.target.value))} /></label>
+    <div className="v1-opportunity-actions"><button className="secondary-button" type="button" disabled={busy} onClick={onUnavailable}><X size={17} /> Unavailable</button><button className="primary-button" type="button" disabled={busy || !confirmed || seconds === 0} onClick={onAccept}><Check size={17} /> Accept exact item</button></div>
+  </article>;
 }
 
 type FulfilmentCardProps = {
   fulfilment: V1MerchantFulfilment;
-  now: number;
   busy: boolean;
   packageCount: number;
   evidenceFile?: File;
@@ -456,9 +656,10 @@ type FulfilmentCardProps = {
 
 function FulfilmentCard(props: FulfilmentCardProps) {
   const { fulfilment } = props;
+  const now = useTickingNow();
   const preparing = fulfilment.status === "PREPARING";
   const remaining = fulfilment.estimatedReadyAt
-    ? Math.ceil((Date.parse(fulfilment.estimatedReadyAt) - props.now) / 1_000)
+    ? Math.ceil((Date.parse(fulfilment.estimatedReadyAt) - now) / 1_000)
     : 0;
   const runningLate = preparing && remaining < 0;
   const hasRequiredEvidence = fulfilment.evidence.some((item) => item.type === "MERCHANT_READY_PHOTO");
@@ -540,6 +741,14 @@ function without(values: Set<string>, value: string) {
   const next = new Set(values);
   next.delete(value);
   return next;
+}
+function useTickingNow() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const clock = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(clock);
+  }, []);
+  return now;
 }
 function formatDuration(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;

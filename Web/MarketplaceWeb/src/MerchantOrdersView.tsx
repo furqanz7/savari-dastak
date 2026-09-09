@@ -72,7 +72,12 @@ export function MerchantOrdersView({
               <p>Live exact-item requests and fulfilments.</p>
             </div>
           </header>
-          <MerchantV1Opportunities auth={auth} client={client} accountId={accountId} />
+          <MerchantV1Opportunities
+            auth={auth}
+            client={client}
+            accountId={accountId}
+            onSessionExpired={onSignOut}
+          />
         </div>
       )}
     </div>

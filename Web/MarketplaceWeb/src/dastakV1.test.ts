@@ -20,12 +20,14 @@ import {
   getV1MerchantCanonicalCatalogue,
   getV1MerchantRestaurantMenu,
   getV1MerchantFulfilments,
+  getV1MerchantOperationFeeds,
   getV1MerchantOpportunities,
   markV1FulfilmentReady,
   manageV1DeliveryRecovery,
   manageV1RiderEscalation,
   merchantReadyEvidenceObjectPath,
   parseV1Catalogue,
+  parseV1MerchantOperationFeeds,
   parseV1MerchantFulfilment,
   parseV1Order,
   reportV1CustomerIssue,
@@ -949,6 +951,41 @@ describe("Dastak V1 web contract", () => {
     ]);
     expect(calls.map((call) => call.key)).toEqual(["packages-once", "evidence-once", "ready-once"]);
     expect(calls[1].body).toMatchObject({ fulfilmentId, packageId, expectedVersion: 2 });
+  });
+
+  it("decodes merchant operation feeds independently", () => {
+    const result = parseV1MerchantOperationFeeds({
+      fulfilments: [fulfilmentFixture()],
+      recoveryOpportunities: "malformed recovery feed",
+      returnReceipts: [{ returnStopId: categoryId, packageCount: 2 }],
+      settlements: [{ id: subcategoryId, status: "ELIGIBLE" }],
+    });
+
+    expect(result.fulfilments).toMatchObject({ ok: true });
+    expect(result.fulfilments.ok && result.fulfilments.value).toHaveLength(1);
+    expect(result.recoveryOpportunities).toMatchObject({
+      ok: false,
+      error: { code: "invalid_response", status: 502 },
+    });
+    expect(result.returnReceipts).toMatchObject({ ok: true });
+    expect(result.settlements).toMatchObject({ ok: true });
+  });
+
+  it("uses one existing merchant-fulfilments request for isolated operation feeds", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const feeds = await getV1MerchantOperationFeeds(auth, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        fulfilments: [fulfilmentFixture()],
+        recoveryOpportunities: [],
+        returnReceipts: [],
+        settlements: [],
+      });
+    });
+
+    expect(requestBody).toEqual({ operation: "merchantFulfilments", limit: 50 });
+    expect(feeds.fulfilments).toMatchObject({ ok: true });
+    expect(feeds.recoveryOpportunities).toEqual({ ok: true, value: [] });
   });
 
   it("parses merchant pickup code and completed package custody state", () => {

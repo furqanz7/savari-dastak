@@ -455,6 +455,17 @@ export type V1MerchantOperations = {
   settlements: Record<string, unknown>[];
 };
 
+export type V1MerchantOperationFeed<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: unknown };
+
+export type V1MerchantOperationFeeds = {
+  fulfilments: V1MerchantOperationFeed<V1MerchantFulfilment[]>;
+  recoveryOpportunities: V1MerchantOperationFeed<V1RecoveryOpportunity[]>;
+  returnReceipts: V1MerchantOperationFeed<Record<string, unknown>[]>;
+  settlements: V1MerchantOperationFeed<Record<string, unknown>[]>;
+};
+
 export type V1AdminExecutionOrder = {
   id: string;
   displayOrderNumber: string;
@@ -1187,6 +1198,33 @@ export async function getV1MerchantOperations(
     recoveryOpportunities: source.recoveryOpportunities.map(parseRecoveryOpportunity),
     returnReceipts: source.returnReceipts.map(requiredRecord),
     settlements: source.settlements.map(requiredRecord),
+  };
+}
+
+/**
+ * Reads the existing merchant-operations projection while isolating each feed's
+ * decoder. A malformed optional recovery/finance section must not hide a valid
+ * preparation queue (and vice versa). Transport/auth failures still reject the
+ * request because no feed was obtained from the server.
+ */
+export async function getV1MerchantOperationFeeds(
+  input: DastakV1Auth & { limit?: number; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1MerchantOperationFeeds> {
+  const source = requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "merchantFulfilments",
+    limit: input.limit ?? 50,
+  }, undefined, fetcher));
+  return parseV1MerchantOperationFeeds(source);
+}
+
+export function parseV1MerchantOperationFeeds(value: unknown): V1MerchantOperationFeeds {
+  const source = requiredRecord(value);
+  return {
+    fulfilments: isolatedFeed(() => requiredArray(source.fulfilments).map(parseMerchantFulfilment)),
+    recoveryOpportunities: isolatedFeed(() => requiredArray(source.recoveryOpportunities).map(parseRecoveryOpportunity)),
+    returnReceipts: isolatedFeed(() => requiredArray(source.returnReceipts).map(requiredRecord)),
+    settlements: isolatedFeed(() => requiredArray(source.settlements).map(requiredRecord)),
   };
 }
 
@@ -3112,6 +3150,13 @@ function requiredTimestamp(value: unknown) {
 }
 function optionalTimestamp(value: unknown) { return value === null || value === undefined ? undefined : requiredTimestamp(value); }
 function currency(value: unknown): "INR" { return value === "INR" ? "INR" : invalid("currency"); }
+function isolatedFeed<T>(parse: () => T): V1MerchantOperationFeed<T> {
+  try {
+    return { ok: true, value: parse() };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
 function invalidInput(message: string): never {
   throw new DastakV1RequestError("validation_failed", message, 400);
 }
