@@ -20,20 +20,19 @@ import {
   MonitorSmartphone,
   Navigation,
   PackageOpen,
-  Pencil,
   Plus,
   Phone,
   ReceiptText,
   RefreshCw,
   Search,
   ShieldAlert,
-  ShieldCheck,
   ShoppingBag,
   Store,
   Trash2,
   X,
 } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
+import { CustomerProfileCard } from "./CustomerProfileCard";
 import { AccountActionDialog } from "./AccountActionDialog";
 import { AccountSessionsSheet } from "./AccountSessionsSheet";
 import { DeleteAccountDialog } from "./DeleteAccountDialog";
@@ -1112,17 +1111,11 @@ export function CatalogueView({
             <h1>Your Dastak</h1>
             <p>Your details, saved places and account controls—kept together and protected.</p>
           </header>
-          <button className="customer-profile-card" type="button" onClick={() => setProfileEditorOpen(true)}>
-            <span className="customer-profile-avatar" aria-hidden="true">{accountInitials}</span>
-            <span><strong>{accountProfile.displayName || "Your account"}</strong><small>{accountProfile.phoneNumber || "Add a contact number"}</small>{email && <small>{email}</small>}</span>
-            <span className="customer-profile-edit"><Pencil size={15} /> Edit</span>
-            <span className="customer-profile-meta" aria-hidden="true">
-              <span><ShieldCheck size={15} /> {customerIdentities.length > 0
+          <CustomerProfileCard initials={accountInitials} displayName={accountProfile.displayName}
+            phoneNumber={accountProfile.phoneNumber} email={email} onEdit={() => setProfileEditorOpen(true)}
+            signInLabel={customerIdentities.length > 0
                 ? `${customerIdentities.map((identity) => identity.provider === "apple" ? "Apple" : "Google").join(" + ")} sign-in`
-                : "Secure sign-in"}</span>
-              <span><MapPin size={15} /> {savedAddresses.length} saved {savedAddresses.length === 1 ? "place" : "places"}</span>
-            </span>
-          </button>
+                : "Secure sign-in"} savedPlaceCount={savedAddresses.length} />
 
           <section className="customer-account-group" aria-labelledby="account-delivery-title">
             <div className="customer-account-section-heading"><div><h2 id="account-delivery-title">Saved places</h2><small>Your default doorstep for checkout</small></div><span>{savedAddresses.length}/10</span></div>

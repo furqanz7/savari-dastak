@@ -51,7 +51,9 @@ describe("customer account dialogs", () => {
     const addresses = readFileSync(new URL("./CustomerAddressBookSheet.tsx", import.meta.url), "utf8");
     const styles = readFileSync(new URL("./design/customer.css", import.meta.url), "utf8");
 
-    expect(catalogue).toContain('className="customer-profile-meta"');
+    expect(catalogue).toContain("<CustomerProfileCard");
+    const profileCard = readFileSync(new URL("./CustomerProfileCard.tsx", import.meta.url), "utf8");
+    expect(profileCard).toContain('className="customer-identity-meta"');
     expect(catalogue).toContain("Identity, sessions, privacy and access");
     expect(addresses).toContain("useModalDialog<HTMLElement>");
     expect(styles).toContain(".customer-profile-card::before");

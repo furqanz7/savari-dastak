@@ -302,10 +302,28 @@
 .customer-experience .customer-account-heading { grid-column: 1 / -1; border: 0; padding: 0; }
 .customer-experience .customer-account-heading h1 { font-size: var(--customer-heading); line-height: 1.1; margin: 8px 0 12px; }
 .customer-experience .customer-account-heading > p:last-child { font-size: 16px; color: var(--text-secondary); }
-.customer-experience .customer-profile-card { grid-column: 1 / -1; width: 100%; max-width: none; margin: 0; box-shadow: none; background: var(--primary-action); color: var(--primary-action-foreground); border-radius: 24px; padding: 26px; }
-.customer-experience .customer-profile-card small, .customer-experience .customer-profile-meta { color: var(--primary-action-foreground); opacity: .78; font-size: 13px; }
-.customer-experience .customer-profile-edit { color: var(--primary-action-foreground); border-color: currentColor; font-size: 13px; }
-.customer-experience .customer-profile-avatar { background: var(--dastak-accent-soft); color: var(--dastak-accent); }
+.customer-experience .customer-identity-card { grid-column: 1 / -1; display: block; min-width: 0; width: 100%; margin: 0; padding: 28px 30px 0; border: 1px solid var(--divider); border-radius: 24px; background: var(--surface); color: var(--text-primary); box-shadow: var(--customer-shadow); text-align: left; }
+.customer-experience .customer-identity-heading { display: grid; grid-template-columns: 60px minmax(0, 1fr) auto; align-items: center; gap: 18px; }
+.customer-experience .customer-identity-avatar { display: grid; place-items: center; width: 60px; height: 60px; border: 1px solid color-mix(in srgb, var(--dastak-accent) 20%, var(--divider)); border-radius: 20px; background: var(--dastak-accent-soft); color: var(--dastak-accent); font-size: 23px; font-weight: 600; letter-spacing: -.04em; }
+.customer-experience .customer-identity-heading strong { min-width: 0; font-size: 26px; font-weight: 650; line-height: 1.3; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.customer-experience .customer-identity-edit { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--dastak-accent); font-size: 14px; font-weight: 600; white-space: nowrap; transition: background var(--customer-ease); }
+.customer-experience .customer-identity-edit svg { flex-shrink: 0; }
+.customer-experience .customer-identity-contacts { display: grid; gap: 9px; min-width: 0; margin: 12px 0 24px 78px; }
+.customer-experience .customer-identity-contacts > span { display: flex; align-items: flex-start; gap: 10px; min-width: 0; line-height: 1.5; }
+.customer-experience .customer-identity-contacts svg { flex: 0 0 auto; margin-top: 4px; color: var(--text-tertiary); }
+.customer-experience .customer-identity-contacts > span > span { min-width: 0; overflow-wrap: anywhere; }
+.customer-experience .customer-identity-phone { color: var(--text-primary); font-size: 15px; font-variant-numeric: tabular-nums; }
+.customer-experience .customer-identity-email { color: var(--text-secondary); font-size: 14px; }
+.customer-experience .customer-identity-meta { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 18px 0; border-top: 1px solid var(--divider); color: var(--text-secondary); font-size: 13px; font-weight: 500; line-height: 1.5; }
+.customer-experience .customer-identity-meta > span { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.customer-experience .customer-identity-meta > span > span { overflow-wrap: anywhere; }
+.customer-experience .customer-identity-meta svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--text-secondary); }
+.customer-experience .customer-identity-meta .apple-logo { color: var(--text-primary); }
+@media (hover: hover) {
+  .customer-experience .customer-identity-card:hover { border-color: var(--dastak-accent); }
+  .customer-experience .customer-identity-card:hover .customer-identity-edit { background: var(--dastak-accent-soft); }
+}
+.customer-experience .customer-identity-card:focus-visible .customer-identity-edit { background: var(--dastak-accent-soft); }
 .customer-experience .customer-account-group { margin-top: 0; min-width: 0; }
 .customer-experience .customer-account-section-heading h2 { font-size: 20px; }
 .customer-experience .customer-account-section-heading small { font-size: 13px; }
@@ -476,9 +494,13 @@
   .customer-experience .v1-live-delivery { padding: 16px; }
   .customer-experience .customer-map-frame { aspect-ratio: 1.15; min-height: 220px; }
   .customer-experience .customer-account { grid-template-columns: minmax(0, 1fr); padding-top: 28px; gap: 30px; }
-  .customer-experience .customer-profile-card { grid-template-columns: 52px minmax(0, 1fr) auto; padding: 20px; gap: 12px; }
-  .customer-experience .customer-profile-avatar { width: 52px; height: 52px; }
-  .customer-experience .customer-profile-card strong { font-size: 18px; }
+  .customer-experience .customer-identity-card { padding: 20px 20px 0; border-radius: 22px; }
+  .customer-experience .customer-identity-heading { grid-template-columns: 48px minmax(0, 1fr) auto; gap: 12px; }
+  .customer-experience .customer-identity-avatar { width: 48px; height: 48px; border-radius: 16px; font-size: 20px; }
+  .customer-experience .customer-identity-heading strong { font-size: 22px; }
+  .customer-experience .customer-identity-edit { gap: 6px; padding: 0 6px; }
+  .customer-experience .customer-identity-contacts { margin: 20px 0; }
+  .customer-experience .customer-identity-meta { gap: 10px 18px; padding: 16px 0; font-size: 12px; }
   .customer-experience .customer-account-heading { margin-bottom: -8px; }
   .customer-experience .customer-account-rows { padding-inline: 16px; }
   .customer-experience .customer-sheet-backdrop { padding: 8px; }
@@ -502,7 +524,6 @@
   .customer-experience .v1-order-card-main .v1-order-card-trailing { grid-column: 2; justify-self: start; }
   .customer-experience .v1-cart-bar { gap: 8px; padding-inline: 12px; }
   .customer-experience .v1-cart-bar span { gap: 5px; }
-  .customer-experience .customer-profile-edit { font-size: 0; }
 }
 /* Profile editor only: shared account sheets and other approved surfaces are unchanged. */
 .customer-experience .customer-profile-backdrop { place-items: center; padding: 24px; }
