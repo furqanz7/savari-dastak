@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ArrowLeft, Home, ReceiptText, Search, UserRound } from "lucide-react";
+import { ArrowLeft, Home, ReceiptText, UserRound } from "lucide-react";
+import { CustomerNotice } from "./CustomerUI";
+import { useCustomerOnline } from "./useCustomerOnline";
+import "./design/customer-experience.css";
 import { CatalogueView } from "./CatalogueView";
 import { DastakV1CustomerExperience } from "./DastakV1CustomerExperience";
 import { ParcelCustomerView } from "./ParcelCustomerView";
@@ -32,6 +35,7 @@ type Props = {
 };
 
 export function DastakCustomerView(props: Props) {
+  const online = useCustomerOnline();
   const [orderRefreshToken, setOrderRefreshToken] = useState(0);
   const [destination, setDestination] = useState<CustomerDestination>(() =>
     parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
@@ -73,7 +77,7 @@ export function DastakCustomerView(props: Props) {
     if (typeof window !== "undefined" && window.location.hash !== hash) {
       window.history[replace ? "replaceState" : "pushState"](null, "", hash);
     }
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "instant" });
   }, []);
 
   useEffect(() => {
@@ -90,13 +94,23 @@ export function DastakCustomerView(props: Props) {
   const navigateSection = (nextSection: CustomerSection) => navigate({ section: nextSection });
 
   return (
-    <div className="customer-workspace">
+    <div className="customer-workspace customer-experience">
+      <a className="customer-skip-link" href="#customer-content" onClick={(event) => {
+        event.preventDefault();
+        const content = document.getElementById("customer-content");
+        content?.focus({ preventScroll: true });
+        content?.scrollIntoView({ behavior: "instant" });
+      }}>Skip to content</a>
+      <header className="customer-app-header">
+        <button className="customer-brand" type="button" onClick={() => navigateSection("home")} aria-label="Dastak Home">Dastak<span>.</span><small>Everyday, at your doorstep.</small></button>
       <nav className="customer-navigation" aria-label="Dastak">
-        <CustomerNavigationButton icon={<Home />} label="Home" selected={section === "home"} onClick={() => navigateSection("home")} />
-        <CustomerNavigationButton icon={<Search />} label="Search" selected={section === "search"} onClick={() => navigateSection("search")} />
+        <CustomerNavigationButton icon={<Home />} label="Home" selected={section === "home" || section === "search" || section === "parcel"} onClick={() => navigateSection("home")} />
         <CustomerNavigationButton icon={<ReceiptText />} label="Orders" selected={section === "orders"} onClick={() => navigateSection("orders")} />
         <CustomerNavigationButton icon={<UserRound />} label="Account" selected={section === "account" || section === "wishlist" || section === "payments"} onClick={() => navigateSection("account")} />
       </nav>
+      </header>
+      <div className="customer-content" id="customer-content" tabIndex={-1}>
+      {!online ? <CustomerNotice title="You’re offline" tone="offline">You can browse what’s already loaded. Your orders will update when you reconnect.</CustomerNotice> : null}
       {shouldMountV1CustomerExperience(section) ? <div className="customer-view">
         <DastakV1CustomerExperience
           accessToken={props.accessToken}
@@ -108,6 +122,7 @@ export function DastakCustomerView(props: Props) {
           supabaseUrl={props.supabaseUrl}
           publishableKey={props.publishableKey}
           orderRefreshToken={orderRefreshToken}
+          realtimeHealth={realtimeHealth}
           initialOrderId={destination.entityType === "dastakV1Order" ? destination.entityId : undefined}
           section={v1Section}
           onNavigate={navigateSection}
@@ -152,6 +167,7 @@ export function DastakCustomerView(props: Props) {
         onEnable={() => void webPush.enable()}
         onDismiss={webPush.dismiss}
       />}
+      </div>
     </div>
   );
 }

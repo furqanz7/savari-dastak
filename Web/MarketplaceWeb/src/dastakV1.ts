@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parseCustomerDeliveryTracking, type CustomerDeliveryTracking } from "./customerDeliveryPresentation";
 import { isAbortError, requestDeadline } from "./requestDeadline";
 
 export type DastakV1Auth = {
@@ -163,6 +164,7 @@ export type V1OrderLine = {
 export type V1OrderCursor = { createdAt: string; orderId: string };
 
 export type V1Order = {
+  tracking?: CustomerDeliveryTracking;
   id: string;
   displayOrderNumber: string;
   orderType: string;
@@ -1931,6 +1933,7 @@ export function parseV1Order(value: unknown): V1Order {
       ? undefined
       : parseLaunchPayment(source.launchPayment),
     delivery: delivery ? parseOrderDelivery(delivery) : undefined,
+    tracking: parseCustomerDeliveryTracking(source.tracking),
     support: support ? parseOrderSupport(support) : undefined,
     restaurant: restaurant ? {
       organizationId: requiredUuid(restaurant.organizationId),

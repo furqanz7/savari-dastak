@@ -22,6 +22,25 @@ import {
 import type { V1Order } from "./dastakV1";
 
 describe("customer V1 Orders experience", () => {
+  it("shows rider arrival in both the summary and detail without offering a manual Refresh", () => {
+    const order = orderFixture();
+    order.status = "OUT_FOR_DELIVERY";
+    order.delivery = { state: "ON_THE_WAY", verificationStatus: "ACTIVE", recipientAccountRequired: false,
+      riderArrivedAt: "2026-09-09T10:00:00Z" };
+    const noop = () => undefined;
+    const summary = renderToStaticMarkup(<OrdersSection orders={[order]} loading={false} loadingMore={false}
+      canLoadMore={false} imageUrlForLine={() => null} onRefresh={noop} onLoadMore={noop} onOpen={noop}
+      onReorder={noop} onSessionExpired={noop} realtimeHealth="subscribed" />);
+    expect(summary).toContain("Your rider has arrived");
+    expect(summary).toContain("Updates automatically");
+    expect(summary).not.toContain(">Refresh<");
+    const detail = renderToStaticMarkup(<MatchingSheet order={order} busy={false} imageUrlForLine={() => null}
+      onDismiss={noop} onCancel={noop} onPay={noop} onReorder={noop} onRefresh={noop} onReportIssue={async () => true} />);
+    expect(detail).toContain("Your rider has arrived");
+    expect(detail).toContain("Rider arrived");
+    expect(detail).not.toContain("heading to you");
+  });
+
   it("uses accurate customer lifecycle language and active classification", () => {
     expect(statusTitle("PAYMENT_EXPIRED")).toBe("Payment window expired");
     expect(statusMessage("DASTAK_FULFILMENT_FAILURE")).toContain("recovery");
@@ -114,6 +133,11 @@ describe("customer V1 Orders experience", () => {
     expect(nonBlockingFailure).toContain("You are offline");
     expect(nonBlockingFailure).toContain("v1-order-list");
     expect(nonBlockingFailure).not.toContain("No active orders");
+    const onlyHistoryDuringFailure = render({ orders: [{ ...orderFixture(), status: "DELIVERED" }], error: {
+      kind: "offline", title: "Updates unavailable", message: "Try again later.", action: "retry",
+    } });
+    expect(onlyHistoryDuringFailure).toContain("Updates unavailable");
+    expect(onlyHistoryDuringFailure).not.toContain("No active orders");
   });
 
   it("offers existing sign-in recovery for an expired Orders session", () => {
@@ -187,8 +211,8 @@ describe("customer V1 Orders experience", () => {
     expect(markup).toContain("Large · Extra shot");
     expect(markup).toContain("12 Market Road");
     expect(markup).toContain("A Customer · +91 98765 43210");
-    expect(markup).toContain("LIVE DELIVERY");
-    expect(markup).toContain("725 m");
+    expect(markup).toContain('aria-label="Delivery tracking"');
+    expect(markup).toContain("Last-known location · not live");
     expect(markup).toContain("On the way");
     expect(markup).toContain("Bill summary");
     expect(markup).toContain("Timeline");

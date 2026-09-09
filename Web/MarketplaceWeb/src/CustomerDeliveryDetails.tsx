@@ -10,7 +10,7 @@ export type CustomerMapPoint = {
   kind: "pickup" | "dropoff" | "courier";
 };
 
-export function CustomerRouteMap({ points }: { points: CustomerMapPoint[] }) {
+export function CustomerRouteMap({ points, routeOverlay = true }: { points: CustomerMapPoint[]; routeOverlay?: boolean }) {
   const available = points.filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude));
   if (available.length === 0) return null;
   const focus = available.find((point) => point.kind === "courier") ?? available.find((point) => point.kind === "dropoff") ?? available[0];
@@ -39,7 +39,7 @@ export function CustomerRouteMap({ points }: { points: CustomerMapPoint[] }) {
 
   return (
     <section className="customer-route-panel" aria-label="Delivery route">
-      <div className="customer-map-frame"><iframe title="Delivery map" src={source} loading="lazy" referrerPolicy="no-referrer" /><div className="customer-map-markers" aria-hidden="true">{routePoints.length > 1 ? <svg className="customer-map-route-line" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={routePath} /></svg> : null}{projected.map((point) => <span key={`marker-${point.kind}-${point.latitude}-${point.longitude}`} className={`customer-map-marker ${point.kind}`} style={{ left: `${point.left}%`, top: `${point.top}%` }}><MapPin size={16} /></span>)}</div></div>
+      <div className="customer-map-frame"><iframe title="Delivery map" src={source} loading="lazy" referrerPolicy="no-referrer" />{routeOverlay ? <div className="customer-map-markers" aria-hidden="true">{routePoints.length > 1 ? <svg className="customer-map-route-line" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={routePath} /></svg> : null}{projected.map((point) => <span key={`marker-${point.kind}-${point.latitude}-${point.longitude}`} className={`customer-map-marker ${point.kind}`} style={{ left: `${point.left}%`, top: `${point.top}%` }}><MapPin size={16} /></span>)}</div> : null}</div>
       <div className="customer-route-points">{available.map((point) => (
         <div key={`${point.kind}-${point.latitude}-${point.longitude}`}>
           <span className={`route-dot ${point.kind}`}><MapPin size={15} /></span>

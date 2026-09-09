@@ -2,12 +2,14 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Poin
 import { catalogueImageUrl } from "./catalogue";
 import { DetailImage } from "./ProductDetailCard";
 import { productPickerPose, type DetailProduct } from "./productDetail";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 /** Full-screen, scroll-snapping pages. A SKU's entire card is a page, including
  * its fixed action bar. The circular picker is a sibling, never a sheet panel. */
-export function ProductDetailOverlay({ selectedId, products, supabaseUrl, onSelect, onClose, disabled = false, renderProduct }: {
+export function ProductDetailOverlay({ selectedId, products, supabaseUrl, onSelect, onClose, disabled = false, showPagingControls = false, renderProduct }: {
   selectedId: string; products: DetailProduct[]; supabaseUrl: string;
   onSelect: (id: string) => void; onClose: () => void; disabled?: boolean;
+  showPagingControls?: boolean;
   renderProduct: (product: DetailProduct, select: (id: string) => void) => ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -120,6 +122,7 @@ export function ProductDetailOverlay({ selectedId, products, supabaseUrl, onSele
       if (step) { event.preventDefault(); const item = products[Math.round(progress) + step]; if (item) navigate(item.id); }
     }}>
     <div className="product-detail-stage">
+      {showPagingControls ? <div className="customer-product-paging"><button type="button" disabled={disabled || Math.round(progress) === 0} aria-label="Previous product" onClick={() => navigate(products[Math.round(progress) - 1].id)}><ChevronLeft size={22} /></button><span>{Math.round(progress) + 1} / {products.length}</span><button type="button" disabled={disabled || Math.round(progress) >= products.length - 1} aria-label="Next product" onClick={() => navigate(products[Math.round(progress) + 1].id)}><ChevronRight size={22} /></button></div> : null}
       <div ref={deck} className={`product-card-deck${disabled ? " is-busy" : ""}`} tabIndex={0} aria-label="Swipe between products"
         onScroll={scroll} onPointerDown={(event) => startDrag(event, false)} onPointerMove={moveDrag}
         onPointerUp={endDrag} onPointerCancel={endDrag}

@@ -28,6 +28,15 @@ const props: ComponentProps<typeof HomeSection> = {
 };
 
 describe("two-level customer catalogue", () => {
+  it("uses an initial skeleton, and keeps existing categories visible during a scoped refresh failure", () => {
+    const loading = renderToStaticMarkup(<HomeSection {...props} loadingCatalogue />);
+    expect(loading).toContain("Opening Dastak catalogue");
+    expect(loading).not.toContain("v1-product-grid");
+    const failed = renderToStaticMarkup(<HomeSection {...props} catalogueIssue="Connection unavailable" onRetryCatalogue={noop} />);
+    expect(failed).toContain("Products couldn’t update");
+    expect(failed).toContain("Try again");
+    expect(failed).toContain("Grocery &amp; Kitchen");
+  });
   it("shows broad category tiles under section headings", () => {
     const html = renderToStaticMarkup(<HomeSection {...props} />);
     expect(html).toContain("Grocery &amp; Kitchen");
