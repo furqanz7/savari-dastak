@@ -143,6 +143,21 @@ function cardProps(overrides: Partial<ComponentProps<typeof FulfilmentCard>> = {
 }
 
 describe("Merchant preparation presentation", () => {
+  it("keeps long product names and pack details in the flexible item-description column", async () => {
+    const longLine = {
+      orderLineId: "long-line",
+      name: "4700 BC x Netflix Gourmet Cheese and Caramel Popcorn Small Tin",
+      quantity: 12,
+      variant: "Movie Night Collector Edition with an unusually descriptive flavour",
+      packSize: "75 g x 6",
+    };
+    await render(<FulfilmentCard {...cardProps({ fulfilment: { ...fulfilment, lines: [longLine] } })} />);
+    const line = host.querySelector(".merchant-order-lines li")!;
+    expect(line.querySelector(":scope > .merchant-line-quantity")?.textContent).toBe("12×");
+    expect(line.querySelector(":scope > span > strong")?.textContent).toBe(longLine.name);
+    expect(line.querySelector(":scope > span > small")?.textContent).toBe(`${longLine.variant} · ${longLine.packSize}`);
+  });
+
   it("does not turn disabled server capabilities into available actions", async () => {
     await render(<FulfilmentCard {...cardProps()} />);
     expect(host.querySelector<HTMLInputElement>('input[type="number"]')!.disabled).toBe(true);

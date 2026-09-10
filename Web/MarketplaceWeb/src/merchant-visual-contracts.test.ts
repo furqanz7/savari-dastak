@@ -32,4 +32,11 @@ describe("Merchant visual scope and responsive contracts", () => {
     expect(css).toContain("forced-colors: active");
     expect(css).toContain("label:has(input:focus-visible)");
   });
+  it("gives long order-item descriptions the flexible column at wide and narrow card widths", () => {
+    expect(css).toContain("grid-template-columns: max-content minmax(0, 1fr) max-content");
+    expect(css).toContain(".merchant-experience .merchant-order-lines li > span { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr)");
+    expect(css).toContain(".merchant-experience .merchant-order-lines li > span > strong { min-width: 0; white-space: normal; overflow-wrap: break-word; word-break: normal;");
+    expect(css).toContain(".merchant-experience .merchant-order-lines li > span > small { grid-column: auto; min-width: 0; overflow-wrap: break-word; word-break: normal;");
+    expect(css).not.toMatch(/\.merchant-experience \.merchant-order-lines li > span[^}]*grid-template-columns:\s*24px/);
+  });
 });
