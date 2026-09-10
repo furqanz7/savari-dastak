@@ -1009,7 +1009,7 @@ export async function getV1MerchantCanonicalCatalogue(
   return parseMerchantCanonicalCatalogue(await invoke(input, "dastak-v1-catalogue", {
     operation: "merchantSnapshot",
     branchId: input.branchId ?? null,
-    limit: input.limit ?? 1000,
+    limit: input.limit ?? 5000,
   }, undefined, fetcher));
 }
 

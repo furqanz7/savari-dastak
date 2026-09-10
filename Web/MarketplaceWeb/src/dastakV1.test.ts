@@ -288,6 +288,23 @@ describe("Dastak V1 web contract", () => {
     ]);
   });
 
+  it("requests the server-supported 5,000 product merchant catalogue by default", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    await getV1MerchantCanonicalCatalogue(auth, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        branch: {
+          branchId: "88888888-8888-4888-8888-888888888888", branchName: "Main", branchStatus: "ACTIVE", branchVersion: 1,
+          organizationId: accountId, organizationName: "Dastak", merchantType: "RETAIL",
+          operationalState: { isOpen: true, acceptingOrders: true, version: 1, updatedAt: null },
+          capacity: { limit: 10, held: 0, available: 10 },
+        },
+        categoryTypes: [], categories: [], subcategories: [], skus: [], truncated: false,
+      });
+    });
+    expect(requestBody).toEqual({ operation: "merchantSnapshot", branchId: null, limit: 5000 });
+  });
+
   it("decodes the secured payment window without exposing matching internals", () => {
     const fixture = orderFixture();
     fixture.status = "AWAITING_PAYMENT";

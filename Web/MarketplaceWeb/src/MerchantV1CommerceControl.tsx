@@ -1,8 +1,18 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CirclePause, Plus, ShieldCheck, Store } from "lucide-react";
 import { MerchantV1CatalogueControl } from "./MerchantV1CatalogueControl";
+import { merchantCommerceKind, type MerchantBranch } from "./merchantBranchContext";
+import { MerchantMutationKeys } from "./merchantMutationKeys";
+import {
+  createVersionedDraft,
+  editVersionedDraft,
+  reconcileVersionedDraft,
+  useLatestVersionedDraft,
+  type VersionedDraft,
+} from "./restaurantMenuDraft";
 import { userFacingError } from "./userFacingError";
 import {
+  DastakV1RequestError,
   formatV1Price,
   getV1MerchantRestaurantMenu,
   updateV1MerchantBranchState,
@@ -14,26 +24,45 @@ import {
   type V1RestaurantMenuOptionGroup,
 } from "./dastakV1";
 
-type Props = { auth: DastakV1Auth };
+type Props = {
+  auth: DastakV1Auth;
+  branch: MerchantBranch;
+  onSessionExpired: () => void;
+};
 
-export function MerchantV1CommerceControl({ auth }: Props) {
+export function MerchantV1CommerceControl({ auth, branch, onSessionExpired }: Props) {
   const [restaurant, setRestaurant] = useState<V1RestaurantMenu>();
   const [probing, setProbing] = useState(true);
+  const [error, setError] = useState<string>();
+  const commerceKind = merchantCommerceKind(branch);
+  const isRestaurant = commerceKind === "restaurant";
 
   useEffect(() => {
-    void getV1MerchantRestaurantMenu(auth)
+    setProbing(true);
+    setRestaurant(undefined);
+    setError(undefined);
+    if (!isRestaurant) {
+      setProbing(false);
+      return;
+    }
+    void getV1MerchantRestaurantMenu({ ...auth, branchId: branch.id })
       .then(setRestaurant)
-      .catch(() => undefined)
+      .catch((requestError: unknown) => {
+        if (isSessionError(requestError)) onSessionExpired();
+        setError(message(requestError));
+      })
       .finally(() => setProbing(false));
-  }, [auth]);
+  }, [auth, branch.id, isRestaurant, onSessionExpired]);
 
   if (probing) return <div className="catalogue-loading" role="status"><span /> Opening V1 merchant controls</div>;
-  return restaurant
-    ? <MerchantV1RestaurantMenuControl auth={auth} initial={restaurant} />
-    : <MerchantV1CatalogueControl auth={auth} />;
+  if (!commerceKind) return <section className="merchant-v1-control"><p className="order-error" role="alert">This branch’s Store type is not supported. Dastak has not guessed a catalogue.</p></section>;
+  if (isRestaurant) return restaurant
+    ? <MerchantV1RestaurantMenuControl auth={auth} branch={branch} onSessionExpired={onSessionExpired} initial={restaurant} />
+    : <section className="merchant-v1-control"><p className="order-error" role="alert">{error ?? "Restaurant menu unavailable."}</p></section>;
+  return <MerchantV1CatalogueControl auth={auth} branchId={branch.id} onSessionExpired={onSessionExpired} />;
 }
 
-function MerchantV1RestaurantMenuControl({ auth, initial }: Props & { initial: V1RestaurantMenu }) {
+function MerchantV1RestaurantMenuControl({ auth, initial, onSessionExpired }: Props & { initial: V1RestaurantMenu }) {
   const [menu, setMenu] = useState(initial);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
@@ -41,15 +70,29 @@ function MerchantV1RestaurantMenuControl({ auth, initial }: Props & { initial: V
   const [itemCategoryId, setItemCategoryId] = useState(initial.categories[0]?.id ?? "");
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
+  const mutationKeys = useRef(new MerchantMutationKeys());
 
   const refresh = useCallback(async () => {
     try {
-      setMenu(await getV1MerchantRestaurantMenu(auth));
+      setMenu(await getV1MerchantRestaurantMenu({ ...auth, branchId: initial.restaurant.branchId }));
       setError(undefined);
+      return true;
     } catch (requestError) {
+      if (isSessionError(requestError)) onSessionExpired();
       setError(message(requestError));
+      return false;
     }
-  }, [auth]);
+  }, [auth, initial.restaurant.branchId, onSessionExpired]);
+
+  useEffect(() => {
+    const reconcile = () => { if (document.visibilityState === "visible") void refresh(); };
+    window.addEventListener("focus", reconcile);
+    document.addEventListener("visibilitychange", reconcile);
+    return () => {
+      window.removeEventListener("focus", reconcile);
+      document.removeEventListener("visibilitychange", reconcile);
+    };
+  }, [refresh]);
 
   const save = async (
     identity: string,
@@ -62,6 +105,7 @@ function MerchantV1RestaurantMenuControl({ auth, initial }: Props & { initial: V
     setBusy(identity);
     setError(undefined);
     try {
+      const idempotencyKey = mutationKeys.current.keyFor(identity, payload);
       const result = await upsertV1RestaurantMenuEntity({
         ...auth,
         branchId: menu.restaurant.branchId,
@@ -69,13 +113,25 @@ function MerchantV1RestaurantMenuControl({ auth, initial }: Props & { initial: V
         entityId,
         expectedVersion,
         payload,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey,
       });
       setMenu(result.menu);
+      mutationKeys.current.clear(identity);
       return true;
     } catch (requestError) {
+      if (isSessionError(requestError)) onSessionExpired();
       setError(message(requestError));
-      await refresh();
+      try {
+        const authoritative = await getV1MerchantRestaurantMenu({ ...auth, branchId: menu.restaurant.branchId });
+        setMenu(authoritative);
+        if (menuProvesMutation(authoritative, entityType, entityId, payload)) {
+          mutationKeys.current.clear(identity);
+          setError(undefined);
+          return true;
+        }
+      } catch {
+        // Preserve the logical mutation key until a later retry receives an authoritative result.
+      }
       return false;
     } finally {
       setBusy(undefined);
@@ -97,6 +153,7 @@ function MerchantV1RestaurantMenuControl({ auth, initial }: Props & { initial: V
       });
       await refresh();
     } catch (requestError) {
+      if (isSessionError(requestError)) onSessionExpired();
       setError(message(requestError));
       await refresh();
     } finally {
@@ -155,20 +212,27 @@ type Save = (
   payload: Record<string, unknown>,
 ) => Promise<boolean>;
 
+type ItemDraftValue = { name: string; description: string; price: string };
+
 function RestaurantItemEditor({ item, categoryId, busy, save }: {
   item: V1RestaurantMenuItem; categoryId: string; busy: boolean; save: Save;
 }) {
-  const [name, setName] = useState(item.name);
-  const [description, setDescription] = useState(item.description ?? "");
-  const [price, setPrice] = useState(String(item.basePricePaise / 100));
+  const serverValue = useMemo(() => ({
+    name: item.name,
+    description: item.description ?? "",
+    price: String(item.basePricePaise / 100),
+  }), [item.basePricePaise, item.description, item.name]);
+  const [draft, setDraft] = useState<VersionedDraft<ItemDraftValue>>(() => createVersionedDraft(serverValue, item.version));
+  useEffect(() => setDraft((current) => reconcileVersionedDraft(current, serverValue, item.version)), [item.version, serverValue]);
   const [groupName, setGroupName] = useState("");
   const [groupType, setGroupType] = useState<"SINGLE" | "MULTIPLE">("SINGLE");
   const [groupMax, setGroupMax] = useState(1);
   const updateItem = (status = item.status) => {
-    const basePricePaise = Math.round(Number(price) * 100);
-    if (!name.trim() || !Number.isSafeInteger(basePricePaise) || basePricePaise < 1) return;
-    void save(`item:${item.id}`, "ITEM", item.id, item.version, {
-      categoryId, name: name.trim(), description: description.trim(), imageKey: item.imageKey ?? "",
+    if (draft.stale) return;
+    const basePricePaise = Math.round(Number(draft.value.price) * 100);
+    if (!draft.value.name.trim() || !Number.isSafeInteger(basePricePaise) || basePricePaise < 1) return;
+    void save(`item:${item.id}`, "ITEM", item.id, draft.loadedVersion, {
+      categoryId, name: draft.value.name.trim(), description: draft.value.description.trim(), imageKey: item.imageKey ?? "",
       basePricePaise, taxRateBps: item.taxRateBps,
       logisticsAttributes: item.logisticsAttributes, status,
     });
@@ -182,7 +246,9 @@ function RestaurantItemEditor({ item, categoryId, busy, save }: {
       sortOrder: item.optionGroups.length, status: "ACTIVE",
     })) setGroupName("");
   };
-  return <article className="merchant-v1-menu-item"><div className="merchant-v1-menu-item-fields"><input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} aria-label="Menu item name" /><input value={description} maxLength={1000} onChange={(event) => setDescription(event.target.value)} aria-label="Menu item description" placeholder="Description" /><label><span>Price ₹</span><input value={price} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} /></label><div><button className="primary-button" type="button" disabled={busy} onClick={() => updateItem()}>Save</button><button className="secondary-button" type="button" disabled={busy} onClick={() => updateItem(item.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{item.status === "ACTIVE" ? "Mark unavailable" : "Activate"}</button></div></div>
+  return <article className={`merchant-v1-menu-item ${draft.stale ? "stale-draft" : ""}`}><div className="merchant-v1-menu-item-fields">
+    {draft.stale ? <p className="merchant-v1-draft-warning" role="status"><span>Newer server changes are available. Your draft was not overwritten.</span><button className="secondary-button" type="button" onClick={() => setDraft(useLatestVersionedDraft)}>Use latest</button></p> : null}
+    <input value={draft.value.name} maxLength={160} disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, name: event.target.value }))} aria-label="Menu item name" /><input value={draft.value.description} maxLength={1000} disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, description: event.target.value }))} aria-label="Menu item description" placeholder="Description" /><label><span>Price ₹</span><input value={draft.value.price} inputMode="decimal" disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, price: event.target.value }))} /></label><div><button className="primary-button" type="button" disabled={busy || draft.stale || !draft.dirty} onClick={() => updateItem()}>Save</button><button className="secondary-button" type="button" disabled={busy || draft.stale} onClick={() => updateItem(item.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{item.status === "ACTIVE" ? "Mark unavailable" : "Activate"}</button></div></div>
     {item.optionGroups.map((group) => <RestaurantOptionGroupEditor key={group.id} group={group} itemId={item.id} busy={busy} save={save} />)}
     <form className="merchant-v1-option-create" onSubmit={(event) => void createGroup(event)}><strong>Add variant / add-on group</strong><input value={groupName} maxLength={100} onChange={(event) => setGroupName(event.target.value)} placeholder="Size or extras" /><select value={groupType} onChange={(event) => setGroupType(event.target.value as "SINGLE" | "MULTIPLE")}><option value="SINGLE">Choose one</option><option value="MULTIPLE">Choose multiple</option></select>{groupType === "MULTIPLE" ? <input type="number" min={1} max={20} value={groupMax} onChange={(event) => setGroupMax(Number(event.target.value))} aria-label="Maximum selections" /> : null}<button className="secondary-button" disabled={busy || !groupName.trim()}><Plus size={15} /> Add group</button></form>
   </article>;
@@ -211,17 +277,46 @@ function RestaurantOptionGroupEditor({ group, itemId, busy, save }: {
 function RestaurantOptionEditor({ option, groupId, busy, save }: {
   option: V1RestaurantMenuOption; groupId: string; busy: boolean; save: Save;
 }) {
-  const [name, setName] = useState(option.name);
-  const [price, setPrice] = useState(String(option.priceDeltaPaise / 100));
+  const serverValue = useMemo(() => ({ name: option.name, price: String(option.priceDeltaPaise / 100) }), [option.name, option.priceDeltaPaise]);
+  const [draft, setDraft] = useState<VersionedDraft<typeof serverValue>>(() => createVersionedDraft(serverValue, option.version));
+  useEffect(() => setDraft((current) => reconcileVersionedDraft(current, serverValue, option.version)), [option.version, serverValue]);
   const update = (status = option.status) => {
-    const priceDeltaPaise = Math.round(Number(price) * 100);
-    if (!name.trim() || !Number.isSafeInteger(priceDeltaPaise) || priceDeltaPaise < 0) return;
-    void save(`option:${option.id}`, "OPTION", option.id, option.version, {
-      optionGroupId: groupId, name: name.trim(), priceDeltaPaise,
+    if (draft.stale) return;
+    const priceDeltaPaise = Math.round(Number(draft.value.price) * 100);
+    if (!draft.value.name.trim() || !Number.isSafeInteger(priceDeltaPaise) || priceDeltaPaise < 0) return;
+    void save(`option:${option.id}`, "OPTION", option.id, draft.loadedVersion, {
+      optionGroupId: groupId, name: draft.value.name.trim(), priceDeltaPaise,
       sortOrder: option.sortOrder, status,
     });
   };
-  return <div className="merchant-v1-option-row"><input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} aria-label="Option name" /><input value={price} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} aria-label="Option price in rupees" /><span>{formatV1Price(option.priceDeltaPaise)}</span><button className="secondary-button" type="button" disabled={busy} onClick={() => update()}>Save</button><button className="secondary-button" type="button" disabled={busy} onClick={() => update(option.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{option.status === "ACTIVE" ? "Hide" : "Activate"}</button></div>;
+  return <div className={`merchant-v1-option-row ${draft.stale ? "stale-draft" : ""}`}>{draft.stale ? <p className="merchant-v1-draft-warning" role="status"><span>Newer server version available.</span><button className="secondary-button" type="button" onClick={() => setDraft(useLatestVersionedDraft)}>Use latest</button></p> : null}<input value={draft.value.name} maxLength={100} disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, name: event.target.value }))} aria-label="Option name" /><input value={draft.value.price} inputMode="decimal" disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, price: event.target.value }))} aria-label="Option price in rupees" /><span>{formatV1Price(option.priceDeltaPaise)}</span><button className="secondary-button" type="button" disabled={busy || draft.stale || !draft.dirty} onClick={() => update()}>Save</button><button className="secondary-button" type="button" disabled={busy || draft.stale} onClick={() => update(option.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{option.status === "ACTIVE" ? "Hide" : "Activate"}</button></div>;
+}
+
+function menuProvesMutation(menu: V1RestaurantMenu, entityType: "CATEGORY" | "ITEM" | "OPTION_GROUP" | "OPTION", entityId: string | undefined, payload: Record<string, unknown>) {
+  const categories = menu.categories;
+  const items = categories.flatMap((category) => category.items);
+  const groups = items.flatMap((item) => item.optionGroups);
+  const options = groups.flatMap((group) => group.options);
+  const candidates = entityType === "CATEGORY" ? categories : entityType === "ITEM" ? items : entityType === "OPTION_GROUP" ? groups : options;
+  return candidates.some((candidate) => {
+    if (entityId && candidate.id !== entityId) return false;
+    return menuEntityMatchesPayload(candidate as unknown as Record<string, unknown>, entityType, payload);
+  });
+}
+
+function menuEntityMatchesPayload(candidate: Record<string, unknown>, entityType: "CATEGORY" | "ITEM" | "OPTION_GROUP" | "OPTION", payload: Record<string, unknown>) {
+  const comparableKeys = entityType === "CATEGORY"
+    ? ["name", "description", "sortOrder", "status"]
+    : entityType === "ITEM"
+      ? ["name", "description", "imageKey", "basePricePaise", "taxRateBps", "logisticsAttributes", "status"]
+      : entityType === "OPTION_GROUP"
+        ? ["name", "selectionType", "minimumSelections", "maximumSelections", "sortOrder", "status"]
+        : ["name", "priceDeltaPaise", "sortOrder", "status"];
+  return comparableKeys.every((key) => payload[key] === undefined || JSON.stringify(candidate[key]) === JSON.stringify(payload[key]));
+}
+
+function isSessionError(error: unknown) {
+  return error instanceof DastakV1RequestError && (error.status === 401 || error.code === "authentication_required");
 }
 
 function message(error: unknown) {

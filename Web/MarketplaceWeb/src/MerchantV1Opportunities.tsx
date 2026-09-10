@@ -48,6 +48,7 @@ import {
   type MerchantOrderSnapshot,
 } from "./orders";
 import { MerchantLiveDelivery } from "./MerchantLiveDelivery";
+import { validateDecodableImage } from "./imageValidation";
 import {
   merchantFulfilmentQueue,
   merchantPaymentPresentation,
@@ -61,11 +62,13 @@ type Props = {
   client: SupabaseClient;
   accountId: string;
   onSessionExpired: () => void;
+  activeBranchId?: string;
+  onBranchesDiscovered: (branches: Array<{ id: string; displayName: string }>) => void;
 };
 
 const operationFeedKeys: MerchantFeedKey[] = ["fulfilments", "recovery", "returns", "settlements"];
 
-export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpired }: Props) {
+export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpired, activeBranchId, onBranchesDiscovered }: Props) {
   const [opportunities, setOpportunities] = useState<V1MerchantOpportunity[]>([]);
   const [restaurantRequests, setRestaurantRequests] = useState<V1RestaurantRequest[]>([]);
   const [fulfilments, setFulfilments] = useState<V1MerchantFulfilment[]>([]);
@@ -120,6 +123,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
       try {
         const result = await getV1MerchantOpportunities({ ...auth, limit: 50 });
         setOpportunities(result);
+        onBranchesDiscovered(result.map((item) => item.branch));
         setPrepMinutes((current) => {
           const next = { ...current };
           result.forEach((opportunity) => {
@@ -132,7 +136,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
         recordFeedFailure("retail", requestError);
       }
     });
-  }, [auth, recordFeedFailure]);
+  }, [auth, onBranchesDiscovered, recordFeedFailure]);
 
   const refreshRestaurants = useCallback(async () => {
     await restaurantRefreshQueue.current.request(false, async () => {
@@ -140,6 +144,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
       try {
         const result = await getV1RestaurantRequests({ ...auth, limit: 50 });
         setRestaurantRequests(result);
+        onBranchesDiscovered(result.map((item) => item.branch));
         setRestaurantPrepMinutes((current) => {
           const next = { ...current };
           result.forEach((request) => { next[request.id] ??= request.promisedPrepMinutes ?? 15; });
@@ -150,7 +155,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
         recordFeedFailure("restaurant", requestError);
       }
     });
-  }, [auth, recordFeedFailure]);
+  }, [auth, onBranchesDiscovered, recordFeedFailure]);
 
   const refreshOperations = useCallback(async () => {
     await operationsRefreshQueue.current.request(false, async () => {
@@ -160,6 +165,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
         if (result.fulfilments.ok) {
           const values = result.fulfilments.value;
           setFulfilments(values);
+          onBranchesDiscovered(values.map((item) => item.branch));
           setPackageCounts((current) => {
             const next = { ...current };
             values.forEach((fulfilment) => {
@@ -173,6 +179,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
         if (result.recoveryOpportunities.ok) {
           const values = result.recoveryOpportunities.value;
           setRecoveryOpportunities(values);
+          onBranchesDiscovered(values.map((item) => item.branch));
           setRecoveryPrepMinutes((current) => {
             const next = { ...current };
             values.forEach((opportunity) => {
@@ -196,7 +203,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
         operationFeedKeys.forEach((key) => recordFeedFailure(key, requestError));
       }
     });
-  }, [auth, recordFeedFailure]);
+  }, [auth, onBranchesDiscovered, recordFeedFailure]);
 
   const refreshLegacy = useCallback(async () => {
     await legacyRefreshQueue.current.request(false, async () => {
@@ -330,6 +337,9 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
     if (!fulfilment.canAddEvidence) throw new Error("This order is not ready for a preparation photo yet.");
     const file = evidenceFiles[fulfilment.id];
     if (!file) throw new Error("Capture or choose a prepared-order photo first.");
+    if (!await validateDecodableImage(file)) {
+      throw new Error("Choose a valid JPEG, PNG, or HEIC image up to 10 MB.");
+    }
     let objectPath = uploadedEvidence.current.get(fulfilment.id);
     if (!objectPath) {
       objectPath = await uploadV1MerchantReadyEvidence(client, accountId, file);
@@ -505,22 +515,31 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
     }
   };
 
+  const branchOpportunities = useMemo(() => opportunities.filter((item) => !activeBranchId || item.branch.id === activeBranchId), [activeBranchId, opportunities]);
+  const branchRestaurantRequests = useMemo(() => restaurantRequests.filter((item) => !activeBranchId || item.branch.id === activeBranchId), [activeBranchId, restaurantRequests]);
+  const branchFulfilments = useMemo(() => fulfilments.filter((item) => !activeBranchId || item.branch.id === activeBranchId), [activeBranchId, fulfilments]);
+  const branchRecovery = useMemo(() => recoveryOpportunities.filter((item) => !activeBranchId || item.branch.id === activeBranchId), [activeBranchId, recoveryOpportunities]);
+  const branchReturnReceipts = useMemo(() => returnReceipts.filter((item) => !activeBranchId || recordText(recordObject(item, "branch"), "id") === activeBranchId), [activeBranchId, returnReceipts]);
+  // Settlement recovery is organization-scoped in the launch contract and does not
+  // carry branch identity. Keep it visible instead of incorrectly hiding it when a
+  // branch is selected.
+  const branchSettlements = settlements;
   const visibleOpportunities = useMemo(
-    () => opportunities.filter((opportunity) =>
+    () => branchOpportunities.filter((opportunity) =>
       opportunity.status === "OFFERED" ||
       opportunity.reservationState === "ITEMS_HELD_WHILE_ORDER_COMPLETES"
     ),
-    [opportunities],
+    [branchOpportunities],
   );
   const queueFulfilments = useMemo(
-    () => fulfilments.filter((fulfilment) => queue === "all"
+    () => branchFulfilments.filter((fulfilment) => queue === "all"
       ? merchantFulfilmentQueue(fulfilment) !== "history" && ["PREPARING", "READY", "PICKED_UP"].includes(fulfilment.status)
       : merchantFulfilmentQueue(fulfilment) === queue),
-    [fulfilments, queue],
+    [branchFulfilments, queue],
   );
-  const offeredRestaurants = restaurantRequests.filter((request) => request.status === "OFFERED");
-  const offeredRecovery = recoveryOpportunities.filter((item) => item.status === "OFFERED");
-  const counts = merchantQueueCounts({ opportunities, restaurantRequests, fulfilments });
+  const offeredRestaurants = branchRestaurantRequests.filter((request) => request.status === "OFFERED");
+  const offeredRecovery = branchRecovery.filter((item) => item.status === "OFFERED");
+  const counts = merchantQueueCounts({ opportunities: branchOpportunities, restaurantRequests: branchRestaurantRequests, fulfilments: branchFulfilments });
   const showIncoming = queue === "all" || queue === "new";
   const showHistory = queue === "history";
   const activeLegacyOrders = legacyOrders.filter((order) => !isLegacyHistory(order));
@@ -531,11 +550,11 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
     all: counts.all + offeredRecovery.length
       + visibleOpportunities.filter((item) => item.status !== "OFFERED").length + activeLegacyOrders.length,
     new: counts.new + offeredRecovery.length,
-    history: counts.history + historicalLegacyOrders.length + returnReceipts.length,
+    history: counts.history + historicalLegacyOrders.length + branchReturnReceipts.length,
   };
   const hasContent = queueFulfilments.length > 0 ||
     (showIncoming && (offeredRestaurants.length > 0 || offeredRecovery.length > 0 || visibleOpportunities.length > 0)) ||
-    (showHistory && (returnReceipts.length > 0 || settlements.length > 0)) || visibleLegacyOrders.length > 0;
+    (showHistory && (branchReturnReceipts.length > 0 || branchSettlements.length > 0)) || visibleLegacyOrders.length > 0;
 
   return <section className="v1-merchant-panel" aria-labelledby="v1-merchant-title">
     <header>
@@ -643,17 +662,17 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
           onAccept={() => void respond(opportunity, "accept")}
         />)}
       </div> : null}
-      {showHistory && returnReceipts.length > 0 ? <div className="v1-preparation-list">
-        {returnReceipts.map((receipt, index) => <article className="v1-preparation-card" key={recordText(receipt, "returnStopId") ?? index}>
+      {showHistory && branchReturnReceipts.length > 0 ? <div className="v1-preparation-list">
+        {branchReturnReceipts.map((receipt, index) => <article className="v1-preparation-card" key={recordText(receipt, "returnStopId") ?? index}>
           <header><span className="v1-opportunity-icon"><PackageCheck size={20} /></span><span><strong>Return receipt</strong><small>{recordText(recordObject(receipt, "branch"), "displayName") ?? "Merchant branch"}</small></span><b>{(recordText(receipt, "status") ?? "PENDING").replaceAll("_", " ")}</b></header>
           <p>{recordNumber(receipt, "packageCount") ?? 0} package(s) must transfer together from the assigned rider.</p>
           {recordText(receipt, "receiptCode") ? <div className="v1-merchant-pickup-code"><small>Give this in-app code only after every returned package is present</small><strong>{recordText(receipt, "receiptCode")}</strong></div> : <p className="v1-reservation-state">Receipt verification {recordText(receipt, "verificationStatus")?.toLowerCase() ?? "pending"}.</p>}
         </article>)}
       </div> : null}
-      {showHistory && settlements.length > 0 ? <div className="v1-preparation-times" aria-label="Settlement status">
-        <span><small>Settlement entries</small><strong>{settlements.length}</strong></span>
-        <span><small>Eligible</small><strong>{settlements.filter((item) => recordText(item, "status") === "ELIGIBLE").length}</strong></span>
-        <span><small>Settled</small><strong>{settlements.filter((item) => recordText(item, "status") === "SETTLED").length}</strong></span>
+      {showHistory && branchSettlements.length > 0 ? <div className="v1-preparation-times" aria-label="Settlement status">
+        <span><small>Settlement entries</small><strong>{branchSettlements.length}</strong></span>
+        <span><small>Eligible</small><strong>{branchSettlements.filter((item) => recordText(item, "status") === "ELIGIBLE").length}</strong></span>
+        <span><small>Settled</small><strong>{branchSettlements.filter((item) => recordText(item, "status") === "SETTLED").length}</strong></span>
       </div> : null}
   </section>;
 }

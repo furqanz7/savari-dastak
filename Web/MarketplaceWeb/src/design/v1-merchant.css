@@ -141,6 +141,7 @@
 .merchant-v1-price { text-align: right; white-space: nowrap; }
 .merchant-v1-price small { text-decoration: line-through; }
 .merchant-v1-truncated { color: var(--text-secondary); font-size: 12px; }
+.merchant-v1-load-more { display: flex; min-height: 44px; margin: 16px auto 0; }
 .merchant-v1-sku-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); gap: 12px; overflow: visible; border: 0; background: transparent; }
 .merchant-v1-sku-gallery > article { position: relative; min-height: 0; grid-template-columns: 1fr; align-content: start; gap: 8px; overflow: hidden; padding: 9px; border: 1px solid var(--divider); border-radius: 17px; background: var(--surface-raised); box-shadow: 0 8px 22px rgb(34 23 14 / .045); }
 .merchant-v1-sku-gallery > article.selected { border-color: color-mix(in srgb, var(--success) 52%, var(--divider)); }
@@ -192,6 +193,9 @@
 .merchant-v1-menu-item-fields { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 2fr) 110px auto; gap: 8px; align-items: end; }
 .merchant-v1-menu-item-fields label { display: grid; gap: 4px; color: var(--text-secondary); font-size: 11px; }
 .merchant-v1-menu-item-fields > div { display: flex; gap: 6px; }
+.merchant-v1-menu-item.stale-draft, .merchant-v1-option-row.stale-draft { border-color: color-mix(in srgb, #bd7a22 55%, var(--divider)); }
+.merchant-v1-draft-warning { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 4px; padding: 9px 11px; border: 1px solid color-mix(in srgb, #bd7a22 44%, var(--divider)); border-radius: 8px; color: var(--text-primary); background: color-mix(in srgb, #bd7a22 10%, var(--surface)); font-size: 11px; line-height: 1.4; }
+.merchant-v1-draft-warning button { flex: 0 0 auto; min-height: 34px; padding-inline: 11px; }
 .merchant-v1-option-group { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--divider); border-radius: 8px; background: var(--surface-muted); }
 .merchant-v1-option-group > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .merchant-v1-option-row { display: grid; grid-template-columns: minmax(120px, 1fr) 100px auto auto auto; gap: 7px; align-items: center; }
@@ -220,4 +224,5 @@
   .merchant-v1-save-bar > button:first-of-type { display: none; }
   .merchant-v1-menu-create { grid-template-columns: 1fr; }
   .merchant-v1-menu-create form:nth-child(2), .merchant-v1-menu-item-fields, .merchant-v1-option-row, .merchant-v1-option-create, .merchant-v1-option-group > form { grid-template-columns: 1fr; }
+  .merchant-v1-draft-warning { grid-column: 1; align-items: start; }
 }

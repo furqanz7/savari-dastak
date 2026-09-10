@@ -6,6 +6,7 @@ import { ProductDetailOverlay } from "./ProductDetailOverlay";
 import { merchantStockAction } from "./productDetail";
 import { userFacingError } from "./userFacingError";
 import {
+  DastakV1RequestError,
   getV1MerchantCanonicalCatalogue,
   updateV1MerchantBranchState,
   updateV1MerchantSkuSelections,
@@ -13,9 +14,11 @@ import {
   type V1MerchantCanonicalCatalogue,
 } from "./dastakV1";
 
-type Props = { auth: DastakV1Auth };
+type Props = { auth: DastakV1Auth; branchId: string; onSessionExpired: () => void };
 
-export function MerchantV1CatalogueControl({ auth }: Props) {
+const cataloguePageSize = 80;
+
+export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }: Props) {
   const [snapshot, setSnapshot] = useState<V1MerchantCanonicalCatalogue>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
@@ -27,16 +30,18 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
   const [selectedOnly, setSelectedOnly] = useState(false);
   const [pendingSelections, setPendingSelections] = useState<Record<string, boolean>>({});
   const [detailId, setDetailId] = useState<string>();
+  const [visibleLimit, setVisibleLimit] = useState(cataloguePageSize);
   const selectionSaveKey = useRef<string | undefined>(undefined);
   const headingRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (categoryTypeId) headingRef.current?.scrollIntoView({ block: "start" });
   }, [categoryTypeId]);
   const deferredQuery = useDeferredValue(query);
+  useEffect(() => setVisibleLimit(cataloguePageSize), [categoryId, categoryTypeId, deferredQuery, selectedOnly, subcategoryId]);
 
   const refresh = useCallback(async () => {
     try {
-      const next = await getV1MerchantCanonicalCatalogue(auth);
+      const next = await getV1MerchantCanonicalCatalogue({ ...auth, branchId, limit: 5000 });
       setSnapshot(next);
       setPendingSelections((current) => {
         const retained = Object.fromEntries(Object.entries(current).filter(([skuId, selected]) =>
@@ -47,11 +52,12 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
       setError(undefined);
       return next;
     } catch (requestError) {
+      if (isSessionError(requestError)) onSessionExpired();
       setError(message(requestError));
     } finally {
       setLoading(false);
     }
-  }, [auth]);
+  }, [auth, branchId, onSessionExpired]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
@@ -229,17 +235,19 @@ export function MerchantV1CatalogueControl({ auth }: Props) {
       </aside>
       <div className="merchant-v1-category-results" key={categoryId}><header><h2>{snapshot.categories.find((item) => item.categoryId === categoryId)?.name ?? "Products"}</h2><span>{visibleSkus.length} products</span></header>
         {productTypes.length ? <label className="merchant-v1-type-filter">Type<select aria-label="Product type" value={subcategoryId ?? ""} onChange={(event) => setSubcategoryId(event.target.value || undefined)}><option value="">All types</option>{productTypes.map((item) => <option key={item.subcategoryId} value={item.subcategoryId}>{item.name}</option>)}</select></label> : null}
-        <MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /></div>
-    </section> : selectedOnly || deferredQuery.trim() ? <MerchantSkuGallery auth={auth} skus={visibleSkus} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /> : null}
+        <MerchantSkuGallery auth={auth} skus={visibleSkus.slice(0, visibleLimit)} total={visibleSkus.length} onLoadMore={() => setVisibleLimit((current) => current + cataloguePageSize)} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /></div>
+    </section> : selectedOnly || deferredQuery.trim() ? <MerchantSkuGallery auth={auth} skus={visibleSkus.slice(0, visibleLimit)} total={visibleSkus.length} onLoadMore={() => setVisibleLimit((current) => current + cataloguePageSize)} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /> : null}
     {Object.keys(pendingSelections).length ? <div className="merchant-v1-save-bar" role="status"><span><strong>{Object.keys(pendingSelections).length} unsaved {Object.keys(pendingSelections).length === 1 ? "change" : "changes"}</strong><small>Keep selecting, then save once.</small></span><button type="button" className="secondary-button" disabled={busy === "catalogue"} onClick={() => { setPendingSelections({}); selectionSaveKey.current = undefined; }}>Discard</button><button type="button" className="primary-button" disabled={busy === "catalogue"} onClick={() => void saveSelections()}>{busy === "catalogue" ? "Saving…" : "Save storefront"}</button></div> : null}
-    {snapshot.truncated && <p className="merchant-v1-truncated">Showing the first 5,000 SKUs. Refine the canonical catalogue before launch.</p>}
+    {snapshot.truncated && <p className="merchant-v1-truncated">Dastak loaded the first 5,000 authorised catalogue products. Use search or a category to narrow this branch’s storefront.</p>}
     {detailSku ? <MerchantProductDetail sku={detailSku} products={snapshot.skus.filter((item) => item.categoryId === detailSku.categoryId)} branch={branch.branchName} supabaseUrl={auth.supabaseUrl} onSelect={(id) => { if (!busy) setDetailId(id); }} onClose={() => { if (!busy) setDetailId(undefined); }} onAdd={addSku} onSave={saveStock} busy={Boolean(busy)} error={error} /> : null}
   </section>;
 }
 
-function MerchantSkuGallery({ auth, skus, subcategories, pendingSelections, busy, onSelection, onDetail }: {
+function MerchantSkuGallery({ auth, skus, total, onLoadMore, subcategories, pendingSelections, busy, onSelection, onDetail }: {
   auth: DastakV1Auth;
   skus: V1MerchantCanonicalCatalogue["skus"];
+  total: number;
+  onLoadMore: () => void;
   subcategories: V1MerchantCanonicalCatalogue["subcategories"];
   pendingSelections: Record<string, boolean>;
   busy?: string;
@@ -248,7 +256,7 @@ function MerchantSkuGallery({ auth, skus, subcategories, pendingSelections, busy
 }) {
   if (!skus.length) return <div className="merchant-v1-empty-products"><PackageCheck size={28} /><strong>No matching products</strong><span>Choose another collection or change your search.</span></div>;
   const names = new Map(subcategories.map((item) => [item.subcategoryId, item.name]));
-  return <div className="merchant-v1-sku-list merchant-v1-sku-gallery" aria-live="polite">{skus.map((sku) => {
+  return <><div className="merchant-v1-sku-list merchant-v1-sku-gallery" aria-live="polite">{skus.map((sku) => {
     const selected = pendingSelections[sku.skuId] ?? sku.selected;
     return <article className={selected ? "selected" : ""} key={sku.skuId}>
       <button type="button" className="product-open-button" onClick={() => onDetail(sku.skuId)} aria-label={`View ${sku.name} details and stock`}><MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={sku.imageKey} /></button>
@@ -257,7 +265,7 @@ function MerchantSkuGallery({ auth, skus, subcategories, pendingSelections, busy
       <span className="merchant-v1-price"><strong>{formatPrice(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise && <small>{formatPrice(sku.listPricePaise)}</small>}</span>
       <button type="button" className={selected ? "secondary-button" : "primary-button"} disabled={busy === "catalogue" || sku.catalogueStatus !== "ACTIVE"} aria-pressed={selected} onClick={() => onSelection(sku)}>{selected ? "Remove" : "Select"}</button>
     </article>;
-  })}</div>;
+  })}</div>{skus.length < total ? <button className="secondary-button merchant-v1-load-more" type="button" onClick={onLoadMore}>Show more products · {total - skus.length} remaining</button> : null}</>;
 }
 
 function MerchantImage({ supabaseUrl, imageKey }: { supabaseUrl: string; imageKey?: string }) {
@@ -311,6 +319,10 @@ function merchantNavigationGroups(categoryTypes: V1MerchantCanonicalCatalogue["c
 
 function message(error: unknown) {
   return userFacingError(error, "The merchant control could not be completed.");
+}
+
+function isSessionError(error: unknown) {
+  return error instanceof DastakV1RequestError && (error.status === 401 || error.code === "authentication_required");
 }
 
 function merchantDetail(sku: V1MerchantCanonicalCatalogue["skus"][number]): DetailProduct {

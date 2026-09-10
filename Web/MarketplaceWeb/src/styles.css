@@ -725,6 +725,15 @@ button:disabled { cursor: wait; opacity: .55; }
 .workspace-tabs button:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: -3px; }
 .merchant-workspace .primary-button { background: var(--primary-action); color: var(--primary-action-foreground); }
 .merchant-workspace .secondary-button, .merchant-workspace .icon-button { border-color: var(--divider); color: var(--text-primary); background: var(--surface); }
+.merchant-branch-context { width: min(1040px, 100%); min-width: 0; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 10px; margin: 14px auto 18px; padding: 11px 13px; border: 1px solid var(--divider); border-radius: 14px; background: var(--surface-raised); }
+.merchant-branch-context > svg { width: 38px; height: 38px; padding: 10px; border-radius: 11px; color: var(--accent); background: var(--accent-soft); }
+.merchant-branch-context > span { min-width: 0; display: grid; gap: 2px; }
+.merchant-branch-context small, .merchant-branch-context em { overflow: hidden; color: var(--text-secondary); font-size: 11px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.merchant-branch-context strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.merchant-branch-context label { position: relative; min-width: 190px; }
+.merchant-branch-context select { width: 100%; min-height: 42px; appearance: none; padding: 0 35px 0 12px; border: 1px solid var(--divider); border-radius: 11px; color: var(--text-primary); background: var(--surface); font: inherit; font-size: 12px; font-weight: 700; }
+.merchant-branch-context label > svg { position: absolute; top: 50%; right: 11px; pointer-events: none; transform: translateY(-50%); }
+.merchant-branch-context > p { grid-column: 2 / -1; margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
 
 .royalty-shell { display: grid; gap: 22px; padding: 26px 0 48px; }
 .royalty-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
@@ -2221,6 +2230,9 @@ button:disabled { cursor: wait; opacity: .55; }
   .catalogue-heading { display: grid; align-items: start; padding-top: 8px; }
   .catalogue-heading h1 { font-size: 30px; }
   .merchant-workspace { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
+  .merchant-branch-context { grid-template-columns: 38px minmax(0, 1fr); margin-block: 10px 16px; }
+  .merchant-branch-context label, .merchant-branch-context > p { grid-column: 1 / -1; }
+  .merchant-branch-context label { min-width: 0; }
   .merchant-orders-heading { align-items: center; padding-top: 8px; }
   .merchant-orders-heading h1 { font-size: 30px; }
   .merchant-orders-heading { display: grid; }
