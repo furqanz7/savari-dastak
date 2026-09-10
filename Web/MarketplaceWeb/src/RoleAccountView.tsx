@@ -26,6 +26,8 @@ import {
 import { AccountProfileSheet } from "./AccountProfileSheet";
 import { AccountActionDialog } from "./AccountActionDialog";
 import { AccountSessionsSheet } from "./AccountSessionsSheet";
+import { CustomerNotice } from "./CustomerUI";
+import { useModalDialog } from "./useModalDialog";
 import { userFacingError } from "./userFacingError";
 import {
   AccountProfileRequestError,
@@ -60,6 +62,7 @@ type Props = {
   deliveryPartnerError?: string;
   onRefreshPartner?: () => void;
   onOpenWorkspace?: () => void;
+  notificationSurface?: ReactNode;
   onSignOut: () => void;
 };
 
@@ -70,7 +73,7 @@ export function RoleAccountView({
   persona,
   supabaseUrl, publishableKey, allowsAccountDeletion = true, deliveryPartner,
   deliveryPartnerLoading = false, deliveryPartnerError, onRefreshPartner,
-  onOpenWorkspace, onSignOut,
+  onOpenWorkspace, notificationSurface, onSignOut,
 }: Props) {
   const auth = useMemo(
     () => ({ accessToken, supabaseUrl, publishableKey }),
@@ -136,18 +139,18 @@ export function RoleAccountView({
   return <section className="role-account">
     <header className="role-account-heading">
       <p className="eyebrow">{roleName}</p>
-      <h1>{roleName === "Merchant" ? "Your store identity" : "Your account"}</h1>
+      <h1>{roleName === "Merchant" ? "Your merchant account" : "Your account"}</h1>
       <p>{copy.introduction}</p>
     </header>
 
-    <button className="role-profile" type="button" onClick={() => setEditing(true)} disabled={loading}>
+    <button className="role-profile" type="button" aria-label={roleName === "Merchant" ? "Edit merchant profile" : undefined} onClick={() => setEditing(true)} disabled={loading}>
       <span className="role-profile-main">
         <span className="role-profile-avatar" aria-hidden="true">{initials(profile.displayName || roleName)}</span>
         <span className="role-profile-copy">
           <strong>{loading ? "Loading account" : profile.displayName || `${roleName} account`}</strong>
           <small>{roleName}</small>
         </span>
-        <span className="role-profile-edit" aria-hidden="true"><Pencil size={16} /></span>
+        <span className="role-profile-edit" aria-hidden="true"><Pencil size={16} />{roleName === "Merchant" ? <span>Edit profile</span> : null}</span>
       </span>
       {!loading && <span className="role-profile-contacts">
         <span><Phone size={15} />{profile.phoneNumber || "Add a contact number"}</span>
@@ -164,12 +167,12 @@ export function RoleAccountView({
     />}
 
     {roleName === "Merchant" && onOpenWorkspace && <section className="role-account-section" aria-labelledby="role-store-workspace-title">
-      <h2 id="role-store-workspace-title">Store workspace</h2>
+      <h2 id="role-store-workspace-title">Your business</h2>
       <div className="role-account-group">
         <AccountButtonRow
           icon={<Store size={19} />}
-          title="Branch catalogue and availability"
-          detail="Select Dastak canonical SKUs and control new-order acceptance"
+          title="Store and availability"
+          detail="Manage products, your menu and new-order acceptance"
           onClick={onOpenWorkspace}
         />
       </div>
@@ -185,13 +188,13 @@ export function RoleAccountView({
           value={accessLabel}
           onClick={() => setDetail("access")}
         />}
-        <AccountButtonRow
+        {!notificationSurface ? <AccountButtonRow
           icon={<Bell size={19} />}
           title="Notifications"
           detail="Order and account updates"
           value="In app"
           onClick={() => setDetail("notifications")}
-        />
+        /> : null}
         <AccountButtonRow
           icon={<Hand size={19} />}
           title="Privacy and data"
@@ -206,6 +209,8 @@ export function RoleAccountView({
         />
       </div>
     </section>
+
+    {notificationSurface ? <section className="role-account-section" aria-label="Browser order alerts"><h2>Order alerts</h2>{notificationSurface}</section> : null}
 
     {isDeliveryPartner && <section className="role-account-section" aria-labelledby="role-support-title">
       <h2 id="role-support-title">Support and safety</h2>
@@ -239,12 +244,12 @@ export function RoleAccountView({
       </div>
     </section>
 
-    {error && !editing && <div className="role-account-error" role="alert">
+    {error && !editing && (roleName === "Merchant" ? <CustomerNotice title="Account details couldn’t update" onRetry={loadFailed ? () => void loadProfile() : undefined}>{error}</CustomerNotice> : <div className="role-account-error" role="alert">
       <p>{error}</p>
       {loadFailed && <button type="button" onClick={() => void loadProfile()}>Try again</button>}
-    </div>}
+    </div>)}
 
-    {editing && <AccountProfileSheet profile={profile} busy={busy} error={error} contactMessage={copy.editorPrivacy} onDismiss={() => { setEditing(false); setError(undefined); }} onSave={save} />}
+    {editing && <div className={roleName === "Merchant" ? "customer-experience merchant-profile-presentation" : undefined}><AccountProfileSheet presentation={roleName === "Merchant" ? "customer" : undefined} profile={profile} busy={busy} error={error} contactMessage={copy.editorPrivacy} onDismiss={() => { setEditing(false); setError(undefined); }} onSave={save} /></div>}
     {detail && <RoleAccountDetailSheet
       detail={detail}
       roleName={roleName}
@@ -285,13 +290,13 @@ function RoleAccountDetailSheet({ detail, roleName, accessLabel, onDismiss }: {
   const content = accountDetailContent(detail, roleName, accessLabel);
 
   useEffect(() => {
+    if (roleName === "Merchant") return;
     const dismissOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onDismiss(); };
     document.addEventListener("keydown", dismissOnEscape);
     return () => document.removeEventListener("keydown", dismissOnEscape);
-  }, [onDismiss]);
+  }, [onDismiss, roleName]);
 
-  return <div className="customer-sheet-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onDismiss(); }}>
-    <section className="customer-sheet role-account-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="account-detail-title">
+  const body = <>
       <header>
         <div><p className="eyebrow">{content.eyebrow}</p><h2 id="account-detail-title">{content.title}</h2></div>
         <button className="icon-button" type="button" onClick={onDismiss} aria-label="Close" title="Close"><X size={19} /></button>
@@ -305,7 +310,17 @@ function RoleAccountDetailSheet({ detail, roleName, accessLabel, onDismiss }: {
         </div>)}
       </div>
       <button type="button" className="primary-button role-detail-done" onClick={onDismiss}>Done</button>
-    </section>
+  </>;
+  if (roleName === "Merchant") return <MerchantAccountDetailDialog onDismiss={onDismiss}>{body}</MerchantAccountDetailDialog>;
+  return <div className="customer-sheet-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onDismiss(); }}>
+    <section className="customer-sheet role-account-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="account-detail-title">{body}</section>
+  </div>;
+}
+
+function MerchantAccountDetailDialog({ children, onDismiss }: { children: ReactNode; onDismiss: () => void }) {
+  const dialog = useModalDialog<HTMLElement>({ onDismiss });
+  return <div className="customer-sheet-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onDismiss(); }}>
+    <section ref={dialog} tabIndex={-1} className="customer-sheet role-account-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="account-detail-title">{children}</section>
   </div>;
 }
 

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { CirclePause, Plus, ShieldCheck, Store } from "lucide-react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { CirclePause, Plus, Search, ShieldCheck, Store } from "lucide-react";
+import { CustomerEmptyState, CustomerNotice, CustomerSkeleton } from "./CustomerUI";
 import { MerchantV1CatalogueControl } from "./MerchantV1CatalogueControl";
 import { merchantCommerceKind, type MerchantBranch } from "./merchantBranchContext";
 import { MerchantMutationKeys } from "./merchantMutationKeys";
@@ -54,11 +55,11 @@ export function MerchantV1CommerceControl({ auth, branch, onSessionExpired }: Pr
       .finally(() => setProbing(false));
   }, [auth, branch.id, isRestaurant, onSessionExpired]);
 
-  if (probing) return <div className="catalogue-loading" role="status"><span /> Opening V1 merchant controls</div>;
-  if (!commerceKind) return <section className="merchant-v1-control"><p className="order-error" role="alert">This branch’s Store type is not supported. Dastak has not guessed a catalogue.</p></section>;
+  if (probing) return <CustomerSkeleton label="Opening your Store" kind="orders" />;
+  if (!commerceKind) return <section className="merchant-v1-control"><CustomerNotice title="Store unavailable">This branch’s Store type is not supported. Contact Dastak to check its setup.</CustomerNotice></section>;
   if (isRestaurant) return restaurant
     ? <MerchantV1RestaurantMenuControl auth={auth} branch={branch} onSessionExpired={onSessionExpired} initial={restaurant} />
-    : <section className="merchant-v1-control"><p className="order-error" role="alert">{error ?? "Restaurant menu unavailable."}</p></section>;
+    : <section className="merchant-v1-control"><CustomerNotice title="Menu couldn’t load">{error ?? "Restaurant menu unavailable."}</CustomerNotice></section>;
   return <MerchantV1CatalogueControl auth={auth} branchId={branch.id} onSessionExpired={onSessionExpired} />;
 }
 
@@ -70,6 +71,9 @@ function MerchantV1RestaurantMenuControl({ auth, initial, onSessionExpired }: Pr
   const [itemCategoryId, setItemCategoryId] = useState(initial.categories[0]?.id ?? "");
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
+  const [menuQuery, setMenuQuery] = useState("");
+  const query = useDeferredValue(menuQuery.trim().toLowerCase());
+  const visibleCategories = menu.categories.map((category) => ({ ...category, items: category.items.filter((item) => !query || `${category.name} ${item.name} ${item.description ?? ""}`.toLowerCase().includes(query)) })).filter((category) => !query || category.items.length > 0);
   const mutationKeys = useRef(new MerchantMutationKeys());
 
   const refresh = useCallback(async () => {
@@ -185,21 +189,25 @@ function MerchantV1RestaurantMenuControl({ auth, initial, onSessionExpired }: Pr
   };
 
   return <section className="merchant-v1-control merchant-v1-menu-control">
-    <header className="merchant-orders-heading"><div><p className="eyebrow">STORE &amp; MENU</p><h1>{menu.restaurant.name}</h1><p>{menu.restaurant.branchName}</p></div></header>
-    {error ? <p className="order-error" role="alert">{error}</p> : null}
+    <header className="merchant-orders-heading"><div><p className="eyebrow">YOUR KITCHEN</p><h1>{menu.restaurant.name}</h1><p>Your menu, made easy to manage.</p></div></header>
+    {error ? <CustomerNotice title="Menu update needs attention" onRetry={() => void refresh()}>{error}</CustomerNotice> : null}
     <div className="merchant-v1-operation-grid">
-      <article><Store size={19} /><span><strong>{menu.restaurant.isOpen ? "Restaurant open" : "Restaurant closed"}</strong><small>Existing paid commitments continue</small></span><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void setOperation(!menu.restaurant.isOpen, false)}>{menu.restaurant.isOpen ? "Close" : "Open"}</button></article>
-      <article><CirclePause size={19} /><span><strong>{menu.restaurant.acceptingOrders ? "Accepting new food orders" : "New food orders paused"}</strong><small>Confirmation remains direct—no rerouting</small></span><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void setOperation(true, !menu.restaurant.acceptingOrders)}>{menu.restaurant.acceptingOrders ? "Pause" : "Accept"}</button></article>
+      <article><Store size={19} /><span><strong>{menu.restaurant.isOpen ? "Restaurant open" : "Restaurant closed"}</strong><small>Existing confirmed orders continue</small></span><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void setOperation(!menu.restaurant.isOpen, false)}>{menu.restaurant.isOpen ? "Close" : "Open"}</button></article>
+      <article><CirclePause size={19} /><span><strong>{menu.restaurant.acceptingOrders ? "Accepting food orders" : "New food orders paused"}</strong><small>Choose when your kitchen takes new requests</small></span><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void setOperation(true, !menu.restaurant.acceptingOrders)}>{menu.restaurant.acceptingOrders ? "Pause" : "Resume"}</button></article>
       <article><ShieldCheck size={19} /><span><strong>{menu.restaurant.activeOrderCount} active orders</strong><small>Soft threshold {menu.restaurant.softActiveOrderThreshold}; never a hard cutoff</small></span><b>Live</b></article>
     </div>
-    <div className="merchant-v1-canonical-note"><ShieldCheck size={18} /><span><strong>Restaurant-owned menu</strong><small>Manage exact food, prices, availability and options. Confirmed customer selections are immutable snapshots.</small></span></div>
+    <div className="merchant-v1-canonical-note"><ShieldCheck size={18} /><span><strong>Your menu, your craft.</strong><small>Manage dishes, prices and options. Changes apply to future orders; confirmed selections stay protected.</small></span></div>
+    <div className="merchant-v1-catalogue-tools"><label><Search size={18} aria-hidden="true" /><input type="search" value={menuQuery} onChange={(event) => setMenuQuery(event.target.value)} aria-label="Search your menu" placeholder="Find a dish or category" /></label></div>
+    <details className="merchant-menu-options merchant-menu-create-disclosure"><summary>Add to your menu</summary>
     <div className="merchant-v1-menu-create">
-      <form onSubmit={(event) => void createCategory(event)}><strong>New menu category</strong><input value={categoryName} maxLength={100} onChange={(event) => setCategoryName(event.target.value)} placeholder="Breakfast" /><button className="primary-button" disabled={Boolean(busy) || !categoryName.trim()}><Plus size={16} /> Add category</button></form>
-      <form onSubmit={(event) => void createItem(event)}><strong>New menu item</strong><select value={itemCategoryId} onChange={(event) => setItemCategoryId(event.target.value)} required><option value="">Choose category</option>{menu.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><input value={itemName} maxLength={160} onChange={(event) => setItemName(event.target.value)} placeholder="Item name" required /><input value={itemPrice} inputMode="decimal" onChange={(event) => setItemPrice(event.target.value)} placeholder="Price ₹" required /><button className="primary-button" disabled={Boolean(busy)}><Plus size={16} /> Add item</button></form>
+      <form onSubmit={(event) => void createCategory(event)}><strong>New category</strong><label>Category name<input value={categoryName} maxLength={100} onChange={(event) => setCategoryName(event.target.value)} placeholder="Breakfast" /></label><button className="primary-button" disabled={Boolean(busy) || !categoryName.trim()}><Plus size={16} /> Add category</button></form>
+      <form onSubmit={(event) => void createItem(event)}><strong>New dish</strong><label>Category<select value={itemCategoryId} onChange={(event) => setItemCategoryId(event.target.value)} required><option value="">Choose category</option>{menu.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label>Item name<input value={itemName} maxLength={160} onChange={(event) => setItemName(event.target.value)} placeholder="What’s cooking?" required /></label><label>Price in rupees<input value={itemPrice} inputMode="decimal" onChange={(event) => setItemPrice(event.target.value)} placeholder="₹ 0.00" required /></label><button className="primary-button" disabled={Boolean(busy)}><Plus size={16} /> Add item</button></form>
     </div>
-    <div className="merchant-v1-menu-list">{menu.categories.map((category) => <section key={category.id}>
+    </details>
+    {visibleCategories.length === 0 ? <CustomerEmptyState title={query ? "No matching dishes" : "Make this menu yours"} copy={query ? "Try another dish or category name." : "Add your first category and dish using “Add to your menu” above."} /> : null}
+    <div className="merchant-v1-menu-list">{menu.categories.map((category) => <section key={category.id} hidden={!visibleCategories.some((visible) => visible.id === category.id)}>
       <header><div><strong>{category.name}</strong><small>{category.items.length} items · {category.status.toLowerCase()}</small></div><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void save(`category:${category.id}`, "CATEGORY", category.id, category.version, { name: category.name, description: category.description ?? "", sortOrder: category.sortOrder, status: category.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" })}>{category.status === "ACTIVE" ? "Hide" : "Activate"}</button></header>
-      <div>{category.items.map((item) => <RestaurantItemEditor key={item.id} item={item} categoryId={category.id} busy={Boolean(busy)} save={save} />)}</div>
+      <div>{category.items.map((item) => <div key={item.id} hidden={!visibleCategories.find((visible) => visible.id === category.id)?.items.some((visible) => visible.id === item.id)}><RestaurantItemEditor item={item} categoryId={category.id} busy={Boolean(busy)} save={save} /></div>)}</div>
     </section>)}</div>
   </section>;
 }
@@ -248,9 +256,14 @@ function RestaurantItemEditor({ item, categoryId, busy, save }: {
   };
   return <article className={`merchant-v1-menu-item ${draft.stale ? "stale-draft" : ""}`}><div className="merchant-v1-menu-item-fields">
     {draft.stale ? <p className="merchant-v1-draft-warning" role="status"><span>Newer server changes are available. Your draft was not overwritten.</span><button className="secondary-button" type="button" onClick={() => setDraft(useLatestVersionedDraft)}>Use latest</button></p> : null}
-    <input value={draft.value.name} maxLength={160} disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, name: event.target.value }))} aria-label="Menu item name" /><input value={draft.value.description} maxLength={1000} disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, description: event.target.value }))} aria-label="Menu item description" placeholder="Description" /><label><span>Price ₹</span><input value={draft.value.price} inputMode="decimal" disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, price: event.target.value }))} /></label><div><button className="primary-button" type="button" disabled={busy || draft.stale || !draft.dirty} onClick={() => updateItem()}>Save</button><button className="secondary-button" type="button" disabled={busy || draft.stale} onClick={() => updateItem(item.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{item.status === "ACTIVE" ? "Mark unavailable" : "Activate"}</button></div></div>
+    <label>Item name<input value={draft.value.name} maxLength={160} disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, name: event.target.value }))} aria-label="Menu item name" /></label>
+    <label><span>Price ₹</span><input value={draft.value.price} inputMode="decimal" disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, price: event.target.value }))} /></label>
+    <label className="merchant-menu-description">Description<input value={draft.value.description} maxLength={1000} disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, description: event.target.value }))} aria-label="Menu item description" placeholder="A little about this dish" /></label>
+    <div><button className="primary-button" type="button" disabled={busy || draft.stale || !draft.dirty} onClick={() => updateItem()}>Save changes</button><button className="secondary-button" type="button" disabled={busy || draft.stale} onClick={() => updateItem(item.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{item.status === "ACTIVE" ? "Mark unavailable" : "Activate"}</button></div></div>
+    <details className="merchant-menu-options"><summary>Variants &amp; add-ons <small>{item.optionGroups.length} groups</small></summary>
     {item.optionGroups.map((group) => <RestaurantOptionGroupEditor key={group.id} group={group} itemId={item.id} busy={busy} save={save} />)}
-    <form className="merchant-v1-option-create" onSubmit={(event) => void createGroup(event)}><strong>Add variant / add-on group</strong><input value={groupName} maxLength={100} onChange={(event) => setGroupName(event.target.value)} placeholder="Size or extras" /><select value={groupType} onChange={(event) => setGroupType(event.target.value as "SINGLE" | "MULTIPLE")}><option value="SINGLE">Choose one</option><option value="MULTIPLE">Choose multiple</option></select>{groupType === "MULTIPLE" ? <input type="number" min={1} max={20} value={groupMax} onChange={(event) => setGroupMax(Number(event.target.value))} aria-label="Maximum selections" /> : null}<button className="secondary-button" disabled={busy || !groupName.trim()}><Plus size={15} /> Add group</button></form>
+    <form className="merchant-v1-option-create" onSubmit={(event) => void createGroup(event)}><strong>Add variant / add-on group</strong><label>Group name<input value={groupName} maxLength={100} onChange={(event) => setGroupName(event.target.value)} placeholder="Size or extras" /></label><label>Selection type<select value={groupType} onChange={(event) => setGroupType(event.target.value as "SINGLE" | "MULTIPLE")}><option value="SINGLE">Choose one</option><option value="MULTIPLE">Choose multiple</option></select></label>{groupType === "MULTIPLE" ? <label>Maximum selections<input type="number" min={1} max={20} value={groupMax} onChange={(event) => setGroupMax(Number(event.target.value))} /></label> : null}<button className="secondary-button" disabled={busy || !groupName.trim()}><Plus size={15} /> Add group</button></form>
+    </details>
   </article>;
 }
 
@@ -270,7 +283,7 @@ function RestaurantOptionGroupEditor({ group, itemId, busy, save }: {
   };
   return <div className="merchant-v1-option-group"><header><span><strong>{group.name}</strong><small>{group.selectionType.toLowerCase()} · {group.minimumSelections}–{group.maximumSelections}</small></span><button className="secondary-button" type="button" disabled={busy} onClick={() => void save(`group:${group.id}`, "OPTION_GROUP", group.id, group.version, { menuItemId: itemId, name: group.name, selectionType: group.selectionType, minimumSelections: group.minimumSelections, maximumSelections: group.maximumSelections, sortOrder: group.sortOrder, status: group.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" })}>{group.status === "ACTIVE" ? "Hide group" : "Activate"}</button></header>
     {group.options.map((option) => <RestaurantOptionEditor key={option.id} option={option} groupId={group.id} busy={busy} save={save} />)}
-    <form onSubmit={(event) => void create(event)}><input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} placeholder="Option name" /><input value={price} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} aria-label="Option price in rupees" /><button className="secondary-button" disabled={busy || !name.trim()}><Plus size={15} /> Add option</button></form>
+    <form onSubmit={(event) => void create(event)}><label>Option name<input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} placeholder="Option name" /></label><label>Additional price ₹<input value={price} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} /></label><button className="secondary-button" disabled={busy || !name.trim()}><Plus size={15} /> Add option</button></form>
   </div>;
 }
 

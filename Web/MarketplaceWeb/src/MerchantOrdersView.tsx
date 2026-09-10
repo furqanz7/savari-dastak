@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BellRing, BookOpen, Check, ChevronDown, ClipboardList, Store, UserRound, WalletCards } from "lucide-react";
+import { BellRing, Check, ChevronDown, ClipboardList, Store, UserRound, WalletCards } from "lucide-react";
+import { CustomerNotice, CustomerSkeleton } from "./CustomerUI";
+import "./design/customer-experience.css";
+import "./design/merchant-experience.css";
 import { MerchantV1CommerceControl } from "./MerchantV1CommerceControl";
 import { MerchantV1Opportunities } from "./MerchantV1Opportunities";
 import { RoleAccountView } from "./RoleAccountView";
@@ -61,6 +64,12 @@ export function MerchantOrdersView({
   }), [accessToken, accountId, publishableKey, supabaseUrl, webPushPublicKey]);
   const webPush = useDastakWebPush(webPushAuthentication);
   const selectedBranch = branches.find((branch) => branch.id === selectedBranchId);
+  const contentRef = useRef<HTMLElement>(null);
+  const openSection = (next: MerchantSection) => {
+    setSection(next);
+    contentRef.current?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
 
   const acceptBranches = useCallback((incoming: MerchantBranch[]) => {
     setBranches((current) => mergeMerchantBranches(current, incoming));
@@ -123,19 +132,24 @@ export function MerchantOrdersView({
   };
 
   return (
-    <div className="merchant-workspace">
-      <nav className="workspace-tabs merchant-tabs" aria-label="Merchant workspace" role="tablist">
-        <MerchantTab selected={section === "orders"} onSelect={() => setSection("orders")} icon={<ClipboardList size={18} />} label="Orders" />
-        <MerchantTab selected={section === "catalogue"} onSelect={() => setSection("catalogue")} icon={<BookOpen size={18} />} label="Catalogue" />
-        <MerchantTab selected={section === "royalty"} onSelect={() => setSection("royalty")} icon={<WalletCards size={18} />} label="Royalty" />
-        <MerchantTab selected={section === "account"} onSelect={() => setSection("account")} icon={<UserRound size={18} />} label="Account" />
-      </nav>
-
+    <div className="merchant-workspace merchant-experience">
+      <a className="customer-skip-link" href="#merchant-content">Skip to content</a>
+      <aside className="merchant-sidebar">
+        <button className="merchant-brand" type="button" onClick={() => openSection("orders")} aria-label="Dastak Merchant · Open Orders">Dastak<span>.</span><small>MERCHANT</small></button>
+        <nav className="merchant-navigation" aria-label="Merchant navigation">
+          <MerchantTab selected={section === "orders"} onSelect={() => openSection("orders")} icon={<ClipboardList size={21} />} label="Orders" />
+          <MerchantTab selected={section === "catalogue"} onSelect={() => openSection("catalogue")} icon={<Store size={21} />} label="Store" />
+          <MerchantTab selected={section === "royalty"} onSelect={() => openSection("royalty")} icon={<WalletCards size={21} />} label="Earnings" />
+          <MerchantTab selected={section === "account"} onSelect={() => openSection("account")} icon={<UserRound size={21} />} label="Account" />
+        </nav>
+        <p className="merchant-sidebar-note">Every detail.<br />Every doorstep.</p>
+      </aside>
+      <section className="merchant-main" id="merchant-content" ref={contentRef} tabIndex={-1} aria-label={section === "catalogue" ? "Store" : section === "royalty" ? "Earnings" : section === "account" ? "Account" : "Orders"}>
       <MerchantBranchSelector branches={branches} selected={selectedBranch} loading={branchLoading} issue={branchIssue} onSelect={selectBranch} />
 
       {section === "catalogue" ? (
         selectedBranch ? <MerchantV1CommerceControl key={selectedBranch.id} auth={auth} branch={selectedBranch} onSessionExpired={onSignOut} />
-          : <div className="catalogue-loading" role={branchIssue ? "alert" : "status"}><span /> {branchIssue ?? "Loading your branches"}</div>
+          : branchIssue ? <CustomerNotice title="Store unavailable">{branchIssue}</CustomerNotice> : <CustomerSkeleton label="Loading your branches" kind="orders" />
       ) : section === "royalty" ? (
         <RoyaltyPanel auth={auth} kind="MERCHANT" />
       ) : section === "account" ? (
@@ -148,16 +162,17 @@ export function MerchantOrdersView({
           persona="MERCHANT"
           supabaseUrl={supabaseUrl}
           publishableKey={publishableKey}
-          onOpenWorkspace={() => setSection("catalogue")}
+          onOpenWorkspace={() => openSection("catalogue")}
+          notificationSurface={<MerchantNotificationStatus controller={webPush} />}
           onSignOut={onSignOut}
         />
       ) : (
         <div className="merchant-orders-shell">
           <header className="merchant-orders-heading">
             <div>
-              <p className="eyebrow">{displayName ? `Hello, ${displayName}` : "Dastak merchant"}</p>
-              <h1>Orders</h1>
-              <p>Live exact-item requests and fulfilments.</p>
+              <p className="eyebrow">YOUR ORDER DESK</p>
+              <h1>Ready for what’s next.</h1>
+              <p>From the first request to the final handoff.</p>
             </div>
             <MerchantNotificationStatus controller={webPush} />
           </header>
@@ -171,6 +186,7 @@ export function MerchantOrdersView({
           />
         </div>
       )}
+      </section>
     </div>
   );
 }
@@ -220,8 +236,8 @@ function MerchantTab({
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={selected}
+      aria-current={selected ? "page" : undefined}
+      aria-controls="merchant-content"
       className={selected ? "selected" : ""}
       onClick={onSelect}
     >

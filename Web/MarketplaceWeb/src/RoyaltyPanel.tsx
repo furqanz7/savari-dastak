@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Landmark, RefreshCw, WalletCards } from "lucide-react";
 import { formatPrice } from "./catalogue";
 import { userFacingError } from "./userFacingError";
+import { CustomerEmptyState, CustomerNotice, CustomerSkeleton } from "./CustomerUI";
 import {
   getRoyalty,
   registerRoyaltyPayoutDestination,
@@ -50,24 +51,25 @@ export function RoyaltyPanel({
     <section className="royalty-shell" aria-labelledby="royalty-title">
       <header className="royalty-heading">
         <div>
-          <p className="eyebrow">Earnings balance</p>
-          <h1 id="royalty-title">Royalty</h1>
-          <p>Credits, adjustments, and payout requests from the append-only ledger.</p>
+          <p className="eyebrow">{kind === "MERCHANT" ? "YOUR BUSINESS" : "Earnings balance"}</p>
+          <h1 id="royalty-title">{kind === "MERCHANT" ? "Earnings" : "Royalty"}</h1>
+          <p>{kind === "MERCHANT" ? "Your Royalty balance, credits and payouts, clearly accounted for." : "Credits, adjustments, and payout requests from the append-only ledger."}</p>
         </div>
         <button
-          className="icon-button"
+          className={kind === "MERCHANT" ? "merchant-quiet-refresh" : "icon-button"}
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
           aria-label="Refresh Royalty"
         >
           <RefreshCw size={19} />
+          {kind === "MERCHANT" ? "Check balance" : null}
         </button>
       </header>
-      {error && <p className="order-error" role="alert">{error}</p>}
+      {error && (kind === "MERCHANT" ? <CustomerNotice title="Earnings couldn’t update" onRetry={() => void refresh()}>{error}</CustomerNotice> : <p className="order-error" role="alert">{error}</p>)}
       {loading && !snapshot
         ? (
-          <div className="catalogue-loading" role="status">
+          kind === "MERCHANT" ? <CustomerSkeleton label="Loading earnings" kind="orders" /> : <div className="catalogue-loading" role="status">
             <span /> Loading Royalty
           </div>
         )
@@ -87,6 +89,7 @@ export function RoyaltyPanel({
               />
             </div>
             <div className="royalty-subjects">
+              {kind === "MERCHANT" && snapshot.subjects.length === 0 ? <CustomerEmptyState title="Your earnings start here" copy="Earning credits and payout information appear here when they become available." icon={<WalletCards size={30} />} /> : null}
               {snapshot.subjects.map((subject) => (
                 <RoyaltySubjectCard
                   key={subject.subjectType + ":" + subject.subjectId}

@@ -1,0 +1,371 @@
+/* Merchant adopts the shared Customer token palette and feedback primitives.
+   Layout and operational density are intentionally scoped to this application. */
+.app.variant-dastak-merchant:has(.merchant-experience) { padding: 0; background: var(--canvas); }
+.app.variant-dastak-merchant:has(.merchant-experience)::before { display: none; }
+.variant-dastak-merchant .content.workspace-content { display: block; max-width: none; padding: 0; }
+.merchant-experience {
+  --merchant-gap: clamp(16px, 2vw, 28px);
+  --merchant-radius: 20px;
+  --merchant-small: 13px;
+  --merchant-heading: clamp(30px, 3.2vw, 44px);
+  width: min(100%, 1600px); min-width: 0; margin: 0 auto; display: grid;
+  grid-template-columns: 204px minmax(0, 1fr); min-height: 100dvh;
+  font: 15px/1.5 var(--font-system); color: var(--text-primary);
+}
+.merchant-experience :is(h1, h2, h3, p, strong, small, span) { overflow-wrap: anywhere; }
+.merchant-experience :is(button, input, select, textarea, a) { -webkit-tap-highlight-color: transparent; }
+.merchant-experience :is(button, a) { touch-action: manipulation; }
+.merchant-experience button { transition: background var(--customer-ease), border-color var(--customer-ease), color var(--customer-ease), box-shadow var(--customer-ease); }
+.merchant-experience button:disabled { cursor: default; }
+.merchant-experience :is(button, a, summary):focus-visible { outline: 3px solid var(--dastak-accent); outline-offset: 4px; }
+.merchant-experience :is(input, select, textarea):focus-visible { outline: 3px solid color-mix(in srgb, var(--dastak-accent) 50%, transparent); outline-offset: 2px; border-color: var(--dastak-accent); }
+.merchant-experience :is(input, select, textarea) { min-width: 0; max-width: 100%; font: 16px/1.4 var(--font-system); color: var(--text-primary); accent-color: var(--dastak-accent); }
+.merchant-experience :is(input:not([type=checkbox], [type=radio], [type=file]), select, textarea) { min-height: 46px; padding: 11px 13px; border: 1px solid var(--divider); border-radius: var(--radius-control); background: var(--surface-raised); }
+.merchant-experience :is(input, textarea)::placeholder { color: var(--text-tertiary); opacity: 1; }
+.merchant-experience :is(input, select, textarea):disabled { opacity: .65; cursor: not-allowed; }
+.merchant-experience small { font-size: var(--merchant-small); line-height: 1.5; }
+.merchant-experience .eyebrow { margin: 0; color: var(--dastak-accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; line-height: 1.5; }
+.merchant-experience .primary-button, .merchant-experience .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; margin: 0; padding: 11px 18px; border-radius: var(--radius-control); font: 650 14px/1.4 var(--font-system); text-decoration: none; }
+.merchant-experience .primary-button { border: 1px solid transparent; background: var(--primary-action); color: var(--primary-action-foreground); box-shadow: none; }
+.merchant-experience .secondary-button { border: 1px solid var(--divider); background: var(--surface); color: var(--text-primary); box-shadow: none; }
+.merchant-experience .secondary-button:not(:disabled):hover { background: var(--surface-muted); border-color: var(--dastak-accent); }
+.merchant-experience .primary-button:not(:disabled):hover { box-shadow: 0 3px 12px color-mix(in srgb, var(--text-primary) 12%, transparent); filter: brightness(1.08); }
+.merchant-experience .icon-button { flex-shrink: 0; width: 44px; height: 44px; min-height: 44px; border: 1px solid var(--divider); border-radius: 50%; padding: 0; }
+.merchant-sidebar { position: sticky; top: 0; align-self: start; height: 100dvh; display: flex; flex-direction: column; gap: 44px; padding: 38px 18px 28px; border-right: 1px solid var(--divider); background: var(--surface); }
+.merchant-brand { width: fit-content; margin: 0 0 0 14px; padding: 0; border: 0; background: none; color: var(--text-primary); text-align: left; font: 43px/.95 var(--font-dastak-wordmark); }
+.merchant-brand > span { color: var(--dastak-accent); }
+.merchant-brand > small { display: block; margin: 12px 0 0 3px; color: var(--text-secondary); font: 650 10px/1.5 var(--font-system); letter-spacing: .23em; }
+.merchant-navigation { display: grid; gap: 8px; }
+.merchant-navigation button { display: flex; align-items: center; gap: 13px; width: 100%; padding: 14px 16px; border: 1px solid transparent; border-radius: 14px; min-height: 52px; color: var(--text-secondary); background: transparent; text-align: left; font-size: 15px; font-weight: 600; }
+.merchant-navigation button.selected { color: var(--text-primary); background: var(--dastak-accent-soft); border-color: color-mix(in srgb, var(--dastak-accent) 16%, transparent); }
+.merchant-navigation button.selected svg { color: var(--dastak-accent); }
+.merchant-navigation button:not(.selected):hover { background: var(--surface-muted); }
+.merchant-sidebar-note { margin: auto 14px 0; color: var(--text-secondary); font: 23px/1.25 var(--font-dastak-wordmark); }
+.merchant-main { min-width: 0; padding: 0 clamp(20px, 3.5vw, 52px) 80px; outline: none; }
+.merchant-experience .merchant-branch-context { width: 100%; min-height: 94px; margin: 0 0 32px; padding: 18px 0; border: 0; border-bottom: 1px solid var(--divider); border-radius: 0; background: transparent; grid-template-columns: 38px minmax(0, 1fr) minmax(0, auto); }
+.merchant-experience .merchant-branch-context > svg { color: var(--dastak-accent); background: var(--dastak-accent-soft); }
+.merchant-experience .merchant-branch-context small { font-size: 11px; letter-spacing: .04em; }
+.merchant-experience .merchant-branch-context strong { font-size: 15px; }
+.merchant-experience .merchant-branch-context em { font-size: 12px; }
+.merchant-experience .merchant-branch-context label { min-width: 0; max-width: 330px; }
+.merchant-experience .merchant-branch-context select { padding-right: 34px; font-size: 14px; }
+.merchant-experience .merchant-branch-context > p { grid-column: 1 / -1; font-size: 13px; }
+.merchant-experience .merchant-orders-shell, .merchant-experience .merchant-v1-control { width: 100%; min-width: 0; margin: 0; padding: 0; }
+.merchant-experience .merchant-orders-heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 22px; margin: 0 0 28px; padding: 0; }
+.merchant-experience :is(.merchant-orders-heading, .role-account-heading, .royalty-heading) h1 { margin: 8px 0 12px; color: var(--text-primary); font: 400 var(--merchant-heading)/1.12 var(--font-dastak-wordmark); letter-spacing: -.02em; }
+.merchant-experience .merchant-orders-heading > div { min-width: 0; }
+.merchant-experience .merchant-orders-heading p:last-child { margin: 0; color: var(--text-secondary); font-size: 15px; }
+.merchant-notification-status { display: flex; align-items: center; gap: 9px; padding: 10px 0; margin: 0; color: var(--text-secondary); font-size: 13px; }
+.merchant-notification-status.enabled { color: var(--success); }
+.merchant-notification-status.attention { flex: 1 1 280px; max-width: 400px; display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: start; gap: 10px; padding: 15px 17px; border: 1px solid var(--divider); border-radius: 16px; background: var(--surface); }
+.merchant-notification-status.attention > svg { margin-top: 2px; color: var(--dastak-accent); }
+.merchant-notification-status.attention strong { display: block; color: var(--text-primary); font-size: 14px; }
+.merchant-notification-status.attention small { display: block; margin-top: 3px; font-size: 13px; }
+.merchant-notification-status.attention button { grid-column: 2; justify-self: start; min-height: 44px; padding: 7px 0; background: transparent; border: 0; color: var(--dastak-accent); font-size: 14px; font-weight: 700; }
+.merchant-experience .customer-notice { margin: 16px 0; }
+.merchant-experience .customer-empty-state { min-height: 340px; margin-top: 20px; border: 1px dashed var(--divider); border-radius: var(--merchant-radius); background: var(--surface); }
+.merchant-experience .customer-empty-art { width: 70px; height: 70px; border-radius: 22px; }
+.merchant-experience .customer-empty-state h2 { font-size: 22px; }
+.merchant-experience .customer-skeleton > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.merchant-experience .customer-skeleton-card { border-radius: var(--merchant-radius); }
+.merchant-experience .v1-merchant-panel { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; }
+.merchant-experience .merchant-desk-status { align-items: center; margin-bottom: 16px; }
+.merchant-experience .merchant-desk-status h2 { margin: 0; font-size: 20px; font-weight: 650; }
+.merchant-experience .v1-merchant-queues { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 0 0 28px; }
+.merchant-experience .v1-merchant-queues button { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; min-width: 0; min-height: 62px; padding: 13px 16px; border-radius: 14px; border-color: var(--divider); background: var(--surface); font-size: 14px; color: var(--text-secondary); }
+.merchant-experience .v1-merchant-queues button.selected { color: var(--primary-action-foreground); border-color: var(--primary-action); background: var(--primary-action); }
+.merchant-experience .v1-merchant-queues b { min-width: 26px; padding: 3px 7px; font-size: 13px; }
+.merchant-queue-content { display: flex; flex-direction: column; gap: 24px; }
+.merchant-queue-content > :is(.customer-notice, .customer-skeleton, .customer-empty-state) { margin-block: 0; }
+.merchant-experience :is(.v1-opportunity-list, .v1-preparation-list) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin: 0; align-items: start; }
+.merchant-experience [hidden] { display: none !important; }
+.merchant-experience .merchant-v1-menu-list > section > div > div + div { border-top: 1px solid var(--divider); }
+.merchant-experience .merchant-dialog-error { color: var(--destructive); padding: 12px; border: 1px solid currentColor; border-radius: var(--radius-control); }
+.merchant-experience .merchant-feed-heading { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 4px 0 -4px; color: var(--text-secondary); font-size: 13px; font-weight: 650; letter-spacing: .02em; }
+.merchant-feed-heading > span { font-variant-numeric: tabular-nums; }
+.merchant-experience :is(.v1-opportunity-card, .v1-preparation-card) { min-width: 0; padding: clamp(18px, 2vw, 25px); border: 1px solid var(--divider); border-radius: var(--merchant-radius); background: var(--surface); box-shadow: var(--customer-shadow); }
+.merchant-experience .v1-opportunity-card { border-top: 3px solid var(--dastak-accent); }
+.merchant-experience .v1-preparation-card.running-late { border-color: color-mix(in srgb, var(--destructive) 50%, var(--divider)); }
+.merchant-experience .v1-preparation-card.running-late .v1-opportunity-icon { color: var(--destructive); }
+.merchant-experience :is(.v1-opportunity-card, .v1-preparation-card) > header { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.merchant-experience :is(.v1-opportunity-card, .v1-preparation-card) > header strong { color: var(--text-primary); font-size: 16px; font-weight: 700; line-height: 1.4; }
+.merchant-experience :is(.v1-opportunity-card, .v1-preparation-card) > header small { font-size: 12px; }
+.merchant-experience .merchant-card-eyebrow { color: var(--dastak-accent); font-size: 11px !important; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+.merchant-experience .v1-opportunity-icon { color: var(--dastak-accent); }
+.merchant-experience :is(.merchant-status-badge, .merchant-deadline) { display: inline-flex; align-items: center; gap: 5px; max-width: 150px; padding: 7px 9px; border-radius: 9px; background: var(--dastak-accent-soft); color: var(--dastak-accent); font-size: 12px; line-height: 1.35; text-align: left; font-weight: 650; font-variant-numeric: tabular-nums; text-transform: none; }
+.merchant-experience .merchant-deadline.urgent { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, var(--surface)); }
+.merchant-experience :is(.v1-opportunity-card, .v1-preparation-card) ul { gap: 14px; padding: 18px 0; margin: 18px 0; }
+.merchant-experience .merchant-order-lines li { display: flex; align-items: start; gap: 12px; font-size: 15px; line-height: 1.45; }
+.merchant-order-lines li > span { min-width: 0; flex: 1; }
+.merchant-order-lines li > em { font-style: normal; font-size: 14px; font-variant-numeric: tabular-nums; }
+.merchant-experience .merchant-order-lines small { font-size: 13px; }
+.merchant-line-quantity { display: grid; place-items: center; min-width: 32px; min-height: 32px; padding: 3px; border-radius: 8px; color: var(--text-primary); background: var(--surface-muted); font-size: 13px; }
+.merchant-experience .v1-physical-check { align-items: start; gap: 11px; padding: 10px 0; font-size: 14px; line-height: 1.5; }
+.merchant-experience .v1-physical-check input { flex: 0 0 20px; width: 20px; height: 20px; margin: 1px 0 0; }
+.merchant-experience .v1-physical-check small { display: block; margin-top: 5px; font-size: 13px; color: var(--text-secondary); }
+.merchant-prep-options { min-width: 0; border: 0; margin: 16px 0 0; padding: 0; }
+.merchant-prep-options legend { display: flex; gap: 7px; align-items: center; margin-bottom: 11px; color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.merchant-prep-options legend small { margin-left: 4px; color: var(--text-secondary); font-weight: 400; }
+.merchant-prep-options > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.merchant-prep-options label { position: relative; display: grid; place-items: center; min-width: 48px; min-height: 44px; border: 1px solid var(--divider); border-radius: 11px; background: var(--surface-raised); color: var(--text-secondary); cursor: pointer; font-variant-numeric: tabular-nums; }
+.merchant-prep-options label.selected { border-color: var(--dastak-accent); background: var(--dastak-accent-soft); color: var(--text-primary); font-weight: 700; }
+.merchant-prep-options input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+.merchant-prep-options label:has(input:focus-visible) { outline: 3px solid var(--dastak-accent); outline-offset: 3px; }
+.merchant-prep-options:disabled { opacity: .6; }
+.merchant-experience .v1-opportunity-actions { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.5fr); gap: 10px; margin-top: 20px; }
+.merchant-experience .v1-opportunity-actions button { width: 100%; min-height: 48px; }
+.merchant-card-footnote { margin: 14px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.merchant-experience .v1-reservation-state { padding: 12px 14px; margin: 14px 0; background: var(--surface-subtle); color: var(--text-secondary); font-size: 13px; line-height: 1.55; border-radius: 12px; }
+.merchant-experience .merchant-payment-note { display: flex; align-items: start; gap: 8px; background: none; padding: 0; }
+.merchant-payment-note > svg { flex-shrink: 0; margin-top: 3px; color: var(--dastak-accent); }
+.merchant-experience .v1-preparation-times { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.merchant-experience .v1-preparation-times > span { padding: 11px; background: var(--surface-subtle); border-radius: 12px; }
+.merchant-experience .v1-preparation-times small { font-size: 12px; text-transform: none; }
+.merchant-experience .v1-preparation-times strong { font-size: 14px; }
+.merchant-experience .v1-ready-workflow { gap: 0; padding: 0; overflow: hidden; border: 1px solid var(--divider); border-radius: 16px; background: var(--surface-raised); }
+.merchant-preparation-step { padding: 18px; display: grid; gap: 13px; }
+.merchant-preparation-step + .merchant-preparation-step { border-top: 1px solid var(--divider); }
+.merchant-preparation-step > header { display: flex; align-items: center; gap: 9px; }
+.merchant-preparation-step > header > span { display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid var(--divider); border-radius: 50%; font-size: 12px; color: var(--text-secondary); }
+.merchant-preparation-step.complete > header > span { border-color: transparent; background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success); }
+.merchant-preparation-step h3 { flex: 1; margin: 0; font-size: 15px; font-weight: 650; }
+.merchant-preparation-step > header b { color: var(--success); font-size: 12px; font-weight: 600; }
+.merchant-preparation-step > label:not(.v1-physical-check) { display: grid; gap: 7px; color: var(--text-secondary); font-size: 13px; }
+.merchant-experience .v1-photo-field { position: relative; justify-items: center; padding: 20px 12px; border: 1px dashed var(--divider); border-radius: 13px; background: var(--surface); text-align: center; cursor: pointer; }
+.merchant-experience .v1-photo-field > svg { color: var(--dastak-accent); }
+.merchant-experience .v1-photo-field > span { color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.merchant-experience .v1-photo-field input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.merchant-experience .v1-photo-field:focus-within { outline: 3px solid var(--dastak-accent); outline-offset: 3px; }
+.merchant-experience .v1-photo-field.disabled { opacity: .65; cursor: default; }
+.merchant-evidence-preview { margin: 0; display: grid; gap: 8px; }
+.merchant-evidence-preview img { display: block; max-width: 100%; max-height: 200px; border-radius: 12px; object-fit: contain; background: var(--surface-muted); }
+.merchant-evidence-preview figcaption { color: var(--text-secondary); font-size: 12px; }
+.merchant-ready-confirmation { background: var(--surface-subtle); }
+.merchant-experience .v1-mark-ready { min-height: 48px; }
+.merchant-experience .v1-report-problem { min-height: 44px; padding: 10px 0; font-size: 13px; color: var(--destructive); }
+.merchant-experience .v1-ready-complete { color: var(--success); background: color-mix(in srgb, var(--success) 10%, var(--surface)); font-size: 14px; line-height: 1.5; }
+.merchant-experience .v1-merchant-pickup-state { grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--divider); background: var(--surface-subtle); padding: 16px; border-radius: 16px; }
+.merchant-experience .v1-merchant-pickup-state small { font-size: 12px; text-transform: none; }
+.merchant-experience .v1-merchant-pickup-state strong { font-size: 14px; }
+.merchant-experience .v1-merchant-pickup-code { padding: 18px; margin-top: 10px; gap: 10px; border-radius: 12px; background: var(--surface); }
+.merchant-experience .v1-merchant-pickup-code strong { font-size: 32px; color: var(--text-primary); letter-spacing: .18em; }
+.merchant-experience .v1-merchant-tracking { padding: 16px; border-color: var(--divider); border-radius: 16px; background: var(--surface-subtle); }
+.merchant-experience .v1-merchant-tracking :is(small, p, header b) { font-size: 13px; }
+.merchant-experience .v1-merchant-tracking > header > span { color: var(--dastak-accent); }
+.merchant-experience .v1-merchant-tracking > p { flex-wrap: wrap; }
+.merchant-experience .v1-merchant-tracking .customer-map-frame { min-height: 240px; }
+.merchant-experience .merchant-v1-operation-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); display: grid; gap: 12px; margin: 24px 0; overflow: visible; }
+.merchant-experience .merchant-v1-operation-grid article { min-width: 0; grid-template-columns: 24px minmax(0, 1fr); padding: 18px; gap: 12px; border-radius: 16px; background: var(--surface); }
+.merchant-experience .merchant-v1-operation-grid article > button { grid-column: 2; justify-self: start; min-width: 80px; }
+.merchant-experience .merchant-v1-operation-grid small { font-size: 13px; }
+.merchant-experience .merchant-v1-operation-grid b { grid-column: 2; font-size: 13px; }
+.merchant-experience .merchant-v1-canonical-note { border: 0; background: var(--surface-subtle); border-radius: 14px; padding: 16px; }
+.merchant-experience .merchant-v1-canonical-note small { font-size: 13px; }
+.merchant-experience .merchant-v1-catalogue-tools { margin-top: 24px; gap: 18px; }
+.merchant-experience .merchant-v1-catalogue-tools > label { border-radius: 14px; padding: 0 14px; background: var(--surface); }
+.merchant-experience .merchant-v1-catalogue-tools > label:focus-within { outline: 3px solid var(--dastak-accent); outline-offset: 2px; }
+.merchant-experience .merchant-v1-catalogue-tools input { border: 0; border-radius: 0; background: transparent; padding-inline: 0; outline: 0; }
+.merchant-experience .merchant-v1-view-switch { max-width: 100%; }
+.merchant-experience .merchant-v1-view-switch button { min-height: 44px; padding: 8px 16px; font-size: 14px; }
+.merchant-experience .merchant-v1-category-directory { gap: 30px; margin-block: 10px; }
+.merchant-experience .merchant-v1-category-directory h2 { font-size: 22px; }
+.merchant-experience .merchant-v1-category-directory .merchant-v1-visual-categories { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; }
+.merchant-experience .merchant-v1-visual-categories button { min-width: 0; white-space: normal; font-size: 14px; line-height: 1.45; }
+.merchant-experience .merchant-v1-browser-heading { scroll-margin-top: 24px; margin-top: 28px; }
+.merchant-experience .merchant-v1-category-browser { grid-template-columns: 154px minmax(0, 1fr); height: auto; overflow: visible; gap: 22px; margin-top: 22px; }
+.merchant-experience .merchant-v1-subcategory-rail { position: sticky; top: 20px; height: auto; max-height: calc(100dvh - 40px); overflow-y: auto; overscroll-behavior: auto; padding: 0 6px 10px 0; scrollbar-width: thin; }
+.merchant-experience .merchant-v1-subcategory-rail > button { display: flex; align-items: center; width: 100%; gap: 10px; min-height: 52px; padding: 9px; font-size: 13px; text-align: left; }
+.merchant-experience .merchant-v1-subcategory-rail .merchant-v1-product-art { flex: 0 0 38px; width: 38px; height: 38px; aspect-ratio: 1; margin: 0; }
+.merchant-experience .merchant-v1-category-results { height: auto; overflow: visible; padding-bottom: 20px; }
+.merchant-experience .merchant-v1-category-results h2 { white-space: normal; font-size: 21px; }
+.merchant-experience .merchant-v1-category-results header span { font-size: 13px; }
+.merchant-category-select { display: none; }
+.merchant-experience .merchant-v1-sku-gallery { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; align-items: stretch; }
+.merchant-experience .merchant-v1-sku-gallery > article { display: flex; flex-direction: column; gap: 10px; padding: 13px; border-radius: 17px; contain-intrinsic-size: 400px; box-shadow: none; }
+.merchant-experience .merchant-v1-sku-gallery .product-open-button { aspect-ratio: 1.12; min-height: 0; padding: 0; }
+.merchant-experience .merchant-v1-product-copy { min-height: 0; gap: 5px; }
+.merchant-experience .merchant-v1-product-copy > b { font-size: 11px; }
+.merchant-experience .merchant-v1-product-copy > strong { min-height: 0; font-size: 15px; line-height: 1.45; }
+.merchant-experience .merchant-v1-product-copy > small { white-space: normal; font-size: 13px; }
+.merchant-experience .merchant-v1-sku-gallery em { font-size: 12px; margin-top: 3px; }
+.merchant-experience .merchant-v1-price { margin-top: auto; padding-top: 4px; font-size: 16px; }
+.merchant-experience .merchant-v1-sku-gallery .merchant-v1-selection { top: 16px; left: 16px; }
+.merchant-experience .merchant-v1-save-bar { bottom: 20px; padding: 16px; border-radius: 16px; background: var(--surface-raised); }
+.merchant-experience .merchant-v1-save-bar small { font-size: 13px; }
+.merchant-experience .merchant-v1-save-bar > button:first-of-type { display: inline-flex; }
+.variant-dastak-merchant .product-detail-dialog { --detail-ink: var(--text-primary); --detail-muted: var(--text-secondary); --detail-surface: var(--surface-raised); --detail-canvas: var(--surface); --detail-line: var(--divider); --detail-accent: var(--dastak-accent); --detail-action: var(--primary-action); --detail-success: var(--success); color-scheme: light dark; }
+.variant-dastak-merchant .product-detail-dialog::backdrop { background: rgb(28 24 18 / 54%); backdrop-filter: blur(10px); }
+.variant-dastak-merchant .customer-product-paging { width: min(580px, calc(100% - 32px)); }
+.variant-dastak-merchant .product-detail-info h2 { font-size: 23px; line-height: 1.3; }
+.variant-dastak-merchant .product-detail-description { font-size: 15px; line-height: 1.6; }
+.variant-dastak-merchant :is(.product-stock-editor p, .product-stock-summary, .product-detail-action span, .product-detail-action small) { font-size: 13px; }
+.variant-dastak-merchant .product-stock-heading > span { font-size: 12px; }
+.variant-dastak-merchant .product-detail-action { padding: 14px 18px; }
+.variant-dastak-merchant .product-detail-action > button { color: var(--primary-action-foreground); font-size: 15px; min-height: 50px; }
+.variant-dastak-merchant .product-detail-action > button:disabled { color: var(--text-secondary); }
+.variant-dastak-merchant .product-stock-editor p[role=alert] { color: var(--destructive); }
+.variant-dastak-merchant .product-photo-dots button, .variant-dastak-merchant .product-detail-hero > button { min-height: 44px; }
+.merchant-experience .merchant-v1-menu-create { grid-template-columns: 1fr 1.5fr; gap: 16px; margin-top: 24px; }
+.merchant-experience .merchant-v1-menu-create form { grid-template-columns: 1fr; align-content: start; gap: 12px; padding: 20px; border-radius: 16px; }
+.merchant-experience .merchant-v1-menu-create label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 13px; }
+.merchant-experience .merchant-v1-menu-create button { justify-self: start; }
+.merchant-experience .merchant-v1-menu-list { gap: 24px; margin-top: 28px; }
+.merchant-experience .merchant-v1-menu-list > section { border-radius: 18px; }
+.merchant-experience .merchant-v1-menu-list > section > header { padding: 20px; background: var(--surface-subtle); }
+.merchant-experience .merchant-v1-menu-list > section > header strong { font-size: 19px; }
+.merchant-experience .merchant-v1-menu-list header small { font-size: 13px; }
+.merchant-experience .merchant-v1-menu-item { padding: 20px; gap: 18px; }
+.merchant-experience .merchant-v1-menu-item-fields { grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; }
+.merchant-experience .merchant-v1-menu-item-fields label { font-size: 13px; }
+.merchant-experience .merchant-v1-menu-item-fields .merchant-menu-description { grid-column: 1 / -1; }
+.merchant-experience .merchant-v1-menu-item-fields > div { grid-column: 1 / -1; gap: 10px; flex-wrap: wrap; }
+.merchant-experience .merchant-menu-options { padding: 12px; border: 1px solid var(--divider); border-radius: 14px; background: var(--surface-subtle); }
+.merchant-menu-options > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 4px; cursor: pointer; color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.merchant-menu-options > summary::after { content: "+"; font-size: 23px; font-weight: 400; }
+.merchant-menu-options[open] > summary::after { content: "−"; }
+.merchant-menu-options[open] > summary { margin-bottom: 12px; }
+.merchant-experience .merchant-v1-option-group { padding: 16px; margin-bottom: 12px; background: var(--surface); border-radius: 12px; }
+.merchant-experience .merchant-v1-option-row { grid-template-columns: minmax(0, 1fr) 92px auto auto auto; gap: 8px; }
+.merchant-experience .merchant-v1-option-create, .merchant-experience .merchant-v1-option-group > form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 14px; border-radius: 12px; }
+.merchant-experience .merchant-v1-option-create > strong { grid-column: 1 / -1; }
+.merchant-experience .merchant-v1-draft-warning { font-size: 13px; padding: 13px; border-radius: 12px; }
+.merchant-experience .royalty-shell { padding: 0; gap: 24px; }
+.merchant-experience .royalty-heading { align-items: center; }
+.merchant-experience .royalty-heading p { font-size: 15px; }
+.merchant-quiet-refresh { display: flex; flex-shrink: 0; align-items: center; gap: 8px; min-height: 44px; padding: 8px 0; border: 0; background: none; color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+.merchant-experience .royalty-summary { border-radius: 20px; background: var(--surface); }
+.merchant-experience .royalty-summary > div { padding: 24px; }
+.merchant-experience .royalty-summary > div:first-child { background: var(--dastak-accent-soft); }
+.merchant-experience .royalty-summary strong { font-size: clamp(23px, 2.3vw, 32px); line-height: 1.3; }
+.merchant-experience .royalty-summary small { font-size: 13px; }
+.merchant-experience .royalty-card { border-radius: 20px; box-shadow: var(--customer-shadow); }
+.merchant-experience :is(.royalty-help, .royalty-history small, .royalty-notice) { font-size: 13px; line-height: 1.5; }
+.merchant-experience .role-account { max-width: 900px; padding: 0; margin: 0; }
+.merchant-experience .role-account-heading { margin: 0 0 28px; padding: 0; }
+.merchant-experience .role-account-heading > p:last-child { font-size: 15px; }
+.merchant-experience .role-profile { width: 100%; padding: 26px; border: 1px solid var(--divider); border-radius: 20px; background: var(--surface); box-shadow: var(--customer-shadow); color: var(--text-primary); text-align: left; }
+.merchant-experience .role-profile-main { grid-template-columns: 58px minmax(0, 1fr) auto; gap: 16px; }
+.merchant-experience .role-profile-avatar { width: 58px; height: 58px; border-radius: 18px; background: var(--dastak-accent-soft); color: var(--dastak-accent); font-size: 23px; }
+.merchant-experience .role-profile-copy strong { font-size: 23px; line-height: 1.35; }
+.merchant-experience .role-profile-copy small { color: var(--text-secondary); font-size: 13px; }
+.merchant-experience .role-profile-edit { display: flex; gap: 7px; align-items: center; width: auto; height: auto; min-height: 44px; padding: 8px 0 8px 12px; border: 0; background: none; color: var(--dastak-accent); font-size: 14px; font-weight: 600; }
+.merchant-experience .role-profile-contacts { display: grid; gap: 9px; margin-top: 20px; padding-top: 18px; border-color: var(--divider); }
+.merchant-experience .role-profile-contacts > span { display: flex; align-items: start; gap: 9px; white-space: normal; word-break: break-word; font-size: 14px; color: var(--text-secondary); }
+.merchant-experience .role-profile-contacts svg { flex-shrink: 0; margin-top: 3px; }
+.merchant-experience .role-account-section { margin-top: 30px; }
+.merchant-experience .role-account-section h2 { font-size: 18px; margin-bottom: 14px; }
+.merchant-experience .role-account-group { border-radius: 18px; background: var(--surface); }
+.merchant-experience .role-account-row { min-height: 84px; padding: 18px; gap: 14px; }
+.merchant-experience .role-account-row strong { font-size: 15px; }
+.merchant-experience .role-account-row small { font-size: 13px; }
+.merchant-experience .role-row-trailing b { font-size: 12px; }
+.merchant-experience .customer-sheet { border-radius: var(--radius-sheet); border: 1px solid var(--divider); background: var(--surface); }
+.merchant-experience .role-account-detail-sheet { max-height: calc(100dvh - 48px); overflow-y: auto; }
+.merchant-experience .role-account-detail-sheet h2 { font-family: var(--font-dastak-wordmark); }
+.merchant-experience :is(.role-detail-introduction, .role-detail-list small, .role-detail-status small) { font-size: 14px; line-height: 1.6; }
+.merchant-experience .role-detail-done { width: 100%; }
+.merchant-experience .merchant-profile-presentation .customer-profile-name-control input { padding: 14px 16px 14px 48px; }
+.merchant-dialog-backdrop { position: fixed; z-index: 180; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(15 12 9 / 55%); backdrop-filter: blur(5px); }
+.merchant-dialog { width: min(100%, 520px); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 28px; border: 1px solid var(--divider); border-radius: var(--radius-sheet); background: var(--surface); color: var(--text-primary); box-shadow: var(--glass-shadow); }
+.merchant-dialog header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.merchant-dialog h2 { margin: 8px 0; font: 32px/1.15 var(--font-dastak-wordmark); }
+.merchant-dialog > p { margin: 12px 0 24px; color: var(--text-secondary); }
+.merchant-dialog > label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 650; }
+.merchant-dialog textarea { display: block; width: 100%; resize: vertical; }
+.merchant-dialog > small { display: block; margin-top: 8px; color: var(--text-secondary); }
+.merchant-dialog footer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
+.merchant-experience .merchant-danger-action { background: var(--destructive); color: var(--surface); }
+.merchant-experience .order-error { font-size: 14px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--divider)); border-radius: 13px; color: var(--destructive); background: color-mix(in srgb, var(--destructive) 7%, var(--surface)); }
+@media (min-width: 1320px) {
+  .merchant-experience :is(.v1-opportunity-list, .v1-preparation-list) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1100px) {
+  .merchant-experience { grid-template-columns: 174px minmax(0, 1fr); }
+  .merchant-sidebar { padding-inline: 12px; }
+  .merchant-main { padding-inline: 24px; }
+  .merchant-experience .merchant-v1-operation-grid { grid-template-columns: 1fr; }
+  .merchant-experience .merchant-v1-operation-grid article { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .merchant-experience .merchant-v1-operation-grid article > :is(button, b) { grid-column: 3; }
+  .merchant-experience .v1-merchant-queues button { flex-direction: column; gap: 6px; padding: 10px 5px; }
+  .merchant-experience .merchant-v1-option-row { grid-template-columns: minmax(0, 1fr) 90px auto; }
+  .merchant-experience .merchant-v1-menu-create { grid-template-columns: 1fr; }
+}
+@media (max-width: 900px) {
+  .merchant-experience { display: block; padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .merchant-sidebar { position: static; height: auto; display: block; padding: calc(20px + env(safe-area-inset-top)) 24px 20px; border: 0; border-bottom: 1px solid var(--divider); }
+  .merchant-brand { display: flex; align-items: baseline; margin: 0; font-size: 38px; }
+  .merchant-brand > small { margin: 0 0 0 14px; font-size: 10px; }
+  .merchant-sidebar-note { display: none; }
+  .merchant-navigation { position: fixed; z-index: 40; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--divider); background: var(--glass); backdrop-filter: blur(18px); }
+  .merchant-navigation button { min-height: 58px; flex-direction: column; justify-content: center; gap: 4px; padding: 7px 3px; font-size: 12px; border-radius: 13px; }
+  .merchant-experience .merchant-branch-context { min-height: 84px; margin-bottom: 26px; }
+  .merchant-experience .merchant-v1-save-bar { bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .merchant-experience .role-profile-main { grid-template-columns: 52px minmax(0, 1fr) auto; }
+}
+@media (max-width: 620px) {
+  .merchant-main { padding: 0 16px 44px; }
+  .merchant-sidebar { padding-inline: 20px; }
+  .merchant-experience .merchant-branch-context { grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
+  .merchant-experience .merchant-branch-context label { grid-column: 1 / -1; max-width: none; width: 100%; margin-top: 5px; }
+  .merchant-experience .merchant-branch-context select { width: 100%; }
+  .merchant-experience .merchant-orders-heading { gap: 18px; margin-bottom: 24px; }
+  .merchant-notification-status.attention { max-width: none; }
+  .merchant-experience .v1-merchant-queues { gap: 5px; margin-bottom: 24px; }
+  .merchant-experience .v1-merchant-queues button { display: flex; min-width: 0; font-size: 12px; padding: 10px 2px; gap: 5px; }
+  .merchant-experience :is(.v1-opportunity-card, .v1-preparation-card) > header { grid-template-columns: 34px minmax(0, 1fr); gap: 10px; }
+  .merchant-experience :is(.v1-opportunity-card, .v1-preparation-card) > header > b { grid-column: 2; width: fit-content; max-width: none; }
+  .merchant-experience .v1-opportunity-icon { width: 34px; height: 34px; }
+  .merchant-experience .v1-preparation-times { gap: 5px; }
+  .merchant-experience .v1-preparation-times > span { padding: 9px 7px; }
+  .merchant-experience .v1-preparation-times small { font-size: 11px; }
+  .merchant-experience .v1-preparation-times strong { font-size: 13px; }
+  .merchant-preparation-step { padding: 15px; }
+  .merchant-preparation-step > header { flex-wrap: wrap; }
+  .merchant-preparation-step > header > b { margin-left: 34px; }
+  .merchant-experience .v1-merchant-pickup-state { grid-template-columns: 1fr 1fr; gap: 14px; }
+  .merchant-experience .v1-merchant-pickup-state > span:first-child { grid-column: 1 / -1; }
+  .merchant-experience .customer-notice { flex-wrap: wrap; padding: 14px; }
+  .merchant-experience .customer-notice > div { flex-basis: calc(100% - 42px); }
+  .merchant-experience .customer-notice button { margin-left: 30px; }
+  .merchant-experience .customer-skeleton > div { grid-template-columns: 1fr; }
+  .merchant-experience .merchant-v1-operation-grid article { padding: 15px; }
+  .merchant-experience .merchant-v1-operation-grid article > button { padding-inline: 12px; min-width: 68px; }
+  .merchant-experience .merchant-v1-category-browser { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .merchant-experience .merchant-v1-subcategory-rail { display: none; }
+  .merchant-category-select { display: grid; gap: 7px; margin-top: 20px; font-size: 14px; color: var(--text-secondary); }
+  .merchant-experience .merchant-v1-category-directory .merchant-v1-visual-categories { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .merchant-experience .merchant-v1-visual-categories button { padding: 8px 4px; font-size: 13px; }
+  .merchant-experience .merchant-v1-sku-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .merchant-experience .merchant-v1-sku-gallery > article { padding: 10px; gap: 9px; }
+  .merchant-experience .merchant-v1-product-copy > strong { font-size: 14px; }
+  .merchant-experience .merchant-v1-product-copy > small { font-size: 12px; }
+  .merchant-experience .merchant-v1-save-bar { grid-template-columns: 1fr auto; gap: 8px; padding: 12px; }
+  .merchant-experience .merchant-v1-save-bar > span { grid-column: 1 / -1; }
+  .merchant-experience .merchant-v1-save-bar > button { width: 100%; }
+  .merchant-experience .merchant-v1-menu-item { padding: 16px; }
+  .merchant-experience .merchant-v1-menu-item-fields { grid-template-columns: minmax(0, 1fr); }
+  .merchant-experience .merchant-v1-option-row { grid-template-columns: minmax(0, 1fr) 90px; }
+  .merchant-experience .merchant-v1-option-row > span { grid-column: 1 / -1; }
+  .merchant-experience .merchant-v1-option-create, .merchant-experience .merchant-v1-option-group > form { grid-template-columns: 1fr; }
+  .merchant-experience .merchant-v1-draft-warning { flex-wrap: wrap; }
+  .merchant-experience .role-profile { padding: 20px; }
+  .merchant-experience .role-profile-main { grid-template-columns: 50px minmax(0, 1fr); gap: 12px; }
+  .merchant-experience .role-profile-avatar { width: 50px; height: 50px; border-radius: 16px; }
+  .merchant-experience .role-profile-copy strong { font-size: 21px; }
+  .merchant-experience .role-profile-edit { grid-column: 2; padding: 0; min-height: 32px; }
+  .merchant-experience .role-account-row { grid-template-columns: 34px minmax(0, 1fr) auto; padding: 16px 14px; gap: 10px; }
+  .merchant-experience .royalty-heading { align-items: start; flex-wrap: wrap; gap: 12px; }
+  .merchant-experience .royalty-summary { grid-template-columns: 1fr; }
+  .merchant-experience .royalty-summary > div { padding: 18px; }
+  .merchant-experience .royalty-summary > div + div { border-left: 0; border-top: 1px solid var(--divider); }
+  .merchant-experience .royalty-card { padding: 17px; }
+  .merchant-dialog-backdrop { padding: 16px; }
+  .merchant-dialog { padding: 22px; max-height: calc(100dvh - 32px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .merchant-experience *, .merchant-experience *::before, .merchant-experience *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+@media (forced-colors: active) {
+  .merchant-experience :is(button, .merchant-status-badge, .merchant-deadline, .merchant-prep-options label) { border: 1px solid ButtonText; }
+  .merchant-prep-options label.selected, .merchant-navigation button.selected { outline: 2px solid Highlight; }
+}

@@ -76,7 +76,15 @@ describe("Customer Web design and presentation contracts", () => {
     expect(css).toContain(".customer-experience :is(input, textarea, select) { font-size: 16px;");
     expect(css).toContain("prefers-reduced-motion: reduce");
     expect(css).toContain("prefers-color-scheme: dark");
-    expect(css).not.toMatch(/\.variant-dastak-(merchant|delivery|admin)/);
+    // Merchant now intentionally shares exactly these token-only theme blocks.
+    // Customer layout selectors must still never style another application.
+    const sharedThemes = [...css.matchAll(/\.variant-dastak-merchant, \.variant-dastak-customer \{([^}]+)\}/g)];
+    expect(sharedThemes).toHaveLength(2);
+    for (const [, declarations] of sharedThemes) {
+      expect(declarations.split(";").map((line) => line.trim()).filter(Boolean).every((line) => line.startsWith("--"))).toBe(true);
+    }
+    const customerLayout = css.replace(/\.variant-dastak-merchant, \.variant-dastak-customer \{[^}]+\}/g, "");
+    expect(customerLayout).not.toMatch(/\.variant-dastak-(merchant|delivery|admin)/);
   });
 
   it("meets WCAG AA text contrast for the shared light and dark tokens", () => {

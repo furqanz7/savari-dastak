@@ -5,6 +5,7 @@ import { ProductDetailCard, type DetailProduct } from "./ProductDetailCard";
 import { ProductDetailOverlay } from "./ProductDetailOverlay";
 import { merchantStockAction } from "./productDetail";
 import { userFacingError } from "./userFacingError";
+import { CustomerEmptyState, CustomerNotice, CustomerSkeleton } from "./CustomerUI";
 import {
   DastakV1RequestError,
   getV1MerchantCanonicalCatalogue,
@@ -184,8 +185,8 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
     finally { setBusy(undefined); }
   };
 
-  if (loading) return <div className="catalogue-loading" role="status"><span /> Loading canonical catalogue</div>;
-  if (!snapshot) return <section className="merchant-v1-control"><p className="order-error" role="alert">{error ?? "Merchant catalogue unavailable."}</p></section>;
+  if (loading) return <CustomerSkeleton label="Loading your Store" />;
+  if (!snapshot) return <section className="merchant-v1-control"><CustomerNotice title="Store couldn’t load" onRetry={() => void refresh()}>{error ?? "Your product library is temporarily unavailable."}</CustomerNotice></section>;
 
   const { branch } = snapshot;
   const selectedType = snapshot.categoryTypes.find((type) => type.categoryTypeId === categoryTypeId);
@@ -196,14 +197,14 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
   const detailSku = snapshot.skus.find((sku) => sku.skuId === detailId);
   return <section className="merchant-v1-control">
     <header className="merchant-orders-heading">
-      <div><p className="eyebrow">STORE &amp; CATALOGUE</p><h1>{branch.branchName}</h1><p>{branch.organizationName}</p></div>
+      <div><p className="eyebrow">YOUR STORE</p><h1>Stocked for the everyday.</h1><p>Products, stock and availability for {branch.branchName}.</p></div>
     </header>
 
-    {error && <p className="order-error" role="alert">{error}</p>}
+    {error && <CustomerNotice title="Store update needs attention" onRetry={() => void refresh()}>{error}</CustomerNotice>}
 
     <div className="merchant-v1-operation-grid">
       <article><Store size={19} /><span><strong>{branch.operationalState.isOpen ? "Branch open" : "Branch closed"}</strong><small>Controls branch availability</small></span><button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => void setOperation(!branch.operationalState.isOpen, false)}>{branch.operationalState.isOpen ? "Close" : "Open"}</button></article>
-      <article><CirclePause size={19} /><span><strong>{branch.operationalState.acceptingOrders ? "Accepting orders" : "New orders paused"}</strong><small>Paid commitments continue</small></span><button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => void setOperation(true, !branch.operationalState.acceptingOrders)}>{branch.operationalState.acceptingOrders ? "Pause" : "Accept"}</button></article>
+      <article><CirclePause size={19} /><span><strong>{branch.operationalState.acceptingOrders ? "Accepting orders" : "New orders paused"}</strong><small>Confirmed orders continue</small></span><button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => void setOperation(true, !branch.operationalState.acceptingOrders)}>{branch.operationalState.acceptingOrders ? "Pause" : "Resume"}</button></article>
       <article><ShieldCheck size={19} /><span><strong>{branch.capacity.available} of {branch.capacity.limit} slots available</strong><small>{branch.capacity.held} preparation slots held</small></span><b>Live</b></article>
     </div>
 
@@ -211,10 +212,10 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
 
     <div className="merchant-v1-catalogue-tools">
       <label><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products, brands, packs or categories" aria-label="Search products" /></label>
-      <div className="merchant-v1-view-switch" role="group" aria-label="Catalogue scope"><button type="button" className={!selectedOnly ? "selected" : ""} onClick={() => setSelectedOnly(false)}>All products</button><button type="button" className={selectedOnly ? "selected" : ""} onClick={() => setSelectedOnly(true)}>My storefront</button></div>
+      <div className="merchant-v1-view-switch" role="group" aria-label="Catalogue scope"><button type="button" aria-pressed={!selectedOnly} className={!selectedOnly ? "selected" : ""} onClick={() => setSelectedOnly(false)}>Product library</button><button type="button" aria-pressed={selectedOnly} className={selectedOnly ? "selected" : ""} onClick={() => setSelectedOnly(true)}>In my store</button></div>
       {showDirectory ? <div className="merchant-v1-category-directory">
         {navigationGroups.map((group) => <section key={group.key}>
-          <header><div><small>SHOP DASTAK</small><h2>{group.name}</h2></div></header>
+          <header><div><small>PRODUCT LIBRARY</small><h2>{group.name}</h2></div></header>
           <div className="merchant-v1-visual-categories" role="group" aria-label={`${group.name} categories`}>{group.types.map((type) => <button key={type.categoryTypeId} type="button" onClick={() => {
             const children = snapshot.categories.filter((item) => item.categoryTypeId === type.categoryTypeId);
             setCategoryTypeId(type.categoryTypeId);
@@ -229,6 +230,7 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
     </div>
 
     {selectedType ? <header ref={headingRef} className="merchant-v1-browser-heading"><h2>{selectedType.name}</h2><button type="button" className="secondary-button" onClick={() => { setCategoryTypeId(undefined); setCategoryId(undefined); setSubcategoryId(undefined); }}>All categories</button></header> : null}
+    {categoryTypeId ? <label className="merchant-category-select">Category<select value={categoryId ?? ""} onChange={(event) => { setCategoryId(event.target.value || undefined); setSubcategoryId(undefined); }}>{railCategories.map((item) => <option key={item.categoryId} value={item.categoryId}>{item.name}</option>)}</select></label> : null}
     {categoryTypeId ? <section className="merchant-v1-category-browser">
       <aside className="merchant-v1-subcategory-rail" role="group" aria-label="Subcategories">
         {railCategories.map((item) => <button key={item.categoryId} type="button" aria-pressed={categoryId === item.categoryId} className={categoryId === item.categoryId ? "selected" : ""} onClick={() => { setCategoryId(item.categoryId); setSubcategoryId(undefined); }}><MerchantCategoryImage supabaseUrl={auth.supabaseUrl} imageKey={item.imageKey ?? artworkKeys.categories.get(item.categoryId)} previewImageKeys={item.previewImageKeys} slug={item.slug} /><strong>{item.name}</strong></button>)}
@@ -254,16 +256,17 @@ function MerchantSkuGallery({ auth, skus, total, onLoadMore, subcategories, pend
   onSelection: (sku: V1MerchantCanonicalCatalogue["skus"][number]) => void;
   onDetail: (id: string) => void;
 }) {
-  if (!skus.length) return <div className="merchant-v1-empty-products"><PackageCheck size={28} /><strong>No matching products</strong><span>Choose another collection or change your search.</span></div>;
+  if (!skus.length) return <CustomerEmptyState title="No matching products" copy="Choose another collection or change your search." />;
   const names = new Map(subcategories.map((item) => [item.subcategoryId, item.name]));
-  return <><div className="merchant-v1-sku-list merchant-v1-sku-gallery" aria-live="polite">{skus.map((sku) => {
+  return <><div className="merchant-v1-sku-list merchant-v1-sku-gallery">{skus.map((sku) => {
     const selected = pendingSelections[sku.skuId] ?? sku.selected;
     return <article className={selected ? "selected" : ""} key={sku.skuId}>
       <button type="button" className="product-open-button" onClick={() => onDetail(sku.skuId)} aria-label={`View ${sku.name} details and stock`}><MerchantImage supabaseUrl={auth.supabaseUrl} imageKey={sku.imageKey} /></button>
       <span className={`merchant-v1-selection ${selected ? "selected" : ""}`} aria-hidden="true">{selected && <Check size={16} />}</span>
       <span className="merchant-v1-product-copy">{sku.brandName ? <b>{sku.brandName.toUpperCase()}</b> : null}<strong>{sku.name}</strong><small>{[sku.variant, sku.packSize, names.get(sku.subcategoryId)].filter(Boolean).join(" · ")}</small>{selected ? <em><Check size={13} /> {pendingSelections[sku.skuId] === undefined ? "In your store" : "Selected — not saved"}</em> : null}</span>
       <span className="merchant-v1-price"><strong>{formatPrice(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise && <small>{formatPrice(sku.listPricePaise)}</small>}</span>
-      <button type="button" className={selected ? "secondary-button" : "primary-button"} disabled={busy === "catalogue" || sku.catalogueStatus !== "ACTIVE"} aria-pressed={selected} onClick={() => onSelection(sku)}>{selected ? "Remove" : "Select"}</button>
+      {sku.selected ? <small className="merchant-stock-label">{sku.stockQuantity === undefined ? "Stock count not set" : `${sku.stockQuantity} available`}{sku.stockReservedQuantity ? ` · ${sku.stockReservedQuantity} reserved` : ""}</small> : null}
+      <button type="button" className={selected ? "secondary-button" : "primary-button"} disabled={busy === "catalogue" || sku.catalogueStatus !== "ACTIVE"} aria-label={`${selected ? "Remove" : "Select"} ${sku.name}`} aria-pressed={selected} onClick={() => onSelection(sku)}>{selected ? "Remove" : "Select"}</button>
     </article>;
   })}</div>{skus.length < total ? <button className="secondary-button merchant-v1-load-more" type="button" onClick={onLoadMore}>Show more products · {total - skus.length} remaining</button> : null}</>;
 }
@@ -337,7 +340,7 @@ export function MerchantProductDetail({ sku, products, branch, supabaseUrl, onSe
   onSave: (sku: MerchantDetailSKU, quantity: number) => Promise<MerchantDetailSKU | undefined>;
   onAdd: (sku: MerchantDetailSKU) => Promise<MerchantDetailSKU | undefined>; busy: boolean; error?: string;
 }) {
-  return <ProductDetailOverlay selectedId={sku.skuId} products={products.map(merchantDetail)} supabaseUrl={supabaseUrl}
+  return <ProductDetailOverlay selectedId={sku.skuId} products={products.map(merchantDetail)} supabaseUrl={supabaseUrl} showPagingControls
     onSelect={onSelect} onClose={onClose} disabled={busy} renderProduct={(product, select) => {
       const item = products.find((candidate) => candidate.skuId === product.id);
       return item ? <MerchantProductPage sku={item} products={products} branch={branch} supabaseUrl={supabaseUrl}
