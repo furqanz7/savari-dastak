@@ -36,7 +36,7 @@ describe("merchant operations state", () => {
   it("reports a completely successful empty desk only after every feed settles", () => {
     let states = initialMerchantFeedStates();
     expect(merchantFeedsSettledWithoutErrors(states)).toBe(false);
-    const feeds: MerchantFeedKey[] = ["retail", "restaurant", "fulfilments", "recovery", "returns", "settlements"];
+    const feeds: MerchantFeedKey[] = ["retail", "restaurant", "fulfilments", "recovery", "returns", "settlements", "legacy"];
     feeds.forEach((feed) => { states = merchantFeedSucceeded(states, feed); });
     expect(merchantFeedsSettledWithoutErrors(states)).toBe(true);
   });

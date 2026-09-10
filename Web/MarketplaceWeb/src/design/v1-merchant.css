@@ -3,6 +3,10 @@
 .v1-merchant-panel h2 { margin: 5px 0; font-size: 24px; }
 .v1-merchant-panel header span, .v1-merchant-empty { color: var(--text-secondary); font-size: 13px; }
 .v1-merchant-empty { margin: 18px 0 0; }
+.v1-merchant-queues { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
+.v1-merchant-queues button { min-width: 0; min-height: 45px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid var(--divider); border-radius: 999px; color: var(--text-secondary); background: var(--surface); font: inherit; font-size: 12px; font-weight: 720; }
+.v1-merchant-queues button.selected { border-color: var(--dastak-accent); color: var(--dastak-accent); background: var(--dastak-accent-soft); }
+.v1-merchant-queues b { min-width: 22px; padding: 3px 6px; border-radius: 999px; color: inherit; background: color-mix(in srgb, currentColor 10%, transparent); font-size: 10px; font-variant-numeric: tabular-nums; }
 .v1-opportunity-list { display: grid; gap: 12px; margin-top: 18px; }
 .v1-opportunity-card { padding: 16px; border: 1px solid var(--divider); border-radius: 14px; background: var(--surface); }
 .v1-opportunity-card > header { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; }
@@ -42,6 +46,17 @@
 .v1-merchant-pickup-code { grid-column: 1 / -1; display: grid; justify-items: center; gap: 7px; padding: 13px; border-radius: 9px; background: var(--surface); text-align: center; }
 .v1-merchant-pickup-code strong { color: var(--route); font-size: 30px; letter-spacing: .16em; font-variant-numeric: tabular-nums; }
 .v1-merchant-pickup-state > p { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin: 0; color: var(--success); font-size: 12px; font-weight: 750; }
+.v1-merchant-tracking { display: grid; gap: 10px; margin: 0 0 14px; padding: 12px; border: 1px solid color-mix(in srgb, var(--route) 28%, var(--divider)); border-radius: 12px; background: color-mix(in srgb, var(--route) 5%, var(--surface)); }
+.v1-merchant-tracking > header { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 9px; }
+.v1-merchant-tracking > header > span { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; color: var(--route); background: var(--surface); }
+.v1-merchant-tracking > header > div { min-width: 0; display: grid; gap: 2px; }
+.v1-merchant-tracking small { color: var(--text-secondary); font-size: 11px; }
+.v1-merchant-tracking > header b { display: inline-flex; align-items: center; gap: 4px; color: var(--success); font-size: 11px; }
+.v1-merchant-tracking.delayed > header b { color: var(--text-secondary); }
+.v1-merchant-tracking .customer-route-panel { border-radius: 10px; }
+.v1-merchant-tracking .customer-map-frame { min-height: 220px; }
+.v1-merchant-tracking > p { display: flex; justify-content: space-between; gap: 10px; margin: 0; color: var(--text-secondary); font-size: 11px; }
+.v1-merchant-tracking > p small { white-space: nowrap; }
 .v1-ready-workflow { display: grid; gap: 12px; padding: 14px; border-radius: 12px; background: var(--surface-muted); }
 .v1-ready-workflow > label:not(.v1-physical-check), .v1-problem-form label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
 .v1-ready-workflow input[type="number"], .v1-ready-workflow input[type="file"], .v1-problem-form textarea { width: 100%; min-height: 43px; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--divider); border-radius: 10px; color: var(--text-primary); background: var(--surface); font: inherit; }
@@ -58,6 +73,7 @@
 .v1-problem-form > div { display: flex; justify-content: flex-end; gap: 8px; }
 .v1-problem-form button { min-height: 42px; margin: 0; }
 .v1-problem-history { display: block; margin-top: 8px; color: var(--text-secondary); }
+.legacy-order li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 
 @media (max-width: 620px) {
   .v1-merchant-panel { padding: 15px; }
@@ -68,6 +84,9 @@
   .v1-preparation-times { grid-template-columns: 1fr; }
   .v1-merchant-pickup-state { grid-template-columns: 1fr; }
   .v1-problem-form > div { display: grid; grid-template-columns: 1fr 1fr; }
+  .v1-merchant-queues { display: flex; overflow-x: auto; scrollbar-width: none; }
+  .v1-merchant-queues button { min-width: 112px; }
+  .v1-merchant-tracking > p { display: grid; }
 }
 .merchant-v1-control { width: min(1040px, 100%); margin: 0 auto; padding: 6px 0 120px; }
 .merchant-v1-operation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }

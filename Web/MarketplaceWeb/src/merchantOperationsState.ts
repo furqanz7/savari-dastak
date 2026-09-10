@@ -6,7 +6,8 @@ export type MerchantFeedKey =
   | "fulfilments"
   | "recovery"
   | "returns"
-  | "settlements";
+  | "settlements"
+  | "legacy";
 
 export type MerchantFeedState = {
   loaded: boolean;
@@ -23,6 +24,7 @@ export const merchantFeedLabels: Record<MerchantFeedKey, string> = {
   recovery: "History and recovery",
   returns: "Returns",
   settlements: "Settlements",
+  legacy: "Earlier orders",
 };
 
 export function initialMerchantFeedStates(): MerchantFeedStates {
@@ -33,6 +35,7 @@ export function initialMerchantFeedStates(): MerchantFeedStates {
     recovery: { loaded: false, loading: true },
     returns: { loaded: false, loading: true },
     settlements: { loaded: false, loading: true },
+    legacy: { loaded: false, loading: true },
   };
 }
 

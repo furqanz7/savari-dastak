@@ -421,6 +421,7 @@ export type V1MerchantFulfilment = {
     pickupCode?: string;
     pickedUpAt?: string;
   };
+  tracking?: CustomerDeliveryTracking;
   canDeclarePackages: boolean;
   canAddEvidence: boolean;
   canMarkReady: boolean;
@@ -2437,6 +2438,7 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
       nextEligibleAt: optionalTimestamp(rider.nextEligibleAt),
     },
     delivery: delivery ? parseMerchantDelivery(delivery) : undefined,
+    tracking: parseCustomerDeliveryTracking(source.tracking),
     canDeclarePackages: requiredBoolean(source.canDeclarePackages),
     canAddEvidence: requiredBoolean(source.canAddEvidence),
     canMarkReady: requiredBoolean(source.canMarkReady),

@@ -37,6 +37,26 @@ export function customerRiderArrived(order: V1Order) {
   return order.status === "OUT_FOR_DELIVERY" && (order.tracking?.phase === "ARRIVED" || Boolean(order.delivery?.riderArrivedAt));
 }
 
+export function deliveryTrackingFreshness(
+  tracking: CustomerDeliveryTracking | undefined,
+  now: number,
+  connected = true,
+) {
+  const location = tracking?.location;
+  const recordedAt = tracking?.recordedAt;
+  const live = Boolean(connected && location && tracking?.recordedAt && tracking.liveUntil
+    && tracking.accuracyMeters !== undefined && tracking.accuracyMeters >= 0 && tracking.accuracyMeters <= 35
+    && Date.parse(tracking.liveUntil) > now && Date.parse(tracking.recordedAt) <= now + 5_000);
+  return {
+    location,
+    recordedAt,
+    live,
+    freshness: !connected ? "Updates delayed · last-known information" : !location
+      ? "Waiting for the rider’s first location" : live
+        ? "Location updates automatically" : "Last-known location · not live",
+  };
+}
+
 export function customerTrackingPresentation(order: V1Order, now: number, connected = true) {
   if (!["PAID", "PREPARING", "PICKUP_IN_PROGRESS", "OUT_FOR_DELIVERY"].includes(order.status)) return undefined;
   const tracking = order.tracking;
@@ -44,9 +64,9 @@ export function customerTrackingPresentation(order: V1Order, now: number, connec
   // A legacy coordinate has no precision/expiry authority. Show it as last-known.
   const location = tracking ? tracking.location : order.delivery?.riderLocation;
   const recordedAt = tracking ? tracking.recordedAt : order.delivery?.riderLocationUpdatedAt;
-  const live = Boolean(connected && location && tracking?.recordedAt && tracking.liveUntil
-    && tracking.accuracyMeters !== undefined && tracking.accuracyMeters >= 0 && tracking.accuracyMeters <= 35
-    && Date.parse(tracking.liveUntil) > now && Date.parse(tracking.recordedAt) <= now + 5_000);
+  const freshness = tracking
+    ? deliveryTrackingFreshness(tracking, now, connected)
+    : { location, recordedAt, live: false, freshness: connected ? "Last-known location · not live" : "Updates delayed · last-known information" };
   const phases: Record<string, string> = {
     ASSIGNED: "Your delivery partner is assigned", EN_ROUTE_TO_PICKUPS: "Collecting your order",
     PICKUP_IN_PROGRESS: "Collecting your order", ALL_PACKAGES_PICKED_UP: "Every package is collected",
@@ -54,8 +74,7 @@ export function customerTrackingPresentation(order: V1Order, now: number, connec
     DELIVERY_RECOVERY: "Your delivery needs assistance",
   };
   return {
-    location, recordedAt, live, riderName: tracking?.riderName ?? "Your delivery partner",
+    ...freshness, riderName: tracking?.riderName ?? "Your delivery partner",
     phase: customerRiderArrived(order) ? "At your delivery destination" : phases[tracking?.phase ?? "OUT_FOR_DELIVERY"] ?? "Delivery in progress",
-    freshness: !connected ? "Updates delayed · last-known information" : !location ? "Waiting for the rider’s first location" : live ? "Location updates automatically" : "Last-known location · not live",
   };
 }

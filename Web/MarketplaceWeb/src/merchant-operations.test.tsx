@@ -29,7 +29,7 @@ describe("Merchant operations status", () => {
     expect(failed).not.toContain("Loading fulfilments");
 
     let settled = initialMerchantFeedStates();
-    const feeds: MerchantFeedKey[] = ["retail", "restaurant", "fulfilments", "recovery", "returns", "settlements"];
+    const feeds: MerchantFeedKey[] = ["retail", "restaurant", "fulfilments", "recovery", "returns", "settlements", "legacy"];
     feeds.forEach((feed) => { settled = merchantFeedSucceeded(settled, feed); });
     const empty = renderToStaticMarkup(
       <MerchantOperationsStatus states={settled} hasContent={false} />,

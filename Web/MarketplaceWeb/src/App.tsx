@@ -749,6 +749,7 @@ function Ready({ access, email, session, onSignOut }: {
         phoneNumber={access.profile?.phoneNumber}
         supabaseUrl={config.supabaseUrl}
         publishableKey={config.supabasePublishableKey}
+        webPushPublicKey={config.webPushPublicKey!}
         onSignOut={onSignOut}
       />
     );

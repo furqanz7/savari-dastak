@@ -376,6 +376,12 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 .merchant-orders-heading h1 { margin: 5px 0 8px; font-size: 38px; line-height: 1.08; }
 .merchant-orders-heading p:last-child { margin: 0; color: var(--text-secondary); }
+.merchant-notification-status { display: inline-flex; align-items: center; gap: 7px; margin: 0; padding: 10px 13px; border: 1px solid var(--divider); border-radius: 14px; color: var(--text-secondary); background: var(--surface-raised); font-size: 12px; }
+.merchant-notification-status.enabled { color: var(--success); }
+.merchant-notification-status.attention { max-width: 430px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+.merchant-notification-status.attention > span { display: grid; gap: 2px; }
+.merchant-notification-status.attention small { color: var(--text-secondary); font-size: 10px; line-height: 1.35; }
+.merchant-notification-status.attention button { min-height: 34px; padding: 0 11px; border: 0; border-radius: 999px; color: white; background: var(--dastak-accent); font: inherit; font-size: 10px; font-weight: 750; }
 .merchant-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2217,6 +2223,8 @@ button:disabled { cursor: wait; opacity: .55; }
   .merchant-workspace { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
   .merchant-orders-heading { align-items: center; padding-top: 8px; }
   .merchant-orders-heading h1 { font-size: 30px; }
+  .merchant-orders-heading { display: grid; }
+  .merchant-notification-status.attention { width: 100%; max-width: none; box-sizing: border-box; }
   .merchant-tabs {
     position: fixed;
     z-index: 15;

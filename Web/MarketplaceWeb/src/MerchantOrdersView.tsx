@@ -1,10 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BookOpen, ClipboardList, UserRound, WalletCards } from "lucide-react";
+import { BellRing, BookOpen, Check, ClipboardList, UserRound, WalletCards } from "lucide-react";
 import { MerchantV1CommerceControl } from "./MerchantV1CommerceControl";
 import { MerchantV1Opportunities } from "./MerchantV1Opportunities";
 import { RoleAccountView } from "./RoleAccountView";
 import { RoyaltyPanel } from "./RoyaltyPanel";
+import { useDastakWebPush, type DastakWebPushController } from "./useDastakWebPush";
 
 type Props = {
   accessToken: string;
@@ -15,6 +16,7 @@ type Props = {
   phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  webPushPublicKey: string;
   onSignOut: () => void;
 };
 
@@ -29,6 +31,7 @@ export function MerchantOrdersView({
   phoneNumber,
   supabaseUrl,
   publishableKey,
+  webPushPublicKey,
   onSignOut,
 }: Props) {
   const auth = useMemo(
@@ -36,6 +39,14 @@ export function MerchantOrdersView({
     [accessToken, publishableKey, supabaseUrl],
   );
   const [section, setSection] = useState<MerchantSection>("orders");
+  const webPushAuthentication = useMemo(() => ({
+    accountId,
+    accessToken,
+    supabaseUrl,
+    publishableKey,
+    publicKey: webPushPublicKey,
+  }), [accessToken, accountId, publishableKey, supabaseUrl, webPushPublicKey]);
+  const webPush = useDastakWebPush(webPushAuthentication);
 
   return (
     <div className="merchant-workspace">
@@ -71,6 +82,7 @@ export function MerchantOrdersView({
               <h1>Orders</h1>
               <p>Live exact-item requests and fulfilments.</p>
             </div>
+            <MerchantNotificationStatus controller={webPush} />
           </header>
           <MerchantV1Opportunities
             auth={auth}
@@ -82,6 +94,22 @@ export function MerchantOrdersView({
       )}
     </div>
   );
+}
+
+export function MerchantNotificationStatus({ controller }: { controller: DastakWebPushController }) {
+  if (controller.status === "checking") {
+    return <p className="merchant-notification-status" role="status"><BellRing size={17} /> Checking order alerts…</p>;
+  }
+  if (controller.status === "enabled") {
+    return <p className="merchant-notification-status enabled"><Check size={17} /> New-order alerts on</p>;
+  }
+  const blocked = controller.status === "blocked";
+  const unsupported = controller.status === "unsupported";
+  return <aside className="merchant-notification-status attention" aria-label="New-order notifications">
+    <BellRing size={18} />
+    <span><strong>{blocked ? "Order alerts are blocked" : unsupported ? "Browser alerts unavailable" : "Don’t miss a new request"}</strong><small>{controller.message ?? (blocked ? "Allow notifications in browser settings, then retry." : unsupported ? "Keep this order desk open for live in-app updates." : "Enable browser alerts for incoming retail and restaurant requests.")}</small></span>
+    {!unsupported ? <button type="button" disabled={controller.status === "enabling"} onClick={() => void controller.enable()}>{controller.status === "enabling" ? "Enabling…" : blocked ? "Retry" : "Enable alerts"}</button> : null}
+  </aside>;
 }
 
 function MerchantTab({

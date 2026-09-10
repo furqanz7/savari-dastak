@@ -1024,6 +1024,35 @@ describe("Dastak V1 web contract", () => {
     expect(result.delivery?.pickupCode).toBeUndefined();
   });
 
+  it("decodes the merchant-safe rider tracking projection without exposing destination data", () => {
+    const result = parseV1MerchantFulfilment({
+      ...fulfilmentFixture(),
+      tracking: {
+        missionId: categoryId,
+        phase: "EN_ROUTE_TO_PICKUPS",
+        riderName: "Founder Rider",
+        transportType: "MOTORBIKE",
+        location: { latitude: 12.9716, longitude: 77.5946 },
+        recordedAt: "2026-09-10T08:00:00Z",
+        liveUntil: "2026-09-10T08:00:30Z",
+        accuracyMeters: 8,
+        customerDestination: { latitude: 1, longitude: 1 },
+      },
+    });
+
+    expect(result.tracking).toEqual({
+      missionId: categoryId,
+      phase: "EN_ROUTE_TO_PICKUPS",
+      riderName: "Founder Rider",
+      transportType: "MOTORBIKE",
+      location: { latitude: 12.9716, longitude: 77.5946 },
+      recordedAt: "2026-09-10T08:00:00Z",
+      liveUntil: "2026-09-10T08:00:30Z",
+      accuracyMeters: 8,
+    });
+    expect(JSON.stringify(result.tracking)).not.toContain("customerDestination");
+  });
+
   it("parses a Restaurant/Cafe fulfilment without requiring a retail SKU", () => {
     const result = parseV1MerchantFulfilment({
       ...fulfilmentFixture(),
