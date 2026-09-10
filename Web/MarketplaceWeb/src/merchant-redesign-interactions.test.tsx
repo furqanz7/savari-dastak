@@ -255,4 +255,35 @@ describe("Merchant menu redesign preserves drafts and writes", () => {
     expect(host.querySelector(".merchant-v1-draft-warning")).toBeNull();
     expect(host.querySelector("details summary")?.textContent).toBe("Add to your menu");
   });
+
+  it("hides a category as inactive and immediately renders the authoritative menu response", async () => {
+    vi.mocked(getV1MerchantRestaurantMenu).mockResolvedValue(menu);
+    const hidden = structuredClone(menu);
+    hidden.categories[0] = { ...hidden.categories[0], status: "INACTIVE", version: 2 };
+    vi.mocked(upsertV1RestaurantMenuEntity).mockResolvedValue({
+      entityId: "category",
+      entityType: "CATEGORY",
+      menu: hidden,
+    });
+
+    await render(<MerchantV1CommerceControl auth={auth} branch={branch} onSessionExpired={() => undefined} />);
+    await click(button("Hide"));
+
+    expect(vi.mocked(upsertV1RestaurantMenuEntity)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(upsertV1RestaurantMenuEntity).mock.calls[0][0]).toMatchObject({
+      branchId: "branch",
+      entityType: "CATEGORY",
+      entityId: "category",
+      expectedVersion: 1,
+      payload: {
+        name: "Breakfast",
+        description: "",
+        sortOrder: 0,
+        status: "INACTIVE",
+      },
+    });
+    expect(host.textContent).toContain("1 items · inactive");
+    expect(button("Activate")).toBeTruthy();
+    expect(host.textContent).not.toContain("Menu update needs attention");
+  });
 });

@@ -132,6 +132,41 @@ insert into dastak_v1.restaurant_menu_options (
  '99700000-0000-4000-8000-000000000021','Extra spicy',500,'ACTIVE',
  '99700000-0000-4000-8000-000000000003','99700000-0000-4000-8000-000000000003');
 
+-- Menu visibility is a versioned inactive state, never a destructive delete.
+set local role authenticated;
+select set_config('request.jwt.claim.sub','99700000-0000-4000-8000-000000000003',true);
+select is(
+  public.dastak_v1_upsert_restaurant_menu_entity(
+    '99700000-0000-4000-8000-000000000021','CATEGORY',
+    '99700000-0000-4000-8000-000000000040',1,
+    '{"name":"Breakfast","description":"","sortOrder":1,"status":"INACTIVE"}',
+    'restaurant-category-hide'
+  ) #>> '{menu,categories,0,status}',
+  'INACTIVE',
+  'merchant Hide returns an authoritative inactive category projection'
+);
+select is(
+  pg_catalog.jsonb_array_length(public.dastak_v1_upsert_restaurant_menu_entity(
+    '99700000-0000-4000-8000-000000000021','CATEGORY',
+    '99700000-0000-4000-8000-000000000040',1,
+    '{"name":"Breakfast","description":"","sortOrder":1,"status":"INACTIVE"}',
+    'restaurant-category-hide'
+  ) #> '{menu,categories}'),
+  1,
+  'merchant Hide retains the category as inactive instead of deleting it'
+);
+select is(
+  public.dastak_v1_upsert_restaurant_menu_entity(
+    '99700000-0000-4000-8000-000000000021','CATEGORY',
+    '99700000-0000-4000-8000-000000000040',2,
+    '{"name":"Breakfast","description":"","sortOrder":1,"status":"ACTIVE"}',
+    'restaurant-category-activate'
+  ) #>> '{menu,categories,0,status}',
+  'ACTIVE',
+  'merchant Activate restores the category through the same versioned command'
+);
+reset role;
+
 insert into dastak_v1.category_types (id,name,slug,status,created_by) values
 ('99700000-0000-4000-8000-000000000049','Restaurant Retail','restaurant-retail','ACTIVE',
  '99700000-0000-4000-8000-000000000002');
@@ -166,6 +201,16 @@ where id='99700000-0000-4000-8000-000000000052';
 insert into dastak_v1.merchant_sku_selections (branch_id,sku_id,state,selected_by) values
 ('99700000-0000-4000-8000-000000000031','99700000-0000-4000-8000-000000000052',
  'SELECTED','99700000-0000-4000-8000-000000000003');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub','99700000-0000-4000-8000-000000000003',true);
+select is(
+  public.dastak_v1_merchant_canonical_catalogue_snapshot(null,1)
+    #>> '{branch,branchId}',
+  '99700000-0000-4000-8000-000000000031',
+  'default retail Store discovery skips the authorized Restaurant/Cafe branch'
+);
+reset role;
 
 insert into dastak_v1.platform_settings (
   id, setting_key, scope_type, setting_value, updated_by, update_reason

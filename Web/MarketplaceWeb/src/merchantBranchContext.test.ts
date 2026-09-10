@@ -3,6 +3,7 @@ import { DastakV1RequestError } from "./dastakV1";
 import {
   classifyMerchantBranch,
   classifyMerchantCommerceProbeFailure,
+  discoverDefaultMerchantBranches,
   mergeMerchantBranches,
   merchantCommerceKind,
   persistMerchantBranch,
@@ -44,6 +45,24 @@ describe("merchant branch context", () => {
     ]);
   });
 
+  it("treats an inapplicable retail probe as healthy restaurant-only discovery", async () => {
+    const result = await discoverDefaultMerchantBranches(auth, async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if (body.operation === "merchantSnapshot") {
+        return Response.json({ error: { code: "not_found", message: "retail merchant branch not found" } }, { status: 404 });
+      }
+      return Response.json(restaurantFixture());
+    });
+
+    expect(result.failures).toEqual(["not_applicable"]);
+    expect(result.branches).toEqual([{
+      id: branchId,
+      branchName: "Main",
+      organizationName: "Dastak Cafe",
+      merchantType: "RESTAURANT_CAFE",
+    }]);
+  });
+
   it("does not misclassify permission failures as retail", async () => {
     let requests = 0;
     await expect(classifyMerchantBranch(auth, { id: branchId, displayName: "Main" }, async () => {
@@ -78,5 +97,27 @@ function retailFixture() {
       capacity: { limit: 10, held: 0, available: 10 },
     },
     categoryTypes: [], categories: [], subcategories: [], skus: [], truncated: false,
+  };
+}
+
+function restaurantFixture() {
+  return {
+    restaurant: {
+      organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      branchId,
+      name: "Dastak Cafe",
+      branchName: "Main",
+      imageKey: null,
+      description: null,
+      serviceZoneId: null,
+      acceptingOrders: true,
+      isOpen: true,
+      operationalVersion: 1,
+      branchStatus: "ACTIVE",
+      merchantType: "RESTAURANT_CAFE",
+      softActiveOrderThreshold: 5,
+      activeOrderCount: 0,
+    },
+    categories: [],
   };
 }
