@@ -231,7 +231,7 @@ export default function App() {
 
   return (
     <main className={`app product-${config.product} variant-${config.variant}${usesCustomerOnboarding ? " customer-onboarding-active" : ""}`}>
-      {!usesFullDastakAuth && !(["dastak-customer", "dastak-merchant"].includes(config.variant) && view.phase === "ready") && <header className="topbar" aria-hidden={showsDastakLaunch || undefined}>
+      {!usesFullDastakAuth && !(["dastak-customer", "dastak-merchant", "dastak-delivery"].includes(config.variant) && view.phase === "ready") && <header className="topbar" aria-hidden={showsDastakLaunch || undefined}>
         <Brand />
         {view.phase !== "signed_out" && view.phase !== "loading" && !(
           config.product === "dastak" &&

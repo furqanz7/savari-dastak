@@ -143,14 +143,14 @@ export function RoleAccountView({
       <p>{copy.introduction}</p>
     </header>
 
-    <button className="role-profile" type="button" aria-label={roleName === "Merchant" ? "Edit merchant profile" : undefined} onClick={() => setEditing(true)} disabled={loading}>
+    <button className="role-profile" type="button" aria-label={roleName === "Merchant" ? "Edit merchant profile" : isDeliveryPartner ? "Edit delivery profile" : undefined} onClick={() => setEditing(true)} disabled={loading}>
       <span className="role-profile-main">
         <span className="role-profile-avatar" aria-hidden="true">{initials(profile.displayName || roleName)}</span>
         <span className="role-profile-copy">
           <strong>{loading ? "Loading account" : profile.displayName || `${roleName} account`}</strong>
           <small>{roleName}</small>
         </span>
-        <span className="role-profile-edit" aria-hidden="true"><Pencil size={16} />{roleName === "Merchant" ? <span>Edit profile</span> : null}</span>
+        <span className="role-profile-edit" aria-hidden="true"><Pencil size={16} />{roleName === "Merchant" || isDeliveryPartner ? <span>Edit profile</span> : null}</span>
       </span>
       {!loading && <span className="role-profile-contacts">
         <span><Phone size={15} />{profile.phoneNumber || "Add a contact number"}</span>
@@ -210,7 +210,7 @@ export function RoleAccountView({
       </div>
     </section>
 
-    {notificationSurface ? <section className="role-account-section" aria-label="Browser order alerts"><h2>Order alerts</h2>{notificationSurface}</section> : null}
+    {notificationSurface ? <section className="role-account-section" aria-label={isDeliveryPartner ? "Browser delivery alerts" : "Browser order alerts"}><h2>{isDeliveryPartner ? "Delivery alerts" : "Order alerts"}</h2>{notificationSurface}</section> : null}
 
     {isDeliveryPartner && <section className="role-account-section" aria-labelledby="role-support-title">
       <h2 id="role-support-title">Support and safety</h2>
@@ -249,7 +249,7 @@ export function RoleAccountView({
       {loadFailed && <button type="button" onClick={() => void loadProfile()}>Try again</button>}
     </div>)}
 
-    {editing && <div className={roleName === "Merchant" ? "customer-experience merchant-profile-presentation" : undefined}><AccountProfileSheet presentation={roleName === "Merchant" ? "customer" : undefined} profile={profile} busy={busy} error={error} contactMessage={copy.editorPrivacy} onDismiss={() => { setEditing(false); setError(undefined); }} onSave={save} /></div>}
+    {editing && <div className={roleName === "Merchant" ? "customer-experience merchant-profile-presentation" : isDeliveryPartner ? "customer-experience rider-profile-presentation" : undefined}><AccountProfileSheet presentation={roleName === "Merchant" || isDeliveryPartner ? "customer" : undefined} profile={profile} busy={busy} error={error} contactMessage={copy.editorPrivacy} onDismiss={() => { setEditing(false); setError(undefined); }} onSave={save} /></div>}
     {detail && <RoleAccountDetailSheet
       detail={detail}
       roleName={roleName}

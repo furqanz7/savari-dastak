@@ -19,7 +19,7 @@ export type DeliveryGeolocationStatus =
 
 export type WakeLockStatus = "inactive" | "active" | "unsupported" | "failed";
 
-type PositionFix = {
+export type PositionFix = {
   latitude: number;
   longitude: number;
   accuracyMeters: number;
@@ -39,6 +39,8 @@ export type DeliveryGeolocationController = {
   wakeLockStatus: WakeLockStatus;
   handleVisibilityChange: (visible: boolean) => void;
   currentLocation: () => Promise<OrderLocation>;
+  /** Read-only presentation access. Never starts a watcher or a location request. */
+  peekLocation: () => PositionFix | undefined;
 };
 
 const missionPublishIntervalMs = 8_000;
@@ -244,7 +246,8 @@ export function useDeliveryGeolocationController({
     });
   }, []);
 
-  return { status, wakeLockStatus, handleVisibilityChange, currentLocation };
+  const peekLocation = useCallback(() => latestFix.current, []);
+  return { status, wakeLockStatus, handleVisibilityChange, currentLocation, peekLocation };
 }
 
 export function classifyPositionFix(

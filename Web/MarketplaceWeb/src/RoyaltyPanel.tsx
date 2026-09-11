@@ -53,30 +53,28 @@ export function RoyaltyPanel({
         <div>
           <p className="eyebrow">{kind === "MERCHANT" ? "YOUR BUSINESS" : "Earnings balance"}</p>
           <h1 id="royalty-title">Earnings</h1>
-          <p>{kind === "MERCHANT" ? "Your Royalty balance, credits and payouts, clearly accounted for." : "Verified credits, adjustments, and payout requests from the append-only ledger."}</p>
+          <p>{kind === "MERCHANT" ? "Your Royalty balance, credits and payouts, clearly accounted for." : "Your delivery earnings, adjustments and payouts, clearly accounted for."}</p>
         </div>
         <button
-          className={kind === "MERCHANT" ? "merchant-quiet-refresh" : "icon-button"}
+          className={kind === "MERCHANT" ? "merchant-quiet-refresh" : "rider-quiet-action"}
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
           aria-label="Refresh earnings"
         >
           <RefreshCw size={19} />
-          {kind === "MERCHANT" ? "Check balance" : null}
+          Check balance
         </button>
       </header>
-      {error && (kind === "MERCHANT" ? <CustomerNotice title="Earnings couldn’t update" onRetry={() => void refresh()}>{error}</CustomerNotice> : <p className="order-error" role="alert">{error}</p>)}
+      {error && <CustomerNotice title="Earnings couldn’t update" onRetry={() => void refresh()}>{kind === "RIDER" ? error.replaceAll("Royalty", "Earnings") : error}</CustomerNotice>}
       {loading && !snapshot
         ? (
-          kind === "MERCHANT" ? <CustomerSkeleton label="Loading earnings" kind="orders" /> : <div className="catalogue-loading" role="status">
-            <span /> Loading earnings
-          </div>
+          <CustomerSkeleton label="Loading earnings" kind="orders" />
         )
         : snapshot
         ? (
           <>
-            <div className="royalty-summary" aria-label="Royalty summary">
+            <div className="royalty-summary" aria-label={kind === "RIDER" ? "Earnings summary" : "Royalty summary"}>
               <RoyaltyMetric label="Available" value={formatPrice(snapshot.availablePaise)} />
               <RoyaltyMetric
                 label="Lifetime earned"
@@ -89,11 +87,12 @@ export function RoyaltyPanel({
               />
             </div>
             <div className="royalty-subjects">
-              {kind === "MERCHANT" && snapshot.subjects.length === 0 ? <CustomerEmptyState title="Your earnings start here" copy="Earning credits and payout information appear here when they become available." icon={<WalletCards size={30} />} /> : null}
+              {snapshot.subjects.length === 0 ? <CustomerEmptyState title="Your earnings start here" copy="Earning credits and payout information appear here when they become available." icon={<WalletCards size={30} />} /> : null}
               {snapshot.subjects.map((subject) => (
                 <RoyaltySubjectCard
                   key={subject.subjectType + ":" + subject.subjectId}
                   auth={auth}
+                  rider={kind === "RIDER"}
                   subject={subject}
                   payoutAvailability={snapshot.payoutAvailability}
                   showSubject={snapshot.subjects.length > 1}
@@ -127,12 +126,14 @@ function RoyaltyMetric({
 
 function RoyaltySubjectCard({
   auth,
+  rider,
   subject,
   payoutAvailability,
   showSubject,
   onChanged,
 }: {
   auth: Auth;
+  rider: boolean;
   subject: RoyaltySubject;
   payoutAvailability: RoyaltySnapshot["payoutAvailability"];
   showSubject: boolean;
@@ -190,7 +191,7 @@ function RoyaltySubjectCard({
         </span>
         <div>
           <strong>
-            {showSubject ? "Royalty account · " + shortId(subject.subjectId) : "Your Royalty"}
+            {showSubject ? `${rider ? "Earnings" : "Royalty"} account · ` + shortId(subject.subjectId) : rider ? "Your earnings" : "Your Royalty"}
           </strong>
           <small>
             {subject.payoutDestination?.displayLabel ?? "Payout method not registered"}
@@ -214,10 +215,9 @@ function RoyaltySubjectCard({
       {!payoutAvailability.destinationRegistrationAvailable && !subject.payoutDestination
         ? (
           <div className="royalty-notice royalty-payout-unavailable" role="status">
-            <strong>Royalty payout setup is not active yet.</strong>
+            <strong>{rider ? "Payout setup is not available yet." : "Royalty payout setup is not active yet."}</strong>
             <span>
-              Your earnings remain safe in Royalty. Bank or UPI setup will open after the
-              secure payout service is connected.
+              {rider ? "Your earnings remain in your balance. Bank or UPI setup will be available when payouts open." : "Your earnings remain safe in Royalty. Bank or UPI setup will open after the secure payout service is connected."}
             </span>
           </div>
         )
@@ -226,6 +226,7 @@ function RoyaltySubjectCard({
           <PayoutDestinationForm
             auth={auth}
             subject={subject}
+            rider={rider}
             onSaved={async () => {
               setEditingDestination(false);
               setNotice("Payout destination saved securely.");
@@ -281,16 +282,17 @@ function RoyaltySubjectCard({
       </form>
       <p id={"withdraw-help-" + subject.subjectId} className="royalty-help">
         {!payoutAvailability.withdrawalExecutionAvailable
-          ? "Withdrawals will open after Dastak activates the secure payout service. Your Royalty balance remains unchanged."
+          ? rider ? "Withdrawals will open when payouts are available. Your earnings balance stays unchanged." : "Withdrawals will open after Dastak activates the secure payout service. Your Royalty balance remains unchanged."
           : subject.payoutDestination
-          ? "Available Royalty is reserved immediately. Paid appears only after provider confirmation."
+          ? rider ? "The requested amount is reserved from your available earnings. A payout is marked paid only when receipt is confirmed." : "Available Royalty is reserved immediately. Paid appears only after provider confirmation."
           : "Complete payout-method onboarding before requesting a withdrawal."}
       </p>
-      {error && <p className="order-error" role="alert">{error}</p>}
+      {error && <p className="order-error" role="alert">{rider ? error.replaceAll("Royalty", "Earnings") : error}</p>}
       {notice && <p className="royalty-notice" role="status">{notice}</p>}
-      <RoyaltyHistory title="Earnings and adjustments" entries={subject.entries} />
+      <RoyaltyHistory rider={rider} title="Earnings and adjustments" entries={subject.entries} />
       <WithdrawalHistory
         auth={auth}
+        rider={rider}
         withdrawals={subject.withdrawals}
         onChanged={onChanged}
       />
@@ -301,10 +303,12 @@ function RoyaltySubjectCard({
 function PayoutDestinationForm({
   auth,
   subject,
+  rider = false,
   onSaved,
 }: {
   auth: Auth;
   subject: RoyaltySubject;
+  rider?: boolean;
   onSaved: () => Promise<void>;
 }) {
   const [type, setType] = useState<"BANK_ACCOUNT" | "UPI">("BANK_ACCOUNT");
@@ -379,22 +383,24 @@ function PayoutDestinationForm({
       <button className="primary-button" type="submit" disabled={!valid || busy}>
         {busy ? "Saving securely…" : "Save payout destination"}
       </button>
-      {error ? <p className="order-error" role="alert">{error}</p> : null}
+      {error ? <p className="order-error" role="alert">{rider ? error.replaceAll("Royalty", "Earnings") : error}</p> : null}
     </form>
   );
 }
 
 function RoyaltyHistory({
+  rider,
   title,
   entries,
 }: {
+  rider: boolean;
   title: string;
   entries: RoyaltySubject["entries"];
 }) {
   return (
     <section className="royalty-history" aria-label={title}>
       <h2>{title}</h2>
-      {entries.length === 0 ? <p>No Royalty entries yet.</p> : (
+      {entries.length === 0 ? <p>{rider ? "No earnings entries yet." : "No Royalty entries yet."}</p> : (
         <ul>
           {entries.map((entry) => (
             <li key={entry.id}>
@@ -418,10 +424,12 @@ function RoyaltyHistory({
 }
 
 function WithdrawalHistory({
+  rider,
   auth,
   withdrawals,
   onChanged,
 }: {
+  rider: boolean;
   auth: Auth;
   withdrawals: RoyaltyWithdrawal[];
   onChanged: () => Promise<void>;
@@ -463,7 +471,7 @@ function WithdrawalHistory({
                   : withdrawal.status === "FAILED"
                   ? <small>The failed amount is available again for a new withdrawal.</small>
                   : withdrawal.status === "REVERSED"
-                  ? <small>The reversed amount has been restored to Available Royalty.</small>
+                  ? <small>{rider ? "The reversed amount is back in your available earnings." : "The reversed amount has been restored to Available Royalty."}</small>
                   : withdrawal.reconciliationState === "REVIEW_REQUIRED"
                   ? <small>Operations reconciliation is required.</small>
                   : null}
@@ -481,7 +489,7 @@ function WithdrawalHistory({
           ))}
         </ul>
       )}
-      {error ? <p className="order-error" role="alert">{error}</p> : null}
+      {error ? <p className="order-error" role="alert">{rider ? error.replaceAll("Royalty", "Earnings") : error}</p> : null}
     </section>
   );
 }

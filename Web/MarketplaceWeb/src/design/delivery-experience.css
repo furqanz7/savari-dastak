@@ -1,0 +1,304 @@
+/* Rider workspace. Shared Dastak palette, type and feedback; Delivery-only layout. */
+.app.variant-dastak-delivery:has(.delivery-experience) { padding: 0; background: var(--canvas); }
+.app.variant-dastak-delivery:has(.delivery-experience)::before { display: none; }
+.variant-dastak-delivery:has(.delivery-experience) .content.workspace-content { display: block; max-width: none; padding: 0; }
+.delivery-experience {
+  --warning: var(--dastak-accent);
+  --rider-gap: clamp(18px, 2.5vw, 32px);
+  width: 100%; max-width: 1480px; min-width: 0; margin: 0 auto; padding: 0;
+  color: var(--text-primary); font: 16px/1.5 var(--font-system);
+}
+.delivery-experience :is(h1, h2, h3, p, strong, small, span, label) { min-width: 0; overflow-wrap: anywhere; }
+.delivery-experience :is(button, a) { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.delivery-experience button { transition: background var(--customer-ease), border-color var(--customer-ease), color var(--customer-ease), box-shadow var(--customer-ease); }
+.delivery-experience button:disabled { cursor: default; opacity: .55; }
+.delivery-experience :is(button, a, summary, input, select, textarea):focus-visible { outline: 3px solid var(--dastak-accent); outline-offset: 4px; }
+.delivery-experience :is(input, textarea, select) { min-width: 0; max-width: 100%; font: 16px/1.5 var(--font-system); color: var(--text-primary); accent-color: var(--dastak-accent); }
+.delivery-experience :is(input:not([type=checkbox], [type=radio], [type=file]), textarea, select) { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid var(--divider); border-radius: var(--radius-control); background: var(--surface-raised); }
+.delivery-experience :is(input, textarea)::placeholder { color: var(--text-tertiary); opacity: 1; }
+.delivery-experience :is(input[type=checkbox], input[type=radio]) { width: 20px; height: 20px; flex-shrink: 0; }
+.delivery-experience small { font-size: 13px; line-height: 1.5; }
+.delivery-experience .eyebrow { color: var(--dastak-accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; margin: 0; }
+.delivery-experience :is(.primary-button, .secondary-button, .danger-button) { min-height: 50px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; margin: 0; padding: 12px 18px; border: 1px solid var(--divider); border-radius: var(--radius-control); font: 650 15px/1.4 var(--font-system); text-decoration: none; }
+.delivery-experience .primary-button { background: var(--primary-action); color: var(--primary-action-foreground); border-color: var(--primary-action); }
+.delivery-experience .secondary-button { background: var(--surface-raised); color: var(--text-primary); }
+.delivery-experience .danger-button { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 5%, var(--surface)); border-color: color-mix(in srgb, var(--destructive) 25%, var(--divider)); }
+.delivery-experience .icon-button { width: 44px; height: 44px; min-height: 44px; border-radius: 50%; background: var(--surface); color: var(--text-secondary); border: 1px solid var(--divider); flex-shrink: 0; }
+.delivery-experience :is(button, a):not(:disabled):hover { border-color: var(--dastak-accent); }
+.rider-app-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 25px 40px; border-bottom: 1px solid var(--divider); }
+.rider-brand { border: 0; padding: 0; background: transparent; color: var(--text-primary); text-align: left; font: 42px/1 var(--font-dastak-wordmark); }
+.rider-brand > span { color: var(--dastak-accent); }
+.rider-brand > small { display: block; margin-top: 7px; font: 650 10px/1.4 var(--font-system); letter-spacing: .18em; color: var(--text-secondary); }
+.delivery-navigation { display: flex; gap: 6px; align-items: center; }
+.delivery-navigation button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 10px 16px; border: 1px solid transparent; border-radius: var(--radius-control); color: var(--text-secondary); background: transparent; font-size: 14px; font-weight: 600; }
+.delivery-navigation button[aria-current=page] { color: var(--text-primary); background: var(--surface-muted); border-color: var(--divider); }
+.delivery-navigation button[aria-current=page] svg { color: var(--dastak-accent); }
+.rider-header-note { font: italic 21px/1.2 var(--font-dastak-wordmark); color: var(--text-secondary); }
+.rider-workspace { padding: 28px 40px 72px; outline: none; min-width: 0; }
+.rider-resume { width: 100%; display: flex; align-items: center; gap: 16px; min-height: 66px; padding: 12px 20px; margin-bottom: 24px; color: var(--primary-action-foreground); background: var(--primary-action); border: 0; border-radius: var(--radius-control); font-size: 14px; font-weight: 600; }
+.rider-resume > span { flex: 1; display: grid; text-align: left; }
+.rider-resume small { opacity: .85; }
+.delivery-experience .delivery-heading { padding: 0; margin: 0 0 22px; align-items: center; gap: 20px; }
+.delivery-experience .delivery-heading h1, .delivery-experience .role-account-heading h1, .delivery-experience .royalty-heading h1 { font: 400 clamp(34px, 3.7vw, 48px)/1.1 var(--font-dastak-wordmark); letter-spacing: -.02em; margin: 8px 0; }
+.delivery-experience .delivery-heading.has-mission h1 { font-size: clamp(29px, 3vw, 38px); }
+.rider-transport { display: inline-flex; gap: 8px; align-items: center; color: var(--text-secondary); font-size: 14px; flex-shrink: 0; }
+.rider-status-strip { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 16px; margin-bottom: 24px; padding: 15px 18px; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--radius-control); }
+.delivery-experience .delivery-availability { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+.delivery-experience .delivery-availability > div { min-width: 0; }
+.delivery-experience .availability-icon { width: 38px; height: 38px; border-radius: 12px; background: var(--surface-muted); color: var(--text-secondary); }
+.delivery-experience .availability-icon.online { color: var(--success); background: color-mix(in srgb, var(--success) 12%, var(--surface)); }
+.delivery-experience .availability-switch { margin-left: 12px; flex-shrink: 0; min-height: 44px; display: flex; align-items: center; }
+.delivery-experience .availability-switch > span { top: 6px; bottom: 7px; }
+.delivery-experience .availability-switch input:focus-visible + span { outline: 3px solid var(--dastak-accent); outline-offset: 4px; }
+.delivery-experience .availability-expiring { color: var(--warning); }
+.rider-health-badges { display: flex; flex-wrap: wrap; gap: 9px 16px; }
+.rider-health-badges > span { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+.delivery-experience .good { color: var(--success); }
+.delivery-experience .warning { color: var(--warning); }
+.rider-desk { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr); align-items: start; gap: var(--rider-gap); }
+.rider-mission-column, .rider-route-context { min-width: 0; display: grid; align-content: start; gap: 20px; }
+.rider-route-context { position: sticky; top: 20px; }
+.delivery-experience :is(.delivery-offer, .current-delivery) { margin: 0; padding: clamp(20px, 2.2vw, 30px); border: 1px solid var(--divider); border-radius: var(--customer-radius); background: var(--surface-raised); box-shadow: var(--customer-shadow); min-width: 0; }
+.delivery-experience .current-delivery { border-top: 3px solid var(--dastak-accent); }
+.delivery-experience :is(.delivery-offer, .current-delivery) > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin: 0 0 20px; }
+.delivery-experience .current-delivery > header > div { flex: 1; }
+.delivery-experience :is(.delivery-offer, .current-delivery) h2 { font-size: clamp(22px, 2.3vw, 29px); line-height: 1.2; letter-spacing: -.025em; margin: 5px 0; }
+.delivery-experience .current-delivery > header .section-icon { width: 44px; height: 44px; min-width: 44px; border-radius: 14px; background: var(--dastak-accent-soft); color: var(--dastak-accent); }
+.rider-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0 0 22px; gap: 12px; }
+.rider-progress li { display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 4px solid var(--surface-muted); color: var(--text-secondary); font-size: 14px; }
+.rider-progress li > span { width: 23px; height: 23px; border: 1px solid var(--divider); border-radius: 50%; display: grid; place-items: center; font-size: 12px; flex-shrink: 0; }
+.rider-progress li[aria-current=step], .rider-progress li.complete { border-color: var(--dastak-accent); }
+.rider-progress li[aria-current=step] { color: var(--text-primary); }
+.rider-progress li[aria-current=step] > span, .rider-progress li.complete > span { color: var(--primary-action-foreground); background: var(--primary-action); border-color: var(--primary-action); }
+.rider-next-step { border-radius: var(--radius-control); padding: 18px 20px; margin-bottom: 22px; background: var(--surface-subtle); border-left: 3px solid var(--dastak-accent); }
+.rider-next-step h3 { font-size: 21px; line-height: 1.3; margin: 7px 0; letter-spacing: -.02em; }
+.rider-next-step p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-secondary); }
+.rider-handoff-progress { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 0; margin: 0 0 24px; list-style: none; gap: 6px; }
+.rider-handoff-progress li { display: grid; justify-items: center; align-content: start; gap: 7px; text-align: center; font-size: 12px; color: var(--text-secondary); }
+.rider-handoff-progress li > span:first-child { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-muted); }
+.rider-handoff-progress li[aria-current=step] { font-weight: 700; color: var(--text-primary); }
+.rider-handoff-progress li[aria-current=step] > span:first-child { box-shadow: 0 0 0 2px var(--dastak-accent); background: var(--dastak-accent-soft); }
+.rider-handoff-progress li.complete { color: var(--success); }
+.rider-handoff-progress li.complete > span:first-child { background: color-mix(in srgb, var(--success) 12%, var(--surface)); }
+.delivery-experience .v1-pickup-stop { padding: 18px; border-radius: 16px; background: var(--surface); gap: 14px; }
+.delivery-experience .v1-pickup-stop.completed { opacity: 1; background: var(--surface-subtle); }
+.delivery-experience .v1-pickup-stop > header { grid-template-columns: 30px minmax(0, 1fr); align-items: start; }
+.delivery-experience .v1-pickup-stop > header > em { grid-column: 2; display: flex; gap: 5px; align-items: center; font-size: 13px; font-weight: 600; }
+.delivery-experience :is(.v1-pickup-list li > span, .v1-pickup-stop > header > span) { color: var(--dastak-accent); background: var(--dastak-accent-soft); }
+.delivery-experience .v1-pickup-stop > header strong { font-size: 17px; }
+.delivery-experience .v1-pickup-stop > header small { font-size: 14px; line-height: 1.5; }
+.delivery-experience .map-link { min-height: 48px; display: flex; justify-content: center; gap: 9px; padding: 11px 14px; border: 1px solid var(--divider); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface-raised); text-decoration: none; font-size: 14px; font-weight: 650; }
+.delivery-experience .map-link svg { color: var(--dastak-accent); flex-shrink: 0; }
+.delivery-experience .delivery-next-action { width: 100%; min-height: 54px; margin-top: 0; }
+.delivery-experience .current-delivery > .delivery-next-action { margin-bottom: 20px; }
+.rider-arrival { display: grid; gap: 9px; padding-top: 3px; }
+.delivery-experience .rider-arrival .delivery-return-note { text-align: center; margin: 0; font-size: 13px; line-height: 1.5; }
+.rider-arrival.eligible .delivery-return-note, .rider-arrived-label { color: var(--success); }
+.rider-arrived-label { display: flex; gap: 7px; align-items: center; margin: 0; font-size: 14px; font-weight: 600; }
+.delivery-experience .v1-pickup-verification { gap: 16px; padding-top: 18px; }
+.delivery-experience .v1-pickup-verification fieldset label { min-height: 48px; padding: 12px; border-radius: 12px; font-size: 14px; }
+.delivery-experience .v1-pickup-verification fieldset label:has(input:checked) { color: var(--success); border-color: var(--success); background: color-mix(in srgb, var(--success) 6%, var(--surface)); }
+.delivery-experience .handoff-input { display: grid; gap: 8px; margin: 0; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
+.delivery-experience .handoff-input input[inputmode=numeric] { font-size: 24px; letter-spacing: .22em; text-align: center; font-variant-numeric: tabular-nums; min-height: 58px; }
+.delivery-experience .v1-physical-check { display: flex; align-items: center; gap: 12px; min-height: 48px; }
+.delivery-experience .delivery-stop { padding: 18px 0; grid-template-columns: 36px minmax(0, 1fr); }
+.delivery-experience .delivery-stop > div { min-width: 0; }
+.delivery-experience .delivery-stop strong { font-size: 18px; line-height: 1.45; }
+.delivery-experience .delivery-stop small { font-size: 12px; letter-spacing: .04em; }
+.delivery-experience .delivery-stop p { font-size: 14px; margin-top: 4px; }
+.delivery-experience .v1-delivery-photo { border-radius: 16px; min-height: 88px; padding: 18px; color: var(--dastak-accent); background: var(--surface-subtle); border-color: var(--dastak-accent); }
+.delivery-experience .v1-delivery-photo:has(input:disabled) { opacity: .6; }
+.delivery-experience .v1-delivery-photo:focus-within { outline: 3px solid var(--dastak-accent); outline-offset: 3px; }
+.delivery-experience .v1-delivery-photo small { font-size: 13px; }
+.delivery-experience .v1-doorstep-collection { box-shadow: none; padding: 20px; background: var(--surface-subtle); background-image: none; gap: 18px; }
+.delivery-experience .v1-doorstep-collection > header small { font-size: 11px; }
+.delivery-experience .v1-doorstep-collection > header b { font-size: 11px; text-align: right; }
+.delivery-experience .v1-doorstep-collection > header h3 { font-size: 30px; letter-spacing: -.03em; }
+.delivery-experience .v1-doorstep-collection > p { font-size: 14px; line-height: 1.55; }
+.delivery-experience .v1-collection-methods button { min-height: 50px; font-size: 15px; }
+.delivery-experience .v1-collection-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.delivery-experience .delivery-recovery-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--divider); }
+.delivery-experience .v1-secondary-action { width: auto; min-height: 44px; margin-top: 18px; padding: 10px 12px; background: transparent; border: 0; font-size: 13px; }
+.delivery-experience .delivery-recovery-actions .v1-secondary-action { margin: 0; flex: 1; }
+.delivery-experience .offer-timer { display: grid; gap: 1px; justify-items: center; min-width: 83px; flex-shrink: 0; padding: 9px 12px; border-radius: 14px; color: var(--warning); background: var(--dastak-accent-soft); }
+.delivery-experience .offer-timer small { font-size: 11px; font-weight: 500; }
+.delivery-experience .offer-timer strong { font-size: 24px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.delivery-experience .offer-timer.urgent { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, var(--surface)); }
+.delivery-experience .offer-timer.expired { color: var(--text-secondary); background: var(--surface-muted); }
+.delivery-experience .offer-timer.expired strong { font-size: 16px; }
+.delivery-experience .delivery-route-facts { flex-wrap: wrap; justify-content: flex-start; gap: 10px 20px; padding: 14px 0; border-block: 1px solid var(--divider); margin-top: 18px; }
+.delivery-experience .delivery-route-facts > span { font-size: 14px; }
+.delivery-experience .v1-pickup-list { gap: 18px; margin: 22px 0; }
+.delivery-experience .v1-pickup-list li { grid-template-columns: 30px minmax(0, 1fr); gap: 9px 12px; }
+.delivery-experience .v1-pickup-list li em { grid-column: 2; }
+.delivery-experience .delivery-return-note { color: var(--text-secondary); font-size: 14px; line-height: 1.55; }
+.delivery-experience .delivery-offer-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.delivery-experience .delivery-offer-actions button { min-height: 54px; }
+.rider-route-card { padding: 22px; border: 1px solid var(--divider); border-radius: var(--customer-radius); background: var(--surface); overflow: hidden; }
+.rider-route-card > header { display: flex; justify-content: space-between; gap: 12px; color: var(--dastak-accent); }
+.rider-route-card h2 { font-size: 21px; line-height: 1.3; margin: 10px 0 7px; letter-spacing: -.02em; }
+.rider-route-card > p { font-size: 14px; color: var(--text-secondary); margin: 0 0 18px; }
+.rider-map { overflow: hidden; border: 1px solid var(--divider); border-radius: 16px; background: var(--surface-muted); }
+.rider-map iframe { width: 100%; height: 275px; display: block; border: 0; background: var(--surface-muted); }
+.rider-map > small { display: block; padding: 8px 12px; font-size: 11px; color: var(--text-secondary); }
+.rider-map-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
+.rider-map-controls button { min-height: 44px; padding: 7px; border: 1px solid transparent; border-radius: 12px; background: transparent; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--text-secondary); font-size: 13px; }
+.rider-map-controls button[aria-pressed=true] { border-color: var(--divider); background: var(--surface-raised); color: var(--text-primary); }
+.rider-route-card .rider-map-freshness { font-size: 12px; margin: 8px 0 12px; }
+.delivery-experience .rider-directions { width: 100%; margin-top: 16px; }
+.rider-map-unavailable { padding: 24px; background: var(--surface-muted); border-radius: 14px; font-size: 14px; color: var(--text-secondary); text-align: center; }
+.rider-readiness > svg { color: var(--dastak-accent); margin-bottom: 10px; }
+.rider-readiness ul { padding-left: 18px; color: var(--text-secondary); font-size: 14px; display: grid; gap: 12px; }
+.delivery-experience .delivery-tracking-status { margin: 0; padding: 16px 18px; border: 1px solid var(--divider); border-radius: 16px; color: var(--dastak-accent); background: var(--surface); }
+.delivery-experience .delivery-tracking-status > span { gap: 10px; }
+.delivery-experience .delivery-tracking-status small { font-size: 13px; line-height: 1.55; }
+.delivery-experience .delivery-tracking-status.warning { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, var(--divider)); }
+.delivery-experience .delivery-notification-status { margin: 0; font-size: 13px; }
+.delivery-experience .delivery-notification-status.attention { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; margin: 0; padding: 18px; border: 1px solid var(--divider); border-radius: 16px; background: var(--surface); }
+.delivery-experience .delivery-notification-status.attention > div { grid-column: 2; flex-wrap: wrap; }
+.delivery-experience .delivery-notification-status.attention button { min-height: 44px; font-size: 13px; }
+.delivery-experience .delivery-notification-status.attention small { font-size: 13px; }
+.delivery-experience .delivery-notice { display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; margin: 14px 0; border: 1px solid color-mix(in srgb, var(--success) 25%, var(--divider)); border-radius: var(--radius-control); background: color-mix(in srgb, var(--success) 5%, var(--surface)); color: var(--success); font-size: 14px; line-height: 1.5; }
+.delivery-experience .delivery-notice > svg { flex-shrink: 0; margin-top: 2px; }
+.delivery-experience .delivery-notice > span { flex: 1; }
+.delivery-experience .delivery-notice button { min-width: 44px; min-height: 44px; padding: 8px; border: 0; color: inherit; background: transparent; }
+.delivery-experience .order-error { display: flex; gap: 10px; padding: 16px; border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--divider)); border-radius: var(--radius-control); background: color-mix(in srgb, var(--destructive) 5%, var(--surface)); color: var(--destructive); font-size: 14px; line-height: 1.5; }
+.delivery-experience .customer-empty-state { min-height: 360px; border: 1px solid var(--divider); border-radius: var(--customer-radius); background: var(--surface-raised); }
+.delivery-experience .customer-skeleton.orders > div { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.delivery-experience .delivery-recovery-dialog { gap: 22px; padding: 28px; border-radius: var(--radius-sheet); }
+.delivery-experience .delivery-recovery-dialog fieldset label { min-height: 50px; padding: 12px; font-size: 14px; }
+.delivery-experience .delivery-recovery-dialog fieldset label:has(input:checked) { border-color: var(--destructive); background: color-mix(in srgb, var(--destructive) 7%, var(--surface)); }
+.delivery-experience .delivery-recovery-dialog legend, .delivery-experience .delivery-recovery-dialog > label { font-size: 14px; }
+.delivery-experience .delivery-history { gap: 24px; }
+.delivery-experience .delivery-history-list { gap: 12px; }
+.delivery-experience .delivery-history-card { padding: 22px; border-radius: 18px; gap: 18px; }
+.delivery-experience .delivery-history-card > div:nth-child(2) > span { font-size: 12px; }
+.delivery-experience .delivery-history-card > div:nth-child(2) > small { font-size: 14px; }
+.delivery-experience .delivery-history-icon { width: 48px; height: 48px; color: var(--dastak-accent); background: var(--dastak-accent-soft); border-radius: 15px; }
+.delivery-experience .delivery-history-outcome > strong { font-size: 14px; }
+.delivery-experience .delivery-history-outcome.returned > strong { color: var(--dastak-accent); }
+.delivery-experience .delivery-history-earnings { font-size: 14px; margin: 0; border-radius: var(--radius-control); min-height: 48px; }
+.rider-quiet-action { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 9px 12px; border: 1px solid var(--divider); border-radius: var(--radius-control); background: var(--surface); color: var(--text-secondary); font-size: 13px; }
+/* Account and earnings reuse their shared components, scoped to the rider shell. */
+.delivery-experience :is(.role-account, .royalty-shell) { max-width: 1060px; margin: 0 auto; padding: 0; }
+.delivery-experience :is(.role-account-heading, .royalty-heading) { padding: 0; margin: 0 0 28px; }
+.delivery-experience :is(.role-account-heading, .royalty-heading) > div > p:last-child { font-size: 16px; line-height: 1.5; }
+.delivery-experience .role-profile { background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--divider); border-radius: var(--customer-radius); padding: 24px; box-shadow: var(--customer-shadow); }
+.delivery-experience .role-profile-main { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 18px; }
+.delivery-experience .role-profile-avatar { width: 64px; height: 64px; border-radius: 20px; background: var(--dastak-accent-soft); color: var(--dastak-accent); }
+.delivery-experience .role-profile-copy > strong { font-size: 24px; }
+.delivery-experience .role-profile-contacts { display: grid; gap: 10px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--divider); color: var(--text-secondary); font-size: 14px; }
+.delivery-experience .role-profile-contacts > span { display: flex; align-items: center; gap: 9px; word-break: break-word; }
+.delivery-experience .role-profile-main :is(p, small) { color: var(--text-secondary); font-size: 14px; }
+.delivery-experience .role-profile-edit { display: flex; justify-content: center; align-items: center; gap: 7px; width: auto; min-height: 44px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--divider); background: var(--surface); color: var(--text-secondary); }
+.delivery-experience .role-profile-meta { color: var(--text-secondary); font-size: 13px; }
+.delivery-experience .role-account-section { margin-top: 28px; }
+.delivery-experience .role-account-section h2 { font-size: 20px; margin-bottom: 14px; }
+.delivery-experience :is(.role-account-group, .partner-credentials) { border-radius: 18px; background: var(--surface-raised); }
+.delivery-experience .role-account-row { min-height: 80px; padding: 18px; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 14px; }
+.delivery-experience .role-account-row strong { font-size: 16px; }
+.delivery-experience .role-account-row small, .delivery-experience .partner-credentials :is(dt, dd) { font-size: 14px; line-height: 1.5; }
+.delivery-experience .role-account-row .role-row-icon { width: 42px; height: 42px; border-radius: 13px; }
+.delivery-experience .royalty-summary { gap: 16px; }
+.delivery-experience .royalty-summary > div { padding: 22px; border: 1px solid var(--divider); border-radius: 18px; background: var(--surface); }
+.delivery-experience .royalty-summary > div:first-child { background: var(--primary-action); color: var(--primary-action-foreground); }
+.delivery-experience .royalty-summary > div:first-child small { color: inherit; opacity: .85; }
+.delivery-experience .royalty-summary strong { font-size: clamp(26px, 3vw, 36px); line-height: 1.2; font-variant-numeric: tabular-nums; }
+.delivery-experience .royalty-summary small { font-size: 14px; }
+.delivery-experience .royalty-card { padding: 26px; border-radius: var(--customer-radius); background: var(--surface-raised); margin-top: 22px; }
+.delivery-experience .royalty-card > header strong { font-size: 20px; }
+.delivery-experience :is(.royalty-balance-row, .royalty-destination-grid) { gap: 20px; }
+.delivery-experience :is(.royalty-help, .royalty-history p, .royalty-history small, .royalty-notice) { font-size: 14px; line-height: 1.55; }
+.delivery-experience .royalty-notice { background: var(--surface-subtle); padding: 18px; border-radius: var(--radius-control); }
+.delivery-experience .royalty-history h2 { font-size: 19px; }
+.delivery-experience .royalty-history li { min-height: 76px; gap: 16px; padding: 18px 0; }
+.delivery-experience .royalty-withdraw-form { align-items: end; gap: 14px; }
+.delivery-experience .royalty-withdraw-form label, .delivery-experience .royalty-destination-form label { font-size: 14px; }
+.delivery-experience .royalty-amount-input { overflow: visible; }
+.delivery-experience .royalty-amount-input input { border: 0; }
+.delivery-experience :is(.royalty-card, .royalty-summary, .royalty-history) .warning { color: var(--warning); }
+.delivery-experience .royalty-history .negative { color: var(--destructive); }
+.delivery-experience .royalty-history .positive { color: var(--success); }
+@media (max-width: 1100px) {
+  .rider-app-header { padding: 22px 28px; }
+  .rider-header-note { display: none; }
+  .rider-workspace { padding: 24px 28px 64px; }
+  .rider-desk { grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr); }
+  .rider-health-badges { width: 100%; padding-top: 12px; border-top: 1px solid var(--divider); }
+  .delivery-experience .delivery-availability { width: 100%; }
+  .delivery-experience .availability-switch { margin-left: auto; }
+}
+@media (max-width: 760px) {
+  .rider-app-header { padding: 18px 20px; }
+  .rider-brand { font-size: 34px; }
+  .rider-brand small { font-size: 9px; }
+  .delivery-navigation { position: fixed; inset: auto 0 0; z-index: 40; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); border-top: 1px solid var(--divider); background: var(--glass); backdrop-filter: blur(16px); }
+  .delivery-navigation button { display: grid; justify-items: center; gap: 4px; min-height: 58px; padding: 8px 4px; font-size: 12px; line-height: 1.3; }
+  .rider-workspace { padding: 20px 16px calc(110px + env(safe-area-inset-bottom)); }
+  .delivery-experience .delivery-heading { align-items: flex-start; gap: 12px; }
+  .delivery-experience .delivery-heading.has-mission { margin-bottom: 16px; }
+  .delivery-experience .delivery-heading h1 { font-size: 34px; }
+  .delivery-experience .delivery-heading.has-mission h1 { font-size: 29px; }
+  .delivery-experience .delivery-heading > div { min-width: 0; }
+  .rider-transport { font-size: 12px; max-width: 90px; gap: 5px; padding-top: 3px; }
+  .rider-status-strip { padding: 12px 14px; gap: 10px; margin-bottom: 18px; }
+  .rider-health-badges { gap: 8px 13px; }
+  .rider-health-badges > span { font-size: 11px; }
+  .rider-desk { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .rider-route-context { position: static; }
+  .rider-route-context .rider-readiness { display: none; }
+  .delivery-experience :is(.delivery-offer, .current-delivery) { padding: 20px 16px; border-radius: 20px; }
+  .delivery-experience .current-delivery > header .section-icon { display: none; }
+  .rider-next-step { padding: 16px; margin-bottom: 20px; }
+  .rider-next-step h3 { font-size: 20px; }
+  .delivery-experience .v1-pickup-stop { padding: 16px 13px; }
+  .delivery-experience .delivery-next-action { min-height: 56px; }
+  .delivery-experience .v1-doorstep-collection { padding: 17px 14px; }
+  .delivery-experience .v1-doorstep-collection > header { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .delivery-experience .v1-doorstep-collection > header > span { display: none; }
+  .delivery-experience .v1-collection-actions { grid-template-columns: minmax(0, 1fr); }
+  .delivery-experience .delivery-recovery-actions { display: grid; grid-template-columns: 1fr; }
+  .delivery-experience .v1-secondary-action { text-align: left; padding-inline: 0; }
+  .rider-route-card { padding: 20px; }
+  .rider-map iframe { height: 250px; }
+  .delivery-experience .delivery-recovery-dialog { padding: 24px 20px; max-height: calc(100dvh - 32px); }
+  .delivery-experience .delivery-recovery-dialog > div { display: grid; grid-template-columns: 1fr; }
+  .delivery-experience .delivery-history-card { grid-template-columns: 42px minmax(0, 1fr); padding: 18px 16px; gap: 12px; }
+  .delivery-experience .delivery-history-icon { width: 42px; height: 42px; }
+  .delivery-experience .delivery-history-outcome { grid-column: 2; justify-items: start; text-align: left; }
+  .delivery-experience .delivery-history-outcome > small { display: none; }
+  .delivery-experience .customer-skeleton.orders > div { grid-template-columns: 1fr; }
+  .delivery-experience .customer-skeleton.orders .customer-skeleton-card:nth-child(n+2) { display: none; }
+  .delivery-experience .role-profile { padding: 20px; }
+  .delivery-experience .role-profile-main { grid-template-columns: 48px minmax(0, 1fr); gap: 12px; }
+  .delivery-experience .role-profile-avatar { width: 48px; height: 48px; border-radius: 15px; }
+  .delivery-experience .role-profile-edit { grid-column: 2; justify-self: start; }
+  .delivery-experience .role-profile-copy > strong { font-size: 22px; }
+  .delivery-experience .role-account-row { padding: 16px; }
+  .delivery-experience .royalty-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .delivery-experience .royalty-summary > div:first-child { grid-column: 1 / -1; }
+  .delivery-experience .royalty-summary > div { padding: 20px; }
+  .delivery-experience .royalty-card { padding: 20px 16px; }
+  .delivery-experience .royalty-balance-row { gap: 12px; flex-wrap: wrap; }
+  .delivery-experience .royalty-balance-row strong { font-size: 19px; }
+  .delivery-experience .royalty-withdraw-form { grid-template-columns: minmax(0, 1fr); }
+  .delivery-experience .royalty-history li { align-items: start; }
+  .rider-resume { flex-wrap: wrap; padding: 14px 16px; gap: 10px; }
+}
+@media (max-width: 380px) {
+  .rider-workspace { padding-inline: 12px; }
+  .rider-transport { display: none; }
+  .rider-progress { gap: 7px; }
+  .rider-progress li { font-size: 12px; gap: 6px; }
+  .delivery-experience .delivery-recovery-dialog fieldset { grid-template-columns: 1fr; }
+  .delivery-experience .delivery-offer-actions { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .delivery-experience *, .delivery-experience *::before, .delivery-experience *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}
+@media (forced-colors: active) {
+  .delivery-experience :is(button, a, input, textarea, select) { border: 1px solid ButtonText; }
+  .delivery-experience :is(.rider-progress li[aria-current=step], .delivery-navigation button[aria-current=page]) { outline: 2px solid Highlight; }
+  .delivery-experience .availability-switch input { appearance: auto; opacity: 1; position: static; width: 24px; height: 24px; }
+  .delivery-experience .availability-switch > span { display: none; }
+}

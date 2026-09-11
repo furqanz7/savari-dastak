@@ -68,7 +68,7 @@ describe("Customer Web design and presentation contracts", () => {
 
   it("keeps narrow layouts bounded, inputs readable, motion optional, and styles Customer-scoped", () => {
     const css = readFileSync(new URL("./design/customer-experience.css", import.meta.url), "utf8");
-    expect(css).toContain(".variant-dastak-customer {");
+    expect(css).toContain(".variant-dastak-customer,");
     expect(css).toContain("@media (max-width: 700px)");
     expect(css).toContain("@media (max-width: 370px)");
     expect(css).toContain("repeat(2, minmax(0, 1fr))");
@@ -76,20 +76,20 @@ describe("Customer Web design and presentation contracts", () => {
     expect(css).toContain(".customer-experience :is(input, textarea, select) { font-size: 16px;");
     expect(css).toContain("prefers-reduced-motion: reduce");
     expect(css).toContain("prefers-color-scheme: dark");
-    // Merchant now intentionally shares exactly these token-only theme blocks.
+    // Merchant and Delivery intentionally share exactly these token-only theme blocks.
     // Customer layout selectors must still never style another application.
-    const sharedThemes = [...css.matchAll(/\.variant-dastak-merchant, \.variant-dastak-customer \{([^}]+)\}/g)];
+    const sharedThemes = [...css.matchAll(/\.variant-dastak-merchant, \.variant-dastak-customer, \.variant-dastak-delivery \{([^}]+)\}/g)];
     expect(sharedThemes).toHaveLength(2);
     for (const [, declarations] of sharedThemes) {
       expect(declarations.split(";").map((line) => line.trim()).filter(Boolean).every((line) => line.startsWith("--"))).toBe(true);
     }
-    const customerLayout = css.replace(/\.variant-dastak-merchant, \.variant-dastak-customer \{[^}]+\}/g, "");
+    const customerLayout = css.replace(/\.variant-dastak-merchant, \.variant-dastak-customer, \.variant-dastak-delivery \{[^}]+\}/g, "");
     expect(customerLayout).not.toMatch(/\.variant-dastak-(merchant|delivery|admin)/);
   });
 
   it("meets WCAG AA text contrast for the shared light and dark tokens", () => {
     const css = readFileSync(new URL("./design/customer-experience.css", import.meta.url), "utf8");
-    const themes = [...css.matchAll(/\.variant-dastak-customer \{([^}]+)\}/g)];
+    const themes = [...css.matchAll(/\.variant-dastak-merchant, \.variant-dastak-customer, \.variant-dastak-delivery \{([^}]+)\}/g)];
     expect(themes).toHaveLength(2);
     for (const [, body] of themes) {
       const tokens = Object.fromEntries([...body.matchAll(/--([\w-]+):\s*(#[\da-f]{6})/g)].map(([, key, value]) => [key, value]));

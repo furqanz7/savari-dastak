@@ -1,5 +1,5 @@
 /* Shared Dastak palette. Customer and Merchant keep their own scoped layouts. */
-.variant-dastak-merchant, .variant-dastak-customer {
+.variant-dastak-merchant, .variant-dastak-customer, .variant-dastak-delivery {
   --canvas: #f8f6f1;
   --surface: #fdfcf9;
   --surface-raised: #ffffff;
@@ -373,7 +373,7 @@
   .customer-experience :is(.customer-discovery-shortcuts > button, .customer-header-search-icon):hover { border-color: var(--dastak-accent); }
 }
 @media (prefers-color-scheme: dark) {
-  .variant-dastak-merchant, .variant-dastak-customer { --canvas: #141311; --surface: #1d1b18; --surface-raised: #25221e; --surface-muted: #302b24; --surface-subtle: #27231d; --text-primary: #f4efe5; --text-secondary: #b9b0a2; --text-tertiary: #aaa191; --divider: #3e372e; --dastak-accent: #d6b77c; --dastak-accent-soft: #3a3021; --primary-action: #e9d7b2; --primary-action-foreground: #292216; --success: #a9c49a; --destructive: #eeab97; --customer-shadow: 0 8px 28px rgb(0 0 0 / 10%); }
+  .variant-dastak-merchant, .variant-dastak-customer, .variant-dastak-delivery { --canvas: #141311; --surface: #1d1b18; --surface-raised: #25221e; --surface-muted: #302b24; --surface-subtle: #27231d; --text-primary: #f4efe5; --text-secondary: #b9b0a2; --text-tertiary: #aaa191; --divider: #3e372e; --dastak-accent: #d6b77c; --dastak-accent-soft: #3a3021; --primary-action: #e9d7b2; --primary-action-foreground: #292216; --success: #a9c49a; --destructive: #eeab97; --customer-shadow: 0 8px 28px rgb(0 0 0 / 10%); }
   .customer-home-hero { background: #27241d; }
   .customer-hero-orbit { background: #353020; border-color: #4e432e; }
   .customer-hero-display > div { background: #f4f1e8; }

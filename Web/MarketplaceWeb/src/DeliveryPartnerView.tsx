@@ -1,7 +1,9 @@
 /* eslint-disable react-refresh/only-export-components -- tested delivery presentation helpers intentionally live beside their operational components. */
+import "./design/customer-experience.css";
+import "./design/delivery-experience.css";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Banknote, Bell, BellOff, Camera, Check, CircleAlert, History as HistoryIcon, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, WalletCards, X } from "lucide-react";
+import { Banknote, Bell, BellOff, Camera, Check, CircleAlert, History as HistoryIcon, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, WalletCards, X } from "lucide-react";
 import {
   acceptV1DeliveryOffer,
   acceptDeliveryOffer,
@@ -75,12 +77,16 @@ import {
   type DeliveryFeedStates,
 } from "./deliveryOperationsState";
 import { userFacingError } from "./userFacingError";
+import { CustomerEmptyState, CustomerNotice, CustomerSkeleton } from "./CustomerUI";
+import { useModalDialog } from "./useModalDialog";
+import { DeliveryNavigation, DeliveryHealthBadges, DeliveryRouteContext, MissionProgress, MissionNextStep, HandoffProgress, PickupStatus, missionNextStep, missionDestination, directionsURL, usePresentedGPS, type RiderDestination } from "./DeliveryUI";
 import { validateDecodableImage } from "./imageValidation";
 import { useDastakWebPush, type DastakWebPushController } from "./useDastakWebPush";
 import {
   useDeliveryGeolocationController,
   type DeliveryGeolocationStatus,
   type WakeLockStatus,
+  type PositionFix,
 } from "./deliveryGeolocation";
 
 type Props = {
@@ -129,6 +135,13 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
   const [recoveryIntent, setRecoveryIntent] = useState<RecoveryIntent>();
   const [verificationCode, setVerificationCode] = useState("");
   const [section, setSection] = useState<"deliveries" | "history" | "royalty" | "account">("deliveries");
+  const previousSection = useRef(section);
+  useEffect(() => {
+    if (previousSection.current === section) return;
+    previousSection.current = section;
+    document.getElementById("rider-workspace")?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [section]);
   const partnerRefreshQueue = useRef(new RefreshQueue());
   const v1RefreshQueue = useRef(new RefreshQueue());
   const legacyRefreshQueue = useRef(new RefreshQueue());
@@ -333,7 +346,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         const selector = target.kind === "return"
           ? "[id^='delivery-return-']"
           : target.kind === "mission" ? "[id^='delivery-mission-']" : ".delivery-offer";
-        document.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.querySelector(selector)?.scrollIntoView({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "center" });
       }, 250);
     };
     followNotificationRoute();
@@ -794,15 +807,29 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     parcelDispatch.offer || parcelDispatch.currentJob,
   );
   const operationalFeedsHealthy = deliveryOperationalFeedsSettledWithoutErrors(feedStates);
+  const primaryDestination = missionDestination(v1Dispatch.currentMission, v1Dispatch.returnMission);
+  const legacyJob = dispatch.currentJob;
+  const parcelJob = parcelDispatch.currentJob;
+  const legacyHeadingToCustomer = legacyJob && ["picked_up", "in_transit"].includes(legacyJob.orderStatus);
+  const parcelHeadingToCustomer = parcelJob && ["picked_up", "in_transit"].includes(parcelJob.parcel.status);
+  const destination: RiderDestination | undefined = primaryDestination ?? (legacyJob ? {
+    name: legacyHeadingToCustomer ? "Customer destination" : legacyJob.store.name,
+    address: legacyHeadingToCustomer ? "Open directions for the assigned delivery destination." : legacyJob.store.address,
+    location: legacyHeadingToCustomer ? legacyJob.dropoff : legacyJob.store.pickup,
+    label: legacyHeadingToCustomer ? "Customer destination" : "Merchant pickup",
+  } : parcelJob ? {
+    name: parcelHeadingToCustomer ? parcelJob.parcel.recipient.name : "Parcel pickup",
+    address: (parcelHeadingToCustomer ? parcelJob.parcel.dropoff : parcelJob.parcel.pickup).address,
+    location: parcelHeadingToCustomer ? parcelJob.parcel.dropoff : parcelJob.parcel.pickup,
+    label: parcelHeadingToCustomer ? "Parcel destination" : "Parcel pickup",
+  } : undefined);
 
   return (
-    <div className="delivery-shell">
-      <nav className="workspace-tabs" role="tablist" aria-label="Delivery Partner workspace">
-        <button type="button" role="tab" aria-selected={section === "deliveries"} className={section === "deliveries" ? "selected" : ""} onClick={() => setSection("deliveries")}><Navigation size={18} /> Deliveries</button>
-        <button type="button" role="tab" aria-selected={section === "history"} className={section === "history" ? "selected" : ""} onClick={() => setSection("history")}><HistoryIcon size={18} /> History</button>
-        <button type="button" role="tab" aria-selected={section === "royalty"} className={section === "royalty" ? "selected" : ""} onClick={() => setSection("royalty")}><WalletCards size={18} /> Earnings</button>
-        <button type="button" role="tab" aria-selected={section === "account"} className={section === "account" ? "selected" : ""} onClick={() => setSection("account")}><UserRound size={18} /> Account</button>
-      </nav>
+    <div className="delivery-shell delivery-experience">
+      <a className="customer-skip-link" href="#rider-workspace">Skip to delivery workspace</a>
+      <header className="rider-app-header"><button type="button" className="rider-brand" onClick={() => setSection("deliveries")} aria-label="Dastak Delivery home">Dastak<span>.</span><small>DELIVERY PARTNER</small></button><DeliveryNavigation section={section} onChange={setSection} /><span className="rider-header-note">Every handoff matters.</span></header>
+      <div className="rider-workspace" id="rider-workspace" tabIndex={-1}>
+      {section !== "deliveries" && hasJob ? <button className="rider-resume" type="button" onClick={() => setSection("deliveries")}><Navigation size={18} /><span><strong>Delivery in progress</strong><small>{destination?.name ?? "Return to your current action"}</small></span>Return to delivery</button> : null}
       {section === "royalty" ? <RoyaltyPanel auth={auth} kind="RIDER" /> : section === "history" ? <DeliveryHistoryPanel
         auth={auth}
         onOpenEarnings={() => setSection("royalty")}
@@ -821,40 +848,31 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         publishableKey={publishableKey}
         onRefreshPartner={() => void refreshFeeds(["partner"], true)}
         onOpenWorkspace={() => setSection("deliveries")}
-        notificationSurface={<DeliveryNotificationStatus controller={webPush} />}
+        notificationSurface={<DeliveryNotificationStatus controller={webPush} inAccount />}
         onSignOut={onSignOut}
       /> : <>
-      <header className="delivery-heading">
+      <header className={`delivery-heading ${hasJob ? "has-mission" : ""}`}>
         <div>
-          <p className="eyebrow">{displayName ? `Hello, ${displayName}` : "Dastak Delivery Partner"}</p>
-          <h1>Delivery</h1>
-          <p>{partner?.deliveryMethod ? deliveryMethodLabel(partner.deliveryMethod) : "Delivery Partner"}</p>
+          <p className="eyebrow">{displayName ? `On the road with ${displayName}` : "Your delivery desk"}</p>
+          <h1>{hasJob ? "Your current delivery" : online ? "Ready for what’s next." : "Your next delivery starts here."}</h1>
         </div>
-        <button className="icon-button" type="button" onClick={() => void refreshFeeds(undefined, true)} disabled={Boolean(busy)} aria-label="Refresh delivery queue" title="Refresh delivery queue">
-          <RefreshCw size={19} />
-        </button>
+        <span className="rider-transport"><Navigation size={17} />{partner?.deliveryMethod ? deliveryMethodLabel(partner.deliveryMethod) : "Delivery Partner"}</span>
       </header>
 
-      {error && <p className="order-error" role="alert">{error}</p>}
-      <DeliveryNotificationStatus controller={webPush} />
-      <DeliveryTrackingStatus
-        status={geolocation.status}
-        wakeLockStatus={geolocation.wakeLockStatus}
-        missionActive={Boolean(trackingMissionId)}
-        realtimeHealth={realtimeHealth}
-      />
+      {error && <CustomerNotice title="Action needs attention" onDismiss={() => setError(undefined)}>{error}</CustomerNotice>}
       {notice && <div className="delivery-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div>}
       <DeliveryOperationsStatus
         states={feedStates}
         hasContent={hasOperationalContent}
         onRetry={() => void refreshFeeds(undefined, true)}
       />
+      <div className="rider-status-strip">
       {partner ? (
           <section className="delivery-availability" aria-label="Availability">
             <span className={`availability-icon ${online ? "online" : ""}`}><Power size={21} /></span>
             <div>
               <strong>{online ? "Online" : "Offline"}</strong>
-              <AvailabilityStatusText availability={partner.availability} online={online} />
+              <AvailabilityStatusText availability={partner.availability} online={online} busy={Boolean(busy)} onRenew={!hasJob ? () => void changeAvailability(true) : undefined} />
             </div>
             <label className="availability-switch" title={online && hasJob ? "Complete the active delivery first" : undefined}>
               <input
@@ -868,6 +886,10 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             </label>
           </section>
       ) : null}
+      <DeliveryHealthBadges gps={geolocation.status} realtime={realtimeHealth} peekLocation={geolocation.peekLocation} />
+      </div>
+      <div className="rider-desk">
+      <div className="rider-mission-column" aria-label="Current delivery work">
           {v1Dispatch.returnMission && (
             <CurrentV1ReturnMission
               mission={v1Dispatch.returnMission}
@@ -889,10 +911,10 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
                 void captureV1DeliveryEvidence(v1Dispatch.currentMission!, file)}
               onCollection={(input) =>
                 void runV1Collection(v1Dispatch.currentMission!, input)}
-              onRequestRecovery={(operation) => setRecoveryIntent({
-                mission: v1Dispatch.currentMission!,
-                operation,
-              })}
+              onRequestRecovery={(operation) => {
+                setError(undefined);
+                setRecoveryIntent({ mission: v1Dispatch.currentMission!, operation });
+              }}
             />
           )}
 
@@ -960,13 +982,17 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
           )}
 
           {!hasOperationalContent && operationalFeedsHealthy && (
-            <section className="delivery-empty">
-              <Navigation size={25} />
-              <div><h2>{online ? "Waiting for assignments" : "Offline"}</h2><p>{online ? "No ready orders nearby." : "Go online when available."}</p></div>
-            </section>
+            <CustomerEmptyState icon={<Navigation size={32} />} title={online ? "You’re ready for your next delivery" : "Take the road when you’re ready"} copy={online ? "Nearby offers appear here automatically. Keep this tab open while you’re available." : "Go online to receive nearby delivery offers. We’ll ask for your precise location to find pickups near you."} />
           )}
+      </div>
+      <DeliveryRouteContext destination={destination} peekLocation={geolocation.peekLocation} gps={geolocation.status}>
+        <DeliveryTrackingStatus status={geolocation.status} peekLocation={geolocation.peekLocation} wakeLockStatus={geolocation.wakeLockStatus} missionActive={Boolean(trackingMissionId)} realtimeHealth={realtimeHealth} />
+        <DeliveryNotificationStatus controller={webPush} />
+      </DeliveryRouteContext>
+      </div>
           {recoveryIntent ? <RecoveryConfirmation
             intent={recoveryIntent}
+            error={error}
             busy={Boolean(busy)}
             onDismiss={() => setRecoveryIntent(undefined)}
             onConfirm={async (reason) => {
@@ -979,6 +1005,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             }}
           /> : null}
       </>}
+      </div>
     </div>
   );
 }
@@ -1025,20 +1052,13 @@ export function DeliveryHistoryPanel({ auth, onOpenEarnings, onSessionExpired }:
         <h1 id="delivery-history-title">History</h1>
         <p>Completed, returned and cancelled work across Dastak deliveries.</p>
       </div>
-      <button className="icon-button" type="button" onClick={() => void load()} disabled={loading} aria-label="Refresh delivery history">
-        <RefreshCw size={19} />
+      <button className="rider-quiet-action" type="button" onClick={() => void load()} disabled={loading} aria-label="Refresh delivery history">
+        <RefreshCw size={17} /> {loading ? "Updating" : "Check history"}
       </button>
     </header>
-    {error ? <div className={items.length > 0 ? "delivery-notice" : "order-error"} role={items.length > 0 ? "status" : "alert"}>
-      <CircleAlert size={18} />
-      <span>{error}{items.length > 0 ? " Previously loaded history remains visible." : ""}</span>
-      <button type="button" onClick={() => void load()}>Try again</button>
-    </div> : null}
-    {loading && !loaded ? <div className="catalogue-loading" role="status"><span /> Loading delivery history</div> : null}
-    {loaded && items.length === 0 && !error ? <section className="delivery-empty">
-      <HistoryIcon size={25} />
-      <div><h2>No completed work yet</h2><p>Delivered and returned work will appear here.</p></div>
-    </section> : null}
+    {error ? <CustomerNotice title="History couldn’t update" tone={items.length ? "info" : "warning"} onRetry={() => void load()}>{error}{items.length > 0 ? " Previously loaded history remains visible." : ""}</CustomerNotice> : null}
+    {loading && !loaded ? <CustomerSkeleton label="Loading delivery history" kind="orders" /> : null}
+    {loaded && items.length === 0 && !error ? <CustomerEmptyState title="No completed work yet" copy="Delivered and returned work will appear here." icon={<HistoryIcon size={28} />} /> : null}
     {items.length > 0 ? <div className="delivery-history-list" aria-label="Past delivery work">
       {items.map((item) => <article className="delivery-history-card" key={`${item.kind}:${item.workId}`}>
         <div className="delivery-history-icon" aria-hidden="true">{item.kind === "RETURN" ? <PackageCheck size={19} /> : item.kind === "PARCEL" ? <Store size={19} /> : <Navigation size={19} />}</div>
@@ -1067,23 +1087,21 @@ export function DeliveryOperationsStatus({ states, hasContent, onRetry }: {
   if (failures.length > 0) {
     const labels = failures.map((failure) => failure.label).join(", ");
     const sessionExpired = failures.some((failure) => failure.issue.action === "sign_in");
-    return <div className={hasContent ? "delivery-notice" : "order-error"} role={hasContent ? "status" : "alert"}>
-      <CircleAlert size={18} />
-      <span>{sessionExpired
+    return <CustomerNotice title={sessionExpired ? "Sign in again" : "Some delivery updates are delayed"} tone={hasContent ? "info" : "warning"} onRetry={!sessionExpired ? onRetry : undefined}>
+      {sessionExpired
         ? "Your session expired. Dastak is returning you to sign in."
-        : `${labels} could not update. ${hasContent ? "Previously loaded information remains visible." : "Dastak will retry automatically."}`}</span>
-      {!sessionExpired && onRetry ? <button type="button" onClick={onRetry}>Try again</button> : null}
-    </div>;
+        : `${labels} could not update. ${hasContent ? "Previously loaded information remains visible." : "Dastak will retry automatically."}`}
+    </CustomerNotice>;
   }
   const waitingForOperationalFeed = deliveryOperationalFeedKeys.some((key) => !states[key].loaded);
   if (!hasContent && (deliveryFeedsInitiallyLoading(states) || waitingForOperationalFeed)) {
-    return <div className="catalogue-loading" role="status"><span /> Loading delivery queue</div>;
+    return <CustomerSkeleton label="Loading delivery queue" kind="orders" />;
   }
   return null;
 }
 
-export function DeliveryNotificationStatus({ controller }: { controller: DastakWebPushController }) {
-  if (controller.status === "dismissed") return null;
+export function DeliveryNotificationStatus({ controller, inAccount = false }: { controller: DastakWebPushController; inAccount?: boolean }) {
+  if (controller.status === "dismissed" && !inAccount) return null;
   if (controller.status === "checking") {
     return <p className="delivery-notification-status" role="status"><Bell size={17} /> Checking delivery alerts…</p>;
   }
@@ -1100,13 +1118,15 @@ export function DeliveryNotificationStatus({ controller }: { controller: DastakW
   </aside>;
 }
 
-function DeliveryTrackingStatus({ status, wakeLockStatus, missionActive, realtimeHealth }: {
+function DeliveryTrackingStatus({ status, peekLocation, wakeLockStatus, missionActive, realtimeHealth }: {
   status: DeliveryGeolocationStatus;
+  peekLocation: () => PositionFix | undefined;
   wakeLockStatus: WakeLockStatus;
   missionActive: boolean;
   realtimeHealth: OrderRealtimeHealth;
 }) {
-  const messages = deliveryTrackingMessages(status, wakeLockStatus, missionActive, realtimeHealth);
+  const effectiveStatus = usePresentedGPS(status, peekLocation);
+  const messages = deliveryTrackingMessages(effectiveStatus, wakeLockStatus, missionActive, realtimeHealth);
   if (messages.length === 0) return null;
   return <div className={`delivery-tracking-status ${messages.some((item) => item.tone === "warning") ? "warning" : ""}`} role="status">
     <Navigation size={18} />
@@ -1131,7 +1151,7 @@ export function deliveryTrackingMessages(
     permission_denied: "Precise location is blocked. Allow it in browser settings to continue.",
     inaccurate: "GPS accuracy is too low. Arrival remains locked until the position improves.",
     stale: "The last GPS position is stale. Arrival remains locked.",
-    interrupted: "Location publication is reconnecting. Arrival remains server-locked.",
+    interrupted: "Location sharing is reconnecting. Arrival unlocks when your position is verified again.",
   };
   const text = statusText[status];
   if (text) messages.push({ text, tone: ["tracking"].includes(status) ? "normal" : "warning" });
@@ -1144,14 +1164,16 @@ export function deliveryTrackingMessages(
     messages.push({ text: "Browsers cannot guarantee background GPS. Use Dastak Delivery on iOS for continuous background tracking.", tone: "normal" });
   }
   if (realtimeHealth !== "subscribed") {
-    messages.push({ text: "Live delivery updates are reconnecting; authoritative state will reconcile automatically.", tone: "warning" });
+    messages.push({ text: "Delivery updates are reconnecting. Your latest details will appear automatically.", tone: "warning" });
   }
   return messages;
 }
 
-function AvailabilityStatusText({ availability, online }: {
+export function AvailabilityStatusText({ availability, online, onRenew, busy }: {
   availability: PartnerAvailability | null;
   online: boolean;
+  onRenew?: () => void;
+  busy?: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -1164,7 +1186,7 @@ function AvailabilityStatusText({ availability, online }: {
   if (!online) return <small>Not receiving assignments</small>;
   const remaining = availability?.availableUntil ? Date.parse(availability.availableUntil) - now : 0;
   if (remaining <= 3 * 60_000) {
-    return <small className="availability-expiring">Expiring soon · renew availability to keep receiving offers</small>;
+    return <small className="availability-expiring">{onRenew ? <>Expiring soon · <button type="button" className="rider-quiet-action" disabled={busy} onClick={onRenew}>Renew availability</button></> : "Availability expiring · active delivery tracking continues"}</small>;
   }
   return <small>{availabilityMessage(availability?.availableUntil)}</small>;
 }
@@ -1207,7 +1229,7 @@ function useOfferExpiration(respondBy: string, onExpire: () => void) {
   return expired;
 }
 
-function V1DeliveryOffer({ offer, busy, onAccept, onDecline, onExpire }: {
+export function V1DeliveryOffer({ offer, busy, onAccept, onDecline, onExpire }: {
   offer: V1RiderOffer;
   busy: boolean;
   onAccept: () => void;
@@ -1218,7 +1240,7 @@ function V1DeliveryOffer({ offer, busy, onAccept, onDecline, onExpire }: {
   return (
     <section id={`delivery-offer-${offer.id}`} className="delivery-offer v1-delivery-card" aria-label="New Dastak order mission">
       <header>
-        <div><p className="eyebrow">Dastak order mission</p><h2>{offer.displayOrderNumber}</h2></div>
+        <div><p className="eyebrow">New delivery offer</p><h2>{offer.pickupStops[0]?.branch.displayName ?? "Your next pickup"}</h2><small>{offer.displayOrderNumber}</small></div>
         <OfferTimer respondBy={offer.respondBy} />
       </header>
 
@@ -1236,17 +1258,17 @@ function V1DeliveryOffer({ offer, busy, onAccept, onDecline, onExpire }: {
         ))}
       </ol>
       <p className="delivery-return-note">
-        One customer order · {transportLabel(offer.transportType)} eligible · No batching
+        One customer · {transportLabel(offer.transportType)} · Collect every package before heading to the customer
       </p>
       <div className="delivery-offer-actions">
         <button className="danger-button" type="button" disabled={busy || expired} onClick={onDecline}><X size={17} /> Decline</button>
-        <button className="primary-button" type="button" disabled={busy || expired} onClick={onAccept}><Check size={18} /> {expired ? "Offer expired" : "Accept mission"}</button>
+        <button className="primary-button" type="button" disabled={busy || expired} onClick={onAccept}><Check size={18} /> {expired ? "Offer expired" : busy ? "Updating…" : "Accept delivery"}</button>
       </div>
     </section>
   );
 }
 
-function CurrentV1ReturnMission({
+export function CurrentV1ReturnMission({
   mission,
   busy,
   onAction,
@@ -1270,6 +1292,8 @@ function CurrentV1ReturnMission({
   }, [mission.id, mission.status]);
   return <section id={`delivery-return-${mission.id}`} className="current-delivery v1-delivery-card" aria-label="Active Dastak return mission">
     <header><span className="section-icon"><PackageCheck size={22} /></span><div><p className="eyebrow">Secure return mission</p><h2>{mission.status === "ASSIGNED" ? "Collect from customer" : mission.status === "AT_CUSTOMER" ? "Verify reverse pickup" : "Return to merchants"}</h2><small>{mission.packageCount} package(s) · no partial custody transfer</small></div></header>
+    <MissionProgress returning step={mission.status === "RETURNING_TO_MERCHANTS" ? mission.stops.some((stop) => stop.status === "ARRIVED") ? 2 : 1 : 0} />
+    <MissionNextStep title={mission.status === "ASSIGNED" ? "Head to the return customer" : mission.status === "AT_CUSTOMER" ? "Photograph and verify the return" : "Return each package to its merchant"} detail={mission.status === "ASSIGNED" ? "Confirm arrival within 50 metres, then collect all return packages together." : mission.status === "AT_CUSTOMER" ? "Secure the package photo, account for every package, then enter the customer’s return code." : "Follow the stops in order. Confirm arrival and use each merchant’s receipt code to close that handoff."} />
     {mission.status !== "RETURNING_TO_MERCHANTS" ? <>
       <div className="delivery-stop"><span><MapPin size={19} /></span><div><small>Customer destination</small><strong>{mission.customerDestination.address}</strong>{mission.customerDestination.recipientName ? <p>Recipient: {mission.customerDestination.recipientName}</p> : null}</div></div>
       {mission.customerDestination.location ? <MapLink location={mission.customerDestination.location} label="Open return pickup route" /> : null}
@@ -1295,7 +1319,7 @@ function CurrentV1ReturnMission({
   </section>;
 }
 
-function CurrentV1Mission({
+export function CurrentV1Mission({
   mission,
   busy,
   onAction,
@@ -1329,7 +1353,9 @@ function CurrentV1Mission({
   const [collectionMethod, setCollectionMethod] = useState<"CASH" | "UPI">("CASH");
   const [collectionReference, setCollectionReference] = useState("");
   const [collectionFailureReason, setCollectionFailureReason] = useState("");
+  const [confirmCollection, setConfirmCollection] = useState(false);
   const collection = mission.launchCollection;
+  const next = missionNextStep(mission);
   const finalStage = ["ALL_PACKAGES_PICKED_UP", "OUT_FOR_DELIVERY", "ARRIVED"].includes(
     mission.status,
   );
@@ -1337,17 +1363,21 @@ function CurrentV1Mission({
     setDeliveryCode("");
     setCollectionReference("");
     setCollectionFailureReason("");
+    setConfirmCollection(false);
   }, [mission.id, mission.status, collection?.state]);
   return (
     <section id={`delivery-mission-${mission.id}`} className="current-delivery v1-delivery-card" aria-label="Active Dastak order mission">
       <header>
         <span className="section-icon"><PackageCheck size={22} /></span>
         <div>
-          <p className="eyebrow">Active Dastak mission</p>
+          <p className="eyebrow">Current delivery</p>
           <h2>{missionLabel(mission.status)}</h2>
           <small>{mission.displayOrderNumber} · {completed}/{mission.pickupCount} pickups complete</small>
         </div>
       </header>
+      <MissionProgress step={next.step} />
+      <MissionNextStep title={next.title} detail={next.detail} />
+      {finalStage ? <HandoffProgress mission={mission} /> : null}
 
       {mission.riderSafety.escalationState === "STALLED" && (
         <p className="delivery-notice" role="status">
@@ -1366,7 +1396,7 @@ function CurrentV1Mission({
         </button>
       )}
 
-      {!finalStage && (
+      {!finalStage && mission.status !== "DELIVERY_RECOVERY" && (
         <div className="v1-mission-stops">
           {mission.pickupStops.map((stop) => (
             <V1PickupStopCard
@@ -1405,8 +1435,8 @@ function CurrentV1Mission({
               <Navigation size={18} /> Start final delivery
             </button>
           )}
-          {mission.canArriveCustomer && (
-            <ArrivalAction arrival={mission.customerArrival} busy={busy} onArrive={() => onAction("v1ArriveAtCustomer")} />
+          {mission.status === "OUT_FOR_DELIVERY" && (
+            <ArrivalAction arrival={mission.customerArrival} permitted={mission.canArriveCustomer} busy={busy} onArrive={() => onAction("v1ArriveAtCustomer")} />
           )}
           {mission.canVerifyCustomerPIN && (
             <div className="v1-pickup-verification">
@@ -1458,7 +1488,7 @@ function CurrentV1Mission({
           )}
           {collection && collection.state !== "NOT_REQUIRED" && (
             <section className={`v1-doorstep-collection ${collection.state === "COLLECTION_RETRY_NEEDED" ? "retry" : ""}`} aria-labelledby="doorstep-collection-title">
-              <header><span><Banknote size={21} /></span><div><small>AUTHORITATIVE AMOUNT DUE</small><h3 id="doorstep-collection-title">{formatPrice(collection.amountPaise ?? 0)}</h3></div><b>{collection.state === "PAYMENT_COLLECTED" ? "COLLECTED" : "PAY AT DELIVERY"}</b></header>
+              <header><span><Banknote size={21} /></span><div><small>{collection.state === "PAYMENT_COLLECTED" ? "PAYMENT RECEIVED" : "COLLECT AT THE DOOR"}</small><h3 id="doorstep-collection-title">{collection.amountPaise === undefined ? "Amount unavailable" : formatPrice(collection.amountPaise)}</h3></div><b>{collection.state === "PAYMENT_COLLECTED" ? "COLLECTED" : "PAY AT DELIVERY"}</b></header>
               {collection.state === "PAYMENT_COLLECTED" ? <p className="delivery-notice" role="status"><Check size={18} /> Payment collected by {collection.lastMethod === "CASH" ? "cash" : "UPI"}. Delivery completion is unlocked.</p> : !collection.canRecord ? <p>First confirm arrival, verify the customer PIN and secure the package photo. Payment collection unlocks after those steps.</p> : <>
                 {collection.state === "COLLECTION_RETRY_NEEDED" ? <p className="order-error" role="status"><CircleAlert size={17} /> The last collection failed{collection.failureReason ? `: ${collection.failureReason}` : "."} Keep every package secure and retry.</p> : <p>Ask the recipient whether they are paying by cash or UPI, then record the actual result.</p>}
                 <div className="v1-collection-methods" role="group" aria-label="Actual payment method">
@@ -1466,7 +1496,7 @@ function CurrentV1Mission({
                 </div>
                 {collectionMethod === "UPI" ? <label className="handoff-input">UPI reference (optional)<input value={collectionReference} maxLength={200} autoComplete="off" placeholder="Recipient reference" onChange={(event) => setCollectionReference(event.target.value)} /></label> : null}
                 <label className="handoff-input">If collection fails, add a reason<textarea value={collectionFailureReason} maxLength={500} rows={2} placeholder="For example, recipient could not complete payment" onChange={(event) => setCollectionFailureReason(event.target.value)} /></label>
-                <div className="v1-collection-actions"><button className="secondary-button" type="button" disabled={busy || collectionFailureReason.trim().length < 3 || !collection.canRecord} onClick={() => onCollection({ outcome: "FAILED", method: collectionMethod, collectionReference: collectionReference || undefined, failureReason: collectionFailureReason.trim() })}>Couldn’t collect</button><button className="primary-button" type="button" disabled={busy || !collection.canRecord} onClick={() => onCollection({ outcome: "COLLECTED", method: collectionMethod, collectionReference: collectionReference || undefined })}><Check size={18} /> Record collected</button></div>
+                <div className="v1-collection-actions"><button className="secondary-button" type="button" disabled={busy || collectionFailureReason.trim().length < 3 || !collection.canRecord} onClick={() => onCollection({ outcome: "FAILED", method: collectionMethod, collectionReference: collectionReference || undefined, failureReason: collectionFailureReason.trim() })}>Couldn’t collect</button><button className="primary-button" type="button" disabled={busy || !collection.canRecord} onClick={() => setConfirmCollection(true)}><Check size={18} /> Record collected</button></div>
               </>}
             </section>
           )}
@@ -1502,6 +1532,7 @@ function CurrentV1Mission({
       {mission.status === "DELIVERY_RECOVERY" && (
         <p className="order-error" role="alert">Operations is handling this custody issue. Keep every package secure.</p>
       )}
+      {confirmCollection && collection?.canRecord ? <PaymentConfirmation amount={collection.amountPaise} method={collectionMethod} busy={busy} onDismiss={() => setConfirmCollection(false)} onConfirm={() => { setConfirmCollection(false); onCollection({ outcome: "COLLECTED", method: collectionMethod, collectionReference: collectionReference || undefined }); }} /> : null}
     </section>
   );
 }
@@ -1516,9 +1547,10 @@ export function recoveryOptions(operation: RecoveryOperation) {
   return ["Package damaged", "Vehicle issue", "Safety concern", "Customer unavailable", "Other"];
 }
 
-function RecoveryConfirmation({ intent, busy, onDismiss, onConfirm }: {
+export function RecoveryConfirmation({ intent, busy, error, onDismiss, onConfirm }: {
   intent: RecoveryIntent;
   busy: boolean;
+  error?: string;
   onDismiss: () => void;
   onConfirm: (reason: string) => Promise<void>;
 }) {
@@ -1535,21 +1567,17 @@ function RecoveryConfirmation({ intent, busy, onDismiss, onConfirm }: {
     : "This moves the delivery into Operations recovery. Keep every package secure; reporting the issue does not transfer or release custody.";
   const finalReason = [reason, detail.trim()].filter(Boolean).join(" — ");
 
-  useEffect(() => {
-    const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onDismiss();
-    };
-    window.addEventListener("keydown", dismissOnEscape);
-    return () => window.removeEventListener("keydown", dismissOnEscape);
-  }, [busy, onDismiss]);
+  const dialog = useModalDialog<HTMLFormElement>({ busy, onDismiss });
 
   return <div className="delivery-dialog-backdrop" role="presentation">
-    <form className="delivery-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="delivery-recovery-title" onSubmit={(event) => {
+    <form ref={dialog} tabIndex={-1} className="delivery-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="delivery-recovery-title" aria-describedby="delivery-recovery-consequence" onSubmit={(event) => {
       event.preventDefault();
+      if (busy) return;
       void onConfirm(finalReason);
     }}>
       <header><div><p className="eyebrow">Custody protection</p><h2 id="delivery-recovery-title">{title}</h2></div><button type="button" className="icon-button" onClick={onDismiss} disabled={busy} aria-label="Close"><X size={18} /></button></header>
-      <p>{consequence}</p>
+      <p id="delivery-recovery-consequence">{consequence}</p>
+      {error ? <CustomerNotice title="The action couldn’t complete">{error}</CustomerNotice> : null}
       <fieldset>
         <legend>Reason</legend>
         {options.map((option) => <label key={option}><input type="radio" name="recovery-reason" value={option} checked={reason === option} disabled={busy} onChange={() => setReason(option)} /><span>{option}</span></label>)}
@@ -1560,7 +1588,16 @@ function RecoveryConfirmation({ intent, busy, onDismiss, onConfirm }: {
   </div>;
 }
 
-function ArrivalAction({ arrival, permitted = true, busy, onArrive }: {
+function PaymentConfirmation({ amount, method, busy, onDismiss, onConfirm }: { amount?: number; method: "CASH" | "UPI"; busy: boolean; onDismiss: () => void; onConfirm: () => void }) {
+  const dialog = useModalDialog<HTMLDivElement>({ busy, onDismiss });
+  return <div className="delivery-dialog-backdrop"><div ref={dialog} tabIndex={-1} className="delivery-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="rider-payment-confirm-title" aria-describedby="rider-payment-confirm-copy">
+    <header><div><p className="eyebrow">Pay at delivery</p><h2 id="rider-payment-confirm-title">Confirm payment received</h2></div></header>
+    <p id="rider-payment-confirm-copy">Confirm you have received {amount === undefined ? "the full amount" : formatPrice(amount)} by {method === "CASH" ? "cash" : "UPI"}. Do not confirm a pending payment.</p>
+    <div><button type="button" className="secondary-button" disabled={busy} onClick={onDismiss}>Not yet</button><button type="button" className="primary-button" disabled={busy} onClick={onConfirm}><Check size={18} /> Payment received</button></div>
+  </div></div>;
+}
+
+export function ArrivalAction({ arrival, permitted = true, busy, onArrive }: {
   arrival: V1ArrivalEligibility | null | undefined;
   permitted?: boolean;
   busy: boolean;
@@ -1577,15 +1614,15 @@ function ArrivalAction({ arrival, permitted = true, busy, onArrive }: {
     fresh && arrival?.reason === "TOO_FAR" && arrival.distanceMeters !== null
       ? `Move within 50 metres to confirm arrival · ${Math.ceil(arrival.distanceMeters)} m away.`
       : "A fresh, precise GPS position within 50 metres is required to confirm arrival.";
-  return <div>
+  return <div className={`rider-arrival ${eligible ? "eligible" : "locked"}`}>
     <button className="primary-button delivery-next-action" type="button" disabled={busy || !eligible} onClick={onArrive}>
-      <MapPin size={18} /> I’ve arrived
+      <MapPin size={18} /> {busy ? "Confirming…" : "I’ve arrived"}
     </button>
     <p className="delivery-return-note" role="status">{hint}</p>
   </div>;
 }
 
-function V1PickupStopCard({
+export function V1PickupStopCard({
   stop,
   missionStarted,
   busy,
@@ -1612,7 +1649,7 @@ function V1PickupStopCard({
       <header>
         <span>{stop.sequence}</span>
         <div><strong>{stop.branch.displayName}</strong><small>{stop.branch.address}</small></div>
-        <em>{stop.status === "COMPLETED" ? "Picked up" : stop.ready ? "Ready" : stop.runningLate ? "Merchant running late" : "Preparing"}</em>
+        <PickupStatus stop={stop} />
       </header>
       {stop.branch.location && stop.status !== "COMPLETED" && (
         <MapLink location={stop.branch.location} label="Open merchant route" />
@@ -1623,6 +1660,7 @@ function V1PickupStopCard({
       {stop.status === "ARRIVED" && !stop.ready && (
         <p className="delivery-return-note">Waiting for the merchant to mark this pickup Ready · {formatDuration(stop.waitingSeconds)}</p>
       )}
+      {stop.status === "ARRIVED" && <p className="rider-arrived-label"><Check size={16} /> You’ve arrived at this pickup</p>}
       {stop.status === "ARRIVED" && stop.ready && packageCount > 0 && (
         <div className="v1-pickup-verification">
           <fieldset>
@@ -1632,9 +1670,12 @@ function V1PickupStopCard({
                 <input
                   type="checkbox"
                   checked={accounted.includes(number)}
-                  onChange={(event) => setAccounted((current) => event.currentTarget.checked
-                    ? [...current, number]
-                    : current.filter((item) => item !== number))}
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked;
+                    setAccounted((current) => checked
+                      ? [...current, number]
+                      : current.filter((item) => item !== number));
+                  }}
                 />
                 Package {number}
               </label>
@@ -1809,19 +1850,19 @@ function DeliveryItems({ assignment }: { assignment: DeliveryAssignment }) {
   );
 }
 
-function OfferTimer({ respondBy }: { respondBy: string }) {
+export function OfferTimer({ respondBy }: { respondBy: string }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(interval);
   }, []);
   const seconds = Math.max(0, Math.ceil((Date.parse(respondBy) - now) / 1000));
-  return <span className="offer-timer">{seconds}s</span>;
+  return <span className={`offer-timer ${seconds === 0 ? "expired" : seconds <= 15 ? "urgent" : ""}`} role="timer" aria-label={seconds === 0 ? "Offer expired" : `${seconds} seconds to respond`}><small>{seconds === 0 ? "Offer" : "Respond in"}</small><strong>{seconds === 0 ? "Expired" : `${seconds}s`}</strong></span>;
 }
 
 function MapLink({ location, label }: { location: { latitude: number; longitude: number }; label: string }) {
   return (
-    <a className="map-link" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${location.latitude},${location.longitude}`)}&travelmode=driving`} target="_blank" rel="noreferrer">
+    <a className="map-link" href={directionsURL(location)} target="_blank" rel="noreferrer">
       <Navigation size={17} /> {label}
     </a>
   );
