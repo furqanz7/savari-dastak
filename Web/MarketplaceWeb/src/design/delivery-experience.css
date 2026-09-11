@@ -17,6 +17,14 @@
 .delivery-experience :is(input:not([type=checkbox], [type=radio], [type=file]), textarea, select) { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid var(--divider); border-radius: var(--radius-control); background: var(--surface-raised); }
 .delivery-experience :is(input, textarea)::placeholder { color: var(--text-tertiary); opacity: 1; }
 .delivery-experience :is(input[type=checkbox], input[type=radio]) { width: 20px; height: 20px; flex-shrink: 0; }
+.delivery-experience .rider-profile-presentation .customer-profile-name-control > svg { top: 50%; left: auto; inset-inline-start: 16px; transform: translateY(-50%); }
+.delivery-experience .rider-profile-presentation .customer-profile-name-control input {
+  padding-block: 14px;
+  padding-inline-start: 48px;
+  padding-inline-end: 52px;
+  -webkit-appearance: auto;
+  appearance: auto;
+}
 .delivery-experience small { font-size: 13px; line-height: 1.5; }
 .delivery-experience .eyebrow { color: var(--dastak-accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; margin: 0; }
 .delivery-experience :is(.primary-button, .secondary-button, .danger-button) { min-height: 50px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; margin: 0; padding: 12px 18px; border: 1px solid var(--divider); border-radius: var(--radius-control); font: 650 15px/1.4 var(--font-system); text-decoration: none; }
