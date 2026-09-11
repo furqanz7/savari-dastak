@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { getCustomerParcels, mutateParcelAssignment, parseParcel, quoteParcel } from "./parcels";
+import { describe, expect, it, vi } from "vitest";
+import {
+  getCustomerParcels,
+  getParcelPartnerSnapshot,
+  mutateParcelAssignment,
+  parseParcel,
+  quoteParcel,
+} from "./parcels";
 import { parcelPresentation, parcelPaymentStateLabel } from "./customerLifecycle";
 
 const parcelId = "22222222-2222-4222-8222-222222222222";
@@ -73,6 +79,22 @@ describe("parcel delivery", () => {
   it("parses customer parcel snapshots", async () => {
     const fetcher = () => Promise.resolve(new Response(JSON.stringify([parcel]), { status: 200 }));
     await expect(getCustomerParcels(auth, fetcher)).resolves.toEqual([{ ...parseParcel(parcel), audience: "sender" }]);
+  });
+
+  it("applies the shared request deadline to the delivery-partner parcel lane", async () => {
+    vi.useFakeTimers();
+    const pending = getParcelPartnerSnapshot(auth, (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("Aborted", "AbortError")));
+      }));
+    const assertion = expect(pending).rejects.toMatchObject({
+      code: "request_timeout",
+      status: 0,
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
+    vi.useRealTimers();
   });
 
   it("keeps recipient parcels read-only and identifies their audience", async () => {

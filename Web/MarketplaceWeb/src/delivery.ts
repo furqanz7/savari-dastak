@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MerchantOrderStatus, OrderLocation } from "./orders";
+import { isAbortError, requestDeadline } from "./requestDeadline";
 
 export type DeliveryMethod =
   | "walking"
@@ -259,7 +260,12 @@ export type V1DeliveryDispatchSnapshot = {
   returnMission: V1ReturnMission | null;
 };
 
-type AuthenticatedInput = { supabaseUrl: string; publishableKey: string; accessToken: string };
+type AuthenticatedInput = {
+  supabaseUrl: string;
+  publishableKey: string;
+  accessToken: string;
+  signal?: AbortSignal;
+};
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type EvidenceFile = { type: string; size: number };
 
@@ -506,6 +512,34 @@ export async function getV1DeliveryDispatch(
   ));
 }
 
+export type V1DeliveryLaneSnapshot = Omit<V1DeliveryDispatchSnapshot, "returnMission">;
+export type V1ReturnLaneSnapshot = Pick<V1DeliveryDispatchSnapshot, "returnMission">;
+export type DeliveryLaneResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: DeliveryRequestError };
+
+export async function getV1DeliveryLaneSnapshots(
+  input: AuthenticatedInput,
+  fetcher: Fetcher = fetch,
+): Promise<{
+  delivery: DeliveryLaneResult<V1DeliveryLaneSnapshot>;
+  returns: DeliveryLaneResult<V1ReturnLaneSnapshot>;
+}> {
+  const payload = await call(
+    "courier-dispatch",
+    input,
+    { operation: "v1PartnerSnapshot" },
+    undefined,
+    fetcher,
+  );
+  const source = record(payload);
+  if (!source) invalid();
+  return {
+    delivery: captureLane(() => parseV1DeliveryLane(source)),
+    returns: captureLane(() => parseV1ReturnLane(source)),
+  };
+}
+
 export async function publishV1MissionLocation(
   input: AuthenticatedInput & {
     missionId: string; latitude: number; longitude: number;
@@ -554,11 +588,11 @@ export async function heartbeatV1DeliveryMission(
 ) {
   if (!uuidPattern.test(input.missionId) || !Number.isSafeInteger(input.expectedVersion) ||
     input.expectedVersion < 1) throw validationError("The active mission changed. Refresh first.");
-  return call("courier-dispatch", input, {
+  return parseV1Dispatch(await call("courier-dispatch", input, {
     operation: "v1Heartbeat",
     missionId: input.missionId,
     expectedVersion: input.expectedVersion,
-  }, undefined, fetcher);
+  }, undefined, fetcher));
 }
 
 export type V1DeliveryMissionOperation =
@@ -756,7 +790,9 @@ async function call(
   idempotencyKey: string | undefined,
   fetcher: Fetcher,
 ) {
+  const deadline = requestDeadline(auth.signal);
   let response: Response;
+  let payload: unknown;
   try {
     response = await fetcher(`${auth.supabaseUrl.replace(/\/$/, "")}/functions/v1/${service}`, {
       method: "POST",
@@ -767,11 +803,25 @@ async function call(
         ...(idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : {}),
       },
       body: JSON.stringify(body),
+      signal: deadline.signal,
     });
-  } catch {
+    payload = await response.json().catch((error: unknown) => {
+      if (deadline.timedOut()) throw error;
+      return undefined;
+    });
+  } catch (error) {
+    if (deadline.timedOut()) {
+      throw new DeliveryRequestError(
+        "request_timeout",
+        "Dastak took too long to respond. Try again.",
+        0,
+      );
+    }
+    if (isAbortError(error) || auth.signal?.aborted) throw error;
     throw new DeliveryRequestError("network_error", "Dastak could not reach the delivery service.", 0);
+  } finally {
+    deadline.dispose();
   }
-  const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
     const error = record(record(payload)?.error);
     throw new DeliveryRequestError(
@@ -831,17 +881,39 @@ function parseDispatch(value: unknown): DeliveryDispatchSnapshot {
 
 function parseV1Dispatch(value: unknown): V1DeliveryDispatchSnapshot {
   const source = record(value);
-  if (!source || !("offer" in source) || !("currentMission" in source)) invalid();
+  if (!source) invalid();
+  return {
+    ...parseV1DeliveryLane(source),
+    ...parseV1ReturnLane(source),
+  };
+}
+
+function parseV1DeliveryLane(source: Record<string, unknown>): V1DeliveryLaneSnapshot {
+  if (!("offer" in source) || !("currentMission" in source)) invalid();
   return {
     offer: source.offer === null ? null : v1Offer(source.offer),
     currentMission: source.currentMission === null ? null : v1Mission(source.currentMission),
     completedMission: source.completedMission === null || source.completedMission === undefined
       ? null
       : v1CompletedMission(source.completedMission),
+  };
+}
+
+function parseV1ReturnLane(source: Record<string, unknown>): V1ReturnLaneSnapshot {
+  return {
     returnMission: source.returnMission === null || source.returnMission === undefined
       ? null
       : v1ReturnMission(source.returnMission),
   };
+}
+
+function captureLane<T>(parse: () => T): DeliveryLaneResult<T> {
+  try {
+    return { ok: true, value: parse() };
+  } catch (error) {
+    if (error instanceof DeliveryRequestError) return { ok: false, error };
+    throw error;
+  }
 }
 
 function v1ReturnMission(value: unknown): V1ReturnMission {

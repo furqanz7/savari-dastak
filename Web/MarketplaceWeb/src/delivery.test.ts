@@ -10,6 +10,7 @@ import {
   getDeliveryDispatch,
   getDeliveryPartnerSnapshot,
   getV1DeliveryDispatch,
+  getV1DeliveryLaneSnapshots,
   heartbeatV1DeliveryMission,
   isAcceptedPartnerEvidence,
   isValidVehicleRegistration,
@@ -312,6 +313,74 @@ describe("delivery partner client", () => {
     expect(JSON.stringify(snapshot)).not.toContain("customerAccountId");
   });
 
+  it("isolates malformed return decoding from a valid V1 delivery lane", async () => {
+    const result = await getV1DeliveryLaneSnapshots(auth, () => Promise.resolve(Response.json({
+      offer: null,
+      currentMission: null,
+      completedMission: null,
+      returnMission: { status: "BROKEN" },
+    })));
+    expect(result.delivery).toEqual({ ok: true, value: {
+      offer: null, currentMission: null, completedMission: null,
+    } });
+    expect(result.returns.ok).toBe(false);
+  });
+
+  it("isolates malformed V1 delivery decoding from a valid return lane", async () => {
+    const returnMission = {
+      id: orderId, returnId: assignmentId, orderId: applicationId,
+      status: "ASSIGNED", transportType: "MOTORBIKE",
+      assignedAt: "2026-09-11T10:00:00Z", arrivedCustomerAt: null,
+      pickupCompletedAt: null, completedAt: null, version: 2,
+      customerDestination: {
+        address: { line1: "128 Mandi Street", latitude: 12.681, longitude: 78.621 },
+        recipient: { name: "Furqan", phoneNumber: "+919900000000" },
+      },
+      packageCount: 1,
+      pickupVerification: { status: "INACTIVE", failedAttempts: 0 },
+      evidence: [],
+      stops: [],
+      customerArrival: {
+        eligible: true, reason: "ELIGIBLE", distanceMeters: 15,
+        radiusMeters: 50, validUntil: "2026-09-11T10:00:30Z",
+      },
+      canArriveCustomer: true, canCaptureEvidence: false,
+      canVerifyPickup: false, canCompleteReturnStops: false,
+    };
+    const result = await getV1DeliveryLaneSnapshots(auth, () => Promise.resolve(Response.json({
+      offer: { status: "BROKEN" },
+      currentMission: null,
+      completedMission: null,
+      returnMission,
+    })));
+    expect(result.delivery.ok).toBe(false);
+    expect(result.returns).toMatchObject({
+      ok: true,
+      value: {
+        returnMission: {
+          id: orderId,
+          returnId: assignmentId,
+          canArriveCustomer: true,
+          customerDestination: {
+            address: "128 Mandi Street",
+            location: { latitude: 12.681, longitude: 78.621 },
+          },
+        },
+      },
+    });
+  });
+
+  it("applies the shared request deadline to delivery snapshots", async () => {
+    vi.useFakeTimers();
+    const pending = getDeliveryDispatch(auth, (_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+    const assertion = expect(pending).rejects.toMatchObject({ code: "request_timeout", status: 0 });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
+    vi.useRealTimers();
+  });
+
   it("sends V1 offer acceptance and all-package pickup verification", async () => {
     const requests: Array<{ body: unknown; key: string | null }> = [];
     const fetcher = (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -484,7 +553,9 @@ describe("delivery partner client", () => {
       ...auth, missionId: orderId, expectedVersion: 8,
     }, (_input, init) => {
       body = JSON.parse(String(init?.body));
-      return Promise.resolve(Response.json({ missionId: orderId, version: 9 }));
+      return Promise.resolve(Response.json({
+        offer: null, currentMission: null, completedMission: null, returnMission: null,
+      }));
     });
     expect(body).toEqual({ operation: "v1Heartbeat", missionId: orderId, expectedVersion: 8 });
   });

@@ -1,5 +1,6 @@
 import { parseCustomerOrderSupportCase } from "./orders";
 import type { CustomerOrderActions, CustomerOrderSupportCase, CustomerOrderSupportCategory } from "./orders";
+import { isAbortError, requestDeadline } from "./requestDeadline";
 
 export type ParcelDeliveryMethod = "walking" | "bicycle" | "retired" | "bike" | "auto";
 export type ParcelStatus = "payment_pending" | "paid" | "assigned" | "en_route_to_pickup" | "picked_up" | "in_transit" | "delivered" | "cancelled";
@@ -72,7 +73,12 @@ export type ParcelAssignment = {
 
 export type ParcelPartnerSnapshot = { offer: ParcelAssignment | null; currentJob: ParcelAssignment | null };
 
-type AuthenticatedInput = { supabaseUrl: string; publishableKey: string; accessToken: string };
+type AuthenticatedInput = {
+  supabaseUrl: string;
+  publishableKey: string;
+  accessToken: string;
+  signal?: AbortSignal;
+};
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export class ParcelRequestError extends Error {
@@ -307,7 +313,9 @@ function assignment(value: unknown): ParcelAssignment {
 }
 
 async function call(auth: AuthenticatedInput, body: unknown, idempotencyKey: string | undefined, fetcher: Fetcher) {
+  const deadline = requestDeadline(auth.signal);
   let response: Response;
+  let payload: unknown;
   try {
     response = await fetcher(`${auth.supabaseUrl.replace(/\/$/, "")}/functions/v1/parcel-deliveries`, {
       method: "POST",
@@ -318,11 +326,25 @@ async function call(auth: AuthenticatedInput, body: unknown, idempotencyKey: str
         ...(idempotencyKey ? { "x-idempotency-key": idempotencyKey } : {}),
       },
       body: JSON.stringify(body),
+      signal: deadline.signal,
     });
-  } catch {
+    payload = await response.json().catch((error: unknown) => {
+      if (deadline.timedOut()) throw error;
+      return undefined;
+    });
+  } catch (error) {
+    if (deadline.timedOut()) {
+      throw new ParcelRequestError(
+        "request_timeout",
+        "Dastak took too long to respond. Try again.",
+        0,
+      );
+    }
+    if (isAbortError(error) || auth.signal?.aborted) throw error;
     throw new ParcelRequestError("network_error", "Dastak could not reach parcel delivery.", 0);
+  } finally {
+    deadline.dispose();
   }
-  const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
     const error = record(record(payload)?.error);
     throw new ParcelRequestError(

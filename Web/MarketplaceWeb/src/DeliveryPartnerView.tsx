@@ -12,7 +12,7 @@ import {
   declineDeliveryOffer,
   getDeliveryDispatch,
   getDeliveryPartnerSnapshot,
-  getV1DeliveryDispatch,
+  getV1DeliveryLaneSnapshots,
   heartbeatV1DeliveryMission,
   publishDeliveryPartnerLocation,
   publishV1MissionLocation,
@@ -25,6 +25,7 @@ import {
   type DeliveryDispatchSnapshot,
   type DeliveryJobOperation,
   type DeliveryPartnerSnapshot,
+  type PartnerAvailability,
   type V1DeliveryDispatchSnapshot,
   type V1DeliveryMission,
   type V1DeliveryMissionOperation,
@@ -45,7 +46,28 @@ import {
 } from "./parcels";
 import { RoleAccountView } from "./RoleAccountView";
 import { RoyaltyPanel } from "./RoyaltyPanel";
-import { RefreshQueue, useOrderRealtime } from "./orderRealtime";
+import { RefreshCoalescer, RefreshQueue, useOrderRealtime } from "./orderRealtime";
+import {
+  deadlineDelay,
+  deliveryDataIssue,
+  deliveryFallbackCadence,
+  deliveryFeedFailed,
+  deliveryFeedFailures,
+  deliveryFeedStarted,
+  deliveryFeedsForRealtimeSignal,
+  deliveryFeedsInitiallyLoading,
+  deliveryFeedSucceeded,
+  deliveryOperationalFeedKeys,
+  deliveryOperationalFeedsSettledWithoutErrors,
+  initialDeliveryFeedStates,
+  isDeliveryConcurrencyReconciliation,
+  isOfferExpired,
+  isRiderEffectivelyOnline,
+  isUncertainDeliveryMutation,
+  shouldRunDeliveryFallback,
+  type DeliveryFeedKey,
+  type DeliveryFeedStates,
+} from "./deliveryOperationsState";
 import { userFacingError } from "./userFacingError";
 
 type Props = {
@@ -73,57 +95,172 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     returnMission: null,
   });
   const [parcelDispatch, setParcelDispatch] = useState<ParcelPartnerSnapshot>({ offer: null, currentJob: null });
-  const [loading, setLoading] = useState(true);
+  const [feedStates, setFeedStates] = useState<DeliveryFeedStates>(initialDeliveryFeedStates);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [trackingError, setTrackingError] = useState<string>();
   const [verificationCode, setVerificationCode] = useState("");
   const [section, setSection] = useState<"deliveries" | "royalty" | "account">("deliveries");
-  const refreshQueue = useRef(new RefreshQueue());
+  const partnerRefreshQueue = useRef(new RefreshQueue());
+  const v1RefreshQueue = useRef(new RefreshQueue());
+  const legacyRefreshQueue = useRef(new RefreshQueue());
+  const parcelRefreshQueue = useRef(new RefreshQueue());
+  const feedControllers = useRef<Partial<Record<DeliveryFeedKey, AbortController>>>({});
   const actionKeys = useRef(new Map<string, string>());
+  const sessionRecoveryStarted = useRef(false);
 
-  const refresh = useCallback(async (showProgress = false) => {
-    await refreshQueue.current.request(showProgress, async (progress) => {
-      if (progress) setBusy("refresh");
+  const recoverSession = useCallback((requestError: unknown) => {
+    const issue = deliveryDataIssue(requestError);
+    if (issue.action !== "sign_in") return false;
+    if (!sessionRecoveryStarted.current) {
+      sessionRecoveryStarted.current = true;
+      void onSignOut();
+    }
+    return true;
+  }, [onSignOut]);
+
+  const recordFeedFailure = useCallback((key: DeliveryFeedKey, requestError: unknown) => {
+    setFeedStates((current) => deliveryFeedFailed(current, key, requestError));
+    recoverSession(requestError);
+  }, [recoverSession]);
+
+  const nextFeedSignal = useCallback((key: DeliveryFeedKey) => {
+    feedControllers.current[key]?.abort();
+    const controller = new AbortController();
+    feedControllers.current[key] = controller;
+    return controller.signal;
+  }, []);
+
+  const refreshPartner = useCallback(async () => {
+    await partnerRefreshQueue.current.request(false, async () => {
+      setFeedStates((current) => deliveryFeedStarted(current, ["partner"]));
+      const signal = nextFeedSignal("partner");
       try {
-        const [partnerSnapshot, v1DispatchSnapshot, dispatchSnapshot, parcelSnapshot] = await Promise.all([
-          getDeliveryPartnerSnapshot(auth),
-          getV1DeliveryDispatch(auth),
-          getDeliveryDispatch(auth),
-          getParcelPartnerSnapshot(auth),
-        ]);
-        setPartner(partnerSnapshot);
-        setV1Dispatch(v1DispatchSnapshot);
-        setDispatch(dispatchSnapshot);
-        setParcelDispatch(parcelSnapshot);
-        setError(undefined);
-      } catch (refreshError) {
-        setError(message(refreshError));
-      } finally {
-        setLoading(false);
-        if (progress) setBusy(undefined);
+        setPartner(await getDeliveryPartnerSnapshot({ ...auth, signal }));
+        setFeedStates((current) => deliveryFeedSucceeded(current, "partner"));
+      } catch (requestError) {
+        if (!signal.aborted) recordFeedFailure("partner", requestError);
       }
     });
-  }, [auth]);
+  }, [auth, nextFeedSignal, recordFeedFailure]);
 
-  useOrderRealtime({ client, accountId, accessToken, onChange: () => void refresh() });
+  const refreshV1 = useCallback(async () => {
+    await v1RefreshQueue.current.request(false, async () => {
+      setFeedStates((current) => deliveryFeedStarted(current, ["v1", "returns"]));
+      const signal = nextFeedSignal("v1");
+      try {
+        const result = await getV1DeliveryLaneSnapshots({ ...auth, signal });
+        if (result.delivery.ok) {
+          const delivery = result.delivery.value;
+          setV1Dispatch((current) => ({ ...current, ...delivery }));
+          setFeedStates((current) => deliveryFeedSucceeded(current, "v1"));
+        } else recordFeedFailure("v1", result.delivery.error);
+        if (result.returns.ok) {
+          const returns = result.returns.value;
+          setV1Dispatch((current) => ({ ...current, ...returns }));
+          setFeedStates((current) => deliveryFeedSucceeded(current, "returns"));
+        } else recordFeedFailure("returns", result.returns.error);
+      } catch (requestError) {
+        if (!signal.aborted) {
+          recordFeedFailure("v1", requestError);
+          recordFeedFailure("returns", requestError);
+        }
+      }
+    });
+  }, [auth, nextFeedSignal, recordFeedFailure]);
+
+  const refreshLegacy = useCallback(async () => {
+    await legacyRefreshQueue.current.request(false, async () => {
+      setFeedStates((current) => deliveryFeedStarted(current, ["legacy"]));
+      const signal = nextFeedSignal("legacy");
+      try {
+        setDispatch(await getDeliveryDispatch({ ...auth, signal }));
+        setFeedStates((current) => deliveryFeedSucceeded(current, "legacy"));
+      } catch (requestError) {
+        if (!signal.aborted) recordFeedFailure("legacy", requestError);
+      }
+    });
+  }, [auth, nextFeedSignal, recordFeedFailure]);
+
+  const refreshParcel = useCallback(async () => {
+    await parcelRefreshQueue.current.request(false, async () => {
+      setFeedStates((current) => deliveryFeedStarted(current, ["parcel"]));
+      const signal = nextFeedSignal("parcel");
+      try {
+        setParcelDispatch(await getParcelPartnerSnapshot({ ...auth, signal }));
+        setFeedStates((current) => deliveryFeedSucceeded(current, "parcel"));
+      } catch (requestError) {
+        if (!signal.aborted) recordFeedFailure("parcel", requestError);
+      }
+    });
+  }, [auth, nextFeedSignal, recordFeedFailure]);
+
+  const refreshFeeds = useCallback(async (
+    keys: DeliveryFeedKey[] = ["partner", ...deliveryOperationalFeedKeys],
+    showProgress = false,
+  ) => {
+    if (showProgress) setBusy("refresh");
+    const unique = new Set(keys);
+    try {
+      await Promise.allSettled([
+        ...(unique.has("partner") ? [refreshPartner()] : []),
+        ...(unique.has("v1") || unique.has("returns") ? [refreshV1()] : []),
+        ...(unique.has("legacy") ? [refreshLegacy()] : []),
+        ...(unique.has("parcel") ? [refreshParcel()] : []),
+      ]);
+    } finally {
+      if (showProgress) setBusy(undefined);
+    }
+  }, [refreshLegacy, refreshParcel, refreshPartner, refreshV1]);
+
+  const refreshRef = useRef(refreshFeeds);
+  refreshRef.current = refreshFeeds;
+  const pendingRealtimeFeeds = useRef(new Set<DeliveryFeedKey>());
+  const reconcileCoalescer = useRef<RefreshCoalescer<void> | undefined>(undefined);
+  if (!reconcileCoalescer.current) {
+    reconcileCoalescer.current = new RefreshCoalescer(() => {
+      const keys = [...pendingRealtimeFeeds.current];
+      pendingRealtimeFeeds.current.clear();
+      void refreshRef.current(keys);
+    });
+  }
+  const requestReconciliation = useCallback((keys: DeliveryFeedKey[]) => {
+    keys.forEach((key) => pendingRealtimeFeeds.current.add(key));
+    reconcileCoalescer.current?.request();
+  }, []);
+
+  const realtimeHealth = useOrderRealtime({
+    client,
+    accountId,
+    accessToken,
+    onChange: (signal) => requestReconciliation(deliveryFeedsForRealtimeSignal(signal)),
+  });
 
   useEffect(() => {
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 30_000);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refresh();
-    };
-    const onOnline = () => void refresh();
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
+    const controllers = feedControllers.current;
+    void refreshFeeds();
     return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
+      reconcileCoalescer.current?.cancel();
+      Object.values(controllers).forEach((controller) => controller?.abort());
     };
-  }, [refresh]);
+  }, [refreshFeeds]);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const tick = () => {
+      timer = undefined;
+      if (!shouldRunDeliveryFallback(document.visibilityState, navigator.onLine !== false)) return;
+      requestReconciliation(["partner", ...deliveryOperationalFeedKeys]);
+      timer = window.setTimeout(tick, deliveryFallbackCadence(realtimeHealth));
+    };
+    if (shouldRunDeliveryFallback(document.visibilityState, navigator.onLine !== false)) {
+      timer = window.setTimeout(tick, deliveryFallbackCadence(realtimeHealth));
+    }
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [realtimeHealth, requestReconciliation]);
 
   // Preserve operational liveness when precise GPS is temporarily unavailable.
   // Successful mission-location updates also refresh the server contact time.
@@ -132,16 +269,25 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     if (!mission || mission.status === "DELIVERY_RECOVERY") return;
     const heartbeat = async () => {
       try {
-        await heartbeatV1DeliveryMission({
+        const snapshot = await heartbeatV1DeliveryMission({
           ...auth, missionId: mission.id, expectedVersion: mission.version,
         });
-      } finally {
-        await refresh();
+        setV1Dispatch((current) => ({
+          ...current,
+          offer: snapshot.offer,
+          currentMission: snapshot.currentMission,
+          completedMission: snapshot.completedMission,
+        }));
+        setFeedStates((current) => deliveryFeedSucceeded(current, "v1"));
+      } catch (heartbeatError) {
+        if (isDeliveryConcurrencyReconciliation(heartbeatError)) {
+          requestReconciliation(["v1"]);
+        }
       }
     };
     const timer = window.setInterval(() => { void heartbeat().catch(() => undefined); }, 20_000);
     return () => window.clearInterval(timer);
-  }, [auth, refresh, v1Dispatch.currentMission]);
+  }, [auth, requestReconciliation, v1Dispatch.currentMission]);
 
   // A recovery return can intentionally coexist with its source delivery
   // mission. The return is the rider's current custody route and therefore
@@ -200,7 +346,32 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     return () => { cancelled = true; navigator.geolocation.clearWatch(watch); };
   }, [auth, trackingMissionId]);
 
+  const handleActionFailure = useCallback(async (
+    actionError: unknown,
+    requestIdentity: string,
+    lanes: DeliveryFeedKey[],
+  ) => {
+    if (recoverSession(actionError)) return;
+    if (isDeliveryConcurrencyReconciliation(actionError)) {
+      actionKeys.current.delete(requestIdentity);
+      await refreshFeeds(lanes);
+      setError(undefined);
+      setNotice("This delivery changed elsewhere. The latest details are now shown.");
+      return;
+    }
+    if (isUncertainDeliveryMutation(actionError)) {
+      await refreshFeeds(lanes);
+      setError("Dastak could not confirm that action. The latest delivery state was checked; retrying will safely use the same request.");
+      return;
+    }
+    actionKeys.current.delete(requestIdentity);
+    setError(message(actionError));
+  }, [recoverSession, refreshFeeds]);
+
   const changeAvailability = async (online: boolean) => {
+    const requestIdentity = `availability:${online}:${partner?.availability?.stateVersion ?? 0}`;
+    const idempotencyKey = actionKeys.current.get(requestIdentity) ?? crypto.randomUUID();
+    actionKeys.current.set(requestIdentity, idempotencyKey);
     setBusy("availability");
     setError(undefined);
     try {
@@ -209,21 +380,20 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         ...auth,
         online,
         location,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey,
       });
+      actionKeys.current.delete(requestIdentity);
       setPartner((current) => current ? { ...current, availability } : current);
+      setFeedStates((current) => deliveryFeedSucceeded(current, "partner"));
       if (online) {
-        const [v1Snapshot, orderSnapshot, parcelSnapshot] = await Promise.all([
-          getV1DeliveryDispatch(auth),
-          getDeliveryDispatch(auth),
-          getParcelPartnerSnapshot(auth),
-        ]);
-        setV1Dispatch(v1Snapshot);
-        setDispatch(orderSnapshot);
-        setParcelDispatch(parcelSnapshot);
+        await refreshFeeds(deliveryOperationalFeedKeys);
       }
     } catch (availabilityError) {
-      setError(message(availabilityError));
+      await handleActionFailure(
+        availabilityError,
+        requestIdentity,
+        ["partner", ...deliveryOperationalFeedKeys],
+      );
     } finally {
       setBusy(undefined);
     }
@@ -250,11 +420,12 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       });
       actionKeys.current.delete(requestIdentity);
       setParcelDispatch(snapshot);
+      setFeedStates((current) => deliveryFeedSucceeded(current, "parcel"));
       setVerificationCode("");
       if (operation === "confirmPickup") setNotice("Pickup verified. The parcel is now in your care.");
       if (operation === "completeDelivery") setNotice("Parcel delivery verified and completed.");
     } catch (actionError) {
-      setError(message(actionError));
+      await handleActionFailure(actionError, requestIdentity, ["parcel"]);
     } finally {
       setBusy(undefined);
     }
@@ -284,11 +455,12 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
           });
       actionKeys.current.delete(requestIdentity);
       setDispatch(snapshot);
+      setFeedStates((current) => deliveryFeedSucceeded(current, "legacy"));
       setVerificationCode("");
       if (action === "confirmPickup") setNotice("Pickup verified. The order is now in your care.");
       if (action === "completeDelivery") setNotice("Delivery verified and completed.");
     } catch (actionError) {
-      setError(message(actionError));
+      await handleActionFailure(actionError, requestIdentity, ["legacy"]);
     } finally {
       setBusy(undefined);
     }
@@ -311,9 +483,11 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         });
       actionKeys.current.delete(requestIdentity);
       setV1Dispatch(snapshot);
+      setFeedStates((current) =>
+        deliveryFeedSucceeded(deliveryFeedSucceeded(current, "v1"), "returns"));
       if (action === "accept") setNotice("Mission assigned. Collect every package at each pickup.");
     } catch (actionError) {
-      setError(message(actionError));
+      await handleActionFailure(actionError, requestIdentity, ["v1"]);
     } finally {
       setBusy(undefined);
     }
@@ -345,6 +519,8 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       });
       actionKeys.current.delete(requestIdentity);
       setV1Dispatch(snapshot);
+      setFeedStates((current) =>
+        deliveryFeedSucceeded(deliveryFeedSucceeded(current, "v1"), "returns"));
       setVerificationCode("");
       if (operation === "v1VerifyPickup") {
         setNotice("Pickup verified. Every declared package is now in your custody.");
@@ -356,12 +532,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         setNotice("Delivery verified. Every package is now in the customer’s custody.");
       }
     } catch (actionError) {
-      if (actionError instanceof DeliveryRequestError && actionError.status >= 400 &&
-        actionError.status < 500 && ![408, 429].includes(actionError.status)) {
-        actionKeys.current.delete(requestIdentity);
-        await refresh();
-      }
-      setError(message(actionError));
+      await handleActionFailure(actionError, requestIdentity, ["v1"]);
     } finally {
       setBusy(undefined);
     }
@@ -384,9 +555,11 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       });
       actionKeys.current.delete(requestIdentity);
       setV1Dispatch(snapshot);
+      setFeedStates((current) =>
+        deliveryFeedSucceeded(deliveryFeedSucceeded(current, "v1"), "returns"));
       setNotice("Package photo secured. Record the pay-at-delivery collection next.");
     } catch (actionError) {
-      setError(message(actionError));
+      await handleActionFailure(actionError, requestIdentity, ["v1"]);
     } finally {
       setBusy(undefined);
     }
@@ -416,16 +589,13 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       });
       actionKeys.current.delete(requestIdentity);
       setV1Dispatch(snapshot);
+      setFeedStates((current) =>
+        deliveryFeedSucceeded(deliveryFeedSucceeded(current, "v1"), "returns"));
       setNotice(input.outcome === "COLLECTED"
         ? "Payment collected and recorded. You can now complete the delivery."
         : "Collection attempt recorded. Keep the order secure and retry before delivery.");
     } catch (actionError) {
-      if (actionError instanceof DeliveryRequestError && actionError.status >= 400 &&
-        actionError.status < 500 && ![408, 429].includes(actionError.status)) {
-        actionKeys.current.delete(requestIdentity);
-        await refresh();
-      }
-      setError(message(actionError));
+      await handleActionFailure(actionError, requestIdentity, ["v1"]);
     } finally {
       setBusy(undefined);
     }
@@ -447,6 +617,8 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       });
       actionKeys.current.delete(requestIdentity);
       setV1Dispatch(snapshot);
+      setFeedStates((current) =>
+        deliveryFeedSucceeded(deliveryFeedSucceeded(current, "v1"), "returns"));
       if (operation === "v1VerifyReturnPickup") {
         setNotice("Return pickup verified. Every return package is now in your custody.");
       }
@@ -454,7 +626,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         setNotice("Merchant receipt verified. Reverse custody was recorded exactly once.");
       }
     } catch (actionError) {
-      setError(message(actionError));
+      await handleActionFailure(actionError, requestIdentity, ["returns"]);
     } finally {
       setBusy(undefined);
     }
@@ -474,18 +646,29 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       });
       actionKeys.current.delete(requestIdentity);
       setV1Dispatch(snapshot);
+      setFeedStates((current) =>
+        deliveryFeedSucceeded(deliveryFeedSucceeded(current, "v1"), "returns"));
       setNotice("Immutable return-package photo captured.");
     } catch (actionError) {
-      setError(message(actionError));
+      await handleActionFailure(actionError, requestIdentity, ["returns"]);
     } finally {
       setBusy(undefined);
     }
   };
 
-  const online = partner?.availability?.status === "online";
+  const reconcileAvailabilityExpiry = useCallback(() => {
+    requestReconciliation(["partner"]);
+  }, [requestReconciliation]);
+  const online = useEffectiveRiderOnline(partner?.availability, reconcileAvailabilityExpiry);
   const hasJob = Boolean(
     v1Dispatch.currentMission || v1Dispatch.returnMission || dispatch.currentJob || parcelDispatch.currentJob,
   );
+  const hasOperationalContent = Boolean(
+    v1Dispatch.offer || v1Dispatch.currentMission || v1Dispatch.returnMission ||
+    v1Dispatch.completedMission || dispatch.offer || dispatch.currentJob ||
+    parcelDispatch.offer || parcelDispatch.currentJob,
+  );
+  const operationalFeedsHealthy = deliveryOperationalFeedsSettledWithoutErrors(feedStates);
 
   useEffect(() => {
     if (!online || !navigator.geolocation) return;
@@ -504,9 +687,10 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
           idempotencyKey: crypto.randomUUID(),
         }).then((availability) => {
           setPartner((current) => current ? { ...current, availability } : current);
+          setFeedStates((current) => deliveryFeedSucceeded(current, "partner"));
         }).catch((locationError) => {
           if (locationError instanceof DeliveryRequestError && locationError.code === "partner_offline") {
-            void refresh();
+            requestReconciliation(["partner"]);
           }
         });
       },
@@ -514,7 +698,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       { enableHighAccuracy: true, maximumAge: 10_000, timeout: 12_000 },
     );
     return () => navigator.geolocation.clearWatch(watch);
-  }, [auth, online, refresh]);
+  }, [auth, online, requestReconciliation]);
 
   return (
     <div className="delivery-shell">
@@ -531,11 +715,11 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         roleName="Delivery Partner"
         persona="DELIVERY"
         deliveryPartner={partner}
-        deliveryPartnerLoading={loading}
-        deliveryPartnerError={partner ? undefined : error}
+        deliveryPartnerLoading={!partner && !feedStates.partner.loaded}
+        deliveryPartnerError={partner ? undefined : feedStates.partner.issue?.message}
         supabaseUrl={supabaseUrl}
         publishableKey={publishableKey}
-        onRefreshPartner={() => void refresh(true)}
+        onRefreshPartner={() => void refreshFeeds(["partner"], true)}
         onOpenWorkspace={() => setSection("deliveries")}
         onSignOut={onSignOut}
       /> : <>
@@ -545,7 +729,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
           <h1>Delivery</h1>
           <p>{partner?.deliveryMethod ? deliveryMethodLabel(partner.deliveryMethod) : "Delivery Partner"}</p>
         </div>
-        <button className="icon-button" type="button" onClick={() => void refresh(true)} disabled={Boolean(busy)} aria-label="Refresh delivery queue" title="Refresh delivery queue">
+        <button className="icon-button" type="button" onClick={() => void refreshFeeds(undefined, true)} disabled={Boolean(busy)} aria-label="Refresh delivery queue" title="Refresh delivery queue">
           <RefreshCw size={19} />
         </button>
       </header>
@@ -554,8 +738,12 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       {trackingMissionId && <p className="delivery-notice" role="status">{trackingError ??
         "Keep this browser tab open for location sharing. Use the Dastak iOS app for background delivery tracking."}</p>}
       {notice && <div className="delivery-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div>}
-      {loading ? <div className="catalogue-loading" role="status"><span /> Loading delivery queue</div> : (
-        <>
+      <DeliveryOperationsStatus
+        states={feedStates}
+        hasContent={hasOperationalContent}
+        onRetry={() => void refreshFeeds(undefined, true)}
+      />
+      {partner ? (
           <section className="delivery-availability" aria-label="Availability">
             <span className={`availability-icon ${online ? "online" : ""}`}><Power size={21} /></span>
             <div>
@@ -573,6 +761,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
               <span aria-hidden="true" />
             </label>
           </section>
+      ) : null}
           {v1Dispatch.returnMission && (
             <CurrentV1ReturnMission
               mission={v1Dispatch.returnMission}
@@ -599,10 +788,12 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
 
           {v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && (
             <V1DeliveryOffer
+              key={v1Dispatch.offer.id}
               offer={v1Dispatch.offer}
               busy={Boolean(busy)}
               onAccept={() => void runV1OfferAction(v1Dispatch.offer!, "accept")}
               onDecline={() => void runV1OfferAction(v1Dispatch.offer!, "decline")}
+              onExpire={() => requestReconciliation(["v1"])}
             />
           )}
 
@@ -638,41 +829,107 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
 
           {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && dispatch.offer && (
             <DeliveryOffer
+              key={dispatch.offer.assignmentId}
               offer={dispatch.offer}
               busy={Boolean(busy)}
               onAccept={() => void runDispatchAction(dispatch.offer!, "accept")}
               onDecline={() => void runDispatchAction(dispatch.offer!, "decline")}
+              onExpire={() => requestReconciliation(["legacy"])}
             />
           )}
 
           {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && parcelDispatch.offer && (
             <ParcelOffer
+              key={parcelDispatch.offer.assignmentId}
               offer={parcelDispatch.offer}
               busy={Boolean(busy)}
               onAccept={() => void runParcelAction(parcelDispatch.offer!, "acknowledgeAssignment")}
               onDecline={() => void runParcelAction(parcelDispatch.offer!, "declineAssignment")}
+              onExpire={() => requestReconciliation(["parcel"])}
             />
           )}
 
-          {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && !v1Dispatch.completedMission && !dispatch.offer && !dispatch.currentJob && !parcelDispatch.offer && !parcelDispatch.currentJob && (
+          {!hasOperationalContent && operationalFeedsHealthy && (
             <section className="delivery-empty">
               <Navigation size={25} />
               <div><h2>{online ? "Waiting for assignments" : "Offline"}</h2><p>{online ? "No ready orders nearby." : "Go online when available."}</p></div>
             </section>
           )}
-        </>
-      )}
       </>}
     </div>
   );
 }
 
-function V1DeliveryOffer({ offer, busy, onAccept, onDecline }: {
+export function DeliveryOperationsStatus({ states, hasContent, onRetry }: {
+  states: DeliveryFeedStates;
+  hasContent: boolean;
+  onRetry?: () => void;
+}) {
+  const failures = deliveryFeedFailures(states);
+  if (failures.length > 0) {
+    const labels = failures.map((failure) => failure.label).join(", ");
+    const sessionExpired = failures.some((failure) => failure.issue.action === "sign_in");
+    return <div className={hasContent ? "delivery-notice" : "order-error"} role={hasContent ? "status" : "alert"}>
+      <CircleAlert size={18} />
+      <span>{sessionExpired
+        ? "Your session expired. Dastak is returning you to sign in."
+        : `${labels} could not update. ${hasContent ? "Previously loaded information remains visible." : "Dastak will retry automatically."}`}</span>
+      {!sessionExpired && onRetry ? <button type="button" onClick={onRetry}>Try again</button> : null}
+    </div>;
+  }
+  const waitingForOperationalFeed = deliveryOperationalFeedKeys.some((key) => !states[key].loaded);
+  if (!hasContent && (deliveryFeedsInitiallyLoading(states) || waitingForOperationalFeed)) {
+    return <div className="catalogue-loading" role="status"><span /> Loading delivery queue</div>;
+  }
+  return null;
+}
+
+function useEffectiveRiderOnline(
+  availability: PartnerAvailability | null | undefined,
+  onExpire: () => void,
+) {
+  const [, renderExpiry] = useState(0);
+  const expiryCallback = useRef(onExpire);
+  expiryCallback.current = onExpire;
+  useEffect(() => {
+    if (availability?.status !== "online" || !availability.availableUntil) return;
+    const delay = deadlineDelay(availability.availableUntil);
+    const timer = window.setTimeout(() => {
+      renderExpiry((value) => value + 1);
+      expiryCallback.current();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [availability?.availableUntil, availability?.status]);
+  return isRiderEffectivelyOnline(availability);
+}
+
+function useOfferExpiration(respondBy: string, onExpire: () => void) {
+  const [expired, setExpired] = useState(() => isOfferExpired(respondBy));
+  const expiryCallback = useRef(onExpire);
+  const notified = useRef(false);
+  expiryCallback.current = onExpire;
+  useEffect(() => {
+    const delay = deadlineDelay(respondBy);
+    const timer = window.setTimeout(() => {
+      setExpired(true);
+      if (!notified.current) {
+        notified.current = true;
+        expiryCallback.current();
+      }
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [respondBy]);
+  return expired;
+}
+
+function V1DeliveryOffer({ offer, busy, onAccept, onDecline, onExpire }: {
   offer: V1RiderOffer;
   busy: boolean;
   onAccept: () => void;
   onDecline: () => void;
+  onExpire: () => void;
 }) {
+  const expired = useOfferExpiration(offer.respondBy, onExpire);
   return (
     <section className="delivery-offer v1-delivery-card" aria-label="New Dastak order mission">
       <header>
@@ -697,8 +954,8 @@ function V1DeliveryOffer({ offer, busy, onAccept, onDecline }: {
         One customer order · {transportLabel(offer.transportType)} eligible · No batching
       </p>
       <div className="delivery-offer-actions">
-        <button className="danger-button" type="button" disabled={busy} onClick={onDecline}><X size={17} /> Decline</button>
-        <button className="primary-button" type="button" disabled={busy} onClick={onAccept}><Check size={18} /> Accept mission</button>
+        <button className="danger-button" type="button" disabled={busy || expired} onClick={onDecline}><X size={17} /> Decline</button>
+        <button className="primary-button" type="button" disabled={busy || expired} onClick={onAccept}><Check size={18} /> {expired ? "Offer expired" : "Accept mission"}</button>
       </div>
     </section>
   );
@@ -1067,12 +1324,14 @@ function V1PickupStopCard({
   );
 }
 
-function ParcelOffer({ offer, busy, onAccept, onDecline }: {
+function ParcelOffer({ offer, busy, onAccept, onDecline, onExpire }: {
   offer: ParcelAssignment;
   busy: boolean;
   onAccept: () => void;
   onDecline: () => void;
+  onExpire: () => void;
 }) {
+  const expired = useOfferExpiration(offer.respondBy, onExpire);
   return (
     <section className="delivery-offer" aria-label="New parcel offer">
       <header><div><p className="eyebrow">Parcel offer</p><h2>{offer.parcel.declaredContents}</h2></div><OfferTimer respondBy={offer.respondBy} /></header>
@@ -1083,8 +1342,8 @@ function ParcelOffer({ offer, busy, onAccept, onDecline }: {
         <MapLink location={offer.parcel.pickup} label="Open pickup route" />
       </div>
       <div className="delivery-offer-actions">
-        <button className="danger-button" type="button" disabled={busy} onClick={onDecline}><X size={17} /> Decline</button>
-        <button className="primary-button" type="button" disabled={busy} onClick={onAccept}><Check size={18} /> Accept</button>
+        <button className="danger-button" type="button" disabled={busy || expired} onClick={onDecline}><X size={17} /> Decline</button>
+        <button className="primary-button" type="button" disabled={busy || expired} onClick={onAccept}><Check size={18} /> {expired ? "Offer expired" : "Accept"}</button>
       </div>
     </section>
   );
@@ -1115,12 +1374,14 @@ function CurrentParcel({ assignment, busy, verificationCode, onVerificationCode,
   );
 }
 
-function DeliveryOffer({ offer, busy, onAccept, onDecline }: {
+function DeliveryOffer({ offer, busy, onAccept, onDecline, onExpire }: {
   offer: DeliveryAssignment;
   busy: boolean;
   onAccept: () => void;
   onDecline: () => void;
+  onExpire: () => void;
 }) {
+  const expired = useOfferExpiration(offer.respondBy, onExpire);
   return (
     <section className="delivery-offer" aria-label="New delivery offer">
       <header><div><p className="eyebrow">New offer</p><h2>{offer.store.name}</h2></div><OfferTimer respondBy={offer.respondBy} /></header>
@@ -1132,8 +1393,8 @@ function DeliveryOffer({ offer, busy, onAccept, onDecline }: {
         <MapLink location={offer.store.pickup} label="Open pickup route" />
       </div>
       <div className="delivery-offer-actions">
-        <button className="danger-button" type="button" disabled={busy} onClick={onDecline}><X size={17} /> Decline</button>
-        <button className="primary-button" type="button" disabled={busy} onClick={onAccept}><Check size={18} /> Accept</button>
+        <button className="danger-button" type="button" disabled={busy || expired} onClick={onDecline}><X size={17} /> Decline</button>
+        <button className="primary-button" type="button" disabled={busy || expired} onClick={onAccept}><Check size={18} /> {expired ? "Offer expired" : "Accept"}</button>
       </div>
     </section>
   );
