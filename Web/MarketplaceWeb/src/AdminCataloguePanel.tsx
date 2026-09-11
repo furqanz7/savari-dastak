@@ -28,6 +28,8 @@ import {
 } from "./dastakV1";
 import { catalogueImageUrl } from "./catalogue";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { useAdminRuntime } from "./AdminRuntimeContext";
+import { RefreshQueue } from "./orderRealtime";
 import { userFacingError } from "./userFacingError";
 
 const importTemplate = `{
@@ -56,6 +58,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   const [source, setSource] = useState(importTemplate);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [pageLoaded, setPageLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -69,6 +72,10 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     closeEditor?: boolean;
   }>();
   const headingRef = useRef<HTMLElement>(null);
+  const pageGeneration = useRef(0);
+  const pageController = useRef<AbortController | undefined>(undefined);
+  const refreshQueue = useRef(new RefreshQueue());
+  const { reportRequestError } = useAdminRuntime();
   useEffect(() => {
     if (categoryTypeId) headingRef.current?.scrollIntoView({ block: "start" });
   }, [categoryTypeId]);
@@ -101,49 +108,74 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     return { categories, subcategories };
   }, [skus, snapshot]);
 
-  const loadMetadata = useCallback(async () => setSnapshot(await getV1AdminCatalogue(auth)), [auth]);
+  const loadMetadata = useCallback(async (signal?: AbortSignal) => setSnapshot(await getV1AdminCatalogue({ ...auth, signal })), [auth]);
   const loadPage = useCallback(async (append: boolean, signal?: AbortSignal) => {
+    const generation = ++pageGeneration.current;
     if (append) setLoadingMore(true);
     else setLoading(true);
     try {
       const page = await getV1AdminCataloguePage({ ...auth, ...filters, limit: 50, cursor: append ? cursor : undefined, signal });
+      if (signal?.aborted || generation !== pageGeneration.current) return;
       setSkus((current) => append ? [...current, ...page.skus] : page.skus);
       setCursor(page.nextCursor);
       setHasMore(page.hasMore);
+      setPageLoaded(true);
       setError(undefined);
     } catch (loadError) {
-      if (loadError instanceof DOMException && loadError.name === "AbortError") return;
+      if (signal?.aborted || generation !== pageGeneration.current) return;
+      reportRequestError(loadError);
       setError(message(loadError));
+      throw loadError;
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (generation === pageGeneration.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-  }, [auth, cursor, filters]);
+  }, [auth, cursor, filters, reportRequestError]);
 
-  useEffect(() => { void loadMetadata().catch((loadError) => setError(message(loadError))); }, [loadMetadata]);
   useEffect(() => {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => void loadPage(false, controller.signal), 250);
+    void loadMetadata(controller.signal).catch((loadError) => {
+      if (!controller.signal.aborted) { reportRequestError(loadError); setError(message(loadError)); }
+    });
+    return () => controller.abort();
+  }, [loadMetadata, reportRequestError]);
+  useEffect(() => {
+    pageController.current?.abort();
+    const controller = new AbortController();
+    pageController.current = controller;
+    setPageLoaded(false);
+    const timer = window.setTimeout(() => void loadPage(false, controller.signal).catch(() => undefined), 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
     // Cursor changes only while appending and must not restart page one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth, filters]);
 
   const reconcileCatalogue = useCallback(async () => {
+    pageController.current?.abort();
+    const controller = new AbortController();
+    pageController.current = controller;
+    const generation = ++pageGeneration.current;
     const [metadata, page] = await Promise.all([
-      getV1AdminCatalogue(auth),
-      getV1AdminCataloguePage({ ...auth, ...filters, limit: 50 }),
+      getV1AdminCatalogue({ ...auth, signal: controller.signal }),
+      getV1AdminCataloguePage({ ...auth, ...filters, limit: 50, signal: controller.signal }),
     ]);
-    setSnapshot(metadata); setSkus(page.skus); setCursor(page.nextCursor); setHasMore(page.hasMore);
+    if (controller.signal.aborted || generation !== pageGeneration.current) return;
+    setSnapshot(metadata); setSkus(page.skus); setCursor(page.nextCursor); setHasMore(page.hasMore); setPageLoaded(true);
   }, [auth, filters]);
 
-  const refresh = useCallback(async () => {
-    setBusy(true);
+  const refresh = useCallback(() => refreshQueue.current.request(false, async () => {
     try { await reconcileCatalogue(); setError(undefined); }
-    catch (refreshError) { setError(message(refreshError)); throw refreshError; }
-    finally { setBusy(false); }
-  }, [reconcileCatalogue]);
-  useAdminWorkspaceRefresh(refresh);
+    catch (refreshError) { reportRequestError(refreshError); setError(message(refreshError)); throw refreshError; }
+  }), [reconcileCatalogue, reportRequestError]);
+  useAdminWorkspaceRefresh("catalogue", refresh);
+  const loadMore = useCallback(async () => {
+    pageController.current?.abort();
+    const controller = new AbortController();
+    pageController.current = controller;
+    await loadPage(true, controller.signal);
+  }, [loadPage]);
 
   const chooseCategoryType = (value: string) => {
     const children = value ? snapshot?.categories.filter((item) => item.categoryTypeId === value) ?? [] : [];
@@ -210,7 +242,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
       if (result.kind === "reconciled") setIntent(undefined);
     } else if (result.kind === "uncertain_blocked") {
       setReconciliationBlocked(true); setError(result.message);
-    } else setError(message(result.error));
+    } else { reportRequestError(result.error); setError(message(result.error)); }
   };
 
   const showProducts = Boolean(query.trim() || categoryTypeId || categoryId || subcategoryId || status || qaStatus);
@@ -240,9 +272,9 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
       <header><Tags size={20} /><div><h3>Customer-ready products</h3><p>Open a product to manage its exact record.</p></div></header>
       <div className={`admin-catalogue-browser ${categoryTypeId && visibleCategories.length ? "with-rail" : ""}`}>
         {categoryTypeId && visibleCategories.length ? <div className="admin-subcategory-rail" role="group" aria-label="Subcategories">{visibleCategories.map((category) => <button type="button" className={categoryId === category.id ? "selected" : ""} aria-pressed={categoryId === category.id} key={category.id} onClick={() => chooseCategory(category.id)}><AdminCategoryArtwork item={{ ...category, imageKey: category.imageKey ?? artworkKeys.categories.get(category.id) }} supabaseUrl={auth.supabaseUrl} /><strong>{category.name}</strong></button>)}</div> : null}
-        <div className="admin-catalogue-products" key={categoryId}>{loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : <div className="v1-admin-sku-grid">{skus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div>}</div>
+        <div className="admin-catalogue-products" key={categoryId}>{loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 && pageLoaded ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : skus.length > 0 ? <div className="v1-admin-sku-grid">{skus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div> : null}</div>
       </div>
-      {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadPage(true)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 products"}</button> : null}
+      {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadMore().catch(() => undefined)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 products"}</button> : null}
     </section> : null}
     {snapshot ? <details className="admin-catalogue-operations"><summary><Settings2 size={18} /><span><strong>Catalogue operations</strong><small>Counts, hierarchy and launch configuration</small></span><ChevronDown size={17} /></summary><div className="admin-catalogue-operations-body"><div className="v1-admin-summary"><Summary label="Departments" value={snapshot.categoryTypes.length} /><Summary label="Categories" value={snapshot.categories.length} /><Summary label="Subcategories" value={snapshot.subcategories.length} /><Summary label="Canonical SKUs" value={snapshot.skuCount} /><Summary label="Retail branches" value={snapshot.branches.length} /></div><section className="v1-admin-config"><header><Settings2 size={20} /><div><h3>Launch configuration</h3><p>Effective settings and validation state for the customer catalogue.</p></div></header><div>{snapshot.configuration.map((setting) => <article key={setting.key} className={!setting.valid || (setting.required && !setting.explicit) ? "attention" : ""}><code>{setting.key}</code><strong>{displayValue(setting.value)}</strong><span>{setting.explicit ? "Explicit" : "Default"} · {setting.valid ? "Valid" : "Invalid"}</span></article>)}</div></section></div></details> : null}
     <details className="v1-admin-import"><summary><Upload size={18} /><span><strong>Advanced atomic import</strong><small>Imports enter Draft and require taxonomy, QA, price and cleared imagery before activation</small></span><ChevronDown size={17} /></summary><form onSubmit={runImport}><label htmlFor="v1-catalogue-import">Catalogue JSON</label><textarea id="v1-catalogue-import" value={source} onChange={(event) => setSource(event.target.value)} rows={16} spellCheck={false} disabled={busy} /><p className="field-help">Use approved taxonomy slugs. A successful import does not make a product customer-visible.</p><button className="primary-button" type="submit" disabled={busy}>{busy ? "Importing…" : "Validate and import as Draft"}</button></form></details>

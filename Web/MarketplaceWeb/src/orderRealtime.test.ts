@@ -35,10 +35,10 @@ describe("order realtime", () => {
 
     const first = queue.request(false, task);
     await Promise.resolve();
-    await queue.request(false, task);
-    await queue.request(false, task);
+    const second = queue.request(false, task);
+    const third = queue.request(false, task);
     releaseFirst?.();
-    await first;
+    await Promise.all([first, second, third]);
 
     expect(runs).toBe(2);
   });
@@ -52,10 +52,26 @@ describe("order realtime", () => {
       await new Promise<void>((resolve) => { releaseFirst = resolve; });
     });
     await Promise.resolve();
-    await queue.request(false, async () => { runs.push("latest"); });
+    const trailing = queue.request(false, async () => { runs.push("latest"); });
     releaseFirst?.();
-    await first;
+    await Promise.all([first, trailing]);
     expect(runs).toEqual(["first", "latest"]);
+  });
+
+  it("still runs the queued authoritative refresh after an in-flight failure", async () => {
+    const queue = new RefreshQueue();
+    let releaseFirst: (() => void) | undefined;
+    const runs: string[] = [];
+    const first = queue.request(false, async () => {
+      runs.push("failed");
+      await new Promise<void>((resolve) => { releaseFirst = resolve; });
+      throw new Error("temporary");
+    });
+    await Promise.resolve();
+    const trailing = queue.request(false, async () => { runs.push("authoritative"); });
+    releaseFirst?.();
+    await expect(Promise.all([first, trailing])).resolves.toEqual([undefined, undefined]);
+    expect(runs).toEqual(["failed", "authoritative"]);
   });
 
   it("bounds realtime reconnect backoff", () => {

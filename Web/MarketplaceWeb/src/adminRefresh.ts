@@ -1,19 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AdminRefreshWorkspace } from "./adminRuntime";
 
 type RefreshHandler = () => Promise<unknown> | unknown;
 
-const activeRefreshHandlers = new Set<RefreshHandler>();
+const activeRefreshHandlers = new Map<AdminRefreshWorkspace, Set<RefreshHandler>>();
 const pullThreshold = 68;
 
-export function useAdminWorkspaceRefresh(handler: RefreshHandler) {
+export function useAdminWorkspaceRefresh(workspace: AdminRefreshWorkspace, handler: RefreshHandler) {
   useEffect(() => {
-    activeRefreshHandlers.add(handler);
-    return () => { activeRefreshHandlers.delete(handler); };
-  }, [handler]);
+    const handlers = activeRefreshHandlers.get(workspace) ?? new Set<RefreshHandler>();
+    handlers.add(handler);
+    activeRefreshHandlers.set(workspace, handlers);
+    return () => {
+      handlers.delete(handler);
+      if (handlers.size === 0) activeRefreshHandlers.delete(workspace);
+    };
+  }, [handler, workspace]);
 }
 
-export async function refreshVisibleAdminWorkspaces() {
-  await Promise.allSettled([...activeRefreshHandlers].map((handler) => handler()));
+export async function refreshVisibleAdminWorkspaces(workspaces?: readonly AdminRefreshWorkspace[]) {
+  const selected = workspaces ?? [...activeRefreshHandlers.keys()];
+  const handlers = new Set<RefreshHandler>();
+  selected.forEach((workspace) => activeRefreshHandlers.get(workspace)?.forEach((handler) => handlers.add(handler)));
+  await Promise.allSettled([...handlers].map((handler) => handler()));
 }
 
 export function useAdminPullToRefresh() {

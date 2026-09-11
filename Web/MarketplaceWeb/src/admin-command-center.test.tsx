@@ -46,6 +46,7 @@ describe("finished Admin command center", () => {
 
   it("ships separate responsive desktop, mobile, and reduced-motion Admin layouts", () => {
     const dashboard = readFileSync(new URL("./AdminDashboard.tsx", import.meta.url), "utf8");
+    const runtime = readFileSync(new URL("./adminRuntime.ts", import.meta.url), "utf8");
     const styles = readFileSync(new URL("./design/v1-admin.css", import.meta.url), "utf8");
 
     expect(dashboard).toContain('className="admin-sidebar"');
@@ -56,12 +57,16 @@ describe("finished Admin command center", () => {
     expect(dashboard).not.toContain("mainNavigation.slice(0, 5)");
     expect(dashboard).toContain("Promise.allSettled");
     expect(dashboard).toContain("AdminFeedStatus");
-    expect(dashboard).toContain("feedUpdatedAt");
+    expect(dashboard).toContain("feedStates");
+    expect(dashboard).toContain("useAdminRealtime");
+    expect(dashboard).toContain("adminFallbackCadence");
     expect(dashboard).toContain("actionError");
     expect(dashboard).not.toContain("Some live signals could not be refreshed");
     expect(dashboard).not.toContain("getAdminOrders({ ...auth, limit: 50 }).catch");
-    expect(dashboard).toContain("visibilitychange");
-    expect(dashboard).toContain("30_000");
+    expect(runtime).toContain("visibilitychange");
+    expect(runtime).toContain("30_000");
+    expect(runtime).toContain('.channel("admin-control", { config: { private: true } })');
+    expect(runtime).toContain('{ event: "admin_changed" }');
     expect(dashboard).toContain("useAdminPullToRefresh");
     expect(dashboard).toContain("admin-pull-indicator");
     expect(dashboard).not.toMatch(/<button[^>]*>\s*(?:Refresh|Retry)/i);

@@ -1,30 +1,39 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { WalletCards } from "lucide-react";
 import { formatPrice } from "./catalogue";
 import { getAdminRoyaltyPayouts, type AdminRoyaltyPayout } from "./earnings";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { useAdminRuntime } from "./AdminRuntimeContext";
+import { adminFeedFailed, adminFeedHasContent, adminFeedStarted, adminFeedSucceeded, initialAdminFeedState } from "./adminRuntime";
+import { RefreshQueue } from "./orderRealtime";
 import { userFacingError } from "./userFacingError";
 
 type Auth = { accessToken: string; supabaseUrl: string; publishableKey: string };
 
 export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
   const [payouts, setPayouts] = useState<AdminRoyaltyPayout[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const [feedState, setFeedState] = useState(initialAdminFeedState);
+  const queue = useRef(new RefreshQueue());
+  const controller = useRef<AbortController | undefined>(undefined);
+  const { reportRequestError } = useAdminRuntime();
+  const refresh = useCallback(() => queue.current.request(false, async () => {
+    controller.current?.abort();
+    const nextController = new AbortController();
+    controller.current = nextController;
+    setFeedState((current) => adminFeedStarted(current));
     try {
-      setPayouts(await getAdminRoyaltyPayouts({ ...auth, limit: 100 }));
-      setError(undefined);
+      setPayouts(await getAdminRoyaltyPayouts({ ...auth, limit: 100, signal: nextController.signal }));
+      setFeedState((current) => adminFeedSucceeded(current));
     } catch (loadError) {
-      setError(message(loadError));
-    } finally {
-      setLoading(false);
+      if (nextController.signal.aborted) return;
+      reportRequestError(loadError);
+      setFeedState((current) => adminFeedFailed(current, loadError));
+      throw loadError;
     }
-  }, [auth]);
+  }), [auth, reportRequestError]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
-  useAdminWorkspaceRefresh(refresh);
+  useEffect(() => { void refresh().catch(() => undefined); return () => controller.current?.abort(); }, [refresh]);
+  useAdminWorkspaceRefresh("royaltyPayouts", refresh);
 
   return (
     <section className="admin-royalty-payouts" role="tabpanel" aria-labelledby="admin-payouts-title">
@@ -35,12 +44,12 @@ export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
           <p>Provider state, immutable destination snapshots, attempts, and reconciliation.</p>
         </div>
       </header>
-      {error ? <p className="order-error" role="alert">{error}</p> : null}
-      {loading && payouts.length === 0
+      {feedState.phase === "failed-with-content" || feedState.phase === "failed-without-content" ? <p className="order-error" role="alert">{message(feedState.error)}</p> : null}
+      {feedState.phase === "loading" && payouts.length === 0
         ? <div className="catalogue-loading" role="status"><span /> Loading payouts</div>
-        : payouts.length === 0
+        : payouts.length === 0 && adminFeedHasContent(feedState)
         ? <p className="admin-empty">No Royalty withdrawals yet.</p>
-        : <div className="admin-payout-list">{payouts.map((payout) => <PayoutCard key={payout.id} payout={payout} />)}</div>}
+        : payouts.length > 0 ? <div className="admin-payout-list">{payouts.map((payout) => <PayoutCard key={payout.id} payout={payout} />)}</div> : null}
     </section>
   );
 }

@@ -774,6 +774,7 @@ function Ready({ access, email, session, onSignOut }: {
     return (
       <AdminDashboard
         accessToken={session.access_token}
+        client={supabase}
         displayName={access.profile?.displayName}
         email={email}
         phoneNumber={access.profile?.phoneNumber}

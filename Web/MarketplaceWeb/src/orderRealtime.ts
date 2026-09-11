@@ -53,6 +53,7 @@ export class RefreshQueue {
   private queued = false;
   private pendingProgress = false;
   private nextTask: ((showProgress: boolean) => Promise<void>) | undefined;
+  private completion: Promise<void> | undefined;
 
   async request(
     showProgress: boolean,
@@ -61,21 +62,34 @@ export class RefreshQueue {
     this.queued = true;
     this.pendingProgress ||= showProgress;
     this.nextTask = task;
-    if (this.running) return;
+    if (this.running) return this.completion;
 
     this.running = true;
-    try {
-      while (this.queued) {
-        const nextProgress = this.pendingProgress;
-        const nextTask = this.nextTask;
-        this.queued = false;
-        this.pendingProgress = false;
-        this.nextTask = undefined;
-        if (nextTask) await nextTask(nextProgress);
+    this.completion = (async () => {
+      try {
+        let finalError: unknown;
+        while (this.queued) {
+          const nextProgress = this.pendingProgress;
+          const nextTask = this.nextTask;
+          this.queued = false;
+          this.pendingProgress = false;
+          this.nextTask = undefined;
+          if (nextTask) {
+            try {
+              await nextTask(nextProgress);
+              finalError = undefined;
+            } catch (error) {
+              finalError = error;
+            }
+          }
+        }
+        if (finalError !== undefined) throw finalError;
+      } finally {
+        this.running = false;
+        this.completion = undefined;
       }
-    } finally {
-      this.running = false;
-    }
+    })();
+    return this.completion;
   }
 }
 

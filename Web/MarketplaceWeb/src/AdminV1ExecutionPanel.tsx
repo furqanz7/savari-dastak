@@ -21,68 +21,112 @@ import {
 } from "./dastakV1";
 import { processV1Refund } from "./payments";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { useAdminRuntime } from "./AdminRuntimeContext";
+import {
+  adminFeedFailed,
+  adminFeedHasContent,
+  adminFeedStarted,
+  adminFeedSucceeded,
+  initialAdminFeedState,
+} from "./adminRuntime";
+import { RefreshQueue } from "./orderRealtime";
 import { userFacingError } from "./userFacingError";
 
 export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   const [orders, setOrders] = useState<V1AdminExecutionOrder[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [trace, setTrace] = useState<V1AdminExecutionTrace>();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
+  const [listState, setListState] = useState(initialAdminFeedState);
+  const [traceState, setTraceState] = useState(initialAdminFeedState);
   const [notice, setNotice] = useState<string>();
   const selectedIdRef = useRef<string | undefined>(undefined);
+  const listController = useRef<AbortController | undefined>(undefined);
+  const traceController = useRef<AbortController | undefined>(undefined);
+  const listQueue = useRef(new RefreshQueue());
+  const { reportRequestError } = useAdminRuntime();
 
   const loadTrace = useCallback(async (orderId: string) => {
+    traceController.current?.abort();
+    const controller = new AbortController();
+    traceController.current = controller;
+    setTraceState((current) => adminFeedStarted(current));
     try {
-      const result = await getV1AdminExecutionTrace({ ...auth, orderId });
-      if (selectedIdRef.current !== orderId) return;
+      const result = await getV1AdminExecutionTrace({ ...auth, orderId, signal: controller.signal });
+      if (controller.signal.aborted || selectedIdRef.current !== orderId) return;
       setTrace(result);
-      setError(undefined);
+      setTraceState((current) => adminFeedSucceeded(current));
     } catch (traceError) {
-      setError(message(traceError));
+      if (controller.signal.aborted) return;
+      reportRequestError(traceError);
+      setTraceState((current) => adminFeedFailed(current, traceError));
       throw traceError;
+    } finally {
+      if (traceController.current === controller) traceController.current = undefined;
     }
-  }, [auth]);
+  }, [auth, reportRequestError]);
 
   const refresh = useCallback(async () => {
-    try {
-      const result = await getV1AdminExecutionOrders({ ...auth, limit: 50 });
-      setOrders(result);
-      const currentId = selectedIdRef.current;
-      const orderId = currentId && result.some((order) => order.id === currentId)
-        ? currentId
-        : result[0]?.id;
-      selectedIdRef.current = orderId;
-      setSelectedId(orderId);
-      if (orderId) await loadTrace(orderId);
-      else setTrace(undefined);
-      setError(undefined);
-    } catch (refreshError) {
-      setError(message(refreshError));
-      throw refreshError;
-    } finally {
-      setLoading(false);
-    }
-  }, [auth, loadTrace]);
+    await listQueue.current.request(false, async () => {
+      listController.current?.abort();
+      const controller = new AbortController();
+      listController.current = controller;
+      setListState((current) => adminFeedStarted(current));
+      try {
+        const result = await getV1AdminExecutionOrders({ ...auth, limit: 50, signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setOrders(result);
+        setListState((current) => adminFeedSucceeded(current));
+        const currentId = selectedIdRef.current;
+        const orderId = currentId && result.some((order) => order.id === currentId)
+          ? currentId
+          : result[0]?.id;
+        if (orderId !== currentId) setTraceState(initialAdminFeedState());
+        selectedIdRef.current = orderId;
+        setSelectedId(orderId);
+        if (!orderId) {
+          setTrace(undefined);
+          setTraceState(initialAdminFeedState());
+        }
+      } catch (refreshError) {
+        if (controller.signal.aborted) return;
+        reportRequestError(refreshError);
+        setListState((current) => adminFeedFailed(current, refreshError));
+        throw refreshError;
+      } finally {
+        if (listController.current === controller) listController.current = undefined;
+      }
+    });
+  }, [auth, reportRequestError]);
 
-  useEffect(() => { void refresh().catch(() => undefined); }, [refresh]);
-  useAdminWorkspaceRefresh(refresh);
+  const reconcile = useCallback(async () => {
+    await refresh();
+    const orderId = selectedIdRef.current;
+    if (orderId) await loadTrace(orderId);
+  }, [loadTrace, refresh]);
+
+  useEffect(() => { void reconcile().catch(() => undefined); }, [reconcile]);
+  useEffect(() => () => { listController.current?.abort(); traceController.current?.abort(); }, []);
+  useAdminWorkspaceRefresh("liveOrders", reconcile);
 
   const select = (orderId: string) => {
     selectedIdRef.current = orderId;
     setSelectedId(orderId);
-    setTrace(undefined);
+    setTraceState(initialAdminFeedState());
     void loadTrace(orderId).catch(() => undefined);
   };
 
+  const listError = listState.phase === "failed-with-content" || listState.phase === "failed-without-content";
+  const traceError = traceState.phase === "failed-with-content" || traceState.phase === "failed-without-content";
+  const initialListLoading = listState.phase === "loading";
+
   return <section className="v1-execution-panel" role="tabpanel" aria-label="Current Dastak orders">
     <header><div><p className="eyebrow">LIVE ORDER CONTROL</p><h2>Orders</h2><span>Inspect matching, payment, fulfilment, custody and recovery in one trace.</span></div></header>
-    {error ? <p className="order-error" role="alert">{error}</p> : null}
+    {listError ? <p className="order-error" role="alert">{message(listState.error)}</p> : null}
     {notice ? <p className="admin-access-message success" role="status">{notice}</p> : null}
-    {loading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length === 0 ? <p className="admin-empty">No current-generation orders have been submitted.</p> : <div className="v1-execution-layout">
+    {initialListLoading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length === 0 && adminFeedHasContent(listState) ? <p className="admin-empty">No current-generation orders have been submitted.</p> : orders.length > 0 ? <div className="v1-execution-layout">
       <nav aria-label="Current orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>
-      <div className="v1-trace-detail">{trace ? <Trace trace={trace} auth={auth} onChanged={refresh} onNotice={setNotice} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
-    </div>}
+      <div className="v1-trace-detail">{traceError ? <p className="order-error" role="alert">{message(traceState.error)}</p> : null}{trace && trace.order.id === selectedId ? <Trace trace={trace} auth={auth} onChanged={reconcile} onNotice={setNotice} /> : traceState.phase === "loading" ? <div className="catalogue-loading" role="status"><span /> Loading order evidence</div> : null}</div>
+    </div> : null}
   </section>;
 }
 

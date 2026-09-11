@@ -2,6 +2,7 @@ import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { AccountProfileRequestError, snapshotAccountProfile } from "./accountProfile";
 import type { AppConfig } from "./config";
 import { isValidDastakPhoneNumber } from "./phoneNumber";
+import { isAbortError, requestDeadline } from "./requestDeadline";
 
 export type AccessState = "signed_out" | "needs_profile" | "active" | "pending" | "suspended" | "denied";
 
@@ -15,6 +16,13 @@ export type AccessResult = {
   profile?: AccountProfile;
   message?: string;
 };
+
+export class DastakAccessRequestError extends Error {
+  constructor(public readonly code: string, message: string, public readonly status: number) {
+    super(message);
+    this.name = "DastakAccessRequestError";
+  }
+}
 
 export class ProfileSubmissionAttempt {
   private fingerprint?: string;
@@ -215,7 +223,7 @@ async function resolveDastakAccess(
       return { state: "signed_out" } satisfies AccessResult;
     }
     if (!routeResponse.ok) {
-      throw new Error(readErrorMessage(routeResponse.body, "Delivery access could not be verified."));
+      throw accessRequestError(routeResponse, "Delivery access could not be verified.");
     }
     const route = mapDastakRoute((routeResponse.body as { route?: unknown }).route);
     if (route.state === "needs_profile") return route;
@@ -225,7 +233,7 @@ async function resolveDastakAccess(
       return { state: "signed_out" } satisfies AccessResult;
     }
     if (response.status === 409) return { state: "needs_profile" } satisfies AccessResult;
-    if (!response.ok) throw new Error(readErrorMessage(response.body, "Delivery access could not be verified."));
+    if (!response.ok) throw accessRequestError(response, "Delivery access could not be verified.");
     const result = mapDeliverySnapshot(response.body as DeliverySnapshot);
     if (result.state === "active") {
       const profile = await resolveDastakProfile(session, config);
@@ -240,7 +248,7 @@ async function resolveDastakAccess(
   if (isAuthenticationRequiredResponse(response.status)) {
     return { state: "signed_out" } satisfies AccessResult;
   }
-  if (!response.ok) throw new Error(readErrorMessage(response.body, "Account access could not be verified."));
+  if (!response.ok) throw accessRequestError(response, "Account access could not be verified.");
   const result = mapDastakRoute((response.body as { route?: unknown }).route);
   if (result.state === "active") {
     const profile = await resolveDastakProfile(session, config);
@@ -280,22 +288,33 @@ async function callFunction(
   extraHeaders: Record<string, string> = {},
 ) {
   const url = `${config.supabaseUrl}/functions/v1/${name}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: config.supabasePublishableKey,
-      authorization: `Bearer ${session.access_token}`,
-      "content-type": "application/json",
-      ...extraHeaders,
-    },
-    body: JSON.stringify(body),
-  });
-  const responseBody = await response.json().catch(() => ({}));
-  return { ok: response.ok, status: response.status, body: responseBody };
+  const deadline = requestDeadline();
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: config.supabasePublishableKey,
+        authorization: `Bearer ${session.access_token}`,
+        "content-type": "application/json",
+        ...extraHeaders,
+      },
+      body: JSON.stringify(body),
+      signal: deadline.signal,
+    });
+    const responseBody = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body: responseBody };
+  } catch (error) {
+    if (deadline.timedOut()) throw new DastakAccessRequestError("request_timeout", "Account access verification timed out.", 0);
+    if (isAbortError(error)) throw error;
+    throw new DastakAccessRequestError("network_error", "Account access verification could not be reached.", 0);
+  } finally {
+    deadline.dispose();
+  }
 }
 
-function readErrorMessage(body: unknown, fallback: string) {
-  return readFunctionError(body, fallback).message;
+function accessRequestError(response: { status: number; body: unknown }, fallback: string) {
+  const details = readFunctionError(response.body, fallback);
+  return new DastakAccessRequestError(details.code ?? `http_${response.status}`, details.message, response.status);
 }
 
 function readFunctionError(body: unknown, fallback: string) {

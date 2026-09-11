@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, BellRing, Clock3, ServerCog, ShieldCheck } from "lucide-react";
 import {
   getV1AdminSystemHealth,
@@ -6,26 +6,36 @@ import {
   type V1SystemHealth,
 } from "./dastakV1";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { useAdminRuntime } from "./AdminRuntimeContext";
+import { adminFeedFailed, adminFeedHasContent, adminFeedStarted, adminFeedSucceeded, initialAdminFeedState } from "./adminRuntime";
+import { RefreshQueue } from "./orderRealtime";
 import { userFacingError } from "./userFacingError";
 
 export function AdminSystemHealthPanel({ auth }: { auth: DastakV1Auth }) {
   const [health, setHealth] = useState<V1SystemHealth>();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
+  const [feedState, setFeedState] = useState(initialAdminFeedState);
+  const queue = useRef(new RefreshQueue());
+  const controller = useRef<AbortController | undefined>(undefined);
+  const { reportRequestError } = useAdminRuntime();
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(() => queue.current.request(false, async () => {
+    controller.current?.abort();
+    const nextController = new AbortController();
+    controller.current = nextController;
+    setFeedState((current) => adminFeedStarted(current));
     try {
-      setHealth(await getV1AdminSystemHealth(auth));
-      setError(undefined);
+      setHealth(await getV1AdminSystemHealth({ ...auth, signal: nextController.signal }));
+      setFeedState((current) => adminFeedSucceeded(current));
     } catch (healthError) {
-      setError(message(healthError));
-    } finally {
-      setLoading(false);
+      if (nextController.signal.aborted) return;
+      reportRequestError(healthError);
+      setFeedState((current) => adminFeedFailed(current, healthError));
+      throw healthError;
     }
-  }, [auth]);
+  }), [auth, reportRequestError]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
-  useAdminWorkspaceRefresh(refresh);
+  useEffect(() => { void refresh().catch(() => undefined); return () => controller.current?.abort(); }, [refresh]);
+  useAdminWorkspaceRefresh("systemHealth", refresh);
 
   return <section className="v1-health-panel" role="tabpanel" aria-label="Dastak V1 system health">
     <header>
@@ -35,8 +45,8 @@ export function AdminSystemHealthPanel({ auth }: { auth: DastakV1Auth }) {
         <span>Transactional delivery, critical invariants and payment reconciliation.</span>
       </div>
     </header>
-    {error ? <p className="order-error" role="alert">{error}</p> : null}
-    {loading ? <div className="catalogue-loading" role="status"><span /> Loading system health</div> : health ? <>
+    {feedState.phase === "failed-with-content" || feedState.phase === "failed-without-content" ? <p className="order-error" role="alert">{message(feedState.error)}</p> : null}
+    {feedState.phase === "loading" ? <div className="catalogue-loading" role="status"><span /> Loading system health</div> : health && adminFeedHasContent(feedState) ? <>
       <div className={`v1-health-state ${health.healthy ? "healthy" : "degraded"}`} role="status">
         {health.healthy ? <ShieldCheck size={22} /> : <AlertTriangle size={22} />}
         <div><strong>{health.healthy ? "Healthy" : "Needs attention"}</strong><span>Observed {formatTime(health.observedAt)}</span></div>

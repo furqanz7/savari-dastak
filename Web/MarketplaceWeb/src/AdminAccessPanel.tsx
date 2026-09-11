@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Clock3, LockKeyhole, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { AdminPrivilegedActionDialog, type AdminPrivilegedActionIntent } from "./AdminPrivilegedActionDialog";
 import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
+import { useAdminRuntime } from "./AdminRuntimeContext";
 import { userFacingError } from "./userFacingError";
 import {
   getV1AdminAccess,
@@ -18,6 +19,7 @@ type Props = {
 };
 
 export function AdminAccessPanel({ auth, access, onChange }: Props) {
+  const { reportRequestError } = useAdminRuntime();
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [busySlot, setBusySlot] = useState<number>();
   const [error, setError] = useState<string>();
@@ -79,6 +81,7 @@ export function AdminAccessPanel({ auth, access, onChange }: Props) {
       setReconciliationBlocked(true);
       setError(result.message);
     } else {
+      reportRequestError(result.error);
       setError(userFacingError(result.error, "Admin access could not be updated."));
     }
   };
@@ -219,6 +222,7 @@ export function AdminAccessPanel({ auth, access, onChange }: Props) {
             setNotice("Authoritative Admin access was reloaded. Review the seat before trying again.");
             setIntent(undefined);
           } catch (cause) {
+            reportRequestError(cause);
             setError(userFacingError(cause, "Admin access could not be reconciled."));
           } finally { setBusySlot(undefined); }
         }}

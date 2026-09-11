@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleAlert, PauseCircle, ShieldCheck } from "lucide-react";
 import { AdminPrivilegedActionDialog, type AdminPrivilegedActionIntent } from "./AdminPrivilegedActionDialog";
 import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
@@ -11,6 +11,9 @@ import {
   type V1OperationalSafety,
 } from "./dastakV1";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { useAdminRuntime } from "./AdminRuntimeContext";
+import { RefreshQueue } from "./orderRealtime";
+import { adminFeedFailed, adminFeedStarted, adminFeedSucceeded, initialAdminFeedState } from "./adminRuntime";
 import { userFacingError } from "./userFacingError";
 
 type Props = { auth: DastakV1Auth };
@@ -24,6 +27,10 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [reconciliationBlocked, setReconciliationBlocked] = useState(false);
+  const [feedState, setFeedState] = useState(initialAdminFeedState);
+  const queue = useRef(new RefreshQueue());
+  const controller = useRef<AbortController | undefined>(undefined);
+  const { reportRequestError } = useAdminRuntime();
   const [intent, setIntent] = useState<{
     dialog: AdminPrivilegedActionIntent;
     operationIdentity: string;
@@ -31,17 +38,25 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
     success: string;
   }>();
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(() => queue.current.request(false, async () => {
+    controller.current?.abort();
+    const nextController = new AbortController();
+    controller.current = nextController;
+    setFeedState((current) => adminFeedStarted(current));
     try {
-      setSnapshot(await getV1AdminOperationalSafety(auth));
+      setSnapshot(await getV1AdminOperationalSafety({ ...auth, signal: nextController.signal }));
       setError(undefined);
+      setFeedState((current) => adminFeedSucceeded(current));
     } catch (cause) {
+      if (nextController.signal.aborted) return;
+      reportRequestError(cause);
       setError(message(cause));
+      setFeedState((current) => adminFeedFailed(current, cause));
       throw cause;
     }
-  }, [auth]);
-  useEffect(() => { void refresh().catch(() => undefined); }, [refresh]);
-  useAdminWorkspaceRefresh(refresh);
+  }), [auth, reportRequestError]);
+  useEffect(() => { void refresh().catch(() => undefined); return () => controller.current?.abort(); }, [refresh]);
+  useAdminWorkspaceRefresh("operationalSafety", refresh);
 
   const existing = useMemo(() => snapshot?.pauses.find((pause) =>
     pause.scope === scope && pause.targetId === targetId.trim()), [scope, snapshot, targetId]);
@@ -67,7 +82,7 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
     } else if (result.kind === "uncertain_blocked") {
       setReconciliationBlocked(true);
       setError(result.message);
-    } else setError(message(result.error));
+    } else { reportRequestError(result.error); setError(message(result.error)); }
   };
 
   const requestPause = () => {
@@ -153,6 +168,8 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
     <div className="admin-approvals" role="tabpanel">
       {error && <p className="order-error" role="alert">{error}</p>}
       {notice && <p className="admin-access-message success" role="status">{notice}</p>}
+      {feedState.phase === "loading" && !snapshot ? <div className="catalogue-loading" role="status"><span /> Loading operational safety</div> : null}
+      {snapshot ? <>
       <section className="admin-section">
         <header>
           <div><h2>Scoped emergency controls</h2><p>New commitments only; paid work continues.</p></div>
@@ -203,6 +220,7 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
           </div>
         )}
       </section>
+      </> : null}
       {intent ? <AdminPrivilegedActionDialog intent={intent.dialog} busy={busy} error={error} notice={notice}
         reconciliationBlocked={reconciliationBlocked} onReconcile={reconcileIntent}
         onDismiss={() => { setIntent(undefined); setError(undefined); setNotice(undefined); }}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  EarningsRequestError,
   getAdminRoyaltyPayouts,
   getRoyalty,
   registerRoyaltyPayoutDestination,
@@ -15,6 +16,24 @@ const auth = {
 const subjectId = "95000000-0000-4000-8000-000000000001";
 
 describe("Royalty", () => {
+  it("preserves structured Edge error code and status", async () => {
+    await expect(getAdminRoyaltyPayouts(auth, () => Promise.resolve(Response.json({
+      error: { code: "authentication_required", message: "Sign in again." },
+    }, { status: 401 })))).rejects.toEqual(new EarningsRequestError("authentication_required", "Sign in again.", 401));
+  });
+
+  it("enforces a request deadline while forwarding the abort signal", async () => {
+    let signal: AbortSignal | undefined;
+    const pending = getAdminRoyaltyPayouts({ ...auth, timeoutMs: 5 }, (_input, init) => {
+      signal = init?.signal as AbortSignal;
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      });
+    });
+    await expect(pending).rejects.toMatchObject({ code: "request_timeout", status: 0 });
+    expect(signal?.aborted).toBe(true);
+  });
+
   it("parses positive and negative append-only ledger entries", async () => {
     let body: unknown;
     const snapshot = await getRoyalty(auth, "deliveryRoyaltySnapshot", (_input, init) => {

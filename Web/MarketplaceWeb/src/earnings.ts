@@ -1,3 +1,5 @@
+import { isAbortError, requestDeadline } from "./requestDeadline";
+
 export type EarningsSnapshot = {
   currency: "INR";
   completedPaise: number;
@@ -72,36 +74,28 @@ type Auth = {
   supabaseUrl: string;
   publishableKey: string;
   accessToken: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
 };
 
+export class EarningsRequestError extends Error {
+  constructor(public readonly code: string, message: string, public readonly status: number) {
+    super(message);
+    this.name = "EarningsRequestError";
+  }
+}
+
 export async function getEarnings(
-  input: { supabaseUrl: string; publishableKey: string; accessToken: string },
+  input: Auth,
   operation: "merchantSnapshot" | "deliveryPartnerSnapshot",
 ): Promise<EarningsSnapshot> {
-  const response = await fetch(`${input.supabaseUrl}/functions/v1/earnings`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      apikey: input.publishableKey,
-      authorization: `Bearer ${input.accessToken}`,
-      "x-idempotency-key": crypto.randomUUID(),
-    },
-    body: JSON.stringify({ operation }),
-  });
-  const payload = await response.json().catch(() => undefined) as
-    | Record<string, unknown>
-    | undefined;
+  const payload = await callEarnings(input, { operation });
   if (
-    !response.ok || !payload || payload.currency !== "INR" ||
+    payload.currency !== "INR" ||
     !validMoney(payload.completedPaise) ||
     !validMoney(payload.pendingPaise) || !validMoney(payload.thisWeekPaise)
   ) {
-    throw new Error(
-      typeof payload?.error === "object" && payload.error !== null &&
-        typeof (payload.error as Record<string, unknown>).message === "string"
-        ? (payload.error as Record<string, string>).message
-        : "Earnings are unavailable.",
-    );
+    throw new EarningsRequestError("invalid_response", "Earnings are unavailable.", 200);
   }
   return {
     currency: "INR",
@@ -270,39 +264,44 @@ export async function getAdminRoyaltyPayouts(
     crypto.randomUUID(),
     fetcher,
   );
-  if (!Array.isArray(payload.withdrawals)) throw new Error("Payouts are unavailable.");
-  return payload.withdrawals.map((value) => {
-    const payout = record(value);
-    const destination = record(payout.destinationSnapshot);
-    if (
-      typeof payout.id !== "string" || typeof payout.subjectType !== "string" ||
-      typeof payout.subjectId !== "string" || !validMoney(payout.amountPaise) ||
-      typeof payout.effectiveStatus !== "string" || typeof payout.requestedAt !== "string" ||
-      typeof destination.type !== "string" || typeof destination.displayLabel !== "string" ||
-      !Array.isArray(payout.attempts) || !Array.isArray(payout.providerRequests) ||
-      !Array.isArray(payout.webhookHistory)
-    ) throw new Error("Payouts are unavailable.");
-    return {
-      id: payout.id,
-      subjectType: payout.subjectType,
-      subjectId: payout.subjectId,
-      amountPaise: payout.amountPaise,
-      effectiveStatus: payout.effectiveStatus,
-      destinationSnapshot: {
-        type: destination.type,
-        displayLabel: destination.displayLabel,
-      },
-      provider: optionalString(payout.provider),
-      providerPayoutReference: optionalString(payout.providerPayoutReference),
-      providerStatus: optionalString(payout.providerStatus),
-      reconciliationState: optionalString(payout.reconciliationState),
-      utr: optionalString(payout.utr),
-      requestedAt: payout.requestedAt,
-      attempts: payout.attempts.map(record),
-      providerRequests: payout.providerRequests.map(record),
-      webhookHistory: payout.webhookHistory.map(record),
-    };
-  });
+  if (!Array.isArray(payload.withdrawals)) throw new EarningsRequestError("invalid_response", "Payouts are unavailable.", 200);
+  try {
+    return payload.withdrawals.map((value) => {
+      const payout = record(value);
+      const destination = record(payout.destinationSnapshot);
+      if (
+        typeof payout.id !== "string" || typeof payout.subjectType !== "string" ||
+        typeof payout.subjectId !== "string" || !validMoney(payout.amountPaise) ||
+        typeof payout.effectiveStatus !== "string" || typeof payout.requestedAt !== "string" ||
+        typeof destination.type !== "string" || typeof destination.displayLabel !== "string" ||
+        !Array.isArray(payout.attempts) || !Array.isArray(payout.providerRequests) ||
+        !Array.isArray(payout.webhookHistory)
+      ) throw new Error("Payouts are unavailable.");
+      return {
+        id: payout.id,
+        subjectType: payout.subjectType,
+        subjectId: payout.subjectId,
+        amountPaise: payout.amountPaise,
+        effectiveStatus: payout.effectiveStatus,
+        destinationSnapshot: {
+          type: destination.type,
+          displayLabel: destination.displayLabel,
+        },
+        provider: optionalString(payout.provider),
+        providerPayoutReference: optionalString(payout.providerPayoutReference),
+        providerStatus: optionalString(payout.providerStatus),
+        reconciliationState: optionalString(payout.reconciliationState),
+        utr: optionalString(payout.utr),
+        requestedAt: payout.requestedAt,
+        attempts: payout.attempts.map(record),
+        providerRequests: payout.providerRequests.map(record),
+        webhookHistory: payout.webhookHistory.map(record),
+      };
+    });
+  } catch (error) {
+    if (error instanceof EarningsRequestError) throw error;
+    throw new EarningsRequestError("invalid_response", "Payouts are unavailable.", 200);
+  }
 }
 
 async function callEarnings(
@@ -311,29 +310,38 @@ async function callEarnings(
   idempotencyKey: string = crypto.randomUUID(),
   fetcher: typeof fetch = fetch,
 ): Promise<Record<string, unknown>> {
-  const response = await fetcher(`${input.supabaseUrl}/functions/v1/earnings`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      apikey: input.publishableKey,
-      authorization: `Bearer ${input.accessToken}`,
-      "x-idempotency-key": idempotencyKey,
-    },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json().catch(() => undefined) as
-    | Record<string, unknown>
-    | undefined;
-  if (!response.ok || !payload) {
-    const error = payload?.error;
-    throw new Error(
-      typeof error === "object" && error !== null &&
-        typeof (error as Record<string, unknown>).message === "string"
-        ? (error as Record<string, string>).message
-        : "Royalty is unavailable.",
-    );
+  const deadline = requestDeadline(input.signal, input.timeoutMs);
+  try {
+    const response = await fetcher(`${input.supabaseUrl}/functions/v1/earnings`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        apikey: input.publishableKey,
+        authorization: `Bearer ${input.accessToken}`,
+        "x-idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify(body),
+      signal: deadline.signal,
+    });
+    const payload = await response.json().catch(() => undefined) as Record<string, unknown> | undefined;
+    if (!response.ok || !payload) {
+      const error = payload?.error;
+      const details = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
+      throw new EarningsRequestError(
+        typeof details?.code === "string" ? details.code : `http_${response.status}`,
+        typeof details?.message === "string" ? details.message : "Royalty is unavailable.",
+        response.status,
+      );
+    }
+    return payload;
+  } catch (error) {
+    if (error instanceof EarningsRequestError) throw error;
+    if (deadline.timedOut()) throw new EarningsRequestError("request_timeout", "The earnings request timed out.", 0);
+    if (input.signal?.aborted || isAbortError(error)) throw error;
+    throw new EarningsRequestError("network_error", "Earnings could not be reached.", 0);
+  } finally {
+    deadline.dispose();
   }
-  return payload;
 }
 
 function parseRoyaltySubject(value: unknown): RoyaltySubject {

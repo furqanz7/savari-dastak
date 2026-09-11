@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -22,6 +22,9 @@ import {
   type V1AdminPersonaState,
 } from "./dastakV1";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
+import { useAdminRuntime } from "./AdminRuntimeContext";
+import { adminFeedFailed, adminFeedHasContent, adminFeedStarted, adminFeedSucceeded, initialAdminFeedState } from "./adminRuntime";
+import { RefreshQueue } from "./orderRealtime";
 import { userFacingError } from "./userFacingError";
 
 export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
@@ -32,15 +35,19 @@ export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
   const [cursor, setCursor] = useState<{ updatedAt: string; accountId: string }>();
   const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<string>();
-  const [loading, setLoading] = useState(true);
+  const [feedState, setFeedState] = useState(initialAdminFeedState);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string>();
+  const requestGeneration = useRef(0);
+  const controller = useRef<AbortController | undefined>(undefined);
+  const refreshQueue = useRef(new RefreshQueue());
+  const { reportRequestError } = useAdminRuntime();
 
   const filters = useMemo(() => ({ query: query.trim(), persona, state }), [persona, query, state]);
 
   const load = useCallback(async (append: boolean, signal?: AbortSignal) => {
+    const generation = ++requestGeneration.current;
     if (append) setLoadingMore(true);
-    else setLoading(true);
+    else setFeedState((current) => adminFeedStarted(current));
     try {
       const page = await getV1AdminNetworkPage({
         ...auth,
@@ -49,6 +56,7 @@ export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
         limit: 40,
         signal,
       });
+      if (signal?.aborted || generation !== requestGeneration.current) return;
       setPeople((current) => append ? [...current, ...page.people] : page.people);
       setCursor(page.nextCursor);
       setHasMore(page.hasMore);
@@ -56,27 +64,41 @@ export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
         setSelected((current) => current && page.people.some((person) => person.id === current)
           ? current : page.people[0]?.id);
       }
-      setError(undefined);
+      setFeedState((current) => adminFeedSucceeded(current));
     } catch (loadError) {
-      if (loadError instanceof DOMException && loadError.name === "AbortError") return;
-      setError(message(loadError));
+      if (signal?.aborted || generation !== requestGeneration.current) return;
+      reportRequestError(loadError);
+      setFeedState((current) => adminFeedFailed(current, loadError));
+      throw loadError;
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (generation === requestGeneration.current) setLoadingMore(false);
     }
-  }, [auth, cursor, filters]);
+  }, [auth, cursor, filters, reportRequestError]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => void load(false, controller.signal), 250);
-    return () => { window.clearTimeout(timer); controller.abort(); };
+    controller.current?.abort();
+    const nextController = new AbortController();
+    controller.current = nextController;
+    const timer = window.setTimeout(() => void load(false, nextController.signal).catch(() => undefined), 250);
+    return () => { window.clearTimeout(timer); nextController.abort(); };
     // Cursor and current people intentionally do not restart a filtered first page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth, filters]);
 
   const selectedPerson = people.find((person) => person.id === selected);
-  const refreshWorkspace = useCallback(() => load(false), [load]);
-  useAdminWorkspaceRefresh(refreshWorkspace);
+  const refreshWorkspace = useCallback(() => refreshQueue.current.request(false, async () => {
+    controller.current?.abort();
+    const nextController = new AbortController();
+    controller.current = nextController;
+    await load(false, nextController.signal);
+  }), [load]);
+  const loadMore = useCallback(async () => {
+    controller.current?.abort();
+    const nextController = new AbortController();
+    controller.current = nextController;
+    await load(true, nextController.signal);
+  }, [load]);
+  useAdminWorkspaceRefresh("network", refreshWorkspace);
 
   return <section className="admin-section admin-network" role="tabpanel">
     <header className="admin-section-heading">
@@ -89,18 +111,18 @@ export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
       <label><span>State</span><select value={state ?? ""} onChange={(event) => setState(event.target.value ? event.target.value as V1AdminPersonaState : undefined)}><option value="">Any state</option><option value="ACTIVE">Active</option><option value="DELETED">Deleted / recoverable</option></select><ChevronDown size={15} /></label>
     </div>
 
-    {error ? <p className="order-error" role="alert">{error}</p> : null}
-    {loading ? <div className="admin-directory-loading" role="status"><span /><p>Connecting identity and operating records…</p></div> : people.length === 0 ? <div className="admin-empty-state"><UsersRound size={28} /><h3>No identities match these filters</h3><p>Try another search or persona state.</p></div> : <div className="admin-network-layout">
+    {feedState.phase === "failed-with-content" || feedState.phase === "failed-without-content" ? <p className="order-error" role="alert">{message(feedState.error)}</p> : null}
+    {feedState.phase === "loading" ? <div className="admin-directory-loading" role="status"><span /><p>Connecting identity and operating records…</p></div> : people.length === 0 && adminFeedHasContent(feedState) ? <div className="admin-empty-state"><UsersRound size={28} /><h3>No identities match these filters</h3><p>Try another search or persona state.</p></div> : people.length > 0 ? <div className="admin-network-layout">
       <div className="admin-people-list" aria-label="Dastak identities">
         {people.map((person) => <button type="button" key={person.id} className={person.id === selected ? "selected" : ""} onClick={() => setSelected(person.id)}>
           <span className="admin-person-mark" aria-hidden="true"><IdCard size={20} /></span>
           <span><strong>{person.displayName}</strong><small>{person.email ?? person.phoneNumber}</small><span className="admin-persona-row">{person.adminRole ? <b className="admin-persona admin"><ShieldCheck size={11} /> {roleLabel(person.adminRole)}</b> : null}{person.personas.map((entry) => <b key={entry.persona} className={`admin-persona ${entry.state.toLowerCase()}`}>{personaIcon(entry.persona)} {personaLabel(entry.persona)}</b>)}</span></span>
           <em>{person.accountState === "ACTIVE" ? "Active" : "Retired"}</em>
         </button>)}
-        {hasMore ? <button type="button" className="admin-load-more" onClick={() => void load(true)} disabled={loadingMore}>{loadingMore ? "Loading…" : "Load more identities"}</button> : null}
+        {hasMore ? <button type="button" className="admin-load-more" onClick={() => void loadMore().catch(() => undefined)} disabled={loadingMore}>{loadingMore ? "Loading…" : "Load more identities"}</button> : null}
       </div>
       <div className="admin-person-detail">{selectedPerson ? <PersonDetail person={selectedPerson} /> : null}</div>
-    </div>}
+    </div> : null}
   </section>;
 }
 
