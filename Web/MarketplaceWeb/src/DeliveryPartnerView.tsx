@@ -1,6 +1,7 @@
+/* eslint-disable react-refresh/only-export-components -- tested delivery presentation helpers intentionally live beside their operational components. */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Banknote, Camera, Check, CircleAlert, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, WalletCards, X } from "lucide-react";
+import { Banknote, Bell, BellOff, Camera, Check, CircleAlert, History as HistoryIcon, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, UserRound, WalletCards, X } from "lucide-react";
 import {
   acceptV1DeliveryOffer,
   acceptDeliveryOffer,
@@ -11,6 +12,7 @@ import {
   declineV1DeliveryOffer,
   declineDeliveryOffer,
   getDeliveryDispatch,
+  getDeliveryPartnerWorkHistory,
   getDeliveryPartnerSnapshot,
   getV1DeliveryLaneSnapshots,
   heartbeatV1DeliveryMission,
@@ -18,6 +20,9 @@ import {
   publishV1MissionLocation,
   recordV1LaunchCollection,
   setDeliveryPartnerAvailability,
+  removeV1EvidenceObject,
+  v1DeliveryEvidenceObjectPath,
+  v1ReturnEvidenceObjectPath,
   uploadV1DeliveryEvidence,
   uploadV1ReturnEvidence,
   DeliveryRequestError,
@@ -25,6 +30,7 @@ import {
   type DeliveryDispatchSnapshot,
   type DeliveryJobOperation,
   type DeliveryPartnerSnapshot,
+  type DeliveryWorkHistoryItem,
   type PartnerAvailability,
   type V1DeliveryDispatchSnapshot,
   type V1DeliveryMission,
@@ -46,7 +52,7 @@ import {
 } from "./parcels";
 import { RoleAccountView } from "./RoleAccountView";
 import { RoyaltyPanel } from "./RoyaltyPanel";
-import { RefreshCoalescer, RefreshQueue, useOrderRealtime } from "./orderRealtime";
+import { RefreshCoalescer, RefreshQueue, useOrderRealtime, type OrderRealtimeHealth } from "./orderRealtime";
 import {
   deadlineDelay,
   deliveryDataIssue,
@@ -69,6 +75,13 @@ import {
   type DeliveryFeedStates,
 } from "./deliveryOperationsState";
 import { userFacingError } from "./userFacingError";
+import { validateDecodableImage } from "./imageValidation";
+import { useDastakWebPush, type DastakWebPushController } from "./useDastakWebPush";
+import {
+  useDeliveryGeolocationController,
+  type DeliveryGeolocationStatus,
+  type WakeLockStatus,
+} from "./deliveryGeolocation";
 
 type Props = {
   accessToken: string;
@@ -79,12 +92,26 @@ type Props = {
   phoneNumber?: string;
   supabaseUrl: string;
   publishableKey: string;
+  webPushPublicKey: string;
   onSignOut: () => void;
 };
 
 type DispatchAction = "accept" | "decline" | DeliveryJobOperation;
+type EvidenceAttempt = {
+  objectPath: string;
+  idempotencyKey: string;
+  fileSignature: string;
+  contentType: string;
+  uploaded: boolean;
+};
+type ActionFailureOutcome = "session" | "reconciled" | "uncertain" | "definite";
+type RecoveryOperation = Extract<
+  V1DeliveryMissionOperation,
+  "v1CancelBeforePickup" | "v1ReportCustomerUnreachable" | "v1ReportDeliveryProblem"
+>;
+type RecoveryIntent = { mission: V1DeliveryMission; operation: RecoveryOperation };
 
-export function DeliveryPartnerView({ accessToken, accountId, client, displayName, email, phoneNumber, supabaseUrl, publishableKey, onSignOut }: Props) {
+export function DeliveryPartnerView({ accessToken, accountId, client, displayName, email, phoneNumber, supabaseUrl, publishableKey, webPushPublicKey, onSignOut }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [partner, setPartner] = useState<DeliveryPartnerSnapshot>();
   const [dispatch, setDispatch] = useState<DeliveryDispatchSnapshot>({ offer: null, currentJob: null });
@@ -99,16 +126,21 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  const [trackingError, setTrackingError] = useState<string>();
+  const [recoveryIntent, setRecoveryIntent] = useState<RecoveryIntent>();
   const [verificationCode, setVerificationCode] = useState("");
-  const [section, setSection] = useState<"deliveries" | "royalty" | "account">("deliveries");
+  const [section, setSection] = useState<"deliveries" | "history" | "royalty" | "account">("deliveries");
   const partnerRefreshQueue = useRef(new RefreshQueue());
   const v1RefreshQueue = useRef(new RefreshQueue());
   const legacyRefreshQueue = useRef(new RefreshQueue());
   const parcelRefreshQueue = useRef(new RefreshQueue());
   const feedControllers = useRef<Partial<Record<DeliveryFeedKey, AbortController>>>({});
   const actionKeys = useRef(new Map<string, string>());
+  const evidenceAttempts = useRef(new Map<string, EvidenceAttempt>());
   const sessionRecoveryStarted = useRef(false);
+  const webPushAuthentication = useMemo(() => ({
+    accessToken, accountId, supabaseUrl, publishableKey, publicKey: webPushPublicKey,
+  }), [accessToken, accountId, publishableKey, supabaseUrl, webPushPublicKey]);
+  const webPush = useDastakWebPush(webPushAuthentication);
 
   const recoverSession = useCallback((requestError: unknown) => {
     const issue = deliveryDataIssue(requestError);
@@ -230,12 +262,84 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     reconcileCoalescer.current?.request();
   }, []);
 
+  const reconcileAvailabilityExpiry = useCallback(() => {
+    requestReconciliation(["partner"]);
+  }, [requestReconciliation]);
+  const online = useEffectiveRiderOnline(partner?.availability, reconcileAvailabilityExpiry);
+  // A recovery return can intentionally coexist with its source delivery. It
+  // is the current custody route and owns the one mission GPS stream.
+  const trackingMissionId = v1Dispatch.returnMission?.id ?? v1Dispatch.currentMission?.id;
+
+  const publishTrackedMissionLocation = useCallback(async (
+    missionId: string,
+    fix: { latitude: number; longitude: number; accuracyMeters: number; recordedAt: string },
+  ) => {
+    const snapshot = await publishV1MissionLocation({ ...auth, missionId, ...fix });
+    setV1Dispatch((current) => mergeMissionTrackingSnapshot(current, snapshot, missionId));
+    setFeedStates((current) => deliveryFeedSucceeded(
+      current,
+      snapshot.returnMission?.id === missionId ? "returns" : "v1",
+    ));
+  }, [auth]);
+
+  const publishAvailabilityLocation = useCallback(async (location: { latitude: number; longitude: number }) => {
+    try {
+      const availability = await publishDeliveryPartnerLocation({
+        ...auth,
+        location,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      setPartner((current) => current && availabilityPresentationChanged(current.availability, availability)
+        ? { ...current, availability }
+        : current);
+      setFeedStates((current) => deliveryFeedSucceeded(current, "partner"));
+    } catch (locationError) {
+      if (locationError instanceof DeliveryRequestError && locationError.code === "partner_offline") {
+        requestReconciliation(["partner"]);
+      }
+      throw locationError;
+    }
+  }, [auth, requestReconciliation]);
+
+  const geolocationMode = useMemo(() => trackingMissionId
+    ? { kind: "mission" as const, missionId: trackingMissionId }
+    : online ? { kind: "availability" as const } : { kind: "idle" as const },
+  [online, trackingMissionId]);
+  const geolocation = useDeliveryGeolocationController({
+    mode: geolocationMode,
+    publishMission: publishTrackedMissionLocation,
+    publishAvailability: publishAvailabilityLocation,
+    onForegroundReconcile: () => requestReconciliation([
+      "partner",
+      ...(trackingMissionId ? [v1Dispatch.returnMission ? "returns" as const : "v1" as const] : []),
+    ]),
+  });
+
   const realtimeHealth = useOrderRealtime({
     client,
     accountId,
     accessToken,
     onChange: (signal) => requestReconciliation(deliveryFeedsForRealtimeSignal(signal)),
+    onVisibilityChange: geolocation.handleVisibilityChange,
   });
+
+  useEffect(() => {
+    const followNotificationRoute = () => {
+      const target = deliveryNotificationTarget(window.location.hash);
+      if (!target) return;
+      setSection("deliveries");
+      requestReconciliation(target.kind === "return" ? ["returns"] : target.kind === "mission" ? ["v1", "returns"] : deliveryOperationalFeedKeys);
+      window.setTimeout(() => {
+        const selector = target.kind === "return"
+          ? "[id^='delivery-return-']"
+          : target.kind === "mission" ? "[id^='delivery-mission-']" : ".delivery-offer";
+        document.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 250);
+    };
+    followNotificationRoute();
+    window.addEventListener("hashchange", followNotificationRoute);
+    return () => window.removeEventListener("hashchange", followNotificationRoute);
+  }, [requestReconciliation]);
 
   useEffect(() => {
     const controllers = feedControllers.current;
@@ -289,83 +393,27 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     return () => window.clearInterval(timer);
   }, [auth, requestReconciliation, v1Dispatch.currentMission]);
 
-  // A recovery return can intentionally coexist with its source delivery
-  // mission. The return is the rider's current custody route and therefore
-  // owns the single mission-bound GPS stream until it is complete.
-  const trackingMissionId = v1Dispatch.returnMission?.id ?? v1Dispatch.currentMission?.id;
-  useEffect(() => {
-    setTrackingError(undefined);
-    if (!trackingMissionId) return;
-    if (!navigator.geolocation) {
-      setTrackingError("This browser cannot share location. Use the Dastak iOS app for delivery.");
-      return;
-    }
-    let cancelled = false;
-    let uploading = false;
-    let lastUpload = 0;
-    const watch = navigator.geolocation.watchPosition(async (position) => {
-      if (cancelled || uploading || Date.now() - lastUpload < 8_000) return;
-      if (Math.abs(Date.now() - position.timestamp) > 25_000 || position.coords.accuracy > 200) {
-        setTrackingError("Waiting for a fresh, precise GPS position. Arrival remains locked.");
-        return;
-      }
-      uploading = true;
-      lastUpload = Date.now();
-      try {
-        const snapshot = await publishV1MissionLocation({
-          ...auth, missionId: trackingMissionId,
-          latitude: position.coords.latitude, longitude: position.coords.longitude,
-          accuracyMeters: position.coords.accuracy,
-          recordedAt: new Date(position.timestamp).toISOString(),
-        });
-        if (cancelled) return;
-        setTrackingError(undefined);
-        // An in-flight fix must never resurrect a completed/reassigned mission,
-        // or replace a newer action response with an older version.
-        setV1Dispatch((current) => {
-          if (current.currentMission?.id === trackingMissionId &&
-            snapshot.currentMission?.id === trackingMissionId &&
-            snapshot.currentMission.version >= current.currentMission.version) {
-            return { ...current, currentMission: snapshot.currentMission };
-          }
-          if (current.returnMission?.id === trackingMissionId &&
-            snapshot.returnMission?.id === trackingMissionId &&
-            snapshot.returnMission.version >= current.returnMission.version) {
-            return { ...current, returnMission: snapshot.returnMission };
-          }
-          return current;
-        });
-      } catch {
-        if (!cancelled) setTrackingError("Location sharing interrupted. Arrival stays locked until GPS reconnects.");
-      } finally {
-        uploading = false;
-      }
-    }, () => {
-      if (!cancelled) setTrackingError("Allow precise location in your browser settings to confirm arrival.");
-    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 });
-    return () => { cancelled = true; navigator.geolocation.clearWatch(watch); };
-  }, [auth, trackingMissionId]);
-
   const handleActionFailure = useCallback(async (
     actionError: unknown,
     requestIdentity: string,
     lanes: DeliveryFeedKey[],
-  ) => {
-    if (recoverSession(actionError)) return;
+  ): Promise<ActionFailureOutcome> => {
+    if (recoverSession(actionError)) return "session";
     if (isDeliveryConcurrencyReconciliation(actionError)) {
       actionKeys.current.delete(requestIdentity);
       await refreshFeeds(lanes);
       setError(undefined);
       setNotice("This delivery changed elsewhere. The latest details are now shown.");
-      return;
+      return "reconciled";
     }
     if (isUncertainDeliveryMutation(actionError)) {
       await refreshFeeds(lanes);
       setError("Dastak could not confirm that action. The latest delivery state was checked; retrying will safely use the same request.");
-      return;
+      return "uncertain";
     }
     actionKeys.current.delete(requestIdentity);
     setError(message(actionError));
+    return "definite";
   }, [recoverSession, refreshFeeds]);
 
   const changeAvailability = async (online: boolean) => {
@@ -375,7 +423,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     setBusy("availability");
     setError(undefined);
     try {
-      const location = online ? await currentLocation() : undefined;
+      const location = online ? await geolocation.currentLocation() : undefined;
       const availability = await setDeliveryPartnerAvailability({
         ...auth,
         online,
@@ -531,29 +579,56 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       if (operation === "v1CompleteDelivery" || operation === "v1VerifyDelivery") {
         setNotice("Delivery verified. Every package is now in the customer’s custody.");
       }
+      return true;
     } catch (actionError) {
       await handleActionFailure(actionError, requestIdentity, ["v1"]);
+      return false;
     } finally {
       setBusy(undefined);
     }
   };
 
   const captureV1DeliveryEvidence = async (mission: V1DeliveryMission, file: File) => {
-    const requestIdentity = `v1:evidence:${mission.id}:${file.name}:${file.size}`;
-    const idempotencyKey = actionKeys.current.get(requestIdentity) ?? crypto.randomUUID();
-    actionKeys.current.set(requestIdentity, idempotencyKey);
+    if (!await validateDecodableImage(file)) {
+      setError("Capture a genuine JPG, PNG or HEIC package photo up to 10 MB.");
+      return;
+    }
+    const attemptKey = `delivery:${mission.id}`;
+    const signature = fileSignature(file);
+    let attempt = evidenceAttempts.current.get(attemptKey);
+    if (attempt && (attempt.fileSignature !== signature || attempt.contentType !== file.type)) {
+      setError("Dastak is still reconciling the previous photo. Choose the same photo to retry, or wait for the mission to update.");
+      await refreshFeeds(["v1"]);
+      return;
+    }
+    if (!attempt) {
+      attempt = {
+        objectPath: v1DeliveryEvidenceObjectPath(accountId, file.type, crypto.randomUUID()),
+        idempotencyKey: crypto.randomUUID(),
+        fileSignature: signature,
+        contentType: file.type,
+        uploaded: false,
+      };
+      evidenceAttempts.current.set(attemptKey, attempt);
+    }
+    const requestIdentity = `v1:evidence:${mission.id}:${attempt.objectPath}`;
+    actionKeys.current.set(requestIdentity, attempt.idempotencyKey);
     setBusy(requestIdentity);
     setError(undefined);
     try {
-      const objectPath = await uploadV1DeliveryEvidence(client, accountId, file);
+      if (!attempt.uploaded) {
+        await uploadV1DeliveryEvidence(client, accountId, file, attempt.objectPath);
+        attempt.uploaded = true;
+      }
       const snapshot = await advanceV1DeliveryMission({
         ...auth,
         missionId: mission.id,
         operation: "v1AddDeliveryEvidence",
-        objectPath,
-        idempotencyKey,
+        objectPath: attempt.objectPath,
+        idempotencyKey: attempt.idempotencyKey,
       });
       actionKeys.current.delete(requestIdentity);
+      evidenceAttempts.current.delete(attemptKey);
       setV1Dispatch(snapshot);
       setFeedStates((current) =>
         deliveryFeedSucceeded(deliveryFeedSucceeded(current, "v1"), "returns"));
@@ -633,18 +708,43 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
   };
 
   const captureV1ReturnEvidence = async (mission: V1ReturnMission, file: File) => {
-    const requestIdentity = `v1-return:evidence:${mission.id}:${file.name}:${file.size}`;
-    const idempotencyKey = actionKeys.current.get(requestIdentity) ?? crypto.randomUUID();
-    actionKeys.current.set(requestIdentity, idempotencyKey);
+    if (!await validateDecodableImage(file)) {
+      setError("Capture a genuine JPG, PNG or HEIC return-package photo up to 10 MB.");
+      return;
+    }
+    const attemptKey = `return:${mission.id}`;
+    const signature = fileSignature(file);
+    let attempt = evidenceAttempts.current.get(attemptKey);
+    if (attempt && (attempt.fileSignature !== signature || attempt.contentType !== file.type)) {
+      setError("Dastak is still reconciling the previous return photo. Choose the same photo to retry, or wait for the mission to update.");
+      await refreshFeeds(["returns"]);
+      return;
+    }
+    if (!attempt) {
+      attempt = {
+        objectPath: v1ReturnEvidenceObjectPath(accountId, file.type, crypto.randomUUID()),
+        idempotencyKey: crypto.randomUUID(),
+        fileSignature: signature,
+        contentType: file.type,
+        uploaded: false,
+      };
+      evidenceAttempts.current.set(attemptKey, attempt);
+    }
+    const requestIdentity = `v1-return:evidence:${mission.id}:${attempt.objectPath}`;
+    actionKeys.current.set(requestIdentity, attempt.idempotencyKey);
     setBusy(requestIdentity);
     setError(undefined);
     try {
-      const objectPath = await uploadV1ReturnEvidence(client, accountId, file);
+      if (!attempt.uploaded) {
+        await uploadV1ReturnEvidence(client, accountId, file, attempt.objectPath);
+        attempt.uploaded = true;
+      }
       const snapshot = await advanceV1ReturnMission({
         ...auth, returnMissionId: mission.id, operation: "v1AddReturnEvidence",
-        objectPath, idempotencyKey,
+        objectPath: attempt.objectPath, idempotencyKey: attempt.idempotencyKey,
       });
       actionKeys.current.delete(requestIdentity);
+      evidenceAttempts.current.delete(attemptKey);
       setV1Dispatch(snapshot);
       setFeedStates((current) =>
         deliveryFeedSucceeded(deliveryFeedSucceeded(current, "v1"), "returns"));
@@ -656,10 +756,35 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     }
   };
 
-  const reconcileAvailabilityExpiry = useCallback(() => {
-    requestReconciliation(["partner"]);
-  }, [requestReconciliation]);
-  const online = useEffectiveRiderOnline(partner?.availability, reconcileAvailabilityExpiry);
+  useEffect(() => {
+    const deliveryMission = v1Dispatch.currentMission;
+    const returnMission = v1Dispatch.returnMission;
+    const cleanup: string[] = [];
+    if (deliveryMission) {
+      const key = `delivery:${deliveryMission.id}`;
+      const attempt = evidenceAttempts.current.get(key);
+      if (attempt && deliveryMission.deliveryEvidence.some((item) => item.objectPath === attempt.objectPath)) {
+        evidenceAttempts.current.delete(key);
+      } else if (attempt?.uploaded && !deliveryMission.canCaptureDeliveryEvidence) {
+        evidenceAttempts.current.delete(key);
+        cleanup.push(attempt.objectPath);
+      }
+    }
+    if (returnMission) {
+      const key = `return:${returnMission.id}`;
+      const attempt = evidenceAttempts.current.get(key);
+      if (attempt && returnMission.evidence.some((item) => item.objectPath === attempt.objectPath)) {
+        evidenceAttempts.current.delete(key);
+      } else if (attempt?.uploaded && !returnMission.canCaptureEvidence) {
+        evidenceAttempts.current.delete(key);
+        cleanup.push(attempt.objectPath);
+      }
+    }
+    cleanup.forEach((objectPath) => {
+      void removeV1EvidenceObject(client, accountId, objectPath).catch(() => undefined);
+    });
+  }, [accountId, client, v1Dispatch.currentMission, v1Dispatch.returnMission]);
+
   const hasJob = Boolean(
     v1Dispatch.currentMission || v1Dispatch.returnMission || dispatch.currentJob || parcelDispatch.currentJob,
   );
@@ -670,44 +795,19 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
   );
   const operationalFeedsHealthy = deliveryOperationalFeedsSettledWithoutErrors(feedStates);
 
-  useEffect(() => {
-    if (!online || !navigator.geolocation) return;
-    let lastPublishedAt = 0;
-    const watch = navigator.geolocation.watchPosition(
-      (position) => {
-        const now = Date.now();
-        if (now - lastPublishedAt < 15_000) return;
-        lastPublishedAt = now;
-        void publishDeliveryPartnerLocation({
-          ...auth,
-          location: {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          },
-          idempotencyKey: crypto.randomUUID(),
-        }).then((availability) => {
-          setPartner((current) => current ? { ...current, availability } : current);
-          setFeedStates((current) => deliveryFeedSucceeded(current, "partner"));
-        }).catch((locationError) => {
-          if (locationError instanceof DeliveryRequestError && locationError.code === "partner_offline") {
-            requestReconciliation(["partner"]);
-          }
-        });
-      },
-      () => undefined,
-      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 12_000 },
-    );
-    return () => navigator.geolocation.clearWatch(watch);
-  }, [auth, online, requestReconciliation]);
-
   return (
     <div className="delivery-shell">
       <nav className="workspace-tabs" role="tablist" aria-label="Delivery Partner workspace">
         <button type="button" role="tab" aria-selected={section === "deliveries"} className={section === "deliveries" ? "selected" : ""} onClick={() => setSection("deliveries")}><Navigation size={18} /> Deliveries</button>
-        <button type="button" role="tab" aria-selected={section === "royalty"} className={section === "royalty" ? "selected" : ""} onClick={() => setSection("royalty")}><WalletCards size={18} /> Royalty</button>
+        <button type="button" role="tab" aria-selected={section === "history"} className={section === "history" ? "selected" : ""} onClick={() => setSection("history")}><HistoryIcon size={18} /> History</button>
+        <button type="button" role="tab" aria-selected={section === "royalty"} className={section === "royalty" ? "selected" : ""} onClick={() => setSection("royalty")}><WalletCards size={18} /> Earnings</button>
         <button type="button" role="tab" aria-selected={section === "account"} className={section === "account" ? "selected" : ""} onClick={() => setSection("account")}><UserRound size={18} /> Account</button>
       </nav>
-      {section === "royalty" ? <RoyaltyPanel auth={auth} kind="RIDER" /> : section === "account" ? <RoleAccountView
+      {section === "royalty" ? <RoyaltyPanel auth={auth} kind="RIDER" /> : section === "history" ? <DeliveryHistoryPanel
+        auth={auth}
+        onOpenEarnings={() => setSection("royalty")}
+        onSessionExpired={recoverSession}
+      /> : section === "account" ? <RoleAccountView
         accessToken={accessToken}
         displayName={displayName}
         email={email}
@@ -721,6 +821,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         publishableKey={publishableKey}
         onRefreshPartner={() => void refreshFeeds(["partner"], true)}
         onOpenWorkspace={() => setSection("deliveries")}
+        notificationSurface={<DeliveryNotificationStatus controller={webPush} />}
         onSignOut={onSignOut}
       /> : <>
       <header className="delivery-heading">
@@ -735,8 +836,13 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       </header>
 
       {error && <p className="order-error" role="alert">{error}</p>}
-      {trackingMissionId && <p className="delivery-notice" role="status">{trackingError ??
-        "Keep this browser tab open for location sharing. Use the Dastak iOS app for background delivery tracking."}</p>}
+      <DeliveryNotificationStatus controller={webPush} />
+      <DeliveryTrackingStatus
+        status={geolocation.status}
+        wakeLockStatus={geolocation.wakeLockStatus}
+        missionActive={Boolean(trackingMissionId)}
+        realtimeHealth={realtimeHealth}
+      />
       {notice && <div className="delivery-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div>}
       <DeliveryOperationsStatus
         states={feedStates}
@@ -748,7 +854,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             <span className={`availability-icon ${online ? "online" : ""}`}><Power size={21} /></span>
             <div>
               <strong>{online ? "Online" : "Offline"}</strong>
-              <small>{online ? availabilityMessage(partner?.availability?.availableUntil) : "Not receiving assignments"}</small>
+              <AvailabilityStatusText availability={partner.availability} online={online} />
             </div>
             <label className="availability-switch" title={online && hasJob ? "Complete the active delivery first" : undefined}>
               <input
@@ -783,6 +889,10 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
                 void captureV1DeliveryEvidence(v1Dispatch.currentMission!, file)}
               onCollection={(input) =>
                 void runV1Collection(v1Dispatch.currentMission!, input)}
+              onRequestRecovery={(operation) => setRecoveryIntent({
+                mission: v1Dispatch.currentMission!,
+                operation,
+              })}
             />
           )}
 
@@ -855,9 +965,97 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
               <div><h2>{online ? "Waiting for assignments" : "Offline"}</h2><p>{online ? "No ready orders nearby." : "Go online when available."}</p></div>
             </section>
           )}
+          {recoveryIntent ? <RecoveryConfirmation
+            intent={recoveryIntent}
+            busy={Boolean(busy)}
+            onDismiss={() => setRecoveryIntent(undefined)}
+            onConfirm={async (reason) => {
+              const succeeded = await runV1MissionAction(
+                recoveryIntent.mission,
+                recoveryIntent.operation,
+                { reason },
+              );
+              if (succeeded) setRecoveryIntent(undefined);
+            }}
+          /> : null}
       </>}
     </div>
   );
+}
+
+export function DeliveryHistoryPanel({ auth, onOpenEarnings, onSessionExpired }: {
+  auth: { accessToken: string; supabaseUrl: string; publishableKey: string };
+  onOpenEarnings: () => void;
+  onSessionExpired: (error: unknown) => boolean;
+}) {
+  const [items, setItems] = useState<DeliveryWorkHistoryItem[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>();
+  const request = useRef<AbortController | undefined>(undefined);
+
+  const load = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setLoading(true);
+    try {
+      const history = await getDeliveryPartnerWorkHistory({ ...auth, limit: 30, signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setItems(history);
+      setLoaded(true);
+      setError(undefined);
+    } catch (loadError) {
+      if (controller.signal.aborted || onSessionExpired(loadError)) return;
+      setError(userFacingError(loadError, "Delivery history could not update."));
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }, [auth, onSessionExpired]);
+
+  useEffect(() => {
+    void load();
+    return () => request.current?.abort();
+  }, [load]);
+
+  return <section className="delivery-history" aria-labelledby="delivery-history-title">
+    <header className="delivery-heading">
+      <div>
+        <p className="eyebrow">Your work</p>
+        <h1 id="delivery-history-title">History</h1>
+        <p>Completed, returned and cancelled work across Dastak deliveries.</p>
+      </div>
+      <button className="icon-button" type="button" onClick={() => void load()} disabled={loading} aria-label="Refresh delivery history">
+        <RefreshCw size={19} />
+      </button>
+    </header>
+    {error ? <div className={items.length > 0 ? "delivery-notice" : "order-error"} role={items.length > 0 ? "status" : "alert"}>
+      <CircleAlert size={18} />
+      <span>{error}{items.length > 0 ? " Previously loaded history remains visible." : ""}</span>
+      <button type="button" onClick={() => void load()}>Try again</button>
+    </div> : null}
+    {loading && !loaded ? <div className="catalogue-loading" role="status"><span /> Loading delivery history</div> : null}
+    {loaded && items.length === 0 && !error ? <section className="delivery-empty">
+      <HistoryIcon size={25} />
+      <div><h2>No completed work yet</h2><p>Delivered and returned work will appear here.</p></div>
+    </section> : null}
+    {items.length > 0 ? <div className="delivery-history-list" aria-label="Past delivery work">
+      {items.map((item) => <article className="delivery-history-card" key={`${item.kind}:${item.workId}`}>
+        <div className="delivery-history-icon" aria-hidden="true">{item.kind === "RETURN" ? <PackageCheck size={19} /> : item.kind === "PARCEL" ? <Store size={19} /> : <Navigation size={19} />}</div>
+        <div>
+          <span>{deliveryWorkKindLabel(item.kind)}</span>
+          <strong>{item.reference}</strong>
+          <small>{item.packageCount === null ? "Package count unavailable" : `${item.packageCount} ${item.packageCount === 1 ? "package" : "packages"}`} · <time dateTime={item.endedAt}>{formatDeliveryHistoryDate(item.endedAt)}</time></small>
+        </div>
+        <div className={`delivery-history-outcome ${item.outcome.toLowerCase()}`}>
+          <strong>{deliveryWorkOutcomeLabel(item.outcome)}</strong>
+          <small>{humanizeDeliveryStatus(item.status)}</small>
+          {item.payoutPaise !== null ? <span>{formatPrice(item.payoutPaise)}</span> : null}
+        </div>
+      </article>)}
+    </div> : null}
+    <button className="delivery-history-earnings" type="button" onClick={onOpenEarnings}><WalletCards size={18} /> Open earnings ledger</button>
+  </section>;
 }
 
 export function DeliveryOperationsStatus({ states, hasContent, onRetry }: {
@@ -882,6 +1080,93 @@ export function DeliveryOperationsStatus({ states, hasContent, onRetry }: {
     return <div className="catalogue-loading" role="status"><span /> Loading delivery queue</div>;
   }
   return null;
+}
+
+export function DeliveryNotificationStatus({ controller }: { controller: DastakWebPushController }) {
+  if (controller.status === "dismissed") return null;
+  if (controller.status === "checking") {
+    return <p className="delivery-notification-status" role="status"><Bell size={17} /> Checking delivery alerts…</p>;
+  }
+  if (controller.status === "enabled") {
+    return <p className="delivery-notification-status enabled" role="status"><Check size={17} /> Delivery alerts on</p>;
+  }
+  const blocked = controller.status === "blocked";
+  const unsupported = controller.status === "unsupported";
+  const failed = controller.status === "error";
+  return <aside className="delivery-notification-status attention" aria-label="Delivery notifications">
+    {blocked ? <BellOff size={18} /> : <Bell size={18} />}
+    <span><strong>{blocked ? "Delivery alerts are blocked" : unsupported ? "Browser alerts unavailable" : failed ? "Delivery alerts need attention" : "Get delivery alerts"}</strong><small>{controller.message ?? (blocked ? "Allow notifications in browser settings, then retry." : unsupported ? "Keep Delivery open for live in-app offers and mission updates." : "Enable browser alerts for offers, assignments, merchant readiness and returns.")}</small></span>
+    {!unsupported ? <div><button type="button" disabled={controller.status === "enabling"} onClick={() => void (failed ? controller.refresh() : controller.enable())}>{controller.status === "enabling" ? "Enabling…" : failed || blocked ? "Retry" : "Enable alerts"}</button>{controller.status === "prompt" ? <button type="button" className="quiet" onClick={controller.dismiss}>Later</button> : null}</div> : null}
+  </aside>;
+}
+
+function DeliveryTrackingStatus({ status, wakeLockStatus, missionActive, realtimeHealth }: {
+  status: DeliveryGeolocationStatus;
+  wakeLockStatus: WakeLockStatus;
+  missionActive: boolean;
+  realtimeHealth: OrderRealtimeHealth;
+}) {
+  const messages = deliveryTrackingMessages(status, wakeLockStatus, missionActive, realtimeHealth);
+  if (messages.length === 0) return null;
+  return <div className={`delivery-tracking-status ${messages.some((item) => item.tone === "warning") ? "warning" : ""}`} role="status">
+    <Navigation size={18} />
+    <span>{messages.map((item) => <small key={item.text}>{item.text}</small>)}</span>
+  </div>;
+}
+
+export function deliveryTrackingMessages(
+  status: DeliveryGeolocationStatus,
+  wakeLockStatus: WakeLockStatus,
+  missionActive: boolean,
+  realtimeHealth: OrderRealtimeHealth,
+) {
+  const messages: Array<{ text: string; tone: "normal" | "warning" }> = [];
+  const statusText: Partial<Record<DeliveryGeolocationStatus, string>> = {
+    starting: "Acquiring a fresh, precise location…",
+    tracking: missionActive
+      ? "Foreground mission tracking is active."
+      : "Location is ready for nearby delivery offers.",
+    background_limited: "Web tracking was suspended in the background. Dastak will publish immediately when this tab returns.",
+    unavailable: "This browser cannot share location.",
+    permission_denied: "Precise location is blocked. Allow it in browser settings to continue.",
+    inaccurate: "GPS accuracy is too low. Arrival remains locked until the position improves.",
+    stale: "The last GPS position is stale. Arrival remains locked.",
+    interrupted: "Location publication is reconnecting. Arrival remains server-locked.",
+  };
+  const text = statusText[status];
+  if (text) messages.push({ text, tone: ["tracking"].includes(status) ? "normal" : "warning" });
+  if (missionActive && wakeLockStatus === "unsupported") {
+    messages.push({ text: "Screen wake lock is unavailable in this browser; keep the screen and tab open.", tone: "warning" });
+  } else if (missionActive && wakeLockStatus === "failed") {
+    messages.push({ text: "Dastak could not keep the screen awake. Keep this tab visible during active work.", tone: "warning" });
+  }
+  if (missionActive) {
+    messages.push({ text: "Browsers cannot guarantee background GPS. Use Dastak Delivery on iOS for continuous background tracking.", tone: "normal" });
+  }
+  if (realtimeHealth !== "subscribed") {
+    messages.push({ text: "Live delivery updates are reconnecting; authoritative state will reconcile automatically.", tone: "warning" });
+  }
+  return messages;
+}
+
+function AvailabilityStatusText({ availability, online }: {
+  availability: PartnerAvailability | null;
+  online: boolean;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!online || !availability?.availableUntil) return;
+    const remaining = Date.parse(availability.availableUntil) - Date.now();
+    if (remaining <= 0) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(60_000, remaining));
+    return () => window.clearTimeout(timer);
+  }, [availability?.availableUntil, now, online]);
+  if (!online) return <small>Not receiving assignments</small>;
+  const remaining = availability?.availableUntil ? Date.parse(availability.availableUntil) - now : 0;
+  if (remaining <= 3 * 60_000) {
+    return <small className="availability-expiring">Expiring soon · renew availability to keep receiving offers</small>;
+  }
+  return <small>{availabilityMessage(availability?.availableUntil)}</small>;
 }
 
 function useEffectiveRiderOnline(
@@ -931,7 +1216,7 @@ function V1DeliveryOffer({ offer, busy, onAccept, onDecline, onExpire }: {
 }) {
   const expired = useOfferExpiration(offer.respondBy, onExpire);
   return (
-    <section className="delivery-offer v1-delivery-card" aria-label="New Dastak order mission">
+    <section id={`delivery-offer-${offer.id}`} className="delivery-offer v1-delivery-card" aria-label="New Dastak order mission">
       <header>
         <div><p className="eyebrow">Dastak order mission</p><h2>{offer.displayOrderNumber}</h2></div>
         <OfferTimer respondBy={offer.respondBy} />
@@ -983,7 +1268,7 @@ function CurrentV1ReturnMission({
     setReceiptCodes({});
     setPackagesAccounted(false);
   }, [mission.id, mission.status]);
-  return <section className="current-delivery v1-delivery-card" aria-label="Active Dastak return mission">
+  return <section id={`delivery-return-${mission.id}`} className="current-delivery v1-delivery-card" aria-label="Active Dastak return mission">
     <header><span className="section-icon"><PackageCheck size={22} /></span><div><p className="eyebrow">Secure return mission</p><h2>{mission.status === "ASSIGNED" ? "Collect from customer" : mission.status === "AT_CUSTOMER" ? "Verify reverse pickup" : "Return to merchants"}</h2><small>{mission.packageCount} package(s) · no partial custody transfer</small></div></header>
     {mission.status !== "RETURNING_TO_MERCHANTS" ? <>
       <div className="delivery-stop"><span><MapPin size={19} /></span><div><small>Customer destination</small><strong>{mission.customerDestination.address}</strong>{mission.customerDestination.recipientName ? <p>Recipient: {mission.customerDestination.recipientName}</p> : null}</div></div>
@@ -1016,6 +1301,7 @@ function CurrentV1Mission({
   onAction,
   onCaptureEvidence,
   onCollection,
+  onRequestRecovery,
 }: {
   mission: V1DeliveryMission;
   busy: boolean;
@@ -1036,6 +1322,7 @@ function CurrentV1Mission({
     collectionReference?: string;
     failureReason?: string;
   }) => void;
+  onRequestRecovery: (operation: RecoveryOperation) => void;
 }) {
   const completed = mission.pickupStops.filter((stop) => stop.status === "COMPLETED").length;
   const [deliveryCode, setDeliveryCode] = useState("");
@@ -1052,7 +1339,7 @@ function CurrentV1Mission({
     setCollectionFailureReason("");
   }, [mission.id, mission.status, collection?.state]);
   return (
-    <section className="current-delivery v1-delivery-card" aria-label="Active Dastak order mission">
+    <section id={`delivery-mission-${mission.id}`} className="current-delivery v1-delivery-card" aria-label="Active Dastak order mission">
       <header>
         <span className="section-icon"><PackageCheck size={22} /></span>
         <div>
@@ -1195,16 +1482,16 @@ function CurrentV1Mission({
       )}
 
       {mission.canCancelBeforePickup && (
-        <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onAction("v1CancelBeforePickup", { reason: "Rider cannot continue before pickup" })}>
+        <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onRequestRecovery("v1CancelBeforePickup")}>
           Release mission before pickup
         </button>
       )}
       {mission.mustUseDeliveryRecovery && (
         <div className="delivery-recovery-actions">
-          <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onAction("v1ReportCustomerUnreachable", { reason: "Customer or recipient could not be reached at the delivery address" })}>
+          <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onRequestRecovery("v1ReportCustomerUnreachable")}>
             Customer unreachable
           </button>
-          <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onAction("v1ReportDeliveryProblem", { reason: "Rider reported a problem after custody began" })}>
+          <button className="danger-button v1-secondary-action" type="button" disabled={busy} onClick={() => onRequestRecovery("v1ReportDeliveryProblem")}>
             Report another delivery problem
           </button>
         </div>
@@ -1217,6 +1504,60 @@ function CurrentV1Mission({
       )}
     </section>
   );
+}
+
+export function recoveryOptions(operation: RecoveryOperation) {
+  if (operation === "v1CancelBeforePickup") {
+    return ["Vehicle issue", "Unable to reach pickup", "Safety concern", "Other"];
+  }
+  if (operation === "v1ReportCustomerUnreachable") {
+    return ["Customer not answering", "Address inaccessible", "Safety concern", "Other"];
+  }
+  return ["Package damaged", "Vehicle issue", "Safety concern", "Customer unavailable", "Other"];
+}
+
+function RecoveryConfirmation({ intent, busy, onDismiss, onConfirm }: {
+  intent: RecoveryIntent;
+  busy: boolean;
+  onDismiss: () => void;
+  onConfirm: (reason: string) => Promise<void>;
+}) {
+  const options = recoveryOptions(intent.operation);
+  const [reason, setReason] = useState(options[0]);
+  const [detail, setDetail] = useState("");
+  const title = intent.operation === "v1CancelBeforePickup"
+    ? "Release this mission?"
+    : intent.operation === "v1ReportCustomerUnreachable"
+      ? "Start customer recovery?"
+      : "Report a custody problem?";
+  const consequence = intent.operation === "v1CancelBeforePickup"
+    ? "The mission will return to Operations for reassignment. This is only available before package custody begins."
+    : "This moves the delivery into Operations recovery. Keep every package secure; reporting the issue does not transfer or release custody.";
+  const finalReason = [reason, detail.trim()].filter(Boolean).join(" — ");
+
+  useEffect(() => {
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) onDismiss();
+    };
+    window.addEventListener("keydown", dismissOnEscape);
+    return () => window.removeEventListener("keydown", dismissOnEscape);
+  }, [busy, onDismiss]);
+
+  return <div className="delivery-dialog-backdrop" role="presentation">
+    <form className="delivery-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="delivery-recovery-title" onSubmit={(event) => {
+      event.preventDefault();
+      void onConfirm(finalReason);
+    }}>
+      <header><div><p className="eyebrow">Custody protection</p><h2 id="delivery-recovery-title">{title}</h2></div><button type="button" className="icon-button" onClick={onDismiss} disabled={busy} aria-label="Close"><X size={18} /></button></header>
+      <p>{consequence}</p>
+      <fieldset>
+        <legend>Reason</legend>
+        {options.map((option) => <label key={option}><input type="radio" name="recovery-reason" value={option} checked={reason === option} disabled={busy} onChange={() => setReason(option)} /><span>{option}</span></label>)}
+      </fieldset>
+      <label>Optional detail<textarea rows={3} maxLength={300} value={detail} disabled={busy} onChange={(event) => setDetail(event.target.value)} placeholder="Add details that will help Operations resolve this safely" /></label>
+      <div><button className="secondary-button" type="button" onClick={onDismiss} disabled={busy}>Keep delivery</button><button className="danger-button" type="submit" disabled={busy || finalReason.length < 3}>{busy ? "Reporting…" : "Confirm and notify Operations"}</button></div>
+    </form>
+  </div>;
 }
 
 function ArrivalAction({ arrival, permitted = true, busy, onArrive }: {
@@ -1423,7 +1764,7 @@ function CurrentDelivery({ assignment, busy, verificationCode, onVerificationCod
       </div>
       <div className="delivery-stop">
         <span><MapPin size={19} /></span>
-        <div><small>Drop-off</small><strong>{coordinateLabel(assignment.dropoff)}</strong></div>
+        <div><small>Drop-off</small><strong>Customer destination</strong><p>Open directions for the verified doorstep.</p></div>
       </div>
       <DeliveryItems assignment={assignment} />
       <MapLink location={destination} label={headingToCustomer ? "Open drop-off route" : "Open pickup route"} />
@@ -1480,7 +1821,7 @@ function OfferTimer({ respondBy }: { respondBy: string }) {
 
 function MapLink({ location, label }: { location: { latitude: number; longitude: number }; label: string }) {
   return (
-    <a className="map-link" href={`https://maps.apple.com/?daddr=${location.latitude},${location.longitude}&dirflg=d`} target="_blank" rel="noreferrer">
+    <a className="map-link" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${location.latitude},${location.longitude}`)}&travelmode=driving`} target="_blank" rel="noreferrer">
       <Navigation size={17} /> {label}
     </a>
   );
@@ -1517,20 +1858,6 @@ function parcelAction(status: ParcelAssignment["parcel"]["status"]): {
   }
 }
 
-function currentLocation() {
-  if (!navigator.geolocation) return Promise.reject(new Error("Location is unavailable in this browser."));
-  return new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-      () => reject(new Error("Allow location access to go online.")),
-      { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 },
-    );
-  });
-}
-
-function coordinateLabel(location: { latitude: number; longitude: number }) {
-  return `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`;
-}
 function deliveryMethodLabel(method: string) {
   if (method === "retired") return "Retired delivery method";
   if (method === "goods_vehicle") return "Tempo / goods vehicle";
@@ -1539,6 +1866,127 @@ function deliveryMethodLabel(method: string) {
     : method === "auto"
       ? "Auto"
       : `${method.charAt(0).toUpperCase()}${method.slice(1)}`;
+}
+
+export function deliveryNotificationTarget(hash: string): {
+  kind: "workspace" | "offer" | "mission" | "return";
+  entityId?: string;
+} | undefined {
+  const match = /^#\/deliveries(?:\/(offer|mission|return)(?:\/([^/]+))?)?\/?$/.exec(hash);
+  if (!match) return undefined;
+  let entityId: string | undefined;
+  try {
+    entityId = match[2] ? decodeURIComponent(match[2]) : undefined;
+  } catch {
+    return undefined;
+  }
+  return {
+    kind: (match[1] ?? "workspace") as "workspace" | "offer" | "mission" | "return",
+    ...(entityId ? { entityId } : {}),
+  };
+}
+
+function availabilityPresentationChanged(
+  current: PartnerAvailability | null | undefined,
+  incoming: PartnerAvailability,
+) {
+  return !current || current.status !== incoming.status ||
+    current.availableUntil !== incoming.availableUntil ||
+    current.serviceZoneId !== incoming.serviceZoneId;
+}
+
+export function mergeMissionTrackingSnapshot(
+  current: V1DeliveryDispatchSnapshot,
+  incoming: V1DeliveryDispatchSnapshot,
+  missionId: string,
+  now = Date.now(),
+): V1DeliveryDispatchSnapshot {
+  if (current.currentMission?.id === missionId && incoming.currentMission?.id === missionId &&
+    shouldApplyMissionProjection(current.currentMission, incoming.currentMission, now)) {
+    return { ...current, currentMission: incoming.currentMission };
+  }
+  if (current.returnMission?.id === missionId && incoming.returnMission?.id === missionId &&
+    shouldApplyReturnProjection(current.returnMission, incoming.returnMission, now)) {
+    return { ...current, returnMission: incoming.returnMission };
+  }
+  return current;
+}
+
+function shouldApplyMissionProjection(
+  current: V1DeliveryMission,
+  incoming: V1DeliveryMission,
+  now: number,
+) {
+  if (incoming.version < current.version) return false;
+  if (incoming.version > current.version || incoming.status !== current.status) return true;
+  return arrivalProjectionKey([
+    current.customerArrival,
+    ...current.pickupStops.map((stop) => stop.arrival),
+  ], now) !== arrivalProjectionKey([
+    incoming.customerArrival,
+    ...incoming.pickupStops.map((stop) => stop.arrival),
+  ], now);
+}
+
+function shouldApplyReturnProjection(
+  current: V1ReturnMission,
+  incoming: V1ReturnMission,
+  now: number,
+) {
+  if (incoming.version < current.version) return false;
+  if (incoming.version > current.version || incoming.status !== current.status) return true;
+  return arrivalProjectionKey([
+    current.customerArrival,
+    ...current.stops.map((stop) => stop.arrival),
+  ], now) !== arrivalProjectionKey([
+    incoming.customerArrival,
+    ...incoming.stops.map((stop) => stop.arrival),
+  ], now);
+}
+
+function arrivalProjectionKey(
+  arrivals: Array<V1ArrivalEligibility | null | undefined>,
+  now: number,
+) {
+  return arrivals.map((arrival) => {
+    if (!arrival) return "none";
+    const distanceBand = arrival.distanceMeters === null ? "unknown" : Math.floor(arrival.distanceMeters / 10);
+    const validityBand = arrival.validUntil === null ? "expired" :
+      Math.max(0, Math.floor((Date.parse(arrival.validUntil) - now) / 20_000));
+    return [arrival.eligible, arrival.reason, distanceBand, validityBand].join(":");
+  }).join("|");
+}
+
+function deliveryWorkKindLabel(kind: DeliveryWorkHistoryItem["kind"]) {
+  switch (kind) {
+    case "V1_DELIVERY": return "Dastak delivery";
+    case "RETURN": return "Return mission";
+    case "LEGACY_DELIVERY": return "Store delivery";
+    case "PARCEL": return "Parcel delivery";
+  }
+}
+
+function deliveryWorkOutcomeLabel(outcome: DeliveryWorkHistoryItem["outcome"]) {
+  switch (outcome) {
+    case "COMPLETED": return "Completed";
+    case "RETURNED": return "Returned";
+    case "CANCELLED": return "Cancelled";
+  }
+}
+
+function humanizeDeliveryStatus(status: string) {
+  return status.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatDeliveryHistoryDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function fileSignature(file: File) {
+  return [file.name, file.type, file.size, file.lastModified].join(":");
 }
 function transportLabel(transport: string) {
   if (transport === "CAR") return "Tempo / goods vehicle";

@@ -105,12 +105,17 @@ export function readAppConfig(environment: PublicEnvironment): AppConfig {
   const customerLaunchConfiguration = selectedVariant === "dastak-customer"
     ? readCustomerLaunchConfiguration(environment)
     : {};
+  const notificationConfiguration = ["dastak-customer", "dastak-merchant", "dastak-delivery"]
+    .includes(selectedVariant)
+    ? { webPushPublicKey: readDastakWebPushPublicKey(environment) }
+    : {};
 
   return {
     ...variants[selectedVariant],
     supabaseUrl: supabaseUrl.replace(/\/$/, ""),
     supabasePublishableKey,
     ...customerLaunchConfiguration,
+    ...notificationConfiguration,
   };
 }
 
@@ -118,10 +123,6 @@ function readCustomerLaunchConfiguration(environment: PublicEnvironment) {
   const privacy = requiredPublicUrl("VITE_DASTAK_PRIVACY_URL", environment.VITE_DASTAK_PRIVACY_URL);
   const terms = requiredPublicUrl("VITE_DASTAK_TERMS_URL", environment.VITE_DASTAK_TERMS_URL);
   const support = requiredPublicUrl("VITE_DASTAK_SUPPORT_URL", environment.VITE_DASTAK_SUPPORT_URL);
-  const webPushPublicKey = environment.VITE_DASTAK_WEB_PUSH_PUBLIC_KEY?.trim() ?? "";
-  if (!/^[A-Za-z0-9_-]{80,100}$/.test(webPushPublicKey)) {
-    throw new Error("VITE_DASTAK_WEB_PUSH_PUBLIC_KEY must be a VAPID public key.");
-  }
   const deliveryPartnerUrl = requiredPublicUrl(
     "VITE_DASTAK_DELIVERY_URL",
     environment.VITE_DASTAK_DELIVERY_URL,
@@ -130,7 +131,15 @@ function readCustomerLaunchConfiguration(environment: PublicEnvironment) {
     "VITE_DASTAK_MERCHANT_URL",
     environment.VITE_DASTAK_MERCHANT_URL,
   );
-  return { legalLinks: { privacy, terms, support }, webPushPublicKey, deliveryPartnerUrl, merchantUrl };
+  return { legalLinks: { privacy, terms, support }, deliveryPartnerUrl, merchantUrl };
+}
+
+function readDastakWebPushPublicKey(environment: PublicEnvironment) {
+  const webPushPublicKey = environment.VITE_DASTAK_WEB_PUSH_PUBLIC_KEY?.trim() ?? "";
+  if (!/^[A-Za-z0-9_-]{80,100}$/.test(webPushPublicKey)) {
+    throw new Error("VITE_DASTAK_WEB_PUSH_PUBLIC_KEY must be a VAPID public key.");
+  }
+  return webPushPublicKey;
 }
 
 function requiredPublicUrl(name: string, value: string | undefined) {

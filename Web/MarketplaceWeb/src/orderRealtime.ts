@@ -84,14 +84,18 @@ export function useOrderRealtime({
   accountId,
   accessToken,
   onChange,
+  onVisibilityChange,
 }: {
   client: SupabaseClient;
   accountId: string;
   accessToken: string;
   onChange: (signal?: OrderChangeSignal) => void;
+  onVisibilityChange?: (visible: boolean) => void;
 }) {
   const callback = useRef(onChange);
   callback.current = onChange;
+  const visibilityCallback = useRef(onVisibilityChange);
+  visibilityCallback.current = onVisibilityChange;
   const [health, setHealth] = useState<OrderRealtimeHealth>("connecting");
 
   useEffect(() => {
@@ -167,7 +171,9 @@ export function useOrderRealtime({
       void connect(generation);
     };
     const onVisible = () => {
-      if (document.visibilityState === "visible") reconcile();
+      const visible = document.visibilityState === "visible";
+      visibilityCallback.current?.(visible);
+      if (visible) reconcile();
     };
     const onOnline = () => reconcile();
     const onOffline = () => {
@@ -176,6 +182,7 @@ export function useOrderRealtime({
     };
 
     void connect(generation);
+    visibilityCallback.current?.(document.visibilityState === "visible");
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);

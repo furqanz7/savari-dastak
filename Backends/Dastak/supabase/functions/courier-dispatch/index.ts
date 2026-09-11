@@ -9,9 +9,9 @@ import {
   type V1DeliveryMissionMutationInput,
   type V1FinalDeliveryMutationInput,
   type V1LaunchCollectionInput,
+  type V1MissionLocationInput,
   type V1ReturnMissionMutationInput,
   type V1RiderHeartbeatInput,
-  type V1MissionLocationInput,
   type V1RiderOfferDeclineInput,
   type V1RiderOfferMutationInput,
 } from "./handler.ts";
@@ -31,6 +31,7 @@ Deno.serve((request) =>
     declineOffer,
     advanceJob,
     getV1PartnerSnapshot,
+    getPartnerHistory,
     acceptV1Offer,
     declineV1Offer,
     heartbeatV1Mission,
@@ -44,9 +45,12 @@ Deno.serve((request) =>
 
 async function publishV1Location(input: V1MissionLocationInput) {
   const { data, error } = await serviceClient.rpc("dastak_v1_publish_mission_location", {
-    p_account_id: input.accountId, p_mission_id: input.missionId,
-    p_latitude: input.latitude, p_longitude: input.longitude,
-    p_accuracy: input.accuracyMeters, p_recorded_at: input.recordedAt,
+    p_account_id: input.accountId,
+    p_mission_id: input.missionId,
+    p_latitude: input.latitude,
+    p_longitude: input.longitude,
+    p_accuracy: input.accuracyMeters,
+    p_recorded_at: input.recordedAt,
   });
   if (error) throw error;
   return data;
@@ -69,6 +73,15 @@ async function getV1PartnerSnapshot(accountId: string) {
   );
   if (error) throw error;
   return rpcResponse(data, "dastak_v1_delivery_partner_snapshot");
+}
+
+async function getPartnerHistory(accountId: string, limit: number) {
+  const { data, error } = await serviceClient.rpc(
+    "dastak_delivery_partner_work_history",
+    { p_account_id: accountId, p_limit: limit },
+  );
+  if (error) throw error;
+  return data;
 }
 
 async function acceptV1Offer(input: V1RiderOfferMutationInput) {

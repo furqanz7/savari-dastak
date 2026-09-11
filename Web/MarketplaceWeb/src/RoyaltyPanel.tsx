@@ -52,15 +52,15 @@ export function RoyaltyPanel({
       <header className="royalty-heading">
         <div>
           <p className="eyebrow">{kind === "MERCHANT" ? "YOUR BUSINESS" : "Earnings balance"}</p>
-          <h1 id="royalty-title">{kind === "MERCHANT" ? "Earnings" : "Royalty"}</h1>
-          <p>{kind === "MERCHANT" ? "Your Royalty balance, credits and payouts, clearly accounted for." : "Credits, adjustments, and payout requests from the append-only ledger."}</p>
+          <h1 id="royalty-title">Earnings</h1>
+          <p>{kind === "MERCHANT" ? "Your Royalty balance, credits and payouts, clearly accounted for." : "Verified credits, adjustments, and payout requests from the append-only ledger."}</p>
         </div>
         <button
           className={kind === "MERCHANT" ? "merchant-quiet-refresh" : "icon-button"}
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          aria-label="Refresh Royalty"
+          aria-label="Refresh earnings"
         >
           <RefreshCw size={19} />
           {kind === "MERCHANT" ? "Check balance" : null}
@@ -70,7 +70,7 @@ export function RoyaltyPanel({
       {loading && !snapshot
         ? (
           kind === "MERCHANT" ? <CustomerSkeleton label="Loading earnings" kind="orders" /> : <div className="catalogue-loading" role="status">
-            <span /> Loading Royalty
+            <span /> Loading earnings
           </div>
         )
         : snapshot

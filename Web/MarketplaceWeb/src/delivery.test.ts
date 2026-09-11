@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import {
   acceptV1DeliveryOffer,
@@ -9,6 +10,7 @@ import {
   deliveryPartnerVerificationState,
   getDeliveryDispatch,
   getDeliveryPartnerSnapshot,
+  getDeliveryPartnerWorkHistory,
   getV1DeliveryDispatch,
   getV1DeliveryLaneSnapshots,
   heartbeatV1DeliveryMission,
@@ -20,6 +22,9 @@ import {
   requiresVehicleVerification,
   setDeliveryPartnerAvailability,
   submitDeliveryPartnerApplication,
+  uploadV1DeliveryEvidence,
+  v1DeliveryEvidenceObjectPath,
+  v1ReturnEvidenceObjectPath,
 } from "./delivery";
 
 const accountId = "11111111-1111-4111-8111-111111111111";
@@ -89,6 +94,45 @@ describe("delivery partner client", () => {
     expect(partnerEvidenceObjectPath(accountId, "image/jpeg", applicationId)).toBe(
       `dastak-partner/${accountId}/identity-${applicationId}.jpg`,
     );
+  });
+
+  it("keeps delivery evidence paths stable across an already-uploaded retry", async () => {
+    const upload = vi.fn().mockResolvedValue({ error: { statusCode: "409", message: "already exists" } });
+    const client = {
+      storage: { from: vi.fn(() => ({ upload })) },
+    } as unknown as SupabaseClient;
+    const path = v1DeliveryEvidenceObjectPath(accountId, "image/jpeg", applicationId);
+    const file = new File([new Uint8Array([1, 2, 3])], "handoff.jpg", { type: "image/jpeg" });
+
+    await expect(uploadV1DeliveryEvidence(client, accountId, file, path)).resolves.toBe(path);
+    expect(upload).toHaveBeenCalledWith(path, file, expect.objectContaining({ upsert: false }));
+    expect(v1ReturnEvidenceObjectPath(accountId, "image/png", assignmentId)).toBe(
+      `return-pickup/${accountId}/${assignmentId}.png`,
+    );
+  });
+
+  it("decodes the bounded cross-domain rider history contract", async () => {
+    let body: unknown;
+    const items = await getDeliveryPartnerWorkHistory({ ...auth, limit: 12 }, (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(Response.json({
+        items: [{
+          kind: "RETURN",
+          workId: applicationId,
+          reference: "DSK-260911-00000001",
+          status: "COMPLETED",
+          startedAt: "2026-09-11T10:00:00Z",
+          endedAt: "2026-09-11T10:20:00Z",
+          packageCount: 2,
+          payoutPaise: null,
+          outcome: "RETURNED",
+        }],
+      }));
+    });
+    expect(body).toEqual({ operation: "partnerHistory", limit: 12 });
+    expect(items).toEqual([expect.objectContaining({
+      kind: "RETURN", packageCount: 2, outcome: "RETURNED",
+    })]);
   });
 
   it("requires valid vehicle verification for motor methods", async () => {

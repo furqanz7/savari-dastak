@@ -39,7 +39,11 @@ export function createWebPushSender(
         JSON.stringify({
           title: job.title,
           body: job.body,
-          payload: { ...job.payload, eventId: job.eventId },
+          payload: {
+            ...job.payload,
+            eventId: job.eventId,
+            notificationType: job.notificationType,
+          },
         }),
         {
           TTL: 300,

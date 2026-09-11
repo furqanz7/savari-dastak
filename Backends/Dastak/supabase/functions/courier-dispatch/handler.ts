@@ -130,6 +130,7 @@ export type CourierDispatchDependencies = {
   declineOffer: (input: CourierDispatchDeclineInput) => Promise<RpcResult>;
   advanceJob: (input: CourierJobMutationInput) => Promise<RpcResult>;
   getV1PartnerSnapshot: (accountId: string) => Promise<RpcResult>;
+  getPartnerHistory: (accountId: string, limit: number) => Promise<unknown>;
   acceptV1Offer: (input: V1RiderOfferMutationInput) => Promise<RpcResult>;
   declineV1Offer: (input: V1RiderOfferDeclineInput) => Promise<RpcResult>;
   heartbeatV1Mission: (input: V1RiderHeartbeatInput) => Promise<unknown>;
@@ -171,6 +172,11 @@ export async function handleCourierDispatch(
       case "v1PartnerSnapshot": {
         const result = await dependencies.getV1PartnerSnapshot(actor.accountId);
         return json(result.responseBody, result.responseStatus);
+      }
+      case "partnerHistory": {
+        const limit = body.limit === undefined ? 30 : validPositiveInteger(body.limit);
+        if (!limit || limit > 50) return validationError();
+        return json(await dependencies.getPartnerHistory(actor.accountId, limit));
       }
       case "v1Heartbeat": {
         const missionId = validUUID(body.missionId);

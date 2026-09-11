@@ -259,6 +259,17 @@ export type V1DeliveryDispatchSnapshot = {
   completedMission: V1CompletedMission | null;
   returnMission: V1ReturnMission | null;
 };
+export type DeliveryWorkHistoryItem = {
+  kind: "V1_DELIVERY" | "RETURN" | "LEGACY_DELIVERY" | "PARCEL";
+  workId: string;
+  reference: string;
+  status: string;
+  startedAt: string;
+  endedAt: string;
+  packageCount: number | null;
+  payoutPaise: number | null;
+  outcome: "COMPLETED" | "RETURNED" | "CANCELLED";
+};
 
 type AuthenticatedInput = {
   supabaseUrl: string;
@@ -378,18 +389,19 @@ export async function uploadV1DeliveryEvidence(
   client: SupabaseClient,
   accountId: string,
   file: File,
+  objectPath = v1DeliveryEvidenceObjectPath(accountId, file.type, crypto.randomUUID()),
 ) {
   const extension = deliveryEvidenceExtensions.get(file.type);
-  if (!uuidPattern.test(accountId) || !extension || file.size < 1 || file.size > maximumEvidenceBytes) {
+  if (!uuidPattern.test(accountId) || !extension || file.size < 1 || file.size > maximumEvidenceBytes ||
+    !isOwnedV1EvidencePath(objectPath, "rider-delivery", accountId, extension)) {
     throw validationError("Capture a JPG, PNG or HEIC package photo up to 10 MB.");
   }
-  const objectPath = `rider-delivery/${accountId.toLowerCase()}/${crypto.randomUUID()}.${extension}`;
   const { error } = await client.storage.from("dastak-evidence").upload(objectPath, file, {
     cacheControl: "3600",
     contentType: file.type,
     upsert: false,
   });
-  if (error) {
+  if (error && !isExistingStorageObject(error)) {
     throw new DeliveryRequestError(
       "evidence_upload_failed",
       "The package photo could not be uploaded.",
@@ -403,21 +415,90 @@ export async function uploadV1ReturnEvidence(
   client: SupabaseClient,
   accountId: string,
   file: File,
+  objectPath = v1ReturnEvidenceObjectPath(accountId, file.type, crypto.randomUUID()),
 ) {
   const extension = deliveryEvidenceExtensions.get(file.type);
-  if (!uuidPattern.test(accountId) || !extension || file.size < 1 || file.size > maximumEvidenceBytes) {
+  if (!uuidPattern.test(accountId) || !extension || file.size < 1 || file.size > maximumEvidenceBytes ||
+    !isOwnedV1EvidencePath(objectPath, "return-pickup", accountId, extension)) {
     throw validationError("Capture a JPG, PNG or HEIC return-package photo up to 10 MB.");
   }
-  const objectPath = `return-pickup/${accountId.toLowerCase()}/${crypto.randomUUID()}.${extension}`;
   const { error } = await client.storage.from("dastak-evidence").upload(objectPath, file, {
     cacheControl: "3600",
     contentType: file.type,
     upsert: false,
   });
-  if (error) throw new DeliveryRequestError(
+  if (error && !isExistingStorageObject(error)) throw new DeliveryRequestError(
     "evidence_upload_failed", "The return-package photo could not be uploaded.", 0,
   );
   return objectPath;
+}
+
+export function v1DeliveryEvidenceObjectPath(
+  accountId: string,
+  contentType: string,
+  uniqueId: string,
+) {
+  return v1EvidenceObjectPath("rider-delivery", accountId, contentType, uniqueId);
+}
+
+export function v1ReturnEvidenceObjectPath(
+  accountId: string,
+  contentType: string,
+  uniqueId: string,
+) {
+  return v1EvidenceObjectPath("return-pickup", accountId, contentType, uniqueId);
+}
+
+export async function removeV1EvidenceObject(
+  client: SupabaseClient,
+  accountId: string,
+  objectPath: string,
+) {
+  const prefix = objectPath.startsWith("rider-delivery/") ? "rider-delivery" :
+    objectPath.startsWith("return-pickup/") ? "return-pickup" : undefined;
+  if (!prefix || !objectPath.startsWith(`${prefix}/${accountId.toLowerCase()}/`)) {
+    throw validationError("The evidence object is outside this delivery partner account.");
+  }
+  const { error } = await client.storage.from("dastak-evidence").remove([objectPath]);
+  if (error) throw new DeliveryRequestError(
+    "evidence_cleanup_failed",
+    "The unused evidence photo could not be cleaned up yet.",
+    0,
+  );
+}
+
+function v1EvidenceObjectPath(
+  prefix: "rider-delivery" | "return-pickup",
+  accountId: string,
+  contentType: string,
+  uniqueId: string,
+) {
+  const extension = deliveryEvidenceExtensions.get(contentType);
+  if (!uuidPattern.test(accountId) || !uuidPattern.test(uniqueId) || !extension) {
+    throw validationError("Capture a supported package photo before continuing.");
+  }
+  return `${prefix}/${accountId.toLowerCase()}/${uniqueId.toLowerCase()}.${extension}`;
+}
+
+function isOwnedV1EvidencePath(
+  objectPath: string,
+  prefix: "rider-delivery" | "return-pickup",
+  accountId: string,
+  extension: string,
+) {
+  const expectedPrefix = `${prefix}/${accountId.toLowerCase()}/`;
+  if (!objectPath.toLowerCase().startsWith(expectedPrefix)) return false;
+  const filename = objectPath.slice(expectedPrefix.length);
+  const suffix = `.${extension}`;
+  if (!filename.toLowerCase().endsWith(suffix)) return false;
+  return uuidPattern.test(filename.slice(0, -suffix.length));
+}
+
+function isExistingStorageObject(error: unknown) {
+  const source = record(error);
+  const status = String(source?.statusCode ?? source?.status ?? "");
+  const message = String(source?.message ?? "").toLowerCase();
+  return status === "409" || message.includes("already exists") || message.includes("duplicate");
 }
 
 export async function submitDeliveryPartnerApplication(
@@ -507,6 +588,23 @@ export async function getV1DeliveryDispatch(
     "courier-dispatch",
     input,
     { operation: "v1PartnerSnapshot" },
+    undefined,
+    fetcher,
+  ));
+}
+
+export async function getDeliveryPartnerWorkHistory(
+  input: AuthenticatedInput & { limit?: number },
+  fetcher: Fetcher = fetch,
+) {
+  const limit = input.limit ?? 30;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+    throw validationError("Choose between 1 and 50 delivery records.");
+  }
+  return parseDeliveryWorkHistory(await call(
+    "courier-dispatch",
+    input,
+    { operation: "partnerHistory", limit },
     undefined,
     fetcher,
   ));
@@ -886,6 +984,30 @@ function parseV1Dispatch(value: unknown): V1DeliveryDispatchSnapshot {
     ...parseV1DeliveryLane(source),
     ...parseV1ReturnLane(source),
   };
+}
+
+function parseDeliveryWorkHistory(value: unknown): DeliveryWorkHistoryItem[] {
+  const source = record(value);
+  const items = source?.items;
+  if (!source || !Array.isArray(items) || items.length > 50) invalid();
+  const kinds = ["V1_DELIVERY", "RETURN", "LEGACY_DELIVERY", "PARCEL"] as const;
+  const outcomes = ["COMPLETED", "RETURNED", "CANCELLED"] as const;
+  return items.map((value) => {
+    const item = record(value);
+    if (!item || !kinds.includes(item.kind as typeof kinds[number]) ||
+      !outcomes.includes(item.outcome as typeof outcomes[number])) invalid();
+    return {
+      kind: item.kind as DeliveryWorkHistoryItem["kind"],
+      workId: requiredUUID(item.workId),
+      reference: requiredText(item.reference, 160),
+      status: requiredText(item.status, 80),
+      startedAt: timestamp(item.startedAt),
+      endedAt: timestamp(item.endedAt),
+      packageCount: item.packageCount === null ? null : nonNegativeInteger(item.packageCount),
+      payoutPaise: item.payoutPaise === null ? null : nonNegativeInteger(item.payoutPaise),
+      outcome: item.outcome as DeliveryWorkHistoryItem["outcome"],
+    };
+  });
 }
 
 function parseV1DeliveryLane(source: Record<string, unknown>): V1DeliveryLaneSnapshot {

@@ -456,6 +456,19 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 .delivery-notice > svg { color: var(--success); }
 .delivery-notice button { border: 0; background: transparent; color: var(--text-secondary); padding: 8px; }
+.delivery-notification-status { width: fit-content; display: inline-flex; align-items: center; gap: 8px; margin: 16px 0 0; padding: 10px 13px; border: 1px solid var(--divider); border-radius: 12px; color: var(--text-secondary); background: var(--surface-raised); font-size: 12px; }
+.delivery-notification-status.enabled { color: var(--success); }
+.delivery-notification-status.attention { width: min(100%, 720px); box-sizing: border-box; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.delivery-notification-status.attention > span { min-width: 0; display: grid; gap: 3px; }
+.delivery-notification-status.attention small { color: var(--text-secondary); line-height: 1.45; }
+.delivery-notification-status.attention > div { display: flex; align-items: center; gap: 7px; }
+.delivery-notification-status.attention button { min-height: 36px; padding: 0 12px; border: 0; border-radius: 999px; color: var(--primary-action-foreground); background: var(--primary-action); font: inherit; font-size: 11px; font-weight: 800; }
+.delivery-notification-status.attention button.quiet { color: var(--text-secondary); background: transparent; }
+.delivery-tracking-status { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 11px; margin: 16px 0 0; padding: 13px 15px; border: 1px solid color-mix(in srgb, var(--route) 32%, var(--divider)); border-radius: 12px; color: var(--route); background: color-mix(in srgb, var(--route) 8%, var(--surface)); }
+.delivery-tracking-status.warning { border-color: color-mix(in srgb, var(--warning) 35%, var(--divider)); color: var(--warning); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); }
+.delivery-tracking-status > span { display: grid; gap: 4px; }
+.delivery-tracking-status small { color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.availability-expiring { color: var(--warning) !important; font-weight: 700; }
 .delivery-heading {
   display: flex;
   align-items: end;
@@ -504,6 +517,35 @@ button:disabled { cursor: wait; opacity: .55; }
 .availability-switch input:checked + span::after { transform: translateX(20px); }
 .availability-switch input:focus-visible + span { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
 .availability-switch input:disabled + span { opacity: .48; cursor: wait; }
+.delivery-dialog-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / 58%); backdrop-filter: blur(8px); }
+.delivery-recovery-dialog { width: min(100%, 560px); max-height: calc(100vh - 40px); overflow: auto; display: grid; gap: 18px; padding: 24px; border: 1px solid var(--divider); border-radius: 22px; color: var(--text-primary); background: var(--surface-raised); box-shadow: 0 24px 70px rgb(0 0 0 / 30%); }
+.delivery-recovery-dialog > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.delivery-recovery-dialog h2 { margin: 4px 0 0; font-size: 25px; }
+.delivery-recovery-dialog > p { margin: 0; color: var(--text-secondary); line-height: 1.55; }
+.delivery-recovery-dialog fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 0; padding: 0; border: 0; }
+.delivery-recovery-dialog legend, .delivery-recovery-dialog > label { margin-bottom: 8px; color: var(--text-secondary); font-size: 12px; font-weight: 800; }
+.delivery-recovery-dialog fieldset label { min-height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid var(--divider); border-radius: 11px; background: var(--surface); }
+.delivery-recovery-dialog fieldset input { accent-color: var(--destructive); }
+.delivery-recovery-dialog > label { display: grid; gap: 8px; }
+.delivery-recovery-dialog textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: 11px 12px; border: 1px solid var(--divider); border-radius: 11px; color: var(--text-primary); background: var(--surface); font: inherit; line-height: 1.45; }
+.delivery-recovery-dialog textarea:focus-visible { outline: 3px solid var(--accent-soft); border-color: var(--accent); }
+.delivery-recovery-dialog > div { display: flex; justify-content: flex-end; gap: 10px; }
+.delivery-recovery-dialog > div button { min-height: 44px; }
+.delivery-history { display: grid; gap: 18px; }
+.delivery-history-list { display: grid; gap: 10px; }
+.delivery-history-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 17px; border: 1px solid var(--divider); border-radius: 14px; background: var(--surface-raised); }
+.delivery-history-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; color: var(--route); background: color-mix(in srgb, var(--route) 12%, var(--surface)); }
+.delivery-history-card > div:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
+.delivery-history-card > div:nth-child(2) > span { color: var(--text-secondary); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.delivery-history-card > div:nth-child(2) > strong { overflow-wrap: anywhere; }
+.delivery-history-card > div:nth-child(2) > small { color: var(--text-secondary); line-height: 1.4; }
+.delivery-history-outcome { display: grid; justify-items: end; gap: 3px; text-align: right; }
+.delivery-history-outcome > strong { color: var(--success); }
+.delivery-history-outcome.returned > strong { color: var(--route); }
+.delivery-history-outcome.cancelled > strong { color: var(--text-secondary); }
+.delivery-history-outcome > small { color: var(--text-secondary); }
+.delivery-history-outcome > span { font-weight: 800; }
+.delivery-history-earnings { min-height: 44px; width: fit-content; margin-left: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 15px; border: 1px solid var(--divider); border-radius: 999px; color: var(--text-primary); background: var(--surface-raised); font: inherit; font-size: 13px; font-weight: 800; }
 .delivery-offer, .current-delivery {
   margin-top: 22px;
   padding: 20px;
@@ -2310,7 +2352,27 @@ button:disabled { cursor: wait; opacity: .55; }
   .merchant-account-actions { grid-template-columns: 1fr; }
   .delivery-heading { align-items: center; padding-top: 8px; }
   .delivery-heading h1 { font-size: 30px; }
+  .delivery-shell > .workspace-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+  }
+  .delivery-shell > .workspace-tabs button {
+    min-width: 0;
+    justify-content: center;
+    gap: 4px;
+    font-size: 11px;
+  }
   .delivery-availability { grid-template-columns: 44px minmax(0, 1fr) 51px; gap: 10px; }
+  .delivery-notification-status.attention { grid-template-columns: auto minmax(0, 1fr); }
+  .delivery-notification-status.attention > div { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; }
+  .delivery-recovery-dialog { padding: 19px; border-radius: 20px; }
+  .delivery-recovery-dialog fieldset { grid-template-columns: 1fr; }
+  .delivery-recovery-dialog > div { display: grid; grid-template-columns: 1fr; }
+  .delivery-history-card { grid-template-columns: auto minmax(0, 1fr); align-items: start; padding: 14px; }
+  .delivery-history-outcome { grid-column: 2; grid-template-columns: auto auto; justify-content: start; justify-items: start; column-gap: 9px; text-align: left; }
+  .delivery-history-outcome > span { grid-column: 1 / -1; }
+  .delivery-history-earnings { width: 100%; }
   .delivery-offer, .current-delivery { padding: 16px; }
   .current-delivery > header { display: grid; grid-template-columns: 44px minmax(0, 1fr); }
   .active-delivery-payout { grid-column: 2; margin: 0; text-align: left; }

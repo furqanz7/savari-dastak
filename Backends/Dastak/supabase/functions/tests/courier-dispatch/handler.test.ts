@@ -57,6 +57,28 @@ Deno.test("partner snapshot uses only the authenticated account", async () => {
   assertEquals(recordedAccountId, accountId);
 });
 
+Deno.test("partner history is rider-scoped and bounded", async () => {
+  let recorded: { accountId: string; limit: number } | undefined;
+  const response = await handleCourierDispatch(
+    request({ body: { operation: "partnerHistory", accountId: assignmentId, limit: 12 } }),
+    dependencies({
+      getPartnerHistory: (inputAccountId, limit) => {
+        recorded = { accountId: inputAccountId, limit };
+        return Promise.resolve({ items: [] });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accountId, limit: 12 });
+  assertEquals(await response.json(), { items: [] });
+
+  const excessive = await handleCourierDispatch(
+    request({ body: { operation: "partnerHistory", limit: 51 } }),
+    dependencies(),
+  );
+  await assertError(excessive, 400, "validation_failed");
+});
+
 Deno.test("V1 partner snapshot and offer actions bind the authenticated rider", async () => {
   let snapshotAccount: string | undefined;
   let accepted: Record<string, unknown> | undefined;
@@ -638,6 +660,7 @@ function dependencies(
     advanceJob: () => Promise.resolve({ responseBody: snapshot(), responseStatus: 200 }),
     getV1PartnerSnapshot: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
+    getPartnerHistory: () => Promise.resolve({ items: [] }),
     acceptV1Offer: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     declineV1Offer: () =>

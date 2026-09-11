@@ -61,6 +61,20 @@ describe("readAppConfig", () => {
     expect(() => readAppConfig({ ...customerEnvironment, VITE_DASTAK_MERCHANT_URL: undefined }))
       .toThrow(/MERCHANT/);
   });
+
+  it.each(["dastak-delivery", "dastak-merchant"])(
+    "requires the shared Dastak web-push key for %s",
+    (variant) => {
+      expect(readAppConfig({ ...customerEnvironment, VITE_APP_VARIANT: variant })).toMatchObject({
+        webPushPublicKey: customerEnvironment.VITE_DASTAK_WEB_PUSH_PUBLIC_KEY,
+      });
+      expect(() => readAppConfig({
+        ...customerEnvironment,
+        VITE_APP_VARIANT: variant,
+        VITE_DASTAK_WEB_PUSH_PUBLIC_KEY: undefined,
+      })).toThrow(/VAPID/);
+    },
+  );
 });
 
 describe("assertBrowserSafeKey", () => {
