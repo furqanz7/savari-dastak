@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   getAdminOrders,
   getEvidenceUrl,
@@ -240,8 +240,10 @@ describe("Dastak Admin client", () => {
 
   it("runs idempotent lifecycle recovery", async () => {
     let body: unknown;
-    const result = await reconcileOwnerOrders(auth, (_input, init) => {
+    let headers: Headers | undefined;
+    const result = await reconcileOwnerOrders({ ...auth, idempotencyKey: "owner-reconcile-key" }, (_input, init) => {
       body = JSON.parse(String(init?.body));
+      headers = new Headers(init?.headers);
       return Promise.resolve(new Response(JSON.stringify({
         merchantOrdersRecovered: 1,
         parcelsRecovered: 0,
@@ -251,7 +253,22 @@ describe("Dastak Admin client", () => {
       }), { status: 200 }));
     });
     expect(body).toEqual({ operation: "ownerReconcile" });
+    expect(headers?.get("X-Idempotency-Key")).toBe("owner-reconcile-key");
     expect(result.merchantOrdersRecovered).toBe(1);
+  });
+
+  it("classifies an Admin request deadline as an uncertain timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = getMerchantApplications(auth, (_input, init) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      }));
+      const assertion = expect(pending).rejects.toMatchObject({ code: "request_timeout", status: 0 });
+      await vi.advanceTimersByTimeAsync(15_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleAlert, PauseCircle, ShieldCheck } from "lucide-react";
+import { AdminPrivilegedActionDialog, type AdminPrivilegedActionIntent } from "./AdminPrivilegedActionDialog";
+import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
   getV1AdminOperationalSafety,
   manageV1RiderEscalation,
@@ -20,6 +22,14 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+  const [reconciliationBlocked, setReconciliationBlocked] = useState(false);
+  const [intent, setIntent] = useState<{
+    dialog: AdminPrivilegedActionIntent;
+    operationIdentity: string;
+    mutate: (idempotencyKey: string, reason: string) => Promise<unknown>;
+    success: string;
+  }>();
 
   const refresh = useCallback(async () => {
     try {
@@ -27,63 +37,111 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
       setError(undefined);
     } catch (cause) {
       setError(message(cause));
+      throw cause;
     }
   }, [auth]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refresh().catch(() => undefined); }, [refresh]);
   useAdminWorkspaceRefresh(refresh);
 
   const existing = useMemo(() => snapshot?.pauses.find((pause) =>
     pause.scope === scope && pause.targetId === targetId.trim()), [scope, snapshot, targetId]);
 
-  const pause = async () => {
+  const perform = async (operatorReason: string) => {
+    if (!intent || busy) return;
     setBusy(true);
-    try {
-      await setV1OperationalPause({
-        ...auth, scope, targetId: targetId.trim(), active: true,
-        reason: reason.trim(), expectedVersion: existing?.version ?? 0,
-        idempotencyKey: crypto.randomUUID(),
-      });
-      setReason("");
-      await refresh();
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setBusy(false);
-    }
+    setError(undefined);
+    setNotice(undefined);
+    setReconciliationBlocked(false);
+    const result = await runAdminPrivilegedMutation({
+      operationIdentity: intent.operationIdentity,
+      mutate: (key) => intent.mutate(key, operatorReason),
+      reconcile: refresh,
+    });
+    setBusy(false);
+    if (result.kind === "completed") {
+      setNotice(intent.success);
+      setIntent(undefined);
+    } else if (result.kind === "reconciled" || result.kind === "uncertain_reconciled") {
+      setNotice(result.message);
+      if (result.kind === "reconciled") setIntent(undefined);
+    } else if (result.kind === "uncertain_blocked") {
+      setReconciliationBlocked(true);
+      setError(result.message);
+    } else setError(message(result.error));
   };
 
-  const resume = async (control: V1OperationalSafety["pauses"][number]) => {
-    setBusy(true);
-    try {
-      await setV1OperationalPause({
+  const requestPause = () => {
+    const normalizedTarget = targetId.trim();
+    const normalizedReason = reason.trim();
+    if (normalizedTarget.length !== 36 || normalizedReason.length < 3 || existing?.active) return;
+    setIntent({
+      operationIdentity: `operational-pause:${scope}:${normalizedTarget}:${existing?.version ?? 0}:active`,
+      success: "New work is paused for the reviewed scope.",
+      dialog: {
+        title: "Pause new operational work?",
+        entityLabel: scope.replaceAll("_", " "), entityValue: normalizedTarget,
+        currentState: existing?.active ? "Paused" : "Accepting new commitments",
+        resultingState: "New commitments paused",
+        consequence: "New matching or assignments in this exact scope stop. Already-paid and already-committed work continues and must still be fulfilled.",
+        confirmLabel: "Pause new work", tone: "danger", reason: normalizedReason,
+      },
+      mutate: (idempotencyKey) => setV1OperationalPause({
+        ...auth, scope, targetId: normalizedTarget, active: true,
+        reason: normalizedReason, expectedVersion: existing?.version ?? 0, idempotencyKey,
+      }),
+    });
+  };
+
+  const requestResume = (control: V1OperationalSafety["pauses"][number]) => {
+    setIntent({
+      operationIdentity: `operational-pause:${control.scope}:${control.targetId}:${control.version}:inactive`,
+      success: "New work has resumed for the reviewed scope.",
+      dialog: {
+        title: "Resume new operational work?",
+        entityLabel: control.scope.replaceAll("_", " "), entityValue: control.targetId,
+        currentState: `Paused · ${control.reason}`, resultingState: "Accepting new commitments",
+        consequence: "Eligible customer orders and rider assignments may begin entering this scope again immediately.",
+        confirmLabel: "Resume new work",
+        reasonOptions: ["Incident resolved", "Service restored", "Safety clearance", "Authorized override", "Other"],
+      },
+      mutate: (idempotencyKey, operatorReason) => setV1OperationalPause({
         ...auth, scope: control.scope, targetId: control.targetId, active: false,
-        reason: "Authorized Operations resume", expectedVersion: control.version,
-        idempotencyKey: crypto.randomUUID(),
-      });
-      await refresh();
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setBusy(false);
-    }
+        reason: operatorReason, expectedVersion: control.version, idempotencyKey,
+      }),
+    });
   };
 
-  const manage = async (
-    escalation: V1OperationalSafety["riderEscalations"][number],
-  ) => {
-    const action = escalation.custodyStarted
-      ? "ENTER_DELIVERY_RECOVERY" as const
-      : "RELEASE_REMATCH" as const;
+  const requestManage = (escalation: V1OperationalSafety["riderEscalations"][number]) => {
+    const action = escalation.custodyStarted ? "ENTER_DELIVERY_RECOVERY" as const : "RELEASE_REMATCH" as const;
+    setIntent({
+      operationIdentity: `rider-escalation:${escalation.missionId}:${escalation.version}:${action}`,
+      success: escalation.custodyStarted ? "The mission entered Delivery Recovery." : "The rider was released and rematching can continue.",
+      dialog: {
+        title: escalation.custodyStarted ? "Enter Delivery Recovery?" : "Release rider and rematch?",
+        entityLabel: "Order and mission", entityValue: `${escalation.displayOrderNumber} · ${escalation.missionId}`,
+        currentState: `${escalation.escalationState.replaceAll("_", " ")} · ${escalation.custodyStarted ? "Package custody started" : "No package custody"}`,
+        resultingState: escalation.custodyStarted ? "Delivery Recovery" : "Rider released for rematch",
+        consequence: escalation.custodyStarted
+          ? "The rider keeps recorded custody while Operations takes control of the recovery path. Normal completion remains blocked until recovery is resolved."
+          : "This rider loses the assignment and the delivery returns to matching. No custody transfer has occurred.",
+        confirmLabel: escalation.custodyStarted ? "Enter Delivery Recovery" : "Release and rematch",
+        tone: escalation.custodyStarted ? "danger" : "primary",
+        reasonOptions: ["Rider unreachable", "Safety intervention", "Operations reassignment", "Service disruption", "Other"],
+      },
+      mutate: (idempotencyKey, operatorReason) => manageV1RiderEscalation({
+        ...auth, missionId: escalation.missionId, action, reason: operatorReason,
+        expectedVersion: escalation.version, idempotencyKey,
+      }),
+    });
+  };
+
+  const reconcileIntent = async () => {
     setBusy(true);
     try {
-      await manageV1RiderEscalation({
-        ...auth, missionId: escalation.missionId, action,
-        reason: escalation.custodyStarted
-          ? "Operations escalated unresponsive rider after custody"
-          : "Operations released unresponsive rider before custody",
-        expectedVersion: escalation.version, idempotencyKey: crypto.randomUUID(),
-      });
       await refresh();
+      setReconciliationBlocked(false);
+      setNotice("Authoritative operational state was reloaded. Review it before acting again.");
+      setIntent(undefined);
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -94,6 +152,7 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
   return (
     <div className="admin-approvals" role="tabpanel">
       {error && <p className="order-error" role="alert">{error}</p>}
+      {notice && <p className="admin-access-message success" role="status">{notice}</p>}
       <section className="admin-section">
         <header>
           <div><h2>Scoped emergency controls</h2><p>New commitments only; paid work continues.</p></div>
@@ -111,7 +170,7 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
             </select>
             <input value={targetId} onChange={(event) => setTargetId(event.target.value)} placeholder="Zone, branch or rider UUID" aria-label="Pause target ID" />
             <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Required reason" aria-label="Pause reason" />
-            <button className="danger-button" type="button" disabled={busy || targetId.trim().length !== 36 || reason.trim().length < 3 || existing?.active} onClick={() => void pause()}><PauseCircle size={17} /> Pause new work</button>
+            <button className="danger-button" type="button" disabled={busy || targetId.trim().length !== 36 || reason.trim().length < 3 || existing?.active} onClick={requestPause}><PauseCircle size={17} /> Pause new work</button>
           </div>
         )}
         <div className="exception-list">
@@ -119,7 +178,7 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
             <article className="exception-card high" key={control.id}>
               <header><ShieldCheck size={18} /><div><h3>{control.scope.replaceAll("_", " ")}</h3><p>{control.targetId}</p></div></header>
               <p>{control.reason}</p>
-              {snapshot.permissions.canManageOperationalPauses && <button className="secondary-button" type="button" disabled={busy} onClick={() => void resume(control)}>Resume new work</button>}
+              {snapshot.permissions.canManageOperationalPauses && <button className="secondary-button" type="button" disabled={busy} onClick={() => requestResume(control)}>Resume new work</button>}
             </article>
           ))}
         </div>
@@ -135,7 +194,7 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
                 <p>{escalation.escalationReason ?? "Threshold escalation"}</p>
                 <small>{escalation.custodyStarted ? "Package custody has started" : "No package custody"}</small>
                 {snapshot.permissions.canManageRiderEscalations && ["STALLED", "UNRESPONSIVE"].includes(escalation.escalationState) && (
-                  <button className={escalation.custodyStarted ? "danger-button" : "secondary-button"} type="button" disabled={busy} onClick={() => void manage(escalation)}>
+                  <button className={escalation.custodyStarted ? "danger-button" : "secondary-button"} type="button" disabled={busy} onClick={() => requestManage(escalation)}>
                     {escalation.custodyStarted ? "Enter Delivery Recovery" : "Release and rematch"}
                   </button>
                 )}
@@ -144,6 +203,10 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
           </div>
         )}
       </section>
+      {intent ? <AdminPrivilegedActionDialog intent={intent.dialog} busy={busy} error={error} notice={notice}
+        reconciliationBlocked={reconciliationBlocked} onReconcile={reconcileIntent}
+        onDismiss={() => { setIntent(undefined); setError(undefined); setNotice(undefined); }}
+        onConfirm={perform} /> : null}
     </div>
   );
 }

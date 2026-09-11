@@ -20,7 +20,9 @@ import {
 } from "lucide-react";
 import { RoleAccountView } from "./RoleAccountView";
 import { AdminAccessPanel } from "./AdminAccessPanel";
+import { AdminPrivilegedActionDialog } from "./AdminPrivilegedActionDialog";
 import { AdminCataloguePanel } from "./AdminCataloguePanel";
+import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
   getAdminOrders,
   getEvidenceUrl,
@@ -121,7 +123,6 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
   const [feedIssues, setFeedIssues] = useState<Partial<Record<AdminBootstrapFeed, AdminFeedIssue>>>({});
   const [feedUpdatedAt, setFeedUpdatedAt] = useState<Partial<Record<AdminBootstrapFeed, string>>>({});
   const [notice, setNotice] = useState<string>();
-  const reviewKeys = useRef(new Map<string, string>());
   const refreshInFlight = useRef(false);
 
   const refresh = useCallback(async (showProgress = false) => {
@@ -191,24 +192,59 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     };
   }, [refresh]);
 
-  const review = async (kind: "merchant" | "partner", applicationId: string, decision: ReviewDecision, reason?: string) => {
-    const identity = `${kind}:${applicationId}:${decision}:${reason ?? ""}`;
-    const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
-    reviewKeys.current.set(identity, idempotencyKey);
+  const performMutation = async (input: {
+    identity: string;
+    mutate: (idempotencyKey: string) => Promise<unknown>;
+    reconcile: () => Promise<unknown>;
+    success: string;
+  }) => {
+    const identity = input.identity;
     setBusy(identity);
     setActionError(undefined);
-    try {
-      const input = { ...auth, applicationId, decision, reason, idempotencyKey };
-      if (kind === "merchant") await reviewMerchantApplication(input);
-      else await reviewPartnerApplication(input);
-      reviewKeys.current.delete(identity);
-      await refresh();
-    } catch (reviewError) {
-      setActionError(message(reviewError));
-      throw reviewError;
-    } finally {
-      setBusy(undefined);
+    setNotice(undefined);
+    const result = await runAdminPrivilegedMutation({
+      operationIdentity: identity, mutate: input.mutate, reconcile: input.reconcile,
+    });
+    setBusy(undefined);
+    if (result.kind === "completed") {
+      setNotice(input.success);
+      return;
     }
+    if (result.kind === "reconciled") {
+      setNotice(result.message);
+      return;
+    }
+    if (result.kind === "uncertain_reconciled") {
+      setNotice(result.message);
+      return;
+    }
+    if (result.kind === "uncertain_blocked") {
+      setActionError(result.message);
+      throw result;
+    }
+    setActionError(message(result.error));
+    throw result.error;
+  };
+
+  const review = async (kind: "merchant" | "partner", applicationId: string, decision: ReviewDecision, reason?: string) => {
+    const reconcile = async () => {
+      if (kind === "merchant") {
+        const value = await getMerchantApplications(auth);
+        setMerchants(value.filter((application) => application.status === "pending"));
+      } else {
+        const value = await getPartnerApplications(auth);
+        setPartners(value.filter((application) => application.status === "pending"));
+      }
+    };
+    await performMutation({
+      identity: `${kind}-application:${applicationId}:${decision}:${reason ?? ""}`,
+      mutate: (idempotencyKey) => {
+        const input = { ...auth, applicationId, decision, reason, idempotencyKey };
+        return kind === "merchant" ? reviewMerchantApplication(input) : reviewPartnerApplication(input);
+      },
+      reconcile,
+      success: `${kind === "merchant" ? "Merchant" : "Delivery Partner"} application ${decision === "approve" ? "approved" : "rejected"}.`,
+    });
   };
 
   const openEvidence = async (objectPath: string) => {
@@ -230,102 +266,72 @@ export function AdminDashboard({ accessToken, displayName, email, phoneNumber, s
     faultSource: "merchant" | "dastak" | null,
     reason: string,
   ) => {
-    const identity = `refund:${order.orderId}:${outcome}:${faultSource ?? "none"}:${reason}`;
-    const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
-    reviewKeys.current.set(identity, idempotencyKey);
-    setBusy(identity);
-    setActionError(undefined);
-    try {
-      const updated = await reviewOrderRefund({
-        ...auth, orderId: order.orderId, outcome, faultSource, reason, idempotencyKey,
+    let updated: Awaited<ReturnType<typeof reviewOrderRefund>> | undefined;
+    const reloadOrders = async () => {
+      const value = await getAdminOrders({ ...auth, limit: 50 });
+      setOrders(value);
+    };
+    await performMutation({
+      identity: `refund-decision:${order.orderId}:${order.updatedAt}:${outcome}:${faultSource ?? "none"}:${reason}`,
+      mutate: async (idempotencyKey) => {
+        updated = await reviewOrderRefund({ ...auth, orderId: order.orderId, outcome, faultSource, reason, idempotencyKey });
+        return updated;
+      },
+      reconcile: reloadOrders,
+      success: outcome === "deny" ? "Refund request denied and recorded." : "Refund decision recorded.",
+    });
+    if (outcome !== "deny" && updated?.paymentState === "refund_pending" && updated.status !== "returning_to_merchant") {
+      await performMutation({
+        identity: `provider-refund:${order.orderId}`,
+        mutate: (idempotencyKey) => processOrderRefund({ ...auth, orderId: order.orderId, idempotencyKey }),
+        reconcile: reloadOrders,
+        success: "Provider refund submitted and authoritative payment state reloaded.",
       });
-      reviewKeys.current.delete(identity);
-      await refresh();
-      if (outcome !== "deny" && updated.paymentState === "refund_pending" &&
-        updated.status !== "returning_to_merchant") {
-        await processOrderRefund({ ...auth, orderId: order.orderId, idempotencyKey: crypto.randomUUID() });
-        await refresh();
-      }
-    } catch (reviewError) {
-      setActionError(message(reviewError));
-    } finally {
-      setBusy(undefined);
     }
   };
 
   const retryRefund = async (order: AdminOrder) => {
-    setBusy(`process-refund:${order.orderId}`);
-    setActionError(undefined);
-    try {
-      await processOrderRefund({ ...auth, orderId: order.orderId, idempotencyKey: crypto.randomUUID() });
-      await refresh();
-    } catch (refundError) {
-      setActionError(message(refundError));
-    } finally {
-      setBusy(undefined);
-    }
+    await performMutation({
+      identity: `provider-refund:${order.orderId}`,
+      mutate: (idempotencyKey) => processOrderRefund({ ...auth, orderId: order.orderId, idempotencyKey }),
+      reconcile: async () => setOrders(await getAdminOrders({ ...auth, limit: 50 })),
+      success: "Provider refund submitted and authoritative payment state reloaded.",
+    });
   };
 
   const resolveSupport = async (exception: OwnerOrderException, resolution: string) => {
-    const identity = `support:${exception.entityId}:${resolution}`;
-    const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
-    reviewKeys.current.set(identity, idempotencyKey);
-    setBusy(identity);
-    setActionError(undefined);
-    try {
-      await resolveOwnerSupportCase({ ...auth, caseId: exception.entityId, resolution, idempotencyKey });
-      reviewKeys.current.delete(identity);
-      setNotice("Support case resolved and recorded.");
-      await refresh();
-    } catch (supportError) {
-      setActionError(message(supportError));
-      throw supportError;
-    } finally {
-      setBusy(undefined);
-    }
+    await performMutation({
+      identity: `support:${exception.entityId}:${exception.status}:${resolution}`,
+      mutate: (idempotencyKey) => resolveOwnerSupportCase({ ...auth, caseId: exception.entityId, resolution, idempotencyKey }),
+      reconcile: async () => setOperations(await getOwnerOperations({ ...auth, limit: 50 })),
+      success: "Support case resolved and recorded.",
+    });
   };
 
   const resetHandoff = async (exception: OwnerOrderException, reason: string) => {
     if (!exception.purpose) return;
-    const identity = `handoff:${exception.entityKind}:${exception.entityId}:${exception.purpose}:${reason}`;
-    const idempotencyKey = reviewKeys.current.get(identity) ?? crypto.randomUUID();
-    reviewKeys.current.set(identity, idempotencyKey);
-    setBusy(identity);
-    setActionError(undefined);
-    try {
-      await resetOwnerHandoff({
-        ...auth,
-        entityKind: exception.entityKind,
-        entityId: exception.entityId,
-        purpose: exception.purpose,
-        reason,
-        idempotencyKey,
-      });
-      reviewKeys.current.delete(identity);
-      setNotice("Handoff code unlocked and securely regenerated.");
-      await refresh();
-    } catch (handoffError) {
-      setActionError(message(handoffError));
-      throw handoffError;
-    } finally {
-      setBusy(undefined);
-    }
+    await performMutation({
+      identity: `handoff:${exception.entityKind}:${exception.entityId}:${exception.purpose}:${exception.status}:${reason}`,
+      mutate: (idempotencyKey) => resetOwnerHandoff({ ...auth, entityKind: exception.entityKind,
+        entityId: exception.entityId, purpose: exception.purpose!, reason, idempotencyKey }),
+      reconcile: async () => setOperations(await getOwnerOperations({ ...auth, limit: 50 })),
+      success: "Handoff code unlocked and securely regenerated.",
+    });
   };
 
   const reconcile = async () => {
-    setBusy("reconcile");
-    setActionError(undefined);
-    try {
-      const result = await reconcileOwnerOrders(auth);
-      const recovered = result.merchantOrdersRecovered + result.parcelsRecovered;
-      const offers = result.merchantOffersCreated + result.parcelOffersCreated;
-      setNotice(`Recovery complete: ${recovered} records repaired, ${offers} offers created.`);
-      await refresh();
-    } catch (reconcileError) {
-      setActionError(message(reconcileError));
-    } finally {
-      setBusy(undefined);
-    }
+    await performMutation({
+      identity: "owner-lifecycle-recovery",
+      mutate: async (idempotencyKey) => {
+        const result = await reconcileOwnerOrders({ ...auth, idempotencyKey });
+        const recovered = result.merchantOrdersRecovered + result.parcelsRecovered;
+        const offers = result.merchantOffersCreated + result.parcelOffersCreated;
+        setNotice(`Recovery complete: ${recovered} records repaired, ${offers} offers created.`);
+        return result;
+      },
+      reconcile: async () => setOperations(await getOwnerOperations({ ...auth, limit: 50 })),
+      success: "Lifecycle recovery completed and the exception desk was reloaded.",
+    });
   };
 
   const mainNavigation: Array<{ id: AdminTab; label: string; icon: ReactNode; badge?: number }> = [
@@ -463,11 +469,12 @@ function ExceptionsPanel({ operations, available, busy, onResolve, onReset, onRe
   onReviewRefund: () => void;
 }) {
   const exceptions = operations?.exceptions ?? [];
+  const [confirmRecovery, setConfirmRecovery] = useState(false);
   return (
     <section className="admin-section admin-exceptions" role="tabpanel">
       <header>
         <div><h2>Exceptions</h2><p>Support, locked handoffs, refunds and stalled deliveries.</p></div>
-        <button className="secondary-button" type="button" disabled={busy} onClick={() => void onReconcile()}><RotateCcw size={17} /> Run recovery</button>
+        <button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmRecovery(true)}><RotateCcw size={17} /> Run recovery</button>
       </header>
       {exceptions.length === 0 ? <p className="admin-empty">{available ? "No marketplace exceptions need attention." : "Exception data is not available yet."}</p> : (
         <div className="exception-list">
@@ -484,6 +491,14 @@ function ExceptionsPanel({ operations, available, busy, onResolve, onReset, onRe
           ))}
         </div>
       )}
+      {confirmRecovery ? <AdminPrivilegedActionDialog intent={{
+        title: "Run marketplace lifecycle recovery?", entityLabel: "Operational scope", entityValue: "Stalled merchant orders and parcel deliveries",
+        currentState: `${operations?.summary.stalledOrders ?? 0} stalled lifecycle signal(s)`, resultingState: "Authoritative state reconciled; eligible offers may be recreated",
+        consequence: "Recovery may repair stalled lifecycle records and create new rider offers. It does not bypass payment, assignment, custody, or handoff rules.",
+        confirmLabel: "Run controlled recovery",
+      }} busy={busy} onDismiss={() => setConfirmRecovery(false)} onConfirm={async () => {
+        await onReconcile(); setConfirmRecovery(false);
+      }} /> : null}
     </section>
   );
 }
@@ -498,6 +513,7 @@ function ExceptionCard({ exception, busy, onResolve, onReset, onReviewRefund, on
 }) {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [intent, setIntent] = useState<"resolve" | "reset" | "recover">();
   const requiresNote = exception.kind === "support" || exception.kind === "handoff_locked";
 
   const submit = async () => {
@@ -506,6 +522,8 @@ function ExceptionCard({ exception, busy, onResolve, onReset, onReviewRefund, on
     try {
       if (exception.kind === "support") await onResolve(exception, note.trim());
       if (exception.kind === "handoff_locked") await onReset(exception, note.trim());
+      setIntent(undefined);
+      setNote("");
     } catch {
       // The dashboard keeps the note in place and displays the action error.
     } finally {
@@ -518,9 +536,25 @@ function ExceptionCard({ exception, busy, onResolve, onReset, onReviewRefund, on
       <header><span><CircleAlert size={19} /></span><div><p className="eyebrow">{exception.kind.replaceAll("_", " ")}</p><h3>{exception.title}</h3></div><time>{formatDate(exception.occurredAt)}</time></header>
       <p>{exception.detail}</p>
       <small>{exception.entityKind.replaceAll("_", " ")} · {shortId(exception.entityId)} · {exception.status.replaceAll("_", " ")}</small>
-      {requiresNote && <div className="exception-action"><input value={note} maxLength={exception.kind === "support" ? 500 : 300} onChange={(event) => setNote(event.target.value)} placeholder={exception.kind === "support" ? "Resolution shared with the customer" : "Reason for secure code reset"} /><button className="primary-button" type="button" disabled={busy || submitting || note.trim().length < 5} onClick={() => void submit()}>{exception.kind === "support" ? "Resolve case" : "Reset code"}</button></div>}
+      {requiresNote && <div className="exception-action"><input value={note} maxLength={exception.kind === "support" ? 500 : 300} onChange={(event) => setNote(event.target.value)} placeholder={exception.kind === "support" ? "Resolution shared with the customer" : "Reason for secure code reset"} /><button className="primary-button" type="button" disabled={busy || submitting || note.trim().length < 5} onClick={() => setIntent(exception.kind === "support" ? "resolve" : "reset")}>{exception.kind === "support" ? "Resolve case" : "Reset code"}</button></div>}
       {exception.kind === "refund_review" && <button className="primary-button" type="button" disabled={busy} onClick={onReviewRefund}>Review refund</button>}
-      {exception.kind === "stalled_order" && <button className="secondary-button" type="button" disabled={busy} onClick={() => void onReconcile()}><RotateCcw size={17} /> Recover lifecycle</button>}
+      {exception.kind === "stalled_order" && <button className="secondary-button" type="button" disabled={busy} onClick={() => setIntent("recover")}><RotateCcw size={17} /> Recover lifecycle</button>}
+      {intent ? <AdminPrivilegedActionDialog intent={{
+        title: intent === "resolve" ? "Resolve this customer support case?" : intent === "reset" ? "Reset this secure handoff?" : "Recover this stalled lifecycle?",
+        entityLabel: exception.entityKind.replaceAll("_", " "), entityValue: `${exception.title} · ${exception.entityId}`,
+        currentState: exception.status.replaceAll("_", " "),
+        resultingState: intent === "resolve" ? "Support case resolved" : intent === "reset" ? `${exception.purpose ?? "Handoff"} code invalidated and regenerated` : "Lifecycle reconciled; eligible work may resume",
+        consequence: intent === "resolve"
+          ? "This closes the customer issue with the exact resolution shown and records the operator action."
+          : intent === "reset"
+            ? "The current secure code becomes invalid. A replacement code is generated for the same handoff; package custody does not change."
+            : "Recovery can repair stalled state and create a new rider offer, but cannot bypass payment, assignment, custody, or verification rules.",
+        confirmLabel: intent === "resolve" ? "Resolve case" : intent === "reset" ? "Reset secure code" : "Run recovery",
+        tone: intent === "reset" ? "danger" : "primary",
+        reason: intent === "recover" ? undefined : note.trim(),
+      }} busy={busy || submitting} onDismiss={() => setIntent(undefined)} onConfirm={intent === "recover" ? async () => {
+        setSubmitting(true); try { await onReconcile(); setIntent(undefined); } finally { setSubmitting(false); }
+      } : submit} /> : null}
     </article>
   );
 }
@@ -547,14 +581,12 @@ function ReviewCard({ icon, title, subtitle, facts, evidence, location, approval
   onReview: (decision: ReviewDecision, reason?: string) => Promise<void>;
 }) {
   const [mode, setMode] = useState<ReviewDecision>();
-  const [reason, setReason] = useState("");
 
-  const confirm = async () => {
-    if (!mode || (mode === "reject" && !reason.trim())) return;
+  const confirm = async (reason: string) => {
+    if (!mode) return;
     try {
-      await onReview(mode, mode === "reject" ? reason : undefined);
+      await onReview(mode, reason);
       setMode(undefined);
-      setReason("");
     } catch {
       // The dashboard displays the server error and preserves the review form.
     }
@@ -575,19 +607,17 @@ function ReviewCard({ icon, title, subtitle, facts, evidence, location, approval
           <button className="danger-button" type="button" disabled={busy} onClick={() => setMode("reject")}><X size={17} /> Reject</button>
           <button className="primary-button" type="button" disabled={busy} onClick={() => setMode("approve")}><Check size={17} /> Approve</button>
         </div>
-      ) : (
-        <div className="review-confirmation">
-          <strong>{mode === "approve" ? "Approve this application?" : "Reason for rejection"}</strong>
-          {mode === "approve" ? <p>{approvalSummary}</p> : null}
-          {mode === "reject" && <input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Required reason" />}
-          <div>
-            <button className="secondary-button" type="button" disabled={busy} onClick={() => setMode(undefined)}>Cancel</button>
-            <button className={mode === "approve" ? "primary-button" : "danger-button"} type="button" disabled={busy || (mode === "reject" && !reason.trim())} onClick={() => void confirm()}>
-              {mode === "approve" ? <Check size={17} /> : <X size={17} />} Confirm
-            </button>
-          </div>
-        </div>
-      )}
+      ) : null}
+      {mode ? <AdminPrivilegedActionDialog intent={{
+        title: `${mode === "approve" ? "Approve" : "Reject"} this application?`,
+        entityLabel: "Reviewed applicant", entityValue: `${title} · ${subtitle}`,
+        currentState: "Application pending review", resultingState: mode === "approve" ? "Approved and operational profile created" : "Application rejected",
+        consequence: mode === "approve" ? approvalSummary : "The applicant will not receive operational access. The decision and operator reason are recorded for audit.",
+        confirmLabel: mode === "approve" ? "Approve application" : "Reject application", tone: mode === "reject" ? "danger" : "primary",
+        reasonOptions: mode === "approve"
+          ? ["Evidence verified", "Eligibility verified", "Compliance review complete", "Other"]
+          : ["Evidence could not be verified", "Eligibility requirements not met", "Application information incomplete", "Compliance concern", "Other"],
+      }} busy={busy} onDismiss={() => setMode(undefined)} onConfirm={confirm} /> : null}
     </article>
   );
 }
@@ -637,6 +667,7 @@ function AdminOrderRow({ order, busy, onReview, onRefund }: {
   );
   const [faultSource, setFaultSource] = useState<"merchant" | "dastak" | "">("");
   const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState<"decision" | "provider">();
   const needsFault = postPickup && outcome === "approve_full";
 
   return (
@@ -668,7 +699,7 @@ function AdminOrderRow({ order, busy, onReview, onRefund }: {
             className="primary-button"
             type="button"
             disabled={busy || !reason.trim() || (needsFault && !faultSource)}
-            onClick={() => void onReview(order, outcome, faultSource || null, reason.trim())}
+            onClick={() => setConfirming("decision")}
           >
             Submit decision
           </button>
@@ -679,9 +710,27 @@ function AdminOrderRow({ order, busy, onReview, onRefund }: {
         <div className="admin-refund-review">
           <strong>Refund pending</strong>
           <small>Retry safely if the provider call did not finish.</small>
-          <button className="primary-button" type="button" disabled={busy} onClick={() => void onRefund(order)}>Process refund</button>
+          <button className="primary-button" type="button" disabled={busy} onClick={() => setConfirming("provider")}>Process refund</button>
         </div>
       )}
+      {confirming ? <AdminPrivilegedActionDialog intent={{
+        title: confirming === "provider" ? "Submit this provider refund?" : "Record this refund decision?",
+        entityLabel: "Order", entityValue: `${shortId(order.orderId)} · ${order.store.name} · ${formatPrice(order.total.paise)}`,
+        currentState: `${orderStatusLabel(order.status)} · ${paymentLabel(order.paymentState)}`,
+        resultingState: confirming === "provider" ? "Original-method refund submitted" : outcome === "deny" ? "Refund denied" : outcome === "approve_items_only" ? "Item refund approved" : "Full refund approved",
+        consequence: confirming === "provider"
+          ? "Dastak will ask the payment provider to return the approved amount through the original payment method. An uncertain response is reconciled before any retry."
+          : outcome === "deny"
+            ? "No refund will be issued from this decision. The operator reason is preserved in the order audit trail."
+            : `${outcome === "approve_full" ? "The full eligible amount" : "The item subtotal only"} becomes refundable. If eligible, provider processing may begin immediately after this decision.`,
+        confirmLabel: confirming === "provider" ? "Submit provider refund" : "Record decision",
+        tone: outcome === "deny" ? "danger" : "primary",
+        reason: confirming === "provider" ? undefined : reason.trim(),
+      }} busy={busy} onDismiss={() => setConfirming(undefined)} onConfirm={async () => {
+        if (confirming === "provider") await onRefund(order);
+        else await onReview(order, outcome, faultSource || null, reason.trim());
+        setConfirming(undefined);
+      }} /> : null}
     </article>
   );
 }

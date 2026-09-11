@@ -20,6 +20,8 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { AdminPrivilegedActionDialog, type AdminPrivilegedActionIntent } from "./AdminPrivilegedActionDialog";
+import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
   getV1AdminCatalogue, getV1AdminCataloguePage, importV1AdminCatalogue, updateV1AdminSku,
   type DastakV1Auth, type V1AdminCataloguePageSku, type V1AdminSnapshot,
@@ -58,7 +60,14 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [editingSku, setEditingSku] = useState<V1AdminCataloguePageSku>();
-  const importKeys = useRef(new Map<string, string>());
+  const [reconciliationBlocked, setReconciliationBlocked] = useState(false);
+  const [intent, setIntent] = useState<{
+    dialog: AdminPrivilegedActionIntent;
+    identity: string;
+    mutate: (idempotencyKey: string) => Promise<unknown>;
+    success: string;
+    closeEditor?: boolean;
+  }>();
   const headingRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (categoryTypeId) headingRef.current?.scrollIntoView({ block: "start" });
@@ -120,12 +129,20 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth, filters]);
 
+  const reconcileCatalogue = useCallback(async () => {
+    const [metadata, page] = await Promise.all([
+      getV1AdminCatalogue(auth),
+      getV1AdminCataloguePage({ ...auth, ...filters, limit: 50 }),
+    ]);
+    setSnapshot(metadata); setSkus(page.skus); setCursor(page.nextCursor); setHasMore(page.hasMore);
+  }, [auth, filters]);
+
   const refresh = useCallback(async () => {
     setBusy(true);
-    try { await Promise.all([loadMetadata(), loadPage(false)]); setError(undefined); }
-    catch (refreshError) { setError(message(refreshError)); }
+    try { await reconcileCatalogue(); setError(undefined); }
+    catch (refreshError) { setError(message(refreshError)); throw refreshError; }
     finally { setBusy(false); }
-  }, [loadMetadata, loadPage]);
+  }, [reconcileCatalogue]);
   useAdminWorkspaceRefresh(refresh);
 
   const chooseCategoryType = (value: string) => {
@@ -140,33 +157,60 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     setSubcategoryId("");
   };
 
-  const runImport = async (event: FormEvent) => {
+  const runImport = (event: FormEvent) => {
     event.preventDefault();
     let catalogue: unknown;
     try { catalogue = JSON.parse(source); } catch { setError("Import must be valid JSON."); return; }
     if (!catalogue || typeof catalogue !== "object" || Array.isArray(catalogue)) { setError("Import must be one catalogue object."); return; }
     const fingerprint = source.trim();
-    const idempotencyKey = importKeys.current.get(fingerprint) ?? crypto.randomUUID();
-    importKeys.current.set(fingerprint, idempotencyKey);
-    setBusy(true); setError(undefined);
-    try {
-      await importV1AdminCatalogue({ ...auth, catalogue: catalogue as Record<string, unknown>, idempotencyKey });
-      importKeys.current.delete(fingerprint);
-      setNotice("Catalogue import committed atomically and recorded in audit history.");
-      await refresh();
-    } catch (importError) { setError(message(importError)); }
-    finally { setBusy(false); }
+    const payload = catalogue as Record<string, unknown>;
+    const counts = ["categories", "subcategories", "brands", "skus"].map((key) =>
+      `${Array.isArray(payload[key]) ? (payload[key] as unknown[]).length : 0} ${key}`).join(" · ");
+    setIntent({
+      identity: `catalogue-import:${fingerprint}`,
+      success: "Catalogue import committed atomically and recorded in audit history.",
+      dialog: {
+        title: "Import this catalogue payload?", entityLabel: "Draft catalogue changes", entityValue: counts,
+        currentState: "Existing authoritative catalogue", resultingState: "Validated records imported as Draft",
+        consequence: "This atomic operation can create or update many shared catalogue records. Imported products remain Draft and are not customer-visible until their separate readiness gates pass.",
+        confirmLabel: "Import as Draft", tone: "danger",
+      },
+      mutate: (idempotencyKey) => importV1AdminCatalogue({ ...auth, catalogue: payload, idempotencyKey }),
+    });
   };
 
   const updateSku = async (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => {
-    setBusy(true); setError(undefined);
-    try {
-      await updateV1AdminSku({ ...auth, skuId: sku.id, expectedVersion: sku.version, patch, idempotencyKey: crypto.randomUUID() });
-      setNotice(`${sku.name} was updated with version protection.`);
-      await loadPage(false);
-      setEditingSku(undefined);
-    } catch (updateError) { setError(message(updateError)); }
-    finally { setBusy(false); }
+    const nextStatus = typeof patch.status === "string" ? patch.status : sku.status;
+    const nextPrice = typeof patch.sellingPricePaise === "number" ? patch.sellingPricePaise : sku.sellingPricePaise;
+    setIntent({
+      identity: `catalogue-sku:${sku.id}:${sku.version}:${JSON.stringify(patch)}`,
+      success: `${sku.name} was updated with version protection.`, closeEditor: true,
+      dialog: {
+        title: `Save changes to ${sku.name}?`, entityLabel: "Canonical SKU", entityValue: `${sku.name} · ${sku.id}`,
+        currentState: `${label(sku.status)} · ${formatPaise(sku.sellingPricePaise)} · version ${sku.version}`,
+        resultingState: `${label(nextStatus)} · ${formatPaise(nextPrice)}`,
+        consequence: "This updates the shared authoritative product record, including customer pricing and visibility where changed. Existing order snapshots remain immutable.",
+        confirmLabel: "Save authoritative SKU", tone: nextStatus === "INACTIVE" ? "danger" : "primary",
+      },
+      mutate: (idempotencyKey) => updateV1AdminSku({ ...auth, skuId: sku.id, expectedVersion: sku.version, patch, idempotencyKey }),
+    });
+  };
+
+  const confirmMutation = async () => {
+    if (!intent || busy) return;
+    setBusy(true); setError(undefined); setNotice(undefined); setReconciliationBlocked(false);
+    const result = await runAdminPrivilegedMutation({ operationIdentity: intent.identity, mutate: intent.mutate, reconcile: reconcileCatalogue });
+    setBusy(false);
+    if (result.kind === "completed") {
+      setNotice(intent.success);
+      if (intent.closeEditor) setEditingSku(undefined);
+      setIntent(undefined);
+    } else if (result.kind === "reconciled" || result.kind === "uncertain_reconciled") {
+      setNotice(result.message);
+      if (result.kind === "reconciled") setIntent(undefined);
+    } else if (result.kind === "uncertain_blocked") {
+      setReconciliationBlocked(true); setError(result.message);
+    } else setError(message(result.error));
   };
 
   const showProducts = Boolean(query.trim() || categoryTypeId || categoryId || subcategoryId || status || qaStatus);
@@ -203,6 +247,14 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     {snapshot ? <details className="admin-catalogue-operations"><summary><Settings2 size={18} /><span><strong>Catalogue operations</strong><small>Counts, hierarchy and launch configuration</small></span><ChevronDown size={17} /></summary><div className="admin-catalogue-operations-body"><div className="v1-admin-summary"><Summary label="Departments" value={snapshot.categoryTypes.length} /><Summary label="Categories" value={snapshot.categories.length} /><Summary label="Subcategories" value={snapshot.subcategories.length} /><Summary label="Canonical SKUs" value={snapshot.skuCount} /><Summary label="Retail branches" value={snapshot.branches.length} /></div><section className="v1-admin-config"><header><Settings2 size={20} /><div><h3>Launch configuration</h3><p>Effective settings and validation state for the customer catalogue.</p></div></header><div>{snapshot.configuration.map((setting) => <article key={setting.key} className={!setting.valid || (setting.required && !setting.explicit) ? "attention" : ""}><code>{setting.key}</code><strong>{displayValue(setting.value)}</strong><span>{setting.explicit ? "Explicit" : "Default"} · {setting.valid ? "Valid" : "Invalid"}</span></article>)}</div></section></div></details> : null}
     <details className="v1-admin-import"><summary><Upload size={18} /><span><strong>Advanced atomic import</strong><small>Imports enter Draft and require taxonomy, QA, price and cleared imagery before activation</small></span><ChevronDown size={17} /></summary><form onSubmit={runImport}><label htmlFor="v1-catalogue-import">Catalogue JSON</label><textarea id="v1-catalogue-import" value={source} onChange={(event) => setSource(event.target.value)} rows={16} spellCheck={false} disabled={busy} /><p className="field-help">Use approved taxonomy slugs. A successful import does not make a product customer-visible.</p><button className="primary-button" type="submit" disabled={busy}>{busy ? "Importing…" : "Validate and import as Draft"}</button></form></details>
     {editingSku ? <div className="v1-overlay admin-sku-overlay" role="presentation"><section className="v1-sheet admin-sku-sheet" role="dialog" aria-modal="true" aria-label={`Edit ${editingSku.name}`}><header><div><p>EXACT SKU</p><h2>{editingSku.name}</h2></div><button type="button" onClick={() => setEditingSku(undefined)} aria-label="Close product editor"><X size={19} /></button></header><SkuEditor sku={editingSku} taxonomy={snapshot} supabaseUrl={auth.supabaseUrl} disabled={busy} onSave={updateSku} /></section></div> : null}
+    {intent ? <AdminPrivilegedActionDialog intent={intent.dialog} busy={busy} error={error} notice={notice}
+      reconciliationBlocked={reconciliationBlocked} onConfirm={() => confirmMutation()}
+      onDismiss={() => { setIntent(undefined); setError(undefined); }}
+      onReconcile={async () => {
+        setBusy(true);
+        try { await reconcileCatalogue(); setReconciliationBlocked(false); setNotice("Authoritative catalogue state was reloaded. Review the current record before acting again."); setIntent(undefined); }
+        catch (cause) { setError(message(cause)); } finally { setBusy(false); }
+      }} /> : null}
   </section>;
 }
 

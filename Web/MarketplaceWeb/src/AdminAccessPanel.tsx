@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock3, LockKeyhole, ShieldCheck, Trash2, UserCog } from "lucide-react";
+import { AdminPrivilegedActionDialog, type AdminPrivilegedActionIntent } from "./AdminPrivilegedActionDialog";
+import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
+import { userFacingError } from "./userFacingError";
 import {
   getV1AdminAccess,
   setV1ExecutiveAdmin,
@@ -19,6 +22,13 @@ export function AdminAccessPanel({ auth, access, onChange }: Props) {
   const [busySlot, setBusySlot] = useState<number>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [intent, setIntent] = useState<{
+    slot: V1AdminSlot & { slot: 1 | 2 };
+    email?: string;
+    reviewedValue: string;
+    dialog: AdminPrivilegedActionIntent;
+  }>();
+  const [reconciliationBlocked, setReconciliationBlocked] = useState(false);
 
   useEffect(() => {
     setDrafts(Object.fromEntries(access.slots.map((slot) => [slot.slot, slot.email ?? ""])));
@@ -30,33 +40,77 @@ export function AdminAccessPanel({ auth, access, onChange }: Props) {
     (slot): slot is V1AdminSlot & { slot: 1 | 2 } => slot.role === "EXECUTIVE_ADMIN",
   );
 
-  const update = async (slot: V1AdminSlot & { slot: 1 | 2 }, email?: string) => {
+  const refreshAccess = async () => {
+    const refreshed = await getV1AdminAccess(auth);
+    onChange(refreshed);
+    return refreshed;
+  };
+
+  const update = async (slot: V1AdminSlot & { slot: 1 | 2 }, email: string | undefined, reason: string) => {
     if (busySlot !== undefined) return;
+    const reviewedValue = email ?? slot.email ?? "";
+    const currentDraft = (drafts[slot.slot] ?? "").trim().toLowerCase();
+    if (intent?.slot.slot !== slot.slot || intent.reviewedValue !== reviewedValue ||
+      (email !== undefined && currentDraft !== reviewedValue)) {
+      setError("The reviewed Executive Admin value changed. Review the current value again before confirming.");
+      setIntent(undefined);
+      return;
+    }
     setBusySlot(slot.slot);
     setError(undefined);
     setNotice(undefined);
-    try {
-      await setV1ExecutiveAdmin({
-        ...auth,
-        slot: slot.slot,
-        email,
-        expectedVersion: slot.version,
-        reason: email
-          ? "Updated from protected Dastak Admin access settings."
-          : "Cleared from protected Dastak Admin access settings.",
-      });
-      const refreshed = await getV1AdminAccess(auth);
-      onChange(refreshed);
-      setNotice(email
-        ? "Executive Admin access has been saved."
-        : "Executive Admin access has been removed.");
-    } catch (updateError) {
-      setError(updateError instanceof Error
-        ? updateError.message
-        : "Admin access could not be updated. Refresh and try again.");
-    } finally {
-      setBusySlot(undefined);
+    setReconciliationBlocked(false);
+    const operationIdentity = `executive-admin:${slot.slot}:${slot.version}:${email ?? "remove"}`;
+    const result = await runAdminPrivilegedMutation({
+      operationIdentity,
+      mutate: (idempotencyKey) => setV1ExecutiveAdmin({
+        ...auth, slot: slot.slot, email, expectedVersion: slot.version, reason, idempotencyKey,
+      }),
+      reconcile: refreshAccess,
+    });
+    setBusySlot(undefined);
+    if (result.kind === "completed") {
+      setIntent(undefined);
+      setNotice(email ? "Executive Admin access has been saved." : "Executive Admin access has been removed.");
+    } else if (result.kind === "reconciled" || result.kind === "uncertain_reconciled") {
+      setNotice(result.message);
+      if (result.kind === "reconciled") setIntent(undefined);
+    } else if (result.kind === "uncertain_blocked") {
+      setReconciliationBlocked(true);
+      setError(result.message);
+    } else {
+      setError(userFacingError(result.error, "Admin access could not be updated."));
     }
+  };
+
+  const requestUpdate = (slot: V1AdminSlot & { slot: 1 | 2 }, email?: string) => {
+    const reviewedValue = email ?? slot.email ?? "";
+    const assigning = Boolean(email);
+    setError(undefined);
+    setNotice(undefined);
+    setReconciliationBlocked(false);
+    setIntent({
+      slot,
+      email,
+      reviewedValue,
+      dialog: {
+        eyebrow: "Superadmin control",
+        title: assigning ? `Assign Executive Admin ${slot.slot}?` : `Remove Executive Admin ${slot.slot}?`,
+        entityLabel: assigning ? "Reviewed account email" : "Executive Admin account",
+        entityValue: reviewedValue,
+        currentState: slot.email ? `${slot.linked ? "Active" : "Reserved"} · ${slot.email}` : "Empty seat",
+        resultingState: assigning ? `Executive Admin ${slot.slot} · ${reviewedValue}` : "Empty Executive Admin seat",
+        consequence: assigning
+          ? "Executive Admin receives full operational capabilities across orders, recovery, finance, safety and marketplace controls. Confirm only the account you reviewed."
+          : "Access is removed immediately. The account will lose all Executive Admin operational capabilities and active Admin access.",
+        confirmLabel: assigning ? "Grant full Admin access" : "Remove Admin access",
+        tone: "danger",
+        reasonOptions: ["Role assignment", "Staffing change", "Temporary coverage", "Security response", "Other"],
+        reasonMinimumLength: 3,
+        confirmationValue: reviewedValue,
+        confirmationLabel: `Type the exact reviewed email (${reviewedValue}) to confirm`,
+      },
+    });
   };
 
   return (
@@ -94,7 +148,7 @@ export function AdminAccessPanel({ auth, access, onChange }: Props) {
               key={slot.slot}
               onSubmit={(event) => {
                 event.preventDefault();
-                if (normalizedDraft) void update(slot, normalizedDraft);
+                if (normalizedDraft) requestUpdate(slot, normalizedDraft);
               }}
             >
               <div className="admin-access-seat-title">
@@ -135,11 +189,7 @@ export function AdminAccessPanel({ auth, access, onChange }: Props) {
                   className="admin-access-clear"
                   type="button"
                   disabled={busySlot !== undefined}
-                  onClick={() => {
-                    if (window.confirm("Remove this Executive Admin's access immediately?")) {
-                      void update(slot);
-                    }
-                  }}
+                  onClick={() => requestUpdate(slot)}
                 >
                   <Trash2 size={15} /> Remove Executive Admin
                 </button>
@@ -154,6 +204,26 @@ export function AdminAccessPanel({ auth, access, onChange }: Props) {
       <p className="admin-access-note">
         Executive Admins can use every current operations feature. Only the permanent Superadmin can change Admin access.
       </p>
+      {intent ? <AdminPrivilegedActionDialog
+        intent={intent.dialog}
+        busy={busySlot !== undefined}
+        error={error}
+        notice={notice}
+        reconciliationBlocked={reconciliationBlocked}
+        onDismiss={() => { setIntent(undefined); setError(undefined); setNotice(undefined); }}
+        onReconcile={async () => {
+          setBusySlot(intent.slot.slot);
+          try {
+            await refreshAccess();
+            setReconciliationBlocked(false);
+            setNotice("Authoritative Admin access was reloaded. Review the seat before trying again.");
+            setIntent(undefined);
+          } catch (cause) {
+            setError(userFacingError(cause, "Admin access could not be reconciled."));
+          } finally { setBusySlot(undefined); }
+        }}
+        onConfirm={(reason) => update(intent.slot, intent.email, reason)}
+      /> : null}
     </section>
   );
 }

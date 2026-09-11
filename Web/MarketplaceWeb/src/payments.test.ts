@@ -45,7 +45,7 @@ const customer = {
 };
 
 describe("Dastak payments", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
   it("creates a server-authoritative checkout session", async () => {
     let requestBody: unknown;
@@ -94,6 +94,19 @@ describe("Dastak payments", () => {
 
     expect(requestBody).toEqual({ operation: "processRefund", orderId });
     expect(result).toEqual({ orderId, refundState: "pending" });
+  });
+
+  it("classifies an unresolved provider request as an uncertain timeout", async () => {
+    vi.useFakeTimers();
+    const pending = processOrderRefund(
+      { ...auth, orderId, idempotencyKey: "refund-timeout" },
+      (_input, init) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      }),
+    );
+    const assertion = expect(pending).rejects.toMatchObject({ code: "request_timeout", status: 0 });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
   });
 
   it("starts V1 checkout only after reservation and preserves its attempt", async () => {

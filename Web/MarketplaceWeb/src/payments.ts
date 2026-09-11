@@ -1,9 +1,11 @@
 import { userFacingError } from "./userFacingError";
+import { isAbortError, requestDeadline } from "./requestDeadline";
 
 type AuthenticatedInput = {
   supabaseUrl: string;
   publishableKey: string;
   accessToken: string;
+  signal?: AbortSignal;
 };
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -639,7 +641,9 @@ async function call(
   idempotencyKey: string,
   fetcher: Fetcher,
 ) {
+  const deadline = requestDeadline(auth.signal);
   let response: Response;
+  let payload: unknown;
   try {
     response = await fetcher(`${auth.supabaseUrl.replace(/\/$/, "")}/functions/v1/dastak-payments`, {
       method: "POST",
@@ -650,11 +654,21 @@ async function call(
         "X-Idempotency-Key": idempotencyKey,
       },
       body: JSON.stringify(body),
+      signal: deadline.signal,
     });
-  } catch {
+    payload = await response.json().catch((error: unknown) => {
+      if (deadline.timedOut()) throw error;
+      return undefined;
+    });
+  } catch (error) {
+    if (deadline.timedOut()) {
+      throw new PaymentRequestError("request_timeout", "The payment request timed out. Dastak will verify its authoritative state before any retry.", 0);
+    }
+    if (auth.signal?.aborted && isAbortError(error)) throw error;
     throw new PaymentRequestError("network_error", "Dastak could not reach the payment service.", 0);
+  } finally {
+    deadline.dispose();
   }
-  const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
     const error = record(record(payload)?.error);
     throw new PaymentRequestError(

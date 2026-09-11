@@ -1,3 +1,4 @@
+import { isAbortError, requestDeadline } from "./requestDeadline";
 import {
   parseCustomerOrderSupportCase,
   parseMerchantOrder,
@@ -91,7 +92,7 @@ export type OwnerReconciliationResult = {
   reconciledAt: string;
 };
 
-type AuthenticatedInput = { supabaseUrl: string; publishableKey: string; accessToken: string };
+type AuthenticatedInput = { supabaseUrl: string; publishableKey: string; accessToken: string; signal?: AbortSignal };
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export class AdminRequestError extends Error {
@@ -174,10 +175,10 @@ export async function resetOwnerHandoff(
 }
 
 export async function reconcileOwnerOrders(
-  input: AuthenticatedInput,
+  input: AuthenticatedInput & { idempotencyKey: string },
   fetcher: Fetcher = fetch,
 ): Promise<OwnerReconciliationResult> {
-  return reconciliation(await call("merchant-orders", input, { operation: "ownerReconcile" }, undefined, fetcher));
+  return reconciliation(await call("merchant-orders", input, { operation: "ownerReconcile" }, input.idempotencyKey, fetcher));
 }
 
 export async function reviewOrderRefund(
@@ -249,7 +250,9 @@ async function call(
   idempotencyKey: string | undefined,
   fetcher: Fetcher,
 ) {
+  const deadline = requestDeadline(auth.signal);
   let response: Response;
+  let payload: unknown;
   try {
     response = await fetcher(`${auth.supabaseUrl.replace(/\/$/, "")}/functions/v1/${service}`, {
       method: "POST",
@@ -260,11 +263,21 @@ async function call(
         ...(idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : {}),
       },
       body: JSON.stringify(body),
+      signal: deadline.signal,
     });
-  } catch {
+    payload = await response.json().catch((error: unknown) => {
+      if (deadline.timedOut()) throw error;
+      return undefined;
+    });
+  } catch (error) {
+    if (deadline.timedOut()) {
+      throw new AdminRequestError("request_timeout", "The Admin request timed out. Dastak will reconcile authoritative state before a retry.", 0);
+    }
+    if (auth.signal?.aborted && isAbortError(error)) throw error;
     throw new AdminRequestError("network_error", "Dastak Admin could not reach the server.", 0);
+  } finally {
+    deadline.dispose();
   }
-  const payload = await response.json().catch(() => undefined);
   if (!response.ok) {
     const error = record(record(payload)?.error);
     throw new AdminRequestError(

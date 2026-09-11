@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Camera, Clock3, PackageCheck, Route, ShieldCheck, WalletCards } from "lucide-react";
 import { getEvidenceUrl } from "./admin";
+import { AdminPrivilegedActionDialog, type AdminPrivilegedActionIntent } from "./AdminPrivilegedActionDialog";
+import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
   authorizeV1ExceptionalDeliveryHandoff,
   adminCancelV1Order,
@@ -27,6 +29,7 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   const [trace, setTrace] = useState<V1AdminExecutionTrace>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const selectedIdRef = useRef<string | undefined>(undefined);
 
   const loadTrace = useCallback(async (orderId: string) => {
@@ -37,6 +40,7 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
       setError(undefined);
     } catch (traceError) {
       setError(message(traceError));
+      throw traceError;
     }
   }, [auth]);
 
@@ -55,41 +59,41 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
       setError(undefined);
     } catch (refreshError) {
       setError(message(refreshError));
+      throw refreshError;
     } finally {
       setLoading(false);
     }
   }, [auth, loadTrace]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refresh().catch(() => undefined); }, [refresh]);
   useAdminWorkspaceRefresh(refresh);
 
   const select = (orderId: string) => {
     selectedIdRef.current = orderId;
     setSelectedId(orderId);
     setTrace(undefined);
-    void loadTrace(orderId);
+    void loadTrace(orderId).catch(() => undefined);
   };
 
   return <section className="v1-execution-panel" role="tabpanel" aria-label="Current Dastak orders">
     <header><div><p className="eyebrow">LIVE ORDER CONTROL</p><h2>Orders</h2><span>Inspect matching, payment, fulfilment, custody and recovery in one trace.</span></div></header>
     {error ? <p className="order-error" role="alert">{error}</p> : null}
+    {notice ? <p className="admin-access-message success" role="status">{notice}</p> : null}
     {loading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length === 0 ? <p className="admin-empty">No current-generation orders have been submitted.</p> : <div className="v1-execution-layout">
       <nav aria-label="Current orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>
-      <div className="v1-trace-detail">{trace ? <Trace trace={trace} auth={auth} onChanged={() => void refresh()} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
+      <div className="v1-trace-detail">{trace ? <Trace trace={trace} auth={auth} onChanged={refresh} onNotice={setNotice} /> : <div className="catalogue-loading" role="status"><span /> Loading order evidence</div>}</div>
     </div>}
   </section>;
 }
 
-function AdminCancellationAction({ trace, auth, onChanged }: {
+function AdminCancellationAction({ trace, auth, onChanged, onNotice }: {
   trace: V1AdminExecutionTrace;
   auth: DastakV1Auth;
-  onChanged: () => void;
+  onChanged: () => Promise<unknown>;
+  onNotice: (message: string) => void;
 }) {
   const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [completed, setCompleted] = useState(false);
-  const [error, setError] = useState<string>();
-  const requestRef = useRef<{ reason: string; version: number; key: string } | undefined>(undefined);
+  const [confirming, setConfirming] = useState(false);
   const cancellation = trace.cancellation;
   const saved = object(cancellation, "record");
   if (saved) return <section className="v1-exceptional-handoff">
@@ -98,45 +102,31 @@ function AdminCancellationAction({ trace, auth, onChanged }: {
     <small>No payment is due. Preparation and dispatch are closed.</small>
   </section>;
   if (boolean(cancellation, "canCancel") !== true) return null;
-  const cancel = async () => {
-    const trimmed = reason.trim();
-    if (busy || completed || trimmed.length < 10) return;
-    if (!window.confirm("Cancel " + trace.order.displayOrderNumber +
-      "? This permanently stops preparation and delivery and releases reserved stock.")) return;
-    const previous = requestRef.current;
-    const request = previous?.reason === trimmed && previous.version === trace.order.version
-      ? previous : { reason: trimmed, version: trace.order.version, key: crypto.randomUUID() };
-    requestRef.current = request;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await adminCancelV1Order({ ...auth, orderId: trace.order.id, reason: request.reason,
-        expectedVersion: request.version, idempotencyKey: request.key });
-      setCompleted(true);
-      onChanged();
-    } catch (actionError) {
-      setError(message(actionError));
-    } finally {
-      setBusy(false);
-    }
-  };
   return <section className="v1-exceptional-handoff" aria-label="Cancel order">
     <strong>Cancel unpaid order</strong>
     <p>Available only before payment collection or package pickup. Stock and capacity are released together.</p>
     <label>Cancellation reason
-      <textarea value={reason} minLength={10} maxLength={500} disabled={busy || completed}
+      <textarea value={reason} minLength={10} maxLength={500}
         onChange={(event) => setReason(event.target.value)} placeholder="Explain why this order should be cancelled." />
     </label>
-    <button type="button" className="danger-button" disabled={busy || completed || reason.trim().length < 10}
-      onClick={() => void cancel()}>{completed ? "Order cancelled" : busy ? "Cancelling…" : "Cancel order"}</button>
-    {error ? <p className="order-error" role="alert">{error}</p> : null}
+    <button type="button" className="danger-button" disabled={reason.trim().length < 10}
+      onClick={() => setConfirming(true)}>Cancel order</button>
+    {confirming ? <ProtectedAdminMutationDialog intent={{
+      title: `Cancel ${trace.order.displayOrderNumber}?`, entityLabel: "Order", entityValue: `${trace.order.displayOrderNumber} · ${trace.order.id}`,
+      currentState: trace.order.status.replaceAll("_", " "), resultingState: "Cancelled; preparation and delivery closed",
+      consequence: "This permanently stops preparation and delivery, releases reserved stock and capacity, and confirms that no payment is due.",
+      confirmLabel: "Cancel order", tone: "danger", reason: reason.trim(),
+    }} operationIdentity={`cancel-order:${trace.order.id}:${trace.order.version}:${reason.trim()}`}
+      mutate={(idempotencyKey) => adminCancelV1Order({ ...auth, orderId: trace.order.id, reason: reason.trim(), expectedVersion: trace.order.version, idempotencyKey })}
+      reconcile={onChanged} success="Order cancelled and authoritative state reloaded." onNotice={onNotice} onDismiss={() => setConfirming(false)} /> : null}
   </section>;
 }
 
-function Trace({ trace, auth, onChanged }: {
+function Trace({ trace, auth, onChanged, onNotice }: {
   trace: V1AdminExecutionTrace;
   auth: DastakV1Auth;
-  onChanged: () => void;
+  onChanged: () => Promise<unknown>;
+  onNotice: (message: string) => void;
 }) {
   const paymentStatus = text(trace.payment, "status") ?? "NOT OPEN";
   const launchStatus = text(trace.launchPayment, "collectionStatus");
@@ -148,7 +138,7 @@ function Trace({ trace, auth, onChanged }: {
     text(item, "status") === "READY" || text(item, "status") === "PICKED_UP").length ?? 0;
   return <>
     <header className="v1-trace-order"><span><strong>{trace.order.displayOrderNumber}</strong><small>Version {trace.order.version}</small></span><b>{trace.order.status.replaceAll("_", " ")}</b></header>
-    <AdminCancellationAction key={trace.order.id} trace={trace} auth={auth} onChanged={onChanged} />
+    <AdminCancellationAction key={trace.order.id} trace={trace} auth={auth} onChanged={onChanged} onNotice={onNotice} />
     <div className="v1-trace-summary">
       <TraceMetric icon={<Clock3 size={17} />} label="Attempts" value={String(trace.matchingAttempts.length)} />
       <TraceMetric icon={<Route size={17} />} label="Plans" value={String(trace.plans.length)} />
@@ -229,10 +219,10 @@ function Trace({ trace, auth, onChanged }: {
         <p>{delivery.deliveryEvidence.length} immutable rider photo(s) · Delivered {formatOptional(trace.order.deliveredAt)}</p>
         {delivery.deliveryEvidence.map((evidence, index) => <article key={text(evidence, "id") ?? index}><strong><Camera size={14} /> Rider package photo · {array(evidence, "packageIds").length} package(s)</strong><span>{formatOptional(text(evidence, "capturedAt"))}<EvidenceButton auth={auth} objectPath={text(evidence, "objectPath")} /></span></article>)}
         {delivery.exceptionalHandoffs.map((handoff, index) => <article className="running-late" key={text(handoff, "id") ?? index}><strong>Exceptional handoff · OVERRIDDEN</strong><span>{text(handoff, "authorizerName") ?? "Operations"} · {text(handoff, "reason") ?? "—"} · {formatOptional(text(handoff, "authorizedAt"))}<br />Normal code verification: no</span></article>)}
-        <ExceptionalHandoffAction trace={trace} auth={auth} onChanged={onChanged} />
+        <ExceptionalHandoffAction trace={trace} auth={auth} onChanged={onChanged} onNotice={onNotice} />
       </>}
     </TraceSection>
-    <FailureAndFinanceTrace trace={trace} auth={auth} onChanged={onChanged} />
+    <FailureAndFinanceTrace trace={trace} auth={auth} onChanged={onChanged} onNotice={onNotice} />
     <TraceSection title="Reconciliation">
       <p>{trace.reconciliationCases.length === 0 ? "No reconciliation cases." : `${trace.reconciliationCases.length} case(s) require operator review.`}</p>
     </TraceSection>
@@ -252,14 +242,14 @@ function LaunchPaymentTrace({ launchPayment }: { launchPayment: Record<string, u
   </TraceSection>;
 }
 
-function ExceptionalHandoffAction({ trace, auth, onChanged }: {
+function ExceptionalHandoffAction({ trace, auth, onChanged, onNotice }: {
   trace: V1AdminExecutionTrace;
   auth: DastakV1Auth;
-  onChanged: () => void;
+  onChanged: () => Promise<unknown>;
+  onNotice: (message: string) => void;
 }) {
   const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [confirming, setConfirming] = useState(false);
   const delivery = trace.delivery;
   const missionId = text(delivery?.mission, "id");
   const missionVersion = number(delivery?.mission, "version");
@@ -270,48 +260,35 @@ function ExceptionalHandoffAction({ trace, auth, onChanged }: {
     delivery.exceptionalHandoffs.length === 0;
   if (!available) return null;
 
-  const authorize = async () => {
-    if (busy || reason.trim().replace(/\s+/g, " ").length < 10 || !missionId ||
-      !missionVersion || !evidenceId) return;
-    if (!window.confirm(
-      "Authorize an exceptional handoff? This will deliver every package as OVERRIDDEN without normal code verification.",
-    )) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await authorizeV1ExceptionalDeliveryHandoff({
-        ...auth,
-        missionId,
-        deliveryEvidenceId: evidenceId,
-        reason,
-        expectedMissionVersion: missionVersion,
-        idempotencyKey: crypto.randomUUID(),
-      });
-      onChanged();
-    } catch (actionError) {
-      setError(message(actionError));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return <div className="v1-exceptional-handoff">
     <label>
       Operations exception reason
       <textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Record why normal in-app verification cannot be completed." />
     </label>
-    <button className="danger-button" type="button" disabled={busy || reason.trim().length < 10} onClick={() => void authorize()}>
-      {busy ? "Authorizing…" : "Authorize exceptional handoff"}
+    <button className="danger-button" type="button" disabled={reason.trim().length < 10} onClick={() => setConfirming(true)}>
+      Authorize exceptional handoff
     </button>
     <small>This records OVERRIDDEN, never normal verification success.</small>
-    {error ? <p className="order-error" role="alert">{error}</p> : null}
+    {confirming && missionId && missionVersion && evidenceId ? <ProtectedAdminMutationDialog intent={{
+      title: "Authorize exceptional delivery handoff?", entityLabel: "Order and mission", entityValue: `${trace.order.displayOrderNumber} · ${missionId}`,
+      currentState: `${text(delivery?.mission, "status")?.replaceAll("_", " ")} · normal customer verification incomplete`,
+      resultingState: "Every package delivered as OVERRIDDEN",
+      consequence: "This bypasses normal customer code verification after delivery evidence exists. It records an exceptional override, completes package custody to the customer, and can trigger payment and financial consequences.",
+      confirmLabel: "Authorize override", tone: "danger", reason: reason.trim(), confirmationValue: trace.order.displayOrderNumber,
+      confirmationLabel: `Type ${trace.order.displayOrderNumber} to confirm the exact order`,
+    }} operationIdentity={`exceptional-handoff:${missionId}:${missionVersion}:${evidenceId}:${reason.trim()}`}
+      mutate={(idempotencyKey) => authorizeV1ExceptionalDeliveryHandoff({ ...auth, missionId, deliveryEvidenceId: evidenceId,
+        reason: reason.trim(), expectedMissionVersion: missionVersion, idempotencyKey })}
+      reconcile={onChanged} success="Exceptional handoff authorized and authoritative custody state reloaded."
+      onNotice={onNotice} onDismiss={() => setConfirming(false)} /> : null}
   </div>;
 }
 
-function FailureAndFinanceTrace({ trace, auth, onChanged }: {
+function FailureAndFinanceTrace({ trace, auth, onChanged, onNotice }: {
   trace: V1AdminExecutionTrace;
   auth: DastakV1Auth;
-  onChanged: () => void;
+  onChanged: () => Promise<unknown>;
+  onNotice: (message: string) => void;
 }) {
   const state = trace.failureAndFinance;
   if (!state) return <TraceSection title="Failure, returns and finance"><p>No Step 5 trace.</p></TraceSection>;
@@ -321,7 +298,7 @@ function FailureAndFinanceTrace({ trace, auth, onChanged }: {
     {state.recoveryCases.map((recovery, index) => <article key={text(recovery, "id") ?? index}>
       <strong>{text(recovery, "type")?.replaceAll("_", " ")} recovery · {text(recovery, "status")?.replaceAll("_", " ")}</strong>
       <span>{text(recovery, "reason") ?? "—"} · {array(recovery, "opportunities").length} exact-item offer(s){text(recovery, "problemCode") === "CUSTOMER_UNREACHABLE" ? ` · customer contact due ${formatOptional(text(recovery, "nextActionAt"))}` : ""}</span>
-      {boolean(permissions, "canManageRecovery") ? <RecoveryAction recovery={recovery} auth={auth} onChanged={onChanged} preparedFoodPresent={trace.order.orderType !== "RETAIL_ONLY"} /> : null}
+      {boolean(permissions, "canManageRecovery") ? <RecoveryAction recovery={recovery} auth={auth} onChanged={onChanged} onNotice={onNotice} preparedFoodPresent={trace.order.orderType !== "RETAIL_ONLY"} /> : null}
     </article>)}
     {state.customerIssues.map((issue, index) => <article key={text(issue, "id") ?? index}>
       <strong>{text(issue, "category")?.replaceAll("_", " ")} · {text(issue, "status")?.replaceAll("_", " ")}</strong>
@@ -329,20 +306,20 @@ function FailureAndFinanceTrace({ trace, auth, onChanged }: {
         const evidence = asRecord(entry);
         return <EvidenceButton key={text(evidence, "id") ?? evidenceIndex} auth={auth} objectPath={text(evidence, "objectPath")} />;
       })}</span>
-      {boolean(permissions, "canApproveReturns") || boolean(permissions, "canApproveRefunds") ? <IssueAction issue={issue} auth={auth} onChanged={onChanged} /> : null}
+      {boolean(permissions, "canApproveReturns") || boolean(permissions, "canApproveRefunds") ? <IssueAction issue={issue} auth={auth} onChanged={onChanged} onNotice={onNotice} /> : null}
     </article>)}
     {state.returns.map((customerReturn, index) => {
       const mission = object(customerReturn, "mission");
       return <article key={text(customerReturn, "id") ?? index}>
         <strong>Return · {text(customerReturn, "status")?.replaceAll("_", " ")}</strong>
         <span>{array(customerReturn, "packages").length} package(s) · mission {text(mission, "status")?.replaceAll("_", " ") ?? "not started"} · custody {array(customerReturn, "packages").map((item) => text(asRecord(item), "custodyOwnerType") ?? "—").join(", ") || "—"}</span>
-        {boolean(permissions, "canApproveReturns") && text(mission, "status") === "RIDER_SEARCH" ? <ReturnRiderAction mission={mission!} auth={auth} onChanged={onChanged} /> : null}
+        {boolean(permissions, "canApproveReturns") && text(mission, "status") === "RIDER_SEARCH" ? <ReturnRiderAction mission={mission!} auth={auth} onChanged={onChanged} onNotice={onNotice} /> : null}
       </article>;
     })}
     {state.refunds.map((refund, index) => <article key={text(refund, "id") ?? index}>
       <strong>Refund · {text(refund, "status")?.replaceAll("_", " ")}</strong>
       <span>{formatV1Price(number(refund, "amountPaise") ?? 0)} · original payment method · {text(refund, "faultSource") ?? "UNKNOWN"}</span>
-      {boolean(permissions, "canProcessRefunds") && ["APPROVED", "FAILED"].includes(text(refund, "status") ?? "") ? <RefundAction orderId={trace.order.id} refund={refund} auth={auth} onChanged={onChanged} /> : null}
+      {boolean(permissions, "canProcessRefunds") && ["APPROVED", "FAILED"].includes(text(refund, "status") ?? "") ? <RefundAction orderId={trace.order.id} refund={refund} auth={auth} onChanged={onChanged} onNotice={onNotice} /> : null}
     </article>)}
     {state.platformFees.map((fee, index) => <article key={text(fee, "id") ?? index}>
       <strong>Platform fee · {text(fee, "type")?.replaceAll("_", " ")}</strong>
@@ -363,13 +340,14 @@ function FailureAndFinanceTrace({ trace, auth, onChanged }: {
     {state.settlements.map((settlement, index) => <article key={text(settlement, "id") ?? index}>
       <strong>{text(settlement, "subjectType")?.replaceAll("_", " ")} · {text(settlement, "status")}</strong>
       <span>{text(settlement, "entryType")?.replaceAll("_", " ")} · {formatV1Price(number(settlement, "amountPaise") ?? 0)} · calculation {text(settlement, "calculationStatus")?.replaceAll("_", " ")}{text(object(settlement, "payoutCadenceSnapshot"), "mode") ? ` · payout ${text(object(settlement, "payoutCadenceSnapshot"), "mode")}` : ""}</span>
-      {boolean(permissions, "canManageSettlements") && text(settlement, "status") === "PENDING" ? <SettlementAction settlement={settlement} auth={auth} onChanged={onChanged} /> : null}
+      {boolean(permissions, "canManageSettlements") && text(settlement, "status") === "PENDING" ? <SettlementAction settlement={settlement} auth={auth} onChanged={onChanged} onNotice={onNotice} /> : null}
     </article>)}
   </TraceSection>;
 }
 
-function RecoveryAction({ recovery, auth, onChanged, preparedFoodPresent }: {
-  recovery: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+function RecoveryAction({ recovery, auth, onChanged, onNotice, preparedFoodPresent }: {
+  recovery: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => Promise<unknown>;
+  onNotice: (message: string) => void;
   preparedFoodPresent: boolean;
 }) {
   const [branchId, setBranchId] = useState("");
@@ -379,8 +357,7 @@ function RecoveryAction({ recovery, auth, onChanged, preparedFoodPresent }: {
   const [addressLine, setAddressLine] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [action, setAction] = useState<"offer" | "fail" | "resume" | "return">();
   const id = text(recovery, "id");
   const version = number(recovery, "version");
   const type = text(recovery, "type");
@@ -391,37 +368,9 @@ function RecoveryAction({ recovery, auth, onChanged, preparedFoodPresent }: {
     Number(latitude) >= -90 && Number(latitude) <= 90 && Number(longitude) >= -180 && Number(longitude) <= 180;
   const refundValid = !refundAmount.trim() ||
     faultSource !== "CUSTOMER" && Number.isInteger(Number(refundAmount)) && Number(refundAmount) > 0;
-  const run = async (action: "offer" | "fail" | "resume" | "return") => {
-    if (!id || !version || busy) return;
-    setBusy(true); setError(undefined);
-    try {
-      if (action === "offer") await createV1ExactSkuRecoveryOffer({
-        ...auth, recoveryCaseId: id, branchId, expectedVersion: version,
-        idempotencyKey: crypto.randomUUID(),
-      });
-      else if (action === "fail") await failV1ExactSkuRecovery({
-        ...auth, recoveryCaseId: id, reason, expectedVersion: version,
-        idempotencyKey: crypto.randomUUID(),
-      });
-      else await manageV1DeliveryRecovery({
-        ...auth, recoveryCaseId: id,
-        action: action === "resume" ? "RESUME_DELIVERY" : "RETURN_TO_ORIGIN",
-        faultSource,
-        refundAmountPaise: action === "return" && refundAmount.trim()
-          ? Number(refundAmount)
-          : undefined,
-        correctedAddress: action === "resume" && addressLine.trim()
-          ? { line1: addressLine.trim(), latitude: Number(latitude), longitude: Number(longitude) }
-          : undefined,
-        reason, expectedVersion: version, idempotencyKey: crypto.randomUUID(),
-      });
-      onChanged();
-    } catch (actionError) { setError(message(actionError)); }
-    finally { setBusy(false); }
-  };
   if (!["OPEN", "SEARCHING_EXACT_SKU", "ACTION_REQUIRED"].includes(status ?? "")) return null;
   return <div className="v1-exceptional-handoff">
-    {type === "EXACT_SKU" ? <><label>Candidate branch UUID<input value={branchId} onChange={(event) => setBranchId(event.target.value)} placeholder="Branch UUID" /></label><button className="secondary-button" type="button" disabled={busy || !uuid(branchId)} onClick={() => void run("offer")}>Offer exact SKU to branch</button></> : null}
+    {type === "EXACT_SKU" ? <><label>Candidate branch UUID<input value={branchId} onChange={(event) => setBranchId(event.target.value)} placeholder="Branch UUID" /></label><button className="secondary-button" type="button" disabled={!uuid(branchId)} onClick={() => setAction("offer")}>Offer exact SKU to branch</button></> : null}
     {type === "DELIVERY" ? <>
       <label>Fault source<select value={faultSource} onChange={(event) => setFaultSource(event.target.value)}><option>RIDER</option><option>MERCHANT</option><option>DASTAK</option><option>CUSTOMER</option></select></label>
       <label>Corrected address line (optional, resume only)<input value={addressLine} maxLength={300} onChange={(event) => setAddressLine(event.target.value)} /></label>
@@ -430,100 +379,180 @@ function RecoveryAction({ recovery, auth, onChanged, preparedFoodPresent }: {
       <label>Return refund in paise (optional)<input type="number" min={1} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} /></label>
     </> : null}
     <label>Operations reason<textarea value={reason} minLength={3} maxLength={500} onChange={(event) => setReason(event.target.value)} /></label>
-    {type === "EXACT_SKU" ? <button className="danger-button" type="button" disabled={busy || reason.trim().length < 3} onClick={() => void run("fail")}>Close recovery as failed</button> : <>
-      <button className="primary-button" type="button" disabled={busy || reason.trim().length < 10 || !correctedAddressValid} onClick={() => void run("resume")}>Resume assigned delivery</button>
+    {type === "EXACT_SKU" ? <button className="danger-button" type="button" disabled={reason.trim().length < 3} onClick={() => setAction("fail")}>Close recovery as failed</button> : <>
+      <button className="primary-button" type="button" disabled={reason.trim().length < 10 || !correctedAddressValid} onClick={() => setAction("resume")}>Resume assigned delivery</button>
       {preparedFoodPresent
         ? <small>Prepared food cannot enter return-to-origin custody. Resume delivery or use the investigation/refund resolution path.</small>
-        : <button className="danger-button" type="button" disabled={busy || reason.trim().length < 10 || !refundValid} onClick={() => void run("return")}>Start return to origin</button>}
+        : <button className="danger-button" type="button" disabled={reason.trim().length < 10 || !refundValid} onClick={() => setAction("return")}>Start return to origin</button>}
     </>}
-    {error ? <p className="order-error" role="alert">{error}</p> : null}
+    {action && id && version ? <ProtectedAdminMutationDialog intent={{
+      title: action === "offer" ? "Offer this exact-SKU recovery?" : action === "fail" ? "Close this recovery as failed?" : action === "resume" ? "Resume this assigned delivery?" : "Start return-to-origin custody?",
+      entityLabel: "Recovery case", entityValue: id,
+      currentState: `${type?.replaceAll("_", " ")} · ${status?.replaceAll("_", " ")}`,
+      resultingState: action === "offer" ? `Exact-SKU offer sent to branch ${branchId}` : action === "fail" ? "Recovery failed and closed" : action === "resume" ? "Assigned delivery resumed" : "Return-to-origin mission started",
+      consequence: action === "offer"
+        ? "This creates an exact-item opportunity for the reviewed branch without changing the protected customer selection."
+        : action === "fail"
+          ? "No further exact-item matching will occur for this recovery case. The failure and operator reason are recorded."
+          : action === "resume"
+            ? "The existing rider assignment and package custody continue. Any corrected destination shown here becomes the authoritative delivery destination."
+            : `Packages enter return custody. ${refundAmount.trim() ? `A ${formatV1Price(Number(refundAmount))} refund is requested.` : "No refund amount is added by this action."}`,
+      confirmLabel: action === "offer" ? "Create recovery offer" : action === "fail" ? "Close as failed" : action === "resume" ? "Resume delivery" : "Start return",
+      tone: action === "fail" || action === "return" ? "danger" : "primary",
+      reason: action === "offer" ? undefined : reason.trim(),
+    }} operationIdentity={`recovery:${id}:${version}:${action}:${action === "offer" ? branchId : reason.trim()}`}
+      mutate={(idempotencyKey) => action === "offer" ? createV1ExactSkuRecoveryOffer({ ...auth, recoveryCaseId: id, branchId, expectedVersion: version, idempotencyKey })
+        : action === "fail" ? failV1ExactSkuRecovery({ ...auth, recoveryCaseId: id, reason, expectedVersion: version, idempotencyKey })
+          : manageV1DeliveryRecovery({ ...auth, recoveryCaseId: id, action: action === "resume" ? "RESUME_DELIVERY" : "RETURN_TO_ORIGIN", faultSource,
+            refundAmountPaise: action === "return" && refundAmount.trim() ? Number(refundAmount) : undefined,
+            correctedAddress: action === "resume" && addressLine.trim() ? { line1: addressLine.trim(), latitude: Number(latitude), longitude: Number(longitude) } : undefined,
+            reason, expectedVersion: version, idempotencyKey })}
+      reconcile={onChanged} success="Recovery action completed and authoritative state reloaded." onNotice={onNotice} onDismiss={() => setAction(undefined)} /> : null}
   </div>;
 }
 
-function IssueAction({ issue, auth, onChanged }: {
-  issue: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+function IssueAction({ issue, auth, onChanged, onNotice }: {
+  issue: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => Promise<unknown>;
+  onNotice: (message: string) => void;
 }) {
   const [decision, setDecision] = useState<"REJECT" | "RESOLVE_NO_REFUND" | "REFUND_WITHOUT_RETURN" | "PHYSICAL_RETURN">("RESOLVE_NO_REFUND");
   const [faultSource, setFaultSource] = useState("UNKNOWN");
   const [amount, setAmount] = useState("");
   const [packages, setPackages] = useState("1");
   const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [confirming, setConfirming] = useState(false);
   if (!["OPEN", "UNDER_REVIEW"].includes(text(issue, "status") ?? "")) return null;
   const physicalReturnAllowed = boolean(issue, "physicalReturnAllowed") === true;
   const preparedFood = boolean(issue, "preparedFood") === true;
   const requiresRefund = decision === "REFUND_WITHOUT_RETURN" || decision === "PHYSICAL_RETURN";
-  const submit = async () => {
-    const id = text(issue, "id"); const version = number(issue, "version");
-    if (!id || !version || busy) return;
-    setBusy(true); setError(undefined);
-    try {
-      await decideV1CustomerIssue({
-        ...auth, issueId: id, decision,
-        refundAmountPaise: requiresRefund ? Number(amount) : undefined,
-        faultSource: requiresRefund ? faultSource : undefined,
-        returnPackageCount: decision === "PHYSICAL_RETURN" ? Number(packages) : undefined,
-        reason, expectedVersion: version, idempotencyKey: crypto.randomUUID(),
-      });
-      onChanged();
-    } catch (actionError) { setError(message(actionError)); }
-    finally { setBusy(false); }
-  };
+  const id = text(issue, "id"); const version = number(issue, "version");
   return <div className="v1-exceptional-handoff">
     <label>Decision<select value={decision} onChange={(event) => setDecision(event.target.value as typeof decision)}><option value="RESOLVE_NO_REFUND">Resolve without refund</option><option value="REFUND_WITHOUT_RETURN">Refund without physical return</option>{physicalReturnAllowed ? <option value="PHYSICAL_RETURN">Require physical return</option> : null}<option value="REJECT">Reject</option></select></label>
     {preparedFood ? <small>Prepared-food issues use investigation/refund resolution; physical return is forbidden.</small> : null}
     {requiresRefund ? <><label>Refund amount (paise)<input type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} /></label><label>Fault source<select value={faultSource} onChange={(event) => setFaultSource(event.target.value)}><option>UNKNOWN</option><option>MERCHANT</option><option>RIDER</option><option>DASTAK</option><option>CUSTOMER</option><option>NONE</option></select></label></> : null}
     {decision === "PHYSICAL_RETURN" ? <label>Return package count<input type="number" min={1} value={packages} onChange={(event) => setPackages(event.target.value)} /></label> : null}
     <label>Recorded reason<textarea minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-    <button className="primary-button" type="button" disabled={busy || reason.trim().length < 3 || (requiresRefund && Number(amount) < 1) || (decision === "PHYSICAL_RETURN" && Number(packages) < 1)} onClick={() => void submit()}>{busy ? "Recording…" : "Record decision"}</button>
-    {error ? <p className="order-error" role="alert">{error}</p> : null}
+    <button className="primary-button" type="button" disabled={reason.trim().length < 3 || (requiresRefund && Number(amount) < 1) || (decision === "PHYSICAL_RETURN" && Number(packages) < 1)} onClick={() => setConfirming(true)}>Record decision</button>
+    {confirming && id && version ? <ProtectedAdminMutationDialog intent={{
+      title: "Record this customer-issue decision?", entityLabel: "Customer issue", entityValue: `${text(issue, "category")?.replaceAll("_", " ")} · ${id}`,
+      currentState: text(issue, "status")?.replaceAll("_", " ") ?? "OPEN",
+      resultingState: decision.replaceAll("_", " "),
+      consequence: decision === "PHYSICAL_RETURN"
+        ? `${packages} package(s) enter the physical-return workflow and ${formatV1Price(Number(amount))} becomes the requested refund amount.`
+        : decision === "REFUND_WITHOUT_RETURN"
+          ? `${formatV1Price(Number(amount))} is approved without requiring package return.`
+          : decision === "REJECT" ? "The issue is rejected and no refund or return is created." : "The issue closes without a refund or physical return.",
+      confirmLabel: "Record decision", tone: decision === "REJECT" ? "danger" : "primary", reason: reason.trim(),
+    }} operationIdentity={`customer-issue:${id}:${version}:${decision}:${amount}:${packages}:${reason.trim()}`}
+      mutate={(idempotencyKey) => decideV1CustomerIssue({ ...auth, issueId: id, decision,
+        refundAmountPaise: requiresRefund ? Number(amount) : undefined, faultSource: requiresRefund ? faultSource : undefined,
+        returnPackageCount: decision === "PHYSICAL_RETURN" ? Number(packages) : undefined,
+        reason, expectedVersion: version, idempotencyKey })}
+      reconcile={onChanged} success="Customer-issue decision recorded and authoritative state reloaded." onNotice={onNotice} onDismiss={() => setConfirming(false)} /> : null}
   </div>;
 }
 
-function ReturnRiderAction({ mission, auth, onChanged }: {
-  mission: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+function ReturnRiderAction({ mission, auth, onChanged, onNotice }: {
+  mission: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => Promise<unknown>;
+  onNotice: (message: string) => void;
 }) {
-  const [riderId, setRiderId] = useState(""); const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const assign = async () => {
-    const missionId = text(mission, "id"); const version = number(mission, "version");
-    if (!missionId || !version || !uuid(riderId)) return;
-    setBusy(true); setError(undefined);
-    try { await assignV1ReturnRider({ ...auth, returnMissionId: missionId, riderId, expectedVersion: version, idempotencyKey: crypto.randomUUID() }); onChanged(); }
-    catch (actionError) { setError(message(actionError)); } finally { setBusy(false); }
-  };
-  return <div className="v1-exceptional-handoff"><label>Eligible rider UUID<input value={riderId} onChange={(event) => setRiderId(event.target.value)} /></label><button className="primary-button" type="button" disabled={busy || !uuid(riderId)} onClick={() => void assign()}>Assign return rider</button>{error ? <p className="order-error" role="alert">{error}</p> : null}</div>;
+  const [riderId, setRiderId] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const missionId = text(mission, "id"); const version = number(mission, "version");
+  return <div className="v1-exceptional-handoff"><label>Eligible rider UUID<input value={riderId} onChange={(event) => setRiderId(event.target.value)} /></label><button className="primary-button" type="button" disabled={!uuid(riderId)} onClick={() => setConfirming(true)}>Assign return rider</button>
+    {confirming && missionId && version ? <ProtectedAdminMutationDialog intent={{
+      title: "Assign this return rider?", entityLabel: "Return mission", entityValue: missionId,
+      currentState: `${text(mission, "status")?.replaceAll("_", " ")} · no rider assigned`, resultingState: `Assigned to rider ${riderId}`,
+      consequence: "The reviewed rider becomes responsible for this return mission and its future custody transitions. Server eligibility and one-active-job protections still apply.",
+      confirmLabel: "Assign rider",
+    }} operationIdentity={`return-rider:${missionId}:${version}:${riderId}`}
+      mutate={(idempotencyKey) => assignV1ReturnRider({ ...auth, returnMissionId: missionId, riderId, expectedVersion: version, idempotencyKey })}
+      reconcile={onChanged} success="Return rider assigned and authoritative mission state reloaded." onNotice={onNotice} onDismiss={() => setConfirming(false)} /> : null}
+  </div>;
 }
 
-function RefundAction({ orderId, refund, auth, onChanged }: {
-  orderId: string; refund: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+function RefundAction({ orderId, refund, auth, onChanged, onNotice }: {
+  orderId: string; refund: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => Promise<unknown>;
+  onNotice: (message: string) => void;
 }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState<string>();
-  const process = async () => {
-    const refundId = text(refund, "id"); if (!refundId) return;
-    setBusy(true); setError(undefined);
-    try { await processV1Refund({ ...auth, orderId, refundId, idempotencyKey: crypto.randomUUID() }); onChanged(); }
-    catch (actionError) { setError(message(actionError)); } finally { setBusy(false); }
-  };
-  return <div className="v1-exceptional-handoff"><button className="primary-button" type="button" disabled={busy} onClick={() => void process()}>{busy ? "Submitting…" : "Process original-method refund"}</button>{error ? <p className="order-error" role="alert">{error}</p> : null}</div>;
+  const [confirming, setConfirming] = useState(false);
+  const refundId = text(refund, "id");
+  return <div className="v1-exceptional-handoff"><button className="primary-button" type="button" onClick={() => setConfirming(true)}>Process original-method refund</button>
+    {confirming && refundId ? <ProtectedAdminMutationDialog intent={{
+      title: "Submit this original-method refund?", entityLabel: "Order and refund", entityValue: `${orderId} · ${refundId}`,
+      currentState: `${text(refund, "status")?.replaceAll("_", " ")} · ${formatV1Price(number(refund, "amountPaise") ?? 0)}`,
+      resultingState: "Refund submitted to payment provider",
+      consequence: "The approved amount is submitted to the original payment method. An uncertain provider response is reconciled before the same operation key can be replayed.",
+      confirmLabel: "Submit refund",
+    }} operationIdentity={`v1-provider-refund:${refundId}`}
+      mutate={(idempotencyKey) => processV1Refund({ ...auth, orderId, refundId, idempotencyKey })}
+      reconcile={onChanged} success="Refund submitted and authoritative payment state reloaded." onNotice={onNotice} onDismiss={() => setConfirming(false)} /> : null}
+  </div>;
 }
 
-function SettlementAction({ settlement, auth, onChanged }: {
-  settlement: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => void;
+function SettlementAction({ settlement, auth, onChanged, onNotice }: {
+  settlement: Record<string, unknown>; auth: DastakV1Auth; onChanged: () => Promise<unknown>;
+  onNotice: (message: string) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const id = text(settlement, "id");
+  const version = number(settlement, "version");
+  return <div className="v1-exceptional-handoff"><button className="primary-button" type="button" onClick={() => setConfirming(true)}>Finalize calculation</button>
+    {confirming && id && version ? <ProtectedAdminMutationDialog intent={{
+      title: "Finalize this settlement calculation?", entityLabel: "Settlement entry", entityValue: id,
+      currentState: `${text(settlement, "status") ?? "PENDING"} · ${formatV1Price(number(settlement, "amountPaise") ?? 0)}`,
+      resultingState: "Calculation finalized",
+      consequence: "The financial calculation becomes finalized for downstream settlement handling. This does not itself invent or alter ledger value outside the authoritative settlement command.",
+      confirmLabel: "Finalize calculation", tone: "danger",
+    }} operationIdentity={`settlement-finalize:${id}:${version}`}
+      mutate={(idempotencyKey) => finalizeV1SettlementCalculation({ ...auth, settlementEntryId: id, expectedVersion: version, idempotencyKey })}
+      reconcile={onChanged} success="Settlement calculation finalized and authoritative finance state reloaded." onNotice={onNotice} onDismiss={() => setConfirming(false)} /> : null}
+  </div>;
+}
+
+function ProtectedAdminMutationDialog({ intent, operationIdentity, mutate, reconcile, success, onNotice, onDismiss }: {
+  intent: AdminPrivilegedActionIntent;
+  operationIdentity: string;
+  mutate: (idempotencyKey: string, reason: string) => Promise<unknown>;
+  reconcile: () => Promise<unknown>;
+  success: string;
+  onNotice?: (message: string) => void;
+  onDismiss: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const id = text(settlement, "id");
-  const version = number(settlement, "version");
-  const run = async () => {
-    if (!id || !version) return; setBusy(true); setError(undefined);
-    try {
-      await finalizeV1SettlementCalculation({ ...auth, settlementEntryId: id, expectedVersion: version, idempotencyKey: crypto.randomUUID() });
-      onChanged();
-    } catch (actionError) { setError(message(actionError)); } finally { setBusy(false); }
+  const [notice, setNotice] = useState<string>();
+  const [reconciliationBlocked, setReconciliationBlocked] = useState(false);
+  const execute = async (reason: string) => {
+    if (busy) return;
+    setBusy(true); setError(undefined); setNotice(undefined); setReconciliationBlocked(false);
+    const result = await runAdminPrivilegedMutation({
+      operationIdentity, mutate: (key) => mutate(key, reason), reconcile,
+    });
+    setBusy(false);
+    if (result.kind === "completed") {
+      onNotice?.(success);
+      onDismiss();
+    } else if (result.kind === "reconciled" || result.kind === "uncertain_reconciled") {
+      setNotice(result.message);
+      onNotice?.(result.message);
+      if (result.kind === "reconciled") onDismiss();
+    } else if (result.kind === "uncertain_blocked") {
+      setReconciliationBlocked(true);
+      setError(result.message);
+    } else setError(message(result.error));
   };
-  return <div className="v1-exceptional-handoff"><button className="primary-button" type="button" disabled={busy} onClick={() => void run()}>Finalize calculation</button>{error ? <p className="order-error" role="alert">{error}</p> : null}</div>;
+  return <AdminPrivilegedActionDialog intent={intent} busy={busy} error={error} notice={notice}
+    reconciliationBlocked={reconciliationBlocked} onDismiss={onDismiss} onConfirm={execute}
+    onReconcile={async () => {
+      setBusy(true);
+      try {
+        await reconcile();
+        setReconciliationBlocked(false);
+        onNotice?.("Authoritative state was reloaded. Review it before acting again.");
+        onDismiss();
+      } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
+    }} />;
 }
 
 function EvidenceButton({ auth, objectPath }: { auth: DastakV1Auth; objectPath?: string }) {

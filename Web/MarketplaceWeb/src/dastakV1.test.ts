@@ -516,6 +516,7 @@ describe("Dastak V1 web contract", () => {
 
   it("loads fixed Admin slots and submits only an Executive email assignment", async () => {
     const bodies: unknown[] = [];
+    let assignmentHeaders: Headers | undefined;
     const access = await getV1AdminAccess(auth, async (_url, init) => {
       bodies.push(JSON.parse(String(init?.body)));
       return Response.json({
@@ -534,8 +535,10 @@ describe("Dastak V1 web contract", () => {
       email: "  Executive@Example.com ",
       expectedVersion: 1,
       reason: "Updated from protected Admin access settings.",
+      idempotencyKey: "executive-admin-key",
     }, async (_url, init) => {
       bodies.push(JSON.parse(String(init?.body)));
+      assignmentHeaders = new Headers(init?.headers);
       return Response.json({
         slot: 1,
         role: "EXECUTIVE_ADMIN",
@@ -550,6 +553,7 @@ describe("Dastak V1 web contract", () => {
       slots: [{ slot: 0 }, { slot: 1 }, { slot: 2, linked: false }],
     });
     expect(assigned).toMatchObject({ slot: 1, email: "executive@example.com", linked: true });
+    expect(assignmentHeaders?.get("X-Idempotency-Key")).toBe("executive-admin-key");
     expect(bodies).toEqual([
       { operation: "adminAccess" },
       {

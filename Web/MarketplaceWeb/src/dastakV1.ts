@@ -965,6 +965,7 @@ export async function setV1ExecutiveAdmin(
     email?: string;
     expectedVersion: number;
     reason: string;
+    idempotencyKey: string;
     signal?: AbortSignal;
   },
   fetcher: Fetcher = fetch,
@@ -975,7 +976,7 @@ export async function setV1ExecutiveAdmin(
     email: input.email?.trim().toLowerCase() || null,
     expectedVersion: input.expectedVersion,
     reason: input.reason,
-  }, undefined, fetcher));
+  }, input.idempotencyKey, fetcher));
 }
 
 export async function importV1AdminCatalogue(

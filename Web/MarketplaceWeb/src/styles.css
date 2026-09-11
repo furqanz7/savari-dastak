@@ -2782,6 +2782,61 @@ button:disabled { cursor: wait; opacity: .55; }
 .admin-access-message { margin: 14px 0 0; padding: 11px 13px; border-radius: 10px; font-size: 13px; }
 .admin-access-message.error { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
 .admin-access-message.success { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
+.admin-confirmation-backdrop {
+  position: fixed;
+  z-index: 220;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(10 9 8 / 70%);
+  backdrop-filter: blur(14px) saturate(.85);
+}
+.admin-confirmation-dialog {
+  width: min(620px, 100%);
+  max-height: min(820px, calc(100dvh - 48px));
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--divider);
+  border-radius: 22px;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 42%);
+}
+.admin-confirmation-dialog > header {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 40px;
+  gap: 13px;
+  align-items: start;
+}
+.admin-confirmation-dialog > header > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+}
+.admin-confirmation-dialog h2 { margin: 3px 0 0; font-size: clamp(22px, 3vw, 30px); line-height: 1.12; }
+.admin-confirmation-dialog .icon-button { width: 40px; height: 40px; }
+.admin-confirmation-summary { display: grid; gap: 1px; margin: 22px 0 0; overflow: hidden; border: 1px solid var(--divider); border-radius: 14px; background: var(--divider); }
+.admin-confirmation-summary > div { display: grid; grid-template-columns: minmax(120px, .55fr) minmax(0, 1fr); gap: 18px; padding: 12px 14px; background: var(--surface); }
+.admin-confirmation-summary dt { color: var(--text-secondary); font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
+.admin-confirmation-summary dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-weight: 700; }
+.admin-confirmation-consequence { margin: 16px 0; padding: 14px; border-left: 3px solid var(--warning); border-radius: 0 10px 10px 0; color: var(--text-secondary); background: color-mix(in srgb, var(--warning) 8%, transparent); line-height: 1.55; }
+.admin-confirmation-dialog fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 18px 0 0; padding: 0; border: 0; }
+.admin-confirmation-dialog legend, .admin-confirmation-detail, .admin-confirmation-match { display: block; margin-bottom: 9px; color: var(--text-secondary); font-size: 13px; font-weight: 750; }
+.admin-confirmation-dialog fieldset label { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 9px 11px; border: 1px solid var(--divider); border-radius: 11px; background: var(--surface); cursor: pointer; }
+.admin-confirmation-dialog fieldset input { accent-color: var(--dastak-accent); }
+.admin-confirmation-detail, .admin-confirmation-match { margin-top: 16px; }
+.admin-confirmation-detail textarea, .admin-confirmation-match input { width: 100%; margin-top: 7px; padding: 11px 12px; border: 1px solid var(--divider); border-radius: 11px; color: var(--text-primary); background: var(--surface); font: inherit; resize: vertical; }
+.admin-confirmation-recorded-reason { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--divider); border-radius: 11px; background: var(--surface); }
+.admin-confirmation-recorded-reason p { margin: 4px 0 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.admin-confirmation-notice { margin: 14px 0 0; padding: 11px 13px; border-radius: 10px; color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
+.admin-confirmation-dialog > footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--divider); }
+.admin-confirmation-dialog > footer button { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.admin-confirmation-dialog :is(button, input, textarea):focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
 .admin-access-note { margin: 18px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
 .role-account-heading { max-width: 560px; }
 .role-account-heading h1 { margin: 7px 0 8px; font-family: var(--font-display); font-size: 38px; font-weight: 400; line-height: 1.06; }
@@ -2954,6 +3009,13 @@ button.role-account-row:hover, a.role-account-row:hover { background: color-mix(
 }
 
 @media (max-width: 480px) {
+  .admin-confirmation-backdrop { align-items: end; padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
+  .admin-confirmation-dialog { max-height: min(92dvh, 820px); padding: 18px; border-radius: 20px; }
+  .admin-confirmation-summary > div { grid-template-columns: 1fr; gap: 4px; }
+  .admin-confirmation-dialog fieldset { grid-template-columns: 1fr; }
+  .admin-confirmation-dialog > footer { display: grid; grid-template-columns: 1fr; }
+  .admin-confirmation-dialog > footer .primary-button,
+  .admin-confirmation-dialog > footer .danger-button { grid-row: 1; }
   .admin-access { margin-bottom: 112px; padding: 17px; border-radius: 15px; }
   .admin-access-heading { gap: 11px; }
   .admin-access-field { flex-direction: column; }
