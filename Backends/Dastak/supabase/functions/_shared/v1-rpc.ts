@@ -24,7 +24,14 @@ export async function callAuthenticatedRPC(
   return data;
 }
 
-function safeRPCError(error: { code?: string }) {
+export function safeRPCError(error: { code?: string; message?: string }) {
+  if (error.code === "P0001" && error.message === "RIDER_ACTIVE_WORK_CONFLICT") {
+    return new V1RequestError(
+      409,
+      "rider_active_work_conflict",
+      "This delivery partner must complete the active job before another can be assigned.",
+    );
+  }
   switch (error.code) {
     case "42501":
       return new V1RequestError(403, "access_denied", "This account cannot perform that action.");

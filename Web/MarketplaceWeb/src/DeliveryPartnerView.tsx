@@ -143,7 +143,10 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
     return () => window.clearInterval(timer);
   }, [auth, refresh, v1Dispatch.currentMission]);
 
-  const trackingMissionId = v1Dispatch.currentMission?.id;
+  // A recovery return can intentionally coexist with its source delivery
+  // mission. The return is the rider's current custody route and therefore
+  // owns the single mission-bound GPS stream until it is complete.
+  const trackingMissionId = v1Dispatch.returnMission?.id ?? v1Dispatch.currentMission?.id;
   useEffect(() => {
     setTrackingError(undefined);
     if (!trackingMissionId) return;
@@ -173,10 +176,19 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
         setTrackingError(undefined);
         // An in-flight fix must never resurrect a completed/reassigned mission,
         // or replace a newer action response with an older version.
-        setV1Dispatch((current) => current.currentMission?.id === trackingMissionId &&
-          snapshot.currentMission?.id === trackingMissionId &&
-          snapshot.currentMission.version >= current.currentMission.version
-          ? { ...current, currentMission: snapshot.currentMission } : current);
+        setV1Dispatch((current) => {
+          if (current.currentMission?.id === trackingMissionId &&
+            snapshot.currentMission?.id === trackingMissionId &&
+            snapshot.currentMission.version >= current.currentMission.version) {
+            return { ...current, currentMission: snapshot.currentMission };
+          }
+          if (current.returnMission?.id === trackingMissionId &&
+            snapshot.returnMission?.id === trackingMissionId &&
+            snapshot.returnMission.version >= current.returnMission.version) {
+            return { ...current, returnMission: snapshot.returnMission };
+          }
+          return current;
+        });
       } catch {
         if (!cancelled) setTrackingError("Location sharing interrupted. Arrival stays locked until GPS reconnects.");
       } finally {
@@ -719,7 +731,7 @@ function CurrentV1ReturnMission({
     {mission.status !== "RETURNING_TO_MERCHANTS" ? <>
       <div className="delivery-stop"><span><MapPin size={19} /></span><div><small>Customer destination</small><strong>{mission.customerDestination.address}</strong>{mission.customerDestination.recipientName ? <p>Recipient: {mission.customerDestination.recipientName}</p> : null}</div></div>
       {mission.customerDestination.location ? <MapLink location={mission.customerDestination.location} label="Open return pickup route" /> : null}
-      {mission.canArriveCustomer ? <button className="primary-button delivery-next-action" type="button" disabled={busy} onClick={() => onAction("v1ReturnArriveAtCustomer")}><MapPin size={18} /> I’ve arrived</button> : null}
+      {mission.status === "ASSIGNED" ? <ArrivalAction arrival={mission.customerArrival} permitted={mission.canArriveCustomer} busy={busy} onArrive={() => onAction("v1ReturnArriveAtCustomer")} /> : null}
       {mission.canCaptureEvidence ? <label className="v1-delivery-photo"><Camera size={20} /><span><strong>{mission.evidence.length ? "Add another return photo" : "Capture return packages"}</strong><small>Immutable evidence is required before custody transfer</small></span><input type="file" accept="image/jpeg,image/png,image/heic" capture="environment" disabled={busy} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) onCaptureEvidence(file); event.currentTarget.value = ""; }} /></label> : null}
       {mission.evidence.length ? <p className="delivery-notice" role="status"><Check size={18} /> {mission.evidence.length} immutable return photo(s) secured.</p> : null}
       {mission.canVerifyPickup ? <div className="v1-pickup-verification">
@@ -732,7 +744,8 @@ function CurrentV1ReturnMission({
       const code = receiptCodes[stop.id] ?? "";
       return <article className={`v1-pickup-stop ${stop.status === "COMPLETED" ? "completed" : ""}`} key={stop.id}>
         <header><span>{stop.sequence}</span><div><strong>{stop.branch.displayName}</strong><small>{stop.branch.address}</small></div><em>{stop.status.replaceAll("_", " ")}</em></header>
-        {stop.status === "PENDING" ? <button className="secondary-button" type="button" disabled={busy} onClick={() => onAction("v1ArriveAtReturnStop", { returnStopId: stop.id })}><MapPin size={17} /> I’ve arrived</button> : null}
+        {stop.branch.location && stop.status !== "COMPLETED" ? <MapLink location={stop.branch.location} label="Open merchant route" /> : null}
+        {stop.status === "PENDING" ? <ArrivalAction arrival={stop.arrival} permitted={stop.canArrive} busy={busy} onArrive={() => onAction("v1ArriveAtReturnStop", { returnStopId: stop.id })} /> : null}
         {stop.status === "ARRIVED" ? <div className="v1-pickup-verification"><p>Transfer all {stop.packageCount} package(s) together.</p><label className="handoff-input">Merchant return receipt code<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setReceiptCodes((current) => ({ ...current, [stop.id]: event.target.value.replace(/\D/g, "").slice(0, 6) }))} placeholder="000000" /></label><button className="primary-button delivery-next-action" type="button" disabled={busy || code.length !== 6 || stop.verificationStatus === "BLOCKED"} onClick={() => onAction("v1VerifyReturnReceipt", { returnStopId: stop.id, verificationCode: code })}><PackageCheck size={18} /> Verify merchant receipt</button></div> : null}
         {stop.verificationStatus === "BLOCKED" ? <p className="order-error" role="alert">Receipt verification blocked. Keep the packages secure and contact Operations.</p> : null}
       </article>;
@@ -949,8 +962,9 @@ function CurrentV1Mission({
   );
 }
 
-function ArrivalAction({ arrival, busy, onArrive }: {
+function ArrivalAction({ arrival, permitted = true, busy, onArrive }: {
   arrival: V1ArrivalEligibility | null | undefined;
+  permitted?: boolean;
   busy: boolean;
   onArrive: () => void;
 }) {
@@ -959,7 +973,7 @@ function ArrivalAction({ arrival, busy, onArrive }: {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
-  const eligible = canArriveAtDestination(arrival, now);
+  const eligible = permitted && canArriveAtDestination(arrival, now);
   const fresh = arrival?.validUntil && Date.parse(arrival.validUntil) > now;
   const hint = eligible ? "Within 50 metres. You can confirm arrival." :
     fresh && arrival?.reason === "TOO_FAR" && arrival.distanceMeters !== null

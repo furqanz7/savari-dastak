@@ -211,7 +211,14 @@ export type V1ReturnStop = {
   completedAt: string | null;
   verificationStatus: "INACTIVE" | "ACTIVE" | "CONSUMED" | "BLOCKED";
   failedAttempts: number;
-  branch: { id: string; displayName: string; address: string };
+  arrival: V1ArrivalEligibility | null;
+  canArrive: boolean;
+  branch: {
+    id: string;
+    displayName: string;
+    address: string;
+    location: OrderLocation | null;
+  };
 };
 export type V1ReturnMission = {
   id: string;
@@ -239,6 +246,7 @@ export type V1ReturnMission = {
     id: string; objectPath: string; contentType: string; capturedAt: string;
   }>;
   stops: V1ReturnStop[];
+  customerArrival: V1ArrivalEligibility | null;
   canArriveCustomer: boolean;
   canCaptureEvidence: boolean;
   canVerifyPickup: boolean;
@@ -876,6 +884,7 @@ function v1ReturnMission(value: unknown): V1ReturnMission {
       };
     }),
     stops: source.stops.map(v1ReturnStop),
+    customerArrival: v1Arrival(source.customerArrival),
     canArriveCustomer: requiredBoolean(source.canArriveCustomer),
     canCaptureEvidence: requiredBoolean(source.canCaptureEvidence),
     canVerifyPickup: requiredBoolean(source.canVerifyPickup),
@@ -896,9 +905,12 @@ function v1ReturnStop(value: unknown): V1ReturnStop {
     arrivedAt: nullableTimestamp(source.arrivedAt), completedAt: nullableTimestamp(source.completedAt),
     verificationStatus: requiredReturnVerificationStatus(source.verificationStatus),
     failedAttempts: nonNegativeInteger(source.failedAttempts),
+    arrival: v1Arrival(source.arrival),
+    canArrive: requiredBoolean(source.canArrive),
     branch: {
       id: requiredUUID(branch.id), displayName: requiredText(branch.displayName, 160),
       address: addressLabel(branch.address),
+      location: branch.location === null ? null : location(branch.location),
     },
   };
 }

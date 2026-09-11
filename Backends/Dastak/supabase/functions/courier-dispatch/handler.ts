@@ -252,20 +252,34 @@ export async function handleCourierDispatch(
       case "v1PublishLocation": {
         const missionId = validUUID(body.missionId);
         const { latitude, longitude, accuracyMeters, recordedAt } = body;
-        if (!missionId || typeof latitude !== "number" || !Number.isFinite(latitude) ||
+        if (
+          !missionId || typeof latitude !== "number" || !Number.isFinite(latitude) ||
           Math.abs(latitude) > 90 || typeof longitude !== "number" || !Number.isFinite(longitude) ||
           Math.abs(longitude) > 180 || typeof accuracyMeters !== "number" ||
           !Number.isFinite(accuracyMeters) || accuracyMeters < 0 || accuracyMeters > 200 ||
-          typeof recordedAt !== "string" || !Number.isFinite(Date.parse(recordedAt))) return validationError();
-        return json(await dependencies.publishV1Location({
-          accountId: actor.accountId, missionId, latitude, longitude, accuracyMeters, recordedAt,
-        }), 200);
+          typeof recordedAt !== "string" || !Number.isFinite(Date.parse(recordedAt))
+        ) return validationError();
+        return json(
+          await dependencies.publishV1Location({
+            accountId: actor.accountId,
+            missionId,
+            latitude,
+            longitude,
+            accuracyMeters,
+            recordedAt,
+          }),
+          200,
+        );
       }
       case "v1VerifyCustomerPIN":
       case "v1CompleteDelivery":
-        return await v1FinalDeliveryMutation(request, body, actor.accountId,
+        return await v1FinalDeliveryMutation(
+          request,
+          body,
+          actor.accountId,
           body.operation === "v1VerifyCustomerPIN" ? "VERIFY_CUSTOMER_PIN" : "COMPLETE_DELIVERY",
-          dependencies.advanceV1FinalDelivery);
+          dependencies.advanceV1FinalDelivery,
+        );
       case "v1ArriveAtCustomer":
         return await v1FinalDeliveryMutation(
           request,
@@ -397,19 +411,36 @@ export async function handleCourierDispatch(
     }
   } catch (error) {
     // Only expose allowlisted domain errors, never raw SQL/internal details.
-    const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
+    const message = error && typeof error === "object" && "message" in error
+      ? String(error.message)
+      : "";
     const known: Record<string, string> = {
-      ARRIVAL_LOCATION_REQUIRED: "Move within 50 metres and wait for a fresh, accurate location before arriving.",
+      ARRIVAL_LOCATION_REQUIRED:
+        "Move within 50 metres and wait for a fresh, accurate location before arriving.",
+      RETURN_ARRIVAL_LOCATION_REQUIRED:
+        "Move within 50 metres and wait for a fresh, accurate location before confirming this return stop.",
+      RIDER_ACTIVE_WORK_CONFLICT: "Complete your active delivery before accepting another job.",
       DELIVERY_PIN_REQUIRED: "Verify the customer PIN before taking the delivery photo.",
-      DELIVERY_PHOTO_REQUIRED: "Take the package photo after PIN verification before collecting payment.",
-      DELIVERY_HANDOFF_SEQUENCE_REQUIRED: "Complete arrival, PIN verification, photo and payment in order.",
+      DELIVERY_PHOTO_REQUIRED:
+        "Take the package photo after PIN verification before collecting payment.",
+      DELIVERY_HANDOFF_SEQUENCE_REQUIRED:
+        "Complete arrival, PIN verification, photo and payment in order.",
       LAUNCH_PAYMENT_COLLECTION_REQUIRED: "Confirm doorstep payment before completing delivery.",
       STALE_MISSION_VERSION: "This delivery was updated. Refresh and try again.",
       "stale mission version": "This delivery was updated. Refresh and try again.",
       INVALID_LOCATION_SAMPLE: "Waiting for a fresh GPS location.",
       MISSION_NOT_ASSIGNED: "This delivery is no longer assigned to you.",
+      RETURN_CUSTOMER_ARRIVAL_NOT_ALLOWED: "This return pickup is no longer ready for arrival.",
+      RETURN_STOP_ARRIVAL_NOT_ALLOWED: "This merchant return stop is no longer ready for arrival.",
+      RETURN_EVIDENCE_NOT_ALLOWED: "Return evidence cannot be added in the current state.",
+      RETURN_PICKUP_VERIFICATION_INACTIVE: "Return pickup verification is not active.",
+      RETURN_PICKUP_EVIDENCE_REQUIRED: "Capture every return package before verifying pickup.",
+      RETURN_RECEIPT_VERIFICATION_INACTIVE: "Merchant return receipt verification is not active.",
+      "return mission not found": "This return mission is no longer assigned to you.",
     };
-    if (known[message]) return json({ error: { code: message.toLowerCase(), message: known[message] } }, 409);
+    if (known[message]) {
+      return json({ error: { code: message.toLowerCase(), message: known[message] } }, 409);
+    }
     return internalError();
   }
 }
@@ -461,9 +492,7 @@ async function v1FinalDeliveryMutation(
     ? validRiderDeliveryEvidencePath(body.objectPath, accountId)
     : null;
   const needsCode = action === "VERIFY_DELIVERY" || action === "VERIFY_CUSTOMER_PIN";
-  const verificationCode = needsCode
-    ? validV1VerificationCode(body.verificationCode)
-    : null;
+  const verificationCode = needsCode ? validV1VerificationCode(body.verificationCode) : null;
   if (
     !idempotencyKey || !missionId ||
     (action === "ADD_DELIVERY_EVIDENCE" && !objectPath) ||

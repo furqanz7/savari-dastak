@@ -506,12 +506,22 @@ describe("delivery partner client", () => {
         id: evidenceId, objectPath: `return-pickup/${accountId}/${evidenceId}.jpg`,
         contentType: "image/jpeg", capturedAt: "2026-08-22T10:08:00Z",
       }],
+      customerArrival: {
+        eligible: false, reason: "DESTINATION_UNAVAILABLE", distanceMeters: null,
+        radiusMeters: 50, validUntil: null,
+      },
       stops: [{
         id: storeId, sequence: 1, status: "PENDING", packageCount: 1,
         arrivedAt: null, completedAt: null, verificationStatus: "ACTIVE", failedAttempts: 0,
+        arrival: {
+          eligible: true, reason: "ELIGIBLE", distanceMeters: 18,
+          radiusMeters: 50, validUntil: "2026-08-22T10:10:30Z",
+        },
+        canArrive: true,
         branch: {
           id: productId, displayName: "Operational Return Branch",
           address: { line1: "1 Merchant Road" },
+          location: { latitude: 12.68, longitude: 78.62 },
         },
       }],
       canArriveCustomer: false, canCaptureEvidence: false,
@@ -522,6 +532,10 @@ describe("delivery partner client", () => {
     })));
     expect(parsed.returnMission?.pickupVerification.status).toBe("CONSUMED");
     expect(parsed.returnMission?.stops[0].packageCount).toBe(1);
+    expect(parsed.returnMission?.stops[0].canArrive).toBe(true);
+    expect(parsed.returnMission?.stops[0].branch.location).toEqual({
+      latitude: 12.68, longitude: 78.62,
+    });
 
     let body: Record<string, unknown> | undefined;
     await advanceV1ReturnMission({

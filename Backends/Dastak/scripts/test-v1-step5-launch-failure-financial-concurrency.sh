@@ -15,6 +15,7 @@ merchant_b='99600000-0000-4000-8000-000000000005'
 merchant_c='99600000-0000-4000-8000-000000000006'
 rider_id='99600000-0000-4000-8000-000000000007'
 recovery_rider_id='99600000-0000-4000-8000-000000000008'
+threshold_rider_id='99600000-0000-4000-8000-000000000009'
 source_org='99600000-0000-4000-8000-000000000020'
 org_b='99600000-0000-4000-8000-000000000030'
 org_c='99600000-0000-4000-8000-000000000040'
@@ -45,7 +46,8 @@ insert into auth.users (
 ('99600000-0000-4000-8000-000000000005','00000000-0000-0000-8000-000000000000','authenticated','authenticated','step5-b@example.test','',now(),now(),now()),
 ('99600000-0000-4000-8000-000000000006','00000000-0000-0000-8000-000000000000','authenticated','authenticated','step5-c@example.test','',now(),now(),now()),
 ('99600000-0000-4000-8000-000000000007','00000000-0000-0000-8000-000000000000','authenticated','authenticated','step5-rider@example.test','',now(),now(),now()),
-('99600000-0000-4000-8000-000000000008','00000000-0000-0000-8000-000000000000','authenticated','authenticated','step5-recovery-rider@example.test','',now(),now(),now())
+('99600000-0000-4000-8000-000000000008','00000000-0000-0000-8000-000000000000','authenticated','authenticated','step5-recovery-rider@example.test','',now(),now(),now()),
+('99600000-0000-4000-8000-000000000009','00000000-0000-0000-8000-000000000000','authenticated','authenticated','step5-threshold-rider@example.test','',now(),now(),now())
 on conflict (id) do nothing;
 
 insert into public.accounts (id,display_name,phone_number) values
@@ -56,7 +58,8 @@ insert into public.accounts (id,display_name,phone_number) values
 ('99600000-0000-4000-8000-000000000005','Step 5 Merchant B','+919960000005'),
 ('99600000-0000-4000-8000-000000000006','Step 5 Merchant C','+919960000006'),
 ('99600000-0000-4000-8000-000000000007','Step 5 Return Rider','+919960000007'),
-('99600000-0000-4000-8000-000000000008','Step 5 Recovery Rider','+919960000008')
+('99600000-0000-4000-8000-000000000008','Step 5 Recovery Rider','+919960000008'),
+('99600000-0000-4000-8000-000000000009','Step 5 Threshold Rider','+919960000009')
 on conflict (id) do nothing;
 
 insert into private.account_memberships (account_id,role,approved_at) values
@@ -67,7 +70,8 @@ insert into private.account_memberships (account_id,role,approved_at) values
 ('99600000-0000-4000-8000-000000000005','merchant',now()),
 ('99600000-0000-4000-8000-000000000006','merchant',now()),
 ('99600000-0000-4000-8000-000000000007','dastak_partner',now()),
-('99600000-0000-4000-8000-000000000008','dastak_partner',now())
+('99600000-0000-4000-8000-000000000008','dastak_partner',now()),
+('99600000-0000-4000-8000-000000000009','dastak_partner',now())
 on conflict (account_id,role) do update set approved_at=excluded.approved_at;
 
 insert into dastak_v1.platform_permission_grants (
@@ -103,11 +107,18 @@ insert into private.delivery_partner_applications (
   'TN 01 S5 0002','Step 5 Recovery Motorbike',
   'dastak-partner/99600000-0000-4000-8000-000000000008/vehicle.pdf',
   'approved',now(),now(),'99600000-0000-4000-8000-000000000001'
+),(
+  '99600000-0000-4000-8000-000000000072','99600000-0000-4000-8000-000000000009',
+  'motorbike','dastak-partner/99600000-0000-4000-8000-000000000009/identity.pdf',2,
+  'TN 01 S5 0003','Step 5 Threshold Motorbike',
+  'dastak-partner/99600000-0000-4000-8000-000000000009/vehicle.pdf',
+  'approved',now(),now(),'99600000-0000-4000-8000-000000000001'
 ) on conflict (id) do nothing;
 insert into private.delivery_partner_profiles (account_id,approved_application_id,delivery_method)
 values
 ('99600000-0000-4000-8000-000000000007','99600000-0000-4000-8000-000000000070','motorbike'),
-('99600000-0000-4000-8000-000000000008','99600000-0000-4000-8000-000000000071','motorbike')
+('99600000-0000-4000-8000-000000000008','99600000-0000-4000-8000-000000000071','motorbike'),
+('99600000-0000-4000-8000-000000000009','99600000-0000-4000-8000-000000000072','motorbike')
 on conflict (account_id) do update set delivery_method=excluded.delivery_method;
 insert into public.service_zones (id,name,boundary,active) values (
   '99600000-0000-4000-8000-000000000010','Step 5 Zone',
@@ -197,9 +208,10 @@ from (values
 ('99600000-0000-4000-8000-000000000300'::uuid,'matching.wave2_timeout_seconds','120'::jsonb),
 ('99600000-0000-4000-8000-000000000301'::uuid,'matching.wave2_hold_seconds','180'::jsonb),
 ('99600000-0000-4000-8000-000000000302'::uuid,'matching.wave2_max_pickup_route_meters','50000'::jsonb),
+('99600000-0000-4000-8000-000000000317'::uuid,'matching.wave2_max_retail_merchants','3'::jsonb),
 ('99600000-0000-4000-8000-000000000303'::uuid,'payment.reservation_seconds','300'::jsonb),
 ('99600000-0000-4000-8000-000000000304'::uuid,'delivery.default_sku_logistics','{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}'::jsonb),
-('99600000-0000-4000-8000-000000000305'::uuid,'delivery.transport_load_profiles','[{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]'::jsonb),
+('99600000-0000-4000-8000-000000000305'::uuid,'delivery.transport_load_profiles','[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]'::jsonb),
 ('99600000-0000-4000-8000-000000000306'::uuid,'recovery.radius_meters','50000'::jsonb),
 ('99600000-0000-4000-8000-000000000307'::uuid,'recovery.offer_timeout_seconds','120'::jsonb),
 ('99600000-0000-4000-8000-000000000308'::uuid,'retail.prep_time_options_minutes','[10,15,20]'::jsonb),
@@ -537,6 +549,17 @@ return_mission="$(printf '%s' "$decision_json" | sed -n 's/.*"returnMissionId"[[
 pickup_code="$("${psql_base[@]}" -Atc "select private.dastak_v1_handoff_code(id,handoff_type,code_version) from dastak_v1.return_verifications where return_mission_id='$return_mission'::uuid and handoff_type='CUSTOMER_TO_RETURN_RIDER'")"
 return_stop="$("${psql_base[@]}" -Atc "select id from dastak_v1.return_stops where return_mission_id='$return_mission'::uuid")"
 receipt_code="$("${psql_base[@]}" -Atc "select private.dastak_v1_handoff_code(id,handoff_type,code_version) from dastak_v1.return_verifications where return_stop_id='$return_stop'::uuid")"
+"${psql_base[@]}" -Atc "
+select dastak_v1_api.publish_mission_location(
+  '$rider_id'::uuid,
+  '$return_mission'::uuid,
+  (context.delivery_address->>'latitude')::double precision,
+  (context.delivery_address->>'longitude')::double precision,
+  5,
+  pg_catalog.clock_timestamp()
+)
+from dastak_v1.order_context_snapshots context
+where context.order_id='$delivered_order'::uuid" >/dev/null
 "${psql_base[@]}" -Atc "select dastak_v1_api.advance_return_mission('$rider_id'::uuid,'$return_mission'::uuid,'ARRIVE_CUSTOMER',null,null,null,'arrive-$run_token')" >/dev/null
 set +e
 "${psql_base[@]}" -Atc "select dastak_v1_api.advance_return_mission('$rider_id'::uuid,'$return_mission'::uuid,'VERIFY_RETURN_PICKUP',null,null,'$pickup_code','missing-evidence-$run_token')" >"$work_dir/missing-evidence.out" 2>"$work_dir/missing-evidence.err"
@@ -556,6 +579,21 @@ set +e
 pickup_replay_rc=$?
 set -e
 [[ $pickup_replay_rc -ne 0 ]] || { printf 'consumed return pickup code replay succeeded\n' >&2; exit 1; }
+"${psql_base[@]}" -Atc "
+update private.delivery_partner_availability
+set tracking_received_at=pg_catalog.clock_timestamp()-interval '3 seconds'
+where account_id='$rider_id'::uuid;
+select dastak_v1_api.publish_mission_location(
+  '$rider_id'::uuid,
+  '$return_mission'::uuid,
+  extensions.st_y(branch.location),
+  extensions.st_x(branch.location),
+  5,
+  pg_catalog.clock_timestamp()
+)
+from dastak_v1.return_stops stop
+join dastak_v1.merchant_branches branch on branch.id=stop.branch_id
+where stop.id='$return_stop'::uuid" >/dev/null
 "${psql_base[@]}" -Atc "select dastak_v1_api.advance_return_mission('$rider_id'::uuid,'$return_mission'::uuid,'ARRIVE_RETURN_STOP','$return_stop'::uuid,null,null,'stop-$run_token')" >/dev/null
 "${psql_base[@]}" -Atc "select dastak_v1_api.advance_return_mission('$rider_id'::uuid,'$return_mission'::uuid,'VERIFY_RETURN_RECEIPT','$return_stop'::uuid,null,'$receipt_code','receipt-$run_token')" >/dev/null
 
@@ -595,14 +633,14 @@ insert into dastak_v1.return_packages (
   current_custody_owner_type,current_custody_owner_id,created_by,picked_up_at
 ) values
 ('99600000-0000-4000-8000-000000000420','99600000-0000-4000-8000-000000000410','$delivered_order',1,'$source_branch','CUSTOMER_READY','CUSTOMER','$customer_id','$owner_id',null),
-('99600000-0000-4000-8000-000000000421','99600000-0000-4000-8000-000000000411','$delivered_order',1,'$source_branch','RETURN_RIDER_CUSTODY','RETURN_RIDER','$recovery_rider_id','$owner_id',now());
+('99600000-0000-4000-8000-000000000421','99600000-0000-4000-8000-000000000411','$delivered_order',1,'$source_branch','RETURN_RIDER_CUSTODY','RETURN_RIDER','$threshold_rider_id','$owner_id',now());
 
 insert into dastak_v1.return_missions (
   id,return_id,order_id,status,assigned_rider_id,assigned_transport_type,
   assigned_at,arrived_customer_at,pickup_completed_at
 ) values
 ('99600000-0000-4000-8000-000000000430','99600000-0000-4000-8000-000000000410','$delivered_order','AT_CUSTOMER','$rider_id','MOTORBIKE',now(),now(),null),
-('99600000-0000-4000-8000-000000000431','99600000-0000-4000-8000-000000000411','$delivered_order','RETURNING_TO_MERCHANTS','$recovery_rider_id','MOTORBIKE',now(),now(),now());
+('99600000-0000-4000-8000-000000000431','99600000-0000-4000-8000-000000000411','$delivered_order','RETURNING_TO_MERCHANTS','$threshold_rider_id','MOTORBIKE',now(),now(),now());
 
 insert into dastak_v1.return_stops (
   id,return_mission_id,return_id,branch_id,stop_sequence,status,package_count,
@@ -617,7 +655,7 @@ insert into dastak_v1.return_verifications (
 ) values
 ('99600000-0000-4000-8000-000000000450','99600000-0000-4000-8000-000000000410','99600000-0000-4000-8000-000000000430',null,'CUSTOMER_TO_RETURN_RIDER','ACTIVE',private.dastak_v1_handoff_digest('111111'),now(),null,null),
 ('99600000-0000-4000-8000-000000000451','99600000-0000-4000-8000-000000000410','99600000-0000-4000-8000-000000000430','99600000-0000-4000-8000-000000000440','RETURN_RIDER_TO_MERCHANT','INACTIVE',private.dastak_v1_handoff_digest('222222'),null,null,null),
-('99600000-0000-4000-8000-000000000452','99600000-0000-4000-8000-000000000411','99600000-0000-4000-8000-000000000431',null,'CUSTOMER_TO_RETURN_RIDER','CONSUMED',private.dastak_v1_handoff_digest('333333'),now(),now(),'$recovery_rider_id'),
+('99600000-0000-4000-8000-000000000452','99600000-0000-4000-8000-000000000411','99600000-0000-4000-8000-000000000431',null,'CUSTOMER_TO_RETURN_RIDER','CONSUMED',private.dastak_v1_handoff_digest('333333'),now(),now(),'$threshold_rider_id'),
 ('99600000-0000-4000-8000-000000000453','99600000-0000-4000-8000-000000000411','99600000-0000-4000-8000-000000000431','99600000-0000-4000-8000-000000000441','RETURN_RIDER_TO_MERCHANT','ACTIVE',private.dastak_v1_handoff_digest('444444'),now(),null,null);
 
 insert into dastak_v1.return_evidence (
@@ -661,7 +699,7 @@ where verification.id='99600000-0000-4000-8000-000000000450'")"
 
 for attempt in 1 2 3; do
   "${psql_base[@]}" -Atc "select dastak_v1_api.advance_return_mission(
-    '$recovery_rider_id'::uuid,'99600000-0000-4000-8000-000000000431'::uuid,
+    '$threshold_rider_id'::uuid,'99600000-0000-4000-8000-000000000431'::uuid,
     'VERIFY_RETURN_RECEIPT','99600000-0000-4000-8000-000000000441'::uuid,
     null,'000000','receipt-threshold-$run_token-$attempt'
   )->'error'->>'code'" >"$work_dir/receipt-threshold-$attempt.out" &

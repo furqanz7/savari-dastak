@@ -425,6 +425,39 @@ Deno.test("V1 reverse-custody actions bind the rider, immutable evidence path, s
   await assertError(wrongOwner, 400, "validation_failed");
 });
 
+Deno.test("return arrival and active-work conflicts stay structured and SQL-safe", async () => {
+  const proximity = await handleCourierDispatch(
+    request({ body: { operation: "v1ReturnArriveAtCustomer", returnMissionId: missionId } }),
+    dependencies({
+      advanceV1ReturnMission: () => Promise.reject(new Error("RETURN_ARRIVAL_LOCATION_REQUIRED")),
+    }),
+  );
+  await assertError(proximity, 409, "return_arrival_location_required");
+
+  const conflict = await handleCourierDispatch(
+    request({ body: { operation: "v1AcceptOffer", offerId } }),
+    dependencies({
+      acceptV1Offer: () => Promise.reject(new Error("RIDER_ACTIVE_WORK_CONFLICT")),
+    }),
+  );
+  await assertError(conflict, 409, "rider_active_work_conflict");
+
+  const internal = await handleCourierDispatch(
+    request({
+      body: {
+        operation: "v1ArriveAtReturnStop",
+        returnMissionId: missionId,
+        returnStopId: stopId,
+      },
+    }),
+    dependencies({
+      advanceV1ReturnMission: () =>
+        Promise.reject(new Error("duplicate key value violates private constraint")),
+    }),
+  );
+  await assertError(internal, 500, "internal_error");
+});
+
 Deno.test("accept forwards only the authenticated partner and assignment", async () => {
   let recorded: Record<string, unknown> | undefined;
   const response = await handleCourierDispatch(
@@ -673,47 +706,94 @@ async function assertError(response: Response, status: number, code: string) {
 }
 Deno.test("mission location binds the authenticated rider, not request actor", async () => {
   let input: Record<string, unknown> | undefined;
-  const response = await handleCourierDispatch(request({ body: {
-    operation: "v1PublishLocation", missionId, accountId: assignmentId, latitude: 12.68, longitude: 78.62,
-    accuracyMeters: 5, recordedAt: new Date().toISOString(),
-  }}), dependencies({ publishV1Location: (value) => {
-    input = value; return Promise.resolve({ currentMission: null, offer: null });
-  }}));
+  const response = await handleCourierDispatch(
+    request({
+      body: {
+        operation: "v1PublishLocation",
+        missionId,
+        accountId: assignmentId,
+        latitude: 12.68,
+        longitude: 78.62,
+        accuracyMeters: 5,
+        recordedAt: new Date().toISOString(),
+      },
+    }),
+    dependencies({
+      publishV1Location: (value) => {
+        input = value;
+        return Promise.resolve({ currentMission: null, offer: null });
+      },
+    }),
+  );
   assertEquals(response.status, 200);
   assertEquals(input?.accountId, accountId);
   assertEquals(input?.missionId, missionId);
 });
 
 Deno.test("mission location rejects invalid GPS metadata before RPC", async () => {
-  for (const invalid of [{ latitude: 91 }, { longitude: -181 }, { accuracyMeters: -1 },
-    { accuracyMeters: 201 }, { recordedAt: "not-a-date" }, { missionId: "bad" }]) {
-    const response = await handleCourierDispatch(request({body: {
-      operation: "v1PublishLocation", missionId, latitude: 12.68, longitude: 78.62,
-      accuracyMeters: 5, recordedAt: new Date().toISOString(), ...invalid,
-    }}), dependencies({publishV1Location: () => { throw new Error("must not be called"); }}));
+  for (
+    const invalid of [
+      { latitude: 91 },
+      { longitude: -181 },
+      { accuracyMeters: -1 },
+      { accuracyMeters: 201 },
+      { recordedAt: "not-a-date" },
+      { missionId: "bad" },
+    ]
+  ) {
+    const response = await handleCourierDispatch(
+      request({
+        body: {
+          operation: "v1PublishLocation",
+          missionId,
+          latitude: 12.68,
+          longitude: 78.62,
+          accuracyMeters: 5,
+          recordedAt: new Date().toISOString(),
+          ...invalid,
+        },
+      }),
+      dependencies({
+        publishV1Location: () => {
+          throw new Error("must not be called");
+        },
+      }),
+    );
     await assertError(response, 400, "validation_failed");
   }
 });
 
 Deno.test("PIN verification and completion are separate canonical commands", async () => {
-  for (const [operation, action, code] of [
-    ["v1VerifyCustomerPIN", "VERIFY_CUSTOMER_PIN", "123456"],
-    ["v1CompleteDelivery", "COMPLETE_DELIVERY", undefined],
-  ]) {
-    let actual: Record<string,unknown> | undefined;
-    const response = await handleCourierDispatch(request({body: {operation, missionId, verificationCode:code}}),
-      dependencies({ advanceV1FinalDelivery: value => {
-        actual=value; return Promise.resolve({responseBody:{},responseStatus:200});
-      }}));
-    assertEquals(response.status,200);
-    assertEquals(actual?.action,action);
-    assertEquals(actual?.accountId,accountId);
-    assertEquals(actual?.verificationCode,code ?? null);
+  for (
+    const [operation, action, code] of [
+      ["v1VerifyCustomerPIN", "VERIFY_CUSTOMER_PIN", "123456"],
+      ["v1CompleteDelivery", "COMPLETE_DELIVERY", undefined],
+    ]
+  ) {
+    let actual: Record<string, unknown> | undefined;
+    const response = await handleCourierDispatch(
+      request({ body: { operation, missionId, verificationCode: code } }),
+      dependencies({
+        advanceV1FinalDelivery: (value) => {
+          actual = value;
+          return Promise.resolve({ responseBody: {}, responseStatus: 200 });
+        },
+      }),
+    );
+    assertEquals(response.status, 200);
+    assertEquals(actual?.action, action);
+    assertEquals(actual?.accountId, accountId);
+    assertEquals(actual?.verificationCode, code ?? null);
   }
 });
 
 Deno.test("arrival failures return actionable guidance without SQL details", async () => {
-  const response = await handleCourierDispatch(request({body:{operation:"v1ArriveAtCustomer",missionId}}),
-    dependencies({advanceV1FinalDelivery:()=>Promise.reject({message:"ARRIVAL_LOCATION_REQUIRED",details:"private SQL"})}));
-  await assertError(response,409,"arrival_location_required");
+  const response = await handleCourierDispatch(
+    request({ body: { operation: "v1ArriveAtCustomer", missionId } }),
+    dependencies({
+      advanceV1FinalDelivery: () =>
+        Promise.reject({ message: "ARRIVAL_LOCATION_REQUIRED", details: "private SQL" }),
+    }),
+  );
+  await assertError(response, 409, "arrival_location_required");
 });
