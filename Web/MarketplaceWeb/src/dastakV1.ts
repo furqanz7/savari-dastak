@@ -947,6 +947,40 @@ export type V1AdminCataloguePage = {
   nextCursor?: { name: string; skuId: string };
 };
 
+export type V1AdminCatalogueAsset = {
+  id: string;
+  skuId: string;
+  imageKey: string;
+  role: "PRIMARY" | "GALLERY";
+  sortOrder: number;
+  sourceType: string;
+  hasSourceReference: boolean;
+  checksumSha256?: string;
+  widthPixels?: number;
+  heightPixels?: number;
+  mimeType?: string;
+  status: "PENDING" | "VERIFIED" | "REJECTED";
+  rightsStatus: string;
+  version: number;
+  createdAt: string;
+  verifiedAt?: string;
+  storageManaged: boolean;
+  canRemove: boolean;
+};
+
+export type V1AdminCatalogueAssets = {
+  sku: {
+    id: string;
+    name: string;
+    variant?: string;
+    packSize: string;
+    slug: string;
+    status: string;
+    assetVersion: number;
+  };
+  assets: V1AdminCatalogueAsset[];
+};
+
 export class DastakV1RequestError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number) {
     super(message);
@@ -1343,6 +1377,90 @@ export async function getV1AdminCataloguePage(
     limit: input.limit ?? 50,
     cursor: input.cursor ?? null,
   }, undefined, fetcher));
+}
+
+export async function getV1AdminCatalogueAssets(
+  input: DastakV1Auth & { skuId: string; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminCatalogueAssets> {
+  return parseAdminCatalogueAssets(await invoke(input, "dastak-v1-catalogue", {
+    operation: "adminCatalogueAssets",
+    skuId: requiredUuid(input.skuId),
+  }, undefined, fetcher));
+}
+
+export async function uploadV1AdminCatalogueAsset(
+  input: DastakV1Auth & {
+    skuId: string;
+    expectedAssetVersion: number;
+    file: File;
+    sourceType: string;
+    sourceReference: string;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  const form = new FormData();
+  form.set("operation", "uploadAdminCatalogueAsset");
+  form.set("skuId", requiredUuid(input.skuId));
+  form.set("expectedAssetVersion", String(requiredInteger(input.expectedAssetVersion, 1)));
+  form.set("sourceType", requiredText(input.sourceType, 40));
+  form.set("sourceReference", requiredText(input.sourceReference.trim(), 500));
+  form.set("reason", requiredText(input.reason.trim(), 500));
+  form.set("file", input.file);
+  return requiredRecord(await invokeMultipart(
+    input,
+    "dastak-v1-catalogue",
+    form,
+    input.idempotencyKey,
+    fetcher,
+  ));
+}
+
+export async function promoteV1AdminCataloguePrimary(
+  input: DastakV1Auth & {
+    skuId: string;
+    assetId: string;
+    expectedPrimaryAssetId?: string;
+    expectedAssetVersion: number;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "promoteAdminCataloguePrimary",
+    skuId: requiredUuid(input.skuId),
+    assetId: requiredUuid(input.assetId),
+    expectedPrimaryAssetId: input.expectedPrimaryAssetId
+      ? requiredUuid(input.expectedPrimaryAssetId)
+      : null,
+    expectedAssetVersion: requiredInteger(input.expectedAssetVersion, 1),
+    reason: requiredText(input.reason.trim(), 500),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function removeV1AdminCatalogueAsset(
+  input: DastakV1Auth & {
+    skuId: string;
+    assetId: string;
+    expectedAssetVersion: number;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "removeAdminCatalogueAsset",
+    skuId: requiredUuid(input.skuId),
+    assetId: requiredUuid(input.assetId),
+    expectedAssetVersion: requiredInteger(input.expectedAssetVersion, 1),
+    reason: requiredText(input.reason.trim(), 500),
+  }, input.idempotencyKey, fetcher));
 }
 
 export async function setV1ExecutiveAdmin(
@@ -3097,6 +3215,95 @@ async function invoke(
     );
   }
   return payload;
+}
+
+async function invokeMultipart(
+  input: DastakV1Auth & { signal?: AbortSignal },
+  functionName: string,
+  body: FormData,
+  idempotencyKey: string,
+  fetcher: Fetcher,
+) {
+  const deadline = requestDeadline(input.signal);
+  let response: Response;
+  let payload: unknown;
+  try {
+    response = await fetcher(`${input.supabaseUrl.replace(/\/$/, "")}/functions/v1/${functionName}`, {
+      method: "POST",
+      headers: {
+        apikey: input.publishableKey,
+        authorization: `Bearer ${input.accessToken}`,
+        "x-idempotency-key": idempotencyKey,
+      },
+      body,
+      signal: deadline.signal,
+    });
+    payload = await response.json().catch((error: unknown) => {
+      if (deadline.timedOut()) throw error;
+      return undefined;
+    });
+  } catch (error) {
+    if (deadline.timedOut()) {
+      throw new DastakV1RequestError("request_timeout", "Dastak took too long to respond. Try again.", 0);
+    }
+    if (isAbortError(error) || input.signal?.aborted) throw error;
+    throw new DastakV1RequestError("network_error", "Dastak could not be reached. Check your connection.", 0);
+  } finally {
+    deadline.dispose();
+  }
+  if (!response.ok) {
+    const failure = record(record(payload)?.error);
+    throw new DastakV1RequestError(
+      optionalText(failure?.code, 100) ?? "request_failed",
+      optionalText(failure?.message, 400) ?? "Dastak could not complete this request.",
+      response.status,
+    );
+  }
+  return payload;
+}
+
+export function parseAdminCatalogueAssets(value: unknown): V1AdminCatalogueAssets {
+  const source = requiredRecord(value);
+  const sku = requiredRecord(source.sku);
+  return {
+    sku: {
+      id: requiredUuid(sku.id),
+      name: requiredText(sku.name, 160),
+      variant: optionalText(sku.variant, 160),
+      packSize: requiredText(sku.packSize, 80),
+      slug: requiredText(sku.slug, 160),
+      status: requiredText(sku.status, 40),
+      assetVersion: requiredInteger(sku.assetVersion, 1),
+    },
+    assets: requiredArray(source.assets).map((entry) => {
+      const asset = requiredRecord(entry);
+      const role = requiredText(asset.role, 20);
+      const status = requiredText(asset.status, 20);
+      if (!['PRIMARY', 'GALLERY'].includes(role) || !['PENDING', 'VERIFIED', 'REJECTED'].includes(status)) {
+        invalid("catalogue asset");
+      }
+      return {
+        id: requiredUuid(asset.id),
+        skuId: requiredUuid(asset.skuId),
+        imageKey: requiredText(asset.imageKey, 500),
+        role: role as V1AdminCatalogueAsset["role"],
+        sortOrder: requiredInteger(asset.sortOrder, 0),
+        sourceType: requiredText(asset.sourceType, 40),
+        hasSourceReference: requiredBoolean(asset.hasSourceReference),
+        checksumSha256: optionalText(asset.checksumSha256, 64),
+        widthPixels: optionalInteger(asset.widthPixels, 1),
+        heightPixels: optionalInteger(asset.heightPixels, 1),
+        mimeType: optionalText(asset.mimeType, 100),
+        status: status as V1AdminCatalogueAsset["status"],
+        rightsStatus: requiredText(asset.rightsStatus, 40),
+        version: requiredInteger(asset.version, 1),
+        createdAt: requiredTimestamp(asset.createdAt),
+        verifiedAt: optionalTimestamp(asset.verifiedAt),
+        storageManaged: requiredBoolean(asset.storageManaged),
+        canRemove: requiredBoolean(asset.canRemove),
+      };
+    }),
+  };
 }
 
 function parseCategory(value: unknown): V1CatalogueCategory {

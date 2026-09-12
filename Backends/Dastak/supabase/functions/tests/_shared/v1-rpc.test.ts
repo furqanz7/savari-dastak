@@ -68,3 +68,25 @@ Deno.test("shared V1 RPC errors expose a claimed Customer phone without database
     message: "That phone number is already claimed by another Dastak identity.",
   });
 });
+
+Deno.test("shared V1 RPC errors expose reviewed catalogue asset conflicts safely", () => {
+  const primary = safeRPCError({
+    code: "55000",
+    message: "CATALOGUE_PRIMARY_ASSET_REQUIRES_REPLACEMENT",
+  });
+  const path = safeRPCError({
+    code: "55000",
+    message: "CATALOGUE_ASSET_STORAGE_PATH_NOT_GOVERNED",
+  });
+
+  assertEquals({ status: primary.status, code: primary.code, message: primary.message }, {
+    status: 409,
+    code: "primary_asset_requires_replacement",
+    message: "Promote a verified replacement before removing the current primary image.",
+  });
+  assertEquals({ status: path.status, code: path.code, message: path.message }, {
+    status: 409,
+    code: "asset_storage_path_not_governed",
+    message: "This legacy asset is not eligible for governed storage removal.",
+  });
+});

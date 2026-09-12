@@ -25,6 +25,20 @@ export async function callAuthenticatedRPC(
 }
 
 export function safeRPCError(error: { code?: string; message?: string }) {
+  if (error.code === "55000" && error.message === "CATALOGUE_PRIMARY_ASSET_REQUIRES_REPLACEMENT") {
+    return new V1RequestError(
+      409,
+      "primary_asset_requires_replacement",
+      "Promote a verified replacement before removing the current primary image.",
+    );
+  }
+  if (error.code === "55000" && error.message === "CATALOGUE_ASSET_STORAGE_PATH_NOT_GOVERNED") {
+    return new V1RequestError(
+      409,
+      "asset_storage_path_not_governed",
+      "This legacy asset is not eligible for governed storage removal.",
+    );
+  }
   if (error.code === "55000" && error.message === "ACTIVE_FULFILMENTS_REQUIRE_RESOLUTION") {
     return new V1RequestError(
       409,

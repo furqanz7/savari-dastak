@@ -14,6 +14,12 @@ describe("merchant evidence validation", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("accepts decodable WebP catalogue imagery", async () => {
+    vi.stubGlobal("createImageBitmap", vi.fn().mockResolvedValue({ width: 800, height: 800, close: vi.fn() }));
+    const file = new File([new Uint8Array([1, 2, 3])], "product.webp", { type: "image/webp" });
+    await expect(validateDecodableImage(file, 5 * 1024 * 1024)).resolves.toBe(true);
+  });
+
   it("rejects MIME-spoofed, undecodable, empty, and oversized files", async () => {
     vi.stubGlobal("createImageBitmap", vi.fn().mockRejectedValue(new Error("decode failed")));
     await expect(validateDecodableImage(new File(["not an image"], "fake.jpg", { type: "image/jpeg" }))).resolves.toBe(false);

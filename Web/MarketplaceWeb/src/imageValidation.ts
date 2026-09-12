@@ -1,4 +1,4 @@
-const acceptedImageTypes = new Set(["image/jpeg", "image/png", "image/heic"]);
+const acceptedImageTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/heic"]);
 
 export async function validateDecodableImage(file: File, maximumBytes = 10 * 1024 * 1024) {
   if (!acceptedImageTypes.has(file.type) || file.size < 1 || file.size > maximumBytes) return false;

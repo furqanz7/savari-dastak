@@ -7,6 +7,7 @@ import {
   declareV1FulfilmentPackages,
   getV1AdminAccess,
   getV1AdminCatalogue,
+  getV1AdminCatalogueAssets,
   getV1AdminCataloguePage,
   getV1AdminCommandCenter,
   getV1AdminExecutionTrace,
@@ -47,6 +48,9 @@ import {
   setV1AdminDeliveryPartnerStatus,
   correctV1AdminMerchantBranchDetails,
   setV1ExecutiveAdmin,
+  promoteV1AdminCataloguePrimary,
+  removeV1AdminCatalogueAsset,
+  uploadV1AdminCatalogueAsset,
   updateV1AdminSku,
   updateV1MerchantBranchState,
   updateV1MerchantSkuSelection,
@@ -1004,6 +1008,34 @@ describe("Dastak V1 web contract", () => {
       activationReady: false,
       activationBlockers: ["DASTAK_PRICING_REQUIRED"],
     });
+  });
+
+  it("governs exact-SKU catalogue assets without exposing a browser-selected storage path", async () => {
+    const assetId = "88888888-8888-4888-8888-888888888888";
+    const requests: Array<{ contentType: string | null; idempotencyKey: string | null; body: unknown }> = [];
+    const fetcher = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      const body = init?.body instanceof FormData
+        ? Object.fromEntries([...init.body.entries()].filter(([key]) => key !== "file"))
+        : JSON.parse(String(init?.body));
+      requests.push({ contentType: headers.get("content-type"), idempotencyKey: headers.get("x-idempotency-key"), body });
+      const operation = (body as Record<string, unknown>).operation;
+      if (operation === "adminCatalogueAssets") return Response.json({
+        sku: { id: skuId, name: "Whole Wheat Atta", variant: null, packSize: "1 kg", slug: "whole-wheat-atta", status: "ACTIVE", assetVersion: 7 },
+        assets: [{ id: assetId, skuId, imageKey: `canonical/admin/${skuId}/${assetId}.png`, role: "GALLERY", sortOrder: 1, sourceType: "MANUFACTURER", hasSourceReference: true, checksumSha256: "a".repeat(64), widthPixels: 640, heightPixels: 480, mimeType: "image/png", status: "VERIFIED", rightsStatus: "CLEARED", version: 2, createdAt: "2026-09-13T08:00:00Z", verifiedAt: "2026-09-13T08:00:01Z", storageManaged: true, canRemove: true }],
+      });
+      return Response.json({ skuId, assetId, assetVersion: 8 });
+    };
+    const snapshot = await getV1AdminCatalogueAssets({ ...auth, skuId }, fetcher);
+    const file = new File([new Uint8Array([1, 2, 3])], "atta.png", { type: "image/png" });
+    await uploadV1AdminCatalogueAsset({ ...auth, skuId, expectedAssetVersion: 7, file, sourceType: "MANUFACTURER", sourceReference: "Manufacturer catalogue page", reason: "Exact product correction", idempotencyKey: "upload-once" }, fetcher);
+    await promoteV1AdminCataloguePrimary({ ...auth, skuId, assetId, expectedAssetVersion: 8, reason: "Exact product correction", idempotencyKey: "promote-once" }, fetcher);
+    await removeV1AdminCatalogueAsset({ ...auth, skuId, assetId, expectedAssetVersion: 9, reason: "Unused duplicate image", idempotencyKey: "remove-once" }, fetcher);
+    expect(snapshot).toMatchObject({ sku: { id: skuId, assetVersion: 7 }, assets: [{ id: assetId, skuId, canRemove: true }] });
+    expect(requests[1]).toMatchObject({ contentType: null, idempotencyKey: "upload-once", body: { operation: "uploadAdminCatalogueAsset", skuId, expectedAssetVersion: "7" } });
+    expect(requests[1].body).not.toHaveProperty("storageObjectPath");
+    expect(requests[2].body).toEqual({ operation: "promoteAdminCataloguePrimary", skuId, assetId, expectedPrimaryAssetId: null, expectedAssetVersion: 8, reason: "Exact product correction" });
+    expect(requests[3].body).toEqual({ operation: "removeAdminCatalogueAsset", skuId, assetId, expectedAssetVersion: 9, reason: "Unused duplicate image" });
   });
 
   it("loads the Admin taxonomy hierarchy with refresh-safe entity metadata", async () => {

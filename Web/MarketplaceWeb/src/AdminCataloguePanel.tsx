@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminPrivilegedActionDialog, type AdminPrivilegedActionIntent } from "./AdminPrivilegedActionDialog";
+import { AdminCatalogueAssets } from "./AdminCatalogueAssets";
 import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
   getV1AdminCatalogue, getV1AdminCataloguePage, importV1AdminCatalogue, updateV1AdminSku,
@@ -278,7 +279,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     </section> : null}
     {snapshot ? <details className="admin-catalogue-operations"><summary><Settings2 size={18} /><span><strong>Catalogue operations</strong><small>Counts, hierarchy and launch configuration</small></span><ChevronDown size={17} /></summary><div className="admin-catalogue-operations-body"><div className="v1-admin-summary"><Summary label="Departments" value={snapshot.categoryTypes.length} /><Summary label="Categories" value={snapshot.categories.length} /><Summary label="Subcategories" value={snapshot.subcategories.length} /><Summary label="Canonical SKUs" value={snapshot.skuCount} /><Summary label="Retail branches" value={snapshot.branches.length} /></div><section className="v1-admin-config"><header><Settings2 size={20} /><div><h3>Launch configuration</h3><p>Effective settings and validation state for the customer catalogue.</p></div></header><div>{snapshot.configuration.map((setting) => <article key={setting.key} className={!setting.valid || (setting.required && !setting.explicit) ? "attention" : ""}><code>{setting.key}</code><strong>{displayValue(setting.value)}</strong><span>{setting.explicit ? "Explicit" : "Default"} · {setting.valid ? "Valid" : "Invalid"}</span></article>)}</div></section></div></details> : null}
     <details className="v1-admin-import"><summary><Upload size={18} /><span><strong>Advanced atomic import</strong><small>Imports enter Draft and require taxonomy, QA, price and cleared imagery before activation</small></span><ChevronDown size={17} /></summary><form onSubmit={runImport}><label htmlFor="v1-catalogue-import">Catalogue JSON</label><textarea id="v1-catalogue-import" value={source} onChange={(event) => setSource(event.target.value)} rows={16} spellCheck={false} disabled={busy} /><p className="field-help">Use approved taxonomy slugs. A successful import does not make a product customer-visible.</p><button className="primary-button" type="submit" disabled={busy}>{busy ? "Importing…" : "Validate and import as Draft"}</button></form></details>
-    {editingSku ? <div className="v1-overlay admin-sku-overlay" role="presentation"><section className="v1-sheet admin-sku-sheet" role="dialog" aria-modal="true" aria-label={`Edit ${editingSku.name}`}><header><div><p>EXACT SKU</p><h2>{editingSku.name}</h2></div><button type="button" onClick={() => setEditingSku(undefined)} aria-label="Close product editor"><X size={19} /></button></header><SkuEditor sku={editingSku} taxonomy={snapshot} supabaseUrl={auth.supabaseUrl} disabled={busy} onSave={updateSku} /></section></div> : null}
+    {editingSku ? <div className="v1-overlay admin-sku-overlay" role="presentation"><section className="v1-sheet admin-sku-sheet" role="dialog" aria-modal="true" aria-label={`Edit ${editingSku.name}`}><header><div><p>EXACT SKU</p><h2>{editingSku.name}</h2></div><button type="button" onClick={() => setEditingSku(undefined)} aria-label="Close product editor"><X size={19} /></button></header><SkuEditor auth={auth} sku={editingSku} taxonomy={snapshot} supabaseUrl={auth.supabaseUrl} disabled={busy} onSave={updateSku} onCatalogueChanged={reconcileCatalogue} /></section></div> : null}
     {intent ? <AdminPrivilegedActionDialog intent={intent.dialog} busy={busy} error={error} notice={notice}
       reconciliationBlocked={reconciliationBlocked} onConfirm={() => confirmMutation()}
       onDismiss={() => { setIntent(undefined); setError(undefined); }}
@@ -341,7 +342,7 @@ function AdminSkuTile({ sku, supabaseUrl }: { sku: V1AdminCataloguePageSku; supa
   </span>;
 }
 
-function SkuEditor({ sku, taxonomy, supabaseUrl, disabled, onSave }: { sku: V1AdminCataloguePageSku; taxonomy?: V1AdminSnapshot; supabaseUrl: string; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void> }) {
+function SkuEditor({ auth, sku, taxonomy, supabaseUrl, disabled, onSave, onCatalogueChanged }: { auth: DastakV1Auth; sku: V1AdminCataloguePageSku; taxonomy?: V1AdminSnapshot; supabaseUrl: string; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void>; onCatalogueChanged: () => Promise<void> }) {
   const [name, setName] = useState(sku.name);
   const [variant, setVariant] = useState(sku.variant ?? "");
   const [packSize, setPackSize] = useState(sku.packSize);
@@ -405,6 +406,8 @@ function SkuEditor({ sku, taxonomy, supabaseUrl, disabled, onSave }: { sku: V1Ad
       <span className={`v1-admin-status ${sku.activationReady ? "active" : "inactive"}`}><BadgeCheck size={15} /><span><b>{label(sku.qaStatus)}</b><small>{sku.activationReady ? "Ready to activate" : blockerSummary(sku.activationBlockers)}</small></span></span>
       <button className="secondary-button" type="submit" disabled={disabled || !canSave}>{changed ? "Save changes" : "Up to date"}</button>
     </section>
+
+    <AdminCatalogueAssets auth={auth} sku={sku} onCatalogueChanged={onCatalogueChanged} />
 
     <details className="admin-sku-record">
       <summary><span><strong>Full product record</strong><small>Identity, classification, evidence, compliance and operations</small></span><ChevronDown size={17} /></summary>

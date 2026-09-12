@@ -2,6 +2,7 @@ import { assertEquals } from "jsr:@std/assert";
 import { V1RequestError } from "../../_shared/v1-rpc.ts";
 import {
   handleV1Catalogue,
+  inspectImage,
   type V1CatalogueDependencies,
 } from "../../dastak-v1-catalogue/handler.ts";
 
@@ -283,12 +284,21 @@ Deno.test("V1 Admin catalogue page rejects malformed filters before database acc
 
 Deno.test("V1 merchant stock rejects invalid counts before database access", async () => {
   let calls = 0;
-  const deps = dependencies({ updateMerchantSelections: () => { calls += 1; return Promise.resolve({}); } });
+  const deps = dependencies({
+    updateMerchantSelections: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
   for (const stockQuantity of [-1, 1.5, 1_000_001, 0]) {
-    const response = await handleV1Catalogue(request({
-      operation: "updateMerchantSelections", branchId: categoryId,
-      selections: [{ skuId, selected: true, expectedVersion: 0, stockQuantity }],
-    }, "invalid-stock"), deps);
+    const response = await handleV1Catalogue(
+      request({
+        operation: "updateMerchantSelections",
+        branchId: categoryId,
+        selections: [{ skuId, selected: true, expectedVersion: 0, stockQuantity }],
+      }, "invalid-stock"),
+      deps,
+    );
     assertEquals(response.status, 400);
   }
   assertEquals(calls, 0);
@@ -485,8 +495,13 @@ Deno.test("V1 Admin metadata avoids bulk SKU loading while retaining taxonomy", 
     dependencies({
       adminSnapshot: (input) => {
         snapshotInput = input;
-        return Promise.resolve({ skus: [{ id: skuId }], skuCount: 4_200, truncated: true,
-          configuration: [], branches: [] });
+        return Promise.resolve({
+          skus: [{ id: skuId }],
+          skuCount: 4_200,
+          truncated: true,
+          configuration: [],
+          branches: [],
+        });
       },
     }),
   );
@@ -509,6 +524,164 @@ Deno.test("V1 catalogue hides unexpected dependency details", async () => {
     (await body(response)).error.message,
     "The catalogue request could not be processed.",
   );
+});
+
+Deno.test("Admin catalogue assets remain caller-bound and exact-SKU scoped", async () => {
+  let recorded: unknown;
+  const response = await handleV1Catalogue(
+    request({ operation: "adminCatalogueAssets", skuId }),
+    dependencies({
+      adminCatalogueAssets: (input) => {
+        recorded = input;
+        return Promise.resolve({ sku: { id: skuId }, assets: [] });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accessToken: actor.accessToken, skuId });
+});
+
+Deno.test("Admin catalogue upload verifies bytes and preserves one logical operation", async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  const png = minimalPng(320, 240);
+  const form = new FormData();
+  form.set("operation", "uploadAdminCatalogueAsset");
+  form.set("skuId", skuId);
+  form.set("expectedAssetVersion", "7");
+  form.set("sourceType", "MANUFACTURER");
+  form.set("sourceReference", "Manufacturer product page reviewed by catalogue team");
+  form.set("reason", "Correct exact-SKU product imagery");
+  form.set("file", new File([png], "sku.png", { type: "image/png" }));
+  const assetId = "66666666-6666-4666-8666-666666666666";
+  const response = await handleV1Catalogue(
+    multipartRequest(form, "asset-upload-key"),
+    dependencies({
+      prepareAdminCatalogueAsset: (input) => {
+        calls.push({ step: "prepare", ...input });
+        return Promise.resolve({
+          assetId,
+          imageKey: `canonical/admin/${skuId}/${assetId}.png`,
+          assetVersion: 8,
+        });
+      },
+      storeAdminCatalogueAsset: (input) => {
+        calls.push({ step: "store", objectPath: input.objectPath, mimeType: input.mimeType });
+        return Promise.resolve();
+      },
+      finalizeAdminCatalogueAsset: (input) => {
+        calls.push({ step: "finalize", ...input });
+        return Promise.resolve({ assetVersion: 9, asset: { id: assetId } });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(calls[0].actorId, actor.accountId);
+  assertEquals(calls[0].idempotencyKey, "asset-upload-key:prepare");
+  assertEquals(calls[1], {
+    step: "store",
+    objectPath: `canonical/admin/${skuId}/${assetId}.png`,
+    mimeType: "image/png",
+  });
+  assertEquals(calls[2].expectedAssetVersion, 8);
+  assertEquals(calls[2].widthPixels, 320);
+  assertEquals(calls[2].heightPixels, 240);
+  assertEquals(calls[2].idempotencyKey, "asset-upload-key:finalize");
+});
+
+Deno.test("Admin catalogue upload rejects MIME spoofing before privileged work", async () => {
+  let calls = 0;
+  const form = new FormData();
+  form.set("operation", "uploadAdminCatalogueAsset");
+  form.set("skuId", skuId);
+  form.set("expectedAssetVersion", "1");
+  form.set("sourceType", "BRAND");
+  form.set("sourceReference", "Reviewed brand asset library");
+  form.set("reason", "Launch readiness");
+  form.set("file", new File(["not an image"], "fake.png", { type: "image/png" }));
+  const response = await handleV1Catalogue(
+    multipartRequest(form, "asset-spoof"),
+    dependencies({
+      prepareAdminCatalogueAsset: () => {
+        calls += 1;
+        return Promise.resolve({});
+      },
+    }),
+  );
+  assertEquals(response.status, 400);
+  assertEquals(calls, 0);
+});
+
+Deno.test("Admin primary promotion and removal forward actor scope and hide storage paths", async () => {
+  let promoted: unknown;
+  let removedPath = "";
+  const assetId = "66666666-6666-4666-8666-666666666666";
+  const promote = await handleV1Catalogue(
+    request({
+      operation: "promoteAdminCataloguePrimary",
+      skuId,
+      assetId,
+      expectedPrimaryAssetId: null,
+      expectedAssetVersion: 4,
+      reason: "Correct primary image",
+    }, "promote-key"),
+    dependencies({
+      promoteAdminCataloguePrimary: (input) => {
+        promoted = input;
+        return Promise.resolve({ primaryAssetId: assetId });
+      },
+    }),
+  );
+  const remove = await handleV1Catalogue(
+    request({
+      operation: "removeAdminCatalogueAsset",
+      skuId,
+      assetId,
+      expectedAssetVersion: 5,
+      reason: "Remove unused image",
+    }, "remove-key"),
+    dependencies({
+      removeAdminCatalogueAsset: () =>
+        Promise.resolve({ assetId, storageObjectPath: "canonical/imported/legacy-gallery.jpg" }),
+      deleteAdminCatalogueAsset: ({ objectPath }) => {
+        removedPath = objectPath;
+        return Promise.resolve();
+      },
+    }),
+  );
+  assertEquals(promote.status, 200);
+  assertEquals((promoted as { actorId: string }).actorId, actor.accountId);
+  assertEquals(remove.status, 200);
+  assertEquals(removedPath, "canonical/imported/legacy-gallery.jpg");
+  assertEquals((await body(remove)).storageObjectPath, undefined);
+});
+
+Deno.test("Admin catalogue removal refuses a non-catalogue storage path", async () => {
+  let deletionCalls = 0;
+  const assetId = "66666666-6666-4666-8666-666666666666";
+  const response = await handleV1Catalogue(
+    request({
+      operation: "removeAdminCatalogueAsset",
+      skuId,
+      assetId,
+      expectedAssetVersion: 5,
+      reason: "Remove unused image",
+    }, "remove-private-key"),
+    dependencies({
+      removeAdminCatalogueAsset: () =>
+        Promise.resolve({ assetId, storageObjectPath: "private/customer/avatar.jpg" }),
+      deleteAdminCatalogueAsset: () => {
+        deletionCalls += 1;
+        return Promise.resolve();
+      },
+    }),
+  );
+  assertEquals(response.status, 500);
+  assertEquals(deletionCalls, 0);
+});
+
+Deno.test("Image inspection accepts supported headers and rejects unrelated bytes", () => {
+  assertEquals(inspectImage(minimalPng(16, 9)), { mimeType: "image/png", width: 16, height: 9 });
+  assertEquals(inspectImage(new TextEncoder().encode("not an image")), undefined);
 });
 
 const url = "http://localhost/functions/v1/dastak-v1-catalogue";
@@ -549,6 +722,15 @@ function dependencies(
         })),
     adminPage: overrides.adminPage ??
       (() => Promise.resolve({ skus: [], hasMore: false })),
+    adminCatalogueAssets: overrides.adminCatalogueAssets ?? (() => Promise.resolve({})),
+    prepareAdminCatalogueAsset: overrides.prepareAdminCatalogueAsset ?? (() => Promise.resolve({})),
+    finalizeAdminCatalogueAsset: overrides.finalizeAdminCatalogueAsset ??
+      (() => Promise.resolve({})),
+    promoteAdminCataloguePrimary: overrides.promoteAdminCataloguePrimary ??
+      (() => Promise.resolve({})),
+    removeAdminCatalogueAsset: overrides.removeAdminCatalogueAsset ?? (() => Promise.resolve({})),
+    storeAdminCatalogueAsset: overrides.storeAdminCatalogueAsset ?? (() => Promise.resolve()),
+    deleteAdminCatalogueAsset: overrides.deleteAdminCatalogueAsset ?? (() => Promise.resolve()),
     merchantSnapshot: overrides.merchantSnapshot ??
       (() => Promise.resolve(snapshot)),
     merchantRestaurantMenu: overrides.merchantRestaurantMenu ??
@@ -564,6 +746,23 @@ function dependencies(
     upsertRestaurantMenuEntity: overrides.upsertRestaurantMenuEntity ??
       (() => Promise.resolve({})),
   };
+}
+
+function multipartRequest(form: FormData, idempotencyKey: string) {
+  return new Request(url, {
+    method: "POST",
+    headers: { authorization: "Bearer session", "X-Idempotency-Key": idempotencyKey },
+    body: form,
+  });
+}
+
+function minimalPng(width: number, height: number) {
+  const bytes = new Uint8Array(24);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  return bytes;
 }
 
 function request(

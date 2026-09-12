@@ -36,6 +36,58 @@ export type V1CatalogueDependencies = {
     afterName: string | null;
     afterSkuId: string | null;
   }) => Promise<unknown>;
+  adminCatalogueAssets: (input: {
+    accessToken: string;
+    skuId: string;
+  }) => Promise<unknown>;
+  prepareAdminCatalogueAsset: (input: {
+    actorId: string;
+    skuId: string;
+    expectedAssetVersion: number;
+    mimeType: string;
+    byteSize: number;
+    sourceType: string;
+    sourceReference: string;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  finalizeAdminCatalogueAsset: (input: {
+    actorId: string;
+    skuId: string;
+    assetId: string;
+    expectedAssetVersion: number;
+    checksumSha256: string;
+    mimeType: string;
+    byteSize: number;
+    widthPixels: number;
+    heightPixels: number;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  promoteAdminCataloguePrimary: (input: {
+    actorId: string;
+    skuId: string;
+    assetId: string;
+    expectedPrimaryAssetId: string | null;
+    expectedAssetVersion: number;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  removeAdminCatalogueAsset: (input: {
+    actorId: string;
+    skuId: string;
+    assetId: string;
+    expectedAssetVersion: number;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  storeAdminCatalogueAsset: (input: {
+    objectPath: string;
+    bytes: Uint8Array;
+    mimeType: string;
+    checksumSha256: string;
+  }) => Promise<void>;
+  deleteAdminCatalogueAsset: (input: { objectPath: string }) => Promise<void>;
   merchantSnapshot: (input: {
     accessToken: string;
     branchId: string | null;
@@ -114,6 +166,14 @@ export async function handleV1Catalogue(
     return authenticationRequired();
   }
 
+  if (request.headers.get("content-type")?.toLowerCase().includes("multipart/form-data")) {
+    try {
+      return await uploadAdminCatalogueAsset(request, actor, dependencies);
+    } catch (error) {
+      return requestFailure(error);
+    }
+  }
+
   const body = await parseBody(request);
   if (!body || typeof body.operation !== "string") return validationError();
 
@@ -179,6 +239,20 @@ export async function handleV1Catalogue(
       }
       case "adminCataloguePage":
         return await adminCataloguePage(body, actor, dependencies);
+      case "adminCatalogueAssets": {
+        const skuId = requiredUUID(body.skuId);
+        if (!skuId) return validationError();
+        return json(
+          await dependencies.adminCatalogueAssets({
+            accessToken: actor.accessToken,
+            skuId,
+          }),
+        );
+      }
+      case "promoteAdminCataloguePrimary":
+        return await promoteAdminCataloguePrimary(request, body, actor, dependencies);
+      case "removeAdminCatalogueAsset":
+        return await removeAdminCatalogueAsset(request, body, actor, dependencies);
       case "merchantSnapshot": {
         const branchId = optionalUUID(body.branchId);
         const parsedLimit = optionalInteger(body.limit, 1, 5000);
@@ -254,6 +328,175 @@ export async function handleV1Catalogue(
   } catch (error) {
     return requestFailure(error);
   }
+}
+
+async function uploadAdminCatalogueAsset(
+  request: Request,
+  actor: V1Actor,
+  dependencies: V1CatalogueDependencies,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return validationError();
+  }
+  if (form.get("operation") !== "uploadAdminCatalogueAsset") return validationError();
+  const skuId = requiredUUID(form.get("skuId"));
+  const expectedAssetVersion = formInteger(form.get("expectedAssetVersion"), 1);
+  const sourceType = requiredChoice(form.get("sourceType"), [
+    "MANUFACTURER",
+    "BRAND",
+    "AUTHORIZED_RETAILER",
+    "DISTRIBUTOR",
+    "OWNER_CAPTURE",
+    "COMMODITY_STOCK",
+    "OTHER",
+  ]);
+  const sourceReference = requiredFormText(form.get("sourceReference"), 3, 500);
+  const reason = requiredFormText(form.get("reason"), 3, 500);
+  const file = form.get("file");
+  if (
+    !idempotencyKey || !skuId || expectedAssetVersion === undefined || !sourceType ||
+    !sourceReference || !reason || !(file instanceof File) || file.size < 1 ||
+    file.size > 5 * 1024 * 1024
+  ) return validationError();
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const inspected = inspectImage(bytes);
+  if (!inspected || inspected.mimeType !== file.type) return validationError();
+  const checksumSha256 = await sha256(bytes);
+  const prepared = record(
+    await dependencies.prepareAdminCatalogueAsset({
+      actorId: actor.accountId,
+      skuId,
+      expectedAssetVersion,
+      mimeType: inspected.mimeType,
+      byteSize: bytes.byteLength,
+      sourceType,
+      sourceReference,
+      reason,
+      idempotencyKey: `${idempotencyKey}:prepare`,
+    }),
+  );
+  const assetId = requiredUUID(prepared?.assetId);
+  const imageKey = typeof prepared?.imageKey === "string" ? prepared.imageKey : undefined;
+  const preparedVersion = optionalInteger(prepared?.assetVersion, 1, Number.MAX_SAFE_INTEGER);
+  const extension = inspected.mimeType === "image/png"
+    ? "png"
+    : inspected.mimeType === "image/webp"
+    ? "webp"
+    : "jpg";
+  const expectedPath = assetId ? `canonical/admin/${skuId}/${assetId}.${extension}` : "";
+  if (!assetId || !imageKey || imageKey !== expectedPath || preparedVersion === undefined) {
+    throw new V1RequestError(
+      500,
+      "invalid_asset_contract",
+      "The catalogue asset preparation result was invalid.",
+    );
+  }
+  await dependencies.storeAdminCatalogueAsset({
+    objectPath: imageKey,
+    bytes,
+    mimeType: inspected.mimeType,
+    checksumSha256,
+  });
+  return json(
+    await dependencies.finalizeAdminCatalogueAsset({
+      actorId: actor.accountId,
+      skuId,
+      assetId,
+      expectedAssetVersion: preparedVersion,
+      checksumSha256,
+      mimeType: inspected.mimeType,
+      byteSize: bytes.byteLength,
+      widthPixels: inspected.width,
+      heightPixels: inspected.height,
+      reason,
+      idempotencyKey: `${idempotencyKey}:finalize`,
+    }),
+  );
+}
+
+async function promoteAdminCataloguePrimary(
+  request: Request,
+  body: Record<string, unknown>,
+  actor: V1Actor,
+  dependencies: V1CatalogueDependencies,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const skuId = requiredUUID(body.skuId);
+  const assetId = requiredUUID(body.assetId);
+  const expectedPrimaryAssetId = optionalUUID(body.expectedPrimaryAssetId);
+  const expectedAssetVersion = optionalInteger(
+    body.expectedAssetVersion,
+    1,
+    Number.MAX_SAFE_INTEGER,
+  );
+  const reason = requiredText(body.reason, 3, 500);
+  if (
+    !idempotencyKey || !skuId || !assetId || expectedPrimaryAssetId === undefined ||
+    expectedAssetVersion === undefined || !reason
+  ) return validationError();
+  return json(
+    await dependencies.promoteAdminCataloguePrimary({
+      actorId: actor.accountId,
+      skuId,
+      assetId,
+      expectedPrimaryAssetId,
+      expectedAssetVersion,
+      reason,
+      idempotencyKey,
+    }),
+  );
+}
+
+async function removeAdminCatalogueAsset(
+  request: Request,
+  body: Record<string, unknown>,
+  actor: V1Actor,
+  dependencies: V1CatalogueDependencies,
+) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  const skuId = requiredUUID(body.skuId);
+  const assetId = requiredUUID(body.assetId);
+  const expectedAssetVersion = optionalInteger(
+    body.expectedAssetVersion,
+    1,
+    Number.MAX_SAFE_INTEGER,
+  );
+  const reason = requiredText(body.reason, 3, 500);
+  if (!idempotencyKey || !skuId || !assetId || expectedAssetVersion === undefined || !reason) {
+    return validationError();
+  }
+  const result = record(
+    await dependencies.removeAdminCatalogueAsset({
+      actorId: actor.accountId,
+      skuId,
+      assetId,
+      expectedAssetVersion,
+      reason,
+      idempotencyKey,
+    }),
+  );
+  const objectPath = typeof result?.storageObjectPath === "string"
+    ? result.storageObjectPath
+    : undefined;
+  if (
+    !objectPath ||
+    !/^canonical\/[A-Za-z0-9/_-]+\.(jpg|jpeg|png|webp)$/.test(objectPath)
+  ) {
+    throw new V1RequestError(
+      500,
+      "invalid_asset_contract",
+      "The catalogue asset removal result was invalid.",
+    );
+  }
+  await dependencies.deleteAdminCatalogueAsset({ objectPath });
+  const safeResult = { ...(result ?? {}) };
+  delete safeResult.storageObjectPath;
+  return json(safeResult);
 }
 
 async function adminCataloguePage(
@@ -395,9 +638,19 @@ async function updateMerchantSelections(
     if (!skuId || expectedVersion === undefined || typeof item.selected !== "boolean") {
       return undefined;
     }
-    const stockQuantity = item.stockQuantity === undefined ? undefined : optionalInteger(item.stockQuantity, 0, 1_000_000);
-    if (item.stockQuantity !== undefined && (stockQuantity === undefined || (stockQuantity === 0 && item.selected))) return undefined;
-    return { skuId, selected: item.selected, expectedVersion, ...(stockQuantity === undefined ? {} : { stockQuantity }) };
+    const stockQuantity = item.stockQuantity === undefined
+      ? undefined
+      : optionalInteger(item.stockQuantity, 0, 1_000_000);
+    if (
+      item.stockQuantity !== undefined &&
+      (stockQuantity === undefined || (stockQuantity === 0 && item.selected))
+    ) return undefined;
+    return {
+      skuId,
+      selected: item.selected,
+      expectedVersion,
+      ...(stockQuantity === undefined ? {} : { stockQuantity }),
+    };
   });
   if (
     selections.some((item) => item === undefined) ||
@@ -536,6 +789,128 @@ function optionalText(
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length >= 1 && normalized.length <= maximum ? normalized : undefined;
+}
+
+function requiredText(value: unknown, minimum: number, maximum: number) {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized.length >= minimum && normalized.length <= maximum ? normalized : undefined;
+}
+
+function requiredFormText(value: FormDataEntryValue | null, minimum: number, maximum: number) {
+  return requiredText(typeof value === "string" ? value : undefined, minimum, maximum);
+}
+
+function requiredChoice(value: FormDataEntryValue | null, choices: readonly string[]) {
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return choices.includes(normalized) ? normalized : undefined;
+}
+
+function formInteger(value: FormDataEntryValue | null, minimum: number) {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum ? parsed : undefined;
+}
+
+type InspectedImage = {
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  width: number;
+  height: number;
+};
+
+export function inspectImage(bytes: Uint8Array): InspectedImage | undefined {
+  if (
+    bytes.length >= 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e &&
+    bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    const width = readU32BE(bytes, 16);
+    const height = readU32BE(bytes, 20);
+    return validDimensions(width, height) ? { mimeType: "image/png", width, height } : undefined;
+  }
+  if (bytes.length >= 12 && ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 4) === "WEBP") {
+    const dimensions = webpDimensions(bytes);
+    return dimensions ? { mimeType: "image/webp", ...dimensions } : undefined;
+  }
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    const dimensions = jpegDimensions(bytes);
+    return dimensions ? { mimeType: "image/jpeg", ...dimensions } : undefined;
+  }
+  return undefined;
+}
+
+function jpegDimensions(bytes: Uint8Array) {
+  let offset = 2;
+  while (offset + 8 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    if (marker === 0xd8 || marker === 0xd9) {
+      offset += 2;
+      continue;
+    }
+    const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+    if (length < 2 || offset + 2 + length > bytes.length) return undefined;
+    if (
+      [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(
+        marker,
+      )
+    ) {
+      const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
+      const width = (bytes[offset + 7] << 8) | bytes[offset + 8];
+      return validDimensions(width, height) ? { width, height } : undefined;
+    }
+    offset += 2 + length;
+  }
+  return undefined;
+}
+
+function webpDimensions(bytes: Uint8Array) {
+  const chunk = ascii(bytes, 12, 4);
+  if (chunk === "VP8X" && bytes.length >= 30) {
+    const width = 1 + bytes[24] + (bytes[25] << 8) + (bytes[26] << 16);
+    const height = 1 + bytes[27] + (bytes[28] << 8) + (bytes[29] << 16);
+    return validDimensions(width, height) ? { width, height } : undefined;
+  }
+  if (chunk === "VP8L" && bytes.length >= 25 && bytes[20] === 0x2f) {
+    const bits = bytes[21] | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24);
+    const width = (bits & 0x3fff) + 1;
+    const height = ((bits >> 14) & 0x3fff) + 1;
+    return validDimensions(width, height) ? { width, height } : undefined;
+  }
+  if (
+    chunk === "VP8 " && bytes.length >= 30 && bytes[23] === 0x9d && bytes[24] === 0x01 &&
+    bytes[25] === 0x2a
+  ) {
+    const width = ((bytes[27] << 8) | bytes[26]) & 0x3fff;
+    const height = ((bytes[29] << 8) | bytes[28]) & 0x3fff;
+    return validDimensions(width, height) ? { width, height } : undefined;
+  }
+  return undefined;
+}
+
+function validDimensions(width: number, height: number) {
+  return width >= 1 && width <= 20000 && height >= 1 && height <= 20000;
+}
+
+function readU32BE(bytes: Uint8Array, offset: number) {
+  return ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) |
+    bytes[offset + 3]) >>> 0;
+}
+
+function ascii(bytes: Uint8Array, offset: number, length: number) {
+  return String.fromCharCode(...bytes.slice(offset, offset + length));
+}
+
+async function sha256(bytes: Uint8Array) {
+  const input = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  const hash = await crypto.subtle.digest("SHA-256", input);
+  return [...new Uint8Array(hash)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 function optionalChoice(
