@@ -169,6 +169,31 @@ export type V1OrderDependencies = {
     afterUpdatedAt: string | null;
     afterRiderId: string | null;
   }) => Promise<unknown>;
+  getAdminCustomerRecoveryPage: (input: {
+    accessToken: string;
+    query: string | null;
+    accountId: string | null;
+    limit: number;
+    afterUpdatedAt: string | null;
+    afterAccountId: string | null;
+  }) => Promise<unknown>;
+  revokeAdminCustomerSessions: (input: {
+    accessToken: string;
+    accountId: string;
+    scope: "SINGLE" | "ALL";
+    sessionId: string | null;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  correctAdminCustomerPhone: (input: {
+    accessToken: string;
+    accountId: string;
+    reviewedCurrentPhone: string;
+    replacementPhone: string;
+    expectedPhoneClaimVersion: number;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
   setAdminDeliveryPartnerStatus: (input: {
     accessToken: string;
     riderId: string;
@@ -882,6 +907,77 @@ export async function handleV1Orders(
           afterRiderId,
         }));
       }
+      case "adminCustomerRecoveryPage": {
+        const query = nullableText(body.query, 100);
+        const accountId = nullableUUID(body.accountId);
+        const parsedLimit = integer(body.limit, 1, 100);
+        const cursor = record(body.cursor);
+        const afterUpdatedAt = cursor && validTimestamp(cursor.updatedAt)
+          ? cursor.updatedAt as string
+          : null;
+        const afterAccountId = cursor ? requiredUUID(cursor.accountId) ?? null : null;
+        if (
+          query === undefined || accountId === undefined ||
+          (body.limit !== null && body.limit !== undefined && parsedLimit === undefined) ||
+          (body.cursor !== null && body.cursor !== undefined && cursor === undefined) ||
+          (cursor !== undefined && (!afterUpdatedAt || !afterAccountId))
+        ) return validationError();
+        return json(await dependencies.getAdminCustomerRecoveryPage({
+          accessToken: actor.accessToken,
+          query,
+          accountId,
+          limit: parsedLimit ?? 50,
+          afterUpdatedAt,
+          afterAccountId,
+        }));
+      }
+      case "revokeAdminCustomerSessions": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const accountId = requiredUUID(body.accountId);
+        const scope = body.scope === "SINGLE" || body.scope === "ALL"
+          ? body.scope
+          : undefined;
+        const sessionId = body.sessionId === null || body.sessionId === undefined
+          ? null
+          : requiredUUID(body.sessionId);
+        const reason = requiredText(body.reason, 200);
+        if (!accountId || !scope || !reason || reason.length < 3 || !idempotencyKey ||
+          (scope === "SINGLE" && !sessionId) || (scope === "ALL" && sessionId !== null)) {
+          return validationError();
+        }
+        return json(await dependencies.revokeAdminCustomerSessions({
+          accessToken: actor.accessToken,
+          accountId,
+          scope,
+          sessionId: sessionId ?? null,
+          reason,
+          idempotencyKey,
+        }));
+      }
+      case "correctAdminCustomerPhone": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const accountId = requiredUUID(body.accountId);
+        const reviewedCurrentPhone = requiredPhone(body.reviewedCurrentPhone);
+        const replacementPhone = requiredPhone(body.replacementPhone);
+        const expectedPhoneClaimVersion = integer(
+          body.expectedPhoneClaimVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
+        const reason = requiredText(body.reason, 500);
+        if (!accountId || !reviewedCurrentPhone || !replacementPhone ||
+          reviewedCurrentPhone === replacementPhone || !expectedPhoneClaimVersion ||
+          !reason || reason.length < 3 || !idempotencyKey) return validationError();
+        return json(await dependencies.correctAdminCustomerPhone({
+          accessToken: actor.accessToken,
+          accountId,
+          reviewedCurrentPhone,
+          replacementPhone,
+          expectedPhoneClaimVersion,
+          reason,
+          idempotencyKey,
+        }));
+      }
       case "setAdminDeliveryPartnerStatus": {
         const idempotencyKey = requiredIdempotencyKey(request);
         const riderId = requiredUUID(body.riderId);
@@ -1405,6 +1501,12 @@ function requiredText(value: unknown, maximum: number) {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length >= 1 && normalized.length <= maximum ? normalized : undefined;
+}
+
+function requiredPhone(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return /^\+[1-9][0-9]{7,14}$/.test(normalized) ? normalized : undefined;
 }
 
 function nullableText(value: unknown, maximum: number): string | null | undefined {

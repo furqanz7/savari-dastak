@@ -60,6 +60,13 @@ export function safeRPCError(error: { code?: string; message?: string }) {
       "Use the existing recovery or release workflow before suspending this Delivery Partner.",
     );
   }
+  if (error.code === "23505" && error.message === "PHONE_NUMBER_ALREADY_CLAIMED") {
+    return new V1RequestError(
+      409,
+      "phone_number_in_use",
+      "That phone number is already claimed by another Dastak identity.",
+    );
+  }
   switch (error.code) {
     case "42501":
       return new V1RequestError(403, "access_denied", "This account cannot perform that action.");

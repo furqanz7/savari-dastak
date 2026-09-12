@@ -60,6 +60,7 @@ import { AdminNetworkPanel } from "./AdminNetworkPanel";
 import { AdminAuditHistoryPanel } from "./AdminAuditHistoryPanel";
 import { AdminMerchantGovernancePanel } from "./AdminMerchantGovernancePanel";
 import { AdminDeliveryPartnerGovernancePanel } from "./AdminDeliveryPartnerGovernancePanel";
+import { AdminCustomerRecoveryPanel } from "./AdminCustomerRecoveryPanel";
 import {
   getV1AdminAccess,
   getV1AdminCommandCenter,
@@ -100,7 +101,7 @@ type Props = {
 type AdminTab =
   | "overview" | "approvals" | "exceptions" | "orders" | "network" | "audit"
   | "catalogue" | "merchants" | "safety" | "finance" | "health" | "access"
-  | "riders" | "legacy" | "account";
+  | "riders" | "customers" | "legacy" | "account";
 
 type AdminBootstrapFeed =
   | "merchantApprovals"
@@ -434,6 +435,7 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
     { id: "audit", label: "Audit History", icon: <ScrollText size={18} /> },
     { id: "merchants", label: "Merchant governance", icon: <Building2 size={18} /> },
     { id: "riders", label: "Rider governance", icon: <Navigation size={18} /> },
+    { id: "customers", label: "Customer recovery", icon: <UsersRound size={18} /> },
     { id: "safety", label: "Safety controls", icon: <CircleAlert size={18} /> },
     { id: "finance", label: "Finance & Royalty", icon: <WalletCards size={18} /> },
     { id: "health", label: "System health", icon: <Activity size={18} /> },
@@ -473,6 +475,7 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
         : tab === "audit" ? <AdminAuditHistoryPanel auth={auth} />
         : tab === "merchants" ? <AdminMerchantGovernancePanel auth={auth} />
         : tab === "riders" ? <AdminDeliveryPartnerGovernancePanel auth={auth} />
+        : tab === "customers" ? <AdminCustomerRecoveryPanel auth={auth} />
         : tab === "catalogue" ? <AdminCataloguePanel auth={auth} />
         : tab === "orders" ? <AdminV1ExecutionPanel auth={auth} />
         : tab === "finance" ? <AdminRoyaltyPayoutPanel auth={auth} />
@@ -534,7 +537,7 @@ function tabTitle(tab: AdminTab) {
   return ({
     overview: "Command center", approvals: "Application approvals", exceptions: "Exception desk",
     orders: "Live order control", network: "Marketplace network", catalogue: "Master catalogue",
-    audit: "Audit History", merchants: "Merchant governance", riders: "Rider governance",
+    audit: "Audit History", merchants: "Merchant governance", riders: "Rider governance", customers: "Customer recovery",
     safety: "Safety controls", finance: "Finance & Royalty", health: "System health",
     access: "Admin access", legacy: "Historical orders", account: "My account",
   } satisfies Record<AdminTab, string>)[tab];
@@ -550,6 +553,7 @@ function tabDescription(tab: AdminTab) {
     audit: "Search reviewed, append-only operational history across current and legacy Dastak systems.",
     merchants: "Govern organization and branch eligibility, routing records and operational context.",
     riders: "Govern Delivery Partner eligibility while preserving active-work custody and availability controls.",
+    customers: "Review Customer sessions and correct governed contact claims without changing OAuth identity.",
     catalogue: "Control exact SKUs, evidence, QA readiness, pricing and visibility.",
     safety: "Manage scoped pauses and rider recovery without weakening custody.",
     finance: "Review earned Royalty and controlled payout readiness.",

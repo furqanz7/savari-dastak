@@ -596,8 +596,35 @@
 .admin-safety-branch-picker small { color: var(--text-secondary); font-size: 9px; line-height: 1.45; }
 .admin-safety-branch-picker .admin-picker-error { color: var(--destructive); }
 
+/* C2.4 uses the same governed-record language without exposing session or
+   identity recovery as an ordinary account-edit form. */
+.admin-customer-recovery-card > header > div { min-width: 0; }
+.admin-customer-recovery-card > header small { display: block; margin-top: 5px; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 9px; }
+.admin-customer-session-list, .admin-customer-phone-correction { display: grid; gap: 12px; padding: 16px; }
+.admin-customer-session-list { border-bottom: 1px solid var(--divider); }
+.admin-customer-recovery-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.admin-customer-recovery-heading > div, .admin-customer-phone-correction > div { display: flex; align-items: flex-start; gap: 8px; }
+.admin-customer-recovery-heading svg, .admin-customer-phone-correction > div svg { flex: 0 0 auto; margin-top: 2px; color: var(--dastak-accent); }
+.admin-customer-recovery-heading span, .admin-customer-phone-correction > div span { display: grid; gap: 2px; }
+.admin-customer-recovery-heading small, .admin-customer-phone-correction small { color: var(--text-secondary); font-size: 10px; line-height: 1.4; }
+.admin-customer-recovery-heading button { flex: 0 0 auto; margin: 0; }
+.admin-customer-session-list ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.admin-customer-session-list li { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px; border-radius: 12px; background: var(--surface-muted); }
+.admin-customer-session-list li > span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: var(--dastak-accent); background: var(--dastak-accent-soft); }
+.admin-customer-session-list li > div { min-width: 0; display: grid; gap: 3px; }
+.admin-customer-session-list li small { color: var(--text-secondary); font-size: 10px; }
+.admin-customer-session-list li code { overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); font-size: 9px; }
+.admin-customer-session-list li button { margin: 0; }
+.admin-customer-phone-correction { grid-template-columns: minmax(200px, 1fr) minmax(220px, 1fr) auto; align-items: end; background: var(--surface-raised); }
+.admin-customer-phone-correction label { min-width: 0; display: grid; gap: 5px; color: var(--text-secondary); font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.admin-customer-phone-correction input { width: 100%; min-width: 0; min-height: 44px; padding: 0 12px; border: 1px solid var(--divider); border-radius: 11px; outline: 0; color: var(--text-primary); background: var(--surface); font: inherit; letter-spacing: normal; text-transform: none; }
+.admin-customer-phone-correction input:focus-visible { border-color: var(--dastak-accent); box-shadow: 0 0 0 3px var(--dastak-accent-soft); }
+.admin-customer-phone-correction button { margin: 0; }
+
 @media (max-width: 900px) {
   .admin-governance-branch dl, .admin-branch-correction-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-customer-phone-correction { grid-template-columns: 1fr 1fr; }
+  .admin-customer-phone-correction > div { grid-column: 1 / -1; }
 }
 
 @media (max-width: 560px) {
@@ -610,4 +637,11 @@
   .admin-governance-card > footer button, .admin-branch-correction > footer button { width: 100%; }
   .admin-branch-correction > header { display: grid; }
   .admin-branch-correction > header small { text-align: left; }
+  .admin-customer-recovery-heading { align-items: stretch; }
+  .admin-customer-recovery-heading, .admin-customer-phone-correction { grid-template-columns: 1fr; }
+  .admin-customer-recovery-heading { display: grid; }
+  .admin-customer-recovery-heading button, .admin-customer-phone-correction button { width: 100%; }
+  .admin-customer-phone-correction > div { grid-column: auto; }
+  .admin-customer-session-list li { grid-template-columns: auto minmax(0, 1fr); }
+  .admin-customer-session-list li button { grid-column: 1 / -1; width: 100%; }
 }

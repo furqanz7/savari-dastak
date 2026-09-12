@@ -860,6 +860,41 @@ export type V1AdminDeliveryPartnerGovernancePage = {
   nextCursor?: { updatedAt: string; riderId: string };
 };
 
+export type V1AdminCustomerRecoveryRow = {
+  account: {
+    accountId: string;
+    displayName: string;
+    currentPhoneNumber: string;
+    maskedPhoneNumber: string;
+    email?: string;
+    accountState: string;
+    customerState: string;
+    createdAt: string;
+  };
+  phoneClaim: {
+    version: number;
+    state: string;
+    verificationSource: string;
+  };
+  identityProviders: string[];
+  activeSessionCount: number;
+  sessions: Array<{
+    sessionId: string;
+    deviceName: string;
+    platform: "ios" | "web";
+    appName: string;
+    createdAt: string;
+    lastSeenAt: string;
+  }>;
+  updatedAt: string;
+};
+
+export type V1AdminCustomerRecoveryPage = {
+  customers: V1AdminCustomerRecoveryRow[];
+  hasMore: boolean;
+  nextCursor?: { updatedAt: string; accountId: string };
+};
+
 export type V1AdminMerchantBranchChanges = {
   displayName?: string;
   address?: {
@@ -1158,6 +1193,67 @@ export async function setV1AdminDeliveryPartnerStatus(
     riderId: requiredUuid(input.riderId),
     status: input.status,
     expectedGovernanceVersion: input.expectedGovernanceVersion,
+    reason: input.reason.trim(),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function getV1AdminCustomerRecoveryPage(
+  input: DastakV1Auth & {
+    query?: string;
+    accountId?: string;
+    limit?: number;
+    cursor?: { updatedAt: string; accountId: string };
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminCustomerRecoveryPage> {
+  return parseAdminCustomerRecoveryPage(await invoke(input, "dastak-v1-orders", {
+    operation: "adminCustomerRecoveryPage",
+    query: input.query?.trim() || null,
+    accountId: input.accountId ? requiredUuid(input.accountId) : null,
+    limit: input.limit ?? 50,
+    cursor: input.cursor ?? null,
+  }, undefined, fetcher));
+}
+
+export async function revokeV1AdminCustomerSessions(
+  input: DastakV1Auth & {
+    accountId: string;
+    scope: "SINGLE" | "ALL";
+    sessionId?: string;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "revokeAdminCustomerSessions",
+    accountId: requiredUuid(input.accountId),
+    scope: input.scope,
+    sessionId: input.scope === "SINGLE" ? requiredUuid(input.sessionId) : null,
+    reason: input.reason.trim(),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function correctV1AdminCustomerPhone(
+  input: DastakV1Auth & {
+    accountId: string;
+    reviewedCurrentPhone: string;
+    replacementPhone: string;
+    expectedPhoneClaimVersion: number;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "correctAdminCustomerPhone",
+    accountId: requiredUuid(input.accountId),
+    reviewedCurrentPhone: requiredPhone(input.reviewedCurrentPhone),
+    replacementPhone: requiredPhone(input.replacementPhone),
+    expectedPhoneClaimVersion: input.expectedPhoneClaimVersion,
     reason: input.reason.trim(),
   }, input.idempotencyKey, fetcher));
 }
@@ -3293,6 +3389,59 @@ export function parseAdminDeliveryPartnerGovernancePage(value: unknown): V1Admin
   };
 }
 
+export function parseAdminCustomerRecoveryPage(value: unknown): V1AdminCustomerRecoveryPage {
+  const source = requiredRecord(value);
+  const cursor = source.nextCursor === null || source.nextCursor === undefined
+    ? undefined : requiredRecord(source.nextCursor);
+  return {
+    customers: requiredArray(source.customers).map(parseAdminCustomerRecoveryRow),
+    hasMore: requiredBoolean(source.hasMore),
+    nextCursor: cursor ? {
+      updatedAt: requiredTimestamp(cursor.updatedAt),
+      accountId: requiredUuid(cursor.accountId),
+    } : undefined,
+  };
+}
+
+function parseAdminCustomerRecoveryRow(value: unknown): V1AdminCustomerRecoveryRow {
+  const source = requiredRecord(value);
+  const account = requiredRecord(source.account);
+  const phoneClaim = requiredRecord(source.phoneClaim);
+  return {
+    account: {
+      accountId: requiredUuid(account.accountId),
+      displayName: requiredText(account.displayName, 160),
+      currentPhoneNumber: requiredPhone(account.currentPhoneNumber),
+      maskedPhoneNumber: requiredText(account.maskedPhoneNumber, 40),
+      email: optionalText(account.email, 320),
+      accountState: requiredText(account.accountState, 40),
+      customerState: requiredText(account.customerState, 40),
+      createdAt: requiredTimestamp(account.createdAt),
+    },
+    phoneClaim: {
+      version: requiredInteger(phoneClaim.version, 0),
+      state: requiredText(phoneClaim.state, 40),
+      verificationSource: requiredText(phoneClaim.verificationSource, 80),
+    },
+    identityProviders: requiredArray(source.identityProviders).map((provider) => requiredText(provider, 40)),
+    activeSessionCount: requiredInteger(source.activeSessionCount, 0),
+    sessions: requiredArray(source.sessions).map((value) => {
+      const session = requiredRecord(value);
+      const platform = requiredText(session.platform, 20);
+      if (platform !== "ios" && platform !== "web") invalid("Customer session platform");
+      return {
+        sessionId: requiredUuid(session.sessionId),
+        deviceName: requiredText(session.deviceName, 80),
+        platform: platform as "ios" | "web",
+        appName: requiredText(session.appName, 80),
+        createdAt: requiredTimestamp(session.createdAt),
+        lastSeenAt: requiredTimestamp(session.lastSeenAt),
+      };
+    }),
+    updatedAt: requiredTimestamp(source.updatedAt),
+  };
+}
+
 function parseAdminDeliveryPartnerGovernanceRow(value: unknown): V1AdminDeliveryPartnerGovernanceRow {
   const source = requiredRecord(value);
   const rider = requiredRecord(source.rider);
@@ -3662,6 +3811,11 @@ function requiredArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : invalid("array");
 }
 function requiredText(value: unknown, maximum: number) { return optionalText(value, maximum) ?? invalid("text"); }
+function requiredPhone(value: unknown) {
+  return typeof value === "string" && /^\+[1-9][0-9]{7,14}$/.test(value.trim())
+    ? value.trim()
+    : invalid("phone number");
+}
 function optionalText(value: unknown, maximum: number) {
   return value === null || value === undefined ? undefined
     : typeof value === "string" && value.trim().length > 0 && value.length <= maximum ? value : invalid("text");

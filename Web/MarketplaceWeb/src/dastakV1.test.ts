@@ -13,9 +13,11 @@ import {
   getV1AdminAuditHistory,
   getV1AdminMerchantGovernancePage,
   getV1AdminDeliveryPartnerGovernancePage,
+  getV1AdminCustomerRecoveryPage,
   getV1AdminNetworkPage,
   getV1AdminSystemHealth,
   getV1AdminOperationalSafety,
+  correctV1AdminCustomerPhone,
   getV1Catalogue,
   getV1Order,
   getV1Orders,
@@ -28,6 +30,7 @@ import {
   markV1FulfilmentReady,
   manageV1DeliveryRecovery,
   manageV1RiderEscalation,
+  revokeV1AdminCustomerSessions,
   merchantReadyEvidenceObjectPath,
   parseV1Catalogue,
   parseV1MerchantOperationFeeds,
@@ -818,6 +821,49 @@ describe("Dastak V1 web contract", () => {
         activeWork: { domain: "UNREVIEWED", id: orderId }, updatedAt: "2026-09-12T10:00:00Z",
       }], hasMore: false, nextCursor: null,
     }))).rejects.toThrow();
+  });
+
+  it("decodes privacy-bounded Customer recovery sessions and binds reviewed mutations", async () => {
+    const customerId = "88888888-8888-4888-8888-888888888888";
+    const sessionId = "99999999-9999-4999-8999-999999999999";
+    const bodies: unknown[] = [];
+    const fetcher = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      bodies.push(requestBody);
+      if (requestBody.operation === "adminCustomerRecoveryPage") return Response.json({
+        customers: [{
+          account: { accountId: customerId, displayName: "Furqan", currentPhoneNumber: "+919342068881", maskedPhoneNumber: "•••••••• 8881", email: "relay@example.test", accountState: "ACTIVE", customerState: "ACTIVE", createdAt: "2026-09-01T10:00:00Z" },
+          phoneClaim: { version: 3, state: "ACTIVE", verificationSource: "PROFILE_ENTRY" },
+          identityProviders: ["apple"], activeSessionCount: 1,
+          sessions: [{ sessionId, deviceName: "Furqan’s iPhone", platform: "ios", appName: "Dastak", createdAt: "2026-09-01T10:00:00Z", lastSeenAt: "2026-09-12T10:00:00Z" }],
+          updatedAt: "2026-09-12T10:00:00Z",
+        }], hasMore: false, nextCursor: null,
+      });
+      return Response.json({ accountId: customerId, updatedAt: "2026-09-12T10:01:00Z" });
+    };
+    const page = await getV1AdminCustomerRecoveryPage({ ...auth, query: " Furqan ", limit: 40 }, fetcher);
+    await revokeV1AdminCustomerSessions({ ...auth, accountId: customerId, scope: "SINGLE", sessionId, reason: " Lost device ", idempotencyKey: "session-key" }, fetcher);
+    await correctV1AdminCustomerPhone({ ...auth, accountId: customerId, reviewedCurrentPhone: "+919342068881", replacementPhone: "+919342068882", expectedPhoneClaimVersion: 3, reason: " Customer request ", idempotencyKey: "phone-key" }, fetcher);
+    expect(page.customers[0]).toMatchObject({
+      account: { accountId: customerId, maskedPhoneNumber: "•••••••• 8881" },
+      phoneClaim: { version: 3 }, activeSessionCount: 1,
+      sessions: [{ sessionId, platform: "ios" }],
+    });
+    expect(bodies).toEqual([
+      { operation: "adminCustomerRecoveryPage", query: "Furqan", accountId: null, limit: 40, cursor: null },
+      { operation: "revokeAdminCustomerSessions", accountId: customerId, scope: "SINGLE", sessionId, reason: "Lost device" },
+      { operation: "correctAdminCustomerPhone", accountId: customerId, reviewedCurrentPhone: "+919342068881", replacementPhone: "+919342068882", expectedPhoneClaimVersion: 3, reason: "Customer request" },
+    ]);
+  });
+
+  it("rejects Customer recovery projections containing malformed phones or session labels", async () => {
+    await expect(getV1AdminCustomerRecoveryPage(auth, async () => Response.json({
+      customers: [{
+        account: { accountId, displayName: "Customer", currentPhoneNumber: "9342068881", maskedPhoneNumber: "8881", accountState: "ACTIVE", customerState: "ACTIVE", createdAt: "2026-09-01T10:00:00Z" },
+        phoneClaim: { version: 1, state: "ACTIVE", verificationSource: "PROFILE_ENTRY" },
+        identityProviders: ["apple"], activeSessionCount: 0, sessions: [], updatedAt: "2026-09-12T10:00:00Z",
+      }], hasMore: false, nextCursor: null,
+    }))).rejects.toThrow(/phone/i);
   });
 
   it("loads the paginated exact-SKU Admin catalogue without raw import data", async () => {

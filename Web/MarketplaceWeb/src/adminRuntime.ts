@@ -16,6 +16,7 @@ export type AdminWorkspace =
   | "auditHistory"
   | "merchantGovernance"
   | "deliveryPartnerGovernance"
+  | "customerRecovery"
   | "catalogue";
 
 export type AdminRefreshWorkspace = AdminWorkspace | "legacyHistory";
@@ -53,6 +54,7 @@ export const adminWorkspaces: readonly AdminWorkspace[] = [
   "auditHistory",
   "merchantGovernance",
   "deliveryPartnerGovernance",
+  "customerRecovery",
   "catalogue",
 ];
 

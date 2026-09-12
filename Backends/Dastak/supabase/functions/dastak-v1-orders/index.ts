@@ -230,6 +230,31 @@ Deno.serve((request) =>
         p_after_updated_at: input.afterUpdatedAt,
         p_after_rider_id: input.afterRiderId,
       }),
+    getAdminCustomerRecoveryPage: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_customer_recovery_page", {
+        p_query: input.query,
+        p_account_id: input.accountId,
+        p_limit: input.limit,
+        p_after_updated_at: input.afterUpdatedAt,
+        p_after_account_id: input.afterAccountId,
+      }),
+    revokeAdminCustomerSessions: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_revoke_customer_sessions", {
+        p_account_id: input.accountId,
+        p_scope: input.scope,
+        p_session_id: input.sessionId,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    correctAdminCustomerPhone: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_correct_customer_phone", {
+        p_account_id: input.accountId,
+        p_reviewed_current_phone: input.reviewedCurrentPhone,
+        p_replacement_phone: input.replacementPhone,
+        p_expected_phone_claim_version: input.expectedPhoneClaimVersion,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     setAdminDeliveryPartnerStatus: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_set_delivery_partner_status", {
         p_rider_id: input.riderId,

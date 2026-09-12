@@ -59,3 +59,12 @@ Deno.test("shared V1 RPC errors expose reviewed rider governance conflicts safel
     code: "rider_active_work_requires_release",
   });
 });
+
+Deno.test("shared V1 RPC errors expose a claimed Customer phone without database detail", () => {
+  const claimed = safeRPCError({ code: "23505", message: "PHONE_NUMBER_ALREADY_CLAIMED" });
+  assertEquals({ status: claimed.status, code: claimed.code, message: claimed.message }, {
+    status: 409,
+    code: "phone_number_in_use",
+    message: "That phone number is already claimed by another Dastak identity.",
+  });
+});

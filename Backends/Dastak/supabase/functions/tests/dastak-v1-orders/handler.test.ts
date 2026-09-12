@@ -673,6 +673,99 @@ Deno.test("V1 Admin Delivery Partner governance rejects invalid status, cursor a
   assertEquals(calls, 0);
 });
 
+Deno.test("V1 Admin Customer recovery binds paging, reviewed session and phone contracts", async () => {
+  const recorded: Record<string, unknown> = {};
+  const accountId = "77777777-7777-4777-8777-777777777777";
+  const sessionId = "88888888-8888-4888-8888-888888888888";
+  const deps = dependencies({
+    getAdminCustomerRecoveryPage: (input) => {
+      recorded.page = input;
+      return Promise.resolve({ customers: [], hasMore: false, nextCursor: null });
+    },
+    revokeAdminCustomerSessions: (input) => {
+      recorded.revoke = input;
+      return Promise.resolve({ accountId, revokedSessionCount: 1 });
+    },
+    correctAdminCustomerPhone: (input) => {
+      recorded.phone = input;
+      return Promise.resolve({ accountId, phoneClaimVersion: 4 });
+    },
+  });
+  assertEquals((await handleV1Orders(request({
+    operation: "adminCustomerRecoveryPage",
+    query: "  Furqan  ",
+    accountId,
+    limit: 40,
+    cursor: { updatedAt: "2026-09-12T12:34:56.000Z", accountId },
+  }), deps)).status, 200);
+  assertEquals((await handleV1Orders(request({
+    operation: "revokeAdminCustomerSessions",
+    accountId,
+    scope: "SINGLE",
+    sessionId,
+    reason: "  Customer-reported lost device  ",
+  }, "revoke-session-key"), deps)).status, 200);
+  assertEquals((await handleV1Orders(request({
+    operation: "correctAdminCustomerPhone",
+    accountId,
+    reviewedCurrentPhone: "+919876543210",
+    replacementPhone: "+919876543211",
+    expectedPhoneClaimVersion: 3,
+    reason: "  Customer request — reviewed correction  ",
+  }, "phone-correction-key"), deps)).status, 200);
+
+  assertEquals(recorded.page, {
+    accessToken: actor.accessToken,
+    query: "Furqan",
+    accountId,
+    limit: 40,
+    afterUpdatedAt: "2026-09-12T12:34:56.000Z",
+    afterAccountId: accountId,
+  });
+  assertEquals(recorded.revoke, {
+    accessToken: actor.accessToken,
+    accountId,
+    scope: "SINGLE",
+    sessionId,
+    reason: "Customer-reported lost device",
+    idempotencyKey: "revoke-session-key",
+  });
+  assertEquals(recorded.phone, {
+    accessToken: actor.accessToken,
+    accountId,
+    reviewedCurrentPhone: "+919876543210",
+    replacementPhone: "+919876543211",
+    expectedPhoneClaimVersion: 3,
+    reason: "Customer request — reviewed correction",
+    idempotencyKey: "phone-correction-key",
+  });
+});
+
+Deno.test("V1 Admin Customer recovery rejects unreviewed session and phone inputs", async () => {
+  let calls = 0;
+  const accountId = "77777777-7777-4777-8777-777777777777";
+  const sessionId = "88888888-8888-4888-8888-888888888888";
+  const deps = dependencies({
+    getAdminCustomerRecoveryPage: () => { calls += 1; return Promise.resolve({}); },
+    revokeAdminCustomerSessions: () => { calls += 1; return Promise.resolve({}); },
+    correctAdminCustomerPhone: () => { calls += 1; return Promise.resolve({}); },
+  });
+  const candidates: Array<{ body: Record<string, unknown>; key?: string }> = [
+    { body: { operation: "adminCustomerRecoveryPage", limit: 101 } },
+    { body: { operation: "adminCustomerRecoveryPage", cursor: { updatedAt: "bad", accountId } } },
+    { body: { operation: "revokeAdminCustomerSessions", accountId, scope: "SINGLE", reason: "Reviewed" }, key: "key" },
+    { body: { operation: "revokeAdminCustomerSessions", accountId, scope: "ALL", sessionId, reason: "Reviewed" }, key: "key" },
+    { body: { operation: "revokeAdminCustomerSessions", accountId, scope: "SINGLE", sessionId, reason: "No key" } },
+    { body: { operation: "correctAdminCustomerPhone", accountId, reviewedCurrentPhone: "9876", replacementPhone: "+919876543211", expectedPhoneClaimVersion: 1, reason: "Reviewed" }, key: "key" },
+    { body: { operation: "correctAdminCustomerPhone", accountId, reviewedCurrentPhone: "+919876543210", replacementPhone: "+919876543210", expectedPhoneClaimVersion: 1, reason: "Reviewed" }, key: "key" },
+    { body: { operation: "correctAdminCustomerPhone", accountId, reviewedCurrentPhone: "+919876543210", replacementPhone: "+919876543211", expectedPhoneClaimVersion: 0, reason: "Reviewed" }, key: "key" },
+  ];
+  for (const candidate of candidates) {
+    assertEquals((await handleV1Orders(request(candidate.body, candidate.key), deps)).status, 400);
+  }
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 Executive assignment rejects extra slots and malformed email shape", async () => {
   let calls = 0;
   const deps = dependencies({
@@ -1385,6 +1478,12 @@ function dependencies(
       (() => Promise.resolve({ merchants: [], serviceZones: [], hasMore: false, nextCursor: null })),
     getAdminDeliveryPartnerGovernancePage: overrides.getAdminDeliveryPartnerGovernancePage ??
       (() => Promise.resolve({ deliveryPartners: [], hasMore: false, nextCursor: null })),
+    getAdminCustomerRecoveryPage: overrides.getAdminCustomerRecoveryPage ??
+      (() => Promise.resolve({ customers: [], hasMore: false, nextCursor: null })),
+    revokeAdminCustomerSessions: overrides.revokeAdminCustomerSessions ??
+      (() => Promise.resolve({})),
+    correctAdminCustomerPhone: overrides.correctAdminCustomerPhone ??
+      (() => Promise.resolve({})),
     setAdminDeliveryPartnerStatus: overrides.setAdminDeliveryPartnerStatus ??
       (() => Promise.resolve({})),
     setAdminMerchantOrganizationStatus: overrides.setAdminMerchantOrganizationStatus ??
