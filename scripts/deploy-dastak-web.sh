@@ -180,4 +180,4 @@ if [[ "$verified" != true ]]; then
   exit 1
 fi
 printf '%s deployment provenance verified: sha=%s variant=%s environment=%s deployment=%s url=%s\n' \
-  "$requested_role" "$commit_sha" "$expected_variant" "$actual_environment" "$actual_deployment_id" "$verification_url"
+  "$role" "$commit_sha" "$expected_variant" "$actual_environment" "$actual_deployment_id" "$verification_url"
