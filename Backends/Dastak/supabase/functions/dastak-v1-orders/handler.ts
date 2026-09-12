@@ -135,6 +135,22 @@ export type V1OrderDependencies = {
     afterUpdatedAt: string | null;
     afterAccountId: string | null;
   }) => Promise<unknown>;
+  getAdminAuditHistory: (input: {
+    accessToken: string;
+    fromOccurredAt: string | null;
+    toOccurredAt: string | null;
+    actorQuery: string | null;
+    action: string | null;
+    resourceType: string | null;
+    resourceId: string | null;
+    orderId: string | null;
+    branchId: string | null;
+    accountId: string | null;
+    eventId: string | null;
+    limit: number;
+    afterOccurredAt: string | null;
+    afterEventId: string | null;
+  }) => Promise<unknown>;
   setExecutiveAdmin: (input: {
     accessToken: string;
     slot: 1 | 2;
@@ -716,6 +732,50 @@ export async function handleV1Orders(
           }),
         );
       }
+      case "adminAuditHistory": {
+        const fromOccurredAt = nullableTimestamp(body.fromOccurredAt);
+        const toOccurredAt = nullableTimestamp(body.toOccurredAt);
+        const actorQuery = nullableText(body.actorQuery, 100);
+        const action = nullableText(body.action, 120);
+        const resourceType = nullableText(body.resourceType, 120);
+        const resourceId = nullableUUID(body.resourceId);
+        const orderId = nullableUUID(body.orderId);
+        const branchId = nullableUUID(body.branchId);
+        const accountId = nullableUUID(body.accountId);
+        const eventId = nullableAuditEventId(body.eventId);
+        const parsedLimit = integer(body.limit, 1, 100);
+        const cursor = record(body.cursor);
+        const afterOccurredAt = cursor && validTimestamp(cursor.occurredAt)
+          ? cursor.occurredAt as string
+          : null;
+        const parsedAfterEventId = cursor ? nullableAuditEventId(cursor.eventId) : null;
+        if (
+          fromOccurredAt === undefined || toOccurredAt === undefined ||
+          actorQuery === undefined || action === undefined || resourceType === undefined ||
+          resourceId === undefined || orderId === undefined || branchId === undefined ||
+          accountId === undefined || eventId === undefined ||
+          (body.limit !== null && body.limit !== undefined && parsedLimit === undefined) ||
+          (body.cursor !== null && body.cursor !== undefined && cursor === undefined) ||
+          parsedAfterEventId === undefined ||
+          (cursor !== undefined && (!afterOccurredAt || !parsedAfterEventId))
+        ) return validationError();
+        return json(await dependencies.getAdminAuditHistory({
+          accessToken: actor.accessToken,
+          fromOccurredAt,
+          toOccurredAt,
+          actorQuery,
+          action,
+          resourceType,
+          resourceId,
+          orderId,
+          branchId,
+          accountId,
+          eventId,
+          limit: parsedLimit ?? 50,
+          afterOccurredAt,
+            afterEventId: parsedAfterEventId ?? null,
+        }));
+      }
       case "setExecutiveAdmin": {
         const slot = body.slot === 1 || body.slot === 2 ? body.slot : undefined;
         const email = body.email === null || body.email === undefined
@@ -1154,6 +1214,27 @@ function requiredText(value: unknown, maximum: number) {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim().replace(/\s+/g, " ");
   return normalized.length >= 1 && normalized.length <= maximum ? normalized : undefined;
+}
+
+function nullableText(value: unknown, maximum: number): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  return requiredText(value, maximum);
+}
+
+function nullableUUID(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  return requiredUUID(value);
+}
+
+function nullableTimestamp(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  return validTimestamp(value) ? value as string : undefined;
+}
+
+function nullableAuditEventId(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || value.length > 80) return undefined;
+  return /^(legacy:[0-9a-f-]{36}|v1:\d+)$/i.test(value) ? value : undefined;
 }
 
 function validTimestamp(value: unknown) {

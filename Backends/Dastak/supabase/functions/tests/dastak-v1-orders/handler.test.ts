@@ -429,6 +429,73 @@ Deno.test("V1 Admin connected network rejects unsupported filters and incomplete
   ]);
 });
 
+Deno.test("V1 Admin Audit History binds reviewed filters and opaque cursor", async () => {
+  const recorded: Record<string, unknown> = {};
+  const eventId = "legacy:44444444-4444-4444-8444-444444444444";
+  const deps = dependencies({
+    getAdminAuditHistory: (input) => {
+      recorded.audit = input;
+      return Promise.resolve({ events: [], hasMore: false, nextCursor: null });
+    },
+  });
+  const response = await handleV1Orders(request({
+    operation: "adminAuditHistory",
+    fromOccurredAt: "2026-09-01T00:00:00.000Z",
+    toOccurredAt: "2026-09-13T23:59:59.000Z",
+    actorQuery: "  Furqan  ",
+    action: "  order.cancelled  ",
+    resourceType: "  order  ",
+    resourceId: orderId,
+    orderId,
+    branchId: skuId,
+    accountId: actor.accountId,
+    eventId,
+    limit: 40,
+    cursor: { occurredAt: "2026-09-10T12:34:56.000Z", eventId: "v1:901" },
+    rawMetadata: { accessToken: "must-not-forward" },
+  }), deps);
+
+  assertEquals(response.status, 200);
+  assertEquals(recorded.audit, {
+    accessToken: actor.accessToken,
+    fromOccurredAt: "2026-09-01T00:00:00.000Z",
+    toOccurredAt: "2026-09-13T23:59:59.000Z",
+    actorQuery: "Furqan",
+    action: "order.cancelled",
+    resourceType: "order",
+    resourceId: orderId,
+    orderId,
+    branchId: skuId,
+    accountId: actor.accountId,
+    eventId,
+    limit: 40,
+    afterOccurredAt: "2026-09-10T12:34:56.000Z",
+    afterEventId: "v1:901",
+  });
+});
+
+Deno.test("V1 Admin Audit History rejects invalid IDs, limits, times and cursors", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    getAdminAuditHistory: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
+  const bodies = [
+    { operation: "adminAuditHistory", eventId: "unscoped-id" },
+    { operation: "adminAuditHistory", resourceId: "bad" },
+    { operation: "adminAuditHistory", fromOccurredAt: "not-a-time" },
+    { operation: "adminAuditHistory", limit: 101 },
+    { operation: "adminAuditHistory", cursor: { occurredAt: "2026-09-10T12:34:56.000Z" } },
+    { operation: "adminAuditHistory", cursor: { occurredAt: "bad", eventId: "v1:1" } },
+  ];
+  for (const body of bodies) {
+    assertEquals((await handleV1Orders(request(body), deps)).status, 400);
+  }
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 Executive assignment rejects extra slots and malformed email shape", async () => {
   let calls = 0;
   const deps = dependencies({
@@ -1134,6 +1201,8 @@ function dependencies(
     getAdminCommandCenter: overrides.getAdminCommandCenter ??
       (() => Promise.resolve({})),
     getAdminNetworkPage: overrides.getAdminNetworkPage ??
+      (() => Promise.resolve({})),
+    getAdminAuditHistory: overrides.getAdminAuditHistory ??
       (() => Promise.resolve({})),
     setExecutiveAdmin: overrides.setExecutiveAdmin ??
       (() => Promise.resolve({})),

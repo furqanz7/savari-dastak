@@ -10,6 +10,7 @@ import {
   getV1AdminCataloguePage,
   getV1AdminCommandCenter,
   getV1AdminExecutionTrace,
+  getV1AdminAuditHistory,
   getV1AdminNetworkPage,
   getV1AdminSystemHealth,
   getV1AdminOperationalSafety,
@@ -628,6 +629,83 @@ describe("Dastak V1 web contract", () => {
         cursor: { updatedAt: "2026-08-31T12:00:00Z", accountId },
       },
     ]);
+  });
+
+  it("loads only the reviewed paginated Admin Audit History contract", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const page = await getV1AdminAuditHistory({
+      ...auth,
+      fromOccurredAt: "2026-09-01T00:00:00Z",
+      actorQuery: "  Furqan  ",
+      action: " order.cancelled ",
+      resourceType: " order ",
+      orderId,
+      limit: 25,
+      cursor: { occurredAt: "2026-09-10T12:00:00Z", eventId: "v1:41" },
+    }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        events: [{
+          source: "V1",
+          eventId: "v1:42",
+          occurredAt: "2026-09-10T12:30:00Z",
+          actor: { id: accountId, displayName: "Furqan" },
+          action: "order.cancelled",
+          resource: { type: "order", id: orderId },
+          reason: "Customer confirmed cancellation",
+          summary: { fromStatus: "PREPARING", toStatus: "CANCELLED", version: 7 },
+          references: { orderId, branchId: null, accountId: null },
+          rawMetadata: { accessToken: "must-not-be-consumed" },
+        }],
+        hasMore: true,
+        nextCursor: { occurredAt: "2026-09-10T12:30:00Z", eventId: "v1:42" },
+      });
+    });
+
+    expect(requestBody).toEqual({
+      operation: "adminAuditHistory",
+      fromOccurredAt: "2026-09-01T00:00:00Z",
+      toOccurredAt: null,
+      actorQuery: "Furqan",
+      action: "order.cancelled",
+      resourceType: "order",
+      resourceId: null,
+      orderId,
+      branchId: null,
+      accountId: null,
+      eventId: null,
+      limit: 25,
+      cursor: { occurredAt: "2026-09-10T12:00:00Z", eventId: "v1:41" },
+    });
+    expect(page).toEqual({
+      events: [{
+        source: "V1",
+        eventId: "v1:42",
+        occurredAt: "2026-09-10T12:30:00Z",
+        actor: { id: accountId, displayName: "Furqan" },
+        action: "order.cancelled",
+        resource: { type: "order", id: orderId },
+        reason: "Customer confirmed cancellation",
+        summary: { fromStatus: "PREPARING", toStatus: "CANCELLED", version: 7 },
+        references: { orderId, branchId: undefined, accountId: undefined },
+      }],
+      hasMore: true,
+      nextCursor: { occurredAt: "2026-09-10T12:30:00Z", eventId: "v1:42" },
+    });
+  });
+
+  it("rejects unscoped Audit History IDs and unreviewed nested summaries", async () => {
+    await expect(getV1AdminAuditHistory({ ...auth, eventId: "42" }, vi.fn())).rejects.toThrow();
+    await expect(getV1AdminAuditHistory(auth, async () => Response.json({
+      events: [{
+        source: "V1", eventId: "v1:42", occurredAt: "2026-09-10T12:30:00Z",
+        actor: { displayName: "System" }, action: "system.event",
+        resource: { type: "system" }, reason: null,
+        summary: { raw: { token: "secret" } }, references: {},
+      }],
+      hasMore: false,
+      nextCursor: null,
+    }))).rejects.toThrow();
   });
 
   it("loads the paginated exact-SKU Admin catalogue without raw import data", async () => {

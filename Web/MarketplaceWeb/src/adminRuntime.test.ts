@@ -15,11 +15,11 @@ import {
 describe("Admin runtime contracts", () => {
   it("accepts only authorized workspace invalidations and strips untrusted payload", () => {
     expect(parseAdminChangeSignal({ payload: {
-      workspaces: ["liveOrders", "network", "liveOrders", "not-a-workspace"],
+      workspaces: ["liveOrders", "network", "auditHistory", "liveOrders", "not-a-workspace"],
       entityId: "fc67d2b1-7d38-4e99-970e-c973049e4794",
       secret: "must-not-propagate",
     } })).toEqual({
-      workspaces: ["liveOrders", "network"],
+      workspaces: ["liveOrders", "network", "auditHistory"],
       entityId: "fc67d2b1-7d38-4e99-970e-c973049e4794",
     });
     expect(parseAdminChangeSignal({ payload: { workspaces: ["unknown"] } })).toBeUndefined();

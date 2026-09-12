@@ -752,6 +752,24 @@ export type V1AdminNetworkPage = {
   nextCursor?: { updatedAt: string; accountId: string };
 };
 
+export type V1AdminAuditEvent = {
+  source: "LEGACY" | "V1";
+  eventId: string;
+  occurredAt: string;
+  actor: { id?: string; displayName: string };
+  action: string;
+  resource: { type: string; id?: string };
+  reason?: string;
+  summary: Record<string, string | number | boolean>;
+  references: { orderId?: string; branchId?: string; accountId?: string };
+};
+
+export type V1AdminAuditHistoryPage = {
+  events: V1AdminAuditEvent[];
+  hasMore: boolean;
+  nextCursor?: { occurredAt: string; eventId: string };
+};
+
 export type V1AdminCataloguePageSku = V1AdminSku & {
   categoryTypeId?: string;
   categoryTypeName?: string;
@@ -934,6 +952,43 @@ export async function getV1AdminNetworkPage(
     query: input.query?.trim() || null,
     persona: input.persona ?? null,
     state: input.state ?? null,
+    limit: input.limit ?? 50,
+    cursor: input.cursor ?? null,
+  }, undefined, fetcher));
+}
+
+export async function getV1AdminAuditHistory(
+  input: DastakV1Auth & {
+    fromOccurredAt?: string;
+    toOccurredAt?: string;
+    actorQuery?: string;
+    action?: string;
+    resourceType?: string;
+    resourceId?: string;
+    orderId?: string;
+    branchId?: string;
+    accountId?: string;
+    eventId?: string;
+    limit?: number;
+    cursor?: { occurredAt: string; eventId: string };
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminAuditHistoryPage> {
+  const eventId = input.eventId?.trim();
+  if (eventId && !/^(legacy:[0-9a-f-]{36}|v1:\d+)$/i.test(eventId)) invalid("Admin audit event ID");
+  return parseAdminAuditHistoryPage(await invoke(input, "dastak-v1-orders", {
+    operation: "adminAuditHistory",
+    fromOccurredAt: input.fromOccurredAt ? requiredTimestamp(input.fromOccurredAt) : null,
+    toOccurredAt: input.toOccurredAt ? requiredTimestamp(input.toOccurredAt) : null,
+    actorQuery: input.actorQuery?.trim() || null,
+    action: input.action?.trim() || null,
+    resourceType: input.resourceType?.trim() || null,
+    resourceId: input.resourceId ? requiredUuid(input.resourceId) : null,
+    orderId: input.orderId ? requiredUuid(input.orderId) : null,
+    branchId: input.branchId ? requiredUuid(input.branchId) : null,
+    accountId: input.accountId ? requiredUuid(input.accountId) : null,
+    eventId: eventId || null,
     limit: input.limit ?? 50,
     cursor: input.cursor ?? null,
   }, undefined, fetcher));
@@ -2962,6 +3017,70 @@ export function parseAdminNetworkPage(value: unknown): V1AdminNetworkPage {
       accountId: requiredUuid(cursor.accountId),
     } : undefined,
   };
+}
+
+export function parseAdminAuditHistoryPage(value: unknown): V1AdminAuditHistoryPage {
+  const source = requiredRecord(value);
+  const cursor = source.nextCursor === null || source.nextCursor === undefined
+    ? undefined : requiredRecord(source.nextCursor);
+  return {
+    events: requiredArray(source.events).map(parseAdminAuditEvent),
+    hasMore: requiredBoolean(source.hasMore),
+    nextCursor: cursor ? {
+      occurredAt: requiredTimestamp(cursor.occurredAt),
+      eventId: auditEventId(cursor.eventId),
+    } : undefined,
+  };
+}
+
+function parseAdminAuditEvent(value: unknown): V1AdminAuditEvent {
+  const source = requiredRecord(value);
+  const actor = requiredRecord(source.actor);
+  const resource = requiredRecord(source.resource);
+  const references = requiredRecord(source.references);
+  const eventSource = requiredText(source.source, 10);
+  if (eventSource !== "LEGACY" && eventSource !== "V1") invalid("Admin audit source");
+  return {
+    source: eventSource,
+    eventId: auditEventId(source.eventId),
+    occurredAt: requiredTimestamp(source.occurredAt),
+    actor: {
+      id: actor.id === null || actor.id === undefined ? undefined : requiredUuid(actor.id),
+      displayName: requiredText(actor.displayName, 120),
+    },
+    action: requiredText(source.action, 120),
+    resource: {
+      type: requiredText(resource.type, 120),
+      id: resource.id === null || resource.id === undefined ? undefined : requiredUuid(resource.id),
+    },
+    reason: optionalText(source.reason, 500),
+    summary: auditSummary(source.summary),
+    references: {
+      orderId: optionalUuid(references.orderId),
+      branchId: optionalUuid(references.branchId),
+      accountId: optionalUuid(references.accountId),
+    },
+  };
+}
+
+function auditEventId(value: unknown) {
+  const parsed = requiredText(value, 80);
+  if (!/^(legacy:[0-9a-f-]{36}|v1:\d+)$/i.test(parsed)) invalid("Admin audit event ID");
+  return parsed;
+}
+
+function optionalUuid(value: unknown) {
+  return value === null || value === undefined ? undefined : requiredUuid(value);
+}
+
+function auditSummary(value: unknown): Record<string, string | number | boolean> {
+  const source = requiredRecord(value);
+  const result: Record<string, string | number | boolean> = {};
+  for (const [key, entry] of Object.entries(source)) {
+    if (typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean") result[key] = entry;
+    else invalid("Admin audit summary");
+  }
+  return result;
 }
 
 function parseAdminNetworkPerson(value: unknown): V1AdminNetworkPerson {

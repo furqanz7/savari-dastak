@@ -488,3 +488,56 @@
   .v1-health-grid { grid-template-columns: 1fr; }
   .v1-health-incidents article { display: grid; gap: 5px; }
 }
+
+/* C2.1 Audit History intentionally reuses the Admin surface, control and feed
+   language while keeping raw audit payloads outside the rendered contract. */
+.admin-audit { min-width: 0; }
+.admin-audit-filters { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(170px, .6fr) minmax(170px, .6fr) auto; gap: 9px; align-items: end; margin: 18px 0; }
+.admin-audit-filters > label:not(.admin-search), .admin-audit-advanced label { display: grid; gap: 5px; min-width: 0; }
+.admin-audit-filters label > span { color: var(--text-secondary); font-size: 9px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.admin-audit-filters > label:not(.admin-search) input, .admin-audit-advanced input { width: 100%; min-width: 0; min-height: 50px; padding: 0 13px; border: 1px solid var(--divider); border-radius: 13px; outline: 0; color: var(--text-primary); background: var(--surface-raised); font: inherit; }
+.admin-audit-filters input:focus-visible { border-color: var(--dastak-accent); box-shadow: 0 0 0 3px var(--dastak-accent-soft); }
+.admin-audit-filters > .primary-button { min-height: 50px; margin: 0; white-space: nowrap; }
+.admin-audit-advanced { grid-column: 1 / -1; border: 1px solid var(--divider); border-radius: 13px; background: var(--surface-raised); }
+.admin-audit-advanced > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 13px; cursor: pointer; list-style: none; font-size: 12px; font-weight: 800; }
+.admin-audit-advanced > summary::-webkit-details-marker { display: none; }
+.admin-audit-advanced[open] > summary svg { transform: rotate(180deg); }
+.admin-audit-advanced > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; padding: 13px; border-top: 1px solid var(--divider); }
+.admin-audit-advanced .secondary-button { align-self: end; min-height: 50px; margin: 0; }
+.admin-audit-list { overflow: hidden; border: 1px solid var(--divider); border-radius: 16px; background: var(--surface); }
+.admin-audit-event { min-width: 0; display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; padding: 16px; border-bottom: 1px solid var(--divider); content-visibility: auto; contain-intrinsic-size: auto 170px; }
+.admin-audit-event:last-of-type { border-bottom: 0; }
+.admin-audit-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; color: var(--dastak-accent); background: var(--dastak-accent-soft); }
+.admin-audit-main { min-width: 0; }
+.admin-audit-main > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.admin-audit-main > header > div { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.admin-audit-main > header b { overflow-wrap: anywhere; font-size: 14px; }
+.admin-audit-main time { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 11px; }
+.admin-audit-source { padding: 3px 7px; border: 1px solid var(--divider); border-radius: 999px; color: var(--text-secondary); font-size: 8px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+.admin-audit-source.v1 { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, var(--divider)); background: color-mix(in srgb, var(--success) 7%, transparent); }
+.admin-audit-main > p { margin: 5px 0 11px; color: var(--text-primary); font-size: 12px; }
+.admin-audit-main > p span { color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.admin-audit-main dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 0; }
+.admin-audit-main dl > div { min-width: 0; display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 7px; }
+.admin-audit-main dt { color: var(--text-secondary); font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.admin-audit-main dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+.admin-audit-main dd > span { display: inline-flex; gap: 4px; margin: 0 9px 3px 0; }
+.admin-audit-main dd > span b { color: var(--text-primary); font-size: inherit; }
+
+@media (max-width: 900px) {
+  .admin-audit-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-audit-filters .admin-search { grid-column: 1 / -1; }
+  .admin-audit-advanced > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .admin-audit-filters { grid-template-columns: 1fr; }
+  .admin-audit-filters .admin-search, .admin-audit-advanced { grid-column: 1; }
+  .admin-audit-advanced > div { grid-template-columns: 1fr; }
+  .admin-audit-event { grid-template-columns: 34px minmax(0, 1fr); gap: 9px; padding: 13px; }
+  .admin-audit-icon { width: 34px; height: 34px; border-radius: 10px; }
+  .admin-audit-main > header { display: grid; gap: 5px; }
+  .admin-audit-main time { justify-self: start; }
+  .admin-audit-main dl { grid-template-columns: 1fr; }
+  .admin-audit-main dl > div { grid-template-columns: 62px minmax(0, 1fr); }
+}

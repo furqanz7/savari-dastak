@@ -196,6 +196,22 @@ Deno.serve((request) =>
         p_after_updated_at: input.afterUpdatedAt,
         p_after_account_id: input.afterAccountId,
       }),
+    getAdminAuditHistory: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_audit_history_page", {
+        p_from_occurred_at: input.fromOccurredAt,
+        p_to_occurred_at: input.toOccurredAt,
+        p_actor_query: input.actorQuery,
+        p_action: input.action,
+        p_resource_type: input.resourceType,
+        p_resource_id: input.resourceId,
+        p_order_id: input.orderId,
+        p_branch_id: input.branchId,
+        p_account_id: input.accountId,
+        p_event_id: input.eventId,
+        p_limit: input.limit,
+        p_after_occurred_at: input.afterOccurredAt,
+        p_after_event_id: input.afterEventId,
+      }),
     setExecutiveAdmin: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_set_executive_admin", {
         p_slot: input.slot,

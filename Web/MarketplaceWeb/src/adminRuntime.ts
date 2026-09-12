@@ -13,6 +13,7 @@ export type AdminWorkspace =
   | "operationalSafety"
   | "royaltyPayouts"
   | "network"
+  | "auditHistory"
   | "catalogue";
 
 export type AdminRefreshWorkspace = AdminWorkspace | "legacyHistory";
@@ -47,6 +48,7 @@ export const adminWorkspaces: readonly AdminWorkspace[] = [
   "operationalSafety",
   "royaltyPayouts",
   "network",
+  "auditHistory",
   "catalogue",
 ];
 
