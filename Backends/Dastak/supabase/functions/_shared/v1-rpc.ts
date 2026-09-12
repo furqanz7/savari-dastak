@@ -46,6 +46,20 @@ export function safeRPCError(error: { code?: string; message?: string }) {
       "This delivery partner must complete the active job before another can be assigned.",
     );
   }
+  if (error.code === "P0001" && error.message === "RIDER_GOVERNANCE_SUSPENDED") {
+    return new V1RequestError(
+      409,
+      "rider_governance_suspended",
+      "This Delivery Partner is suspended and cannot become available or accept new work.",
+    );
+  }
+  if (error.code === "55000" && error.message === "RIDER_ACTIVE_WORK_REQUIRES_RELEASE") {
+    return new V1RequestError(
+      409,
+      "rider_active_work_requires_release",
+      "Use the existing recovery or release workflow before suspending this Delivery Partner.",
+    );
+  }
   switch (error.code) {
     case "42501":
       return new V1RequestError(403, "access_denied", "This account cannot perform that action.");

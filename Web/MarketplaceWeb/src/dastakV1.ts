@@ -819,6 +819,47 @@ export type V1AdminMerchantGovernancePage = {
   nextCursor?: { updatedAt: string; rowId: string };
 };
 
+export type V1AdminDeliveryPartnerGovernanceRow = {
+  rider: {
+    accountId: string;
+    displayName: string;
+    maskedPhoneNumber?: string;
+    accountState: string;
+  };
+  approval: {
+    applicationId: string;
+    status: string;
+    submittedAt: string;
+    reviewedAt?: string;
+    verificationVersion: number;
+    hasIdentityEvidence: boolean;
+    hasVehicleEvidence: boolean;
+  };
+  transportMethod: string;
+  governance: {
+    status: "ACTIVE" | "SUSPENDED";
+    version: number;
+    suspendedAt?: string;
+    reason?: string;
+  };
+  availability: {
+    status: "ONLINE" | "OFFLINE";
+    version: number;
+    availableUntil?: string;
+    lastSeenAt?: string;
+    serviceZone?: { id: string; name?: string };
+    trackingReceivedAt?: string;
+  };
+  activeWork?: { domain: "DASTAK_V1" | "RETURN" | "LEGACY_COURIER" | "PARCEL"; id: string };
+  updatedAt: string;
+};
+
+export type V1AdminDeliveryPartnerGovernancePage = {
+  deliveryPartners: V1AdminDeliveryPartnerGovernanceRow[];
+  hasMore: boolean;
+  nextCursor?: { updatedAt: string; riderId: string };
+};
+
 export type V1AdminMerchantBranchChanges = {
   displayName?: string;
   address?: {
@@ -1078,6 +1119,47 @@ export async function getV1AdminMerchantGovernancePage(
     limit: input.limit ?? 50,
     cursor: input.cursor ?? null,
   }, undefined, fetcher));
+}
+
+export async function getV1AdminDeliveryPartnerGovernancePage(
+  input: DastakV1Auth & {
+    query?: string;
+    riderId?: string;
+    status?: "ACTIVE" | "SUSPENDED";
+    limit?: number;
+    cursor?: { updatedAt: string; riderId: string };
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminDeliveryPartnerGovernancePage> {
+  return parseAdminDeliveryPartnerGovernancePage(await invoke(input, "dastak-v1-orders", {
+    operation: "adminDeliveryPartnerGovernancePage",
+    query: input.query?.trim() || null,
+    riderId: input.riderId ? requiredUuid(input.riderId) : null,
+    status: input.status ?? null,
+    limit: input.limit ?? 50,
+    cursor: input.cursor ?? null,
+  }, undefined, fetcher));
+}
+
+export async function setV1AdminDeliveryPartnerStatus(
+  input: DastakV1Auth & {
+    riderId: string;
+    status: "ACTIVE" | "SUSPENDED";
+    expectedGovernanceVersion: number;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "setAdminDeliveryPartnerStatus",
+    riderId: requiredUuid(input.riderId),
+    status: input.status,
+    expectedGovernanceVersion: input.expectedGovernanceVersion,
+    reason: input.reason.trim(),
+  }, input.idempotencyKey, fetcher));
 }
 
 export async function setV1AdminMerchantOrganizationStatus(
@@ -3194,6 +3276,82 @@ export function parseAdminMerchantGovernancePage(value: unknown): V1AdminMerchan
       updatedAt: requiredTimestamp(cursor.updatedAt),
       rowId: requiredUuid(cursor.rowId),
     } : undefined,
+  };
+}
+
+export function parseAdminDeliveryPartnerGovernancePage(value: unknown): V1AdminDeliveryPartnerGovernancePage {
+  const source = requiredRecord(value);
+  const cursor = source.nextCursor === null || source.nextCursor === undefined
+    ? undefined : requiredRecord(source.nextCursor);
+  return {
+    deliveryPartners: requiredArray(source.deliveryPartners).map(parseAdminDeliveryPartnerGovernanceRow),
+    hasMore: requiredBoolean(source.hasMore),
+    nextCursor: cursor ? {
+      updatedAt: requiredTimestamp(cursor.updatedAt),
+      riderId: requiredUuid(cursor.riderId),
+    } : undefined,
+  };
+}
+
+function parseAdminDeliveryPartnerGovernanceRow(value: unknown): V1AdminDeliveryPartnerGovernanceRow {
+  const source = requiredRecord(value);
+  const rider = requiredRecord(source.rider);
+  const approval = requiredRecord(source.approval);
+  const governance = requiredRecord(source.governance);
+  const availability = requiredRecord(source.availability);
+  const zone = availability.serviceZone === null || availability.serviceZone === undefined
+    ? undefined : requiredRecord(availability.serviceZone);
+  const activeWork = source.activeWork === null || source.activeWork === undefined
+    ? undefined : requiredRecord(source.activeWork);
+  const governanceStatus = requiredText(governance.status, 20);
+  if (governanceStatus !== "ACTIVE" && governanceStatus !== "SUSPENDED") invalid("Delivery Partner governance status");
+  const availabilityStatus = requiredText(availability.status, 20);
+  if (availabilityStatus !== "ONLINE" && availabilityStatus !== "OFFLINE") invalid("Delivery Partner availability status");
+  const workDomain = activeWork ? requiredText(activeWork.domain, 30) : undefined;
+  if (workDomain && !["DASTAK_V1", "RETURN", "LEGACY_COURIER", "PARCEL"].includes(workDomain)) {
+    invalid("Delivery Partner active-work domain");
+  }
+  return {
+    rider: {
+      accountId: requiredUuid(rider.accountId),
+      displayName: requiredText(rider.displayName, 160),
+      maskedPhoneNumber: optionalText(rider.maskedPhoneNumber, 40),
+      accountState: requiredText(rider.accountState, 40),
+    },
+    approval: {
+      applicationId: requiredUuid(approval.applicationId),
+      status: requiredText(approval.status, 40),
+      submittedAt: requiredTimestamp(approval.submittedAt),
+      reviewedAt: approval.reviewedAt === null || approval.reviewedAt === undefined
+        ? undefined : requiredTimestamp(approval.reviewedAt),
+      verificationVersion: requiredInteger(approval.verificationVersion, 1),
+      hasIdentityEvidence: requiredBoolean(approval.hasIdentityEvidence),
+      hasVehicleEvidence: requiredBoolean(approval.hasVehicleEvidence),
+    },
+    transportMethod: requiredText(source.transportMethod, 40),
+    governance: {
+      status: governanceStatus as "ACTIVE" | "SUSPENDED",
+      version: requiredInteger(governance.version, 1),
+      suspendedAt: governance.suspendedAt === null || governance.suspendedAt === undefined
+        ? undefined : requiredTimestamp(governance.suspendedAt),
+      reason: optionalText(governance.reason, 500),
+    },
+    availability: {
+      status: availabilityStatus as "ONLINE" | "OFFLINE",
+      version: requiredInteger(availability.version, 0),
+      availableUntil: availability.availableUntil === null || availability.availableUntil === undefined
+        ? undefined : requiredTimestamp(availability.availableUntil),
+      lastSeenAt: availability.lastSeenAt === null || availability.lastSeenAt === undefined
+        ? undefined : requiredTimestamp(availability.lastSeenAt),
+      serviceZone: zone ? { id: requiredUuid(zone.id), name: optionalText(zone.name, 120) } : undefined,
+      trackingReceivedAt: availability.trackingReceivedAt === null || availability.trackingReceivedAt === undefined
+        ? undefined : requiredTimestamp(availability.trackingReceivedAt),
+    },
+    activeWork: activeWork ? {
+      domain: workDomain as "DASTAK_V1" | "RETURN" | "LEGACY_COURIER" | "PARCEL",
+      id: requiredUuid(activeWork.id),
+    } : undefined,
+    updatedAt: requiredTimestamp(source.updatedAt),
   };
 }
 

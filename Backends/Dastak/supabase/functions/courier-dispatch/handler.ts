@@ -426,6 +426,8 @@ export async function handleCourierDispatch(
       RETURN_ARRIVAL_LOCATION_REQUIRED:
         "Move within 50 metres and wait for a fresh, accurate location before confirming this return stop.",
       RIDER_ACTIVE_WORK_CONFLICT: "Complete your active delivery before accepting another job.",
+      RIDER_GOVERNANCE_SUSPENDED:
+        "Your Delivery Partner access is suspended. Contact Dastak support before accepting work.",
       DELIVERY_PIN_REQUIRED: "Verify the customer PIN before taking the delivery photo.",
       DELIVERY_PHOTO_REQUIRED:
         "Take the package photo after PIN verification before collecting payment.",

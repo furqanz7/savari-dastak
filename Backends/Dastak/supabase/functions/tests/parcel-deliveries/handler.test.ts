@@ -216,6 +216,14 @@ Deno.test("assignment and lifecycle operations map to server-owned actions", asy
   }
 });
 
+Deno.test("suspended parcel acceptance remains structured and SQL-safe", async () => {
+  const response = await handleParcelDeliveries(
+    request({ body: { operation: "acknowledgeAssignment", assignmentId } }),
+    dependencies({ acknowledgeAssignment: () => Promise.reject(new Error("RIDER_GOVERNANCE_SUSPENDED")) }),
+  );
+  await assertError(response, 409, "rider_governance_suspended");
+});
+
 Deno.test("handoff transitions require six-digit codes", async () => {
   for (const operation of ["confirmPickup", "completeDelivery"]) {
     for (const verificationCode of [undefined, "1234", "12345a", "1234567"]) {

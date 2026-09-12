@@ -218,6 +218,15 @@ export async function handleParcelDeliveries(
     }
   } catch (error) {
     if (error instanceof ParcelRoutingUnavailableError) return routingUnavailable();
+    const message = error && typeof error === "object" && "message" in error
+      ? String(error.message)
+      : "";
+    if (message === "RIDER_GOVERNANCE_SUSPENDED") {
+      return json({ error: {
+        code: "rider_governance_suspended",
+        message: "Your Delivery Partner access is suspended. Contact Dastak support before accepting work.",
+      } }, 409);
+    }
     return internalError();
   }
 }

@@ -339,6 +339,14 @@ Deno.test("availability rejects missing online location and offline location pay
   await assertError(offlineLocation, 400, "validation_failed");
 });
 
+Deno.test("suspended availability failure remains structured and SQL-safe", async () => {
+  const response = await handleDeliveryPartners(
+    request({ body: { operation: "setAvailability", online: true, location: { latitude: 12.68, longitude: 78.62 } } }),
+    dependencies({ setAvailability: () => Promise.reject(new Error("RIDER_GOVERNANCE_SUSPENDED")) }),
+  );
+  await assertError(response, 409, "rider_governance_suspended");
+});
+
 Deno.test("location publication uses the authenticated partner and exact coordinates", async () => {
   let recorded: Record<string, unknown> | undefined;
   const response = await handleDeliveryPartners(

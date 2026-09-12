@@ -160,6 +160,23 @@ export type V1OrderDependencies = {
     afterUpdatedAt: string | null;
     afterRowId: string | null;
   }) => Promise<unknown>;
+  getAdminDeliveryPartnerGovernancePage: (input: {
+    accessToken: string;
+    query: string | null;
+    riderId: string | null;
+    status: "ACTIVE" | "SUSPENDED" | null;
+    limit: number;
+    afterUpdatedAt: string | null;
+    afterRiderId: string | null;
+  }) => Promise<unknown>;
+  setAdminDeliveryPartnerStatus: (input: {
+    accessToken: string;
+    riderId: string;
+    status: "ACTIVE" | "SUSPENDED";
+    expectedGovernanceVersion: number;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
   setAdminMerchantOrganizationStatus: (input: {
     accessToken: string;
     organizationId: string;
@@ -833,6 +850,60 @@ export async function handleV1Orders(
           limit: parsedLimit ?? 50,
           afterUpdatedAt,
           afterRowId,
+        }));
+      }
+      case "adminDeliveryPartnerGovernancePage": {
+        const query = nullableText(body.query, 100);
+        const riderId = nullableUUID(body.riderId);
+        const status = body.status === null || body.status === undefined
+          ? null
+          : body.status === "ACTIVE" || body.status === "SUSPENDED"
+          ? body.status
+          : undefined;
+        const parsedLimit = integer(body.limit, 1, 100);
+        const cursor = record(body.cursor);
+        const afterUpdatedAt = cursor && validTimestamp(cursor.updatedAt)
+          ? cursor.updatedAt as string
+          : null;
+        const afterRiderId = cursor ? requiredUUID(cursor.riderId) ?? null : null;
+        if (
+          query === undefined || riderId === undefined || status === undefined ||
+          (body.limit !== null && body.limit !== undefined && parsedLimit === undefined) ||
+          (body.cursor !== null && body.cursor !== undefined && cursor === undefined) ||
+          (cursor !== undefined && (!afterUpdatedAt || !afterRiderId))
+        ) return validationError();
+        return json(await dependencies.getAdminDeliveryPartnerGovernancePage({
+          accessToken: actor.accessToken,
+          query,
+          riderId,
+          status,
+          limit: parsedLimit ?? 50,
+          afterUpdatedAt,
+          afterRiderId,
+        }));
+      }
+      case "setAdminDeliveryPartnerStatus": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const riderId = requiredUUID(body.riderId);
+        const status = body.status === "ACTIVE" || body.status === "SUSPENDED"
+          ? body.status
+          : undefined;
+        const expectedGovernanceVersion = integer(
+          body.expectedGovernanceVersion,
+          1,
+          Number.MAX_SAFE_INTEGER,
+        );
+        const reason = requiredText(body.reason, 500);
+        if (!riderId || !status || !expectedGovernanceVersion || !reason || reason.length < 3 || !idempotencyKey) {
+          return validationError();
+        }
+        return json(await dependencies.setAdminDeliveryPartnerStatus({
+          accessToken: actor.accessToken,
+          riderId,
+          status,
+          expectedGovernanceVersion,
+          reason,
+          idempotencyKey,
         }));
       }
       case "setAdminMerchantOrganizationStatus": {

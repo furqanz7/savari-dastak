@@ -546,6 +546,11 @@
    reviewable records with explicit separation between eligibility and operations. */
 .admin-merchant-governance { min-width: 0; }
 .admin-governance-search { margin: 18px 0; }
+.admin-governance-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 220px); gap: 12px; align-items: end; margin: 18px 0; }
+.admin-governance-filters .admin-governance-search { margin: 0; }
+.admin-governance-filters > label:last-child { display: grid; gap: 6px; color: var(--text-secondary); font-size: 10px; font-weight: 750; }
+.admin-governance-filters select { min-height: 42px; padding: 0 12px; border: 1px solid var(--divider); border-radius: 12px; color: var(--text-primary); background: var(--surface); font: inherit; }
+.admin-governance-availability { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-secondary); font-size: 10px; }
 .admin-governance-list { display: grid; gap: 14px; }
 .admin-governance-card { min-width: 0; overflow: hidden; border: 1px solid var(--divider); border-radius: 16px; background: var(--surface); }
 .admin-governance-card > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 16px; border-bottom: 1px solid var(--divider); }
@@ -596,6 +601,7 @@
 }
 
 @media (max-width: 560px) {
+  .admin-governance-filters { grid-template-columns: 1fr; }
   .admin-governance-card > header { grid-template-columns: auto minmax(0, 1fr); }
   .admin-governance-statuses { grid-column: 1 / -1; justify-content: flex-start; }
   .admin-governance-branch dl, .admin-branch-correction-grid { grid-template-columns: 1fr; }

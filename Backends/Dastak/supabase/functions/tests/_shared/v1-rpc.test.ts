@@ -46,3 +46,16 @@ Deno.test("shared V1 RPC errors expose reviewed Merchant governance conflicts sa
     code: "active_pickup_or_return_work",
   });
 });
+
+Deno.test("shared V1 RPC errors expose reviewed rider governance conflicts safely", () => {
+  const suspended = safeRPCError({ code: "P0001", message: "RIDER_GOVERNANCE_SUSPENDED" });
+  const activeWork = safeRPCError({ code: "55000", message: "RIDER_ACTIVE_WORK_REQUIRES_RELEASE" });
+  assertEquals({ status: suspended.status, code: suspended.code }, {
+    status: 409,
+    code: "rider_governance_suspended",
+  });
+  assertEquals({ status: activeWork.status, code: activeWork.code }, {
+    status: 409,
+    code: "rider_active_work_requires_release",
+  });
+});

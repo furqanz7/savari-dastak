@@ -221,6 +221,23 @@ Deno.serve((request) =>
         p_after_updated_at: input.afterUpdatedAt,
         p_after_row_id: input.afterRowId,
       }),
+    getAdminDeliveryPartnerGovernancePage: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_delivery_partner_governance_page", {
+        p_query: input.query,
+        p_rider_id: input.riderId,
+        p_status: input.status,
+        p_limit: input.limit,
+        p_after_updated_at: input.afterUpdatedAt,
+        p_after_rider_id: input.afterRiderId,
+      }),
+    setAdminDeliveryPartnerStatus: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_set_delivery_partner_status", {
+        p_rider_id: input.riderId,
+        p_status: input.status,
+        p_expected_governance_version: input.expectedGovernanceVersion,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     setAdminMerchantOrganizationStatus: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_set_merchant_organization_status", {
         p_organization_id: input.organizationId,

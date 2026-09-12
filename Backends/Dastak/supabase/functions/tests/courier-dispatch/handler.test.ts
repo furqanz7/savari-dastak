@@ -514,6 +514,14 @@ Deno.test("accept forwards only the authenticated partner and assignment", async
   assertEquals("respondBy" in (recorded ?? {}), false);
 });
 
+Deno.test("suspended legacy offer acceptance remains structured and SQL-safe", async () => {
+  const response = await handleCourierDispatch(
+    request({ body: { operation: "acceptOffer", assignmentId } }),
+    dependencies({ acceptOffer: () => Promise.reject(new Error("RIDER_GOVERNANCE_SUSPENDED")) }),
+  );
+  await assertError(response, 409, "rider_governance_suspended");
+});
+
 Deno.test("decline normalizes the optional partner reason", async () => {
   let recorded: Record<string, unknown> | undefined;
   const response = await handleCourierDispatch(

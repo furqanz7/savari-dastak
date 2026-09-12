@@ -129,7 +129,16 @@ export async function handleDeliveryPartners(
       default:
         return validationError();
     }
-  } catch {
+  } catch (error) {
+    const message = error && typeof error === "object" && "message" in error
+      ? String(error.message)
+      : "";
+    if (message === "RIDER_GOVERNANCE_SUSPENDED") {
+      return json({ error: {
+        code: "rider_governance_suspended",
+        message: "Your Delivery Partner access is suspended. Contact Dastak support before going online.",
+      } }, 409);
+    }
     return internalError();
   }
 }

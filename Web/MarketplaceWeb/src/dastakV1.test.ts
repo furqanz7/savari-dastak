@@ -12,6 +12,7 @@ import {
   getV1AdminExecutionTrace,
   getV1AdminAuditHistory,
   getV1AdminMerchantGovernancePage,
+  getV1AdminDeliveryPartnerGovernancePage,
   getV1AdminNetworkPage,
   getV1AdminSystemHealth,
   getV1AdminOperationalSafety,
@@ -40,6 +41,7 @@ import {
   setV1OperationalPause,
   setV1AdminMerchantOrganizationStatus,
   setV1AdminMerchantBranchStatus,
+  setV1AdminDeliveryPartnerStatus,
   correctV1AdminMerchantBranchDetails,
   setV1ExecutiveAdmin,
   updateV1AdminSku,
@@ -768,6 +770,53 @@ describe("Dastak V1 web contract", () => {
         branch: { id: orderId, displayName: "Craft", status: "ACTIVE", version: 1, normalizedAddress: {}, latitude: 91, longitude: 0, serviceZone: {}, capacityLimit: 1, operationalState: { isOpen: false, acceptingOrders: false }, activeNonTerminalFulfilmentCount: 0, activePickupReturnWorkCount: 0, operationalPause: null },
         updatedAt: "2026-09-12T10:00:00Z",
       }], serviceZones: [], hasMore: false, nextCursor: null,
+    }))).rejects.toThrow();
+  });
+
+  it("decodes safe rider governance and binds the expected governance version", async () => {
+    const riderId = "77777777-7777-4777-8777-777777777777";
+    const bodies: unknown[] = [];
+    const fetcher = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      bodies.push(requestBody);
+      if (requestBody.operation === "adminDeliveryPartnerGovernancePage") return Response.json({
+        deliveryPartners: [{
+          rider: { accountId: riderId, displayName: "Furqan", maskedPhoneNumber: "•••• 8881", accountState: "ACTIVE" },
+          approval: { applicationId: skuId, status: "approved", submittedAt: "2026-09-01T10:00:00Z", reviewedAt: "2026-09-02T10:00:00Z", verificationVersion: 2, hasIdentityEvidence: true, hasVehicleEvidence: true },
+          transportMethod: "motorbike",
+          governance: { status: "ACTIVE", version: 4 },
+          availability: { status: "ONLINE", version: 8, availableUntil: "2026-09-12T10:15:00Z", lastSeenAt: "2026-09-12T10:00:00Z", serviceZone: { id: orderId, name: "Vaniyambadi" }, trackingReceivedAt: null },
+          activeWork: { domain: "RETURN", id: packageId },
+          updatedAt: "2026-09-12T10:00:00Z",
+        }],
+        hasMore: false,
+        nextCursor: null,
+      });
+      return Response.json({ riderId, status: "SUSPENDED", governanceVersion: 5, availabilityStatus: "OFFLINE", availabilityVersion: 9, updatedAt: "2026-09-12T10:01:00Z" });
+    };
+    const page = await getV1AdminDeliveryPartnerGovernancePage({ ...auth, query: " Furqan ", status: "ACTIVE", limit: 40 }, fetcher);
+    await setV1AdminDeliveryPartnerStatus({ ...auth, riderId, status: "SUSPENDED", expectedGovernanceVersion: 4, reason: " Safety review ", idempotencyKey: "rider-key" }, fetcher);
+    expect(page.deliveryPartners[0]).toMatchObject({
+      rider: { accountId: riderId, maskedPhoneNumber: "•••• 8881" },
+      governance: { status: "ACTIVE", version: 4 },
+      availability: { status: "ONLINE", serviceZone: { name: "Vaniyambadi" } },
+      activeWork: { domain: "RETURN", id: packageId },
+    });
+    expect(bodies).toEqual([
+      { operation: "adminDeliveryPartnerGovernancePage", query: "Furqan", riderId: null, status: "ACTIVE", limit: 40, cursor: null },
+      { operation: "setAdminDeliveryPartnerStatus", riderId, status: "SUSPENDED", expectedGovernanceVersion: 4, reason: "Safety review" },
+    ]);
+  });
+
+  it("rejects rider governance responses containing unreviewed active-work domains", async () => {
+    await expect(getV1AdminDeliveryPartnerGovernancePage(auth, async () => Response.json({
+      deliveryPartners: [{
+        rider: { accountId, displayName: "Rider", accountState: "ACTIVE" },
+        approval: { applicationId: skuId, status: "approved", submittedAt: "2026-09-01T10:00:00Z", verificationVersion: 1, hasIdentityEvidence: true, hasVehicleEvidence: false },
+        transportMethod: "bicycle", governance: { status: "ACTIVE", version: 1 },
+        availability: { status: "OFFLINE", version: 0 },
+        activeWork: { domain: "UNREVIEWED", id: orderId }, updatedAt: "2026-09-12T10:00:00Z",
+      }], hasMore: false, nextCursor: null,
     }))).rejects.toThrow();
   });
 

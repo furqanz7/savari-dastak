@@ -606,6 +606,73 @@ Deno.test("V1 Admin Merchant governance rejects unreviewed inputs before RPC", a
   assertEquals(calls, 0);
 });
 
+Deno.test("V1 Admin Delivery Partner governance binds paging and versioned commands", async () => {
+  const recorded: Record<string, unknown> = {};
+  const riderId = "66666666-6666-4666-8666-666666666666";
+  const deps = dependencies({
+    getAdminDeliveryPartnerGovernancePage: (input) => {
+      recorded.page = input;
+      return Promise.resolve({ deliveryPartners: [], hasMore: false, nextCursor: null });
+    },
+    setAdminDeliveryPartnerStatus: (input) => {
+      recorded.command = input;
+      return Promise.resolve({ riderId, status: "SUSPENDED", governanceVersion: 3 });
+    },
+  });
+  assertEquals((await handleV1Orders(request({
+    operation: "adminDeliveryPartnerGovernancePage",
+    query: "  Furqan  ",
+    riderId,
+    status: "ACTIVE",
+    limit: 40,
+    cursor: { updatedAt: "2026-09-12T12:34:56.000Z", riderId },
+  }), deps)).status, 200);
+  assertEquals((await handleV1Orders(request({
+    operation: "setAdminDeliveryPartnerStatus",
+    riderId,
+    status: "SUSPENDED",
+    expectedGovernanceVersion: 2,
+    reason: "  Safety review — verified incident  ",
+  }, "rider-governance-key"), deps)).status, 200);
+  assertEquals(recorded.page, {
+    accessToken: actor.accessToken,
+    query: "Furqan",
+    riderId,
+    status: "ACTIVE",
+    limit: 40,
+    afterUpdatedAt: "2026-09-12T12:34:56.000Z",
+    afterRiderId: riderId,
+  });
+  assertEquals(recorded.command, {
+    accessToken: actor.accessToken,
+    riderId,
+    status: "SUSPENDED",
+    expectedGovernanceVersion: 2,
+    reason: "Safety review — verified incident",
+    idempotencyKey: "rider-governance-key",
+  });
+});
+
+Deno.test("V1 Admin Delivery Partner governance rejects invalid status, cursor and command inputs", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    getAdminDeliveryPartnerGovernancePage: () => { calls += 1; return Promise.resolve({}); },
+    setAdminDeliveryPartnerStatus: () => { calls += 1; return Promise.resolve({}); },
+  });
+  const riderId = "66666666-6666-4666-8666-666666666666";
+  const candidates: Array<{ body: Record<string, unknown>; key?: string }> = [
+    { body: { operation: "adminDeliveryPartnerGovernancePage", status: "PAUSED" } },
+    { body: { operation: "adminDeliveryPartnerGovernancePage", cursor: { updatedAt: "bad", riderId } } },
+    { body: { operation: "setAdminDeliveryPartnerStatus", riderId, status: "OFFLINE", expectedGovernanceVersion: 1, reason: "Reviewed" }, key: "key" },
+    { body: { operation: "setAdminDeliveryPartnerStatus", riderId, status: "SUSPENDED", expectedGovernanceVersion: 0, reason: "Reviewed" }, key: "key" },
+    { body: { operation: "setAdminDeliveryPartnerStatus", riderId, status: "SUSPENDED", expectedGovernanceVersion: 1, reason: "No key" } },
+  ];
+  for (const candidate of candidates) {
+    assertEquals((await handleV1Orders(request(candidate.body, candidate.key), deps)).status, 400);
+  }
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 Executive assignment rejects extra slots and malformed email shape", async () => {
   let calls = 0;
   const deps = dependencies({
@@ -1316,6 +1383,10 @@ function dependencies(
       (() => Promise.resolve({})),
     getAdminMerchantGovernancePage: overrides.getAdminMerchantGovernancePage ??
       (() => Promise.resolve({ merchants: [], serviceZones: [], hasMore: false, nextCursor: null })),
+    getAdminDeliveryPartnerGovernancePage: overrides.getAdminDeliveryPartnerGovernancePage ??
+      (() => Promise.resolve({ deliveryPartners: [], hasMore: false, nextCursor: null })),
+    setAdminDeliveryPartnerStatus: overrides.setAdminDeliveryPartnerStatus ??
+      (() => Promise.resolve({})),
     setAdminMerchantOrganizationStatus: overrides.setAdminMerchantOrganizationStatus ??
       (() => Promise.resolve({})),
     setAdminMerchantBranchStatus: overrides.setAdminMerchantBranchStatus ??
