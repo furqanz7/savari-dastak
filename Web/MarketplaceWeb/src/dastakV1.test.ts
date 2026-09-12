@@ -11,6 +11,7 @@ import {
   getV1AdminCommandCenter,
   getV1AdminExecutionTrace,
   getV1AdminAuditHistory,
+  getV1AdminMerchantGovernancePage,
   getV1AdminNetworkPage,
   getV1AdminSystemHealth,
   getV1AdminOperationalSafety,
@@ -37,6 +38,9 @@ import {
   respondToV1MerchantOpportunity,
   submitV1Order,
   setV1OperationalPause,
+  setV1AdminMerchantOrganizationStatus,
+  setV1AdminMerchantBranchStatus,
+  correctV1AdminMerchantBranchDetails,
   setV1ExecutiveAdmin,
   updateV1AdminSku,
   updateV1MerchantBranchState,
@@ -705,6 +709,65 @@ describe("Dastak V1 web contract", () => {
       }],
       hasMore: false,
       nextCursor: null,
+    }))).rejects.toThrow();
+  });
+
+  it("decodes the bounded Merchant governance projection and binds governed mutations", async () => {
+    const organizationId = "77777777-7777-4777-8777-777777777777";
+    const branchId = "88888888-8888-4888-8888-888888888888";
+    const bodies: unknown[] = [];
+    const fetcher = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      bodies.push(requestBody);
+      if (requestBody.operation === "adminMerchantGovernancePage") return Response.json({
+        merchants: [{
+          organization: {
+            id: organizationId, displayName: "Craft", legalName: "Craft Foods Private Limited",
+            merchantType: "RESTAURANT_CAFE", status: "ACTIVE", version: 3,
+            activeNonTerminalFulfilmentCount: 1, activePickupReturnWorkCount: 0,
+          },
+          branch: {
+            id: branchId, displayName: "Craft Central", status: "ACTIVE", version: 5,
+            normalizedAddress: { line1: "128 Mandi Street", city: "Vaniyambadi", state: "Tamil Nadu", postalCode: "635751", countryCode: "IN" },
+            latitude: 12.6812, longitude: 78.6202,
+            serviceZone: { id: skuId, name: "Vaniyambadi" }, capacityLimit: 12,
+            operationalState: { isOpen: true, acceptingOrders: false, version: 4 },
+            activeNonTerminalFulfilmentCount: 1, activePickupReturnWorkCount: 0,
+            operationalPause: { id: packageId, active: true, reason: "Safety review", version: 2, updatedAt: "2026-09-12T10:00:00Z" },
+          },
+          updatedAt: "2026-09-12T10:00:00Z",
+        }],
+        serviceZones: [{ id: skuId, name: "Vaniyambadi" }],
+        hasMore: false,
+        nextCursor: null,
+      });
+      return Response.json({ status: requestBody.status ?? "ACTIVE", version: 6 });
+    };
+
+    const page = await getV1AdminMerchantGovernancePage({ ...auth, query: " Craft ", limit: 40 }, fetcher);
+    await setV1AdminMerchantOrganizationStatus({ ...auth, organizationId, status: "SUSPENDED", expectedVersion: 3, reason: " Reviewed compliance ", idempotencyKey: "org-key" }, fetcher);
+    await setV1AdminMerchantBranchStatus({ ...auth, branchId, status: "SUSPENDED", expectedVersion: 5, reason: " Reviewed branch ", idempotencyKey: "branch-key" }, fetcher);
+    await correctV1AdminMerchantBranchDetails({ ...auth, branchId, changes: { displayName: "Craft Central", capacityLimit: 12 }, expectedVersion: 5, reason: " Verified details ", idempotencyKey: "correction-key" }, fetcher);
+
+    expect(page.merchants[0]).toMatchObject({
+      organization: { id: organizationId, status: "ACTIVE", activeNonTerminalFulfilmentCount: 1 },
+      branch: { id: branchId, serviceZone: { name: "Vaniyambadi" }, operationalPause: { active: true } },
+    });
+    expect(bodies).toEqual([
+      { operation: "adminMerchantGovernancePage", query: "Craft", organizationId: null, branchId: null, limit: 40, cursor: null },
+      { operation: "setAdminMerchantOrganizationStatus", organizationId, status: "SUSPENDED", expectedVersion: 3, reason: "Reviewed compliance" },
+      { operation: "setAdminMerchantBranchStatus", branchId, status: "SUSPENDED", expectedVersion: 5, reason: "Reviewed branch" },
+      { operation: "correctAdminMerchantBranchDetails", branchId, changes: { displayName: "Craft Central", capacityLimit: 12 }, expectedVersion: 5, reason: "Verified details" },
+    ]);
+  });
+
+  it("rejects out-of-range Merchant governance coordinates from the server", async () => {
+    await expect(getV1AdminMerchantGovernancePage(auth, async () => Response.json({
+      merchants: [{
+        organization: { id: skuId, displayName: "Craft", legalName: "Craft", merchantType: "RETAIL", status: "ACTIVE", version: 1, activeNonTerminalFulfilmentCount: 0, activePickupReturnWorkCount: 0 },
+        branch: { id: orderId, displayName: "Craft", status: "ACTIVE", version: 1, normalizedAddress: {}, latitude: 91, longitude: 0, serviceZone: {}, capacityLimit: 1, operationalState: { isOpen: false, acceptingOrders: false }, activeNonTerminalFulfilmentCount: 0, activePickupReturnWorkCount: 0, operationalPause: null },
+        updatedAt: "2026-09-12T10:00:00Z",
+      }], serviceZones: [], hasMore: false, nextCursor: null,
     }))).rejects.toThrow();
   });
 

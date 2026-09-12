@@ -541,3 +541,67 @@
   .admin-audit-main dl { grid-template-columns: 1fr; }
   .admin-audit-main dl > div { grid-template-columns: 62px minmax(0, 1fr); }
 }
+
+/* C2.2 Merchant governance stays within the existing Admin system: compact,
+   reviewable records with explicit separation between eligibility and operations. */
+.admin-merchant-governance { min-width: 0; }
+.admin-governance-search { margin: 18px 0; }
+.admin-governance-list { display: grid; gap: 14px; }
+.admin-governance-card { min-width: 0; overflow: hidden; border: 1px solid var(--divider); border-radius: 16px; background: var(--surface); }
+.admin-governance-card > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 16px; border-bottom: 1px solid var(--divider); }
+.admin-governance-card > header h3, .admin-governance-card > header p { margin: 0; }
+.admin-governance-card > header p:not(.eyebrow) { margin-top: 3px; color: var(--text-secondary); font-size: 11px; }
+.admin-governance-statuses { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.admin-governance-status { display: grid; gap: 1px; padding: 7px 9px; border: 1px solid var(--divider); border-radius: 10px; background: var(--surface-raised); }
+.admin-governance-status small { color: var(--text-secondary); font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.admin-governance-status strong { font-size: 10px; }
+.admin-governance-status.active strong { color: var(--success); }
+.admin-governance-status.suspended strong, .admin-governance-status.closed strong { color: var(--destructive); }
+.admin-governance-branch { display: grid; gap: 13px; padding: 16px; }
+.admin-governance-branch > div:first-child { display: grid; gap: 4px; }
+.admin-governance-branch > div:first-child span { display: flex; align-items: flex-start; gap: 6px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.admin-governance-branch > div:first-child span svg { flex: 0 0 auto; margin-top: 2px; color: var(--dastak-accent); }
+.admin-governance-branch > div:first-child small { color: var(--text-secondary); font-size: 10px; }
+.admin-governance-branch dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.admin-governance-branch dl > div { min-width: 0; display: grid; gap: 4px; padding: 11px; border-radius: 11px; background: var(--surface-muted); }
+.admin-governance-branch dt { color: var(--text-secondary); font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.admin-governance-branch dd { margin: 0; overflow-wrap: anywhere; font-size: 11px; font-weight: 750; }
+.admin-governance-pause, .admin-governance-live { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11px; font-weight: 700; }
+.admin-governance-pause { color: var(--destructive); }
+.admin-governance-live { color: var(--success); }
+.admin-governance-card > footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 16px; border-top: 1px solid var(--divider); }
+.admin-governance-card > footer .secondary-button { margin: 0; }
+.admin-governance-card > footer > small { flex-basis: 100%; color: var(--text-secondary); font-size: 10px; }
+.admin-branch-correction { padding: 16px; border-top: 1px solid var(--divider); background: var(--surface-raised); }
+.admin-branch-correction > header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+.admin-branch-correction h4, .admin-branch-correction p { margin: 0; }
+.admin-branch-correction > header small { max-width: 300px; color: var(--text-secondary); text-align: right; }
+.admin-branch-correction-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.admin-branch-correction-grid label { position: relative; min-width: 0; display: grid; gap: 5px; }
+.admin-branch-correction-grid label.wide { grid-column: span 2; }
+.admin-branch-correction-grid label > span { color: var(--text-secondary); font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.admin-branch-correction-grid input, .admin-branch-correction-grid select { width: 100%; min-width: 0; min-height: 46px; padding: 0 12px; border: 1px solid var(--divider); border-radius: 11px; outline: 0; color: var(--text-primary); background: var(--surface); font: inherit; }
+.admin-branch-correction-grid select { padding-right: 34px; appearance: none; }
+.admin-branch-correction-grid label > svg { position: absolute; right: 11px; bottom: 15px; pointer-events: none; color: var(--text-secondary); }
+.admin-branch-correction-grid input:focus-visible, .admin-branch-correction-grid select:focus-visible { border-color: var(--dastak-accent); box-shadow: 0 0 0 3px var(--dastak-accent-soft); }
+.admin-branch-correction > footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.admin-branch-correction > footer button { margin: 0; }
+.admin-safety-branch-picker { min-width: 0; display: grid; gap: 6px; }
+.admin-safety-branch-picker input, .admin-safety-branch-picker select { width: 100%; min-width: 0; }
+.admin-safety-branch-picker small { color: var(--text-secondary); font-size: 9px; line-height: 1.45; }
+.admin-safety-branch-picker .admin-picker-error { color: var(--destructive); }
+
+@media (max-width: 900px) {
+  .admin-governance-branch dl, .admin-branch-correction-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .admin-governance-card > header { grid-template-columns: auto minmax(0, 1fr); }
+  .admin-governance-statuses { grid-column: 1 / -1; justify-content: flex-start; }
+  .admin-governance-branch dl, .admin-branch-correction-grid { grid-template-columns: 1fr; }
+  .admin-branch-correction-grid label.wide { grid-column: auto; }
+  .admin-governance-card > footer, .admin-branch-correction > footer { display: grid; grid-template-columns: 1fr; }
+  .admin-governance-card > footer button, .admin-branch-correction > footer button { width: 100%; }
+  .admin-branch-correction > header { display: grid; }
+  .admin-branch-correction > header small { text-align: left; }
+}

@@ -151,6 +151,39 @@ export type V1OrderDependencies = {
     afterOccurredAt: string | null;
     afterEventId: string | null;
   }) => Promise<unknown>;
+  getAdminMerchantGovernancePage: (input: {
+    accessToken: string;
+    query: string | null;
+    organizationId: string | null;
+    branchId: string | null;
+    limit: number;
+    afterUpdatedAt: string | null;
+    afterRowId: string | null;
+  }) => Promise<unknown>;
+  setAdminMerchantOrganizationStatus: (input: {
+    accessToken: string;
+    organizationId: string;
+    status: "ACTIVE" | "SUSPENDED";
+    expectedVersion: number;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  setAdminMerchantBranchStatus: (input: {
+    accessToken: string;
+    branchId: string;
+    status: "ACTIVE" | "SUSPENDED";
+    expectedVersion: number;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
+  correctAdminMerchantBranchDetails: (input: {
+    accessToken: string;
+    branchId: string;
+    changes: Record<string, unknown>;
+    expectedVersion: number;
+    reason: string;
+    idempotencyKey: string;
+  }) => Promise<unknown>;
   setExecutiveAdmin: (input: {
     accessToken: string;
     slot: 1 | 2;
@@ -774,6 +807,93 @@ export async function handleV1Orders(
           limit: parsedLimit ?? 50,
           afterOccurredAt,
             afterEventId: parsedAfterEventId ?? null,
+        }));
+      }
+      case "adminMerchantGovernancePage": {
+        const query = nullableText(body.query, 100);
+        const organizationId = nullableUUID(body.organizationId);
+        const branchId = nullableUUID(body.branchId);
+        const parsedLimit = integer(body.limit, 1, 100);
+        const cursor = record(body.cursor);
+        const afterUpdatedAt = cursor && validTimestamp(cursor.updatedAt)
+          ? cursor.updatedAt as string
+          : null;
+        const afterRowId = cursor ? requiredUUID(cursor.rowId) ?? null : null;
+        if (
+          query === undefined || organizationId === undefined || branchId === undefined ||
+          (body.limit !== null && body.limit !== undefined && parsedLimit === undefined) ||
+          (body.cursor !== null && body.cursor !== undefined && cursor === undefined) ||
+          (cursor !== undefined && (!afterUpdatedAt || !afterRowId))
+        ) return validationError();
+        return json(await dependencies.getAdminMerchantGovernancePage({
+          accessToken: actor.accessToken,
+          query,
+          organizationId,
+          branchId,
+          limit: parsedLimit ?? 50,
+          afterUpdatedAt,
+          afterRowId,
+        }));
+      }
+      case "setAdminMerchantOrganizationStatus": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const organizationId = requiredUUID(body.organizationId);
+        const status = body.status === "ACTIVE" || body.status === "SUSPENDED"
+          ? body.status
+          : undefined;
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const reason = requiredText(body.reason, 500);
+        if (!organizationId || !status || !expectedVersion || !reason || reason.length < 3 || !idempotencyKey) {
+          return validationError();
+        }
+        return json(await dependencies.setAdminMerchantOrganizationStatus({
+          accessToken: actor.accessToken,
+          organizationId,
+          status,
+          expectedVersion,
+          reason,
+          idempotencyKey,
+        }));
+      }
+      case "setAdminMerchantBranchStatus": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const branchId = requiredUUID(body.branchId);
+        const status = body.status === "ACTIVE" || body.status === "SUSPENDED"
+          ? body.status
+          : undefined;
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const reason = requiredText(body.reason, 500);
+        if (!branchId || !status || !expectedVersion || !reason || reason.length < 3 || !idempotencyKey) {
+          return validationError();
+        }
+        return json(await dependencies.setAdminMerchantBranchStatus({
+          accessToken: actor.accessToken,
+          branchId,
+          status,
+          expectedVersion,
+          reason,
+          idempotencyKey,
+        }));
+      }
+      case "correctAdminMerchantBranchDetails": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const branchId = requiredUUID(body.branchId);
+        const changes = record(body.changes);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const reason = requiredText(body.reason, 500);
+        if (!branchId || !changes || Object.keys(changes).length === 0 ||
+          Object.keys(changes).some((key) => ![
+            "displayName", "address", "latitude", "longitude", "serviceZoneId", "capacityLimit",
+          ].includes(key)) || !expectedVersion || !reason || reason.length < 3 || !idempotencyKey) {
+          return validationError();
+        }
+        return json(await dependencies.correctAdminMerchantBranchDetails({
+          accessToken: actor.accessToken,
+          branchId,
+          changes,
+          expectedVersion,
+          reason,
+          idempotencyKey,
         }));
       }
       case "setExecutiveAdmin": {

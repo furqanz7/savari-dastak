@@ -770,6 +770,71 @@ export type V1AdminAuditHistoryPage = {
   nextCursor?: { occurredAt: string; eventId: string };
 };
 
+export type V1AdminMerchantGovernanceRow = {
+  organization: {
+    id: string;
+    displayName: string;
+    legalName: string;
+    merchantType: string;
+    status: string;
+    version: number;
+    activeNonTerminalFulfilmentCount: number;
+    activePickupReturnWorkCount: number;
+  };
+  branch: {
+    id: string;
+    displayName: string;
+    status: string;
+    version: number;
+    normalizedAddress: {
+      line1?: string;
+      line2?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+      countryCode?: string;
+    };
+    latitude?: number;
+    longitude?: number;
+    serviceZone: { id?: string; name?: string };
+    capacityLimit: number;
+    operationalState: { isOpen: boolean; acceptingOrders: boolean; version?: number };
+    activeNonTerminalFulfilmentCount: number;
+    activePickupReturnWorkCount: number;
+    operationalPause?: {
+      id: string;
+      active: boolean;
+      reason: string;
+      version: number;
+      updatedAt: string;
+    };
+  };
+  updatedAt: string;
+};
+
+export type V1AdminMerchantGovernancePage = {
+  merchants: V1AdminMerchantGovernanceRow[];
+  serviceZones: Array<{ id: string; name: string }>;
+  hasMore: boolean;
+  nextCursor?: { updatedAt: string; rowId: string };
+};
+
+export type V1AdminMerchantBranchChanges = {
+  displayName?: string;
+  address?: {
+    line1: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    countryCode: string;
+  };
+  latitude?: number;
+  longitude?: number;
+  serviceZoneId?: string;
+  capacityLimit?: number;
+};
+
 export type V1AdminCataloguePageSku = V1AdminSku & {
   categoryTypeId?: string;
   categoryTypeName?: string;
@@ -992,6 +1057,87 @@ export async function getV1AdminAuditHistory(
     limit: input.limit ?? 50,
     cursor: input.cursor ?? null,
   }, undefined, fetcher));
+}
+
+export async function getV1AdminMerchantGovernancePage(
+  input: DastakV1Auth & {
+    query?: string;
+    organizationId?: string;
+    branchId?: string;
+    limit?: number;
+    cursor?: { updatedAt: string; rowId: string };
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+): Promise<V1AdminMerchantGovernancePage> {
+  return parseAdminMerchantGovernancePage(await invoke(input, "dastak-v1-orders", {
+    operation: "adminMerchantGovernancePage",
+    query: input.query?.trim() || null,
+    organizationId: input.organizationId ? requiredUuid(input.organizationId) : null,
+    branchId: input.branchId ? requiredUuid(input.branchId) : null,
+    limit: input.limit ?? 50,
+    cursor: input.cursor ?? null,
+  }, undefined, fetcher));
+}
+
+export async function setV1AdminMerchantOrganizationStatus(
+  input: DastakV1Auth & {
+    organizationId: string;
+    status: "ACTIVE" | "SUSPENDED";
+    expectedVersion: number;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "setAdminMerchantOrganizationStatus",
+    organizationId: requiredUuid(input.organizationId),
+    status: input.status,
+    expectedVersion: input.expectedVersion,
+    reason: input.reason.trim(),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function setV1AdminMerchantBranchStatus(
+  input: DastakV1Auth & {
+    branchId: string;
+    status: "ACTIVE" | "SUSPENDED";
+    expectedVersion: number;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "setAdminMerchantBranchStatus",
+    branchId: requiredUuid(input.branchId),
+    status: input.status,
+    expectedVersion: input.expectedVersion,
+    reason: input.reason.trim(),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function correctV1AdminMerchantBranchDetails(
+  input: DastakV1Auth & {
+    branchId: string;
+    changes: V1AdminMerchantBranchChanges;
+    expectedVersion: number;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "correctAdminMerchantBranchDetails",
+    branchId: requiredUuid(input.branchId),
+    changes: input.changes,
+    expectedVersion: input.expectedVersion,
+    reason: input.reason.trim(),
+  }, input.idempotencyKey, fetcher));
 }
 
 export async function getV1AdminCataloguePage(
@@ -3030,6 +3176,88 @@ export function parseAdminAuditHistoryPage(value: unknown): V1AdminAuditHistoryP
       occurredAt: requiredTimestamp(cursor.occurredAt),
       eventId: auditEventId(cursor.eventId),
     } : undefined,
+  };
+}
+
+export function parseAdminMerchantGovernancePage(value: unknown): V1AdminMerchantGovernancePage {
+  const source = requiredRecord(value);
+  const cursor = source.nextCursor === null || source.nextCursor === undefined
+    ? undefined : requiredRecord(source.nextCursor);
+  return {
+    merchants: requiredArray(source.merchants).map(parseAdminMerchantGovernanceRow),
+    serviceZones: requiredArray(source.serviceZones).map((value) => {
+      const zone = requiredRecord(value);
+      return { id: requiredUuid(zone.id), name: requiredText(zone.name, 120) };
+    }),
+    hasMore: requiredBoolean(source.hasMore),
+    nextCursor: cursor ? {
+      updatedAt: requiredTimestamp(cursor.updatedAt),
+      rowId: requiredUuid(cursor.rowId),
+    } : undefined,
+  };
+}
+
+function parseAdminMerchantGovernanceRow(value: unknown): V1AdminMerchantGovernanceRow {
+  const source = requiredRecord(value);
+  const organization = requiredRecord(source.organization);
+  const branch = requiredRecord(source.branch);
+  const address = requiredRecord(branch.normalizedAddress);
+  const zone = requiredRecord(branch.serviceZone);
+  const operational = requiredRecord(branch.operationalState);
+  const pause = branch.operationalPause === null || branch.operationalPause === undefined
+    ? undefined : requiredRecord(branch.operationalPause);
+  const latitude = optionalFiniteNumber(branch.latitude, -90);
+  const longitude = optionalFiniteNumber(branch.longitude, -180);
+  if (latitude !== undefined && latitude > 90) invalid("latitude");
+  if (longitude !== undefined && longitude > 180) invalid("longitude");
+  return {
+    organization: {
+      id: requiredUuid(organization.id),
+      displayName: requiredText(organization.displayName, 100),
+      legalName: requiredText(organization.legalName, 200),
+      merchantType: requiredText(organization.merchantType, 40),
+      status: requiredText(organization.status, 40),
+      version: requiredInteger(organization.version, 1),
+      activeNonTerminalFulfilmentCount: requiredInteger(organization.activeNonTerminalFulfilmentCount, 0),
+      activePickupReturnWorkCount: requiredInteger(organization.activePickupReturnWorkCount, 0),
+    },
+    branch: {
+      id: requiredUuid(branch.id),
+      displayName: requiredText(branch.displayName, 100),
+      status: requiredText(branch.status, 40),
+      version: requiredInteger(branch.version, 1),
+      normalizedAddress: {
+        line1: optionalText(address.line1, 200),
+        line2: optionalText(address.line2, 200),
+        city: optionalText(address.city, 100),
+        state: optionalText(address.state, 100),
+        postalCode: optionalText(address.postalCode, 20),
+        countryCode: optionalText(address.countryCode, 2),
+      },
+      latitude,
+      longitude,
+      serviceZone: {
+        id: optionalUuid(zone.id),
+        name: optionalText(zone.name, 120),
+      },
+      capacityLimit: requiredInteger(branch.capacityLimit, 1),
+      operationalState: {
+        isOpen: requiredBoolean(operational.isOpen),
+        acceptingOrders: requiredBoolean(operational.acceptingOrders),
+        version: operational.version === null || operational.version === undefined
+          ? undefined : requiredInteger(operational.version, 1),
+      },
+      activeNonTerminalFulfilmentCount: requiredInteger(branch.activeNonTerminalFulfilmentCount, 0),
+      activePickupReturnWorkCount: requiredInteger(branch.activePickupReturnWorkCount, 0),
+      operationalPause: pause ? {
+        id: requiredUuid(pause.id),
+        active: requiredBoolean(pause.active),
+        reason: requiredText(pause.reason, 500),
+        version: requiredInteger(pause.version, 1),
+        updatedAt: requiredTimestamp(pause.updatedAt),
+      } : undefined,
+    },
+    updatedAt: requiredTimestamp(source.updatedAt),
   };
 }
 

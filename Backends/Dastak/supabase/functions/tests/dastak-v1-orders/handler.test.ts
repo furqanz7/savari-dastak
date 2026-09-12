@@ -496,6 +496,116 @@ Deno.test("V1 Admin Audit History rejects invalid IDs, limits, times and cursors
   assertEquals(calls, 0);
 });
 
+Deno.test("V1 Admin Merchant governance binds reviewed paging and command contracts", async () => {
+  const recorded: Record<string, unknown> = {};
+  const organizationId = "44444444-4444-4444-8444-444444444444";
+  const branchId = "55555555-5555-4555-8555-555555555555";
+  const deps = dependencies({
+    getAdminMerchantGovernancePage: (input) => {
+      recorded.page = input;
+      return Promise.resolve({ merchants: [], serviceZones: [], hasMore: false, nextCursor: null });
+    },
+    setAdminMerchantOrganizationStatus: (input) => {
+      recorded.organization = input;
+      return Promise.resolve({ status: "SUSPENDED", version: 4 });
+    },
+    setAdminMerchantBranchStatus: (input) => {
+      recorded.branch = input;
+      return Promise.resolve({ status: "SUSPENDED", version: 7 });
+    },
+    correctAdminMerchantBranchDetails: (input) => {
+      recorded.correction = input;
+      return Promise.resolve({ branchId, version: 8 });
+    },
+  });
+
+  assertEquals((await handleV1Orders(request({
+    operation: "adminMerchantGovernancePage",
+    query: "  Craft  ",
+    organizationId,
+    branchId,
+    limit: 40,
+    cursor: { updatedAt: "2026-09-12T12:34:56.000Z", rowId: branchId },
+  }), deps)).status, 200);
+  assertEquals((await handleV1Orders(request({
+    operation: "setAdminMerchantOrganizationStatus",
+    organizationId,
+    status: "SUSPENDED",
+    expectedVersion: 3,
+    reason: "  Reviewed compliance intervention  ",
+  }, "org-key"), deps)).status, 200);
+  assertEquals((await handleV1Orders(request({
+    operation: "setAdminMerchantBranchStatus",
+    branchId,
+    status: "SUSPENDED",
+    expectedVersion: 6,
+    reason: "  Reviewed branch intervention  ",
+  }, "branch-key"), deps)).status, 200);
+  assertEquals((await handleV1Orders(request({
+    operation: "correctAdminMerchantBranchDetails",
+    branchId,
+    changes: { displayName: "Craft Central", capacityLimit: 12 },
+    expectedVersion: 7,
+    reason: "  Verified branch record  ",
+  }, "correction-key"), deps)).status, 200);
+
+  assertEquals(recorded.page, {
+    accessToken: actor.accessToken,
+    query: "Craft",
+    organizationId,
+    branchId,
+    limit: 40,
+    afterUpdatedAt: "2026-09-12T12:34:56.000Z",
+    afterRowId: branchId,
+  });
+  assertEquals(recorded.organization, {
+    accessToken: actor.accessToken,
+    organizationId,
+    status: "SUSPENDED",
+    expectedVersion: 3,
+    reason: "Reviewed compliance intervention",
+    idempotencyKey: "org-key",
+  });
+  assertEquals(recorded.branch, {
+    accessToken: actor.accessToken,
+    branchId,
+    status: "SUSPENDED",
+    expectedVersion: 6,
+    reason: "Reviewed branch intervention",
+    idempotencyKey: "branch-key",
+  });
+  assertEquals(recorded.correction, {
+    accessToken: actor.accessToken,
+    branchId,
+    changes: { displayName: "Craft Central", capacityLimit: 12 },
+    expectedVersion: 7,
+    reason: "Verified branch record",
+    idempotencyKey: "correction-key",
+  });
+});
+
+Deno.test("V1 Admin Merchant governance rejects unreviewed inputs before RPC", async () => {
+  let calls = 0;
+  const deps = dependencies({
+    getAdminMerchantGovernancePage: () => { calls += 1; return Promise.resolve({}); },
+    setAdminMerchantOrganizationStatus: () => { calls += 1; return Promise.resolve({}); },
+    setAdminMerchantBranchStatus: () => { calls += 1; return Promise.resolve({}); },
+    correctAdminMerchantBranchDetails: () => { calls += 1; return Promise.resolve({}); },
+  });
+  const bodies: Array<{ body: Record<string, unknown>; key?: string }> = [
+    { body: { operation: "adminMerchantGovernancePage", limit: 101 } },
+    { body: { operation: "adminMerchantGovernancePage", cursor: { updatedAt: "bad", rowId: skuId } } },
+    { body: { operation: "setAdminMerchantOrganizationStatus", organizationId: skuId, status: "CLOSED", expectedVersion: 1, reason: "Reviewed" }, key: "key" },
+    { body: { operation: "setAdminMerchantBranchStatus", branchId: skuId, status: "SUSPENDED", expectedVersion: 0, reason: "Reviewed" }, key: "key" },
+    { body: { operation: "correctAdminMerchantBranchDetails", branchId: skuId, changes: { merchantType: "RETAIL" }, expectedVersion: 1, reason: "Reviewed" }, key: "key" },
+    { body: { operation: "correctAdminMerchantBranchDetails", branchId: skuId, changes: {}, expectedVersion: 1, reason: "Reviewed" }, key: "key" },
+  ];
+  for (const candidate of bodies) {
+    assertEquals((await handleV1Orders(request(candidate.body, candidate.key), deps)).status, 400);
+  }
+  assertEquals(calls, 0);
+});
+
 Deno.test("V1 Executive assignment rejects extra slots and malformed email shape", async () => {
   let calls = 0;
   const deps = dependencies({
@@ -1203,6 +1313,14 @@ function dependencies(
     getAdminNetworkPage: overrides.getAdminNetworkPage ??
       (() => Promise.resolve({})),
     getAdminAuditHistory: overrides.getAdminAuditHistory ??
+      (() => Promise.resolve({})),
+    getAdminMerchantGovernancePage: overrides.getAdminMerchantGovernancePage ??
+      (() => Promise.resolve({ merchants: [], serviceZones: [], hasMore: false, nextCursor: null })),
+    setAdminMerchantOrganizationStatus: overrides.setAdminMerchantOrganizationStatus ??
+      (() => Promise.resolve({})),
+    setAdminMerchantBranchStatus: overrides.setAdminMerchantBranchStatus ??
+      (() => Promise.resolve({})),
+    correctAdminMerchantBranchDetails: overrides.correctAdminMerchantBranchDetails ??
       (() => Promise.resolve({})),
     setExecutiveAdmin: overrides.setExecutiveAdmin ??
       (() => Promise.resolve({})),

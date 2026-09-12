@@ -25,6 +25,20 @@ export async function callAuthenticatedRPC(
 }
 
 export function safeRPCError(error: { code?: string; message?: string }) {
+  if (error.code === "55000" && error.message === "ACTIVE_FULFILMENTS_REQUIRE_RESOLUTION") {
+    return new V1RequestError(
+      409,
+      "active_fulfilments_require_resolution",
+      "Pause new work and resolve every active fulfilment or custody journey before suspending this Merchant.",
+    );
+  }
+  if (error.code === "55000" && error.message === "ACTIVE_PICKUP_OR_RETURN_WORK") {
+    return new V1RequestError(
+      409,
+      "active_pickup_or_return_work",
+      "Route-critical branch details cannot change while pickup or return work is active.",
+    );
+  }
   if (error.code === "P0001" && error.message === "RIDER_ACTIVE_WORK_CONFLICT") {
     return new V1RequestError(
       409,

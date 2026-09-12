@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   BadgeCheck,
+  Building2,
   Check,
   CircleAlert,
   Activity,
@@ -57,6 +58,7 @@ import { AdminRoyaltyPayoutPanel } from "./AdminRoyaltyPayoutPanel";
 import { AdminOverviewPanel } from "./AdminOverviewPanel";
 import { AdminNetworkPanel } from "./AdminNetworkPanel";
 import { AdminAuditHistoryPanel } from "./AdminAuditHistoryPanel";
+import { AdminMerchantGovernancePanel } from "./AdminMerchantGovernancePanel";
 import {
   getV1AdminAccess,
   getV1AdminCommandCenter,
@@ -96,7 +98,7 @@ type Props = {
 
 type AdminTab =
   | "overview" | "approvals" | "exceptions" | "orders" | "network" | "audit"
-  | "catalogue" | "safety" | "finance" | "health" | "access"
+  | "catalogue" | "merchants" | "safety" | "finance" | "health" | "access"
   | "legacy" | "account";
 
 type AdminBootstrapFeed =
@@ -429,6 +431,7 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
   ];
   const controlNavigation: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
     { id: "audit", label: "Audit History", icon: <ScrollText size={18} /> },
+    { id: "merchants", label: "Merchant governance", icon: <Building2 size={18} /> },
     { id: "safety", label: "Safety controls", icon: <CircleAlert size={18} /> },
     { id: "finance", label: "Finance & Royalty", icon: <WalletCards size={18} /> },
     { id: "health", label: "System health", icon: <Activity size={18} /> },
@@ -466,6 +469,7 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
       {tab === "overview" ? <AdminOverviewPanel snapshot={commandCenter} loading={feedStates.commandCenter.phase === "loading"} onNavigate={setTab} />
         : tab === "network" ? <AdminNetworkPanel auth={auth} />
         : tab === "audit" ? <AdminAuditHistoryPanel auth={auth} />
+        : tab === "merchants" ? <AdminMerchantGovernancePanel auth={auth} />
         : tab === "catalogue" ? <AdminCataloguePanel auth={auth} />
         : tab === "orders" ? <AdminV1ExecutionPanel auth={auth} />
         : tab === "finance" ? <AdminRoyaltyPayoutPanel auth={auth} />
@@ -527,7 +531,7 @@ function tabTitle(tab: AdminTab) {
   return ({
     overview: "Command center", approvals: "Application approvals", exceptions: "Exception desk",
     orders: "Live order control", network: "Marketplace network", catalogue: "Master catalogue",
-    audit: "Audit History",
+    audit: "Audit History", merchants: "Merchant governance",
     safety: "Safety controls", finance: "Finance & Royalty", health: "System health",
     access: "Admin access", legacy: "Historical orders", account: "My account",
   } satisfies Record<AdminTab, string>)[tab];
@@ -541,6 +545,7 @@ function tabDescription(tab: AdminTab) {
     orders: "Inspect matching, preparation, custody, collection, delivery and financial truth.",
     network: "Understand every identity and its independently onboarded personas.",
     audit: "Search reviewed, append-only operational history across current and legacy Dastak systems.",
+    merchants: "Govern organization and branch eligibility, routing records and operational context.",
     catalogue: "Control exact SKUs, evidence, QA readiness, pricing and visibility.",
     safety: "Manage scoped pauses and rider recovery without weakening custody.",
     finance: "Review earned Royalty and controlled payout readiness.",

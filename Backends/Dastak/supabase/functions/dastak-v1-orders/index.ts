@@ -212,6 +212,39 @@ Deno.serve((request) =>
         p_after_occurred_at: input.afterOccurredAt,
         p_after_event_id: input.afterEventId,
       }),
+    getAdminMerchantGovernancePage: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_merchant_governance_page", {
+        p_query: input.query,
+        p_organization_id: input.organizationId,
+        p_branch_id: input.branchId,
+        p_limit: input.limit,
+        p_after_updated_at: input.afterUpdatedAt,
+        p_after_row_id: input.afterRowId,
+      }),
+    setAdminMerchantOrganizationStatus: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_set_merchant_organization_status", {
+        p_organization_id: input.organizationId,
+        p_status: input.status,
+        p_expected_version: input.expectedVersion,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    setAdminMerchantBranchStatus: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_set_merchant_branch_status", {
+        p_branch_id: input.branchId,
+        p_status: input.status,
+        p_expected_version: input.expectedVersion,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    correctAdminMerchantBranchDetails: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_correct_merchant_branch_details", {
+        p_branch_id: input.branchId,
+        p_changes: input.changes,
+        p_expected_version: input.expectedVersion,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     setExecutiveAdmin: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_set_executive_admin", {
         p_slot: input.slot,

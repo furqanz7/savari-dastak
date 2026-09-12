@@ -26,3 +26,23 @@ Deno.test("shared V1 RPC errors keep unknown database failures private", () => {
   assertEquals(error.code, "internal_error");
   assertEquals(error.message, "The Dastak request could not be processed.");
 });
+
+Deno.test("shared V1 RPC errors expose reviewed Merchant governance conflicts safely", () => {
+  const activeWork = safeRPCError({
+    code: "55000",
+    message: "ACTIVE_FULFILMENTS_REQUIRE_RESOLUTION",
+  });
+  const activeRoute = safeRPCError({
+    code: "55000",
+    message: "ACTIVE_PICKUP_OR_RETURN_WORK",
+  });
+
+  assertEquals({ status: activeWork.status, code: activeWork.code }, {
+    status: 409,
+    code: "active_fulfilments_require_resolution",
+  });
+  assertEquals({ status: activeRoute.status, code: activeRoute.code }, {
+    status: 409,
+    code: "active_pickup_or_return_work",
+  });
+});

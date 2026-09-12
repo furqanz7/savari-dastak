@@ -3,12 +3,14 @@ import { CircleAlert, PauseCircle, ShieldCheck } from "lucide-react";
 import { AdminPrivilegedActionDialog, type AdminPrivilegedActionIntent } from "./AdminPrivilegedActionDialog";
 import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
+  getV1AdminMerchantGovernancePage,
   getV1AdminOperationalSafety,
   manageV1RiderEscalation,
   setV1OperationalPause,
   type DastakV1Auth,
   type V1OperationalPauseScope,
   type V1OperationalSafety,
+  type V1AdminMerchantGovernanceRow,
 } from "./dastakV1";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
 import { useAdminRuntime } from "./AdminRuntimeContext";
@@ -22,6 +24,9 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
   const [snapshot, setSnapshot] = useState<V1OperationalSafety>();
   const [scope, setScope] = useState<V1OperationalPauseScope>("ZONE_RETAIL");
   const [targetId, setTargetId] = useState("");
+  const [branchQuery, setBranchQuery] = useState("");
+  const [branchRows, setBranchRows] = useState<V1AdminMerchantGovernanceRow[]>([]);
+  const [branchLookupError, setBranchLookupError] = useState<string>();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -30,6 +35,8 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
   const [feedState, setFeedState] = useState(initialAdminFeedState);
   const queue = useRef(new RefreshQueue());
   const controller = useRef<AbortController | undefined>(undefined);
+  const branchQueue = useRef(new RefreshQueue());
+  const branchController = useRef<AbortController | undefined>(undefined);
   const { reportRequestError } = useAdminRuntime();
   const [intent, setIntent] = useState<{
     dialog: AdminPrivilegedActionIntent;
@@ -57,6 +64,40 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
   }), [auth, reportRequestError]);
   useEffect(() => { void refresh().catch(() => undefined); return () => controller.current?.abort(); }, [refresh]);
   useAdminWorkspaceRefresh("operationalSafety", refresh);
+
+  const refreshBranches = useCallback(() => branchQueue.current.request(false, async () => {
+    if (scope !== "MERCHANT_BRANCH") return;
+    branchController.current?.abort();
+    const nextController = new AbortController();
+    branchController.current = nextController;
+    try {
+      const page = await getV1AdminMerchantGovernancePage({
+        ...auth,
+        query: branchQuery.trim(),
+        limit: 100,
+        signal: nextController.signal,
+      });
+      if (nextController.signal.aborted) return;
+      setBranchRows(page.merchants);
+      setBranchLookupError(undefined);
+    } catch (cause) {
+      if (nextController.signal.aborted) return;
+      reportRequestError(cause);
+      setBranchLookupError(message(cause));
+      throw cause;
+    }
+  }), [auth, branchQuery, reportRequestError, scope]);
+  useEffect(() => {
+    if (scope !== "MERCHANT_BRANCH") return;
+    const timer = window.setTimeout(() => void refreshBranches().catch(() => undefined), 250);
+    return () => { window.clearTimeout(timer); branchController.current?.abort(); };
+  }, [refreshBranches, scope]);
+  useAdminWorkspaceRefresh("merchantGovernance", refreshBranches);
+
+  const selectedBranch = useMemo(
+    () => branchRows.find((row) => row.branch.id === targetId.trim()),
+    [branchRows, targetId],
+  );
 
   const existing = useMemo(() => snapshot?.pauses.find((pause) =>
     pause.scope === scope && pause.targetId === targetId.trim()), [scope, snapshot, targetId]);
@@ -178,14 +219,24 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
           <p className="admin-empty">This account has trace-only access.</p>
         ) : (
           <div className="exception-action">
-            <select value={scope} onChange={(event) => setScope(event.target.value as V1OperationalPauseScope)} aria-label="Pause scope">
+            <select value={scope} onChange={(event) => { setScope(event.target.value as V1OperationalPauseScope); setTargetId(""); }} aria-label="Pause scope">
               <option value="ZONE_RETAIL">Zone · retail orders</option>
               <option value="ZONE_FOOD">Zone · food orders</option>
               <option value="ZONE_MIXED">Zone · mixed orders</option>
               <option value="MERCHANT_BRANCH">Merchant branch</option>
               <option value="RIDER_ASSIGNMENTS">Rider assignments</option>
             </select>
-            <input value={targetId} onChange={(event) => setTargetId(event.target.value)} placeholder="Zone, branch or rider UUID" aria-label="Pause target ID" />
+            {scope === "MERCHANT_BRANCH" ? <div className="admin-safety-branch-picker">
+              <input value={branchQuery} onChange={(event) => setBranchQuery(event.target.value)} placeholder="Find organization or branch" aria-label="Find Merchant branch" />
+              <select value={targetId} onChange={(event) => setTargetId(event.target.value)} aria-label="Merchant branch">
+                <option value="">Select a governed Merchant branch</option>
+                {branchRows.map((row) => <option key={row.branch.id} value={row.branch.id}>
+                  {row.organization.displayName} · {row.branch.displayName} · {row.branch.status} · {row.branch.activeNonTerminalFulfilmentCount + row.branch.activePickupReturnWorkCount} active · {row.branch.operationalPause?.active ? "paused" : "not paused"}
+                </option>)}
+              </select>
+              {selectedBranch ? <small>{selectedBranch.organization.displayName} / {selectedBranch.branch.displayName} · {selectedBranch.branch.status} · {selectedBranch.branch.activeNonTerminalFulfilmentCount} fulfilment(s) · {selectedBranch.branch.activePickupReturnWorkCount} pickup/return journey(s) · {selectedBranch.branch.operationalPause?.active ? "operational pause active" : "no operational pause"}</small> : null}
+              {branchLookupError ? <small className="admin-picker-error" role="alert">{branchLookupError}</small> : null}
+            </div> : <input value={targetId} onChange={(event) => setTargetId(event.target.value)} placeholder="Zone or rider UUID" aria-label="Pause target ID" />}
             <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Required reason" aria-label="Pause reason" />
             <button className="danger-button" type="button" disabled={busy || targetId.trim().length !== 36 || reason.trim().length < 3 || existing?.active} onClick={requestPause}><PauseCircle size={17} /> Pause new work</button>
           </div>
