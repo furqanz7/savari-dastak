@@ -132,6 +132,19 @@ export type OwnerResetParcelHandoffInput = {
   idempotencyKey: string;
   requestDigest: string;
 };
+export type OwnerHistoryPageInput = {
+  accountId: string;
+  query: string | null;
+  limit: number;
+  afterCreatedAt: string | null;
+  afterOrderId: string | null;
+};
+export type OwnerExceptionPageInput = {
+  accountId: string;
+  limit: number;
+  afterOccurredAt: string | null;
+  afterExceptionId: string | null;
+};
 
 export type CustomerOrderSupportCategory =
   | "delivery_status"
@@ -156,7 +169,9 @@ export type MerchantOrderDependencies = {
   createCustomerSupport: (input: CustomerOrderSupportInput) => Promise<RpcResult>;
   getMerchantOrders: (accountId: string) => Promise<RpcResult>;
   getOwnerOrders: (accountId: string, limit: number) => Promise<RpcResult>;
+  getOwnerOrdersPage: (input: OwnerHistoryPageInput) => Promise<RpcResult>;
   getOwnerOperations: (accountId: string, limit: number) => Promise<RpcResult>;
+  getOwnerExceptionsPage: (input: OwnerExceptionPageInput) => Promise<RpcResult>;
   merchantAccept: (input: MerchantOrderMutationInput) => Promise<RpcResult>;
   merchantReject: (input: MerchantRejectOrderInput) => Promise<RpcResult>;
   merchantMarkReady: (input: MerchantOrderMutationInput) => Promise<RpcResult>;
@@ -224,10 +239,36 @@ export async function handleMerchantOrders(
         const result = await dependencies.getOwnerOrders(actor.accountId, limit);
         return json(result.responseBody, result.responseStatus);
       }
+      case "ownerHistoryPage": {
+        const limit = validOwnerLimit(body.limit);
+        const query = validOwnerQuery(body.query);
+        const cursor = validCursor(body.cursor, "createdAt", "orderId", true);
+        if (!limit || query === undefined || cursor === undefined) return validationError();
+        const result = await dependencies.getOwnerOrdersPage({
+          accountId: actor.accountId,
+          query,
+          limit,
+          afterCreatedAt: cursor?.timestamp ?? null,
+          afterOrderId: cursor?.id ?? null,
+        });
+        return json(result.responseBody, result.responseStatus);
+      }
       case "ownerOperations": {
         const limit = validOwnerLimit(body.limit);
         if (!limit) return validationError();
         const result = await dependencies.getOwnerOperations(actor.accountId, limit);
+        return json(result.responseBody, result.responseStatus);
+      }
+      case "ownerExceptionsPage": {
+        const limit = validOwnerLimit(body.limit);
+        const cursor = validCursor(body.cursor, "occurredAt", "exceptionId", false);
+        if (!limit || cursor === undefined) return validationError();
+        const result = await dependencies.getOwnerExceptionsPage({
+          accountId: actor.accountId,
+          limit,
+          afterOccurredAt: cursor?.timestamp ?? null,
+          afterExceptionId: cursor?.id ?? null,
+        });
         return json(result.responseBody, result.responseStatus);
       }
       case "merchantAccept":
@@ -594,6 +635,30 @@ function validOwnerLimit(value: unknown) {
   return typeof limit === "number" && Number.isInteger(limit) && limit >= 1 && limit <= 100
     ? limit
     : undefined;
+}
+
+function validOwnerQuery(value: unknown): string | null | undefined {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") return undefined;
+  const query = value.trim().replace(/\s+/g, " ");
+  return query.length >= 1 && query.length <= 80 ? query : undefined;
+}
+
+function validCursor(
+  value: unknown,
+  timestampKey: string,
+  idKey: string,
+  uuidId: boolean,
+): { timestamp: string; id: string } | null | undefined {
+  if (value === undefined || value === null) return null;
+  const cursor = record(value);
+  if (!cursor) return undefined;
+  const timestamp = cursor[timestampKey];
+  const rawId = cursor[idKey];
+  const id = uuidId ? validUUID(rawId) : normalizeRequiredText(rawId, 200);
+  if (typeof timestamp !== "string" || timestamp.length > 50 ||
+    !Number.isFinite(Date.parse(timestamp)) || !id) return undefined;
+  return { timestamp, id };
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

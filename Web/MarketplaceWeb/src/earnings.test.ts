@@ -244,8 +244,11 @@ describe("Royalty", () => {
           providerRequests: [],
           webhookHistory: [],
         }],
+        hasMore: false,
+        nextCursor: null,
       })));
-    expect(payouts[0].providerPayoutReference).toBe("pout_00000000000001");
-    expect(payouts[0].destinationSnapshot.displayLabel).toBe("UPI • ri***@okaxis");
+    expect(payouts.withdrawals[0].providerPayoutReference).toBe("pout_00000000000001");
+    expect(payouts.withdrawals[0].destinationSnapshot.displayLabel).toBe("UPI • ri***@okaxis");
+    expect(payouts.hasMore).toBe(false);
   });
 });

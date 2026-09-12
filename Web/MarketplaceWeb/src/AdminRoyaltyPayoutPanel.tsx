@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WalletCards } from "lucide-react";
 import { formatPrice } from "./catalogue";
-import { getAdminRoyaltyPayouts, type AdminRoyaltyPayout } from "./earnings";
+import { getAdminRoyaltyPayouts, type AdminRoyaltyPayout, type AdminRoyaltyPayoutPage } from "./earnings";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
 import { useAdminRuntime } from "./AdminRuntimeContext";
 import { adminFeedFailed, adminFeedHasContent, adminFeedStarted, adminFeedSucceeded, initialAdminFeedState } from "./adminRuntime";
@@ -15,6 +15,8 @@ export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
   const [feedState, setFeedState] = useState(initialAdminFeedState);
   const queue = useRef(new RefreshQueue());
   const controller = useRef<AbortController | undefined>(undefined);
+  const cursor = useRef<AdminRoyaltyPayoutPage["nextCursor"]>(undefined);
+  const [hasMore, setHasMore] = useState(false);
   const { reportRequestError } = useAdminRuntime();
   const refresh = useCallback(() => queue.current.request(false, async () => {
     controller.current?.abort();
@@ -22,7 +24,10 @@ export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
     controller.current = nextController;
     setFeedState((current) => adminFeedStarted(current));
     try {
-      setPayouts(await getAdminRoyaltyPayouts({ ...auth, limit: 100, signal: nextController.signal }));
+      const page = await getAdminRoyaltyPayouts({ ...auth, limit: 50, signal: nextController.signal });
+      setPayouts(page.withdrawals);
+      setHasMore(page.hasMore);
+      cursor.current = page.nextCursor;
       setFeedState((current) => adminFeedSucceeded(current));
     } catch (loadError) {
       if (nextController.signal.aborted) return;
@@ -34,6 +39,20 @@ export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
 
   useEffect(() => { void refresh().catch(() => undefined); return () => controller.current?.abort(); }, [refresh]);
   useAdminWorkspaceRefresh("royaltyPayouts", refresh);
+
+  const loadMore = useCallback(() => queue.current.request(false, async () => {
+    const nextCursor = cursor.current;
+    if (!hasMore || !nextCursor) return;
+    try {
+      const page = await getAdminRoyaltyPayouts({ ...auth, limit: 50, cursor: nextCursor });
+      setPayouts((current) => mergePayouts(current, page.withdrawals));
+      setHasMore(page.hasMore);
+      cursor.current = page.nextCursor;
+    } catch (loadError) {
+      reportRequestError(loadError);
+      setFeedState((current) => adminFeedFailed(current, loadError));
+    }
+  }), [auth, hasMore, reportRequestError]);
 
   return (
     <section className="admin-royalty-payouts" role="tabpanel" aria-labelledby="admin-payouts-title">
@@ -49,7 +68,7 @@ export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
         ? <div className="catalogue-loading" role="status"><span /> Loading payouts</div>
         : payouts.length === 0 && adminFeedHasContent(feedState)
         ? <p className="admin-empty">No Royalty withdrawals yet.</p>
-        : payouts.length > 0 ? <div className="admin-payout-list">{payouts.map((payout) => <PayoutCard key={payout.id} payout={payout} />)}</div> : null}
+        : payouts.length > 0 ? <><div className="admin-payout-list">{payouts.map((payout) => <PayoutCard key={payout.id} payout={payout} />)}</div><button className="secondary-button admin-page-more" type="button" disabled={!hasMore} onClick={() => void loadMore()}>{hasMore ? "Load older payouts" : "All payouts loaded"}</button></> : null}
     </section>
   );
 }
@@ -109,6 +128,12 @@ function number(value: unknown) {
 
 function shortId(value: string) {
   return value.slice(0, 8).toUpperCase();
+}
+
+function mergePayouts(current: AdminRoyaltyPayout[], incoming: AdminRoyaltyPayout[]) {
+  const merged = new Map(current.map((payout) => [payout.id, payout]));
+  incoming.forEach((payout) => merged.set(payout.id, payout));
+  return Array.from(merged.values());
 }
 
 function message(error: unknown) {

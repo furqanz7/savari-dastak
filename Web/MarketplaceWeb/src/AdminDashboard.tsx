@@ -25,10 +25,11 @@ import { AdminPrivilegedActionDialog } from "./AdminPrivilegedActionDialog";
 import { AdminCataloguePanel } from "./AdminCataloguePanel";
 import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
-  getAdminOrders,
+  getAdminOrderPage,
   getEvidenceUrl,
   getMerchantApplications,
   getOwnerOperations,
+  getOwnerExceptionPage,
   getPartnerApplications,
   reconcileOwnerOrders,
   resetOwnerHandoff,
@@ -37,8 +38,10 @@ import {
   reviewMerchantApplication,
   reviewPartnerApplication,
   type AdminOrder,
+  type AdminOrderPage,
   type MerchantAdminApplication,
   type OwnerOperationsSnapshot,
+  type OwnerExceptionPage,
   type OwnerOrderException,
   type PartnerAdminApplication,
   type ReviewDecision,
@@ -133,7 +136,13 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
   const [merchants, setMerchants] = useState<MerchantAdminApplication[]>([]);
   const [partners, setPartners] = useState<PartnerAdminApplication[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [legacyQuery, setLegacyQuery] = useState("");
+  const [legacyQueryInput, setLegacyQueryInput] = useState("");
+  const [legacyHasMore, setLegacyHasMore] = useState(false);
+  const legacyCursor = useRef<AdminOrderPage["nextCursor"]>(undefined);
   const [operations, setOperations] = useState<OwnerOperationsSnapshot>();
+  const [exceptionsHaveMore, setExceptionsHaveMore] = useState(false);
+  const exceptionCursor = useRef<OwnerExceptionPage["nextCursor"]>(undefined);
   const [adminAccess, setAdminAccess] = useState<V1AdminAccess>();
   const [commandCenter, setCommandCenter] = useState<V1AdminCommandCenter>();
   const [tab, setTab] = useState<AdminTab>("overview");
@@ -169,9 +178,18 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
           const value = await getPartnerApplications({ ...auth, signal: controller.signal });
           setPartners(value.filter((application) => application.status === "pending"));
         } else if (feed === "legacyHistory") {
-          setOrders(await getAdminOrders({ ...auth, limit: 50, signal: controller.signal }));
+          const page = await getAdminOrderPage({ ...auth, query: legacyQuery, limit: 50, signal: controller.signal });
+          setOrders(page.orders);
+          setLegacyHasMore(page.hasMore);
+          legacyCursor.current = page.nextCursor;
         } else if (feed === "operations") {
-          setOperations(await getOwnerOperations({ ...auth, limit: 50, signal: controller.signal }));
+          const [summary, page] = await Promise.all([
+            getOwnerOperations({ ...auth, limit: 1, signal: controller.signal }),
+            getOwnerExceptionPage({ ...auth, limit: 50, signal: controller.signal }),
+          ]);
+          setOperations({ ...summary, exceptions: page.exceptions });
+          setExceptionsHaveMore(page.hasMore);
+          exceptionCursor.current = page.nextCursor;
         } else if (feed === "adminAccess") {
           setAdminAccess(await getV1AdminAccess({ ...auth, signal: controller.signal }));
         } else {
@@ -187,7 +205,40 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
         if (controllers.current.get(feed) === controller) controllers.current.delete(feed);
       }
     });
-  }, [auth, reportRequestError]);
+  }, [auth, legacyQuery, reportRequestError]);
+
+  const loadMoreLegacy = useCallback(async () => {
+    await queues.current.legacyHistory.request(false, async () => {
+      const cursor = legacyCursor.current;
+      if (!cursor || !legacyHasMore) return;
+      try {
+        const page = await getAdminOrderPage({ ...auth, query: legacyQuery, limit: 50, cursor });
+        setOrders((current) => mergeById(current, page.orders, (order) => order.orderId));
+        setLegacyHasMore(page.hasMore);
+        legacyCursor.current = page.nextCursor;
+      } catch (error) {
+        reportRequestError(error);
+        setFeedStates((current) => ({ ...current, legacyHistory: adminFeedFailed(current.legacyHistory, error) }));
+      }
+    });
+  }, [auth, legacyHasMore, legacyQuery, reportRequestError]);
+  const loadMoreExceptions = useCallback(async () => {
+    await queues.current.operations.request(false, async () => {
+      const cursor = exceptionCursor.current;
+      if (!cursor || !exceptionsHaveMore) return;
+      try {
+        const page = await getOwnerExceptionPage({ ...auth, limit: 50, cursor });
+        setOperations((current) => current ? {
+          ...current, exceptions: mergeById(current.exceptions, page.exceptions, (exception) => exception.exceptionId),
+        } : current);
+        setExceptionsHaveMore(page.hasMore);
+        exceptionCursor.current = page.nextCursor;
+      } catch (error) {
+        reportRequestError(error);
+        setFeedStates((current) => ({ ...current, operations: adminFeedFailed(current.operations, error) }));
+      }
+    });
+  }, [auth, exceptionsHaveMore, reportRequestError]);
 
   const refreshAllBootstrap = useCallback(async () => {
     await Promise.allSettled(adminBootstrapFeeds.map((feed) => refreshFeed(feed)));
@@ -434,8 +485,11 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
           ]} location={{ latitude: application.latitude, longitude: application.longitude }} evidence={[{ label: "View business evidence", path: application.evidenceObjectPath }]} approvalSummary={`Approval creates one active ${application.merchantType === "RESTAURANT_CAFE" ? "restaurant" : "retail"} organization and branch in ${application.serviceZoneName}, grants this applicant Merchant owner access, and starts the branch closed until the merchant opens it.`} busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("merchant", application.applicationId, decision, reason)} />)}</ApprovalSection>
           <ApprovalSection title="Delivery Partner applications" count={partners.length} empty={approvalEmptyMessage(feedStates.deliveryApprovals, "delivery")}>{partners.map((application) => <ReviewCard key={application.applicationId} icon={<Navigation size={20} />} title={application.displayName} subtitle={application.phoneNumber} facts={[methodLabel(application.deliveryMethod), ...(application.vehicleRegistrationNumber ? [`${application.vehicleRegistrationNumber} · ${application.vehicleMakeModel}`] : []), `Submitted ${formatDate(application.submittedAt)}`]} evidence={[{ label: "View identity proof", path: application.identityEvidenceObjectPath }, ...(application.vehicleEvidenceObjectPath ? [{ label: "View vehicle RC", path: application.vehicleEvidenceObjectPath }] : [])]} approvalSummary="Approval creates the verified Delivery Partner profile and starts it offline. The rider must deliberately go online from an active service area before receiving work." busy={Boolean(busy)} onEvidence={openEvidence} onReview={(decision, reason) => review("partner", application.applicationId, decision, reason)} />)}</ApprovalSection>
         </div>
-        : tab === "legacy" ? <OrdersPanel orders={orders} available={adminFeedHasContent(feedStates.legacyHistory)} busy={Boolean(busy)} onReview={reviewRefund} onRefund={retryRefund} />
-        : <ExceptionsPanel operations={operations} available={adminFeedHasContent(feedStates.operations)} busy={Boolean(busy)} onResolve={resolveSupport} onReset={resetHandoff} onReconcile={reconcile} onReviewRefund={() => setTab("legacy")} />}
+        : tab === "legacy" ? <OrdersPanel orders={orders} available={adminFeedHasContent(feedStates.legacyHistory)} busy={Boolean(busy)} query={legacyQueryInput} hasMore={legacyHasMore} onQuery={setLegacyQueryInput} onSearch={() => {
+          const next = legacyQueryInput.trim();
+          if (next === legacyQuery) void refreshFeed("legacyHistory"); else setLegacyQuery(next);
+        }} onLoadMore={loadMoreLegacy} onReview={reviewRefund} onRefund={retryRefund} />
+        : <ExceptionsPanel operations={operations} available={adminFeedHasContent(feedStates.operations)} busy={Boolean(busy)} hasMore={exceptionsHaveMore} onLoadMore={loadMoreExceptions} onResolve={resolveSupport} onReset={resetHandoff} onReconcile={reconcile} onReviewRefund={() => setTab("legacy")} />}
     </main>
 
     <nav className="admin-mobile-navigation" aria-label="Primary Admin navigation"><AdminNavigation items={mobilePrimaryNavigation} selected={tab} onSelect={setTab} /></nav>
@@ -495,10 +549,12 @@ function adminRoleLabel(role?: V1AdminAccess["role"]) {
   return role === "SUPERADMIN" ? "Superadmin" : role === "EXECUTIVE_ADMIN" ? "Executive Admin" : "Admin";
 }
 
-function ExceptionsPanel({ operations, available, busy, onResolve, onReset, onReconcile, onReviewRefund }: {
+function ExceptionsPanel({ operations, available, busy, hasMore, onLoadMore, onResolve, onReset, onReconcile, onReviewRefund }: {
   operations?: OwnerOperationsSnapshot;
   available: boolean;
   busy: boolean;
+  hasMore: boolean;
+  onLoadMore: () => Promise<void>;
   onResolve: (exception: OwnerOrderException, resolution: string) => Promise<void>;
   onReset: (exception: OwnerOrderException, reason: string) => Promise<void>;
   onReconcile: () => Promise<void>;
@@ -527,6 +583,7 @@ function ExceptionsPanel({ operations, available, busy, onResolve, onReset, onRe
           ))}
         </div>
       )}
+      {exceptions.length > 0 ? <button className="secondary-button admin-page-more" type="button" disabled={busy || !hasMore} onClick={() => void onLoadMore()}>{hasMore ? "Load older exceptions" : "All current exceptions loaded"}</button> : null}
       {confirmRecovery ? <AdminPrivilegedActionDialog intent={{
         title: "Run marketplace lifecycle recovery?", entityLabel: "Operational scope", entityValue: "Stalled merchant orders and parcel deliveries",
         currentState: `${operations?.summary.stalledOrders ?? 0} stalled lifecycle signal(s)`, resultingState: "Authoritative state reconciled; eligible offers may be recreated",
@@ -658,10 +715,15 @@ function ReviewCard({ icon, title, subtitle, facts, evidence, location, approval
   );
 }
 
-function OrdersPanel({ orders, available, busy, onReview, onRefund }: {
+function OrdersPanel({ orders, available, busy, query, hasMore, onQuery, onSearch, onLoadMore, onReview, onRefund }: {
   orders: AdminOrder[];
   available: boolean;
   busy: boolean;
+  query: string;
+  hasMore: boolean;
+  onQuery: (query: string) => void;
+  onSearch: () => void;
+  onLoadMore: () => Promise<void>;
   onReview: (
     order: AdminOrder,
     outcome: "approve_full" | "approve_items_only" | "deny",
@@ -673,6 +735,7 @@ function OrdersPanel({ orders, available, busy, onReview, onRefund }: {
   return (
     <section className="admin-section admin-orders" role="tabpanel">
       <header><h2>Recent orders</h2><span>{orders.length}</span></header>
+      <form className="admin-feed-search" role="search" onSubmit={(event) => { event.preventDefault(); onSearch(); }}><label htmlFor="admin-legacy-search">Search legacy history</label><span><input id="admin-legacy-search" type="search" value={query} maxLength={80} placeholder="Exact order ID or store name" onChange={(event) => onQuery(event.target.value)} /><button className="secondary-button" type="submit">Search</button></span></form>
       {orders.length === 0 ? <p className="admin-empty">{available ? "No historical orders yet." : "Historical order data is not available yet."}</p> : (
         <div className="admin-order-table" role="table" aria-label="Recent orders">
           <div className="admin-order-header" role="row"><span>Order</span><span>Store</span><span>Status</span><span>Payment</span><span>Total</span></div>
@@ -681,6 +744,7 @@ function OrdersPanel({ orders, available, busy, onReview, onRefund }: {
           ))}
         </div>
       )}
+      {orders.length > 0 ? <button className="secondary-button admin-page-more" type="button" disabled={busy || !hasMore} onClick={() => void onLoadMore()}>{hasMore ? "Load older orders" : "End of matching history"}</button> : null}
     </section>
   );
 }
@@ -772,6 +836,11 @@ function AdminOrderRow({ order, busy, onReview, onRefund }: {
 }
 
 function shortId(value: string) { return `#${value.slice(0, 8).toUpperCase()}`; }
+function mergeById<T>(current: T[], incoming: T[], key: (value: T) => string) {
+  const merged = new Map(current.map((value) => [key(value), value]));
+  incoming.forEach((value) => merged.set(key(value), value));
+  return Array.from(merged.values());
+}
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }

@@ -254,19 +254,25 @@ export type AdminRoyaltyPayout = {
   webhookHistory: Array<Record<string, unknown>>;
 };
 
+export type AdminRoyaltyPayoutPage = {
+  withdrawals: AdminRoyaltyPayout[];
+  hasMore: boolean;
+  nextCursor?: { requestedAt: string; withdrawalId: string };
+};
+
 export async function getAdminRoyaltyPayouts(
-  input: Auth & { limit?: number },
+  input: Auth & { limit?: number; cursor?: AdminRoyaltyPayoutPage["nextCursor"] },
   fetcher: typeof fetch = fetch,
-): Promise<AdminRoyaltyPayout[]> {
+): Promise<AdminRoyaltyPayoutPage> {
   const payload = await callEarnings(
     input,
-    { operation: "adminRoyaltyPayouts", limit: input.limit ?? 100 },
+    { operation: "adminRoyaltyPayouts", limit: input.limit ?? 50, cursor: input.cursor ?? null },
     crypto.randomUUID(),
     fetcher,
   );
   if (!Array.isArray(payload.withdrawals)) throw new EarningsRequestError("invalid_response", "Payouts are unavailable.", 200);
   try {
-    return payload.withdrawals.map((value) => {
+    const withdrawals = payload.withdrawals.map((value) => {
       const payout = record(value);
       const destination = record(payout.destinationSnapshot);
       if (
@@ -298,6 +304,20 @@ export async function getAdminRoyaltyPayouts(
         webhookHistory: payout.webhookHistory.map(record),
       };
     });
+    if (typeof payload.hasMore !== "boolean") throw new Error("Payouts are unavailable.");
+    const cursor = payload.nextCursor === null || payload.nextCursor === undefined
+      ? undefined
+      : record(payload.nextCursor);
+    if (payload.hasMore && (!cursor || typeof cursor.requestedAt !== "string" ||
+      typeof cursor.withdrawalId !== "string")) throw new Error("Payouts are unavailable.");
+    return {
+      withdrawals,
+      hasMore: payload.hasMore,
+      nextCursor: cursor ? {
+        requestedAt: cursor.requestedAt as string,
+        withdrawalId: cursor.withdrawalId as string,
+      } : undefined,
+    };
   } catch (error) {
     if (error instanceof EarningsRequestError) throw error;
     throw new EarningsRequestError("invalid_response", "Payouts are unavailable.", 200);

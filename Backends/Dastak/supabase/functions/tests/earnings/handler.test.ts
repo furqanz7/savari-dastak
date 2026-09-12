@@ -310,14 +310,16 @@ Deno.test("Admin payout trace remains platform-RBAC mediated by the database", a
     dependencies({
       callRPC: async (rpc, args) => {
         call = [rpc, args];
-        return [{ response_body: { withdrawals: [] }, response_status: 200 }];
+        return [{ response_body: { withdrawals: [], hasMore: false, nextCursor: null }, response_status: 200 }];
       },
     }),
   );
   assertEquals(response.status, 200);
-  assertEquals(call, ["dastak_v1_razorpayx_admin_snapshot", {
+  assertEquals(call, ["dastak_v1_razorpayx_admin_page", {
     p_account_id: accountId,
     p_limit: 25,
+    p_after_requested_at: null,
+    p_after_withdrawal_id: null,
   }]);
 });
 

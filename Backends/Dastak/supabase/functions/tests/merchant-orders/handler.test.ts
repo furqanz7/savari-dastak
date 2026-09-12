@@ -309,6 +309,22 @@ Deno.test("owner snapshot uses only the authenticated owner and a bounded limit"
   }
 });
 
+Deno.test("owner history page forwards authenticated search and opaque cursor", async () => {
+  let requested: unknown;
+  const response = await handleMerchantOrders(
+    request({ operation: "ownerHistoryPage", query: " Town Store ", limit: 25, cursor: {
+      createdAt: "2026-09-12T10:00:00Z", orderId,
+    } }, "Bearer owner"),
+    dependencies({ getOwnerOrdersPage: (input) => {
+      requested = input;
+      return Promise.resolve({ responseBody: { orders: [], hasMore: false, nextCursor: null }, responseStatus: 200 });
+    } }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(requested, { accountId, query: "Town Store", limit: 25,
+    afterCreatedAt: "2026-09-12T10:00:00Z", afterOrderId: orderId });
+});
+
 Deno.test("merchant accept forwards an authenticated transition intent", async () => {
   let recorded: MerchantOrderMutationInput | undefined;
   const response = await handleMerchantOrders(
@@ -538,6 +554,26 @@ Deno.test("owner operations use the authenticated owner and bounded limit", asyn
   assertEquals(requested, { accountId, limit: 40 });
 });
 
+Deno.test("owner exception page forwards only a complete validated cursor", async () => {
+  let requested: unknown;
+  const response = await handleMerchantOrders(
+    request({ operation: "ownerExceptionsPage", limit: 40, cursor: {
+      occurredAt: "2026-09-12T10:00:00Z", exceptionId: `support:${orderId}`,
+    } }, "Bearer owner"),
+    dependencies({ getOwnerExceptionsPage: (input) => {
+      requested = input;
+      return Promise.resolve({ responseBody: { exceptions: [], hasMore: false, nextCursor: null }, responseStatus: 200 });
+    } }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(requested, { accountId, limit: 40, afterOccurredAt: "2026-09-12T10:00:00Z",
+    afterExceptionId: `support:${orderId}` });
+  const invalid = await handleMerchantOrders(request({ operation: "ownerExceptionsPage", cursor: {
+    occurredAt: "2026-09-12T10:00:00Z",
+  } }, "Bearer owner"), dependencies());
+  assertEquals(invalid.status, 400);
+});
+
 Deno.test("owner support resolution forwards normalized server intent", async () => {
   let recorded: OwnerResolveSupportInput | undefined;
   const response = await handleMerchantOrders(
@@ -732,8 +768,12 @@ function dependencies(
       (() => Promise.resolve({ responseBody: snapshot, responseStatus: 200 })),
     getOwnerOrders: overrides.getOwnerOrders ??
       (() => Promise.resolve({ responseBody: snapshot, responseStatus: 200 })),
+    getOwnerOrdersPage: overrides.getOwnerOrdersPage ??
+      (() => Promise.resolve({ responseBody: { ...snapshot, hasMore: false, nextCursor: null }, responseStatus: 200 })),
     getOwnerOperations: overrides.getOwnerOperations ??
       (() => Promise.resolve({ responseBody: { exceptions: [] }, responseStatus: 200 })),
+    getOwnerExceptionsPage: overrides.getOwnerExceptionsPage ??
+      (() => Promise.resolve({ responseBody: { exceptions: [], hasMore: false, nextCursor: null }, responseStatus: 200 })),
     merchantAccept: overrides.merchantAccept ??
       (() => Promise.resolve({ responseBody: acceptedOrder, responseStatus: 200 })),
     merchantReject: overrides.merchantReject ??

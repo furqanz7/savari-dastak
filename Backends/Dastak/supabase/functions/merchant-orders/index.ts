@@ -9,6 +9,8 @@ import {
   type MerchantConfirmReturnInput,
   type MerchantOrderMutationInput,
   type MerchantRejectOrderInput,
+  type OwnerExceptionPageInput,
+  type OwnerHistoryPageInput,
   type OwnerResetHandoffInput,
   type OwnerResetParcelHandoffInput,
   type OwnerResolveSupportInput,
@@ -32,7 +34,9 @@ Deno.serve((request) =>
     createCustomerSupport,
     getMerchantOrders,
     getOwnerOrders,
+    getOwnerOrdersPage,
     getOwnerOperations,
+    getOwnerExceptionsPage,
     merchantAccept,
     merchantReject,
     merchantMarkReady,
@@ -119,6 +123,18 @@ async function getOwnerOrders(accountId: string, limit: number) {
   return rpcResponse(data, "get_owner_merchant_orders");
 }
 
+async function getOwnerOrdersPage(input: OwnerHistoryPageInput) {
+  const { data, error } = await serviceClient.rpc("get_owner_merchant_orders_page", {
+    p_account_id: input.accountId,
+    p_query: input.query,
+    p_limit: input.limit,
+    p_after_created_at: input.afterCreatedAt,
+    p_after_order_id: input.afterOrderId,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "get_owner_merchant_orders_page");
+}
+
 async function getOwnerOperations(accountId: string, limit: number) {
   const { data, error } = await serviceClient.rpc("get_owner_order_operations", {
     p_account_id: accountId,
@@ -126,6 +142,17 @@ async function getOwnerOperations(accountId: string, limit: number) {
   });
   if (error) throw error;
   return rpcResponse(data, "get_owner_order_operations");
+}
+
+async function getOwnerExceptionsPage(input: OwnerExceptionPageInput) {
+  const { data, error } = await serviceClient.rpc("get_owner_order_exceptions_page", {
+    p_account_id: input.accountId,
+    p_limit: input.limit,
+    p_after_occurred_at: input.afterOccurredAt,
+    p_after_exception_id: input.afterExceptionId,
+  });
+  if (error) throw error;
+  return rpcResponse(data, "get_owner_order_exceptions_page");
 }
 
 async function merchantAccept(input: MerchantOrderMutationInput) {

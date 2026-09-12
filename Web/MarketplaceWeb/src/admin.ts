@@ -84,6 +84,16 @@ export type OwnerOperationsSnapshot = {
   exceptions: OwnerOrderException[];
   parcels: ParcelDelivery[];
 };
+export type AdminOrderPage = {
+  orders: AdminOrder[];
+  hasMore: boolean;
+  nextCursor?: { createdAt: string; orderId: string };
+};
+export type OwnerExceptionPage = {
+  exceptions: OwnerOrderException[];
+  hasMore: boolean;
+  nextCursor?: { occurredAt: string; exceptionId: string };
+};
 export type OwnerReconciliationResult = {
   merchantOrdersRecovered: number;
   parcelsRecovered: number;
@@ -136,10 +146,42 @@ export async function getAdminOrders(input: AuthenticatedInput & { limit?: numbe
   return source.orders.map(adminOrder);
 }
 
+export async function getAdminOrderPage(
+  input: AuthenticatedInput & { query?: string; limit?: number; cursor?: AdminOrderPage["nextCursor"] },
+  fetcher: Fetcher = fetch,
+): Promise<AdminOrderPage> {
+  const limit = input.limit ?? 50;
+  const query = input.query?.trim().replace(/\s+/g, " ") ?? "";
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100 || query.length > 80) throw validationError();
+  const source = record(await call("merchant-orders", input, {
+    operation: "ownerHistoryPage", limit, query: query || null, cursor: input.cursor ?? null,
+  }, undefined, fetcher));
+  if (!source || !Array.isArray(source.orders) || source.orders.length > limit ||
+    typeof source.hasMore !== "boolean") invalid();
+  const cursor = pageCursor(source.nextCursor, "createdAt", "orderId", source.hasMore, true);
+  return { orders: source.orders.map(adminOrder), hasMore: source.hasMore, nextCursor: cursor as AdminOrderPage["nextCursor"] };
+}
+
 export async function getOwnerOperations(input: AuthenticatedInput & { limit?: number }, fetcher: Fetcher = fetch) {
   const limit = input.limit ?? 50;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw validationError();
   return ownerOperations(await call("merchant-orders", input, { operation: "ownerOperations", limit }, undefined, fetcher), limit);
+}
+
+export async function getOwnerExceptionPage(
+  input: AuthenticatedInput & { limit?: number; cursor?: OwnerExceptionPage["nextCursor"] },
+  fetcher: Fetcher = fetch,
+): Promise<OwnerExceptionPage> {
+  const limit = input.limit ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw validationError();
+  const source = record(await call("merchant-orders", input, {
+    operation: "ownerExceptionsPage", limit, cursor: input.cursor ?? null,
+  }, undefined, fetcher));
+  if (!source || !Array.isArray(source.exceptions) || source.exceptions.length > limit ||
+    typeof source.hasMore !== "boolean") invalid();
+  const cursor = pageCursor(source.nextCursor, "occurredAt", "exceptionId", source.hasMore, false);
+  return { exceptions: source.exceptions.map(ownerException), hasMore: source.hasMore,
+    nextCursor: cursor as OwnerExceptionPage["nextCursor"] };
 }
 
 export async function resolveOwnerSupportCase(
@@ -432,6 +474,25 @@ function ownerException(value: unknown): OwnerOrderException {
     purpose: (purpose ?? null) as OwnerOrderException["purpose"],
     occurredAt: timestamp(source.occurredAt),
   };
+}
+
+function pageCursor(
+  value: unknown,
+  timestampKey: string,
+  idKey: string,
+  required: boolean,
+  uuidId: boolean,
+) {
+  if (value === null || value === undefined) {
+    if (required) invalid();
+    return undefined;
+  }
+  const source = record(value);
+  const timestampValue = source?.[timestampKey];
+  const idValue = source?.[idKey];
+  if (!source || typeof timestampValue !== "string" || !Number.isFinite(Date.parse(timestampValue)) ||
+    typeof idValue !== "string" || (uuidId && !uuidPattern.test(idValue)) || (!uuidId && idValue.length > 200)) invalid();
+  return { [timestampKey]: timestampValue, [idKey]: idValue };
 }
 
 function reconciliation(value: unknown): OwnerReconciliationResult {

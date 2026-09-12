@@ -34,12 +34,18 @@ import { userFacingError } from "./userFacingError";
 
 export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   const [orders, setOrders] = useState<V1AdminExecutionOrder[]>([]);
+  const [scope, setScope] = useState<"ACTIVE" | "HISTORY">("ACTIVE");
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selectedId, setSelectedId] = useState<string>();
   const [trace, setTrace] = useState<V1AdminExecutionTrace>();
   const [listState, setListState] = useState(initialAdminFeedState);
   const [traceState, setTraceState] = useState(initialAdminFeedState);
   const [notice, setNotice] = useState<string>();
   const selectedIdRef = useRef<string | undefined>(undefined);
+  const cursorRef = useRef<{ updatedAt: string; orderId: string } | undefined>(undefined);
   const listController = useRef<AbortController | undefined>(undefined);
   const traceController = useRef<AbortController | undefined>(undefined);
   const listQueue = useRef(new RefreshQueue());
@@ -65,21 +71,27 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
     }
   }, [auth, reportRequestError]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (append = false) => {
     await listQueue.current.request(false, async () => {
       listController.current?.abort();
       const controller = new AbortController();
       listController.current = controller;
       setListState((current) => adminFeedStarted(current));
+      if (append) setLoadingMore(true);
       try {
-        const result = await getV1AdminExecutionOrders({ ...auth, limit: 50, signal: controller.signal });
+        const result = await getV1AdminExecutionOrders({
+          ...auth, scope, query, limit: 50, cursor: append ? cursorRef.current : undefined,
+          signal: controller.signal,
+        });
         if (controller.signal.aborted) return;
-        setOrders(result);
+        setOrders((current) => append
+          ? [...current, ...result.orders.filter((order) => !current.some((saved) => saved.id === order.id))]
+          : result.orders);
+        cursorRef.current = result.nextCursor;
+        setHasMore(result.hasMore);
         setListState((current) => adminFeedSucceeded(current));
         const currentId = selectedIdRef.current;
-        const orderId = currentId && result.some((order) => order.id === currentId)
-          ? currentId
-          : result[0]?.id;
+        const orderId = currentId ?? result.orders[0]?.id;
         if (orderId !== currentId) setTraceState(initialAdminFeedState());
         selectedIdRef.current = orderId;
         setSelectedId(orderId);
@@ -93,13 +105,14 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
         setListState((current) => adminFeedFailed(current, refreshError));
         throw refreshError;
       } finally {
+        setLoadingMore(false);
         if (listController.current === controller) listController.current = undefined;
       }
     });
-  }, [auth, reportRequestError]);
+  }, [auth, query, reportRequestError, scope]);
 
   const reconcile = useCallback(async () => {
-    await refresh();
+    await refresh(false);
     const orderId = selectedIdRef.current;
     if (orderId) await loadTrace(orderId);
   }, [loadTrace, refresh]);
@@ -118,15 +131,34 @@ export function AdminV1ExecutionPanel({ auth }: { auth: DastakV1Auth }) {
   const listError = listState.phase === "failed-with-content" || listState.phase === "failed-without-content";
   const traceError = traceState.phase === "failed-with-content" || traceState.phase === "failed-without-content";
   const initialListLoading = listState.phase === "loading";
+  const changeScope = (next: "ACTIVE" | "HISTORY") => {
+    if (next === scope) return;
+    listController.current?.abort();
+    setScope(next); setOrders([]); cursorRef.current = undefined; setHasMore(false);
+    selectedIdRef.current = undefined; setSelectedId(undefined); setTrace(undefined);
+    setListState(initialAdminFeedState()); setTraceState(initialAdminFeedState());
+  };
 
   return <section className="v1-execution-panel" role="tabpanel" aria-label="Current Dastak orders">
-    <header><div><p className="eyebrow">LIVE ORDER CONTROL</p><h2>Orders</h2><span>Inspect matching, payment, fulfilment, custody and recovery in one trace.</span></div></header>
+    <header><div><p className="eyebrow">ORDER CONTROL</p><h2>Orders</h2><span>Actionable work defaults to Live. Terminal records remain available in History.</span></div></header>
+    <div className="admin-order-page-controls">
+      <div role="group" aria-label="Order lifecycle scope">
+        <button type="button" aria-pressed={scope === "ACTIVE"} className={scope === "ACTIVE" ? "selected" : ""} onClick={() => changeScope("ACTIVE")}>Live</button>
+        <button type="button" aria-pressed={scope === "HISTORY"} className={scope === "HISTORY" ? "selected" : ""} onClick={() => changeScope("HISTORY")}>History</button>
+      </div>
+      <form role="search" onSubmit={(event) => { event.preventDefault(); cursorRef.current = undefined; setQuery(queryInput.trim()); }}>
+        <label htmlFor="admin-order-search">Find an order</label>
+        <input id="admin-order-search" value={queryInput} maxLength={80} onChange={(event) => setQueryInput(event.target.value)} placeholder="Order number or exact ID" />
+        <button type="submit">Search</button>
+        {query ? <button type="button" onClick={() => { setQueryInput(""); setQuery(""); cursorRef.current = undefined; }}>Clear</button> : null}
+      </form>
+    </div>
     {listError ? <p className="order-error" role="alert">{message(listState.error)}</p> : null}
     {notice ? <p className="admin-access-message success" role="status">{notice}</p> : null}
-    {initialListLoading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length === 0 && adminFeedHasContent(listState) ? <p className="admin-empty">No current-generation orders have been submitted.</p> : orders.length > 0 ? <div className="v1-execution-layout">
+    {initialListLoading ? <div className="catalogue-loading" role="status"><span /> Loading orders</div> : orders.length === 0 && adminFeedHasContent(listState) ? <p className="admin-empty">{query ? "No matching orders were found." : scope === "ACTIVE" ? "No active current-generation orders." : "No current-generation order history yet."}</p> : orders.length > 0 ? <><div className="v1-execution-layout">
       <nav aria-label="Current orders">{orders.map((order) => <button type="button" className={selectedId === order.id ? "selected" : ""} key={order.id} onClick={() => select(order.id)}><span><strong>{order.displayOrderNumber}</strong><small>{formatTime(order.updatedAt)}</small></span><b>{order.status.replaceAll("_", " ")}</b></button>)}</nav>
       <div className="v1-trace-detail">{traceError ? <p className="order-error" role="alert">{message(traceState.error)}</p> : null}{trace && trace.order.id === selectedId ? <Trace trace={trace} auth={auth} onChanged={reconcile} onNotice={setNotice} /> : traceState.phase === "loading" ? <div className="catalogue-loading" role="status"><span /> Loading order evidence</div> : null}</div>
-    </div> : null}
+    </div>{hasMore ? <button className="secondary-button admin-load-more" type="button" disabled={loadingMore} onClick={() => void refresh(true).catch(() => undefined)}>{loadingMore ? "Loading…" : "Load older orders"}</button> : <p className="admin-page-end">End of this order feed.</p>}</> : null}
   </section>;
 }
 

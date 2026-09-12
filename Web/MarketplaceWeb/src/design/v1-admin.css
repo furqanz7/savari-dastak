@@ -206,6 +206,11 @@
 .admin-section-heading > div { min-width: 0; }
 .admin-section-heading h2 { margin: 4px 0 6px; font-size: clamp(25px, 3vw, 34px); }
 .admin-section-heading p:last-child { max-width: 700px; margin: 0; color: var(--text-secondary); line-height: 1.5; }
+.admin-feed-search { max-width: 720px; display: grid; gap: 7px; margin: 14px 0; color: var(--text-secondary); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.admin-feed-search > span { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.admin-feed-search input { width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid var(--divider); border-radius: 12px; color: var(--text-primary); background: var(--surface-raised); font: inherit; font-size: 14px; font-weight: 650; letter-spacing: normal; text-transform: none; }
+.admin-feed-search input:focus-visible { outline: 3px solid color-mix(in srgb, var(--dastak-accent) 42%, transparent); outline-offset: 2px; border-color: var(--dastak-accent); }
+.admin-page-more { width: min(100%, 360px); min-height: 46px; margin: 18px auto 0; }
 
 .admin-overview { display: grid; gap: 18px; padding: 24px 0 30px; }
 .admin-command-hero { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: center; min-height: 220px; padding: clamp(24px, 4vw, 42px); overflow: hidden; border: 1px solid color-mix(in srgb, var(--dastak-accent) 30%, var(--divider)); border-radius: 24px; background: linear-gradient(130deg, color-mix(in srgb, var(--dastak-accent-soft) 72%, var(--surface)) 0%, var(--surface-raised) 62%); box-shadow: 0 24px 70px rgb(31 24 13 / .1); }

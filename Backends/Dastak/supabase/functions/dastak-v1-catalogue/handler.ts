@@ -162,6 +162,21 @@ export async function handleV1Catalogue(
         }
         return json({ ...snapshotRecord, ...taxonomyRecord });
       }
+      case "adminMetadata": {
+        // The paginated SKU browser is authoritative. Fetch one bounded row so
+        // the existing summary projection can provide counts/config/branches,
+        // then deliberately omit SKU data from the metadata response.
+        const [snapshot, taxonomy] = await Promise.all([
+          dependencies.adminSnapshot({ accessToken: actor.accessToken, skuLimit: 1 }),
+          dependencies.adminTaxonomy({ accessToken: actor.accessToken }),
+        ]);
+        const snapshotRecord = record(snapshot);
+        const taxonomyRecord = record(taxonomy);
+        if (!snapshotRecord || !taxonomyRecord) {
+          throw new Error("invalid Admin catalogue metadata projection");
+        }
+        return json({ ...snapshotRecord, ...taxonomyRecord, skus: [] });
+      }
       case "adminCataloguePage":
         return await adminCataloguePage(body, actor, dependencies);
       case "merchantSnapshot": {

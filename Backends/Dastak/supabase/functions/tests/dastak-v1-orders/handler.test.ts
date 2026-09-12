@@ -544,7 +544,14 @@ Deno.test("V1 execution trace is a permission-checked authenticated RPC surface"
   assertEquals(list.status, 200);
   assertEquals(trace.status, 200);
   assertEquals(health.status, 200);
-  assertEquals(listInput, { accessToken: actor.accessToken, limit: 25 });
+  assertEquals(listInput, {
+    accessToken: actor.accessToken,
+    scope: "ACTIVE",
+    query: null,
+    limit: 25,
+    afterUpdatedAt: null,
+    afterOrderId: null,
+  });
   assertEquals(traceInput, { accessToken: actor.accessToken, orderId });
   assertEquals(healthInput, { accessToken: actor.accessToken });
 });

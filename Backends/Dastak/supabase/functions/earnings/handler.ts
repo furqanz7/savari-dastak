@@ -16,7 +16,7 @@ type EarningsRPC =
   | "get_dastak_delivery_earnings"
   | "dastak_v1_get_royalty_snapshot"
   | "dastak_v1_request_royalty_withdrawal"
-  | "dastak_v1_razorpayx_admin_snapshot";
+  | "dastak_v1_razorpayx_admin_page";
 
 export type EarningsDependencies = {
   authenticateBearer: AuthenticateBearer;
@@ -51,6 +51,7 @@ type RequestBody = {
   withdrawalId?: unknown;
   expectedVersion?: unknown;
   limit?: unknown;
+  cursor?: unknown;
 };
 
 export type PayoutDestinationRequest = {
@@ -193,14 +194,26 @@ export async function handleEarnings(request: Request, dependencies: EarningsDep
       );
     }
     if (operation === "adminRoyaltyPayouts") {
-      const limit = body?.limit === undefined ? 100 : body.limit;
-      if (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+      const limit = body?.limit === undefined ? 50 : body.limit;
+      const cursor = record(body?.cursor);
+      const afterRequestedAt = cursor && validTimestamp(cursor.requestedAt)
+        ? cursor.requestedAt as string
+        : null;
+      const afterWithdrawalId = cursor && typeof cursor.withdrawalId === "string" &&
+          uuidPattern.test(cursor.withdrawalId)
+        ? cursor.withdrawalId
+        : null;
+      if (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+        (body?.cursor !== null && body?.cursor !== undefined && !cursor) ||
+        (cursor !== undefined && (!afterRequestedAt || !afterWithdrawalId))) {
         return json({ error: { code: "invalid_limit", message: "Invalid payout limit." } }, 400);
       }
       return snapshotResponse(
-        await dependencies.callRPC("dastak_v1_razorpayx_admin_snapshot", {
+        await dependencies.callRPC("dastak_v1_razorpayx_admin_page", {
           p_account_id: actor.accountId,
           p_limit: limit,
+          p_after_requested_at: afterRequestedAt,
+          p_after_withdrawal_id: afterWithdrawalId,
         }),
       );
     }
@@ -310,4 +323,8 @@ function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined;
+}
+
+function validTimestamp(value: unknown) {
+  return typeof value === "string" && value.length <= 50 && Number.isFinite(Date.parse(value));
 }

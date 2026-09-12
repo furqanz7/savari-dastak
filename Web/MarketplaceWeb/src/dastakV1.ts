@@ -481,6 +481,13 @@ export type V1AdminExecutionOrder = {
   deliveredAt?: string;
 };
 
+export type V1AdminExecutionOrderPage = {
+  orders: V1AdminExecutionOrder[];
+  hasMore: boolean;
+  nextCursor?: { updatedAt: string; orderId: string };
+  scope: "ACTIVE" | "HISTORY";
+};
+
 export type V1AdminExecutionTrace = {
   order: V1AdminExecutionOrder;
   cancellation?: Record<string, unknown>;
@@ -889,7 +896,7 @@ export async function commitV1LaunchPayment(
 
 export async function getV1AdminCatalogue(input: DastakV1Auth & { signal?: AbortSignal }, fetcher: Fetcher = fetch) {
   return parseV1AdminSnapshot(await invoke(input, "dastak-v1-catalogue", {
-    operation: "adminSnapshot", skuLimit: 1000,
+    operation: "adminMetadata",
   }, undefined, fetcher));
 }
 
@@ -1452,15 +1459,42 @@ export async function uploadV1MerchantReadyEvidence(
 }
 
 export async function getV1AdminExecutionOrders(
-  input: DastakV1Auth & { limit?: number; signal?: AbortSignal },
+  input: DastakV1Auth & {
+    scope?: "ACTIVE" | "HISTORY";
+    query?: string;
+    limit?: number;
+    cursor?: { updatedAt: string; orderId: string };
+    signal?: AbortSignal;
+  },
   fetcher: Fetcher = fetch,
-) {
+): Promise<V1AdminExecutionOrderPage> {
   const source = record(await invoke(input, "dastak-v1-orders", {
     operation: "adminExecutionOrders",
+    scope: input.scope ?? "ACTIVE",
+    query: input.query?.trim() || null,
     limit: input.limit ?? 50,
+    cursor: input.cursor ?? null,
   }, undefined, fetcher));
-  if (!source || !Array.isArray(source.orders)) invalid("execution order collection");
-  return source.orders.map(parseAdminExecutionOrder);
+  if (!source || !Array.isArray(source.orders) || typeof source.hasMore !== "boolean") {
+    invalid("execution order collection");
+  }
+  const cursor = source.nextCursor === null || source.nextCursor === undefined
+    ? undefined
+    : requiredRecord(source.nextCursor);
+  const scope = source.scope;
+  if ((scope !== "ACTIVE" && scope !== "HISTORY") ||
+    (source.hasMore && (!cursor || !cursor.updatedAt || !cursor.orderId))) {
+    invalid("execution order collection");
+  }
+  return {
+    orders: source.orders.map(parseAdminExecutionOrder),
+    hasMore: source.hasMore,
+    nextCursor: cursor ? {
+      updatedAt: requiredTimestamp(cursor.updatedAt),
+      orderId: requiredUuid(cursor.orderId),
+    } : undefined,
+    scope,
+  };
 }
 
 export async function getV1AdminExecutionTrace(

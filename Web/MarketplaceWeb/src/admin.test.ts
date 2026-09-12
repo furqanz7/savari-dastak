@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   getAdminOrders,
+  getAdminOrderPage,
   getEvidenceUrl,
   getMerchantApplications,
   getOwnerOperations,
+  getOwnerExceptionPage,
   getPartnerApplications,
   reconcileOwnerOrders,
   resolveOwnerSupportCase,
@@ -128,6 +130,20 @@ describe("Dastak Admin client", () => {
     expect(orders).toEqual([{ ...order, refundDecision: null }]);
   });
 
+  it("loads opaque legacy history pages without implying the first page is exhaustive", async () => {
+    let requestBody: unknown;
+    const page = await getAdminOrderPage({ ...auth, query: orderId, limit: 25 }, (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return Promise.resolve(Response.json({ orders: [], hasMore: true, nextCursor: {
+        createdAt: "2026-07-22T06:00:00Z", orderId,
+      } }));
+    });
+    expect(requestBody).toEqual({ operation: "ownerHistoryPage", limit: 25, query: orderId, cursor: null });
+    expect(page).toEqual({ orders: [], hasMore: true, nextCursor: {
+      createdAt: "2026-07-22T06:00:00Z", orderId,
+    } });
+  });
+
   it("sends an owner refund decision without accepting client amounts", async () => {
     let requestBody: unknown;
     const reviewedOrder = {
@@ -236,6 +252,16 @@ describe("Dastak Admin client", () => {
       caseId: applicationId,
       resolution: "Partner contacted and delivery confirmed.",
     });
+  });
+
+  it("loads operational exceptions with an opaque continuation cursor", async () => {
+    const page = await getOwnerExceptionPage({ ...auth, limit: 25 }, response({
+      exceptions: [], hasMore: true, nextCursor: {
+        occurredAt: "2026-07-22T06:00:00Z", exceptionId: `support:${applicationId}`,
+      },
+    }));
+    expect(page.hasMore).toBe(true);
+    expect(page.nextCursor?.exceptionId).toBe(`support:${applicationId}`);
   });
 
   it("runs idempotent lifecycle recovery", async () => {

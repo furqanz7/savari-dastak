@@ -151,9 +151,13 @@ Deno.serve((request) =>
     listAdminExecutionOrders: (input) =>
       callAuthenticatedRPC(
         input.accessToken,
-        "dastak_v1_admin_execution_orders",
+        "dastak_v1_admin_execution_orders_page",
         {
+          p_scope: input.scope,
+          p_query: input.query,
           p_limit: input.limit,
+          p_after_updated_at: input.afterUpdatedAt,
+          p_after_order_id: input.afterOrderId,
         },
       ),
     getAdminExecutionTrace: (input) =>

@@ -18,7 +18,7 @@ if [[ "$role" == "all" && "$mode" != "--check" ]]; then
   exit 64
 fi
 
-for command_name in vercel rg rsync; do
+for command_name in curl vercel rg rsync; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'Missing required deployment prerequisite: %s\n' "$command_name" >&2
     exit 127
@@ -41,21 +41,25 @@ configure_role() {
       project="dastak"
       project_id="prj_Wy48d7Vv3OXLAgulBukYHoXiXy0f"
       expected_variant="dastak-customer"
+      production_url="https://dastak-customer.vercel.app"
       ;;
     delivery)
       project="dastak-delivery"
       project_id="prj_NvUua79V8pUlGGA4QIOixsVFJDsX"
       expected_variant="dastak-delivery"
+      production_url="https://dastak-delivery.vercel.app"
       ;;
     merchant)
       project="dastak-merchant"
       project_id="prj_O1XldqBxHKKVChvBqOASbBvi7Tyl"
       expected_variant="dastak-merchant"
+      production_url="https://dastak-merchant.vercel.app"
       ;;
     admin)
       project="dastak-admin"
       project_id="prj_8bTPMpvbQqSOqcgXWwR8cHp0shVS"
       expected_variant="dastak-admin"
+      production_url="https://dastak-admin.vercel.app"
       ;;
     *) usage ;;
   esac
@@ -122,8 +126,9 @@ rsync -a \
   "$repo_root/Web/MarketplaceWeb/" \
   "$deploy_root/Web/MarketplaceWeb/"
 
+commit_sha="$(git -C "$repo_root" rev-parse HEAD)"
 deploy_args=(deploy "$deploy_root" --project "$project" --scope "$team_slug" --archive=tgz --yes)
-deploy_args+=(--meta "gitCommitSha=$(git -C "$repo_root" rev-parse HEAD)")
+deploy_args+=(--meta "gitCommitSha=$commit_sha" --build-env "GIT_COMMIT_SHA=$commit_sha")
 if [[ "$mode" == "--production" || "$mode" == "--staged-production" ]]; then
   deploy_args+=(--prod)
 fi
@@ -132,4 +137,47 @@ if [[ "$mode" == "--staged-production" ]]; then
   # coordinated native/backend rollout. Promote this exact artifact afterwards.
   deploy_args+=(--skip-domain)
 fi
-VERCEL_ORG_ID="$org_id" VERCEL_PROJECT_ID="$project_id" vercel "${deploy_args[@]}"
+deployment_output="$(VERCEL_ORG_ID="$org_id" VERCEL_PROJECT_ID="$project_id" vercel "${deploy_args[@]}" 2>&1)"
+printf '%s\n' "$deployment_output"
+deployment_url="$(rg -o 'https://[^[:space:]]+\.vercel\.app' <<<"$deployment_output" | tail -1)"
+if [[ -z "$deployment_url" ]]; then
+  printf 'Could not resolve the deployment URL for provenance verification.\n' >&2
+  exit 1
+fi
+
+verification_url="$deployment_url"
+if [[ "$mode" == "--production" ]]; then
+  verification_url="$production_url"
+fi
+verified=false
+for _attempt in {1..20}; do
+  html_file="$audit_root/release.html"
+  headers_file="$audit_root/release.headers"
+  if curl --fail --silent --show-error --location --dump-header "$headers_file" "$verification_url" -o "$html_file"; then
+    actual_sha="$(sed -n 's/.*name="dastak:git-sha" content="\([^"]*\)".*/\1/p' "$html_file" | head -1)"
+    actual_variant="$(sed -n 's/.*name="dastak:variant" content="\([^"]*\)".*/\1/p' "$html_file" | head -1)"
+    actual_environment="$(sed -n 's/.*name="dastak:environment" content="\([^"]*\)".*/\1/p' "$html_file" | head -1)"
+    actual_deployment_id="$(sed -n 's/.*name="dastak:deployment-id" content="\([^"]*\)".*/\1/p' "$html_file" | head -1)"
+    expected_environment="preview"
+    if [[ "$mode" == "--production" || "$mode" == "--staged-production" ]]; then
+      expected_environment="production"
+    fi
+    if [[ "$actual_sha" == "$commit_sha" &&
+      "$actual_variant" == "$expected_variant" &&
+      "$actual_environment" == "$expected_environment" &&
+      -n "$actual_deployment_id" && "$actual_deployment_id" != "local" ]] &&
+      rg -qi '^content-security-policy:.*frame-ancestors .none.' "$headers_file" &&
+      rg -qi '^x-content-type-options:[[:space:]]*nosniff' "$headers_file"; then
+      verified=true
+      break
+    fi
+  fi
+  sleep 2
+done
+if [[ "$verified" != true ]]; then
+  printf 'Deployment provenance/header verification failed for %s (expected %s / %s / %s).\n' \
+    "$verification_url" "$expected_variant" "$commit_sha" "$expected_environment" >&2
+  exit 1
+fi
+printf '%s deployment provenance verified: sha=%s variant=%s environment=%s deployment=%s url=%s\n' \
+  "$requested_role" "$commit_sha" "$expected_variant" "$actual_environment" "$actual_deployment_id" "$verification_url"

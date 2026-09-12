@@ -114,7 +114,11 @@ export type V1OrderDependencies = {
   }) => Promise<unknown>;
   listAdminExecutionOrders: (input: {
     accessToken: string;
+    scope: "ACTIVE" | "HISTORY";
+    query: string | null;
     limit: number;
+    afterUpdatedAt: string | null;
+    afterOrderId: string | null;
   }) => Promise<unknown>;
   getAdminExecutionTrace: (input: {
     accessToken: string;
@@ -606,16 +610,36 @@ export async function handleV1Orders(
       }
       case "adminExecutionOrders": {
         const limit = integer(body.limit, 1, 100) ?? 50;
+        const scope = body.scope === undefined || body.scope === null
+          ? "ACTIVE"
+          : body.scope === "ACTIVE" || body.scope === "HISTORY"
+          ? body.scope
+          : undefined;
+        const query = body.query === null || body.query === undefined
+          ? null
+          : requiredText(body.query, 80);
+        const cursor = record(body.cursor);
+        const afterUpdatedAt = cursor && validTimestamp(cursor.updatedAt)
+          ? cursor.updatedAt as string
+          : null;
+        const afterOrderId = cursor ? requiredUUID(cursor.orderId) ?? null : null;
         if (
           body.limit !== null && body.limit !== undefined &&
-          integer(body.limit, 1, 100) === undefined
+          integer(body.limit, 1, 100) === undefined || !scope ||
+          (body.query !== null && body.query !== undefined && !query) ||
+          (body.cursor !== null && body.cursor !== undefined && !cursor) ||
+          (cursor !== undefined && (!afterUpdatedAt || !afterOrderId))
         ) {
           return validationError();
         }
         return json(
           await dependencies.listAdminExecutionOrders({
             accessToken: actor.accessToken,
+            scope,
+            query: query ?? null,
             limit,
+            afterUpdatedAt,
+            afterOrderId,
           }),
         );
       }

@@ -478,6 +478,25 @@ Deno.test("V1 Admin snapshot composes canonical taxonomy without exposing anothe
   ]);
 });
 
+Deno.test("V1 Admin metadata avoids bulk SKU loading while retaining taxonomy", async () => {
+  let snapshotInput: unknown;
+  const response = await handleV1Catalogue(
+    request({ operation: "adminMetadata" }),
+    dependencies({
+      adminSnapshot: (input) => {
+        snapshotInput = input;
+        return Promise.resolve({ skus: [{ id: skuId }], skuCount: 4_200, truncated: true,
+          configuration: [], branches: [] });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(snapshotInput, { accessToken: actor.accessToken, skuLimit: 1 });
+  const payload = await body(response);
+  assertEquals(payload.skus, []);
+  assertEquals(payload.skuCount, 4_200);
+});
+
 Deno.test("V1 catalogue hides unexpected dependency details", async () => {
   const response = await handleV1Catalogue(
     request({ operation: "adminSnapshot" }),

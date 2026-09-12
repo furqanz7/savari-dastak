@@ -794,7 +794,7 @@ describe("Dastak V1 web contract", () => {
       });
     });
 
-    expect(requestBody).toEqual({ operation: "adminSnapshot", skuLimit: 1000 });
+    expect(requestBody).toEqual({ operation: "adminMetadata" });
     expect(snapshot.categoryTypes[0]).toMatchObject({
       name: "Groceries",
       previewImageKeys: ["catalogue/rice.webp", "catalogue/atta.webp"],
