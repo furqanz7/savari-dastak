@@ -216,7 +216,7 @@ export function AdminCatalogueAssets({
     }
   };
 
-  if (accessDenied) return null;
+  if (accessDenied) return <section className="admin-catalogue-assets" aria-label="Catalogue image permissions"><strong>Image management is restricted</strong><p className="field-help">Your current Admin access does not include catalogue asset governance. Product imagery can only be changed through an authorized account.</p></section>;
   return <section className="admin-catalogue-assets" aria-labelledby={`assets-${sku.id}`}>
     <header>
       <span><ShieldCheck size={19} /></span>
@@ -242,13 +242,13 @@ export function AdminCatalogueAssets({
         </article>)}
         {snapshot.assets.length === 0 ? <div className="admin-asset-empty"><ImagePlus size={22} /><strong>No governed imagery</strong><span>Add a verified gallery image, then promote it safely.</span></div> : null}
       </div>
-      <div className="admin-asset-upload">
+      <details className="admin-disclosure"><summary>Add a reviewed product image</summary><div className="admin-asset-upload">
         <div><ImagePlus size={18} /><span><strong>Add exact-SKU image</strong><small>JPG, PNG or WebP · maximum 5 MB</small></span></div>
         <label><span>Image file</span><input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(event) => void chooseUpload(event.target.files?.[0])} /></label>
         <label><span>Reviewed source type</span><select value={sourceType} disabled={busy} onChange={(event) => setSourceType(event.target.value)}>{sourceTypes.map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select></label>
         <label className="wide"><span>Source / rights reference</span><input value={sourceReference} maxLength={500} disabled={busy} onChange={(event) => setSourceReference(event.target.value)} placeholder="Manufacturer page, licence, capture record or reviewed provenance" /></label>
         <button type="button" className="primary-button" disabled={busy || !file || sourceReference.trim().length < 3} onClick={prepareUpload}>Verify and add image</button>
-      </div>
+      </div></details>
     </> : null}
     {intent ? <AdminPrivilegedActionDialog
       intent={intent.dialog}

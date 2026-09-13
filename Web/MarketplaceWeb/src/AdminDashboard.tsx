@@ -56,6 +56,7 @@ import { AdminSystemHealthPanel } from "./AdminSystemHealthPanel";
 import { AdminOperationalSafetyPanel } from "./AdminOperationalSafetyPanel";
 import { AdminRoyaltyPayoutPanel } from "./AdminRoyaltyPayoutPanel";
 import { AdminOverviewPanel } from "./AdminOverviewPanel";
+import { AdminWorkspaceNavigation } from "./AdminWorkspaceNavigation";
 import { AdminNetworkPanel } from "./AdminNetworkPanel";
 import { AdminAuditHistoryPanel } from "./AdminAuditHistoryPanel";
 import { AdminMerchantGovernancePanel } from "./AdminMerchantGovernancePanel";
@@ -86,6 +87,7 @@ import {
 } from "./adminRuntime";
 import { RefreshQueue } from "./orderRealtime";
 import { userFacingError } from "./userFacingError";
+import "./design/admin-workspace.css";
 
 type Props = {
   accessToken: string;
@@ -152,6 +154,16 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
   const [adminAccess, setAdminAccess] = useState<V1AdminAccess>();
   const [commandCenter, setCommandCenter] = useState<V1AdminCommandCenter>();
   const [tab, setTab] = useState<AdminTab>("overview");
+  const previousTab = useRef(tab);
+  useEffect(() => {
+    if (previousTab.current === tab) return;
+    previousTab.current = tab;
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "instant" });
+      document.getElementById("admin-workspace-title")?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [tab]);
   const [busy, setBusy] = useState<string>();
   const [actionError, setActionError] = useState<string>();
   const [feedStates, setFeedStates] = useState(initialBootstrapFeedStates);
@@ -437,35 +449,29 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
     { id: "riders", label: "Rider governance", icon: <Navigation size={18} /> },
     { id: "customers", label: "Customer recovery", icon: <UsersRound size={18} /> },
     { id: "safety", label: "Safety controls", icon: <CircleAlert size={18} /> },
-    { id: "finance", label: "Finance & Royalty", icon: <WalletCards size={18} /> },
+    { id: "finance", label: "Finance & payouts", icon: <WalletCards size={18} /> },
     { id: "health", label: "System health", icon: <Activity size={18} /> },
     { id: "legacy", label: "Legacy history", icon: <FileText size={18} /> },
     { id: "access", label: "Admin access", icon: <ShieldCheck size={18} /> },
     { id: "account", label: "My account", icon: <BadgeCheck size={18} /> },
   ];
-  const mobilePrimaryNavigation = mainNavigation.filter((item) => item.id !== "catalogue");
-  const mobileWorkspaceNavigation = [
-    ...mainNavigation.filter((item) => item.id === "catalogue"),
-    ...controlNavigation,
+  const navigation = [...mainNavigation, ...controlNavigation];
+  const navigationGroups = [
+    { label: "Daily operations", items: ["overview", "orders", "approvals", "exceptions", "safety"].flatMap((id) => navigation.filter((item) => item.id === id)) },
+    { label: "Marketplace", items: ["merchants", "riders", "customers", "network", "catalogue"].flatMap((id) => navigation.filter((item) => item.id === id)) },
+    { label: "Oversight", items: ["audit", "finance", "legacy", "health", "access", "account"].flatMap((id) => navigation.filter((item) => item.id === id)) },
   ];
 
   return <AdminRuntimeProvider realtimeHealth={realtimeHealth} onSessionExpired={recoverExpiredSession}>
     <div className="admin-console" style={{ "--admin-pull-distance": `${pull.distance}px`, "--admin-pull-progress": pull.progress } as CSSProperties}>
+    <a className="admin-skip-link" href="#admin-workspace-title">Skip to workspace</a>
     <div className={`admin-pull-indicator ${pull.refreshing ? "refreshing" : ""}`} aria-live="polite" aria-hidden={!pull.refreshing && pull.distance === 0}>
       <span><span className="admin-pull-glyph">↓</span>{pull.refreshing ? "Refreshing current workspace" : pull.progress >= 1 ? "Release to refresh" : "Pull to refresh"}</span>
     </div>
-    <aside className="admin-sidebar" aria-label="Admin navigation">
-      <header><span>D</span><div><strong>Dastak</strong><small>Admin control</small></div></header>
-      <p>OPERATIONS</p>
-      <AdminNavigation items={mainNavigation} selected={tab} onSelect={setTab} />
-      <p>CONTROL & GOVERNANCE</p>
-      <AdminNavigation items={controlNavigation} selected={tab} onSelect={setTab} />
-      <footer><span className="admin-identity-mark"><ShieldCheck size={18} /></span><div><strong>{displayName ?? "Dastak Admin"}</strong><small>{adminRoleLabel(adminAccess?.role)}</small></div></footer>
-    </aside>
+    <AdminWorkspaceNavigation groups={navigationGroups} selected={tab} onSelect={setTab} displayName={displayName ?? "Dastak Admin"} role={adminRoleLabel(adminAccess?.role)} />
 
     <main className="admin-shell">
-      <header className="admin-heading"><div><p className="eyebrow">{adminRoleLabel(adminAccess?.role).toUpperCase()} WORKSPACE</p><h1>{tabTitle(tab)}</h1><p>{tabDescription(tab)}</p></div></header>
-      <nav className="admin-secondary-mobile" aria-label="More Admin workspaces"><AdminNavigation items={mobileWorkspaceNavigation} selected={tab} onSelect={setTab} /></nav>
+      <header className="admin-heading"><div><p className="eyebrow">{navigationGroups.find((group) => group.items.some((item) => item.id === tab))?.label}</p><h1 id="admin-workspace-title" tabIndex={-1}>{tabTitle(tab)}</h1><p>{tabDescription(tab)}</p></div><span className={`admin-update-status ${realtimeHealth}`} role="status"><i aria-hidden="true" />{realtimeHealth === "subscribed" ? "Live updates" : realtimeHealth === "connecting" ? "Connecting" : "Reconnecting"}</span></header>
       <AdminFeedStatus states={feedStates} realtimeHealth={realtimeHealth} />
       {actionError ? <p className="order-error" role="alert">{actionError}</p> : null}
       {notice ? <div className="admin-notice" role="status"><Check size={18} /><span>{notice}</span><button type="button" onClick={() => setNotice(undefined)} aria-label="Dismiss confirmation"><X size={16} /></button></div> : null}
@@ -506,17 +512,8 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
         : <ExceptionsPanel operations={operations} available={adminFeedHasContent(feedStates.operations)} busy={Boolean(busy)} hasMore={exceptionsHaveMore} onLoadMore={loadMoreExceptions} onResolve={resolveSupport} onReset={resetHandoff} onReconcile={reconcile} onReviewRefund={() => setTab("legacy")} />}
     </main>
 
-    <nav className="admin-mobile-navigation" aria-label="Primary Admin navigation"><AdminNavigation items={mobilePrimaryNavigation} selected={tab} onSelect={setTab} /></nav>
     </div>
   </AdminRuntimeProvider>;
-}
-
-function AdminNavigation({ items, selected, onSelect }: {
-  items: Array<{ id: AdminTab; label: string; icon: ReactNode; badge?: number }>;
-  selected: AdminTab;
-  onSelect: (tab: AdminTab) => void;
-}) {
-  return <>{items.map((item) => <button type="button" key={item.id} className={selected === item.id ? "selected" : ""} aria-current={selected === item.id ? "page" : undefined} onClick={() => onSelect(item.id)}>{item.icon}<span>{item.label}</span>{item.badge ? <b>{item.badge}</b> : null}</button>)}</>;
 }
 
 function AdminFeedStatus({ states, realtimeHealth }: {
@@ -538,7 +535,7 @@ function tabTitle(tab: AdminTab) {
     overview: "Command center", approvals: "Application approvals", exceptions: "Exception desk",
     orders: "Live order control", network: "Marketplace network", catalogue: "Master catalogue",
     audit: "Audit History", merchants: "Merchant governance", riders: "Rider governance", customers: "Customer recovery",
-    safety: "Safety controls", finance: "Finance & Royalty", health: "System health",
+    safety: "Safety controls", finance: "Finance & payouts", health: "System health",
     access: "Admin access", legacy: "Historical orders", account: "My account",
   } satisfies Record<AdminTab, string>)[tab];
 }
@@ -757,7 +754,7 @@ function OrdersPanel({ orders, available, busy, query, hasMore, onQuery, onSearc
       <form className="admin-feed-search" role="search" onSubmit={(event) => { event.preventDefault(); onSearch(); }}><label htmlFor="admin-legacy-search">Search legacy history</label><span><input id="admin-legacy-search" type="search" value={query} maxLength={80} placeholder="Exact order ID or store name" onChange={(event) => onQuery(event.target.value)} /><button className="secondary-button" type="submit">Search</button></span></form>
       {orders.length === 0 ? <p className="admin-empty">{available ? "No historical orders yet." : "Historical order data is not available yet."}</p> : (
         <div className="admin-order-table" role="table" aria-label="Recent orders">
-          <div className="admin-order-header" role="row"><span>Order</span><span>Store</span><span>Status</span><span>Payment</span><span>Total</span></div>
+          <div className="admin-order-header" role="row"><span role="columnheader">Order</span><span role="columnheader">Store</span><span role="columnheader">Status</span><span role="columnheader">Payment</span><span role="columnheader">Total</span></div>
           {orders.map((order) => (
             <AdminOrderRow key={order.orderId} order={order} busy={busy} onReview={onReview} onRefund={onRefund} />
           ))}
@@ -791,11 +788,11 @@ function AdminOrderRow({ order, busy, onReview, onRefund }: {
 
   return (
     <article className="admin-order-row" role="row">
-      <div data-label="Order"><strong>{shortId(order.orderId)}</strong><small>{formatDate(order.createdAt)} · {order.itemCount} items</small></div>
-      <strong data-label="Store">{order.store.name}</strong>
-      <span data-label="Status" className={`admin-status status-${order.status}`}>{orderStatusLabel(order.status)}</span>
-      <span data-label="Payment">{paymentLabel(order.paymentState)}</span>
-      <strong data-label="Total">{formatPrice(order.total.paise)}</strong>
+      <div role="cell" data-label="Order"><strong>{shortId(order.orderId)}</strong><small>{formatDate(order.createdAt)} · {order.itemCount} items</small></div>
+      <strong role="cell" data-label="Store">{order.store.name}</strong>
+      <span role="cell" data-label="Status" className={`admin-status status-${order.status}`}>{orderStatusLabel(order.status)}</span>
+      <span role="cell" data-label="Payment">{paymentLabel(order.paymentState)}</span>
+      <strong role="cell" data-label="Total">{formatPrice(order.total.paise)}</strong>
 
       {order.refundDecision?.decisionStatus === "review_required" && (
         <div className="admin-refund-review">
@@ -813,7 +810,7 @@ function AdminOrderRow({ order, busy, onReview, onRefund }: {
               <option value="dastak">Dastak fault</option>
             </select>
           )}
-          <input value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} placeholder="Decision reason" />
+            <input value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} placeholder="Decision reason" aria-label="Refund decision reason" />
           <button
             className="primary-button"
             type="button"

@@ -122,8 +122,8 @@ export function AdminAccessPanel({ auth, access, onChange }: Props) {
         <div className="admin-access-icon" aria-hidden="true"><ShieldCheck size={22} /></div>
         <div>
           <p className="eyebrow">Superadmin control</p>
-          <h2 id="admin-access-title">Admin access</h2>
-          <p>One permanent Superadmin and two replaceable Executive Admin seats.</p>
+          <h2 id="admin-access-title">Reviewed access, explicit responsibility</h2>
+          <p>Review each account before granting or removing full operational access.</p>
         </div>
       </header>
 

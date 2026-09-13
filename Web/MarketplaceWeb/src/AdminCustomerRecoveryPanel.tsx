@@ -118,7 +118,7 @@ export function AdminCustomerRecoveryPanel({ auth }: { auth: DastakV1Auth }) {
         entityLabel: "Customer account",
         entityValue: `${row.account.displayName} · ${row.account.maskedPhoneNumber} · ${row.account.accountId}`,
         currentState: session
-          ? `${session.deviceName} · ${session.appName} · last seen ${formatWhen(session.lastSeenAt)}`
+          ? `${session.deviceName} · ${session.appName} · session ${session.sessionId} · last seen ${formatWhen(session.lastSeenAt)}`
           : `${count} active session${count === 1 ? "" : "s"}`,
         resultingState: session ? "Selected session revoked" : "No currently active sessions",
         consequence: session
@@ -229,6 +229,7 @@ export function AdminCustomerRecoveryPanel({ auth }: { auth: DastakV1Auth }) {
           <div className="admin-governance-statuses"><span className={`admin-governance-status ${row.account.accountState.toLowerCase()}`}><small>Account</small><strong>{title(row.account.accountState)}</strong></span><span className="admin-governance-status"><small>Sessions</small><strong>{row.activeSessionCount}</strong></span></div>
         </header>
 
+        <details className="admin-disclosure"><summary>Review sessions & contact recovery</summary>
         <section className="admin-customer-session-list" aria-label={`Active sessions for ${row.account.displayName}`}>
           <div className="admin-customer-recovery-heading"><div><KeyRound size={16} /><span><strong>Active sessions</strong><small>Refresh capability and Dastak API access are governed together.</small></span></div>{row.activeSessionCount > 0 ? <button className="danger-button" type="button" disabled={busy} onClick={() => reviewSessions(row)}>Revoke all</button> : null}</div>
           {row.sessions.length === 0 ? <p className="admin-governance-live">No active Customer sessions</p> : <ul>{row.sessions.map((session) => <li key={session.sessionId}>
@@ -243,6 +244,7 @@ export function AdminCustomerRecoveryPanel({ auth }: { auth: DastakV1Auth }) {
           <label>Replacement phone (E.164)<input type="tel" inputMode="tel" autoComplete="off" placeholder="+919876543210" value={replacementPhones[row.account.accountId] ?? ""} onChange={(event) => setReplacementPhones((current) => ({ ...current, [row.account.accountId]: event.target.value }))} /></label>
           <button className="secondary-button" type="button" disabled={busy || row.phoneClaim.version < 1 || !phonePattern.test((replacementPhones[row.account.accountId] ?? "").trim()) || (replacementPhones[row.account.accountId] ?? "").trim() === row.account.currentPhoneNumber} onClick={() => reviewPhone(row)}>Review correction</button>
         </section>
+        </details>
       </article>)}
     </div>
     {rows.length > 0 ? <button className="secondary-button admin-page-more" type="button" disabled={!hasMore || loadingMore} onClick={() => {

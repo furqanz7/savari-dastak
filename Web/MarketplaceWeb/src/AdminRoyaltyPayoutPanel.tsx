@@ -59,7 +59,7 @@ export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
       <header>
         <div>
           <p className="eyebrow">Financial operations</p>
-          <h2 id="admin-payouts-title">Royalty payouts</h2>
+          <h2 id="admin-payouts-title">Payout records</h2>
           <p>Provider state, immutable destination snapshots, attempts, and reconciliation.</p>
         </div>
       </header>
@@ -67,7 +67,7 @@ export function AdminRoyaltyPayoutPanel({ auth }: { auth: Auth }) {
       {feedState.phase === "loading" && payouts.length === 0
         ? <div className="catalogue-loading" role="status"><span /> Loading payouts</div>
         : payouts.length === 0 && adminFeedHasContent(feedState)
-        ? <p className="admin-empty">No Royalty withdrawals yet.</p>
+        ? <p className="admin-empty">No payout withdrawals yet.</p>
         : payouts.length > 0 ? <><div className="admin-payout-list">{payouts.map((payout) => <PayoutCard key={payout.id} payout={payout} />)}</div><button className="secondary-button admin-page-more" type="button" disabled={!hasMore} onClick={() => void loadMore()}>{hasMore ? "Load older payouts" : "All payouts loaded"}</button></> : null}
     </section>
   );

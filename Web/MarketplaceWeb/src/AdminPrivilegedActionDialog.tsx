@@ -55,7 +55,7 @@ export function AdminPrivilegedActionDialog({
     (!otherDetailRequired || reasonDetail.trim().length >= 3);
   const expectedConfirmation = intent.confirmationValue?.trim().toLowerCase();
   const confirmationValid = !expectedConfirmation || confirmation.trim().toLowerCase() === expectedConfirmation;
-  const dialog = useModalDialog<HTMLElement>({ busy, onDismiss, initialFocus: cancelButton });
+  const dialog = useModalDialog<HTMLElement>({ busy, onDismiss, initialFocus: cancelButton, layered: true });
 
   return <div className="admin-confirmation-backdrop" role="presentation" onMouseDown={(event) => {
     if (event.target === event.currentTarget && !busy) onDismiss();
@@ -76,6 +76,7 @@ export function AdminPrivilegedActionDialog({
         <button type="button" className="icon-button" disabled={busy} onClick={onDismiss} aria-label="Close confirmation"><X size={18} /></button>
       </header>
 
+      <div className="admin-confirmation-body">
       <dl className="admin-confirmation-summary">
         <div><dt>{intent.entityLabel}</dt><dd>{intent.entityValue}</dd></div>
         <div><dt>Current state</dt><dd>{intent.currentState}</dd></div>
@@ -88,7 +89,7 @@ export function AdminPrivilegedActionDialog({
         {options.map((option) => <label key={option}><input type="radio" name={`${titleId}-reason`} value={option} checked={reasonChoice === option} disabled={busy} onChange={() => setReasonChoice(option)} /><span>{option}</span></label>)}
       </fieldset> : intent.reason ? <div className="admin-confirmation-recorded-reason"><strong>Recorded reason</strong><p>{intent.reason}</p></div> : null}
 
-      {options.length > 0 ? <label className="admin-confirmation-detail">Optional detail<textarea value={reasonDetail} disabled={busy} maxLength={400} rows={3} onChange={(event) => setReasonDetail(event.target.value)} placeholder="Add context for the audit record" /></label> : null}
+      {options.length > 0 ? <label className="admin-confirmation-detail">{otherDetailRequired ? "Detail (required for Other)" : "Optional detail"}<textarea value={reasonDetail} disabled={busy} required={otherDetailRequired} maxLength={400} rows={3} onChange={(event) => setReasonDetail(event.target.value)} placeholder="Add context for the audit record" /></label> : null}
 
       {expectedConfirmation ? <label className="admin-confirmation-match">
         {intent.confirmationLabel ?? <>Type <strong>{intent.confirmationValue}</strong> to confirm</>}
@@ -97,7 +98,9 @@ export function AdminPrivilegedActionDialog({
 
       {notice ? <p className="admin-confirmation-notice" role="status">{notice}</p> : null}
       {error ? <p className="order-error" role="alert">{error}</p> : null}
+      </div>
       <footer>
+        <small className="admin-confirmation-safety">Review carefully. This action is governed and recorded.</small>
         <button ref={cancelButton} className="secondary-button" type="button" disabled={busy} onClick={onDismiss}>Cancel</button>
         {reconciliationBlocked && onReconcile
           ? <button className="primary-button" type="button" disabled={busy} onClick={() => void onReconcile()}>Reconcile state</button>

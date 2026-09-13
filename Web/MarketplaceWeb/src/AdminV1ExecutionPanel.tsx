@@ -655,7 +655,9 @@ function TraceMetric({ icon, label, value }: { icon: ReactNode; label: string; v
 }
 
 function TraceSection({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="v1-trace-section"><h3>{title}</h3>{children}</section>;
+  // Keep operational stages open; low-level diagnostics remain one disclosure away.
+  const diagnostic = /wave|candidate|hold|reconciliation|capacity/i.test(title);
+  return <details className="v1-trace-section" open={!diagnostic}><summary><h3>{title}</h3></summary><div className="admin-trace-body">{children}</div></details>;
 }
 
 function countStatus(values: Record<string, unknown>[], status: string) {

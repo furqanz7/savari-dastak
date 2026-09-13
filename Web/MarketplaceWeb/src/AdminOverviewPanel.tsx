@@ -43,9 +43,9 @@ export function AdminOverviewPanel({
   return <section className="admin-overview" aria-labelledby="admin-overview-title">
     <article className="admin-command-hero">
       <div>
-        <p className="eyebrow">LIVE COMMAND CENTER</p>
-        <h2 id="admin-overview-title">The whole marketplace, in one view.</h2>
-        <p>Identity, fulfilment, delivery, safety, catalogue and system signals are connected to their authoritative Dastak records.</p>
+        <p className="eyebrow">OPERATING PICTURE</p>
+        <h2 id="admin-overview-title">{actionCount > 0 ? "Your attention, where it matters." : "The operation is clear."}</h2>
+        <p>Review the queues below, then move directly to the work that needs you.</p>
       </div>
       <div className={actionCount > 0 ? "attention" : "clear"}>
         {actionCount > 0 ? <CircleAlert size={24} /> : <ShieldCheck size={24} />}

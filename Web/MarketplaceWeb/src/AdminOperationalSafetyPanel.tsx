@@ -213,19 +213,19 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
       {snapshot ? <>
       <section className="admin-section">
         <header>
-          <div><h2>Scoped emergency controls</h2><p>New commitments only; paid work continues.</p></div>
+          <div><h2>Scoped emergency controls</h2><p>Stop new commitments. Existing committed work continues.</p></div>
         </header>
         {!snapshot?.permissions.canManageOperationalPauses ? (
           <p className="admin-empty">This account has trace-only access.</p>
         ) : (
           <div className="exception-action">
-            <select value={scope} onChange={(event) => { setScope(event.target.value as V1OperationalPauseScope); setTargetId(""); }} aria-label="Pause scope">
+            <label className="admin-safety-field"><span>Pause scope</span><select value={scope} onChange={(event) => { setScope(event.target.value as V1OperationalPauseScope); setTargetId(""); }} aria-label="Pause scope">
               <option value="ZONE_RETAIL">Zone · retail orders</option>
               <option value="ZONE_FOOD">Zone · food orders</option>
               <option value="ZONE_MIXED">Zone · mixed orders</option>
               <option value="MERCHANT_BRANCH">Merchant branch</option>
               <option value="RIDER_ASSIGNMENTS">Rider assignments</option>
-            </select>
+            </select></label>
             {scope === "MERCHANT_BRANCH" ? <div className="admin-safety-branch-picker">
               <input value={branchQuery} onChange={(event) => setBranchQuery(event.target.value)} placeholder="Find organization or branch" aria-label="Find Merchant branch" />
               <select value={targetId} onChange={(event) => setTargetId(event.target.value)} aria-label="Merchant branch">
@@ -236,8 +236,8 @@ export function AdminOperationalSafetyPanel({ auth }: Props) {
               </select>
               {selectedBranch ? <small>{selectedBranch.organization.displayName} / {selectedBranch.branch.displayName} · {selectedBranch.branch.status} · {selectedBranch.branch.activeNonTerminalFulfilmentCount} fulfilment(s) · {selectedBranch.branch.activePickupReturnWorkCount} pickup/return journey(s) · {selectedBranch.branch.operationalPause?.active ? "operational pause active" : "no operational pause"}</small> : null}
               {branchLookupError ? <small className="admin-picker-error" role="alert">{branchLookupError}</small> : null}
-            </div> : <input value={targetId} onChange={(event) => setTargetId(event.target.value)} placeholder="Zone or rider UUID" aria-label="Pause target ID" />}
-            <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Required reason" aria-label="Pause reason" />
+            </div> : <label className="admin-safety-field"><span>Exact zone or rider ID</span><input value={targetId} onChange={(event) => setTargetId(event.target.value)} placeholder="Zone or rider UUID" aria-label="Pause target ID" /></label>}
+            <label className="admin-safety-field"><span>Operator reason</span><input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Required reason" aria-label="Pause reason" /></label>
             <button className="danger-button" type="button" disabled={busy || targetId.trim().length !== 36 || reason.trim().length < 3 || existing?.active} onClick={requestPause}><PauseCircle size={17} /> Pause new work</button>
           </div>
         )}

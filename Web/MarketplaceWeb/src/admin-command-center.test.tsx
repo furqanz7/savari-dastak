@@ -22,7 +22,7 @@ describe("finished Admin command center", () => {
       onNavigate={(destination) => destinations.push(destination)}
     />);
 
-    expect(markup).toContain("The whole marketplace, in one view.");
+    expect(markup).toContain("Your attention, where it matters.");
     expect(markup).toContain("4</strong><span>actions waiting");
     expect(markup).toContain("Active orders");
     expect(markup).toContain("Active accounts");
@@ -49,11 +49,17 @@ describe("finished Admin command center", () => {
     const runtime = readFileSync(new URL("./adminRuntime.ts", import.meta.url), "utf8");
     const styles = readFileSync(new URL("./design/v1-admin.css", import.meta.url), "utf8");
 
-    expect(dashboard).toContain('className="admin-sidebar"');
-    expect(dashboard).toContain('className="admin-mobile-navigation"');
-    expect(dashboard).toContain('className="admin-secondary-mobile"');
-    expect(dashboard).toContain('item.id !== "catalogue"');
-    expect(dashboard).toContain('item.id === "catalogue"');
+    // The redesign replaces the two mobile strips with the same complete,
+    // grouped navigation in an accessible drawer. Interaction tests cover it.
+    const navigation = readFileSync(new URL("./AdminWorkspaceNavigation.tsx", import.meta.url), "utf8");
+    expect(dashboard).toContain("<AdminWorkspaceNavigation");
+    expect(navigation).toContain('className="admin-sidebar"');
+    expect(navigation).toContain('className="admin-mobile-bar"');
+    expect(navigation).toContain('className="admin-navigation-drawer"');
+    expect(navigation).toContain('aria-current={selected === item.id ? "page"');
+    expect(dashboard).toContain('label: "Daily operations"');
+    expect(dashboard).toContain('label: "Marketplace"');
+    expect(dashboard).toContain('label: "Oversight"');
     expect(dashboard).not.toContain("mainNavigation.slice(0, 5)");
     expect(dashboard).toContain("Promise.allSettled");
     expect(dashboard).toContain("AdminFeedStatus");

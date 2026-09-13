@@ -114,7 +114,7 @@ export function AdminNetworkPanel({ auth }: { auth: DastakV1Auth }) {
     {feedState.phase === "failed-with-content" || feedState.phase === "failed-without-content" ? <p className="order-error" role="alert">{message(feedState.error)}</p> : null}
     {feedState.phase === "loading" ? <div className="admin-directory-loading" role="status"><span /><p>Connecting identity and operating records…</p></div> : people.length === 0 && adminFeedHasContent(feedState) ? <div className="admin-empty-state"><UsersRound size={28} /><h3>No identities match these filters</h3><p>Try another search or persona state.</p></div> : people.length > 0 ? <div className="admin-network-layout">
       <div className="admin-people-list" aria-label="Dastak identities">
-        {people.map((person) => <button type="button" key={person.id} className={person.id === selected ? "selected" : ""} onClick={() => setSelected(person.id)}>
+        {people.map((person) => <button type="button" key={person.id} className={person.id === selected ? "selected" : ""} aria-pressed={person.id === selected} onClick={() => setSelected(person.id)}>
           <span className="admin-person-mark" aria-hidden="true"><IdCard size={20} /></span>
           <span><strong>{person.displayName}</strong><small>{person.email ?? person.phoneNumber}</small><span className="admin-persona-row">{person.adminRole ? <b className="admin-persona admin"><ShieldCheck size={11} /> {roleLabel(person.adminRole)}</b> : null}{person.personas.map((entry) => <b key={entry.persona} className={`admin-persona ${entry.state.toLowerCase()}`}>{personaIcon(entry.persona)} {personaLabel(entry.persona)}</b>)}</span></span>
           <em>{person.accountState === "ACTIVE" ? "Active" : "Retired"}</em>
