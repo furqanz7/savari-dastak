@@ -611,6 +611,52 @@ Deno.test("Admin catalogue upload rejects MIME spoofing before privileged work",
   assertEquals(calls, 0);
 });
 
+Deno.test("governed media upload verifies bytes and preserves exact entity scope", async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  const png = minimalPng(1440, 720);
+  const form = new FormData();
+  form.set("operation", "uploadGovernedMedia");
+  form.set("entityType", "RESTAURANT_BRANCH_BANNER");
+  form.set("entityId", categoryId);
+  form.set("expectedMediaVersion", "3");
+  form.set("sourceReference", "Merchant-owned restaurant banner capture");
+  form.set("reason", "Publish reviewed restaurant presentation media");
+  form.set("file", new File([png], "banner.png", { type: "image/png" }));
+  const assetId = "66666666-6666-4666-8666-666666666666";
+  const response = await handleV1Catalogue(multipartRequest(form, "restaurant-banner-once"), dependencies({
+    prepareGovernedMedia: (input) => {
+      calls.push({ step: "prepare", ...input });
+      return Promise.resolve({ assetId, imageKey: `canonical/restaurant/restaurant_branch_banner/${categoryId}/${assetId}.png`, mediaVersion: 3 });
+    },
+    storeAdminCatalogueAsset: (input) => { calls.push({ step: "store", objectPath: input.objectPath }); return Promise.resolve(); },
+    finalizeGovernedMedia: (input) => { calls.push({ step: "finalize", ...input }); return Promise.resolve({ assetId, mediaVersion: 4 }); },
+  }));
+  assertEquals(response.status, 200);
+  assertEquals(calls[0].entityType, "RESTAURANT_BRANCH_BANNER");
+  assertEquals(calls[0].entityId, categoryId);
+  assertEquals(calls[0].idempotencyKey, "restaurant-banner-once:prepare");
+  assertEquals(calls[1].objectPath, `canonical/restaurant/restaurant_branch_banner/${categoryId}/${assetId}.png`);
+  assertEquals(calls[2].widthPixels, 1440);
+  assertEquals(calls[2].heightPixels, 720);
+  assertEquals(calls[2].idempotencyKey, "restaurant-banner-once:finalize");
+});
+
+Deno.test("governed media refuses a server path outside its exact entity", async () => {
+  const form = new FormData();
+  form.set("operation", "uploadGovernedMedia");
+  form.set("entityType", "CATEGORY");
+  form.set("entityId", categoryId);
+  form.set("expectedMediaVersion", "1");
+  form.set("sourceReference", "Reviewed taxonomy artwork");
+  form.set("reason", "Set one-time category art");
+  form.set("file", new File([minimalPng(400, 400)], "category.png", { type: "image/png" }));
+  const response = await handleV1Catalogue(multipartRequest(form, "taxonomy-path-check"), dependencies({
+    prepareGovernedMedia: () => Promise.resolve({ assetId: skuId, imageKey: `canonical/taxonomy/category/${otherAccountId}/${skuId}.png`, mediaVersion: 1 }),
+  }));
+  assertEquals(response.status, 500);
+  assertEquals((await body(response)).error.code, "invalid_asset_contract");
+});
+
 Deno.test("Admin primary promotion and removal forward actor scope and hide storage paths", async () => {
   let promoted: unknown;
   let removedPath = "";
@@ -731,6 +777,8 @@ function dependencies(
     removeAdminCatalogueAsset: overrides.removeAdminCatalogueAsset ?? (() => Promise.resolve({})),
     storeAdminCatalogueAsset: overrides.storeAdminCatalogueAsset ?? (() => Promise.resolve()),
     deleteAdminCatalogueAsset: overrides.deleteAdminCatalogueAsset ?? (() => Promise.resolve()),
+    prepareGovernedMedia: overrides.prepareGovernedMedia ?? (() => Promise.resolve({})),
+    finalizeGovernedMedia: overrides.finalizeGovernedMedia ?? (() => Promise.resolve({})),
     merchantSnapshot: overrides.merchantSnapshot ??
       (() => Promise.resolve(snapshot)),
     merchantRestaurantMenu: overrides.merchantRestaurantMenu ??

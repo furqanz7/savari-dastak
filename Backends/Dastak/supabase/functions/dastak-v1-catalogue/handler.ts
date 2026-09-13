@@ -88,6 +88,15 @@ export type V1CatalogueDependencies = {
     checksumSha256: string;
   }) => Promise<void>;
   deleteAdminCatalogueAsset: (input: { objectPath: string }) => Promise<void>;
+  prepareGovernedMedia: (input: {
+    actorId: string; entityType: string; entityId: string; expectedMediaVersion: number;
+    mimeType: string; byteSize: number; sourceReference: string; reason: string; idempotencyKey: string;
+  }) => Promise<unknown>;
+  finalizeGovernedMedia: (input: {
+    actorId: string; entityType: string; entityId: string; assetId: string; expectedMediaVersion: number;
+    checksumSha256: string; mimeType: string; byteSize: number; widthPixels: number; heightPixels: number;
+    reason: string; idempotencyKey: string;
+  }) => Promise<unknown>;
   merchantSnapshot: (input: {
     accessToken: string;
     branchId: string | null;
@@ -168,7 +177,11 @@ export async function handleV1Catalogue(
 
   if (request.headers.get("content-type")?.toLowerCase().includes("multipart/form-data")) {
     try {
-      return await uploadAdminCatalogueAsset(request, actor, dependencies);
+      const copy = request.clone();
+      const form = await copy.formData();
+      return form.get("operation") === "uploadGovernedMedia"
+        ? await uploadGovernedMedia(request, actor, dependencies)
+        : await uploadAdminCatalogueAsset(request, actor, dependencies);
     } catch (error) {
       return requestFailure(error);
     }
@@ -328,6 +341,32 @@ export async function handleV1Catalogue(
   } catch (error) {
     return requestFailure(error);
   }
+}
+
+async function uploadGovernedMedia(request: Request, actor: V1Actor, dependencies: V1CatalogueDependencies) {
+  const idempotencyKey = requiredIdempotencyKey(request);
+  let form: FormData;
+  try { form = await request.formData(); } catch { return validationError(); }
+  const entityType = requiredChoice(form.get("entityType"), ["CATEGORY_TYPE", "CATEGORY", "SUBCATEGORY", "RESTAURANT_BRANCH_BANNER", "RESTAURANT_MENU_ITEM"]);
+  const entityId = requiredUUID(form.get("entityId"));
+  const expectedMediaVersion = formInteger(form.get("expectedMediaVersion"), 1);
+  const sourceReference = requiredFormText(form.get("sourceReference"), 3, 500);
+  const reason = requiredFormText(form.get("reason"), 3, 500);
+  const file = form.get("file");
+  if (!idempotencyKey || !entityType || !entityId || expectedMediaVersion === undefined || !sourceReference || !reason || !(file instanceof File) || file.size < 1 || file.size > 5 * 1024 * 1024) return validationError();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const inspected = inspectImage(bytes);
+  if (!inspected || inspected.mimeType !== file.type) return validationError();
+  const checksumSha256 = await sha256(bytes);
+  const prepared = record(await dependencies.prepareGovernedMedia({ actorId: actor.accountId, entityType, entityId, expectedMediaVersion, mimeType: inspected.mimeType, byteSize: bytes.byteLength, sourceReference, reason, idempotencyKey: `${idempotencyKey}:prepare` }));
+  const assetId = requiredUUID(prepared?.assetId);
+  const imageKey = typeof prepared?.imageKey === "string" ? prepared.imageKey : undefined;
+  const preparedVersion = optionalInteger(prepared?.mediaVersion, 1, Number.MAX_SAFE_INTEGER);
+  const scope = entityType.startsWith("RESTAURANT_") ? "restaurant" : "taxonomy";
+  const expectedPrefix = `canonical/${scope}/${entityType.toLowerCase()}/${entityId}/`;
+  if (!assetId || !imageKey?.startsWith(expectedPrefix) || preparedVersion === undefined || !/^canonical\/(taxonomy|restaurant)\/[A-Za-z0-9/_-]+\.(jpg|jpeg|png|webp)$/.test(imageKey)) throw new V1RequestError(500, "invalid_asset_contract", "The governed media preparation result was invalid.");
+  await dependencies.storeAdminCatalogueAsset({ objectPath: imageKey, bytes, mimeType: inspected.mimeType, checksumSha256 });
+  return json(await dependencies.finalizeGovernedMedia({ actorId: actor.accountId, entityType, entityId, assetId, expectedMediaVersion: preparedVersion, checksumSha256, mimeType: inspected.mimeType, byteSize: bytes.byteLength, widthPixels: inspected.width, heightPixels: inspected.height, reason, idempotencyKey: `${idempotencyKey}:finalize` }));
 }
 
 async function uploadAdminCatalogueAsset(

@@ -168,6 +168,7 @@ public struct DastakV1RestaurantMenuItem: Codable, Equatable, Identifiable, Send
     public let name: String
     public let description: String?
     public let imageKey: String?
+    public let mediaVersion: Int?
     public let basePricePaise: Int
     public let currencyCode: String
     public let taxRateBps: Int
@@ -195,6 +196,7 @@ public struct DastakV1RestaurantIdentity: Codable, Equatable, Sendable {
     public let name: String
     public let branchName: String
     public let imageKey: String?
+    public let mediaVersion: Int?
     public let description: String?
     public let serviceZoneID: UUID?
     public let acceptingOrders: Bool
@@ -205,7 +207,7 @@ public struct DastakV1RestaurantIdentity: Codable, Equatable, Sendable {
     public let activeOrderCount: Int
 
     private enum CodingKeys: String, CodingKey {
-        case name, branchName, imageKey, description, acceptingOrders, isOpen
+        case name, branchName, imageKey, mediaVersion, description, acceptingOrders, isOpen
         case branchStatus, merchantType, softActiveOrderThreshold, activeOrderCount
         case organizationID = "organizationId"
         case branchID = "branchId"

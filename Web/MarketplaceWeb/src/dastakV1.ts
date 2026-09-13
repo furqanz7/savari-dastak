@@ -113,6 +113,7 @@ export type V1RestaurantMenuOptionGroup = {
 };
 export type V1RestaurantMenuItem = {
   id: string; name: string; description?: string; imageKey?: string;
+  mediaVersion?: number;
   basePricePaise: number; currencyCode: "INR"; taxRateBps: number;
   logisticsAttributes: Record<string, unknown>; status: string; version: number;
   optionGroups: V1RestaurantMenuOptionGroup[];
@@ -124,7 +125,7 @@ export type V1RestaurantMenuCategory = {
 export type V1RestaurantMenu = {
   restaurant: {
     organizationId: string; branchId: string; name: string; branchName: string;
-    imageKey?: string; description?: string; serviceZoneId?: string;
+    imageKey?: string; mediaVersion?: number; description?: string; serviceZoneId?: string;
     acceptingOrders: boolean; isOpen: boolean; branchStatus: string; merchantType: string;
     operationalVersion: number;
     softActiveOrderThreshold: number; activeOrderCount: number;
@@ -2359,6 +2360,7 @@ function parseRestaurantMenu(value: unknown): V1RestaurantMenu {
       name: requiredText(restaurant.name, 160),
       branchName: requiredText(restaurant.branchName, 160),
       imageKey: optionalText(restaurant.imageKey, 500),
+      mediaVersion: optionalInteger(restaurant.mediaVersion, 1),
       description: optionalText(restaurant.description, 500),
       serviceZoneId: restaurant.serviceZoneId === null || restaurant.serviceZoneId === undefined
         ? undefined : requiredUuid(restaurant.serviceZoneId),
@@ -2383,6 +2385,7 @@ function parseRestaurantMenu(value: unknown): V1RestaurantMenu {
             id: requiredUuid(item.id), name: requiredText(item.name, 160),
             description: optionalText(item.description, 1000),
             imageKey: optionalText(item.imageKey, 500),
+            mediaVersion: optionalInteger(item.mediaVersion, 1),
             basePricePaise: requiredInteger(item.basePricePaise, 1),
             currencyCode: currency(item.currencyCode),
             taxRateBps: requiredInteger(item.taxRateBps, 0),

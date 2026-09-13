@@ -162,6 +162,19 @@ Deno.serve((request) =>
         );
       }
     },
+    prepareGovernedMedia: (input) => callServiceRPC("dastak_v1_prepare_governed_media", {
+      p_actor_id: input.actorId, p_entity_type: input.entityType, p_entity_id: input.entityId,
+      p_expected_media_version: input.expectedMediaVersion, p_mime_type: input.mimeType,
+      p_byte_size: input.byteSize, p_source_reference: input.sourceReference,
+      p_reason: input.reason, p_idempotency_key: input.idempotencyKey,
+    }),
+    finalizeGovernedMedia: (input) => callServiceRPC("dastak_v1_finalize_governed_media", {
+      p_actor_id: input.actorId, p_entity_type: input.entityType, p_entity_id: input.entityId,
+      p_asset_id: input.assetId, p_expected_media_version: input.expectedMediaVersion,
+      p_checksum_sha256: input.checksumSha256, p_mime_type: input.mimeType,
+      p_byte_size: input.byteSize, p_width_pixels: input.widthPixels, p_height_pixels: input.heightPixels,
+      p_reason: input.reason, p_idempotency_key: input.idempotencyKey,
+    }),
     merchantSnapshot: (input) =>
       callAuthenticatedRPC(
         input.accessToken,
