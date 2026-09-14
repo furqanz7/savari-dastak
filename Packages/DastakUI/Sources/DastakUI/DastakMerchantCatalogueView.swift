@@ -19,6 +19,8 @@ struct DastakMerchantStoreAndCatalogueView: View {
         if model.isLoading {
             DastakLoadingOverlay(title: "Loading store")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.restaurantMenu != nil {
+            DastakMerchantRestaurantMenuView(model: model)
         } else if model.canonicalCatalogue != nil {
             DastakMerchantCanonicalCatalogueView(model: model)
         } else {

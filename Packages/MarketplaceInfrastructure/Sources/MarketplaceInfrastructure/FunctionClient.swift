@@ -10,6 +10,37 @@ public protocol FunctionClient: Sendable {
         request: Request,
         idempotencyKey: IdempotencyKey
     ) async throws -> Response
+    func invokeMultipart<Response: Decodable & Sendable>(
+        _ name: String,
+        fields: [String: String],
+        file: FunctionUpload,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> Response
+}
+
+public struct FunctionUpload: Equatable, Sendable {
+    public let fieldName: String
+    public let fileName: String
+    public let contentType: String
+    public let data: Data
+
+    public init(fieldName: String = "file", fileName: String, contentType: String, data: Data) {
+        self.fieldName = fieldName
+        self.fileName = fileName
+        self.contentType = contentType
+        self.data = data
+    }
+}
+
+public extension FunctionClient {
+    func invokeMultipart<Response: Decodable & Sendable>(
+        _ name: String,
+        fields: [String: String],
+        file: FunctionUpload,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> Response {
+        throw FunctionClientError.invalidResponse
+    }
 }
 
 public enum FunctionClientError: Error, Equatable, Sendable {
@@ -103,6 +134,45 @@ public struct SupabaseFunctionClient: FunctionClient {
             #endif
             throw FunctionClientError.invalidResponse
         }
+    }
+
+    public func invokeMultipart<Response: Decodable & Sendable>(
+        _ name: String,
+        fields: [String: String],
+        file: FunctionUpload,
+        idempotencyKey: IdempotencyKey
+    ) async throws -> Response {
+        let accessToken = try await authenticatedAccessToken()
+        let boundary = "DastakBoundary-\(UUID().uuidString)"
+        var body = Data()
+        func append(_ value: String) { body.append(Data(value.utf8)) }
+        for (key, value) in fields.sorted(by: { $0.key < $1.key }) {
+            append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(key)\"\r\n\r\n\(value)\r\n")
+        }
+        let safeName = file.fileName.replacingOccurrences(of: "\"", with: "")
+        append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(file.fieldName)\"; filename=\"\(safeName)\"\r\nContent-Type: \(file.contentType)\r\n\r\n")
+        body.append(file.data)
+        append("\r\n--\(boundary)--\r\n")
+
+        let url = configuration.supabaseURL.appendingPathComponent("functions").appendingPathComponent("v1").appendingPathComponent(name)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue(configuration.publishableKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(idempotencyKey.rawValue, forHTTPHeaderField: "X-Idempotency-Key")
+        let (data, response) = try await sendWithTransientRecovery(request, endpoint: name)
+        guard (200..<300).contains(response.statusCode) else {
+            guard let payload = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data) else {
+                throw FunctionClientError.malformedErrorResponse(statusCode: response.statusCode)
+            }
+            throw FunctionClientError.api(statusCode: response.statusCode, code: payload.error.code, message: payload.error.message)
+        }
+        guard let decoded = try? JSONDecoder().decode(Response.self, from: data) else {
+            throw FunctionClientError.invalidResponse
+        }
+        return decoded
     }
 
     private func sendWithTransientRecovery(

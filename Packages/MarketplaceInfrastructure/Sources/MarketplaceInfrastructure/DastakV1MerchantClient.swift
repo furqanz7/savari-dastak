@@ -272,6 +272,59 @@ public struct DastakV1MerchantBranchStateMutation: Codable, Equatable, Sendable 
     }
 }
 
+public enum DastakV1RestaurantMenuPayload: Encodable, Sendable {
+    case category(name: String, description: String, sortOrder: Int, status: String)
+    case item(categoryID: UUID, name: String, description: String, imageKey: String, basePricePaise: Int, taxRateBps: Int, logisticsAttributes: DastakV1SKULogistics, status: String)
+    case optionGroup(menuItemID: UUID, name: String, selectionType: String, minimumSelections: Int, maximumSelections: Int, sortOrder: Int, status: String)
+    case option(optionGroupID: UUID, name: String, priceDeltaPaise: Int, sortOrder: Int, status: String)
+
+    public var entityType: String {
+        switch self { case .category: "CATEGORY"; case .item: "ITEM"; case .optionGroup: "OPTION_GROUP"; case .option: "OPTION" }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case let .category(name, description, sortOrder, status):
+            try container.encode(name, forKey: .name); try container.encode(description, forKey: .description)
+            try container.encode(sortOrder, forKey: .sortOrder); try container.encode(status, forKey: .status)
+        case let .item(categoryID, name, description, imageKey, price, tax, logistics, status):
+            try container.encode(categoryID, forKey: .categoryId); try container.encode(name, forKey: .name)
+            try container.encode(description, forKey: .description); try container.encode(imageKey, forKey: .imageKey)
+            try container.encode(price, forKey: .basePricePaise); try container.encode(tax, forKey: .taxRateBps)
+            try container.encode(logistics, forKey: .logisticsAttributes); try container.encode(status, forKey: .status)
+        case let .optionGroup(itemID, name, type, minimum, maximum, sortOrder, status):
+            try container.encode(itemID, forKey: .menuItemId); try container.encode(name, forKey: .name)
+            try container.encode(type, forKey: .selectionType); try container.encode(minimum, forKey: .minimumSelections)
+            try container.encode(maximum, forKey: .maximumSelections); try container.encode(sortOrder, forKey: .sortOrder)
+            try container.encode(status, forKey: .status)
+        case let .option(groupID, name, price, sortOrder, status):
+            try container.encode(groupID, forKey: .optionGroupId); try container.encode(name, forKey: .name)
+            try container.encode(price, forKey: .priceDeltaPaise); try container.encode(sortOrder, forKey: .sortOrder)
+            try container.encode(status, forKey: .status)
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, description, sortOrder, status, imageKey, basePricePaise, taxRateBps, logisticsAttributes
+        case categoryId, menuItemId, optionGroupId, selectionType, minimumSelections, maximumSelections, priceDeltaPaise
+    }
+}
+
+public struct DastakV1RestaurantMenuMutation: Decodable, Sendable {
+    public let entityID: UUID
+    public let entityType: String
+    public let menu: DastakV1RestaurantMenu
+    private enum CodingKeys: String, CodingKey { case entityID = "entityId", entityType, menu }
+}
+
+public struct DastakV1GovernedMediaMutation: Decodable, Sendable {
+    public let entityID: UUID
+    public let imageKey: String
+    public let mediaVersion: Int
+    private enum CodingKeys: String, CodingKey { case entityID = "entityId", imageKey, mediaVersion }
+}
+
 public protocol DastakV1MerchantClient: Sendable {
     func fulfilments(limit: Int, idempotencyKey: IdempotencyKey) async throws -> [DastakV1MerchantFulfilment]
     func declarePackages(
@@ -315,6 +368,9 @@ public protocol DastakV1MerchantClient: Sendable {
         expectedVersion: Int,
         idempotencyKey: IdempotencyKey
     ) async throws -> DastakV1MerchantBranchStateMutation
+    func restaurantMenu(branchID: UUID?, idempotencyKey: IdempotencyKey) async throws -> DastakV1RestaurantMenu
+    func upsertRestaurantMenuEntity(branchID: UUID, entityID: UUID?, expectedVersion: Int, payload: DastakV1RestaurantMenuPayload, idempotencyKey: IdempotencyKey) async throws -> DastakV1RestaurantMenuMutation
+    func uploadGovernedRestaurantMedia(entityType: String, entityID: UUID, expectedMediaVersion: Int, data: Data, contentType: String, fileName: String, sourceReference: String, reason: String, idempotencyKey: IdempotencyKey) async throws -> DastakV1GovernedMediaMutation
 }
 
 public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
@@ -342,6 +398,17 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
         let isOpen: Bool?
         let acceptingOrders: Bool?
     }
+
+    private struct RestaurantMenuRequest: Encodable, Sendable {
+        let operation: String
+        let branchId: UUID
+        let entityType: String
+        let entityId: UUID?
+        let expectedVersion: Int
+        let payload: DastakV1RestaurantMenuPayload
+    }
+
+    private struct RestaurantSnapshotRequest: Encodable, Sendable { let operation: String; let branchId: UUID? }
 
     private let functions: any FunctionClient
 
@@ -510,6 +577,22 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
             ),
             idempotencyKey: idempotencyKey
         )
+    }
+
+    public func restaurantMenu(branchID: UUID? = nil, idempotencyKey: IdempotencyKey) async throws -> DastakV1RestaurantMenu {
+        try await functions.invoke("dastak-v1-catalogue", request: RestaurantSnapshotRequest(operation: "merchantRestaurantMenu", branchId: branchID), idempotencyKey: idempotencyKey)
+    }
+
+    public func upsertRestaurantMenuEntity(branchID: UUID, entityID: UUID?, expectedVersion: Int, payload: DastakV1RestaurantMenuPayload, idempotencyKey: IdempotencyKey) async throws -> DastakV1RestaurantMenuMutation {
+        try await functions.invoke("dastak-v1-catalogue", request: RestaurantMenuRequest(operation: "upsertRestaurantMenuEntity", branchId: branchID, entityType: payload.entityType, entityId: entityID, expectedVersion: expectedVersion, payload: payload), idempotencyKey: idempotencyKey)
+    }
+
+    public func uploadGovernedRestaurantMedia(entityType: String, entityID: UUID, expectedMediaVersion: Int, data: Data, contentType: String, fileName: String, sourceReference: String, reason: String, idempotencyKey: IdempotencyKey) async throws -> DastakV1GovernedMediaMutation {
+        precondition(["RESTAURANT_BRANCH_BANNER", "RESTAURANT_MENU_ITEM"].contains(entityType))
+        return try await functions.invokeMultipart("dastak-v1-catalogue", fields: [
+            "operation": "uploadGovernedMedia", "entityType": entityType, "entityId": entityID.uuidString.lowercased(),
+            "expectedMediaVersion": String(expectedMediaVersion), "sourceReference": sourceReference, "reason": reason,
+        ], file: FunctionUpload(fileName: fileName, contentType: contentType, data: data), idempotencyKey: idempotencyKey)
     }
 
     private func invoke(

@@ -45,7 +45,9 @@ public struct DastakMerchantRootView: View {
                 case .orders:
                     await model.refreshOrders()
                 case .store:
-                    await model.refreshCanonicalCatalogue(reportFailure: false)
+                    async let retail: Void = model.refreshCanonicalCatalogue(reportFailure: false)
+                    async let restaurant: Void = model.refreshRestaurantMenu(reportFailure: false)
+                    _ = await (retail, restaurant)
                 case .account:
                     await model.notifications.refresh()
                 }

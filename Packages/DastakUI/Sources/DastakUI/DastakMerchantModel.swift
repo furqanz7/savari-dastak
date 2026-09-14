@@ -61,6 +61,7 @@ final class DastakMerchantModel: ObservableObject {
     let notifications: DastakMerchantNotifications
     @Published private(set) var catalogue: CatalogueSnapshot?
     @Published private(set) var canonicalCatalogue: DastakV1MerchantCatalogueSnapshot?
+    @Published private(set) var restaurantMenu: DastakV1RestaurantMenu?
     @Published private(set) var pendingCanonicalSelections: [UUID: Bool] = [:]
     @Published private(set) var earnings: DastakEarningsSnapshot?
     @Published private(set) var isLoading = true
@@ -167,7 +168,9 @@ final class DastakMerchantModel: ObservableObject {
         if let snapshot = try? await catalogueClient.merchantSnapshot(idempotencyKey: makeKey()) {
             catalogue = snapshot
         }
-        await refreshCanonicalCatalogue(reportFailure: false)
+        async let retail: Void = refreshCanonicalCatalogue(reportFailure: false)
+        async let restaurant: Void = refreshRestaurantMenu(reportFailure: false)
+        _ = await (retail, restaurant)
     }
 
     private func refreshEarnings() async {
@@ -195,6 +198,77 @@ final class DastakMerchantModel: ObservableObject {
             {
                 errorMessage = message(for: error, fallback: "The store catalogue could not be refreshed.")
             }
+        }
+    }
+
+    func refreshRestaurantMenu(reportFailure: Bool = true) async {
+        do {
+            restaurantMenu = try await v1Client.restaurantMenu(
+                branchID: restaurantMenu?.restaurant.branchID,
+                idempotencyKey: makeKey()
+            )
+            if reportFailure { errorMessage = nil }
+        } catch {
+            if reportFailure { errorMessage = message(for: error, fallback: "The restaurant menu could not be refreshed.") }
+        }
+    }
+
+    func saveRestaurantEntity(entityID: UUID?, expectedVersion: Int, payload: DastakV1RestaurantMenuPayload) async -> Bool {
+        guard let menu = restaurantMenu else { return false }
+        let identity = "restaurant-menu:\(payload.entityType):\(entityID?.uuidString ?? "new"):\(expectedVersion)"
+        guard !isBusy else { return false }
+        busyIdentity = identity
+        defer { busyIdentity = nil }
+        do {
+            let mutation = try await v1Client.upsertRestaurantMenuEntity(
+                branchID: menu.restaurant.branchID, entityID: entityID,
+                expectedVersion: expectedVersion, payload: payload,
+                idempotencyKey: actionKey(for: identity)
+            )
+            restaurantMenu = mutation.menu
+            actionKeys[identity] = nil
+            errorMessage = nil
+            notice = "Menu updated. Customers now see the latest details."
+            return true
+        } catch {
+            errorMessage = message(for: error, fallback: "The menu could not be updated. Review the latest version and try again.")
+            await refreshRestaurantMenu(reportFailure: false)
+            return false
+        }
+    }
+
+    func uploadRestaurantMedia(entityType: String, entityID: UUID, expectedMediaVersion: Int, data: Data, contentType: String, fileName: String) async -> Bool {
+        guard data.count <= 5 * 1_024 * 1_024 else { errorMessage = "Choose a clear JPG, PNG or WebP image up to 5 MB."; return false }
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let identity = "restaurant-media:\(entityType):\(entityID):\(expectedMediaVersion):\(digest)"
+        guard !isBusy else { return false }
+        busyIdentity = identity
+        defer { busyIdentity = nil }
+        do {
+            _ = try await v1Client.uploadGovernedRestaurantMedia(
+                entityType: entityType, entityID: entityID, expectedMediaVersion: expectedMediaVersion,
+                data: data, contentType: contentType, fileName: fileName,
+                sourceReference: "Merchant-owned image: \(fileName)",
+                reason: entityType == "RESTAURANT_BRANCH_BANNER" ? "Update restaurant banner" : "Update dish image",
+                idempotencyKey: actionKey(for: identity)
+            )
+            await refreshRestaurantMenu(reportFailure: false)
+            actionKeys[identity] = nil
+            errorMessage = nil
+            notice = entityType == "RESTAURANT_BRANCH_BANNER" ? "Restaurant banner updated." : "Dish photo updated."
+            return true
+        } catch {
+            await refreshRestaurantMenu(reportFailure: false)
+            let resolvedVersion = entityType == "RESTAURANT_BRANCH_BANNER"
+                ? restaurantMenu?.restaurant.mediaVersion
+                : restaurantMenu?.categories.lazy.flatMap(\.items).first(where: { $0.id == entityID })?.mediaVersion
+            if (resolvedVersion ?? expectedMediaVersion) > expectedMediaVersion {
+                actionKeys[identity] = nil
+                errorMessage = nil
+                return true
+            }
+            errorMessage = message(for: error, fallback: "The image could not be verified and published.")
+            return false
         }
     }
 

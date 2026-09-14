@@ -257,6 +257,42 @@ final class FunctionClientTests: XCTestCase {
         XCTAssertEqual(callCount, 1)
     }
 
+    func testInvokeMultipartPreservesAuthenticationIdempotencyFieldsAndFile() async throws {
+        let transport = RecordingTransport(
+            statusCode: 200,
+            responseBody: #"{"accepted":true}"#.data(using: .utf8)!
+        )
+        let client = SupabaseFunctionClient(
+            configuration: makeConfiguration(),
+            accessTokenProvider: { "user-access-token" },
+            transport: transport.send
+        )
+        let key = try XCTUnwrap(IdempotencyKey(rawValue: "media-action-123"))
+        let fileData = Data([0x89, 0x50, 0x4E, 0x47, 0x01, 0x02])
+
+        let response: TestResponse = try await client.invokeMultipart(
+            "upload-media",
+            fields: ["entityType": "RESTAURANT_MENU_ITEM", "entityId": "dish-123"],
+            file: FunctionUpload(fieldName: "file", fileName: "dish.png", contentType: "image/png", data: fileData),
+            idempotencyKey: key
+        )
+
+        XCTAssertEqual(response, TestResponse(accepted: true))
+        let recordedRequest = await transport.recordedRequest()
+        let request = try XCTUnwrap(recordedRequest)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer user-access-token")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Idempotency-Key"), "media-action-123")
+        let contentType = try XCTUnwrap(request.value(forHTTPHeaderField: "Content-Type"))
+        XCTAssertTrue(contentType.hasPrefix("multipart/form-data; boundary="))
+        let body = try XCTUnwrap(request.httpBody)
+        let bodyText = String(decoding: body, as: UTF8.self)
+        XCTAssertTrue(bodyText.contains("name=\"entityType\"\r\n\r\nRESTAURANT_MENU_ITEM"))
+        XCTAssertTrue(bodyText.contains("name=\"entityId\"\r\n\r\ndish-123"))
+        XCTAssertTrue(bodyText.contains("name=\"file\"; filename=\"dish.png\""))
+        XCTAssertTrue(bodyText.contains("Content-Type: image/png"))
+        XCTAssertTrue(body.range(of: fileData) != nil)
+    }
+
     private func makeConfiguration() -> BackendConfiguration {
         BackendConfiguration(
             product: "test-product",

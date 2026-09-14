@@ -64,6 +64,16 @@ public struct DastakV1SKULogistics: Codable, Equatable, Sendable {
     public let temperatureClass: String?
     public let fragile: Bool?
     public let bulky: Bool?
+
+    public init(weightGrams: Int? = nil, lengthMillimetres: Int? = nil, widthMillimetres: Int? = nil, heightMillimetres: Int? = nil, temperatureClass: String? = nil, fragile: Bool? = nil, bulky: Bool? = nil) {
+        self.weightGrams = weightGrams
+        self.lengthMillimetres = lengthMillimetres
+        self.widthMillimetres = widthMillimetres
+        self.heightMillimetres = heightMillimetres
+        self.temperatureClass = temperatureClass
+        self.fragile = fragile
+        self.bulky = bulky
+    }
 }
 
 public struct DastakV1CatalogueSKU: Codable, Equatable, Identifiable, Sendable {
