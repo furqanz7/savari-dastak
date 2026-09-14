@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowLeft, ArrowRight, Ban, Check, ChevronRight, CircleAlert, ClockAlert, Copy, Download,
-  Heart, Leaf, LockKeyhole, MapPin, Minus, PackageCheck, PackageX, Plus,
+  Heart, Leaf, LockKeyhole, MapPin, Minus, PackageCheck, PackageX, Plus, Printer,
   ReceiptText, RefreshCw, RotateCcw, Search, ShieldCheck, ShoppingBag,
   UserRound, UtensilsCrossed, X,
 } from "lucide-react";
@@ -79,6 +79,7 @@ type Props = DastakV1Auth & {
 
 type Cart = RetailCart;
 type FoodCartLine = ResolvedFoodCartLine;
+export type CustomerHomeMode = "food" | "grocery" | "parcel" | "print";
 const matchingStatuses = new Set(["CREATED", "MATCHING"]);
 const liveStatuses = new Set([
   "CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT", "PAID", "PREPARING",
@@ -122,6 +123,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const [selectedCategoryType, setSelectedCategoryType] = useState<string>();
   const [selectedCategory, setSelectedCategory] = useState<string>();
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>();
+  const [homeMode, setHomeMode] = useState<CustomerHomeMode>("grocery");
   const [initialCart] = useState(() => loadCustomerCart(props.accountId));
   const [cart, setCart] = useState<Cart>(() => initialCart.retail);
   const [foodCartEntries, setFoodCartEntries] = useState<PersistedFoodCartLine[]>(() => initialCart.food);
@@ -799,6 +801,13 @@ export function DastakV1CustomerExperience(props: Props) {
     {error && !showingCart && editingAddress === undefined && !showingAddressBook ? <CustomerNotice title="We couldn’t complete that action" onDismiss={() => setError(undefined)}>{error}</CustomerNotice> : null}
     {storefrontIssues.addresses && (props.section === "home" || showingCart) ? <CustomerNotice title="Saved places couldn’t update" onRetry={() => void refreshAddresses()}>{addresses.length ? "Your saved address is still shown. Reconnect before changing it." : storefrontIssues.addresses}</CustomerNotice> : null}
     {props.section === "home" ? <HomeSection
+      mode={homeMode}
+      onMode={(mode) => {
+        setHomeMode(mode);
+        setSelectedCategoryType(undefined);
+        setSelectedCategory(undefined);
+        setSelectedSubcategory(undefined);
+      }}
       supabaseUrl={props.supabaseUrl}
       restaurants={restaurants}
       categoryTypes={catalogue?.categoryTypes ?? []}
@@ -828,7 +837,6 @@ export function DastakV1CustomerExperience(props: Props) {
       }}
       onSubcategory={setSelectedSubcategory}
       onOrders={() => props.onNavigate("orders")}
-      onParcel={props.onOpenParcel}
       onAdd={add}
       onRestaurant={setSelectedRestaurant}
       wishlistIds={wishlistIds}
@@ -940,7 +948,8 @@ export function CustomerHeader({ address, count, onAddress, onSearch, onCart }: 
   </header>;
 }
 
-export function HomeSection({ supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, loadingProducts, loadingCatalogue = false, catalogueIssue, restaurantIssue, onRetryCatalogue, onRetryRestaurants, onSearch, selectedCategoryType, selectedCategory, selectedSubcategory, onCategoryType, onCategory, onSubcategory, onOrders, onParcel, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+export function HomeSection({ mode = "grocery", onMode = () => undefined, supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, loadingProducts, loadingCatalogue = false, catalogueIssue, restaurantIssue, onRetryCatalogue, onRetryRestaurants, onSearch, selectedCategoryType, selectedCategory, selectedSubcategory, onCategoryType, onCategory, onSubcategory, onOrders, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+  mode?: CustomerHomeMode; onMode?: (mode: CustomerHomeMode) => void;
   supabaseUrl: string;
   restaurants: V1RestaurantMenu[];
   categoryTypes: V1CatalogueCategoryType[]; categories: V1CatalogueCategory[];
@@ -951,7 +960,7 @@ export function HomeSection({ supabaseUrl, restaurants, categoryTypes, categorie
   selectedCategoryType?: string; selectedCategory?: string; selectedSubcategory?: string;
   onCategoryType: (id?: string) => void;
   onCategory: (id?: string) => void; onSubcategory: (id?: string) => void;
-  onOrders: () => void; onParcel: () => void;
+  onOrders: () => void;
   onAdd: (sku: V1CatalogueSku) => void; onRestaurant: (restaurant: V1RestaurantMenu) => void;
   wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>;
   onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void;
@@ -970,17 +979,21 @@ export function HomeSection({ supabaseUrl, restaurants, categoryTypes, categorie
   const selectedName = subcategories.find((item) => item.id === selectedSubcategory)?.name
     ?? categories.find((item) => item.id === selectedCategory)?.name;
   return <>
-    {!selectedType ? <section className="customer-home-hero"><div><p className="customer-eyebrow">YOUR EVERYDAY, DELIVERED</p><h1>A little more ease.<br /><em>Every day.</em></h1><p>From everyday essentials to your favourite meals. One basket, brought to your doorstep.</p><button className="customer-button" type="button" onClick={() => directoryRef.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}>Explore Dastak<ArrowRight size={19} /></button><span className="customer-hero-assurance"><ShieldCheck size={17} /> Pay via UPI or cash at your doorstep</span></div><div className="customer-hero-display" aria-hidden="true"><span className="customer-hero-orbit" />{skus.filter((sku) => sku.imageKey).slice(0, 3).map((sku) => <div key={sku.id}><ProductImage src={catalogueImageUrl(supabaseUrl, sku.imageKey ?? null)} alt="" /></div>)}<span className="customer-hero-seal">The everyday<br /><b>made easy.</b></span></div></section> : null}
-    {!selectedType ? <div className="customer-discovery-shortcuts"><button type="button" onClick={() => directoryRef.current?.scrollIntoView({ block: "start" })}><ShoppingBag size={20} /><span>Shop essentials</span><ArrowRight size={16} /></button><button type="button" onClick={onSearch}><Search size={20} /><span>Find your favourites</span><ArrowRight size={16} /></button>{restaurants.length ? <button type="button" onClick={() => document.getElementById("customer-restaurants")?.scrollIntoView({ block: "start" })}><UtensilsCrossed size={20} /><span>Order food</span><ArrowRight size={16} /></button> : null}</div> : null}
-    {!selectedType && (restaurants.length || restaurantIssue) ? <section className="v1-section" id="customer-restaurants"><header><div><p>RESTAURANTS &amp; CAFES</p><h2>Something delicious, nearby.</h2></div><span>{restaurants.length ? `${restaurants.length} ${restaurants.length === 1 ? "kitchen" : "kitchens"}` : ""}</span></header>
+    {!selectedType ? <CustomerCommerceNavigation mode={mode} onMode={onMode} /> : null}
+    {!selectedType && mode === "grocery" ? <section className="customer-home-hero"><div><p className="customer-eyebrow">YOUR EVERYDAY, DELIVERED</p><h1>A little more ease.<br /><em>Every day.</em></h1><p>Groceries and everyday essentials, selected carefully and brought to your doorstep.</p><button className="customer-button" type="button" onClick={() => directoryRef.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}>Shop grocery<ArrowRight size={19} /></button><span className="customer-hero-assurance"><ShieldCheck size={17} /> Pay via UPI or cash at your doorstep</span></div><div className="customer-hero-display" aria-hidden="true"><span className="customer-hero-orbit" />{skus.filter((sku) => sku.imageKey).slice(0, 3).map((sku) => <div key={sku.id}><ProductImage src={catalogueImageUrl(supabaseUrl, sku.imageKey ?? null)} alt="" /></div>)}<span className="customer-hero-seal">The everyday<br /><b>made easy.</b></span></div></section> : null}
+    {!selectedType && mode === "grocery" ? <div className="customer-discovery-shortcuts"><button type="button" onClick={() => directoryRef.current?.scrollIntoView({ block: "start" })}><ShoppingBag size={20} /><span>Shop essentials</span><ArrowRight size={16} /></button><button type="button" onClick={onSearch}><Search size={20} /><span>Find your favourites</span><ArrowRight size={16} /></button><button type="button" onClick={() => onMode("food")}><UtensilsCrossed size={20} /><span>Order food</span><ArrowRight size={16} /></button></div> : null}
+    {!selectedType && mode === "food" ? <section className="customer-food-hero"><div><p className="customer-eyebrow">FOOD, MADE NEARBY</p><h1>Your table is closer<br /><em>than you think.</em></h1><p>Choose a restaurant or café, build your order, and let the kitchen confirm every detail.</p></div><UtensilsCrossed size={46} aria-hidden="true" /></section> : null}
+    {!selectedType && mode === "food" && (restaurants.length || restaurantIssue) ? <section className="v1-section" id="customer-restaurants"><header><div><p>RESTAURANTS &amp; CAFES</p><h2>Something delicious, nearby.</h2></div><span>{restaurants.length ? `${restaurants.length} ${restaurants.length === 1 ? "kitchen" : "kitchens"}` : ""}</span></header>
       {restaurantIssue ? <CustomerNotice title="Restaurant menus couldn’t update" onRetry={onRetryRestaurants}>{restaurantIssue}</CustomerNotice> : null}
       <div className="v1-restaurant-rail">{restaurants.map((restaurant) => <button type="button" key={restaurant.restaurant.branchId} onClick={() => onRestaurant(restaurant)}>
         <span className="v1-restaurant-art">{restaurant.restaurant.imageKey ? <ProductImage src={catalogueImageUrl(supabaseUrl, restaurant.restaurant.imageKey)} alt="" /> : <UtensilsCrossed size={28} />}</span>
-        <span><strong>{restaurant.restaurant.name}</strong><small>{restaurant.restaurant.branchName}</small><b>{restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items</b></span>
+        <span className="v1-restaurant-copy"><small>RESTAURANT / CAFE</small><strong>{restaurant.restaurant.name}</strong><span>{restaurant.restaurant.branchName}</span><b>{restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items · View menu</b></span>
         <ChevronRight size={18} />
       </button>)}</div>
     </section> : null}
-    <section ref={directoryRef} className="v1-section v1-catalogue-directory"><header><div><p>SHOP DASTAK</p><h2>{selectedType?.name ?? "What does your day need?"}</h2></div>{selectedType ? <button type="button" className="v1-text-action" onClick={() => onCategoryType(undefined)}><ArrowLeft size={16} />All categories</button> : null}</header>
+    {!selectedType && mode === "food" && !restaurants.length && !restaurantIssue ? <CustomerEmptyState title="Kitchens are opening soon" copy="Restaurants and cafés available for your area will appear here." icon={<UtensilsCrossed size={30} />} /> : null}
+    {!selectedType && (mode === "parcel" || mode === "print") ? <CustomerComingSoon mode={mode} onGrocery={() => onMode("grocery")} /> : null}
+    {mode === "grocery" || selectedType ? <section ref={directoryRef} className="v1-section v1-catalogue-directory"><header><div><p>SHOP DASTAK</p><h2>{selectedType?.name ?? "What does your day need?"}</h2></div>{selectedType ? <button type="button" className="v1-text-action" onClick={() => onCategoryType(undefined)}><ArrowLeft size={16} />All categories</button> : null}</header>
       {catalogueIssue ? <CustomerNotice title="Products couldn’t update" onRetry={onRetryCatalogue}>{catalogueIssue}</CustomerNotice> : null}
       {loadingCatalogue ? <CustomerSkeleton label="Opening Dastak catalogue" /> : !selectedType ? <div className="v1-category-groups">{navigationGroups.map((group) => <section key={group.key}><header><h3>{group.name}</h3></header><div className="v1-category-grid">{group.types.map((type) => <button type="button" key={type.id} onClick={() => onCategoryType(type.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={type} /><strong>{type.name}</strong>{type.status && type.status !== "ACTIVE" ? <small>Coming soon</small> : null}</button>)}</div></section>)}</div> : <div className="v1-category-browser">
         <div className="v1-subcategory-rail" role="group" aria-label="Subcategories">
@@ -990,13 +1003,27 @@ export function HomeSection({ supabaseUrl, restaurants, categoryTypes, categorie
           {categorySubcategories.length ? <label className="v1-catalogue-type-filter">Type<select aria-label="Product type" value={selectedSubcategory ?? ""} onChange={(event) => onSubcategory(event.target.value || undefined)}><option value="">All types</option>{categorySubcategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
           {loadingProducts ? <CustomerSkeleton label="Loading this category" /> : selectedCategory ? <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <p>Products coming soon.</p>}</div>
       </div>}
-    </section>
-    {!loadingCatalogue && !selectedCategory && !selectedCategoryType && visible.length ? <section className="v1-section"><header><div><p>FOR YOUR EVERYDAY</p><h2>Everyday essentials</h2></div><span>{visible.length} products</span></header>
+    </section> : null}
+    {mode === "grocery" && !loadingCatalogue && !selectedCategory && !selectedCategoryType && visible.length ? <section className="v1-section"><header><div><p>FOR YOUR EVERYDAY</p><h2>Everyday essentials</h2></div><span>{visible.length} products</span></header>
       <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />
     </section> : null}
-    {!selectedType ? <><section className="v1-service-band"><PackageCheck size={24} /><div><strong>Send a parcel</strong><span>Door-to-door delivery across your city</span></div><button type="button" onClick={onParcel}>Open <ChevronRight size={17} /></button></section>
-    <button className="v1-order-link" type="button" onClick={onOrders}>View your Dastak orders <ArrowRight size={17} /></button></> : null}
+    {!selectedType ? <button className="v1-order-link" type="button" onClick={onOrders}>View your Dastak orders <ArrowRight size={17} /></button> : null}
   </>;
+}
+
+function CustomerCommerceNavigation({ mode, onMode }: { mode: CustomerHomeMode; onMode: (mode: CustomerHomeMode) => void }) {
+  const items: Array<{ mode: CustomerHomeMode; label: string; icon: React.ReactNode; soon?: boolean }> = [
+    { mode: "food", label: "Food", icon: <UtensilsCrossed /> },
+    { mode: "grocery", label: "Grocery", icon: <ShoppingBag /> },
+    { mode: "parcel", label: "Parcel", icon: <PackageCheck />, soon: true },
+    { mode: "print", label: "Print", icon: <Printer />, soon: true },
+  ];
+  return <nav className="customer-commerce-nav" aria-label="Shop by service">{items.map((item) => <button key={item.mode} type="button" className={mode === item.mode ? "selected" : ""} aria-current={mode === item.mode ? "page" : undefined} onClick={() => onMode(item.mode)}>{item.icon}<span>{item.label}</span>{item.soon ? <small>Soon</small> : null}</button>)}</nav>;
+}
+
+function CustomerComingSoon({ mode, onGrocery }: { mode: "parcel" | "print"; onGrocery: () => void }) {
+  const print = mode === "print";
+  return <section className="customer-coming-soon"><span>{print ? <Printer size={34} /> : <PackageCheck size={34} />}</span><p className="customer-eyebrow">COMING SOON</p><h1>{print ? "Print, without the errand." : "Send it with Dastak."}</h1><p>{print ? "Documents and everyday print jobs, prepared carefully and delivered to your doorstep." : "A simple, secure way to send parcels across your city is on its way."}</p><button className="customer-button" type="button" onClick={onGrocery}>Shop grocery for now<ArrowRight size={18} /></button></section>;
 }
 
 export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; query: string; onQuery: (value: string) => void; searching: boolean; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
@@ -1008,9 +1035,8 @@ export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, on
 }
 
 function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1CatalogueCategory }) {
-  const keys = [item.imageKey, ...item.previewImageKeys].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index).slice(0, 2);
-  return <span className={`v1-category-art count-${keys.length}`} aria-hidden="true">{keys.length
-    ? keys.map((key) => <ProductImage key={key} src={catalogueImageUrl(supabaseUrl, key)} alt="" />)
+  return <span className={`v1-category-art count-${item.imageKey ? 1 : 0}`} aria-hidden="true">{item.imageKey
+    ? <ProductImage src={catalogueImageUrl(supabaseUrl, item.imageKey)} alt="" />
     : item.slug.includes("paan") || item.slug.includes("produce") ? <Leaf size={29} />
       : item.slug.includes("pharmacy") || item.slug.includes("medicine") || item.slug.includes("health") ? <ShieldCheck size={29} />
         : <PackageCheck size={28} />}</span>;
@@ -1109,6 +1135,7 @@ function RestaurantMenuSheet({ menu, supabaseUrl, error, onDismiss, onAdd, wishl
   const dialog = useModalDialog<HTMLElement>({ onDismiss });
   return <div className="v1-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-menu-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-menu-title">
     <header><div><p>RESTAURANT / CAFE</p><h2 id="v1-menu-title">{menu.restaurant.name}</h2><small>{menu.restaurant.branchName}</small></div><button type="button" onClick={onDismiss} aria-label="Close restaurant menu"><X size={19} /></button></header>
+    <div className="customer-menu-banner" aria-hidden="true">{menu.restaurant.imageKey ? <ProductImage src={catalogueImageUrl(supabaseUrl, menu.restaurant.imageKey)} alt="" /> : <UtensilsCrossed size={42} />}</div>
     <div className="v1-security-note"><UtensilsCrossed size={20} /><span><strong>Prepared by {menu.restaurant.name}</strong><small>Your chosen kitchen confirms each item. You pay at your doorstep.</small></span></div>
     {error ? <CustomerNotice title="Your basket needs attention">{error}</CustomerNotice> : null}
     <nav className="customer-menu-nav" aria-label="Menu categories">{menu.categories.map((category) => <a href={`#menu-${category.id}`} key={category.id} onClick={(event) => { event.preventDefault(); document.getElementById(`menu-${category.id}`)?.scrollIntoView({ block: "start" }); }}>{category.name}</a>)}</nav>

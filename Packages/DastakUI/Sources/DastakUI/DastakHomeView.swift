@@ -3,6 +3,24 @@ import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
 
+private enum DastakHomeMode: String, CaseIterable, Identifiable {
+    case food = "Food"
+    case grocery = "Grocery"
+    case parcel = "Parcel"
+    case print = "Print"
+
+    var id: String { rawValue }
+    var symbol: String {
+        switch self {
+        case .food: "fork.knife"
+        case .grocery: "bag"
+        case .parcel: "shippingbox"
+        case .print: "printer"
+        }
+    }
+    var isComingSoon: Bool { self == .parcel || self == .print }
+}
+
 struct DastakHomeView: View {
     @ObservedObject var model: DastakCustomerModel
     let chooseLocation: () -> Void
@@ -13,6 +31,7 @@ struct DastakHomeView: View {
     @State private var selectedCategoryTypeID: UUID?
     @State private var selectedCategoryID: UUID?
     @State private var selectedSubcategoryID: UUID?
+    @State private var homeMode: DastakHomeMode = .grocery
     @State private var isSearchPresented = false
     @FocusState private var isSearchFieldFocused: Bool
 
@@ -26,12 +45,17 @@ struct DastakHomeView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
                             header
-                            categoryRail
-                            if selectedCategoryTypeID == nil {
-                                catalogueContent
+                            commerceNavigation
+                            switch homeMode {
+                            case .grocery:
+                                categoryRail
+                                if selectedCategoryTypeID == nil { catalogueContent }
+                            case .food:
+                                foodHero
+                                restaurantRail
+                            case .parcel, .print:
+                                comingSoon
                             }
-                            restaurantRail
-                            parcelBand
                         }
                         .padding(.horizontal, MarketplaceSpacing.medium)
                         .padding(.bottom, 148)
@@ -82,6 +106,83 @@ struct DastakHomeView: View {
         }
     }
 
+    private var commerceNavigation: some View {
+        HStack(spacing: 4) {
+            ForEach(DastakHomeMode.allCases) { mode in
+                Button {
+                    homeMode = mode
+                    selectedCategoryTypeID = nil
+                    selectedCategoryID = nil
+                    selectedSubcategoryID = nil
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: mode.symbol).font(.subheadline.weight(.semibold))
+                        Text(mode.rawValue).font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(homeMode == mode ? Color.white : Color.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .overlay(alignment: .topTrailing) {
+                        if mode.isComingSoon {
+                            Text("SOON")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                .padding(.horizontal, 4).padding(.vertical, 2)
+                                .background(MarketplaceColors.dastakAccentSoft.color, in: Capsule())
+                        }
+                    }
+                    .background(homeMode == mode ? MarketplaceColors.dastakAccent.color : .clear, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(homeMode == mode ? .isSelected : [])
+            }
+        }
+        .padding(5)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Color.primary.opacity(0.1), lineWidth: 0.5))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Shop by service")
+    }
+
+    private var foodHero: some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+            Text("FOOD, MADE NEARBY")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text("Your table is closer\nthan you think.")
+                .font(MarketplaceTypography.instrumentSerif(fixedSize: 38))
+            Text("Choose a restaurant or café. Your kitchen confirms every detail before delivery.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(MarketplaceSpacing.large)
+        .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    private var comingSoon: some View {
+        VStack(spacing: MarketplaceSpacing.medium) {
+            Image(systemName: homeMode.symbol)
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .frame(width: 84, height: 84)
+                .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            Text("COMING SOON")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(MarketplaceColors.dastakAccent.color)
+            Text(homeMode == .print ? "Print, without the errand." : "Send it with Dastak.")
+                .font(MarketplaceTypography.instrumentSerif(fixedSize: 36))
+                .multilineTextAlignment(.center)
+            Text(homeMode == .print
+                 ? "Documents and everyday print jobs, prepared carefully and delivered to your doorstep."
+                 : "A simple, secure way to send parcels across your city is on its way.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, minHeight: 360)
+        .padding(.horizontal, MarketplaceSpacing.large)
+    }
+
     @ViewBuilder
     private var restaurantRail: some View {
         if !model.v1Restaurants.isEmpty {
@@ -104,14 +205,11 @@ struct DastakHomeView: View {
                         ForEach(model.v1Restaurants) { restaurant in
                             Button { selectedRestaurant = restaurant } label: {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Image(systemName: "fork.knife")
-                                        .font(.title2)
-                                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                                        .frame(maxWidth: .infinity, minHeight: 72)
-                                        .background(
-                                            MarketplaceColors.dastakAccentSoft.color,
-                                            in: RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                        )
+                                    DastakProductArtwork(
+                                        imageKey: restaurant.restaurant.imageKey,
+                                        fallbackSymbol: "fork.knife"
+                                    )
+                                    .frame(maxWidth: .infinity, minHeight: 96)
                                     Text(restaurant.restaurant.name)
                                         .font(.headline)
                                         .foregroundStyle(.primary)
@@ -389,17 +487,16 @@ struct DastakHomeView: View {
     private var priorityArtworkKeys: [String] {
         var keys: [String] = []
         if let selectedCategory {
-            if let key = selectedCategory.imageKey ?? selectedCategory.previewImageKeys?.first {
+            if let key = selectedCategory.imageKey {
                 keys.append(key)
             }
-            keys.append(contentsOf: (selectedCategoryType.map { categories(in: $0.id) } ?? []).compactMap { $0.imageKey ?? $0.previewImageKeys?.first })
+            keys.append(contentsOf: (selectedCategoryType.map { categories(in: $0.id) } ?? []).compactMap(\.imageKey))
             keys.append(contentsOf: selectedProducts.prefix(16).compactMap(\.imageKey))
         } else {
             let destinations = selectedCategoryType.map { categories(in: $0.id) }
                 ?? model.canonicalCategoryTypes
             for destination in destinations {
-                keys.append(contentsOf: ([destination.imageKey].compactMap { $0 }
-                    + (destination.previewImageKeys ?? [])).prefix(2))
+                if let imageKey = destination.imageKey { keys.append(imageKey) }
             }
         }
         var seen = Set<String>()
@@ -768,7 +865,6 @@ private struct DastakDepartmentTile: View {
         VStack(spacing: 7) {
             DastakCategoryArtwork(
                 imageKey: categoryType.imageKey,
-                previewImageKeys: categoryType.previewImageKeys,
                 fallbackSymbol: DastakCatalogueSymbol.symbol(for: categoryType.slug)
             )
             .frame(maxWidth: .infinity)
@@ -797,7 +893,6 @@ private struct DastakCategoryTile: View {
         VStack(spacing: 7) {
             DastakCategoryArtwork(
                 imageKey: category.imageKey,
-                previewImageKeys: category.previewImageKeys,
                 fallbackSymbol: DastakCatalogueSymbol.symbol(for: category.slug)
             )
             .frame(maxWidth: .infinity)
@@ -826,7 +921,7 @@ private struct DastakSubcategoryTile: View {
     var body: some View {
         VStack(spacing: 6) {
             DastakProductArtwork(
-                imageKey: subcategory.imageKey ?? subcategory.previewImageKeys?.first,
+                imageKey: subcategory.imageKey,
                 fallbackSymbol: DastakCatalogueSymbol.symbol(for: subcategory.slug)
             )
             .frame(width: 64, height: 58)
@@ -852,6 +947,12 @@ struct DastakRestaurantMenuView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                    DastakProductArtwork(
+                        imageKey: restaurant.restaurant.imageKey,
+                        fallbackSymbol: "fork.knife"
+                    )
+                    .frame(maxWidth: .infinity)
+
                     Label {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Exact restaurant confirmation")
@@ -947,7 +1048,13 @@ private struct DastakRestaurantItemCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             HStack(alignment: .top, spacing: MarketplaceSpacing.small) {
-                Text(item.name).font(.headline)
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                    if item.imageKey != nil {
+                        DastakProductArtwork(imageKey: item.imageKey, fallbackSymbol: "fork.knife")
+                            .frame(width: 104)
+                    }
+                    Text(item.name).font(.headline)
+                }
                 Spacer(minLength: 8)
                 Button(action: toggleWishlist) {
                     Image(systemName: isWishlisted ? "heart.fill" : "heart")

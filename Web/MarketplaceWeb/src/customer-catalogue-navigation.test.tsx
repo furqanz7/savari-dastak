@@ -7,7 +7,7 @@ const noop = () => undefined;
 const props: ComponentProps<typeof HomeSection> = {
   supabaseUrl: "https://example.supabase.co",
   restaurants: [],
-  categoryTypes: [{ id: "dairy", name: "Dairy, Bread & Eggs", slug: "dairy", sortOrder: 0, previewImageKeys: [], navigationSection: { key: "grocery", name: "Grocery & Kitchen", sortOrder: 0 } }],
+  categoryTypes: [{ id: "dairy", name: "Dairy, Bread & Eggs", slug: "dairy", sortOrder: 0, imageKey: "canonical/taxonomy/category_type/dairy.webp", previewImageKeys: ["catalogue/sku-packshot.png"], navigationSection: { key: "grocery", name: "Grocery & Kitchen", sortOrder: 0 } }],
   categories: [
     { id: "milk", categoryTypeId: "dairy", name: "Milk", slug: "milk", sortOrder: 0, previewImageKeys: [] },
     { id: "bread", categoryTypeId: "dairy", name: "Bread & Buns", slug: "bread", sortOrder: 1, previewImageKeys: [] },
@@ -23,7 +23,7 @@ const props: ComponentProps<typeof HomeSection> = {
   })),
   loadingProducts: false,
   onCategoryType: noop, onCategory: noop, onSubcategory: noop, onOrders: noop,
-  onParcel: noop, onAdd: noop, onRestaurant: noop, onWishlist: noop,
+  onAdd: noop, onRestaurant: noop, onWishlist: noop,
   wishlistIds: new Set(), wishlistUpdatingIds: new Set(),
 };
 
@@ -39,10 +39,29 @@ describe("two-level customer catalogue", () => {
   });
   it("shows broad category tiles under section headings", () => {
     const html = renderToStaticMarkup(<HomeSection {...props} />);
+    expect(html).toContain('aria-label="Shop by service"');
+    expect(html).toContain(">Food<");
+    expect(html).toContain(">Grocery<");
+    expect(html).toContain(">Parcel<");
+    expect(html).toContain(">Print<");
     expect(html).toContain("Grocery &amp; Kitchen");
     expect(html).toContain("Dairy, Bread &amp; Eggs");
+    expect(html).toContain("canonical/taxonomy/category_type/dairy.webp");
+    expect(html).not.toContain("sku-packshot.png");
     expect(html).not.toContain(">Milk<");
     expect(html).not.toContain("v1-category-browser");
+  });
+
+  it("keeps Food focused on restaurant discovery and Parcel and Print honest", () => {
+    const food = renderToStaticMarkup(<HomeSection {...props} mode="food" />);
+    expect(food).toContain("FOOD, MADE NEARBY");
+    expect(food).not.toContain("SHOP DASTAK");
+    expect(food).not.toContain("Everyday essentials");
+    const parcel = renderToStaticMarkup(<HomeSection {...props} mode="parcel" />);
+    expect(parcel).toContain("COMING SOON");
+    expect(parcel).toContain("Send it with Dastak");
+    const print = renderToStaticMarkup(<HomeSection {...props} mode="print" />);
+    expect(print).toContain("Print, without the errand");
   });
 
   it("shows products and sibling subcategories together with finer choices in a filter", () => {
