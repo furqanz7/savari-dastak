@@ -212,18 +212,33 @@
 .merchant-experience .merchant-v1-menu-create form { grid-template-columns: 1fr; align-content: start; gap: 12px; padding: 20px; border-radius: 16px; }
 .merchant-experience .merchant-v1-menu-create label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 13px; }
 .merchant-experience .merchant-v1-menu-create button { justify-self: start; }
+.merchant-experience .merchant-media-picker { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 18px; border: 1px solid var(--divider); border-radius: 18px; background: var(--surface); }
+.merchant-experience .merchant-restaurant-banner { margin: 0 0 22px; }
+.merchant-experience .merchant-media-preview { display: grid; place-items: center; width: 112px; height: 76px; overflow: hidden; border-radius: 13px; background: var(--dastak-accent-soft); color: var(--dastak-accent); }
+.merchant-experience .merchant-media-preview img { width: 100%; height: 100%; object-fit: cover; }
+.merchant-experience .merchant-media-picker > span { display: grid; gap: 5px; min-width: 0; }
+.merchant-experience .merchant-media-picker > span strong { font-size: 15px; }
+.merchant-experience .merchant-media-picker > span small { max-width: 570px; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.merchant-experience .merchant-media-picker > label { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; cursor: pointer; white-space: nowrap; }
+.merchant-experience .merchant-media-picker > label[aria-disabled="true"] { opacity: .55; pointer-events: none; }
+.merchant-experience .merchant-media-picker input[type="file"] { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .merchant-experience .merchant-v1-menu-list { gap: 24px; margin-top: 28px; }
 .merchant-experience .merchant-v1-menu-list > section { border-radius: 18px; }
 .merchant-experience .merchant-v1-menu-list > section > header { padding: 20px; background: var(--surface-subtle); }
 .merchant-experience .merchant-v1-menu-list > section > header strong { font-size: 19px; }
 .merchant-experience .merchant-v1-menu-list header small { font-size: 13px; }
 .merchant-experience .merchant-v1-menu-item { padding: 20px; gap: 18px; }
+.merchant-experience .merchant-v1-menu-item .merchant-dish-photo { grid-template-columns: 88px minmax(0, 1fr) auto; padding: 14px; background: var(--surface-subtle); }
+.merchant-experience .merchant-v1-menu-item .merchant-dish-photo .merchant-media-preview { width: 88px; height: 72px; }
 .merchant-experience .merchant-v1-menu-item-fields { grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; }
 .merchant-experience .merchant-v1-menu-item-fields label { font-size: 13px; }
 .merchant-experience .merchant-v1-menu-item-fields .merchant-menu-description { grid-column: 1 / -1; }
 .merchant-experience .merchant-v1-menu-item-fields > div { grid-column: 1 / -1; gap: 10px; flex-wrap: wrap; }
 .merchant-experience .merchant-menu-options { padding: 12px; border: 1px solid var(--divider); border-radius: 14px; background: var(--surface-subtle); }
-.merchant-menu-options > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 4px; cursor: pointer; color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.merchant-menu-options > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 4px; cursor: pointer; color: var(--text-primary); font-size: 14px; font-weight: 600; }
+.merchant-menu-options > summary > span { display: grid; gap: 3px; }
+.merchant-menu-options > summary small { color: var(--text-secondary); font-size: 12px; font-weight: 450; }
+.merchant-menu-options > summary > b { margin-left: auto; color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
 .merchant-menu-options > summary::after { content: "+"; font-size: 23px; font-weight: 400; }
 .merchant-menu-options[open] > summary::after { content: "−"; }
 .merchant-menu-options[open] > summary { margin-bottom: 12px; }
@@ -231,6 +246,7 @@
 .merchant-experience .merchant-v1-option-row { grid-template-columns: minmax(0, 1fr) 92px auto auto auto; gap: 8px; }
 .merchant-experience .merchant-v1-option-create, .merchant-experience .merchant-v1-option-group > form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 14px; border-radius: 12px; }
 .merchant-experience .merchant-v1-option-create > strong { grid-column: 1 / -1; }
+.merchant-experience .merchant-v1-option-create > p { grid-column: 1 / -1; margin: -4px 0 2px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
 .merchant-experience .merchant-v1-draft-warning { font-size: 13px; padding: 13px; border-radius: 12px; }
 .merchant-experience .royalty-shell { padding: 0; gap: 24px; }
 .merchant-experience .royalty-heading { align-items: center; }
@@ -346,6 +362,9 @@
   .merchant-experience .merchant-v1-save-bar > span { grid-column: 1 / -1; }
   .merchant-experience .merchant-v1-save-bar > button { width: 100%; }
   .merchant-experience .merchant-v1-menu-item { padding: 16px; }
+  .merchant-experience .merchant-media-picker, .merchant-experience .merchant-v1-menu-item .merchant-dish-photo { grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding: 13px; }
+  .merchant-experience .merchant-media-preview, .merchant-experience .merchant-v1-menu-item .merchant-dish-photo .merchant-media-preview { width: 76px; height: 66px; }
+  .merchant-experience .merchant-media-picker > label { grid-column: 2; justify-self: start; padding-inline: 0; border: 0; background: transparent; color: var(--dastak-accent); }
   .merchant-experience .merchant-v1-menu-item-fields { grid-template-columns: minmax(0, 1fr); }
   .merchant-experience .merchant-v1-option-row { grid-template-columns: minmax(0, 1fr) 90px; }
   .merchant-experience .merchant-v1-option-row > span { grid-column: 1 / -1; }

@@ -51,6 +51,7 @@ import {
   promoteV1AdminCataloguePrimary,
   removeV1AdminCatalogueAsset,
   uploadV1AdminCatalogueAsset,
+  uploadV1GovernedMedia,
   updateV1AdminSku,
   updateV1MerchantBranchState,
   updateV1MerchantSkuSelection,
@@ -1036,6 +1037,28 @@ describe("Dastak V1 web contract", () => {
     expect(requests[1].body).not.toHaveProperty("storageObjectPath");
     expect(requests[2].body).toEqual({ operation: "promoteAdminCataloguePrimary", skuId, assetId, expectedPrimaryAssetId: null, expectedAssetVersion: 8, reason: "Exact product correction" });
     expect(requests[3].body).toEqual({ operation: "removeAdminCatalogueAsset", skuId, assetId, expectedAssetVersion: 9, reason: "Unused duplicate image" });
+  });
+
+  it("uploads restaurant media through the governed exact-entity contract", async () => {
+    const entityId = "99999999-9999-4999-8999-999999999999";
+    let request: { contentType: string | null; idempotencyKey: string | null; body: Record<string, FormDataEntryValue> } | undefined;
+    const file = new File([new Uint8Array([1, 2, 3])], "cafe.webp", { type: "image/webp" });
+    const result = await uploadV1GovernedMedia({
+      ...auth, entityType: "RESTAURANT_BRANCH_BANNER", entityId, expectedMediaVersion: 4,
+      file, sourceReference: "Merchant-owned cafe photo", reason: "Update restaurant banner",
+      idempotencyKey: "restaurant-banner-once",
+    }, async (_url, init) => {
+      const headers = new Headers(init?.headers);
+      const form = init?.body as FormData;
+      request = { contentType: headers.get("content-type"), idempotencyKey: headers.get("x-idempotency-key"), body: Object.fromEntries(form.entries()) };
+      return Response.json({ entityType: "RESTAURANT_BRANCH_BANNER", entityId, mediaVersion: 5, imageKey: `canonical/restaurant/restaurant_branch_banner/${entityId}/asset.webp` });
+    });
+    expect(request).toMatchObject({ contentType: null, idempotencyKey: "restaurant-banner-once", body: {
+      operation: "uploadGovernedMedia", entityType: "RESTAURANT_BRANCH_BANNER", entityId,
+      expectedMediaVersion: "4", sourceReference: "Merchant-owned cafe photo", reason: "Update restaurant banner", file,
+    } });
+    expect(result).toMatchObject({ entityId, mediaVersion: 5 });
+    expect(request?.body).not.toHaveProperty("imageKey");
   });
 
   it("loads the Admin taxonomy hierarchy with refresh-safe entity metadata", async () => {

@@ -1,5 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { CirclePause, Plus, Search, ShieldCheck, Store } from "lucide-react";
+import { Camera, CirclePause, ImagePlus, Plus, Search, ShieldCheck, Store } from "lucide-react";
+import { catalogueImageUrl } from "./catalogue";
 import { CustomerEmptyState, CustomerNotice, CustomerSkeleton } from "./CustomerUI";
 import { MerchantV1CatalogueControl } from "./MerchantV1CatalogueControl";
 import { merchantCommerceKind, type MerchantBranch } from "./merchantBranchContext";
@@ -12,6 +13,7 @@ import {
   type VersionedDraft,
 } from "./restaurantMenuDraft";
 import { userFacingError } from "./userFacingError";
+import { validateDecodableImage } from "./imageValidation";
 import {
   DastakV1RequestError,
   formatV1Price,
@@ -23,6 +25,7 @@ import {
   type V1RestaurantMenuItem,
   type V1RestaurantMenuOption,
   type V1RestaurantMenuOptionGroup,
+  uploadV1GovernedMedia,
 } from "./dastakV1";
 
 type Props = {
@@ -165,6 +168,55 @@ function MerchantV1RestaurantMenuControl({ auth, initial, onSessionExpired }: Pr
     }
   };
 
+  const uploadMedia = async (
+    entityType: "RESTAURANT_BRANCH_BANNER" | "RESTAURANT_MENU_ITEM",
+    entityId: string,
+    expectedMediaVersion: number,
+    file: File,
+  ) => {
+    const identity = `media:${entityType}:${entityId}`;
+    if (busy) return false;
+    if (!await validateDecodableImage(file, 5 * 1024 * 1024) || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Choose a genuine JPG, PNG or WebP image up to 5 MB.");
+      return false;
+    }
+    const keyPayload = { entityType, entityId, expectedMediaVersion, name: file.name, size: file.size, modified: file.lastModified };
+    setBusy(identity);
+    setError(undefined);
+    try {
+      await uploadV1GovernedMedia({
+        ...auth, entityType, entityId, expectedMediaVersion, file,
+        sourceReference: `Merchant-owned image: ${file.name}`,
+        reason: entityType === "RESTAURANT_BRANCH_BANNER" ? "Update restaurant banner" : "Update dish image",
+        idempotencyKey: mutationKeys.current.keyFor(identity, keyPayload),
+      });
+      const authoritative = await getV1MerchantRestaurantMenu({ ...auth, branchId: menu.restaurant.branchId });
+      setMenu(authoritative);
+      mutationKeys.current.clear(identity);
+      return true;
+    } catch (requestError) {
+      if (isSessionError(requestError)) onSessionExpired();
+      setError(message(requestError));
+      try {
+        const authoritative = await getV1MerchantRestaurantMenu({ ...auth, branchId: menu.restaurant.branchId });
+        setMenu(authoritative);
+        const nextVersion = entityType === "RESTAURANT_BRANCH_BANNER"
+          ? authoritative.restaurant.mediaVersion
+          : authoritative.categories.flatMap((category) => category.items).find((item) => item.id === entityId)?.mediaVersion;
+        if ((nextVersion ?? expectedMediaVersion) > expectedMediaVersion) {
+          mutationKeys.current.clear(identity);
+          setError(undefined);
+          return true;
+        }
+      } catch {
+        // Keep the same logical key until authoritative state resolves the uncertain upload.
+      }
+      return false;
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
   const createCategory = async (event: FormEvent) => {
     event.preventDefault();
     const name = categoryName.trim();
@@ -191,6 +243,15 @@ function MerchantV1RestaurantMenuControl({ auth, initial, onSessionExpired }: Pr
   return <section className="merchant-v1-control merchant-v1-menu-control">
     <header className="merchant-orders-heading"><div><p className="eyebrow">YOUR KITCHEN</p><h1>{menu.restaurant.name}</h1><p>Your menu, made easy to manage.</p></div></header>
     {error ? <CustomerNotice title="Menu update needs attention" onRetry={() => void refresh()}>{error}</CustomerNotice> : null}
+    <RestaurantMediaPicker
+      className="merchant-restaurant-banner"
+      title="Restaurant banner"
+      copy="Shown at the top of your Dastak restaurant and menu. Use a clear, landscape photo without text."
+      imageKey={menu.restaurant.imageKey}
+      supabaseUrl={auth.supabaseUrl}
+      busy={Boolean(busy)}
+      onChoose={(file) => uploadMedia("RESTAURANT_BRANCH_BANNER", menu.restaurant.branchId, menu.restaurant.mediaVersion ?? 1, file)}
+    />
     <div className="merchant-v1-operation-grid">
       <article><Store size={19} /><span><strong>{menu.restaurant.isOpen ? "Restaurant open" : "Restaurant closed"}</strong><small>Existing confirmed orders continue</small></span><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void setOperation(!menu.restaurant.isOpen, false)}>{menu.restaurant.isOpen ? "Close" : "Open"}</button></article>
       <article><CirclePause size={19} /><span><strong>{menu.restaurant.acceptingOrders ? "Accepting food orders" : "New food orders paused"}</strong><small>Choose when your kitchen takes new requests</small></span><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void setOperation(true, !menu.restaurant.acceptingOrders)}>{menu.restaurant.acceptingOrders ? "Pause" : "Resume"}</button></article>
@@ -207,7 +268,7 @@ function MerchantV1RestaurantMenuControl({ auth, initial, onSessionExpired }: Pr
     {visibleCategories.length === 0 ? <CustomerEmptyState title={query ? "No matching dishes" : "Make this menu yours"} copy={query ? "Try another dish or category name." : "Add your first category and dish using “Add to your menu” above."} /> : null}
     <div className="merchant-v1-menu-list">{menu.categories.map((category) => <section key={category.id} hidden={!visibleCategories.some((visible) => visible.id === category.id)}>
       <header><div><strong>{category.name}</strong><small>{category.items.length} items · {category.status.toLowerCase()}</small></div><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void save(`category:${category.id}`, "CATEGORY", category.id, category.version, { name: category.name, description: category.description ?? "", sortOrder: category.sortOrder, status: category.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" })}>{category.status === "ACTIVE" ? "Hide" : "Activate"}</button></header>
-      <div>{category.items.map((item) => <div key={item.id} hidden={!visibleCategories.find((visible) => visible.id === category.id)?.items.some((visible) => visible.id === item.id)}><RestaurantItemEditor item={item} categoryId={category.id} busy={Boolean(busy)} save={save} /></div>)}</div>
+      <div>{category.items.map((item) => <div key={item.id} hidden={!visibleCategories.find((visible) => visible.id === category.id)?.items.some((visible) => visible.id === item.id)}><RestaurantItemEditor item={item} categoryId={category.id} supabaseUrl={auth.supabaseUrl} busy={Boolean(busy)} save={save} uploadMedia={uploadMedia} /></div>)}</div>
     </section>)}</div>
   </section>;
 }
@@ -222,8 +283,9 @@ type Save = (
 
 type ItemDraftValue = { name: string; description: string; price: string };
 
-function RestaurantItemEditor({ item, categoryId, busy, save }: {
-  item: V1RestaurantMenuItem; categoryId: string; busy: boolean; save: Save;
+function RestaurantItemEditor({ item, categoryId, supabaseUrl, busy, save, uploadMedia }: {
+  item: V1RestaurantMenuItem; categoryId: string; supabaseUrl: string; busy: boolean; save: Save;
+  uploadMedia: (entityType: "RESTAURANT_MENU_ITEM", entityId: string, expectedMediaVersion: number, file: File) => Promise<boolean>;
 }) {
   const serverValue = useMemo(() => ({
     name: item.name,
@@ -254,17 +316,49 @@ function RestaurantItemEditor({ item, categoryId, busy, save }: {
       sortOrder: item.optionGroups.length, status: "ACTIVE",
     })) setGroupName("");
   };
-  return <article className={`merchant-v1-menu-item ${draft.stale ? "stale-draft" : ""}`}><div className="merchant-v1-menu-item-fields">
+  return <article className={`merchant-v1-menu-item ${draft.stale ? "stale-draft" : ""}`}>
+    <RestaurantMediaPicker
+      className="merchant-dish-photo"
+      title="Dish photo"
+      copy="Optional. A clear photo helps customers recognise this dish."
+      imageKey={item.imageKey}
+      supabaseUrl={supabaseUrl}
+      busy={busy || draft.stale}
+      onChoose={(file) => uploadMedia("RESTAURANT_MENU_ITEM", item.id, item.mediaVersion ?? 1, file)}
+    />
+    <div className="merchant-v1-menu-item-fields">
     {draft.stale ? <p className="merchant-v1-draft-warning" role="status"><span>Newer server changes are available. Your draft was not overwritten.</span><button className="secondary-button" type="button" onClick={() => setDraft(useLatestVersionedDraft)}>Use latest</button></p> : null}
     <label>Item name<input value={draft.value.name} maxLength={160} disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, name: event.target.value }))} aria-label="Menu item name" /></label>
     <label><span>Price ₹</span><input value={draft.value.price} inputMode="decimal" disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, price: event.target.value }))} /></label>
     <label className="merchant-menu-description">Description<input value={draft.value.description} maxLength={1000} disabled={draft.stale} onChange={(event) => setDraft((current) => editVersionedDraft(current, { ...current.value, description: event.target.value }))} aria-label="Menu item description" placeholder="A little about this dish" /></label>
     <div><button className="primary-button" type="button" disabled={busy || draft.stale || !draft.dirty} onClick={() => updateItem()}>Save changes</button><button className="secondary-button" type="button" disabled={busy || draft.stale} onClick={() => updateItem(item.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}>{item.status === "ACTIVE" ? "Mark unavailable" : "Activate"}</button></div></div>
-    <details className="merchant-menu-options"><summary>Variants &amp; add-ons <small>{item.optionGroups.length} groups</small></summary>
+    <details className="merchant-menu-options"><summary><span>Customer choices &amp; extras<small>Sizes, flavours, preparation choices or paid extras</small></span><b>{item.optionGroups.length} {item.optionGroups.length === 1 ? "group" : "groups"}</b></summary>
     {item.optionGroups.map((group) => <RestaurantOptionGroupEditor key={group.id} group={group} itemId={item.id} busy={busy} save={save} />)}
-    <form className="merchant-v1-option-create" onSubmit={(event) => void createGroup(event)}><strong>Add variant / add-on group</strong><label>Group name<input value={groupName} maxLength={100} onChange={(event) => setGroupName(event.target.value)} placeholder="Size or extras" /></label><label>Selection type<select value={groupType} onChange={(event) => setGroupType(event.target.value as "SINGLE" | "MULTIPLE")}><option value="SINGLE">Choose one</option><option value="MULTIPLE">Choose multiple</option></select></label>{groupType === "MULTIPLE" ? <label>Maximum selections<input type="number" min={1} max={20} value={groupMax} onChange={(event) => setGroupMax(Number(event.target.value))} /></label> : null}<button className="secondary-button" disabled={busy || !groupName.trim()}><Plus size={15} /> Add group</button></form>
+    <form className="merchant-v1-option-create" onSubmit={(event) => void createGroup(event)}><strong>Add a customer choice</strong><p>Example: “Choose a size” with Small, Medium and Large; or “Add extras” with Cheese and Sauce.</p><label>Choice name<input value={groupName} maxLength={100} onChange={(event) => setGroupName(event.target.value)} placeholder="Choose a size" /></label><label>How customers choose<select value={groupType} onChange={(event) => setGroupType(event.target.value as "SINGLE" | "MULTIPLE")}><option value="SINGLE">One option</option><option value="MULTIPLE">One or more options</option></select></label>{groupType === "MULTIPLE" ? <label>Maximum options<input type="number" min={1} max={20} value={groupMax} onChange={(event) => setGroupMax(Number(event.target.value))} /></label> : null}<button className="secondary-button" disabled={busy || !groupName.trim()}><Plus size={15} /> Add choice group</button></form>
     </details>
   </article>;
+}
+
+function RestaurantMediaPicker({ className, title, copy, imageKey, supabaseUrl, busy, onChoose }: {
+  className: string; title: string; copy: string; imageKey?: string; supabaseUrl: string; busy: boolean;
+  onChoose: (file: File) => Promise<boolean>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const source = catalogueImageUrl(supabaseUrl, imageKey ?? null);
+  return <section className={`merchant-media-picker ${className}`}>
+    <div className="merchant-media-preview">{source ? <img src={source} alt="" /> : <Camera size={28} aria-hidden="true" />}</div>
+    <span><strong>{title}</strong><small>{copy}</small></span>
+    <label className="secondary-button" aria-disabled={busy || uploading}>
+      <ImagePlus size={17} aria-hidden="true" /> {uploading ? "Uploading…" : source ? "Replace photo" : "Add photo"}
+      <input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy || uploading} onChange={(event) => {
+        const file = event.target.files?.[0];
+        event.currentTarget.value = "";
+        if (!file) return;
+        setUploading(true);
+        void onChoose(file).finally(() => setUploading(false));
+      }} />
+    </label>
+  </section>;
 }
 
 function RestaurantOptionGroupEditor({ group, itemId, busy, save }: {

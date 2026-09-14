@@ -1420,6 +1420,36 @@ export async function uploadV1AdminCatalogueAsset(
   ));
 }
 
+export async function uploadV1GovernedMedia(
+  input: DastakV1Auth & {
+    entityType: "RESTAURANT_BRANCH_BANNER" | "RESTAURANT_MENU_ITEM";
+    entityId: string;
+    expectedMediaVersion: number;
+    file: File;
+    sourceReference: string;
+    reason: string;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  },
+  fetcher: Fetcher = fetch,
+) {
+  const form = new FormData();
+  form.set("operation", "uploadGovernedMedia");
+  form.set("entityType", input.entityType);
+  form.set("entityId", requiredUuid(input.entityId));
+  form.set("expectedMediaVersion", String(requiredInteger(input.expectedMediaVersion, 1)));
+  form.set("sourceReference", requiredText(input.sourceReference.trim(), 500));
+  form.set("reason", requiredText(input.reason.trim(), 500));
+  form.set("file", input.file);
+  return requiredRecord(await invokeMultipart(
+    input,
+    "dastak-v1-catalogue",
+    form,
+    input.idempotencyKey,
+    fetcher,
+  ));
+}
+
 export async function promoteV1AdminCataloguePrimary(
   input: DastakV1Auth & {
     skuId: string;

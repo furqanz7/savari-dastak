@@ -5,13 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MerchantDeclineDialog, MerchantPrepChoices, MerchantRestaurantRequestCard } from "./MerchantRequestControls";
 import { FulfilmentCard, MerchantDeadline, MerchantOpportunityCard } from "./MerchantV1Opportunities";
 import { MerchantV1CommerceControl } from "./MerchantV1CommerceControl";
-import { getV1MerchantRestaurantMenu, upsertV1RestaurantMenuEntity, type V1MerchantFulfilment, type V1MerchantOpportunity, type V1RestaurantMenu, type V1RestaurantRequest } from "./dastakV1";
+import { getV1MerchantRestaurantMenu, uploadV1GovernedMedia, upsertV1RestaurantMenuEntity, type V1MerchantFulfilment, type V1MerchantOpportunity, type V1RestaurantMenu, type V1RestaurantRequest } from "./dastakV1";
+import { validateDecodableImage } from "./imageValidation";
 
 vi.mock("./dastakV1", async (original) => ({
   ...await original<typeof import("./dastakV1")>(),
   getV1MerchantRestaurantMenu: vi.fn(),
+  uploadV1GovernedMedia: vi.fn(),
   upsertV1RestaurantMenuEntity: vi.fn(),
 }));
+vi.mock("./imageValidation", () => ({ validateDecodableImage: vi.fn().mockResolvedValue(true) }));
 
 let root: Root;
 let host: HTMLDivElement;
@@ -20,6 +23,7 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
+  vi.mocked(validateDecodableImage).mockResolvedValue(true);
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -215,6 +219,31 @@ const auth = { supabaseUrl: "https://example.supabase.co", publishableKey: "publ
 const branch = { id: "branch", branchName: "Market Street", organizationName: "Market Kitchen", merchantType: "RESTAURANT_CAFE" };
 
 describe("Merchant menu redesign preserves drafts and writes", () => {
+  it("offers governed banner and optional dish photo uploads with clearer customer choices", async () => {
+    const mediaMenu = structuredClone(menu);
+    mediaMenu.restaurant.mediaVersion = 2;
+    mediaMenu.categories[0].items[0].mediaVersion = 3;
+    vi.mocked(getV1MerchantRestaurantMenu).mockResolvedValue(mediaMenu);
+    vi.mocked(uploadV1GovernedMedia).mockResolvedValue({ mediaVersion: 3 });
+    await render(<MerchantV1CommerceControl auth={auth} branch={branch} onSessionExpired={() => undefined} />);
+    expect(host.textContent).toContain("Restaurant banner");
+    expect(host.textContent).toContain("Dish photo");
+    expect(host.textContent).toContain("Customer choices & extras");
+    expect(host.textContent).toContain("Sizes, flavours, preparation choices or paid extras");
+    const inputs = host.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    const file = new File(["image"], "cafe.jpg", { type: "image/jpeg", lastModified: 5 });
+    Object.defineProperty(inputs[0], "files", { configurable: true, value: [file] });
+    await act(async () => {
+      inputs[0].dispatchEvent(new Event("change", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(vi.mocked(uploadV1GovernedMedia)).toHaveBeenCalledWith(expect.objectContaining({
+      entityType: "RESTAURANT_BRANCH_BANNER", entityId: "branch", expectedMediaVersion: 2,
+      file, sourceReference: "Merchant-owned image: cafe.jpg", reason: "Update restaurant banner",
+    }));
+  });
+
   it("preserves a dirty dish while searching and requires explicit reconciliation with newer server data", async () => {
     vi.mocked(getV1MerchantRestaurantMenu).mockResolvedValue(menu);
     await render(<MerchantV1CommerceControl auth={auth} branch={branch} onSessionExpired={() => undefined} />);
