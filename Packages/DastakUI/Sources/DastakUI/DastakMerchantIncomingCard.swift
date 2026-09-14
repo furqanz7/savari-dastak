@@ -1,4 +1,5 @@
 import MarketplaceDesignSystem
+import MarketplaceFoundation
 import MarketplaceInfrastructure
 import SwiftUI
 
@@ -21,6 +22,11 @@ struct DastakMerchantLineList: View {
                         }
                     }
                     Spacer(minLength: 0)
+                    if let subtotal = line.lineSubtotalPaise {
+                        Text(DastakFormatting.money(Money(paise: subtotal)))
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(.primary)
+                    }
                 }
             }
         }.padding(.vertical, 4)
@@ -31,6 +37,7 @@ struct DastakMerchantIncomingCard: View {
     let number: String
     let branch: String
     let lines: [DastakV1MerchantLine]
+    let productSubtotalPaise: Int?
     let expiresAt: String?
     let prepOptions: [Int]
     let isFood: Bool
@@ -69,6 +76,18 @@ struct DastakMerchantIncomingCard: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 DastakMerchantLineList(lines: lines)
+                if let productSubtotalPaise {
+                    HStack {
+                        Text("Product value")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text(DastakFormatting.money(Money(paise: productSubtotalPaise)))
+                            .font(.subheadline.weight(.bold).monospacedDigit())
+                    }
+                    .padding(.top, 2)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Product value \(DastakFormatting.money(Money(paise: productSubtotalPaise))). Delivery and platform fees are not shown to the merchant.")
+                }
                 Divider()
                 Toggle(isFood ? "I can prepare this exact selection" : "I have physically checked every item", isOn: $confirmedItems)
                     .font(.subheadline.weight(.medium))

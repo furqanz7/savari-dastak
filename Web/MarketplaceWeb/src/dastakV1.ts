@@ -313,6 +313,8 @@ export type V1MerchantOpportunity = {
   physicalConfirmationRequired: boolean;
   capacityConsumed: boolean;
   orderPaymentState?: string;
+  /** Immutable value of the exact products requested from this branch only. */
+  productSubtotalPaise?: number;
   lines: Array<{
     orderLineId: string;
     skuId?: string;
@@ -321,6 +323,8 @@ export type V1MerchantOpportunity = {
     variant?: string;
     packSize?: string;
     quantity: number;
+    unitPricePaise?: number;
+    lineSubtotalPaise?: number;
     selection?: Record<string, unknown>;
   }>;
 };
@@ -427,6 +431,8 @@ export type V1MerchantFulfilment = {
   canAddEvidence: boolean;
   canMarkReady: boolean;
   readyIsIrreversible: boolean;
+  /** Immutable value of the products this branch fulfilled; excludes all fees. */
+  productSubtotalPaise?: number;
   canReportExactSkuFailure?: boolean;
   recoveryCases?: Array<{
     id: string; orderLineId: string; status: string; reason: string;
@@ -616,9 +622,12 @@ export type V1RestaurantRequest = {
     id: string; displayName: string; isOpen: boolean; acceptingOrders: boolean;
     operationalVersion: number;
   };
+  /** Immutable value of this restaurant's selected items, including add-ons only. */
+  productSubtotalPaise?: number;
   lines: Array<{
     orderLineId: string; menuItemId: string; name: string; variant?: string;
-    quantity: number; unitPricePaise: number; selection: Record<string, unknown>;
+    quantity: number; unitPricePaise: number; lineSubtotalPaise?: number;
+    selection: Record<string, unknown>;
   }>;
   fulfilmentId?: string;
 };
@@ -2475,6 +2484,7 @@ function parseRestaurantRequest(value: unknown): V1RestaurantRequest {
       isOpen: requiredBoolean(branch.isOpen), acceptingOrders: requiredBoolean(branch.acceptingOrders),
       operationalVersion: requiredInteger(branch.operationalVersion, 1),
     },
+    productSubtotalPaise: optionalInteger(source.productSubtotalPaise, 0),
     lines: requiredArray(source.lines).map((lineValue) => {
       const line = requiredRecord(lineValue);
       return {
@@ -2482,6 +2492,7 @@ function parseRestaurantRequest(value: unknown): V1RestaurantRequest {
         name: requiredText(line.name, 200), variant: optionalText(line.variant, 160),
         quantity: requiredInteger(line.quantity, 1),
         unitPricePaise: requiredInteger(line.unitPricePaise, 0),
+        lineSubtotalPaise: optionalInteger(line.lineSubtotalPaise, 0),
         selection: requiredRecord(line.selection),
       };
     }),
@@ -2769,6 +2780,7 @@ function parseMerchantOpportunity(value: unknown): V1MerchantOpportunity {
     physicalConfirmationRequired: requiredBoolean(source.physicalConfirmationRequired),
     capacityConsumed: requiredBoolean(source.capacityConsumed),
     orderPaymentState: optionalText(source.orderPaymentState, 60),
+    productSubtotalPaise: optionalInteger(source.productSubtotalPaise, 0),
     lines: source.lines.map((item) => {
       const line = requiredRecord(item);
       const skuId = line.skuId === null || line.skuId === undefined
@@ -2784,6 +2796,8 @@ function parseMerchantOpportunity(value: unknown): V1MerchantOpportunity {
         variant: optionalText(line.variant, 160),
         packSize: optionalText(line.packSize, 80),
         quantity: requiredInteger(line.quantity, 1),
+        unitPricePaise: optionalInteger(line.unitPricePaise, 0),
+        lineSubtotalPaise: optionalInteger(line.lineSubtotalPaise, 0),
         selection: line.selection === null || line.selection === undefined
           ? undefined : requiredRecord(line.selection),
       };
@@ -3008,6 +3022,7 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
     canAddEvidence: requiredBoolean(source.canAddEvidence),
     canMarkReady: requiredBoolean(source.canMarkReady),
     readyIsIrreversible: requiredBoolean(source.readyIsIrreversible),
+    productSubtotalPaise: optionalInteger(source.productSubtotalPaise, 0),
     canReportExactSkuFailure: source.canReportExactSkuFailure === undefined
       ? undefined : requiredBoolean(source.canReportExactSkuFailure),
     recoveryCases: source.recoveryCases === undefined
@@ -3036,6 +3051,8 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
         variant: optionalText(line.variant, 160),
         packSize: optionalText(line.packSize, 80),
         quantity: requiredInteger(line.quantity, 1),
+        unitPricePaise: optionalInteger(line.unitPricePaise, 0),
+        lineSubtotalPaise: optionalInteger(line.lineSubtotalPaise, 0),
         selection: line.selection === null || line.selection === undefined
           ? undefined : requiredRecord(line.selection),
       };

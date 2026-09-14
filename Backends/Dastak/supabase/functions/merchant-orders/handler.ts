@@ -231,7 +231,7 @@ export async function handleMerchantOrders(
         );
       case "merchantSnapshot": {
         const result = await dependencies.getMerchantOrders(actor.accountId);
-        return json(result.responseBody, result.responseStatus);
+        return json(merchantProductOnlyResponse(result.responseBody), result.responseStatus);
       }
       case "ownerSnapshot": {
         const limit = validOwnerLimit(body.limit);
@@ -277,6 +277,7 @@ export async function handleMerchantOrders(
           body,
           actor.accountId,
           dependencies.merchantAccept,
+          true,
         );
       case "merchantReject":
         return await reasonedMutation(
@@ -284,6 +285,7 @@ export async function handleMerchantOrders(
           body,
           actor.accountId,
           dependencies.merchantReject,
+          true,
         );
       case "merchantMarkReady":
         return await orderMutation(
@@ -291,6 +293,7 @@ export async function handleMerchantOrders(
           body,
           actor.accountId,
           dependencies.merchantMarkReady,
+          true,
         );
       case "customerCancel":
         return await reasonedMutation(
@@ -305,6 +308,7 @@ export async function handleMerchantOrders(
           body,
           actor.accountId,
           dependencies.merchantConfirmReturn,
+          true,
         );
       case "ownerReviewRefund":
         return await ownerReviewRefundMutation(
@@ -501,6 +505,7 @@ async function orderMutation(
   body: Record<string, unknown>,
   accountId: string,
   dependency: (input: MerchantOrderMutationInput) => Promise<RpcResult>,
+  merchantProductOnly = false,
 ) {
   const idempotencyKey = requiredIdempotencyKey(request);
   const orderId = validUUID(body.orderId);
@@ -513,7 +518,10 @@ async function orderMutation(
     idempotencyKey,
     requestDigest: await canonicalDigest(normalized),
   });
-  return json(result.responseBody, result.responseStatus);
+  return json(
+    merchantProductOnly ? merchantProductOnlyResponse(result.responseBody) : result.responseBody,
+    result.responseStatus,
+  );
 }
 
 async function reasonedMutation(
@@ -521,6 +529,7 @@ async function reasonedMutation(
   body: Record<string, unknown>,
   accountId: string,
   dependency: (input: MerchantRejectOrderInput) => Promise<RpcResult>,
+  merchantProductOnly = false,
 ) {
   const idempotencyKey = requiredIdempotencyKey(request);
   const orderId = validUUID(body.orderId);
@@ -535,7 +544,43 @@ async function reasonedMutation(
     idempotencyKey,
     requestDigest: await canonicalDigest(normalized),
   });
-  return json(result.responseBody, result.responseStatus);
+  return json(
+    merchantProductOnly ? merchantProductOnlyResponse(result.responseBody) : result.responseBody,
+    result.responseStatus,
+  );
+}
+
+/**
+ * The legacy order RPC predates the V1 audience-specific money projection.
+ * Merchant responses must contain only the immutable product value
+ * (`itemSubtotal` and line subtotals), never customer delivery/whole-order
+ * amounts or fee-bearing refund data.  Keep this at the authenticated Edge
+ * boundary as defence in depth while the DB merchant list projection enforces
+ * the same contract.
+ */
+function merchantProductOnlyResponse(value: unknown): unknown {
+  const source = record(value);
+  if (!source) return value;
+  if (Array.isArray(source.orders)) {
+    return {
+      ...source,
+      orders: source.orders.map(merchantProductOnlyOrder),
+    };
+  }
+  return merchantProductOnlyOrder(source);
+}
+
+function merchantProductOnlyOrder(value: unknown): unknown {
+  const order = record(value);
+  if (!order) return value;
+  const {
+    deliveryFee: _deliveryFee,
+    deliveryDistanceMeters: _deliveryDistanceMeters,
+    total: _total,
+    refundDecision: _refundDecision,
+    ...merchantOrder
+  } = order;
+  return merchantOrder;
 }
 
 async function supportMutation(

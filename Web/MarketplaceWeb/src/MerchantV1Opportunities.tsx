@@ -45,7 +45,7 @@ import {
   getMerchantOrders,
   markMerchantOrderReady,
   rejectMerchantOrder,
-  type MerchantOrderSnapshot,
+  type MerchantOperationalOrderSnapshot,
 } from "./orders";
 import { MerchantLiveDelivery } from "./MerchantLiveDelivery";
 import { validateDecodableImage } from "./imageValidation";
@@ -77,7 +77,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
   const [recoveryOpportunities, setRecoveryOpportunities] = useState<V1RecoveryOpportunity[]>([]);
   const [returnReceipts, setReturnReceipts] = useState<Record<string, unknown>[]>([]);
   const [settlements, setSettlements] = useState<Record<string, unknown>[]>([]);
-  const [legacyOrders, setLegacyOrders] = useState<MerchantOrderSnapshot[]>([]);
+  const [legacyOrders, setLegacyOrders] = useState<MerchantOperationalOrderSnapshot[]>([]);
   const [queue, setQueue] = useState<MerchantOperationalQueue>("all");
   const [feedStates, setFeedStates] = useState<MerchantFeedStates>(initialMerchantFeedStates);
   const [refreshing, setRefreshing] = useState(false);
@@ -493,7 +493,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
   };
 
   const performLegacyAction = async (
-    order: MerchantOrderSnapshot,
+    order: MerchantOperationalOrderSnapshot,
     action: "accept" | "reject" | "ready" | "confirmReturn",
   ) => {
     if (busyId) return;
@@ -738,6 +738,7 @@ export function MerchantOpportunityCard({
       {offered ? <MerchantDeadline deadline={opportunity.expiresAt} /> : <b className="merchant-status-badge">{expired && opportunity.status === "OFFERED" ? "Expired" : reservationLabel(opportunity)}</b>}
     </header>
     <LineList lines={opportunity.lines} />
+    <ProductValue value={opportunity.productSubtotalPaise} />
     {offered ? <>
       <label className="v1-physical-check"><input type="checkbox" checked={confirmed} onChange={(event) => onConfirmed(event.target.checked)} /><span>I physically confirmed every exact SKU and quantity above.</span></label>
       <MerchantPrepChoices options={opportunity.prepTimeOptionsMinutes} value={prepMinutes} onChange={onPrepMinutes} disabled={busy} />
@@ -817,6 +818,7 @@ export function FulfilmentCard(props: FulfilmentCardProps) {
     </header>
     {!history && fulfilment.delivery?.pickupCode ? <div className="v1-merchant-pickup-code merchant-primary-code" role="status"><small>PICKUP CODE · Share only after every package is checked</small><strong>{fulfilment.delivery.pickupCode}</strong><span>Give this in-app code only to the assigned delivery partner.</span></div> : null}
     <LineList lines={fulfilment.lines} />
+    <ProductValue value={fulfilment.productSubtotalPaise} />
     <div className="v1-preparation-times">
       <span><small>Preparation started</small><strong>{formatOptionalTime(fulfilment.prepStartedAt)}</strong></span>
       <span><small>Promised Ready</small><strong>{formatOptionalTime(fulfilment.estimatedReadyAt)}</strong></span>
@@ -863,7 +865,7 @@ function merchantPickupLabel(status: "PENDING" | "ARRIVED" | "COMPLETED", arrive
 }
 
 function LegacyMerchantOrderCard(props: {
-  order: MerchantOrderSnapshot;
+  order: MerchantOperationalOrderSnapshot;
   busy: boolean;
   rejecting: boolean;
   rejectReason: string;
@@ -885,7 +887,7 @@ function LegacyMerchantOrderCard(props: {
     <ul>{order.lines.map((line) => <li key={line.productId}><span><strong>{line.quantity}× {line.name}</strong><small>{line.unitLabel}</small></span><b>{formatPaise(line.lineSubtotal.paise)}</b></li>)}</ul>
     <p className="v1-reservation-state"><ShieldCheck size={16} /> <strong>Pay at delivery.</strong> The customer pays the delivery partner; this status does not mean the merchant has received payment.</p>
     <div className="v1-preparation-times">
-      <span><small>Order total</small><strong>{formatPaise(order.total.paise)}</strong></span>
+      <span><small>Product value</small><strong>{formatPaise(order.itemSubtotal.paise)}</strong></span>
       <span><small>Order state</small><strong>{order.status.replaceAll("_", " ")}</strong></span>
       <span><small>Payment collection</small><strong>{legacyCollectionLabel(order)}</strong></span>
     </div>
@@ -901,18 +903,23 @@ function LegacyMerchantOrderCard(props: {
   </article>;
 }
 
-function isLegacyHistory(order: MerchantOrderSnapshot) {
+function isLegacyHistory(order: MerchantOperationalOrderSnapshot) {
   return order.status === "delivered" || order.status === "cancelled";
 }
 
-function legacyCollectionLabel(order: MerchantOrderSnapshot) {
+function legacyCollectionLabel(order: MerchantOperationalOrderSnapshot) {
   if (order.paymentState === "refunded") return "Refunded";
   if (order.paymentState === "refund_pending") return "Refund pending";
   return order.status === "delivered" ? "Completed at doorstep" : "Due at doorstep";
 }
 
 function LineList({ lines }: { lines: V1MerchantOpportunity["lines"] }) {
-  return <ul className="merchant-order-lines">{lines.map((line) => <li key={line.orderLineId}><b className="merchant-line-quantity">{line.quantity}×</b><span><strong>{line.name}</strong><small>{line.selection ? selectionSummary(line.selection) : [line.variant, line.packSize].filter(Boolean).join(" · ")}</small></span></li>)}</ul>;
+  return <ul className="merchant-order-lines">{lines.map((line) => <li key={line.orderLineId}><b className="merchant-line-quantity">{line.quantity}×</b><span><strong>{line.name}</strong><small>{line.selection ? selectionSummary(line.selection) : [line.variant, line.packSize].filter(Boolean).join(" · ")}</small></span>{line.lineSubtotalPaise === undefined ? null : <em>{formatPaise(line.lineSubtotalPaise)}</em>}</li>)}</ul>;
+}
+
+function ProductValue({ value }: { value?: number }) {
+  if (value === undefined) return null;
+  return <p className="merchant-product-value"><span>Product value</span><strong>{formatPaise(value)}</strong></p>;
 }
 
 function reservationLabel(opportunity: V1MerchantOpportunity) {

@@ -681,6 +681,22 @@ select is(
   1,
   'paid order becomes visible to its merchant'
 );
+select is(
+  (
+    select (response_body -> 'orders' -> 0 #>> '{itemSubtotal,paise}')::bigint
+    from public.get_merchant_orders('22222222-2222-4222-8222-222222222226')
+  ),
+  20000::bigint,
+  'merchant paid-order feed retains only its immutable product subtotal'
+);
+select is(
+  (
+    select (response_body -> 'orders' -> 0) ?| array['deliveryFee','deliveryDistanceMeters','total','refundDecision']
+    from public.get_merchant_orders('22222222-2222-4222-8222-222222222226')
+  ),
+  false,
+  'merchant paid-order feed never projects customer delivery, whole-bill, or refund values'
+);
 
 select is(
   (

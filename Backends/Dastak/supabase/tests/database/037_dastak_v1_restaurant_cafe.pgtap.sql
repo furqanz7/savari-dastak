@@ -323,6 +323,13 @@ select ok((select food_selection_snapshot->'options' @>
   '[{"name":"Mild"}]'::jsonb from dastak_v1.order_lines where order_id=
   (select order_id from tap_restaurant_orders where sequence=1)),
   'selected variants/add-ons are snapshotted');
+select is(
+  (select (dastak_v1_api.restaurant_request_json(
+    '99700000-0000-4000-8000-000000000003', request_id
+  ) ->> 'productSubtotalPaise')::bigint from tap_restaurant_orders where sequence=1),
+  7000::bigint,
+  'restaurant merchant request projects only its exact immutable product subtotal'
+);
 
 -- A real Restaurant/Cafe fulfilment enters the existing payment/preparation/Ready spine.
 set local role service_role;
@@ -412,6 +419,12 @@ select is((select (dastak_v1_api.merchant_fulfilment_json(
   (select order_id from tap_restaurant_orders where sequence=2)),
   '99700000-0000-4000-8000-000000000041'::uuid,
   'merchant preparation projection retains exact food selection');
+select is((select (dastak_v1_api.merchant_fulfilment_json(
+  '99700000-0000-4000-8000-000000000003',fulfilment.id)->>'productSubtotalPaise')::bigint
+  from dastak_v1.fulfilments fulfilment where fulfilment.order_id=
+  (select order_id from tap_restaurant_orders where sequence=2)),
+  7000::bigint,
+  'restaurant fulfilment projects its exact immutable product subtotal');
 
 insert into dastak_v1.customer_issues (
   id,order_id,customer_id,order_line_id,category,status,description

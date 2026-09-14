@@ -630,6 +630,12 @@ select is(
   1,
   'Merchant A lists only its own opportunity'
 );
+select is(
+  (public.dastak_v1_list_merchant_opportunities(50)
+    -> 'opportunities' -> 0 ->> 'productSubtotalPaise')::bigint,
+  3000::bigint,
+  'retail opportunity projects the exact requested immutable product subtotal'
+);
 select throws_ok(
   pg_catalog.format(
     'select public.dastak_v1_get_merchant_opportunity(%L::uuid)',

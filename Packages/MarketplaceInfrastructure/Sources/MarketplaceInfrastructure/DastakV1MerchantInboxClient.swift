@@ -12,6 +12,8 @@ public struct DastakV1MerchantOpportunity: Codable, Equatable, Identifiable, Sen
     public let expiresAt: String
     public let secondsRemaining: Int
     public let prepTimeOptionsMinutes: [Int]
+    /// Immutable value of the exact products requested from this branch only.
+    public let productSubtotalPaise: Int?
     public let lines: [DastakV1MerchantLine]
 }
 
@@ -24,6 +26,8 @@ public struct DastakV1RestaurantRequest: Codable, Equatable, Identifiable, Senda
     public let branch: DastakV1MerchantBranch
     public let offeredAt: String
     public let softThresholdWarning: Bool
+    /// Immutable value of this kitchen's selected items, including selected add-ons only.
+    public let productSubtotalPaise: Int?
     public let lines: [DastakV1MerchantLine]
 }
 

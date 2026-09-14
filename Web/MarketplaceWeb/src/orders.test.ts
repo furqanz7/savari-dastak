@@ -8,6 +8,7 @@ import {
   getCustomerOrders,
   getMerchantOrders,
   markMerchantOrderReady,
+  parseMerchantOperationalOrder,
   parseMerchantOrder,
   quoteMerchantOrder,
   rejectMerchantOrder,
@@ -55,6 +56,19 @@ const order = {
   updatedAt: "2026-07-19T14:55:00Z",
 };
 const paidOrder = { ...order, status: "paid", paymentState: "paid" };
+const merchantOperationalOrder = {
+  orderId,
+  storeId,
+  status: "paid",
+  paymentState: "paid",
+  lines: [line],
+  itemSubtotal: { paise: 25_000 },
+  dropoff: { latitude: 12.6819, longitude: 78.6201 },
+  stateVersion: 1,
+  handoffCode: null,
+  createdAt: "2026-07-19T14:55:00Z",
+  updatedAt: "2026-07-19T14:55:00Z",
+};
 const auth = {
   supabaseUrl: "https://example.supabase.co",
   publishableKey: "publishable-key",
@@ -162,16 +176,18 @@ describe("customer orders", () => {
     let requestBody: Record<string, unknown> | undefined;
     const result = await getMerchantOrders(auth, (_input, init) => {
       requestBody = JSON.parse(String(init?.body));
-      return Promise.resolve(new Response(JSON.stringify({ orders: [paidOrder] }), { status: 200 }));
+      return Promise.resolve(new Response(JSON.stringify({ orders: [merchantOperationalOrder] }), { status: 200 }));
     });
 
     expect(result[0].status).toBe("paid");
+    expect(result[0].itemSubtotal.paise).toBe(25_000);
+    expect(result[0]).not.toHaveProperty("total");
     expect(requestBody).toEqual({ operation: "merchantSnapshot" });
   });
 
   it("excludes unpaid orders from a merchant snapshot", async () => {
     const result = await getMerchantOrders(auth, () =>
-      Promise.resolve(new Response(JSON.stringify({ orders: [order] }), { status: 200 })));
+      Promise.resolve(new Response(JSON.stringify({ orders: [{ ...merchantOperationalOrder, status: "payment_pending", paymentState: "payment_pending" }] }), { status: 200 })));
 
     expect(result).toEqual([]);
   });
@@ -185,10 +201,10 @@ describe("customer orders", () => {
       });
       const operation = (requests.at(-1)?.body as { operation: string }).operation;
       const responseOrder = operation === "merchantAccept"
-        ? { ...paidOrder, status: "merchant_accepted", stateVersion: 2 }
+        ? { ...merchantOperationalOrder, status: "merchant_accepted", stateVersion: 2 }
         : operation === "merchantMarkReady"
-          ? { ...paidOrder, status: "ready", stateVersion: 3 }
-          : { ...paidOrder, status: "cancelled", paymentState: "refund_pending", stateVersion: 2 };
+          ? { ...merchantOperationalOrder, status: "ready", stateVersion: 3 }
+          : { ...merchantOperationalOrder, status: "cancelled", paymentState: "refund_pending", stateVersion: 2 };
       return Promise.resolve(new Response(JSON.stringify(responseOrder), { status: 200 }));
     };
 
@@ -227,6 +243,14 @@ describe("customer orders", () => {
     expect(() => parseMerchantOrder({ ...order, customerAccountId: "private" })).toThrow("invalid order response");
   });
 
+  it("rejects whole-bill customer pricing from merchant operational responses", () => {
+    expect(() => parseMerchantOperationalOrder(paidOrder)).toThrow("invalid order response");
+    expect(parseMerchantOperationalOrder(merchantOperationalOrder)).toMatchObject({
+      orderId,
+      itemSubtotal: { paise: 25_000 },
+    });
+  });
+
   it("preserves safe cancellation errors", async () => {
     await expect(cancelMerchantOrder({
       ...auth,
@@ -240,7 +264,7 @@ describe("customer orders", () => {
 
   it("confirms a returned cancellation without client refund values", async () => {
     let requestBody: unknown;
-    const returned = { ...paidOrder, status: "cancelled", paymentState: "refund_pending", stateVersion: 4 };
+    const returned = { ...merchantOperationalOrder, status: "cancelled", paymentState: "refund_pending", stateVersion: 4 };
     const result = await confirmMerchantCancellationReturn({
       ...auth,
       orderId,

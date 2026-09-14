@@ -116,6 +116,22 @@ export type MerchantOrderSnapshot = MerchantOrderPricing & {
   updatedAt: string;
 };
 
+/**
+ * The merchant operational API deliberately has a narrower financial scope
+ * than the customer and owner projections: a merchant can see the immutable
+ * product value they fulfil, never a customer delivery fee, platform/whole
+ * order total, or fee-bearing refund decision.
+ */
+export type MerchantOperationalOrderSnapshot = Omit<
+  MerchantOrderSnapshot,
+  | "deliveryFee"
+  | "deliveryDistanceMeters"
+  | "total"
+  | "refundDecision"
+  | "customerActions"
+  | "supportCases"
+>;
+
 export type MerchantOrderPaymentState = MerchantOrderSnapshot["paymentState"];
 
 type AuthenticatedInput = {
@@ -199,7 +215,7 @@ export async function getMerchantOrders(
 ) {
   const payload = record(await call(input, { operation: "merchantSnapshot" }, undefined, fetcher));
   if (!payload || !Array.isArray(payload.orders)) invalid();
-  const orders = payload.orders.map(parseMerchantOrder);
+  const orders = payload.orders.map(parseMerchantOperationalOrder);
   return orders.filter((order) =>
     order.status !== "payment_pending" &&
     order.paymentState !== "payment_pending" &&
@@ -211,7 +227,7 @@ export async function acceptMerchantOrder(
   input: AuthenticatedInput & { orderId: string; idempotencyKey: string },
   fetcher: Fetcher = fetch,
 ) {
-  return parseMerchantOrder(await call(input, {
+  return parseMerchantOperationalOrder(await call(input, {
     operation: "merchantAccept",
     orderId: input.orderId,
   }, input.idempotencyKey, fetcher));
@@ -221,7 +237,7 @@ export async function rejectMerchantOrder(
   input: AuthenticatedInput & { orderId: string; reason: string; idempotencyKey: string },
   fetcher: Fetcher = fetch,
 ) {
-  return parseMerchantOrder(await call(input, {
+  return parseMerchantOperationalOrder(await call(input, {
     operation: "merchantReject",
     orderId: input.orderId,
     reason: input.reason,
@@ -232,7 +248,7 @@ export async function markMerchantOrderReady(
   input: AuthenticatedInput & { orderId: string; idempotencyKey: string },
   fetcher: Fetcher = fetch,
 ) {
-  return parseMerchantOrder(await call(input, {
+  return parseMerchantOperationalOrder(await call(input, {
     operation: "merchantMarkReady",
     orderId: input.orderId,
   }, input.idempotencyKey, fetcher));
@@ -253,7 +269,7 @@ export async function confirmMerchantCancellationReturn(
   input: AuthenticatedInput & { orderId: string; reason: string; idempotencyKey: string },
   fetcher: Fetcher = fetch,
 ) {
-  return parseMerchantOrder(await call(input, {
+  return parseMerchantOperationalOrder(await call(input, {
     operation: "merchantConfirmReturn",
     orderId: input.orderId,
     reason: input.reason,
@@ -308,6 +324,43 @@ export function parseMerchantOrder(value: unknown): MerchantOrderSnapshot {
     refundDecision: refundDecision(source.refundDecision),
     customerActions: customerActions(source.customerActions),
     supportCases: supportCases(source.supportCases),
+    createdAt: timestamp(source.createdAt),
+    updatedAt: timestamp(source.updatedAt),
+  };
+}
+
+export function parseMerchantOperationalOrder(value: unknown): MerchantOperationalOrderSnapshot {
+  const source = record(value);
+  const hiddenCustomerMoney = [
+    "deliveryFee",
+    "deliveryDistanceMeters",
+    "total",
+    "refundDecision",
+  ];
+  if (!source || ["customerAccountId", "merchantAccountId", "courierAccountId", ...hiddenCustomerMoney]
+    .some((key) => key in source)) {
+    invalid();
+  }
+  const status = requiredText(source.status, 40);
+  const paymentState = requiredText(source.paymentState, 40);
+  if (!orderStatuses.has(status) || !paymentStates.has(paymentState)) invalid();
+  const stateVersion = source.stateVersion;
+  if (typeof stateVersion !== "number" || !Number.isInteger(stateVersion) || stateVersion < 1) invalid();
+
+  return {
+    orderId: requiredUUID(source.orderId),
+    storeId: requiredUUID(source.storeId),
+    status: status as MerchantOrderStatus,
+    paymentState: paymentState as MerchantOperationalOrderSnapshot["paymentState"],
+    lines: lines(source.lines),
+    itemSubtotal: money(source.itemSubtotal),
+    dropoff: location(source.dropoff),
+    deliveryAddress: addressSnapshot(source.deliveryAddress),
+    store: storeSnapshot(source.store),
+    courier: courierSnapshot(source.courier),
+    timeline: orderTimeline(source.timeline),
+    stateVersion,
+    handoffCode: handoffCode(source.handoffCode),
     createdAt: timestamp(source.createdAt),
     updatedAt: timestamp(source.updatedAt),
   };

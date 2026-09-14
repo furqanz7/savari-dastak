@@ -52,7 +52,8 @@ const request: V1RestaurantRequest = {
   offeredAt: "2026-09-10T00:00:00Z", softActiveOrderThreshold: 5, activeOrderCount: 6,
   softThresholdWarning: true, softThresholdIsBlocking: false,
   branch: { id: "branch", displayName: "Market Street Kitchen", isOpen: true, acceptingOrders: true, operationalVersion: 2 },
-  lines: [{ orderLineId: "line", menuItemId: "dish", name: "Breakfast plate", quantity: 2, unitPricePaise: 12000, selection: { groups: [{ options: [{ name: "No chilli" }] }] } }],
+  productSubtotalPaise: 24000,
+  lines: [{ orderLineId: "line", menuItemId: "dish", name: "Breakfast plate", quantity: 2, unitPricePaise: 12000, lineSubtotalPaise: 24000, selection: { groups: [{ options: [{ name: "No chilli" }] }] } }],
 };
 
 describe("Merchant request interactions", () => {
@@ -75,6 +76,7 @@ describe("Merchant request interactions", () => {
     await render(<MerchantRestaurantRequestCard request={request} busy={false} prepMinutes={15} onPrepMinutes={prep} onRespond={respond} />);
     expect(host.textContent).toContain("No chilli");
     expect(host.textContent).toContain("₹240.00");
+    expect(host.textContent).toContain("Product value");
     expect(button("Accept order").disabled).toBe(true);
     expect([...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map((item) => Number(item.value))).toEqual([10, 15, 20, 30, 45, 60, 90, 120, 180, 240]);
     await click(host.querySelector<HTMLInputElement>('input[value="45"]')!);

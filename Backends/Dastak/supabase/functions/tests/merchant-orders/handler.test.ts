@@ -212,6 +212,14 @@ Deno.test("customer and merchant snapshots use only the authenticated account", 
   assertEquals(customerResponse.status, 200);
   assertEquals(merchantResponse.status, 200);
   assertEquals(requested, [`customer:${accountId}`, `merchant:${accountId}`]);
+  const customerOrder = ((await jsonBody(customerResponse)).orders as Array<Record<string, unknown>>)[0];
+  const merchantOrder = ((await jsonBody(merchantResponse)).orders as Array<Record<string, unknown>>)[0];
+  assertEquals("total" in customerOrder, true);
+  assertEquals("deliveryFee" in customerOrder, true);
+  assertEquals("total" in merchantOrder, false);
+  assertEquals("deliveryFee" in merchantOrder, false);
+  assertEquals("refundDecision" in merchantOrder, false);
+  assertEquals(merchantOrder.itemSubtotal, { paise: 25000 });
 });
 
 Deno.test("customer detail and support use authenticated ownership", async () => {
@@ -346,6 +354,10 @@ Deno.test("merchant accept forwards an authenticated transition intent", async (
   assertEquals(recorded?.orderId, orderId);
   assertEquals(recorded?.idempotencyKey, "accept-key-1");
   assertEquals("merchantAccountId" in (recorded ?? {}), false);
+  const responseOrder = await jsonBody(response) as Record<string, unknown>;
+  assertEquals("total" in responseOrder, false);
+  assertEquals("deliveryFee" in responseOrder, false);
+  assertEquals(responseOrder.itemSubtotal, { paise: 25000 });
 });
 
 Deno.test("merchant reject normalizes the reason without accepting refund values", async () => {

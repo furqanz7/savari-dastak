@@ -102,6 +102,8 @@
 .merchant-experience .merchant-order-lines li > span > small { grid-column: auto; min-width: 0; overflow-wrap: break-word; word-break: normal; }
 .merchant-order-lines li > em { font-style: normal; font-size: 14px; font-variant-numeric: tabular-nums; }
 .merchant-experience .merchant-order-lines small { font-size: 13px; }
+.merchant-experience .merchant-product-value { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: -5px 0 16px; color: var(--text-secondary); font-size: 13px; }
+.merchant-experience .merchant-product-value strong { color: var(--text-primary); font-size: 15px; font-variant-numeric: tabular-nums; }
 .merchant-line-quantity { display: grid; place-items: center; min-width: 32px; min-height: 32px; padding: 3px; border-radius: 8px; color: var(--text-primary); background: var(--surface-muted); font-size: 13px; }
 .merchant-experience .v1-physical-check { align-items: start; gap: 11px; padding: 10px 0; font-size: 14px; line-height: 1.5; }
 .merchant-experience .v1-physical-check input { flex: 0 0 20px; width: 20px; height: 20px; margin: 1px 0 0; }

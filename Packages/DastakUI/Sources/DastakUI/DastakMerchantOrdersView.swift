@@ -224,7 +224,8 @@ struct DastakMerchantOrdersView: View {
             ForEach(newOpportunities) { opportunity in
                 DastakMerchantIncomingCard(
                     number: opportunity.displayOrderNumber, branch: opportunity.branch.displayName,
-                    lines: opportunity.lines, expiresAt: opportunity.expiresAt,
+                    lines: opportunity.lines, productSubtotalPaise: opportunity.productSubtotalPaise,
+                    expiresAt: opportunity.expiresAt,
                     prepOptions: opportunity.prepTimeOptionsMinutes,
                     isFood: false, subset: opportunity.requestScope == "REQUESTED_SUBSET",
                     busy: model.isBusy, canRespond: !model.orderRefreshFailures.contains("Incoming orders")
@@ -235,7 +236,8 @@ struct DastakMerchantOrdersView: View {
             ForEach(foodRequests) { request in
                 DastakMerchantIncomingCard(
                     number: request.displayOrderNumber, branch: request.branch.displayName,
-                    lines: request.lines, expiresAt: nil, prepOptions: [10, 15, 20, 30, 45, 60, 90, 120, 180, 240],
+                    lines: request.lines, productSubtotalPaise: request.productSubtotalPaise,
+                    expiresAt: nil, prepOptions: [10, 15, 20, 30, 45, 60, 90, 120, 180, 240],
                     isFood: true, subset: false, busy: model.isBusy,
                     canRespond: !model.orderRefreshFailures.contains("Food requests")
                 ) { accept, minutes, reason in
@@ -252,6 +254,14 @@ struct DastakMerchantOrdersView: View {
                 Text("Keep these items available. Begin preparation once this order moves to Preparing.")
                     .font(.footnote).foregroundStyle(.secondary)
                 DastakMerchantLineList(lines: opportunity.lines)
+                if let productSubtotalPaise = opportunity.productSubtotalPaise {
+                    HStack {
+                        Text("Product value").font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text(DastakFormatting.money(Money(paise: productSubtotalPaise)))
+                            .font(.subheadline.weight(.bold).monospacedDigit())
+                    }
+                }
             }.padding(18).marketplaceFlatSurface()
         }
     }
@@ -374,6 +384,18 @@ private struct DastakV1MerchantFulfilmentCard: View {
             .padding(.vertical, MarketplaceSpacing.compact)
             .overlay(alignment: .top) { Divider() }
             .overlay(alignment: .bottom) { Divider() }
+
+            if let productSubtotalPaise = fulfilment.productSubtotalPaise {
+                HStack {
+                    Text("Product value")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(DastakFormatting.money(Money(paise: productSubtotalPaise)))
+                        .font(.subheadline.weight(.bold).monospacedDigit())
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Product value \(DastakFormatting.money(Money(paise: productSubtotalPaise))). Delivery and platform fees are not shown to the merchant.")
+            }
 
             if let tracking = fulfilment.tracking {
                 DastakDeliveryTrackingView(tracking: tracking)
@@ -617,27 +639,14 @@ private struct DastakMerchantOrderCard: View {
             .overlay(alignment: .top) { Divider() }
             .overlay(alignment: .bottom) { Divider() }
 
-            Grid(alignment: .leading, horizontalSpacing: MarketplaceSpacing.large) {
-                GridRow {
-                    Text("Items").foregroundStyle(.secondary)
-                    Text(DastakFormatting.money(order.itemSubtotal))
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                GridRow {
-                    Text("Delivery · \(order.distanceLabel)")
-                        .foregroundStyle(.secondary)
-                    Text(DastakFormatting.money(order.deliveryFee))
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                Divider().gridCellColumns(2)
-                GridRow {
-                    Text("Total paid").bold()
-                    Text(DastakFormatting.money(order.total))
-                        .bold()
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
+            HStack {
+                Text("Product value").font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(DastakFormatting.money(order.itemSubtotal))
+                    .font(.subheadline.weight(.bold).monospacedDigit())
             }
-            .font(.subheadline)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Product value \(DastakFormatting.money(order.itemSubtotal)). Delivery and platform fees are not shown to the merchant.")
 
             if order.handoffCode?.purpose == .pickup, let code = order.handoffCode?.code {
                 HStack {

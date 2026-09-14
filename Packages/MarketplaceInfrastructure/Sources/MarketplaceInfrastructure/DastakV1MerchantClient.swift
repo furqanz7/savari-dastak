@@ -13,11 +13,14 @@ public struct DastakV1MerchantLine: Codable, Equatable, Identifiable, Sendable {
     public let variant: String?
     public let packSize: String?
     public let selection: DastakV1FoodSelection?
+    /// Immutable product-only pricing. Delivery and platform fees are never projected here.
+    public let unitPricePaise: Int?
+    public let lineSubtotalPaise: Int?
 
     public var id: UUID { orderLineID }
 
     private enum CodingKeys: String, CodingKey {
-        case name, quantity, variant, packSize, selection
+        case name, quantity, variant, packSize, selection, unitPricePaise, lineSubtotalPaise
         case orderLineID = "orderLineId"
     }
 }
@@ -41,6 +44,8 @@ public struct DastakV1MerchantFulfilment: Codable, Equatable, Identifiable, Send
     public let canDeclarePackages: Bool
     public let canAddEvidence: Bool
     public let canMarkReady: Bool
+    /// Immutable subtotal for this merchant's fulfilled products only.
+    public let productSubtotalPaise: Int?
     public let lines: [DastakV1MerchantLine]
     public let delivery: DastakV1MerchantDelivery?
     public var tracking: DastakDeliveryTracking?
@@ -49,7 +54,7 @@ public struct DastakV1MerchantFulfilment: Codable, Equatable, Identifiable, Send
         case id, displayOrderNumber, orderStatus, status, version, branch
         case promisedPrepMinutes, prepStartedAt, estimatedReadyAt, actualReadyAt
         case secondsRemaining, runningLate, packageCount, evidence
-        case canDeclarePackages, canAddEvidence, canMarkReady, lines, delivery, tracking
+        case canDeclarePackages, canAddEvidence, canMarkReady, productSubtotalPaise, lines, delivery, tracking
         case orderID = "orderId"
     }
 }

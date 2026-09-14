@@ -57,7 +57,8 @@ export function MerchantRestaurantRequestCard({ request, busy, prepMinutes, onPr
   const actionable = request.status === "OFFERED";
   return <article className="v1-opportunity-card merchant-food-request" aria-label={`Food request ${request.displayOrderNumber}`} aria-busy={busy}>
     <header><span className="v1-opportunity-icon"><ChefHat size={21} /></span><span><small className="merchant-card-eyebrow">New food order</small><strong>{request.displayOrderNumber}</strong><small>{request.branch.displayName}</small></span><b className="merchant-status-badge">New</b></header>
-    <ul className="merchant-order-lines">{request.lines.map((line) => <li key={line.orderLineId}><b className="merchant-line-quantity">{line.quantity}×</b><span><strong>{line.name}</strong><small>{menuSelectionSummary(line.selection)}</small></span><em>{new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(line.unitPricePaise * line.quantity / 100)}</em></li>)}</ul>
+    <ul className="merchant-order-lines">{request.lines.map((line) => <li key={line.orderLineId}><b className="merchant-line-quantity">{line.quantity}×</b><span><strong>{line.name}</strong><small>{menuSelectionSummary(line.selection)}</small></span><em>{formatProductValue(line.lineSubtotalPaise ?? line.unitPricePaise * line.quantity)}</em></li>)}</ul>
+    {request.productSubtotalPaise === undefined ? null : <p className="merchant-product-value"><span>Product value</span><strong>{formatProductValue(request.productSubtotalPaise)}</strong></p>}
     {request.softThresholdWarning ? <p className="v1-reservation-state merchant-kitchen-warning">Your kitchen has {request.activeOrderCount} active orders. Accept only if you can keep your preparation promise.</p> : null}
     <label className="v1-physical-check"><input type="checkbox" checked={checked} disabled={busy || !actionable} onChange={(event) => setChecked(event.target.checked)} /><span>I can prepare this exact selection.</span></label>
     <MerchantPrepChoices options={restaurantPreparationMinutes} value={prepMinutes} onChange={onPrepMinutes} disabled={busy || !actionable} />
@@ -79,4 +80,8 @@ function menuSelectionSummary(selection: Record<string, unknown>) {
     if (!group || typeof group !== "object" || !("options" in group) || !Array.isArray(group.options)) return [];
     return group.options.flatMap((option: unknown) => option && typeof option === "object" && "name" in option && typeof option.name === "string" ? [option.name] : []);
   }).join(" · ") || "Exact menu selection";
+}
+
+function formatProductValue(paise: number) {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
 }
