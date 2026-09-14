@@ -815,6 +815,7 @@ export function FulfilmentCard(props: FulfilmentCardProps) {
       <span><small className="merchant-card-eyebrow">{history ? "Past order" : preparing ? "Preparing" : "Pickup & handoff"}</small><strong>{fulfilment.displayOrderNumber}</strong><small>{fulfilment.branch.displayName} · {fulfilment.promisedPrepMinutes}-minute promise</small></span>
       {preparing && !history && fulfilment.estimatedReadyAt ? <MerchantDeadline deadline={fulfilment.estimatedReadyAt} preparation /> : <b className="merchant-status-badge">{history ? fulfilment.orderStatus.replaceAll("_", " ").toLowerCase() : fulfilment.status === "PICKED_UP" ? "Picked up" : "Ready for pickup"}</b>}
     </header>
+    {!history && fulfilment.delivery?.pickupCode ? <div className="v1-merchant-pickup-code merchant-primary-code" role="status"><small>PICKUP CODE · Share only after every package is checked</small><strong>{fulfilment.delivery.pickupCode}</strong><span>Give this in-app code only to the assigned delivery partner.</span></div> : null}
     <LineList lines={fulfilment.lines} />
     <div className="v1-preparation-times">
       <span><small>Preparation started</small><strong>{formatOptionalTime(fulfilment.prepStartedAt)}</strong></span>
@@ -826,7 +827,6 @@ export function FulfilmentCard(props: FulfilmentCardProps) {
       <span><small>Delivery partner</small><strong>{fulfilment.delivery.riderAssigned ? fulfilment.delivery.rider?.displayName ?? "Assigned" : "Finding rider"}</strong></span>
       <span><small>Pickup status</small><strong>{merchantPickupLabel(fulfilment.delivery.stopStatus, fulfilment.delivery.riderArrivedAt)}</strong></span>
       <span><small>Waiting</small><strong>{fulfilment.delivery.riderArrivedAt ? formatDuration(fulfilment.delivery.waitingSeconds) : "—"}</strong></span>
-      {fulfilment.delivery.pickupCode ? <div className="v1-merchant-pickup-code"><small>Give this in-app code to the assigned rider after every package is present</small><strong>{fulfilment.delivery.pickupCode}</strong></div> : null}
       {fulfilment.delivery.verificationStatus === "CONSUMED" ? <p><Check size={17} /> Pickup verified. Package custody transferred to the rider.</p> : null}
     </div> : null}
     <MerchantLiveDelivery fulfilment={fulfilment} delayed={props.trackingDelayed} />

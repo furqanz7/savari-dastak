@@ -147,6 +147,25 @@ function cardProps(overrides: Partial<ComponentProps<typeof FulfilmentCard>> = {
 }
 
 describe("Merchant preparation presentation", () => {
+  it("places the secure pickup code before order contents and operational detail", async () => {
+    const ready: V1MerchantFulfilment = {
+      ...fulfilment,
+      status: "READY",
+      delivery: {
+        missionId: "mission", missionStatus: "PICKING_UP", riderAssigned: true,
+        rider: { id: "rider", displayName: "Delivery Partner" }, stopId: "stop",
+        stopStatus: "ARRIVED", waitingSeconds: 20, verificationStatus: "ACTIVE",
+        pickupCode: "123456",
+      },
+    };
+    await render(<FulfilmentCard {...cardProps({ fulfilment: ready })} />);
+    const code = host.querySelector(".merchant-primary-code")!;
+    const lines = host.querySelector(".merchant-order-lines")!;
+    expect(code.textContent).toContain("123456");
+    expect(code.compareDocumentPosition(lines) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(host.querySelectorAll(".v1-merchant-pickup-code")).toHaveLength(1);
+  });
+
   it("keeps long product names and pack details in the flexible item-description column", async () => {
     const longLine = {
       orderLineId: "long-line",

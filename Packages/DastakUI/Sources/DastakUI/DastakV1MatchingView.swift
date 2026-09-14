@@ -95,16 +95,18 @@ struct DastakV1MatchingView: View {
                         if [.paid, .preparing].contains(order.status) {
                             preparationETACard(order)
                         }
+                        if order.status == .outForDelivery,
+                           let delivery = order.delivery,
+                           delivery.pinVerified != true {
+                            deliveryCard(delivery)
+                        }
                         if let tracking = order.tracking {
                             DastakDeliveryTrackingView(tracking: tracking, destination: order.deliveryAddress.map {
                                 CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
                             })
                         }
                         if order.status == .outForDelivery,
-                           let delivery = order.delivery {
-                            if delivery.pinVerified != true {
-                                deliveryCard(delivery)
-                            }
+                           order.delivery != nil {
                             launchCollectionCard(order)
                         }
                         orderSummary(order)

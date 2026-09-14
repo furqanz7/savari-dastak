@@ -152,6 +152,8 @@
 .merchant-experience .v1-merchant-pickup-state strong { font-size: 14px; }
 .merchant-experience .v1-merchant-pickup-code { padding: 18px; margin-top: 10px; gap: 10px; border-radius: 12px; background: var(--surface); }
 .merchant-experience .v1-merchant-pickup-code strong { font-size: 32px; color: var(--text-primary); letter-spacing: .18em; }
+.merchant-experience .merchant-primary-code { margin: 0; border: 1px solid color-mix(in srgb, var(--dastak-accent) 32%, var(--divider)); background: color-mix(in srgb, var(--dastak-accent-soft) 58%, var(--surface)); }
+.merchant-experience .merchant-primary-code span { color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
 .merchant-experience .v1-merchant-tracking { padding: 16px; border-color: var(--divider); border-radius: 16px; background: var(--surface-subtle); }
 .merchant-experience .v1-merchant-tracking :is(small, p, header b) { font-size: 13px; }
 .merchant-experience .v1-merchant-tracking > header > span { color: var(--dastak-accent); }

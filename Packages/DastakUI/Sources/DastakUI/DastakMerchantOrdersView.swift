@@ -347,6 +347,24 @@ private struct DastakV1MerchantFulfilmentCard: View {
                 DastakStatusPill(text: statusLabel, emphasis: !isHistory && fulfilment.status != "PICKED_UP")
             }
 
+            if !isHistory, let code = fulfilment.delivery?.pickupCode {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                    Label("PICKUP CODE", systemImage: "checkmark.shield.fill")
+                        .font(.caption.weight(.bold)).tracking(1)
+                        .foregroundStyle(accent)
+                    Text(code)
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .monospacedDigit().tracking(6)
+                    Text("Share only with the assigned delivery partner after checking every package.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(MarketplaceSpacing.medium)
+                .background(accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Pickup code \(code). Share only after checking every package.")
+            }
+
             if !isHistory && fulfilment.status == "PREPARING" {
                 Label("Confirmed · You can start preparing", systemImage: "checkmark.seal.fill")
                     .font(.subheadline.weight(.semibold)).foregroundStyle(.green)
@@ -392,14 +410,6 @@ private struct DastakV1MerchantFulfilmentCard: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }.padding(12).background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-                if fulfilment.status == "READY", let code = delivery.pickupCode {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("PICKUP CODE").font(.caption.weight(.bold)).tracking(1).foregroundStyle(.secondary)
-                        Text(code).font(.system(.largeTitle, design: .monospaced, weight: .bold)).tracking(5)
-                        Text("Share only with the assigned partner after checking every package.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
             if !isHistory {
                 Text("Payment is collected at the customer's doorstep. No payment action is needed here.")

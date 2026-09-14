@@ -240,8 +240,10 @@ describe("customer V1 Orders experience", () => {
       imageUrlForLine={() => null} onDismiss={() => undefined} onCancel={() => undefined}
       onPay={() => undefined} onReorder={() => undefined} onRefresh={() => undefined}
       onReportIssue={async () => true} />);
-    expect(render()).toContain("654321");
-    expect(render()).toContain("then takes the package photo, collects payment");
+    const visible = render();
+    expect(visible).toContain("654321");
+    expect(visible).toContain("then takes the package photo, collects payment");
+    expect(visible.indexOf("DELIVERY CODE")).toBeLessThan(visible.indexOf("ITEMS IN THIS ORDER"));
     order.delivery.pinVerified = true;
     expect(render()).not.toContain("654321");
   });

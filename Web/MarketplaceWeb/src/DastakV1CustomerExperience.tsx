@@ -1452,6 +1452,12 @@ export function MatchingSheet({
 
     {(order.status === "PAID" || order.status === "PREPARING") && readyAt ? <section className={`v1-order-eta ${runningLate ? "late" : ""}`} aria-label="Preparation estimate"><ClockAlert size={21} /><span><strong>{runningLate ? "Taking a little longer" : "Preparation estimate"}</strong><small>{runningLate ? "Your order stays in preparation until it is genuinely ready." : `Expected around ${formatOrderTime(readyAt)}`}</small></span><b>{runningLate ? "We’re watching" : relativeTime(readyAt, now)}</b></section> : null}
 
+    {order.status === "OUT_FOR_DELIVERY" && order.delivery?.deliveryCode && !order.delivery.pinVerified ? <div className="v1-delivery-code" role="status">
+      <header><ShieldCheck size={20} /><span><small>DELIVERY CODE</small><b>Share only after every package arrives</b></span></header>
+      <strong>{order.delivery.deliveryCode}</strong>
+      <p>Share this PIN once your rider and every package arrive. The rider then takes the package photo, collects payment and completes delivery. A trusted recipient can use this PIN without an account.</p>
+    </div> : null}
+
     {order.tracking || order.status === "OUT_FOR_DELIVERY" ? <CustomerLiveDelivery order={order} delayed={Boolean(liveError)} /> : null}
 
     <section className="v1-order-contents" aria-label="Order items"><header><div><p>ITEMS IN THIS ORDER</p><h3>{orderItemCount(order)} {orderItemCount(order) === 1 ? "item" : "items"}</h3>{order.restaurant ? <small>{order.restaurant.name} · {order.restaurant.branchName}</small> : null}</div></header><div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><ProductImage src={imageUrlForLine(line)} alt="" /><span><b>{line.name}</b>{orderLineDetail(line) ? <small>{orderLineDetail(line)}</small> : null}<small>{line.quantity} × {formatV1Price(line.unitPricePaise)}</small></span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}</div></section>
@@ -1480,11 +1486,6 @@ export function MatchingSheet({
     {order.status === "OUT_FOR_DELIVERY" && launchPayment?.state === "PAYMENT_DUE_AT_DELIVERY" ? <p className="v1-payment-message" role="status"><strong>Payment due at delivery.</strong> Pay your delivery partner {formatV1Price(launchPayment.amountPaise ?? order.price.totalPaise)} by UPI or cash.</p> : null}
     {order.status === "OUT_FOR_DELIVERY" && launchPayment?.state === "COLLECTION_RETRY_NEEDED" ? <p className="v1-payment-retry" role="status">Payment was not confirmed. Your delivery partner can safely retry the doorstep collection before delivery.</p> : null}
     {launchPayment?.state === "PAYMENT_COLLECTED" ? <p className="v1-payment-message" role="status"><strong>Payment collected.</strong> {launchPayment.collectionMethod ? `${launchPayment.collectionMethod === "CASH" ? "Cash" : "UPI"} recorded` : "Collection recorded"} at the doorstep.</p> : null}
-    {order.status === "OUT_FOR_DELIVERY" && order.delivery?.deliveryCode && !order.delivery.pinVerified ? <div className="v1-delivery-code" role="status">
-      <header><ShieldCheck size={20} /><span><small>DELIVERY CODE</small><b>Share only after every package arrives</b></span></header>
-      <strong>{order.delivery.deliveryCode}</strong>
-      <p>Share this PIN once your rider and every package arrive. The rider then takes the package photo, collects payment and completes delivery. A trusted recipient can use this PIN without an account.</p>
-    </div> : null}
     {order.status === "OUT_FOR_DELIVERY" && order.delivery?.verificationStatus === "BLOCKED" ? <p className="v1-payment-retry" role="status">Delivery verification needs Operations support. Your rider must keep every package secure.</p> : null}
     {order.support?.recovery.map((recovery) => <p className="v1-payment-retry" role="status" key={recovery.id}>{recovery.customerMessage}</p>)}
     {order.support?.issues.length ? <section className="v1-order-support-history" aria-label="Reported issues"><h3>Support updates</h3>{order.support.issues.map((issue) => <div key={issue.id}><span><strong>{humanizeV1State(issue.category)}</strong><small>{humanizeV1State(issue.status)}</small></span><p>{issue.resolution ?? "Operations is reviewing your report."}</p></div>)}</section> : null}
