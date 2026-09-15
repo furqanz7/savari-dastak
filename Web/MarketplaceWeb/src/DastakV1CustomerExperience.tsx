@@ -1036,7 +1036,7 @@ export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, on
 
 function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1CatalogueCategory }) {
   const categoryArtwork = {
-    "fresh-produce": "canonical/taxonomy/fresh-produce-provided.png",
+    "fresh-produce": "canonical/taxonomy/fresh-produce-provided-v2.png",
     "personal-care": "canonical/taxonomy/personal-care-v2.png",
     "beauty-grooming": "canonical/taxonomy/beauty-grooming-skin-face-reference.png",
     "health-hygiene": "canonical/taxonomy/pharma-wellness-v2.png",
