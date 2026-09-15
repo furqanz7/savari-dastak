@@ -34,6 +34,7 @@ begin
       -- These remain intentionally unillustrated until their own permanent artwork is sourced.
       when r.slug in ('paan-corner') then 'canonical/taxonomy/paan-corner.png'
       when r.slug in ('personal-care') then 'canonical/taxonomy/personal-care.png'
+      when r.slug in ('beauty-grooming') then 'canonical/taxonomy/beauty-grooming.png'
       when r.slug in ('pet-care') then 'canonical/taxonomy/pet-care.png'
       else null
     end;
