@@ -155,7 +155,7 @@
 .customer-experience .v1-category-grid strong { min-height: 42px; font-size: 14px; line-height: 1.45; padding: 0 5px; }
 .customer-experience .v1-category-grid small { display: block; font-size: 12px; }
 .customer-experience .v1-category-art { border: 0; border-radius: 24px; background: var(--surface-muted); }
-.customer-experience .v1-category-art img { padding: 0; object-fit: cover; mix-blend-mode: normal; }
+.customer-experience .v1-category-art img { padding: 0; object-fit: contain; mix-blend-mode: normal; }
 .customer-experience .v1-category-browser { height: auto; overflow: visible; grid-template-columns: 154px minmax(0, 1fr); gap: 28px; }
 .customer-experience .v1-category-browser .v1-subcategory-rail { position: sticky; top: 16px; height: auto; max-height: calc(100dvh - 120px); align-content: start; gap: 8px; padding: 2px 10px 16px 2px; border-right: 1px solid var(--divider); scrollbar-width: thin; }
 .customer-experience .v1-category-browser .v1-subcategory-rail > button { width: 100%; min-width: 0; padding: 10px; gap: 7px; border-radius: 16px; font-size: 13px; line-height: 1.35; }
