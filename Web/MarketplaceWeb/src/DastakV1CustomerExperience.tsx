@@ -1035,7 +1035,7 @@ export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, on
 }
 
 function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1CatalogueCategory }) {
-  const permanentArtworkKey = ({
+  const categoryArtwork = {
     "personal-care": "canonical/taxonomy/personal-care-v2.png",
     "beauty-grooming": "canonical/taxonomy/beauty-grooming-skin-face-reference.png",
     "health-hygiene": "canonical/taxonomy/pharma-wellness-v2.png",
@@ -1043,7 +1043,20 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     "toys-games-kids": "canonical/taxonomy/toys-games-kids-v2.png",
     "automotive-travel-utility": "canonical/taxonomy/automotive-travel-utility-v2.png",
     "home-improvement-hardware": "canonical/taxonomy/home-improvement-hardware-v2.png",
-  } as Record<string, string>)[item.slug] ?? item.imageKey;
+  } as Record<string, string>;
+  const subcategoryArtwork = {
+    "fresh-produce-all": "canonical/taxonomy/subcategories/fresh-produce-all.png",
+    "fresh-fruits": "canonical/taxonomy/subcategories/fresh-fruits.png",
+    "fresh-vegetables": "canonical/taxonomy/subcategories/fresh-vegetables.png",
+    "leafy-greens-herbs": "canonical/taxonomy/subcategories/coriander-others.png",
+    "seasonal-fruits": "canonical/taxonomy/subcategories/seasonal.png",
+    "fresh-cuts-sprouts": "canonical/taxonomy/subcategories/freshly-cut-sprouts.png",
+    "exotic-premium-produce": "canonical/taxonomy/subcategories/exotics.png",
+    "flowers-leaves": "canonical/taxonomy/subcategories/flowers-leaves.png",
+    "trusted-organics": "canonical/taxonomy/subcategories/trusted-organics.png",
+    "frozen-vegetables": "canonical/taxonomy/subcategories/frozen-veg.png",
+  } as Record<string, string>;
+  const permanentArtworkKey = ("categoryId" in item ? subcategoryArtwork[item.slug] : categoryArtwork[item.slug]) ?? item.imageKey;
   return <span className={`v1-category-art count-${permanentArtworkKey ? 1 : 0}`} aria-hidden="true">{permanentArtworkKey
     ? <ProductImage src={catalogueImageUrl(supabaseUrl, permanentArtworkKey)} alt="" />
     : item.slug.includes("paan") || item.slug.includes("produce") ? <Leaf size={29} />
