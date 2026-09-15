@@ -81,7 +81,7 @@ type Cart = RetailCart;
 type FoodCartLine = ResolvedFoodCartLine;
 export type CustomerHomeMode = "food" | "grocery" | "parcel" | "print";
 function publicRestaurantName(menu: Pick<V1RestaurantMenu, "restaurant">) {
-  return menu.restaurant.branchName?.trim() || "Restaurant / Cafe";
+  return menu.restaurant.branchName?.trim() || "Dastak store";
 }
 const matchingStatuses = new Set(["CREATED", "MATCHING"]);
 const liveStatuses = new Set([
@@ -994,7 +994,7 @@ export function HomeSection({ mode = "grocery", onMode = () => undefined, supaba
       {restaurantIssue ? <CustomerNotice title="Restaurant menus couldn’t update" onRetry={onRetryRestaurants}>{restaurantIssue}</CustomerNotice> : null}
       <div className="v1-restaurant-rail">{restaurants.map((restaurant) => <button type="button" key={restaurant.restaurant.branchId} onClick={() => onRestaurant(restaurant)}>
         <span className="v1-restaurant-art">{restaurant.restaurant.imageKey ? <ProductImage src={catalogueImageUrl(supabaseUrl, restaurant.restaurant.imageKey)} alt="" /> : <UtensilsCrossed size={28} />}</span>
-        <span className="v1-restaurant-copy"><small>{restaurant.restaurant.acceptingOrders ? "RESTAURANT / CAFE" : "STORE CLOSED"}</small><strong>{publicRestaurantName(restaurant)}</strong><b>{restaurant.restaurant.acceptingOrders ? `${restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items · View menu` : "Orders paused"}</b></span>
+        <span className="v1-restaurant-copy">{!restaurant.restaurant.acceptingOrders ? <small>STORE CLOSED</small> : null}<strong>{publicRestaurantName(restaurant)}</strong><b>{restaurant.restaurant.acceptingOrders ? `${restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items · View menu` : "Orders paused"}</b></span>
         <ChevronRight size={18} />
       </button>)}</div>
     </section> : null}
@@ -1195,7 +1195,7 @@ function RestaurantMenuSheet({ menu, supabaseUrl, error, onDismiss, onAdd, wishl
 }) {
   const dialog = useModalDialog<HTMLElement>({ onDismiss });
   return <div className="v1-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-menu-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-menu-title">
-    <header><div><p>RESTAURANT / CAFE</p><h2 id="v1-menu-title">{publicRestaurantName(menu)}</h2></div><button type="button" onClick={onDismiss} aria-label="Close restaurant menu"><X size={19} /></button></header>
+    <header><div>{!menu.restaurant.acceptingOrders ? <p>STORE CLOSED</p> : null}<h2 id="v1-menu-title">{publicRestaurantName(menu)}</h2></div><button type="button" onClick={onDismiss} aria-label="Close restaurant menu"><X size={19} /></button></header>
     <div className="customer-menu-banner" aria-hidden="true">{menu.restaurant.imageKey ? <ProductImage src={catalogueImageUrl(supabaseUrl, menu.restaurant.imageKey)} alt="" /> : <UtensilsCrossed size={42} />}</div>
     <div className="v1-security-note"><UtensilsCrossed size={20} /><span><strong>{menu.restaurant.acceptingOrders ? `Prepared by ${publicRestaurantName(menu)}` : "Store closed"}</strong><small>{menu.restaurant.acceptingOrders ? "Your chosen kitchen confirms each item. You pay at your doorstep." : "This store is open, but the merchant has paused accepting orders."}</small></span></div>
     {error ? <CustomerNotice title="Your basket needs attention">{error}</CustomerNotice> : null}
