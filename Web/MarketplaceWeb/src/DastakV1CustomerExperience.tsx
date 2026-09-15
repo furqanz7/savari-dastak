@@ -1056,7 +1056,9 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     "trusted-organics": "canonical/taxonomy/subcategories/trusted-organics.png",
     "frozen-vegetables": "canonical/taxonomy/subcategories/frozen-veg.png",
   } as Record<string, string>;
-  const permanentArtworkKey = ("categoryId" in item ? subcategoryArtwork[item.slug] : categoryArtwork[item.slug]) ?? item.imageKey;
+  // Subcategory rows may be normalized without categoryId by the catalogue API;
+  // resolve their permanent artwork by slug before falling back to row data.
+  const permanentArtworkKey = subcategoryArtwork[item.slug] ?? categoryArtwork[item.slug] ?? item.imageKey;
   return <span className={`v1-category-art count-${permanentArtworkKey ? 1 : 0}`} aria-hidden="true">{permanentArtworkKey
     ? <ProductImage src={catalogueImageUrl(supabaseUrl, permanentArtworkKey)} alt="" />
     : item.slug.includes("paan") || item.slug.includes("produce") ? <Leaf size={29} />
