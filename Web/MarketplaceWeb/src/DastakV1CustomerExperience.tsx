@@ -503,6 +503,10 @@ export function DastakV1CustomerExperience(props: Props) {
     item: V1RestaurantMenuItem,
     optionIds: string[],
   ) => {
+    if (!restaurant.restaurant.acceptingOrders) {
+      setError("This store is closed and is not accepting orders right now.");
+      return false;
+    }
     const existingBranch = foodCart[0]?.branchId;
     if (existingBranch && existingBranch !== restaurant.restaurant.branchId) {
       setError("A basket can contain food from one Restaurant/Cafe. Remove it before choosing another.");
@@ -990,7 +994,7 @@ export function HomeSection({ mode = "grocery", onMode = () => undefined, supaba
       {restaurantIssue ? <CustomerNotice title="Restaurant menus couldn’t update" onRetry={onRetryRestaurants}>{restaurantIssue}</CustomerNotice> : null}
       <div className="v1-restaurant-rail">{restaurants.map((restaurant) => <button type="button" key={restaurant.restaurant.branchId} onClick={() => onRestaurant(restaurant)}>
         <span className="v1-restaurant-art">{restaurant.restaurant.imageKey ? <ProductImage src={catalogueImageUrl(supabaseUrl, restaurant.restaurant.imageKey)} alt="" /> : <UtensilsCrossed size={28} />}</span>
-        <span className="v1-restaurant-copy"><small>RESTAURANT / CAFE</small><strong>{publicRestaurantName(restaurant)}</strong><b>{restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items · View menu</b></span>
+        <span className="v1-restaurant-copy"><small>{restaurant.restaurant.acceptingOrders ? "RESTAURANT / CAFE" : "STORE CLOSED"}</small><strong>{publicRestaurantName(restaurant)}</strong><b>{restaurant.restaurant.acceptingOrders ? `${restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items · View menu` : "Orders paused"}</b></span>
         <ChevronRight size={18} />
       </button>)}</div>
     </section> : null}
@@ -1193,15 +1197,16 @@ function RestaurantMenuSheet({ menu, supabaseUrl, error, onDismiss, onAdd, wishl
   return <div className="v1-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-menu-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-menu-title">
     <header><div><p>RESTAURANT / CAFE</p><h2 id="v1-menu-title">{publicRestaurantName(menu)}</h2></div><button type="button" onClick={onDismiss} aria-label="Close restaurant menu"><X size={19} /></button></header>
     <div className="customer-menu-banner" aria-hidden="true">{menu.restaurant.imageKey ? <ProductImage src={catalogueImageUrl(supabaseUrl, menu.restaurant.imageKey)} alt="" /> : <UtensilsCrossed size={42} />}</div>
-    <div className="v1-security-note"><UtensilsCrossed size={20} /><span><strong>Prepared by {publicRestaurantName(menu)}</strong><small>Your chosen kitchen confirms each item. You pay at your doorstep.</small></span></div>
+    <div className="v1-security-note"><UtensilsCrossed size={20} /><span><strong>{menu.restaurant.acceptingOrders ? `Prepared by ${publicRestaurantName(menu)}` : "Store closed"}</strong><small>{menu.restaurant.acceptingOrders ? "Your chosen kitchen confirms each item. You pay at your doorstep." : "This store is open, but the merchant has paused accepting orders."}</small></span></div>
     {error ? <CustomerNotice title="Your basket needs attention">{error}</CustomerNotice> : null}
     <nav className="customer-menu-nav" aria-label="Menu categories">{menu.categories.map((category) => <a href={`#menu-${category.id}`} key={category.id} onClick={(event) => { event.preventDefault(); document.getElementById(`menu-${category.id}`)?.scrollIntoView({ block: "start" }); }}>{category.name}</a>)}</nav>
-    {menu.categories.map((category) => <section className="v1-menu-category" id={`menu-${category.id}`} key={category.id}><h3>{category.name}</h3>{category.description ? <p>{category.description}</p> : null}<div>{category.items.map((item) => <RestaurantItemCard key={item.id} item={item} supabaseUrl={supabaseUrl} onAdd={onAdd} wished={wishlistIds.has(`MENU_ITEM:${item.id}`)} updatingWishlist={wishlistUpdatingIds.has(item.id)} onWishlist={() => onWishlist(item.id)} />)}</div></section>)}
+    {menu.categories.map((category) => <section className="v1-menu-category" id={`menu-${category.id}`} key={category.id}><h3>{category.name}</h3>{category.description ? <p>{category.description}</p> : null}<div>{category.items.map((item) => <RestaurantItemCard key={item.id} item={item} supabaseUrl={supabaseUrl} onAdd={onAdd} disabled={!menu.restaurant.acceptingOrders} wished={wishlistIds.has(`MENU_ITEM:${item.id}`)} updatingWishlist={wishlistUpdatingIds.has(item.id)} onWishlist={() => onWishlist(item.id)} />)}</div></section>)}
   </section></div>;
 }
 
-function RestaurantItemCard({ item, supabaseUrl, onAdd, wished, updatingWishlist, onWishlist }: {
+function RestaurantItemCard({ item, supabaseUrl, onAdd, disabled = false, wished, updatingWishlist, onWishlist }: {
   item: V1RestaurantMenuItem; supabaseUrl: string; onAdd: (item: V1RestaurantMenuItem, optionIds: string[]) => boolean;
+  disabled?: boolean;
   wished: boolean; updatingWishlist: boolean; onWishlist: () => void;
 }) {
   const [added, setAdded] = useState(false);
@@ -1229,9 +1234,9 @@ function RestaurantItemCard({ item, supabaseUrl, onAdd, wished, updatingWishlist
     return { ...current, [groupId]: [...selected, optionId] };
   });
   return <article className="v1-menu-item"><div className="v1-menu-item-copy"><strong>{item.name}</strong>{item.description ? <p>{item.description}</p> : null}<b>{formatV1Price(item.basePricePaise)}</b></div><button className="v1-menu-wishlist" type="button" disabled={updatingWishlist} onClick={onWishlist} aria-label={wished ? `Remove ${item.name} from Wishlist` : `Save ${item.name} to Wishlist`}><Heart size={18} fill={wished ? "currentColor" : "none"} /></button>
-    {item.optionGroups.map((group) => <fieldset key={group.id}><legend>{group.name} <small>{group.minimumSelections ? "Required" : "Optional"} · up to {group.maximumSelections}</small></legend>{group.options.map((option) => <label key={option.id}><input type={group.selectionType === "SINGLE" ? "radio" : "checkbox"} name={`${item.id}-${group.id}`} checked={(selection[group.id] ?? []).includes(option.id)} onChange={() => toggle(group.id, option.id, group.selectionType === "SINGLE", group.maximumSelections)} /><span>{option.name}</span><b>{option.priceDeltaPaise ? `+${formatV1Price(option.priceDeltaPaise)}` : "Included"}</b></label>)}</fieldset>)}
+    {item.optionGroups.map((group) => <fieldset key={group.id}><legend>{group.name} <small>{group.minimumSelections ? "Required" : "Optional"} · up to {group.maximumSelections}</small></legend>{group.options.map((option) => <label key={option.id}><input disabled={disabled} type={group.selectionType === "SINGLE" ? "radio" : "checkbox"} name={`${item.id}-${group.id}`} checked={(selection[group.id] ?? []).includes(option.id)} onChange={() => toggle(group.id, option.id, group.selectionType === "SINGLE", group.maximumSelections)} /><span>{option.name}</span><b>{option.priceDeltaPaise ? `+${formatV1Price(option.priceDeltaPaise)}` : "Included"}</b></label>)}</fieldset>)}
     {item.imageKey ? <ProductImage className="customer-menu-photo" src={catalogueImageUrl(supabaseUrl, item.imageKey)} alt={item.name} /> : null}
-    <button className="primary-button" type="button" disabled={!valid} onClick={() => setAdded(onAdd(item, optionIds))}>{added ? <><Check size={18} /> Added</> : `Add · ${formatV1Price(total)}`}</button><span className="customer-sr-only" role="status">{added ? `${item.name} added to your basket` : ""}</span>
+    <button className="primary-button" type="button" disabled={disabled || !valid} onClick={() => setAdded(onAdd(item, optionIds))}>{disabled ? "Store closed" : added ? <><Check size={18} /> Added</> : `Add · ${formatV1Price(total)}`}</button><span className="customer-sr-only" role="status">{added ? `${item.name} added to your basket` : ""}</span>
   </article>;
 }
 
