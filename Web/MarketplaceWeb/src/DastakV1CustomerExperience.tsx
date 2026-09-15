@@ -1049,12 +1049,12 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     "fresh-fruits": "canonical/taxonomy/subcategories/fresh-fruits.png",
     "fresh-vegetables": "canonical/taxonomy/subcategories/fresh-vegetables.png",
     "leafy-greens-herbs": "canonical/taxonomy/subcategories/coriander-others.png",
-    "seasonal-fruits": "canonical/taxonomy/subcategories/seasonal-v2.png",
+    "seasonal-fruits": "canonical/taxonomy/subcategories/seasonal-v4.png",
     "fresh-cuts-sprouts": "canonical/taxonomy/subcategories/freshly-cut-sprouts.png",
     "exotic-premium-produce": "canonical/taxonomy/subcategories/exotics.png",
-    "flowers-leaves": "canonical/taxonomy/subcategories/flowers-leaves.png",
-    "trusted-organics": "canonical/taxonomy/subcategories/trusted-organics.png",
-    "frozen-vegetables": "canonical/taxonomy/subcategories/frozen-veg-v2.png",
+    "flowers-leaves": "canonical/taxonomy/subcategories/flowers-leaves-v2.png",
+    "trusted-organics": "canonical/taxonomy/subcategories/trusted-organics-v2.png",
+    "frozen-vegetables": "canonical/taxonomy/subcategories/frozen-veg-v3.png",
   } as Record<string, string>;
   // Subcategory rows may be normalized without categoryId by the catalogue API;
   // resolve their permanent artwork by slug before falling back to row data.
