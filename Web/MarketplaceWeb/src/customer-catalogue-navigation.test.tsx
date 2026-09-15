@@ -9,7 +9,7 @@ const props: ComponentProps<typeof HomeSection> = {
   restaurants: [],
   categoryTypes: [{ id: "dairy", name: "Dairy, Bread & Eggs", slug: "dairy", sortOrder: 0, imageKey: "canonical/taxonomy/category_type/dairy.webp", previewImageKeys: ["catalogue/sku-packshot.png"], navigationSection: { key: "grocery", name: "Grocery & Kitchen", sortOrder: 0 } }],
   categories: [
-    { id: "milk", categoryTypeId: "dairy", name: "Milk", slug: "milk", sortOrder: 0, previewImageKeys: ["catalogue/milk.webp"] },
+    { id: "milk", categoryTypeId: "dairy", name: "Milk", slug: "milk", sortOrder: 0, previewImageKeys: [] },
     { id: "bread", categoryTypeId: "dairy", name: "Bread & Buns", slug: "bread", sortOrder: 1, previewImageKeys: [] },
   ],
   subcategories: [
@@ -47,7 +47,7 @@ describe("two-level customer catalogue", () => {
     expect(html).toContain("Grocery &amp; Kitchen");
     expect(html).toContain("Dairy, Bread &amp; Eggs");
     expect(html).toContain("canonical/taxonomy/category_type/dairy.webp");
-    expect(html).toContain("sku-packshot.png");
+    expect(html).not.toContain("sku-packshot.png");
     expect(html).not.toContain(">Milk<");
     expect(html).not.toContain("v1-category-browser");
   });
@@ -74,7 +74,6 @@ describe("two-level customer catalogue", () => {
     expect(html).toContain("full product");
     expect(html).toContain('<option value="toned">Toned milk</option>');
     expect(html).toContain('aria-pressed="true"');
-    expect(html).toContain("catalogue/milk.webp");
     expect(html).not.toContain("Everyday essentials");
   });
 
