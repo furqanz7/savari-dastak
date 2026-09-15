@@ -191,7 +191,6 @@ export async function upsertCatalogueProduct(
 
 export async function uploadCatalogueImage(
   client: SupabaseClient,
-  accountId: string,
   file: File,
 ) {
   if (!/^image\/(jpeg|png|webp)$/i.test(file.type) || file.size > 5 * 1024 * 1024) {
@@ -199,7 +198,11 @@ export async function uploadCatalogueImage(
   }
   const extension = file.type.toLowerCase() === "image/png" ? "png"
     : file.type.toLowerCase() === "image/webp" ? "webp" : "jpg";
-  const objectPath = `merchant/${accountId}/${crypto.randomUUID()}.${extension}`;
+  const { data: { user }, error: userError } = await client.auth.getUser();
+  if (userError || !user?.id) {
+    throw new CatalogueRequestError("authentication_required", "Your merchant session has expired. Sign in again and retry.", 401);
+  }
+  const objectPath = `merchant/${user.id}/${crypto.randomUUID()}.${extension}`;
   const { error } = await client.storage.from("dastak-catalogue").upload(objectPath, file, {
     cacheControl: "3600",
     contentType: file.type,

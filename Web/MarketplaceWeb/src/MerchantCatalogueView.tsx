@@ -193,7 +193,7 @@ export function MerchantCatalogueView({
     if (!productDraft.categoryId || !productDraft.name.trim() || !productDraft.unitLabel.trim() || pricePaise === undefined) return;
     await mutate(async () => {
       const imageObjectPath = productImage
-        ? await uploadCatalogueImage(client, accountId, productImage)
+        ? await uploadCatalogueImage(client, productImage)
         : productDraft.imageObjectPath;
       await upsertCatalogueProduct({
         ...auth,
