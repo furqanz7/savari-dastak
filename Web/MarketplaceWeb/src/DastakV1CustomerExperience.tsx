@@ -1046,14 +1046,14 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
   } as Record<string, string>;
   const subcategoryArtwork = {
     "fresh-produce-all": "canonical/taxonomy/subcategories/fresh-produce-all.png",
-    "fresh-fruits": "canonical/taxonomy/subcategories/fresh-fruits.png",
-    "fresh-vegetables": "canonical/taxonomy/subcategories/fresh-vegetables.png",
-    "leafy-greens-herbs": "canonical/taxonomy/subcategories/coriander-others.png",
-    "seasonal-fruits": "canonical/taxonomy/subcategories/seasonal-v4.png",
-    "fresh-cuts-sprouts": "canonical/taxonomy/subcategories/freshly-cut-sprouts.png",
-    "exotic-premium-produce": "canonical/taxonomy/subcategories/exotics.png",
-    "flowers-leaves": "canonical/taxonomy/subcategories/flowers-leaves-v2.png",
-    "trusted-organics": "canonical/taxonomy/subcategories/trusted-organics-v2.png",
+    "fresh-fruits": "canonical/taxonomy/subcategories/fresh-fruits-web.png",
+    "fresh-vegetables": "canonical/taxonomy/subcategories/fresh-vegetables-web.png",
+    "leafy-greens-herbs": "canonical/taxonomy/subcategories/leafy-greens-herbs-web.png",
+    "seasonal-fruits": "canonical/taxonomy/subcategories/seasonal-fruits-web.png",
+    "fresh-cuts-sprouts": "canonical/taxonomy/subcategories/fresh-cuts-sprouts-web.png",
+    "exotic-premium-produce": "canonical/taxonomy/subcategories/exotic-premium-produce-web.png",
+    "flowers-leaves": "canonical/taxonomy/subcategories/flowers-leaves-web.png",
+    "trusted-organics": "canonical/taxonomy/subcategories/trusted-organics-web.png",
     "frozen-vegetables": "canonical/taxonomy/subcategories/frozen-veg-v3.png",
   } as Record<string, string>;
   // Subcategory rows may be normalized without categoryId by the catalogue API;
