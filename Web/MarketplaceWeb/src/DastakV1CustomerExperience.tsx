@@ -1035,8 +1035,11 @@ export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, on
 }
 
 function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1CatalogueCategory }) {
-  return <span className={`v1-category-art count-${item.imageKey ? 1 : 0}`} aria-hidden="true">{item.imageKey
-    ? <ProductImage src={catalogueImageUrl(supabaseUrl, item.imageKey)} alt="" />
+  const imageKeys = [item.imageKey, ...(item.previewImageKeys ?? [])]
+    .filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index)
+    .slice(0, 2);
+  return <span className={`v1-category-art count-${imageKeys.length}`} aria-hidden="true">{imageKeys.length
+    ? imageKeys.map((imageKey) => <ProductImage key={imageKey} src={catalogueImageUrl(supabaseUrl, imageKey)} alt="" />)
     : item.slug.includes("paan") || item.slug.includes("produce") ? <Leaf size={29} />
       : item.slug.includes("pharmacy") || item.slug.includes("medicine") || item.slug.includes("health") ? <ShieldCheck size={29} />
         : <PackageCheck size={28} />}</span>;
