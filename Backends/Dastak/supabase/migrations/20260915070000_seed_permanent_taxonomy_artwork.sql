@@ -21,7 +21,7 @@ begin
       when r.slug in ('chicken-meat-fish') then 'canonical/taxonomy/chicken-meat-fish.png'
       when r.slug in ('organic-gourmet','organic-healthy-living') then 'canonical/taxonomy/organic-healthy.png'
       when r.slug in ('baby-care') then 'canonical/taxonomy/baby-care.png'
-      when r.slug in ('health-hygiene','pharmacy','pharma-wellness') then 'canonical/taxonomy/pharma-wellness.png'
+      when r.slug in ('health-hygiene','pharmacy','pharma-wellness') then 'canonical/taxonomy/pharma-wellness-v2.png'
       when r.slug in ('home-cleaning','cleaning-essentials') then 'canonical/taxonomy/cleaning-essentials.png'
       when r.slug in ('kitchen-dining') then 'canonical/taxonomy/kitchen-dining.png'
       when r.slug in ('home-utility') then 'canonical/taxonomy/home-utility.png'
@@ -33,7 +33,7 @@ begin
       -- Do not reuse a neighboring category tile for Kitchen & Dining or Home & Utility.
       -- These remain intentionally unillustrated until their own permanent artwork is sourced.
       when r.slug in ('paan-corner') then 'canonical/taxonomy/paan-corner.png'
-      when r.slug in ('personal-care') then 'canonical/taxonomy/personal-care.png'
+      when r.slug in ('personal-care') then 'canonical/taxonomy/personal-care-v2.png'
       when r.slug in ('pet-care') then 'canonical/taxonomy/pet-care.png'
       else null
     end;
