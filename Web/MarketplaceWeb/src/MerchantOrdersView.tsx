@@ -17,6 +17,7 @@ import {
   readPersistedMerchantBranch,
   type MerchantBranch,
 } from "./merchantBranchContext";
+import { getV1MerchantOpportunities } from "./dastakV1";
 
 type Props = {
   accessToken: string;
@@ -81,6 +82,28 @@ export function MerchantOrdersView({
     setBranchIssue(undefined);
     branchProbes.current.clear();
   }, [accountId]);
+
+  // Customer restaurant discovery requires a fresh merchant reachability
+  // heartbeat. The orders surface already refreshes this through its feed, but
+  // merchants commonly stay on Store while editing their menu or banner. Keep
+  // the branch reachable while this authenticated merchant workspace is open.
+  useEffect(() => {
+    let active = true;
+    const heartbeat = () => {
+      void getV1MerchantOpportunities({ ...auth, limit: 1 }).catch(() => {
+        // Heartbeats are advisory; the existing workspace remains usable when
+        // the order service is temporarily unavailable.
+      });
+    };
+    heartbeat();
+    const timer = window.setInterval(() => {
+      if (active && document.visibilityState === "visible") heartbeat();
+    }, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [auth]);
 
   useEffect(() => {
     if (selectedBranchId && branches.some((branch) => branch.id === selectedBranchId)) return;
