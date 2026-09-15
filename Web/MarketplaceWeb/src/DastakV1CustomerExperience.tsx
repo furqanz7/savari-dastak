@@ -80,6 +80,9 @@ type Props = DastakV1Auth & {
 type Cart = RetailCart;
 type FoodCartLine = ResolvedFoodCartLine;
 export type CustomerHomeMode = "food" | "grocery" | "parcel" | "print";
+function publicRestaurantName(menu: Pick<V1RestaurantMenu, "restaurant">) {
+  return menu.restaurant.branchName?.trim() || "Restaurant / Cafe";
+}
 const matchingStatuses = new Set(["CREATED", "MATCHING"]);
 const liveStatuses = new Set([
   "CREATED", "MATCHING", "FULLY_SECURED", "AWAITING_PAYMENT", "PAID", "PREPARING",
@@ -987,7 +990,7 @@ export function HomeSection({ mode = "grocery", onMode = () => undefined, supaba
       {restaurantIssue ? <CustomerNotice title="Restaurant menus couldn’t update" onRetry={onRetryRestaurants}>{restaurantIssue}</CustomerNotice> : null}
       <div className="v1-restaurant-rail">{restaurants.map((restaurant) => <button type="button" key={restaurant.restaurant.branchId} onClick={() => onRestaurant(restaurant)}>
         <span className="v1-restaurant-art">{restaurant.restaurant.imageKey ? <ProductImage src={catalogueImageUrl(supabaseUrl, restaurant.restaurant.imageKey)} alt="" /> : <UtensilsCrossed size={28} />}</span>
-        <span className="v1-restaurant-copy"><small>RESTAURANT / CAFE</small><strong>{restaurant.restaurant.name}</strong><span>{restaurant.restaurant.branchName}</span><b>{restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items · View menu</b></span>
+        <span className="v1-restaurant-copy"><small>RESTAURANT / CAFE</small><strong>{publicRestaurantName(restaurant)}</strong><b>{restaurant.categories.reduce((total, category) => total + category.items.length, 0)} items · View menu</b></span>
         <ChevronRight size={18} />
       </button>)}</div>
     </section> : null}
@@ -1173,9 +1176,9 @@ function RestaurantMenuSheet({ menu, supabaseUrl, error, onDismiss, onAdd, wishl
 }) {
   const dialog = useModalDialog<HTMLElement>({ onDismiss });
   return <div className="v1-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-menu-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-menu-title">
-    <header><div><p>RESTAURANT / CAFE</p><h2 id="v1-menu-title">{menu.restaurant.name}</h2><small>{menu.restaurant.branchName}</small></div><button type="button" onClick={onDismiss} aria-label="Close restaurant menu"><X size={19} /></button></header>
+    <header><div><p>RESTAURANT / CAFE</p><h2 id="v1-menu-title">{publicRestaurantName(menu)}</h2></div><button type="button" onClick={onDismiss} aria-label="Close restaurant menu"><X size={19} /></button></header>
     <div className="customer-menu-banner" aria-hidden="true">{menu.restaurant.imageKey ? <ProductImage src={catalogueImageUrl(supabaseUrl, menu.restaurant.imageKey)} alt="" /> : <UtensilsCrossed size={42} />}</div>
-    <div className="v1-security-note"><UtensilsCrossed size={20} /><span><strong>Prepared by {menu.restaurant.name}</strong><small>Your chosen kitchen confirms each item. You pay at your doorstep.</small></span></div>
+    <div className="v1-security-note"><UtensilsCrossed size={20} /><span><strong>Prepared by {publicRestaurantName(menu)}</strong><small>Your chosen kitchen confirms each item. You pay at your doorstep.</small></span></div>
     {error ? <CustomerNotice title="Your basket needs attention">{error}</CustomerNotice> : null}
     <nav className="customer-menu-nav" aria-label="Menu categories">{menu.categories.map((category) => <a href={`#menu-${category.id}`} key={category.id} onClick={(event) => { event.preventDefault(); document.getElementById(`menu-${category.id}`)?.scrollIntoView({ block: "start" }); }}>{category.name}</a>)}</nav>
     {menu.categories.map((category) => <section className="v1-menu-category" id={`menu-${category.id}`} key={category.id}><h3>{category.name}</h3>{category.description ? <p>{category.description}</p> : null}<div>{category.items.map((item) => <RestaurantItemCard key={item.id} item={item} supabaseUrl={supabaseUrl} onAdd={onAdd} wished={wishlistIds.has(`MENU_ITEM:${item.id}`)} updatingWishlist={wishlistUpdatingIds.has(item.id)} onWishlist={() => onWishlist(item.id)} />)}</div></section>)}
@@ -1263,7 +1266,7 @@ function WishlistSection({
           {food.length ? <section className="v1-saved-group"><header><h2>Restaurant &amp; Cafe</h2><span>{food.length}</span></header><div className="v1-saved-list">
             {food.map(({ saved, restaurant, item }) => <article key={saved.itemId}>
               <ProductImage src={catalogueImageUrl(supabaseUrl, item.imageKey ?? null)} alt="" />
-              <div><small>{restaurant.restaurant.name.toUpperCase()}</small><strong>{item.name}</strong><span>{restaurant.restaurant.branchName}</span><b>{formatV1Price(item.basePricePaise)}</b></div>
+              <div><small>{publicRestaurantName(restaurant).toUpperCase()}</small><strong>{item.name}</strong><b>{formatV1Price(item.basePricePaise)}</b></div>
               <div className="v1-saved-actions"><button type="button" disabled={updatingIds.has(item.id)} onClick={() => onRemove("MENU_ITEM", item.id)} aria-label={`Remove ${item.name} from Wishlist`}><Heart size={18} fill="currentColor" /></button><button type="button" onClick={() => item.optionGroups.length ? onChooseFood(restaurant) : onAddFood(restaurant, item, [])}>{item.optionGroups.length ? "Choose" : <><Plus size={17} /> Add</>}</button></div>
             </article>)}
           </div></section> : null}
@@ -1499,7 +1502,7 @@ export function MatchingSheet({
 
     {order.tracking || order.status === "OUT_FOR_DELIVERY" ? <CustomerLiveDelivery order={order} delayed={Boolean(liveError)} /> : null}
 
-    <section className="v1-order-contents" aria-label="Order items"><header><div><p>ITEMS IN THIS ORDER</p><h3>{orderItemCount(order)} {orderItemCount(order) === 1 ? "item" : "items"}</h3>{order.restaurant ? <small>{order.restaurant.name} · {order.restaurant.branchName}</small> : null}</div></header><div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><ProductImage src={imageUrlForLine(line)} alt="" /><span><b>{line.name}</b>{orderLineDetail(line) ? <small>{orderLineDetail(line)}</small> : null}<small>{line.quantity} × {formatV1Price(line.unitPricePaise)}</small></span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}</div></section>
+    <section className="v1-order-contents" aria-label="Order items"><header><div><p>ITEMS IN THIS ORDER</p><h3>{orderItemCount(order)} {orderItemCount(order) === 1 ? "item" : "items"}</h3>{order.restaurant ? <small>{order.restaurant.branchName}</small> : null}</div></header><div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><ProductImage src={imageUrlForLine(line)} alt="" /><span><b>{line.name}</b>{orderLineDetail(line) ? <small>{orderLineDetail(line)}</small> : null}<small>{line.quantity} × {formatV1Price(line.unitPricePaise)}</small></span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}</div></section>
 
     {order.deliveryAddress ? <section className="v1-order-destination"><div><MapPin size={20} /><span><small>{order.deliveryAddress.label ?? "DELIVERY ADDRESS"}</small><strong>{orderAddress(order)}</strong></span></div>{order.recipient ? <div><UserRound size={20} /><span><small>RECIPIENT</small><strong>{order.recipient.name} · {customerPhoneNumber(order.recipient.phoneNumber)}</strong></span></div> : null}{order.deliveryAddress.instructions ? <p><strong>Delivery note</strong>{order.deliveryAddress.instructions}</p> : null}</section> : null}
 
