@@ -25,6 +25,8 @@ begin
       when r.slug in ('home-cleaning','cleaning-essentials') then 'canonical/taxonomy/cleaning-essentials.png'
       when r.slug in ('home-utility','home-office','kitchen-dining') then 'canonical/taxonomy/home-office.png'
       when r.slug in ('paan-corner') then 'canonical/taxonomy/paan-corner.png'
+      when r.slug in ('personal-care') then 'canonical/taxonomy/personal-care.png'
+      when r.slug in ('pet-care') then 'canonical/taxonomy/pet-care.png'
       else null
     end;
     update dastak_v1.category_types set image_key = key, media_version = media_version + 1, updated_at = now() where id = r.id;
