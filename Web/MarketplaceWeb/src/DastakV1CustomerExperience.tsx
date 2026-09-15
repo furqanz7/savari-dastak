@@ -1057,6 +1057,9 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     "trusted-organics": "canonical/taxonomy/subcategories/trusted-organics-web.png",
     "frozen-vegetables": "canonical/taxonomy/subcategories/frozen-veg-v3.png",
     milk: "canonical/taxonomy/subcategories/milk-provided.png",
+    "curd-and-yogurt": "canonical/taxonomy/subcategories/curd-yogurt-provided.png",
+    "paneer-and-cream": "canonical/taxonomy/subcategories/paneer-cream-provided.png",
+    "butter-and-margarine": "canonical/taxonomy/subcategories/butter-margarine-provided.png",
     "curd-yogurt": "canonical/taxonomy/subcategories/curd-yogurt-provided.png",
     "paneer-cream": "canonical/taxonomy/subcategories/paneer-cream-provided.png",
     "butter-margarine": "canonical/taxonomy/subcategories/butter-margarine-provided.png",
@@ -1069,7 +1072,8 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
   } as Record<string, string>;
   // Subcategory rows may be normalized without categoryId by the catalogue API;
   // resolve their permanent artwork by slug before falling back to row data.
-  const permanentArtworkKey = subcategoryArtwork[item.slug] ?? categoryArtwork[item.slug] ?? item.imageKey;
+  const normalizedName = item.name.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const permanentArtworkKey = subcategoryArtwork[item.slug] ?? subcategoryArtwork[normalizedName] ?? categoryArtwork[item.slug] ?? item.imageKey;
   return <span className={`v1-category-art count-${permanentArtworkKey ? 1 : 0}`} aria-hidden="true">{permanentArtworkKey
     ? <ProductImage src={catalogueImageUrl(supabaseUrl, permanentArtworkKey)} alt="" />
     : item.slug.includes("paan") || item.slug.includes("produce") ? <Leaf size={29} />
