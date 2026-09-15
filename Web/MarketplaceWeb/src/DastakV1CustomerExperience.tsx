@@ -1040,6 +1040,9 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     "beauty-grooming": "canonical/taxonomy/beauty-grooming-skin-face-reference.png",
     "health-hygiene": "canonical/taxonomy/pharma-wellness-v2.png",
     pharmacy: "canonical/taxonomy/pharmacy-wellness-reference.png",
+    "toys-games-kids": "canonical/taxonomy/toys-games-kids-v2.png",
+    "automotive-travel-utility": "canonical/taxonomy/automotive-travel-utility-v2.png",
+    "home-improvement-hardware": "canonical/taxonomy/home-improvement-hardware-v2.png",
   } as Record<string, string>)[item.slug] ?? item.imageKey;
   return <span className={`v1-category-art count-${permanentArtworkKey ? 1 : 0}`} aria-hidden="true">{permanentArtworkKey
     ? <ProductImage src={catalogueImageUrl(supabaseUrl, permanentArtworkKey)} alt="" />
