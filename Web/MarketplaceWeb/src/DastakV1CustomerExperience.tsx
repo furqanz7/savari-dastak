@@ -1036,7 +1036,7 @@ export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, on
 
 function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1CatalogueCategory }) {
   const permanentArtworkKey = item.slug === "pharmacy"
-    ? "canonical/taxonomy/pharmacy-v3.png"
+    ? "canonical/taxonomy/pharmacy-wellness-reference.png"
     : item.imageKey;
   return <span className={`v1-category-art count-${permanentArtworkKey ? 1 : 0}`} aria-hidden="true">{permanentArtworkKey
     ? <ProductImage src={catalogueImageUrl(supabaseUrl, permanentArtworkKey)} alt="" />
