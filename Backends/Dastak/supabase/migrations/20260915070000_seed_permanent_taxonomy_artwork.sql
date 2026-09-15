@@ -25,13 +25,11 @@ begin
       when r.slug in ('home-cleaning','cleaning-essentials') then 'canonical/taxonomy/cleaning-essentials.png'
       when r.slug in ('home-utility','home-office','kitchen-dining') then 'canonical/taxonomy/home-office.png'
       when r.slug in ('paan-corner') then 'canonical/taxonomy/paan-corner.png'
-      else 'canonical/taxonomy/home-office.png'
+      else null
     end;
-    if key is not null then
-      update dastak_v1.category_types set image_key = key, media_version = media_version + 1, updated_at = now() where id = r.id;
-      update dastak_v1.categories set image_key = key, media_version = media_version + 1, updated_at = now() where category_type_id = r.id;
-      update dastak_v1.subcategories s set image_key = key, media_version = s.media_version + 1, updated_at = now()
-        from dastak_v1.categories c where s.category_id = c.id and c.category_type_id = r.id;
-    end if;
+    update dastak_v1.category_types set image_key = key, media_version = media_version + 1, updated_at = now() where id = r.id;
+    update dastak_v1.categories set image_key = key, media_version = media_version + 1, updated_at = now() where category_type_id = r.id;
+    update dastak_v1.subcategories s set image_key = key, media_version = s.media_version + 1, updated_at = now()
+      from dastak_v1.categories c where s.category_id = c.id and c.category_type_id = r.id;
   end loop;
 end $$;
