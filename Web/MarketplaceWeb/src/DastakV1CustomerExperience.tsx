@@ -1035,9 +1035,12 @@ export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, on
 }
 
 function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1CatalogueCategory }) {
-  const permanentArtworkKey = item.slug === "pharmacy"
-    ? "canonical/taxonomy/pharmacy-wellness-reference.png"
-    : item.imageKey;
+  const permanentArtworkKey = ({
+    "personal-care": "canonical/taxonomy/personal-care-v2.png",
+    "beauty-grooming": "canonical/taxonomy/beauty-grooming-skin-face-reference.png",
+    "health-hygiene": "canonical/taxonomy/pharma-wellness-v2.png",
+    pharmacy: "canonical/taxonomy/pharmacy-wellness-reference.png",
+  } as Record<string, string>)[item.slug] ?? item.imageKey;
   return <span className={`v1-category-art count-${permanentArtworkKey ? 1 : 0}`} aria-hidden="true">{permanentArtworkKey
     ? <ProductImage src={catalogueImageUrl(supabaseUrl, permanentArtworkKey)} alt="" />
     : item.slug.includes("paan") || item.slug.includes("produce") ? <Leaf size={29} />
