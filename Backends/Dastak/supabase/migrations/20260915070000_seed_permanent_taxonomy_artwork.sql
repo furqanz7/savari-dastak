@@ -23,7 +23,8 @@ begin
       when r.slug in ('baby-care') then 'canonical/taxonomy/baby-care.png'
       when r.slug in ('health-hygiene','pharmacy','pharma-wellness') then 'canonical/taxonomy/pharma-wellness.png'
       when r.slug in ('home-cleaning','cleaning-essentials') then 'canonical/taxonomy/cleaning-essentials.png'
-      when r.slug in ('home-utility','home-office','kitchen-dining') then 'canonical/taxonomy/home-office.png'
+      -- Do not reuse a neighboring category tile for Kitchen & Dining or Home & Utility.
+      -- These remain intentionally unillustrated until their own permanent artwork is sourced.
       when r.slug in ('paan-corner') then 'canonical/taxonomy/paan-corner.png'
       when r.slug in ('personal-care') then 'canonical/taxonomy/personal-care.png'
       when r.slug in ('pet-care') then 'canonical/taxonomy/pet-care.png'
