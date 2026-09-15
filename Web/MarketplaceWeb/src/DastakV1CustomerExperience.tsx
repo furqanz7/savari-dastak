@@ -1072,6 +1072,21 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     "bakery-essentials": "canonical/taxonomy/subcategories/bakery-essentials-provided.png",
     "dairy-alternatives": "canonical/taxonomy/subcategories/dairy-alternatives-provided.png",
     "milk-powders-creamers": "canonical/taxonomy/subcategories/milk-powders-creamers-provided.png",
+    rice: "canonical/taxonomy/subcategories/rice-provided.png",
+    "atta-flours": "canonical/taxonomy/subcategories/atta-flours-provided.png",
+    "dals-pulses": "canonical/taxonomy/subcategories/dals-pulses-provided.png",
+    "millets-grains": "canonical/taxonomy/subcategories/millets-grains-provided.png",
+    "cooking-oils": "canonical/taxonomy/subcategories/cooking-oils-provided.png",
+    ghee: "canonical/taxonomy/subcategories/ghee-provided.png",
+    salt: "canonical/taxonomy/subcategories/salt-provided.png",
+    "dry-fruits-nuts": "canonical/taxonomy/subcategories/dry-fruits-nuts-provided.png",
+    seeds: "canonical/taxonomy/subcategories/seeds-provided.png",
+    "sugar-sweeteners": "canonical/taxonomy/subcategories/sugar-sweeteners-provided.png",
+    "sugar-and-sweeteners": "canonical/taxonomy/subcategories/sugar-sweeteners-provided.png",
+    "atta-and-flours": "canonical/taxonomy/subcategories/atta-flours-provided.png",
+    "dals-and-pulses": "canonical/taxonomy/subcategories/dals-pulses-provided.png",
+    "millets-and-grains": "canonical/taxonomy/subcategories/millets-grains-provided.png",
+    "dry-fruits-and-nuts": "canonical/taxonomy/subcategories/dry-fruits-nuts-provided.png",
   } as Record<string, string>;
   // Subcategory rows may be normalized without categoryId by the catalogue API;
   // resolve their permanent artwork by slug before falling back to row data.
