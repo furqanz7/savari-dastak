@@ -1055,6 +1055,11 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     "flowers-leaves": "canonical/taxonomy/subcategories/flowers-leaves-web.png",
     "trusted-organics": "canonical/taxonomy/subcategories/trusted-organics-web.png",
     "frozen-vegetables": "canonical/taxonomy/subcategories/frozen-veg-v3.png",
+    milk: "canonical/taxonomy/subcategories/milk-web.png",
+    "curd-yogurt": "canonical/taxonomy/subcategories/curd-yogurt-web.png",
+    "paneer-cream": "canonical/taxonomy/subcategories/paneer-cream-web.png",
+    "butter-margarine": "canonical/taxonomy/subcategories/butter-margarine-web.png",
+    cheese: "canonical/taxonomy/subcategories/cheese-web.png",
   } as Record<string, string>;
   // Subcategory rows may be normalized without categoryId by the catalogue API;
   // resolve their permanent artwork by slug before falling back to row data.
