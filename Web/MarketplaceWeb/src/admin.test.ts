@@ -114,6 +114,7 @@ describe("Dastak Admin client", () => {
       paymentState: "paid",
       itemSubtotal: { paise: 20_000 },
       deliveryFee: { paise: 4_000 },
+      platformFee: { paise: 0 },
       total: { paise: 24_000 },
       itemCount: 2,
       assignmentStatus: "offered",

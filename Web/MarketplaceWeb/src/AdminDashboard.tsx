@@ -792,7 +792,10 @@ function AdminOrderRow({ order, busy, onReview, onRefund }: {
       <strong role="cell" data-label="Store">{order.store.name}</strong>
       <span role="cell" data-label="Status" className={`admin-status status-${order.status}`}>{orderStatusLabel(order.status)}</span>
       <span role="cell" data-label="Payment">{paymentLabel(order.paymentState)}</span>
-      <strong role="cell" data-label="Total">{formatPrice(order.total.paise)}</strong>
+      <div className="admin-order-bill" role="cell" data-label="Bill">
+        <small>Items {formatPrice(order.itemSubtotal.paise)} · Delivery {formatPrice(order.deliveryFee.paise)} · Platform {formatPrice(order.platformFee.paise)}</small>
+        <strong>{formatPrice(order.total.paise)}</strong>
+      </div>
 
       {order.refundDecision?.decisionStatus === "review_required" && (
         <div className="admin-refund-review">

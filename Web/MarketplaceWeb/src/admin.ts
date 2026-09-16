@@ -46,6 +46,7 @@ export type AdminOrder = {
   paymentState: "payment_pending" | "paid" | "not_collected" | "refund_pending" | "refunded";
   itemSubtotal: { paise: number };
   deliveryFee: { paise: number };
+  platformFee: { paise: number };
   total: { paise: number };
   itemCount: number;
   assignmentStatus: "offered" | "accepted" | "declined" | "expired" | "cancelled" | "completed" | null;
@@ -409,6 +410,9 @@ function adminOrder(value: unknown): AdminOrder {
     paymentState: paymentState as AdminOrder["paymentState"],
     itemSubtotal: money(source.itemSubtotal),
     deliveryFee: money(source.deliveryFee),
+    platformFee: source.platformFee === undefined
+      ? { paise: money(source.total).paise - money(source.itemSubtotal).paise - money(source.deliveryFee).paise }
+      : money(source.platformFee),
     total: money(source.total),
     itemCount,
     assignmentStatus: assignmentStatus as AdminOrder["assignmentStatus"],

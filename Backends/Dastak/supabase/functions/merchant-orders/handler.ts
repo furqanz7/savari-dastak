@@ -237,7 +237,7 @@ export async function handleMerchantOrders(
         const limit = validOwnerLimit(body.limit);
         if (!limit) return validationError();
         const result = await dependencies.getOwnerOrders(actor.accountId, limit);
-        return json(result.responseBody, result.responseStatus);
+        return json(ownerWholeBillResponse(result.responseBody), result.responseStatus);
       }
       case "ownerHistoryPage": {
         const limit = validOwnerLimit(body.limit);
@@ -251,7 +251,7 @@ export async function handleMerchantOrders(
           afterCreatedAt: cursor?.timestamp ?? null,
           afterOrderId: cursor?.id ?? null,
         });
-        return json(result.responseBody, result.responseStatus);
+        return json(ownerWholeBillResponse(result.responseBody), result.responseStatus);
       }
       case "ownerOperations": {
         const limit = validOwnerLimit(body.limit);
@@ -348,6 +348,21 @@ export async function handleMerchantOrders(
   } catch {
     return internalError();
   }
+}
+
+function ownerWholeBillResponse(value: unknown): unknown {
+  const source = record(value);
+  if (!source) return value;
+  const mapOrder = (value: unknown) => {
+    const order = record(value);
+    if (!order) return value;
+    const item = record(order.itemSubtotal);
+    const delivery = record(order.deliveryFee);
+    const total = record(order.total);
+    if (typeof item?.paise !== "number" || typeof delivery?.paise !== "number" || typeof total?.paise !== "number") return order;
+    return { ...order, platformFee: { paise: total.paise - item.paise - delivery.paise } };
+  };
+  return Array.isArray(source.orders) ? { ...source, orders: source.orders.map(mapOrder) } : mapOrder(source);
 }
 
 async function ownerResolveSupportMutation(
