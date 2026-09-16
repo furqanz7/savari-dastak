@@ -1687,12 +1687,6 @@ function StoreCatalogue({ store, supabaseUrl, cartStoreId, quantities, onQuantit
                 <article className={`product-card ${unavailable ? "unavailable" : ""}`} key={product.productId}>
                   <div className="product-image">
                     {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <ImageOff size={24} aria-label="No product image" />}
-                  </div>
-                  <div className="product-copy">
-                    <h4>{product.name}</h4>
-                    <p>{product.unitLabel}</p>
-                    <strong>{formatPrice(product.price.paise)}</strong>
-                    {product.availability === "out_of_stock" && <span>Out of stock</span>}
                     {quantity > 0 ? (
                       <div className="quantity-control" aria-label={`${product.name} quantity`}>
                         <button type="button" onClick={() => onQuantity(store, product, -1)} aria-label={`Remove one ${product.name}`} title="Remove one"><Minus size={16} /></button>
@@ -1712,12 +1706,19 @@ function StoreCatalogue({ store, supabaseUrl, cartStoreId, quantities, onQuantit
                         className="add-product"
                         type="button"
                         disabled={unavailable || anotherStoreSelected}
-                        title={anotherStoreSelected ? "Clear the current cart to order from this store" : undefined}
+                        title={anotherStoreSelected ? "Clear the current cart to order from this store" : `Add one ${product.name}`}
+                        aria-label={`Add one ${product.name}`}
                         onClick={() => onQuantity(store, product, 1)}
                       >
-                        <Plus size={16} /> Add
+                        <Plus size={21} />
                       </button>
                     )}
+                  </div>
+                  <div className="product-copy">
+                    <h4>{product.name}</h4>
+                    <p>{product.unitLabel}</p>
+                    <strong>{formatPrice(product.price.paise)}</strong>
+                    {product.availability === "out_of_stock" && <span>Out of stock</span>}
                   </div>
                 </article>
               );

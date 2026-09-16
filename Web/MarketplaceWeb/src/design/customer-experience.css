@@ -191,7 +191,7 @@
 
 /* Product cards: explicit title and purchase controls prevent shared button collisions. */
 .customer-experience .v1-product-grid { grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 20px; content-visibility: visible; }
-.customer-experience .v1-product-card { display: flex; flex-direction: column; border-color: var(--divider); border-radius: var(--customer-radius); box-shadow: none; content-visibility: auto; contain-intrinsic-size: auto 345px; }
+.customer-experience .v1-product-card { position: relative; display: flex; flex-direction: column; border-color: var(--divider); border-radius: var(--customer-radius); box-shadow: none; content-visibility: auto; contain-intrinsic-size: auto 345px; }
 .customer-experience .v1-product-art { aspect-ratio: 1.12; background: #f6f5f1; border-radius: 0; }
 .customer-experience .v1-product-art img { padding: 22px; mix-blend-mode: multiply; }
 .customer-experience .v1-product-copy { display: flex; flex-direction: column; flex: 1; gap: 7px; padding: 16px; }
@@ -204,6 +204,12 @@
 .customer-experience .v1-product-copy strong { font-size: 16px; }
 .customer-experience .v1-product-copy del { font-size: 12px; }
 .customer-experience .v1-product-copy .customer-add-product { display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: auto; min-width: 68px; height: 44px; padding: 0 9px; border: 1px solid var(--divider); border-radius: 12px; font-size: 13px; font-weight: 650; color: var(--dastak-accent); background: var(--surface); }
+.customer-experience .v1-listing-add,
+.customer-experience .v1-listing-quantity { position: absolute; z-index: 3; right: 10px; top: 174px; height: 42px; border: 2px solid #4c86ff; border-radius: 12px; color: #1459e8; background: color-mix(in srgb, var(--surface-raised) 94%, #4c86ff); box-shadow: 0 2px 8px rgb(25 65 145 / 16%); }
+.customer-experience .v1-listing-add { display: grid; place-items: center; width: 48px; padding: 0; }
+.customer-experience .v1-listing-quantity { display: grid; grid-template-columns: 34px 38px 34px; align-items: center; overflow: hidden; }
+.customer-experience .v1-listing-quantity button { display: grid; place-items: center; height: 100%; padding: 0; border: 0; color: inherit; background: transparent; }
+.customer-experience .v1-listing-quantity strong { text-align: center; }
 .customer-experience .v1-wishlist-button { top: 8px; right: 8px; width: 44px; height: 44px; border: 0; box-shadow: none; background: color-mix(in srgb, var(--surface-raised) 90%, transparent); color: var(--text-secondary); }
 .customer-experience .v1-wishlist-button[aria-pressed="true"] { color: var(--destructive); }
 .customer-product-saving { position: absolute; top: 14px; left: 12px; border-radius: 7px; padding: 3px 6px; background: #edf2e7; color: #3e5a39; font-size: 11px; font-weight: 650; }
@@ -475,6 +481,8 @@
   .customer-experience .v1-category-results h3 { font-size: 22px; }
   .customer-experience .v1-product-grid, .customer-experience .v1-category-browser .v1-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .customer-experience .v1-product-card { border-radius: 18px; }
+  .customer-experience .v1-listing-add,
+  .customer-experience .v1-listing-quantity { top: 108px; right: 7px; }
   .customer-experience .v1-product-copy { padding: 12px; gap: 6px; }
   .customer-experience .v1-product-copy h3 { font-size: 14px; }
   .customer-experience .v1-product-copy > small { font-size: 12px; }

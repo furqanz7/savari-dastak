@@ -490,6 +490,13 @@ export function DastakV1CustomerExperience(props: Props) {
   const add = (sku: V1CatalogueSku) => setCart((current) => ({
     ...current, [sku.id]: Math.min((current[sku.id] ?? 0) + 1, 99),
   }));
+  const changeRetailQuantity = (sku: V1CatalogueSku, delta: -1 | 1) => setCart((current) => {
+    const nextQuantity = Math.max(0, Math.min(99, (current[sku.id] ?? 0) + delta));
+    const next = { ...current };
+    if (nextQuantity === 0) delete next[sku.id];
+    else next[sku.id] = nextQuantity;
+    return next;
+  });
   const decrement = (skuId: string) => setCart((current) => {
     const quantity = (current[skuId] ?? 0) - 1;
     if (quantity > 0) return { ...current, [skuId]: quantity };
@@ -1037,7 +1044,7 @@ export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, on
   const submit = (event: FormEvent) => event.preventDefault();
   return <section className="v1-search-page"><CustomerPageHeading eyebrow="FIND YOUR EVERYDAY" title="What’s on your list?" description="Find a favourite, discover something new, or search for exactly what you need." />
     <form className="v1-search-field" role="search" onSubmit={submit}><Search size={20} /><input autoFocus value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Products, brands and categories" aria-label="Search Dastak products" />{query ? <button type="button" onClick={() => onQuery("")} aria-label="Clear search"><X size={17} /></button> : null}</form>
-    {!query.trim() ? <><div className="customer-search-ideas"><p>Need a little inspiration?</p><div>{["Milk", "Fresh fruit", "Coffee", "Rice", "Snacks"].map((term) => <button type="button" key={term} onClick={() => onQuery(term)}><Search size={15} />{term}</button>)}</div></div><CustomerEmptyState title="Your next favourite is a search away" copy="Start typing to find a product, brand or category." icon={<Search size={30} />} /></> : searching ? <CustomerSkeleton label="Searching Dastak" /> : skus.length ? <><p className="customer-result-count" role="status">{skus.length} {skus.length === 1 ? "result" : "results"} for “{query.trim()}”</p><ProductGrid supabaseUrl={supabaseUrl} skus={skus} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /></> : <CustomerEmptyState title="No exact matches" copy="Try a shorter name, another brand, or a category like milk or snacks." icon={<Search size={30} />} action="Clear search" onAction={() => onQuery("")} />}
+            {!query.trim() ? <><div className="customer-search-ideas"><p>Need a little inspiration?</p><div>{["Milk", "Fresh fruit", "Coffee", "Rice", "Snacks"].map((term) => <button type="button" key={term} onClick={() => onQuery(term)}><Search size={15} />{term}</button>)}</div></div><CustomerEmptyState title="Your next favourite is a search away" copy="Start typing to find a product, brand or category." icon={<Search size={30} />} /></> : searching ? <CustomerSkeleton label="Searching Dastak" /> : skus.length ? <><p className="customer-result-count" role="status">{skus.length} {skus.length === 1 ? "result" : "results"} for “{query.trim()}”</p><ProductGrid supabaseUrl={supabaseUrl} skus={skus} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /></> : <CustomerEmptyState title="No exact matches" copy="Try a shorter name, another brand, or a category like milk or snacks." icon={<Search size={30} />} action="Clear search" onAction={() => onQuery("")} />}
   </section>;
 }
 
@@ -1129,16 +1136,9 @@ function catalogueNavigationGroups(categoryTypes: V1CatalogueCategoryType[]) {
     .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
 }
 
-export function ProductGrid({ supabaseUrl, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
+export function ProductGrid({ supabaseUrl, skus, quantities = {}, onQuantity, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; skus: V1CatalogueSku[]; quantities?: RetailCart; onQuantity?: (sku: V1CatalogueSku, delta: -1 | 1) => void; onAdd?: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
   const [selectedId, setSelectedId] = useState<string>();
   const selected = skus.find((sku) => sku.id === selectedId);
-  const [addedId, setAddedId] = useState<string>();
-  useEffect(() => {
-    if (!addedId) return;
-    const timer = window.setTimeout(() => setAddedId(undefined), 1800);
-    return () => window.clearTimeout(timer);
-  }, [addedId]);
-  const addProduct = (sku: V1CatalogueSku) => { onAdd(sku); setAddedId(sku.id); };
   if (!skus.length) return <EmptyState title="No products here yet" copy="Choose another category." />;
   return <><div className="v1-product-grid">{skus.map((sku) => <article className="v1-product-card" key={sku.id}>
     <button type="button" className="product-open-button" onClick={() => setSelectedId(sku.id)} aria-label={`View ${sku.name} details`}><ProductImage className="v1-product-art" src={catalogueImageUrl(supabaseUrl, sku.imageKey ?? null)} alt="" /></button>
@@ -1147,8 +1147,9 @@ export function ProductGrid({ supabaseUrl, skus, onAdd, wishlistIds, wishlistUpd
     </button>
     {sku.listPricePaise > sku.sellingPricePaise ? <span className="customer-product-saving">{Math.round((1 - sku.sellingPricePaise / sku.listPricePaise) * 100)}% off</span> : null}
     <div className="v1-product-copy"><small>{sku.brand?.name ?? "Dastak selection"}</small><h3><button type="button" className="customer-product-title" onClick={() => setSelectedId(sku.id)} title={sku.name}>{sku.name}</button></h3><p>{[sku.variant, sku.packSize].filter(Boolean).join(" · ")}</p>
-      <div className="customer-product-price"><span><strong>{formatV1Price(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise ? <del>{formatV1Price(sku.listPricePaise)}</del> : null}</span><button className="customer-add-product" type="button" onClick={() => addProduct(sku)} aria-label={`Add ${sku.name}`}>{addedId === sku.id ? <Check size={17} /> : <Plus size={17} />}<span>{addedId === sku.id ? "Added" : "Add"}</span></button></div>
+      <div className="customer-product-price"><span><strong>{formatV1Price(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise ? <del>{formatV1Price(sku.listPricePaise)}</del> : null}</span></div>
     </div>
+    {quantities[sku.id] ? <div className="v1-listing-quantity" aria-label={`${sku.name} quantity`}><button type="button" onClick={() => (onQuantity ? onQuantity(sku, -1) : undefined)} aria-label={`Remove one ${sku.name}`}><Minus size={17} /></button><strong aria-live="polite">{quantities[sku.id]}</strong><button type="button" onClick={() => (onQuantity ? onQuantity(sku, 1) : undefined)} disabled={quantities[sku.id] >= 99} aria-label={`Add one ${sku.name}`}><Plus size={17} /></button></div> : <button className="v1-listing-add" type="button" onClick={() => (onQuantity ? onQuantity(sku, 1) : onAdd?.(sku))} aria-label={`Add ${sku.name}`}><Plus size={19} /></button>}
   </article>)}</div>{selected ? <ProductDetailOverlay
     selectedId={selected.id} products={skus.filter((item) => item.categoryId === selected.categoryId).map(customerDetail)}
     supabaseUrl={supabaseUrl} onSelect={setSelectedId} onClose={() => setSelectedId(undefined)} showPagingControls
@@ -1158,10 +1159,9 @@ export function ProductGrid({ supabaseUrl, skus, onAdd, wishlistIds, wishlistUpd
         supabaseUrl={supabaseUrl} onSelect={select} onClose={() => setSelectedId(undefined)}
         saved={wishlistIds.has(`RETAIL_SKU:${sku.id}`)} savingWishlist={wishlistUpdatingIds.has(sku.id)}
         onWishlist={() => onWishlist("RETAIL_SKU", sku.id)}
-        action={<button type="button" onClick={() => addProduct(sku)}>{addedId === sku.id ? <><Check size={18} />Added</> : <><Plus size={18} />Add to basket</>}</button>}>
-        {addedId === sku.id ? <p className="product-share-status" role="status">Added to your basket</p> : null}
+        action={<button type="button" onClick={() => onQuantity ? onQuantity(sku, 1) : onAdd?.(sku)}><Plus size={18} />Add to basket</button>}>
       </ProductDetailCard> : null;
-    }} /> : null}<span className="customer-sr-only" role="status">{addedId ? "Item added to your basket" : ""}</span></>;
+    }} /> : null}<span className="customer-sr-only" role="status">{selected && quantities[selected.id] ? `${selected.name} quantity ${quantities[selected.id]}` : ""}</span></>;
 }
 
 function customerDetail(sku: V1CatalogueSku): DetailProduct {
