@@ -852,6 +852,8 @@ export function DastakV1CustomerExperience(props: Props) {
       onSubcategory={setSelectedSubcategory}
       onOrders={() => props.onNavigate("orders")}
       onAdd={add}
+      quantities={cart}
+      onQuantity={changeRetailQuantity}
       onRestaurant={setSelectedRestaurant}
       wishlistIds={wishlistIds}
       wishlistUpdatingIds={wishlistUpdatingIds}
@@ -859,7 +861,7 @@ export function DastakV1CustomerExperience(props: Props) {
     /> : props.section === "search" ? <SearchSection
       supabaseUrl={props.supabaseUrl}
       query={query} onQuery={setQuery} searching={searching}
-      skus={query.trim() ? searchResults : []} onAdd={add}
+      skus={query.trim() ? searchResults : []} onAdd={add} quantities={cart} onQuantity={changeRetailQuantity}
       wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={toggleWishlist}
     /> : props.section === "wishlist" ? <WishlistSection
       supabaseUrl={props.supabaseUrl}
@@ -962,7 +964,7 @@ export function CustomerHeader({ address, count, onAddress, onSearch, onCart }: 
   </header>;
 }
 
-export function HomeSection({ mode = "grocery", onMode = () => undefined, supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, loadingProducts, loadingCatalogue = false, catalogueIssue, restaurantIssue, onRetryCatalogue, onRetryRestaurants, onSearch, selectedCategoryType, selectedCategory, selectedSubcategory, onCategoryType, onCategory, onSubcategory, onOrders, onAdd, onRestaurant, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+export function HomeSection({ mode = "grocery", onMode = () => undefined, supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, loadingProducts, loadingCatalogue = false, catalogueIssue, restaurantIssue, onRetryCatalogue, onRetryRestaurants, onSearch, selectedCategoryType, selectedCategory, selectedSubcategory, onCategoryType, onCategory, onSubcategory, onOrders, onAdd, onRestaurant, quantities = {}, onQuantity = () => undefined, wishlistIds, wishlistUpdatingIds, onWishlist }: {
   mode?: CustomerHomeMode; onMode?: (mode: CustomerHomeMode) => void;
   supabaseUrl: string;
   restaurants: V1RestaurantMenu[];
@@ -976,6 +978,7 @@ export function HomeSection({ mode = "grocery", onMode = () => undefined, supaba
   onCategory: (id?: string) => void; onSubcategory: (id?: string) => void;
   onOrders: () => void;
   onAdd: (sku: V1CatalogueSku) => void; onRestaurant: (restaurant: V1RestaurantMenu) => void;
+  quantities?: RetailCart; onQuantity?: (sku: V1CatalogueSku, delta: -1 | 1) => void;
   wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>;
   onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void;
 }) {
@@ -1015,11 +1018,11 @@ export function HomeSection({ mode = "grocery", onMode = () => undefined, supaba
         </div>
         <div className="v1-category-results" key={selectedCategory}><header><h3>{selectedName ?? "Products"}</h3><span>{loadingProducts ? "Loading…" : `${visible.length} products`}</span></header>
           {categorySubcategories.length ? <label className="v1-catalogue-type-filter">Type<select aria-label="Product type" value={selectedSubcategory ?? ""} onChange={(event) => onSubcategory(event.target.value || undefined)}><option value="">All types</option>{categorySubcategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
-          {loadingProducts ? <CustomerSkeleton label="Loading this category" /> : selectedCategory ? <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <p>Products coming soon.</p>}</div>
+          {loadingProducts ? <CustomerSkeleton label="Loading this category" /> : selectedCategory ? <ProductGrid supabaseUrl={supabaseUrl} skus={visible} quantities={quantities} onQuantity={onQuantity} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <p>Products coming soon.</p>}</div>
       </div>}
     </section> : null}
     {mode === "grocery" && !loadingCatalogue && !selectedCategory && !selectedCategoryType && visible.length ? <section className="v1-section"><header><div><p>FOR YOUR EVERYDAY</p><h2>Everyday essentials</h2></div><span>{visible.length} products</span></header>
-      <ProductGrid supabaseUrl={supabaseUrl} skus={visible} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />
+      <ProductGrid supabaseUrl={supabaseUrl} skus={visible} quantities={quantities} onQuantity={onQuantity} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />
     </section> : null}
     {!selectedType ? <button className="v1-order-link" type="button" onClick={onOrders}>View your Dastak orders <ArrowRight size={17} /></button> : null}
   </>;
@@ -1040,11 +1043,11 @@ function CustomerComingSoon({ mode, onGrocery }: { mode: "parcel" | "print"; onG
   return <section className="customer-coming-soon"><span>{print ? <Printer size={34} /> : <PackageCheck size={34} />}</span><p className="customer-eyebrow">COMING SOON</p><h1>{print ? "Print, without the errand." : "Send it with Dastak."}</h1><p>{print ? "Documents and everyday print jobs, prepared carefully and delivered to your doorstep." : "A simple, secure way to send parcels across your city is on its way."}</p><button className="customer-button" type="button" onClick={onGrocery}>Shop grocery for now<ArrowRight size={18} /></button></section>;
 }
 
-export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; query: string; onQuery: (value: string) => void; searching: boolean; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
+export function SearchSection({ supabaseUrl, query, onQuery, searching, skus, onAdd, quantities = {}, onQuantity, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; query: string; onQuery: (value: string) => void; searching: boolean; skus: V1CatalogueSku[]; onAdd: (sku: V1CatalogueSku) => void; quantities?: RetailCart; onQuantity?: (sku: V1CatalogueSku, delta: -1 | 1) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
   const submit = (event: FormEvent) => event.preventDefault();
   return <section className="v1-search-page"><CustomerPageHeading eyebrow="FIND YOUR EVERYDAY" title="What’s on your list?" description="Find a favourite, discover something new, or search for exactly what you need." />
     <form className="v1-search-field" role="search" onSubmit={submit}><Search size={20} /><input autoFocus value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Products, brands and categories" aria-label="Search Dastak products" />{query ? <button type="button" onClick={() => onQuery("")} aria-label="Clear search"><X size={17} /></button> : null}</form>
-            {!query.trim() ? <><div className="customer-search-ideas"><p>Need a little inspiration?</p><div>{["Milk", "Fresh fruit", "Coffee", "Rice", "Snacks"].map((term) => <button type="button" key={term} onClick={() => onQuery(term)}><Search size={15} />{term}</button>)}</div></div><CustomerEmptyState title="Your next favourite is a search away" copy="Start typing to find a product, brand or category." icon={<Search size={30} />} /></> : searching ? <CustomerSkeleton label="Searching Dastak" /> : skus.length ? <><p className="customer-result-count" role="status">{skus.length} {skus.length === 1 ? "result" : "results"} for “{query.trim()}”</p><ProductGrid supabaseUrl={supabaseUrl} skus={skus} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /></> : <CustomerEmptyState title="No exact matches" copy="Try a shorter name, another brand, or a category like milk or snacks." icon={<Search size={30} />} action="Clear search" onAction={() => onQuery("")} />}
+            {!query.trim() ? <><div className="customer-search-ideas"><p>Need a little inspiration?</p><div>{["Milk", "Fresh fruit", "Coffee", "Rice", "Snacks"].map((term) => <button type="button" key={term} onClick={() => onQuery(term)}><Search size={15} />{term}</button>)}</div></div><CustomerEmptyState title="Your next favourite is a search away" copy="Start typing to find a product, brand or category." icon={<Search size={30} />} /></> : searching ? <CustomerSkeleton label="Searching Dastak" /> : skus.length ? <><p className="customer-result-count" role="status">{skus.length} {skus.length === 1 ? "result" : "results"} for “{query.trim()}”</p><ProductGrid supabaseUrl={supabaseUrl} skus={skus} quantities={quantities} onQuantity={onQuantity} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /></> : <CustomerEmptyState title="No exact matches" copy="Try a shorter name, another brand, or a category like milk or snacks." icon={<Search size={30} />} action="Clear search" onAction={() => onQuery("")} />}
   </section>;
 }
 
