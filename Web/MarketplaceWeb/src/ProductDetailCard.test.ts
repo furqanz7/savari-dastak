@@ -23,6 +23,14 @@ describe("product detail contracts", () => {
     const groups = groupProductFamilies([milk, { ...milk, id: "large", packSize: "1 l", price: 4800 }, { ...milk, id: "chocolate", variant: "Chocolate" }]);
     expect(groups.map((group) => group.map((item) => item.id))).toEqual([["milk", "large"], ["chocolate"]]);
   });
+  it("groups pack-count names such as Pack of 4 and Pack of 8", () => {
+    const groups = groupProductFamilies([
+      { ...milk, id: "pack-4", name: "WickedGud Classic Hakka Noodles - Pack of 4", packSize: "200 g × 4" },
+      { ...milk, id: "pack-8", name: "WickedGud Classic Hakka Noodles - Pack of 8", packSize: "200 g × 8" },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].map((item) => item.id)).toEqual(["pack-4", "pack-8"]);
+  });
 });
 
 describe("product card navigation", () => {

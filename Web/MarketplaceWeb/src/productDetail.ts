@@ -15,16 +15,23 @@ export function productUnitPrice(product: DetailProduct): string | undefined {
   return `${formatPrice(Math.round(product.price * 100 / (base * packCount)))}/100 ${unit === "kg" || unit === "g" ? "g" : "ml"}`;
 }
 
+function presentationName(product: DetailProduct) {
+  return product.name.toLowerCase()
+    .replace(product.packSize.toLowerCase(), " ")
+    .replace(/\b(?:pack|pk)\s*of\s*\d+\b/g, " ")
+    .replace(/\b\d+(?:\.\d+)?\s*(?:kg|g|mg|l|ml)\b/g, " ")
+    .replace(/\b\d+(?:\.\d+)?\s*[x×]\s*\d+(?:\.\d+)?\s*(?:kg|g|mg|l|ml)?\b/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
 // A different flavour/brand is a related product, never an invented pack variant.
 export function sameProductFamily(a: DetailProduct, b: DetailProduct) {
-  const name = (p: DetailProduct) => p.name.toLowerCase().replace(p.packSize.toLowerCase(), "").replace(/\s+/g, " ").trim();
-  return a.id === b.id || (Boolean(a.brand) && a.brand === b.brand && a.variant === b.variant && name(a) === name(b));
+  return a.id === b.id || (Boolean(a.brand) && a.brand === b.brand && a.variant === b.variant && presentationName(a) === presentationName(b));
 }
 
 /** Stable presentation key for legitimate size/unit variants of one product. */
 export function productFamilyKey(product: DetailProduct) {
-  const name = product.name.toLowerCase().replace(product.packSize.toLowerCase(), "").replace(/\s+/g, " ").trim();
-  return [product.brand?.toLowerCase() ?? "", product.variant?.toLowerCase() ?? "", name].join("|");
+  return [product.brand?.toLowerCase() ?? "", product.variant?.toLowerCase() ?? "", presentationName(product)].join("|");
 }
 
 /** Keep one visual card per product presentation while retaining every exact SKU for the detail picker. */
