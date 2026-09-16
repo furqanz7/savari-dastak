@@ -177,6 +177,16 @@ export type V1DeliveryMission = {
     attemptedAt?: string;
     collectedAt?: string;
   };
+  price?: {
+    snapshotKind: string;
+    subtotalPaise: number;
+    deliveryFeePaise: number;
+    platformFeePaise: number;
+    discountPaise: number;
+    taxPaise: number;
+    totalPaise: number;
+    currencyCode: "INR";
+  };
   canStartFinalDelivery: boolean;
   canArriveCustomer: boolean;
   canCaptureDeliveryEvidence: boolean;
@@ -1177,6 +1187,7 @@ function v1Mission(value: unknown): V1DeliveryMission {
     launchCollection: source.launchCollection === null || source.launchCollection === undefined
       ? undefined
       : v1LaunchCollection(source.launchCollection),
+    price: source.price === null || source.price === undefined ? undefined : v1MissionPrice(source.price),
     canStartFinalDelivery: requiredBoolean(source.canStartFinalDelivery),
     canArriveCustomer: requiredBoolean(source.canArriveCustomer),
     canCaptureDeliveryEvidence: requiredBoolean(source.canCaptureDeliveryEvidence),
@@ -1193,6 +1204,23 @@ function v1Mission(value: unknown): V1DeliveryMission {
       escalatedAt: nullableTimestamp(riderSafety.escalatedAt),
       escalationReason: nullableText(riderSafety.escalationReason, 500),
     },
+  };
+}
+
+function v1MissionPrice(value: unknown): NonNullable<V1DeliveryMission["price"]> {
+  const source = record(value);
+  if (!source) invalid();
+  const currencyCode = requiredText(source.currencyCode, 3);
+  if (currencyCode !== "INR") invalid();
+  return {
+    snapshotKind: requiredText(source.snapshotKind, 40),
+    subtotalPaise: nonNegativeInteger(source.subtotalPaise),
+    deliveryFeePaise: nonNegativeInteger(source.deliveryFeePaise),
+    platformFeePaise: nonNegativeInteger(source.platformFeePaise),
+    discountPaise: nonNegativeInteger(source.discountPaise),
+    taxPaise: nonNegativeInteger(source.taxPaise),
+    totalPaise: nonNegativeInteger(source.totalPaise),
+    currencyCode: "INR",
   };
 }
 

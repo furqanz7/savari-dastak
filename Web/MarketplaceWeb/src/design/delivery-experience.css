@@ -310,3 +310,10 @@
   .delivery-experience .availability-switch input { appearance: auto; opacity: 1; position: static; width: 24px; height: 24px; }
   .delivery-experience .availability-switch > span { display: none; }
 }
+/* The rider must see the immutable customer bill, not only the collection amount. */
+.v1-delivery-bill { display: grid; gap: 8px; margin: 16px 0; padding: 16px; border: 1px solid var(--divider); border-radius: 16px; background: var(--surface-raised); }
+.v1-delivery-bill > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--divider); }
+.v1-delivery-bill > header h3, .v1-delivery-bill > header p { margin: 0; }
+.v1-delivery-bill > header strong { font-size: 20px; color: var(--dastak-accent); }
+.v1-delivery-bill > div { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: 13px; }
+.v1-delivery-bill > div b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
