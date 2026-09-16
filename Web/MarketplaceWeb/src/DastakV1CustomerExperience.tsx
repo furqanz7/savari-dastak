@@ -1,4 +1,5 @@
 import { ProductDetailCard, type DetailProduct } from "./ProductDetailCard";
+import { groupProductFamilies } from "./productDetail";
 import { ProductDetailOverlay } from "./ProductDetailOverlay";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1151,20 +1152,21 @@ function catalogueNavigationGroups(categoryTypes: V1CatalogueCategoryType[]) {
 
 export function ProductGrid({ supabaseUrl, skus, quantities = {}, onQuantity, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; skus: V1CatalogueSku[]; quantities?: RetailCart; onQuantity?: (sku: V1CatalogueSku, delta: -1 | 1) => void; onAdd?: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
   const [selectedId, setSelectedId] = useState<string>();
+  const productGroups = groupProductFamilies(skus.map(customerDetail)).map((group) => group.map((product) => skus.find((sku) => sku.id === product.id)!));
   const selected = skus.find((sku) => sku.id === selectedId);
   if (!skus.length) return <EmptyState title="No products here yet" copy="Choose another category." />;
-  return <><div className="v1-product-grid">{skus.map((sku) => <article className="v1-product-card" key={sku.id}>
+  return <><div className="v1-product-grid">{productGroups.map(([sku, ...variants]) => <article className="v1-product-card" key={sku.id}>
     <button type="button" className="product-open-button" onClick={() => setSelectedId(sku.id)} aria-label={`View ${sku.name} details`}><ProductImage className="v1-product-art" src={catalogueImageUrl(supabaseUrl, sku.imageKey ?? null)} alt="" /></button>
     <button className="v1-wishlist-button" type="button" aria-pressed={wishlistIds.has(`RETAIL_SKU:${sku.id}`)} disabled={wishlistUpdatingIds.has(sku.id)} onClick={() => onWishlist("RETAIL_SKU", sku.id)} aria-label={wishlistIds.has(`RETAIL_SKU:${sku.id}`) ? `Remove ${sku.name} from Wishlist` : `Save ${sku.name} to Wishlist`}>
       <Heart size={18} fill={wishlistIds.has(`RETAIL_SKU:${sku.id}`) ? "currentColor" : "none"} />
     </button>
     {sku.listPricePaise > sku.sellingPricePaise ? <span className="customer-product-saving">{Math.round((1 - sku.sellingPricePaise / sku.listPricePaise) * 100)}% off</span> : null}
-    <div className="v1-product-copy"><small>{sku.brand?.name ?? "Dastak selection"}</small><h3><button type="button" className="customer-product-title" onClick={() => setSelectedId(sku.id)} title={sku.name}>{sku.name}</button></h3><p>{[sku.variant, sku.packSize].filter(Boolean).join(" · ")}</p>
+    <div className="v1-product-copy"><small>{sku.brand?.name ?? "Dastak selection"}</small><h3><button type="button" className="customer-product-title" onClick={() => setSelectedId(sku.id)} title={sku.name}>{sku.name}</button></h3><p>{variants.length ? `${sku.packSize} · ${variants.length + 1} sizes` : [sku.variant, sku.packSize].filter(Boolean).join(" · ")}</p>
       <div className="customer-product-price"><span><strong>{formatV1Price(sku.sellingPricePaise)}</strong>{sku.listPricePaise > sku.sellingPricePaise ? <del>{formatV1Price(sku.listPricePaise)}</del> : null}</span></div>
     </div>
     {quantities[sku.id] ? <div className="v1-listing-quantity" aria-label={`${sku.name} quantity`}><button type="button" onClick={() => (onQuantity ? onQuantity(sku, -1) : undefined)} aria-label={`Remove one ${sku.name}`}><Minus size={17} /></button><strong aria-live="polite">{quantities[sku.id]}</strong><button type="button" onClick={() => (onQuantity ? onQuantity(sku, 1) : undefined)} disabled={quantities[sku.id] >= 99} aria-label={`Add one ${sku.name}`}><Plus size={17} /></button></div> : <button className="v1-listing-add" type="button" onClick={() => (onQuantity ? onQuantity(sku, 1) : onAdd?.(sku))} aria-label={`Add ${sku.name}`}><Plus size={19} /></button>}
   </article>)}</div>{selected ? <ProductDetailOverlay
-    selectedId={selected.id} products={skus.filter((item) => item.categoryId === selected.categoryId).map(customerDetail)}
+    selectedId={selected.id} products={skus.filter((item) => item.categoryId === selected.categoryId && productGroups.some((group) => group[0].id === item.id)).map(customerDetail)}
     supabaseUrl={supabaseUrl} onSelect={setSelectedId} onClose={() => setSelectedId(undefined)} showPagingControls
     renderProduct={(product, select) => {
       const sku = skus.find((item) => item.id === product.id);
@@ -1172,7 +1174,7 @@ export function ProductGrid({ supabaseUrl, skus, quantities = {}, onQuantity, on
         supabaseUrl={supabaseUrl} onSelect={select} onClose={() => setSelectedId(undefined)}
         saved={wishlistIds.has(`RETAIL_SKU:${sku.id}`)} savingWishlist={wishlistUpdatingIds.has(sku.id)}
         onWishlist={() => onWishlist("RETAIL_SKU", sku.id)}
-        action={<button type="button" onClick={() => onQuantity ? onQuantity(sku, 1) : onAdd?.(sku)}><Plus size={18} />Add to basket</button>}>
+        action={(selectedProduct) => { const selectedSku = skus.find((item) => item.id === selectedProduct.id) ?? sku; return <button type="button" onClick={() => onQuantity ? onQuantity(selectedSku, 1) : onAdd?.(selectedSku)}><Plus size={18} />Add to basket</button>; }}>
       </ProductDetailCard> : null;
     }} /> : null}<span className="customer-sr-only" role="status">{selected && quantities[selected.id] ? `${selected.name} quantity ${quantities[selected.id]}` : ""}</span></>;
 }

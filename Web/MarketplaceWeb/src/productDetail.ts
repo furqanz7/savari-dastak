@@ -21,6 +21,24 @@ export function sameProductFamily(a: DetailProduct, b: DetailProduct) {
   return a.id === b.id || (Boolean(a.brand) && a.brand === b.brand && a.variant === b.variant && name(a) === name(b));
 }
 
+/** Stable presentation key for legitimate size/unit variants of one product. */
+export function productFamilyKey(product: DetailProduct) {
+  const name = product.name.toLowerCase().replace(product.packSize.toLowerCase(), "").replace(/\s+/g, " ").trim();
+  return [product.brand?.toLowerCase() ?? "", product.variant?.toLowerCase() ?? "", name].join("|");
+}
+
+/** Keep one visual card per product presentation while retaining every exact SKU for the detail picker. */
+export function groupProductFamilies<T extends DetailProduct>(products: T[]) {
+  const groups = new Map<string, T[]>();
+  for (const product of products) {
+    const key = productFamilyKey(product);
+    const group = groups.get(key) ?? [];
+    group.push(product);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
 export function productSwipeStep(horizontal: number, vertical: number): number | undefined {
   if (Math.abs(horizontal) < 56 || Math.abs(horizontal) <= Math.abs(vertical) * 1.5) return undefined;
   return horizontal < 0 ? 1 : -1;

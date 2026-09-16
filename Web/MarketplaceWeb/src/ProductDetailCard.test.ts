@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adjacentProductId, merchantStockAction, productPickerPose, productSwipeStep, productUnitPrice, sameProductFamily, type DetailProduct } from "./productDetail";
+import { adjacentProductId, groupProductFamilies, merchantStockAction, productPickerPose, productSwipeStep, productUnitPrice, sameProductFamily, type DetailProduct } from "./productDetail";
 
 const milk: DetailProduct = { id: "milk", name: "Toned Milk", brand: "Dairy", packSize: "500 ml", galleryImageKeys: [], price: 2400, listPrice: 2400, quantityValue: 500, quantityUnit: "ml", packCount: 1 };
 describe("product detail contracts", () => {
@@ -18,6 +18,10 @@ describe("product detail contracts", () => {
     expect(sameProductFamily(milk, { ...milk, id: "another-brand", brand: "Other" })).toBe(false);
     expect(sameProductFamily(milk, { ...milk, id: "other-milk", name: "Full Cream Milk" })).toBe(false);
     expect(sameProductFamily(milk, { ...milk, id: "flavoured", variant: "Chocolate" })).toBe(false);
+  });
+  it("keeps size variants under one presentation group", () => {
+    const groups = groupProductFamilies([milk, { ...milk, id: "large", packSize: "1 l", price: 4800 }, { ...milk, id: "chocolate", variant: "Chocolate" }]);
+    expect(groups.map((group) => group.map((item) => item.id))).toEqual([["milk", "large"], ["chocolate"]]);
   });
 });
 
