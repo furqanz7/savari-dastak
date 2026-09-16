@@ -552,6 +552,15 @@ export function DastakV1CustomerExperience(props: Props) {
       ? { ...line, quantity: Math.min(line.quantity + 1, 99) }
       : line
   ));
+  const changeFoodQuantity = (restaurant: V1RestaurantMenu, item: V1RestaurantMenuItem, optionIds: string[], delta: -1 | 1) => {
+    const normalizedIds = optionIds.slice().sort();
+    const key = foodCartKey(item.id, normalizedIds);
+    const current = foodCart.find((line) => line.key === key)?.quantity ?? 0;
+    if (delta > 0 && current === 0) return addFood(restaurant, item, normalizedIds);
+    if (delta > 0) incrementFood(key);
+    else decrementFood(key);
+    return true;
+  };
 
   const imageUrlForLine = useCallback((line: V1Order["lines"][number]) => {
     const imageKey = line.skuId
@@ -917,7 +926,8 @@ export function DastakV1CustomerExperience(props: Props) {
     {selectedRestaurant && <RestaurantMenuSheet
       menu={selectedRestaurant} supabaseUrl={props.supabaseUrl} error={error}
       onDismiss={() => setSelectedRestaurant(undefined)}
-      onAdd={(item, optionIds) => addFood(selectedRestaurant, item, optionIds)}
+      onChangeQuantity={(item, optionIds, delta) => changeFoodQuantity(selectedRestaurant, item, optionIds, delta)}
+      foodLines={foodCart}
       wishlistIds={wishlistIds}
       wishlistUpdatingIds={wishlistUpdatingIds}
       onWishlist={(itemId) => void toggleWishlist("MENU_ITEM", itemId)}
@@ -1198,10 +1208,11 @@ export function CartSheet({ lines, foodLines, subtotal, address, busy, supabaseU
   </section></div>;
 }
 
-function RestaurantMenuSheet({ menu, supabaseUrl, error, onDismiss, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+function RestaurantMenuSheet({ menu, supabaseUrl, error, onDismiss, onChangeQuantity, foodLines, wishlistIds, wishlistUpdatingIds, onWishlist }: {
   menu: V1RestaurantMenu; onDismiss: () => void;
   supabaseUrl: string; error?: string;
-  onAdd: (item: V1RestaurantMenuItem, optionIds: string[]) => boolean;
+  onChangeQuantity: (item: V1RestaurantMenuItem, optionIds: string[], delta: -1 | 1) => boolean;
+  foodLines: FoodCartLine[];
   wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (itemId: string) => void;
 }) {
   const dialog = useModalDialog<HTMLElement>({ onDismiss });
@@ -1211,12 +1222,12 @@ function RestaurantMenuSheet({ menu, supabaseUrl, error, onDismiss, onAdd, wishl
     <div className="v1-security-note"><UtensilsCrossed size={20} /><span><strong>{menu.restaurant.acceptingOrders ? `Prepared by ${publicRestaurantName(menu)}` : "Store closed"}</strong><small>{menu.restaurant.acceptingOrders ? "Your chosen kitchen confirms each item. You pay at your doorstep." : "This store is open, but the merchant has paused accepting orders."}</small></span></div>
     {error ? <CustomerNotice title="Your basket needs attention">{error}</CustomerNotice> : null}
     <nav className="customer-menu-nav" aria-label="Menu categories">{menu.categories.map((category) => <a href={`#menu-${category.id}`} key={category.id} onClick={(event) => { event.preventDefault(); document.getElementById(`menu-${category.id}`)?.scrollIntoView({ block: "start" }); }}>{category.name}</a>)}</nav>
-    {menu.categories.map((category) => <section className="v1-menu-category" id={`menu-${category.id}`} key={category.id}><h3>{category.name}</h3>{category.description ? <p>{category.description}</p> : null}<div>{category.items.map((item) => <RestaurantItemCard key={item.id} item={item} supabaseUrl={supabaseUrl} onAdd={onAdd} disabled={!menu.restaurant.acceptingOrders} wished={wishlistIds.has(`MENU_ITEM:${item.id}`)} updatingWishlist={wishlistUpdatingIds.has(item.id)} onWishlist={() => onWishlist(item.id)} />)}</div></section>)}
+    {menu.categories.map((category) => <section className="v1-menu-category" id={`menu-${category.id}`} key={category.id}><h3>{category.name}</h3>{category.description ? <p>{category.description}</p> : null}<div>{category.items.map((item) => <RestaurantItemCard key={item.id} item={item} supabaseUrl={supabaseUrl} foodLines={foodLines} onChangeQuantity={onChangeQuantity} disabled={!menu.restaurant.acceptingOrders} wished={wishlistIds.has(`MENU_ITEM:${item.id}`)} updatingWishlist={wishlistUpdatingIds.has(item.id)} onWishlist={() => onWishlist(item.id)} />)}</div></section>)}
   </section></div>;
 }
 
-function RestaurantItemCard({ item, supabaseUrl, onAdd, disabled = false, wished, updatingWishlist, onWishlist }: {
-  item: V1RestaurantMenuItem; supabaseUrl: string; onAdd: (item: V1RestaurantMenuItem, optionIds: string[]) => boolean;
+function RestaurantItemCard({ item, supabaseUrl, foodLines, onChangeQuantity, disabled = false, wished, updatingWishlist, onWishlist }: {
+  item: V1RestaurantMenuItem; supabaseUrl: string; foodLines: FoodCartLine[]; onChangeQuantity: (item: V1RestaurantMenuItem, optionIds: string[], delta: -1 | 1) => boolean;
   disabled?: boolean;
   wished: boolean; updatingWishlist: boolean; onWishlist: () => void;
 }) {
@@ -1244,10 +1255,12 @@ function RestaurantItemCard({ item, supabaseUrl, onAdd, disabled = false, wished
     if (selected.length >= maximum) return current;
     return { ...current, [groupId]: [...selected, optionId] };
   });
+  const normalizedOptionIds = optionIds.slice().sort();
+  const quantity = foodLines.find((line) => line.key === foodCartKey(item.id, normalizedOptionIds))?.quantity ?? 0;
   return <article className="v1-menu-item"><div className="v1-menu-item-copy"><strong>{item.name}</strong>{item.description ? <p>{item.description}</p> : null}<b>{formatV1Price(item.basePricePaise)}</b></div><button className="v1-menu-wishlist" type="button" disabled={updatingWishlist} onClick={onWishlist} aria-label={wished ? `Remove ${item.name} from Wishlist` : `Save ${item.name} to Wishlist`}><Heart size={18} fill={wished ? "currentColor" : "none"} /></button>
     {item.optionGroups.map((group) => <fieldset key={group.id}><legend>{group.name} <small>{group.minimumSelections ? "Required" : "Optional"} · up to {group.maximumSelections}</small></legend>{group.options.map((option) => <label key={option.id}><input disabled={disabled} type={group.selectionType === "SINGLE" ? "radio" : "checkbox"} name={`${item.id}-${group.id}`} checked={(selection[group.id] ?? []).includes(option.id)} onChange={() => toggle(group.id, option.id, group.selectionType === "SINGLE", group.maximumSelections)} /><span>{option.name}</span><b>{option.priceDeltaPaise ? `+${formatV1Price(option.priceDeltaPaise)}` : "Included"}</b></label>)}</fieldset>)}
     {item.imageKey ? <ProductImage className="customer-menu-photo" src={catalogueImageUrl(supabaseUrl, item.imageKey)} alt={item.name} /> : null}
-    <button className="primary-button" type="button" disabled={disabled || !valid} onClick={() => setAdded(onAdd(item, optionIds))}>{disabled ? "Store closed" : added ? <><Check size={18} /> Added</> : `Add · ${formatV1Price(total)}`}</button><span className="customer-sr-only" role="status">{added ? `${item.name} added to your basket` : ""}</span>
+    {quantity > 0 ? <div className="v1-menu-quantity" aria-label={`${item.name} quantity`}><button type="button" disabled={disabled} onClick={() => onChangeQuantity(item, normalizedOptionIds, -1)} aria-label={`Remove one ${item.name}`}><Minus size={17} /></button><strong aria-live="polite">{quantity}</strong><button type="button" disabled={disabled || quantity >= 99} onClick={() => onChangeQuantity(item, normalizedOptionIds, 1)} aria-label={`Add one ${item.name}`}><Plus size={17} /></button></div> : <button className="primary-button" type="button" disabled={disabled || !valid} onClick={() => setAdded(onChangeQuantity(item, normalizedOptionIds, 1))}>{disabled ? "Store closed" : added ? <><Check size={18} /> Added</> : `Add · ${formatV1Price(total)}`}</button>}<span className="customer-sr-only" role="status">{added ? `${item.name} added to your basket` : ""}</span>
   </article>;
 }
 

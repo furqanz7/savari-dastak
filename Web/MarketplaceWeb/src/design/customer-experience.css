@@ -210,6 +210,9 @@
 .customer-experience .v1-listing-quantity { display: grid; grid-template-columns: 34px 38px 34px; align-items: center; overflow: hidden; }
 .customer-experience .v1-listing-quantity button { display: grid; place-items: center; height: 100%; padding: 0; border: 0; color: inherit; background: transparent; }
 .customer-experience .v1-listing-quantity strong { text-align: center; }
+.customer-experience .v1-menu-quantity { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; min-height: 50px; margin-top: 10px; border: 1px solid var(--dastak-accent); border-radius: 14px; overflow: hidden; color: var(--dastak-accent); background: var(--surface); }
+.customer-experience .v1-menu-quantity button { display: grid; place-items: center; height: 50px; border: 0; color: inherit; background: transparent; }
+.customer-experience .v1-menu-quantity strong { text-align: center; }
 .customer-experience .v1-wishlist-button { top: 8px; right: 8px; width: 44px; height: 44px; border: 0; box-shadow: none; background: color-mix(in srgb, var(--surface-raised) 90%, transparent); color: var(--text-secondary); }
 .customer-experience .v1-wishlist-button[aria-pressed="true"] { color: var(--destructive); }
 .customer-product-saving { position: absolute; top: 14px; left: 12px; border-radius: 7px; padding: 3px 6px; background: #edf2e7; color: #3e5a39; font-size: 11px; font-weight: 650; }
