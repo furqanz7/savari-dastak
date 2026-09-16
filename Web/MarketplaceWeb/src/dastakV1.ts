@@ -368,7 +368,7 @@ export type V1MerchantFulfilment = {
   orderId: string;
   displayOrderNumber: string;
   orderStatus: string;
-  status: "RESERVED_PREPAYMENT" | "PREPARING" | "READY" | "PICKED_UP" | "RELEASED";
+  status: "RESERVED_PREPAYMENT" | "PREPARING" | "READY" | "PICKED_UP" | "COMPLETED" | "RELEASED";
   fulfilmentType?: string;
   version: number;
   branch: { id: string; displayName: string };
@@ -2945,7 +2945,7 @@ function parseMerchantFulfilment(value: unknown): V1MerchantFulfilment {
     (source.delivery !== null && source.delivery !== undefined && !delivery)
   ) invalid("merchant fulfilment");
   const status = requiredText(source.status, 40);
-  if (!["RESERVED_PREPAYMENT", "PREPARING", "READY", "PICKED_UP", "RELEASED"].includes(status)) {
+  if (!["RESERVED_PREPAYMENT", "PREPARING", "READY", "PICKED_UP", "COMPLETED", "RELEASED"].includes(status)) {
     invalid("merchant fulfilment status");
   }
   return {

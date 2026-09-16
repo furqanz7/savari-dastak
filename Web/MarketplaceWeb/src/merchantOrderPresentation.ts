@@ -8,7 +8,7 @@ const finalOrderStatuses = new Set([
 ]);
 
 export function merchantFulfilmentQueue(fulfilment: V1MerchantFulfilment): "preparing" | "ready" | "history" | undefined {
-  if (fulfilment.status === "RELEASED" || finalOrderStatuses.has(fulfilment.orderStatus)) return "history";
+  if (fulfilment.status === "COMPLETED" || fulfilment.status === "RELEASED" || finalOrderStatuses.has(fulfilment.orderStatus)) return "history";
   if (fulfilment.status === "PREPARING") return "preparing";
   if (fulfilment.status === "READY") return "ready";
   return undefined;
