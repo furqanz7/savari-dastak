@@ -19,6 +19,7 @@ function presentationName(product: DetailProduct) {
   return product.name.toLowerCase()
     .replace(product.packSize.toLowerCase(), " ")
     .replace(/\b(?:pack|pk)\s*of\s*\d+\b/g, " ")
+    .replace(/\bfamily\s*pack\b/g, " ")
     .replace(/\b\d+(?:\.\d+)?\s*(?:kg|g|mg|l|ml)\b/g, " ")
     .replace(/\b\d+(?:\.\d+)?\s*[x×]\s*\d+(?:\.\d+)?\s*(?:kg|g|mg|l|ml)?\b/g, " ")
     .replace(/\s+/g, " ").trim();
