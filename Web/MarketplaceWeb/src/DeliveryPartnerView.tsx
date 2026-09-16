@@ -1380,8 +1380,8 @@ export function CurrentV1Mission({
       {mission.price ? <section className="v1-delivery-bill" aria-label="Order bill">
         <header><div><p className="eyebrow">Customer bill</p><h3>Full order total</h3></div><strong>{formatPrice(mission.price.totalPaise)}</strong></header>
         <div><span>Items</span><b>{formatPrice(mission.price.subtotalPaise)}</b></div>
-        {mission.price.deliveryFeePaise ? <div><span>Delivery</span><b>{formatPrice(mission.price.deliveryFeePaise)}</b></div> : null}
-        {mission.price.platformFeePaise ? <div><span>Dastak platform fee</span><b>{formatPrice(mission.price.platformFeePaise)}</b></div> : null}
+        <div><span>Delivery fee</span><b>{formatPrice(mission.price.deliveryFeePaise)}</b></div>
+        <div><span>Dastak platform fee</span><b>{formatPrice(mission.price.platformFeePaise)}</b></div>
         {mission.price.taxPaise ? <div><span>Taxes</span><b>{formatPrice(mission.price.taxPaise)}</b></div> : null}
         {mission.price.discountPaise ? <div><span>Discount</span><b>−{formatPrice(mission.price.discountPaise)}</b></div> : null}
       </section> : null}
