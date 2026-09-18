@@ -424,7 +424,7 @@ function SkuEditor({ auth, sku, taxonomy, supabaseUrl, disabled, onSave, onDelet
       <label><span>Selling (₹)</span><input inputMode="decimal" value={sellingPrice} onChange={(event) => setSellingPrice(event.target.value)} placeholder="Not set" aria-label={`${sku.name} selling price`} /></label>
       <label><span>Visibility</span><select value={status} onChange={(event) => setStatus(event.target.value as V1AdminCataloguePageSku["status"])} aria-label={`${sku.name} visibility`}><option value="DRAFT">Draft</option><option value="ACTIVE" disabled={!sku.activationReady && sku.status !== "ACTIVE"}>Active</option><option value="INACTIVE">Inactive</option></select></label>
       <span className={`v1-admin-status ${sku.activationReady ? "active" : "inactive"}`}><BadgeCheck size={15} /><span><b>{label(sku.qaStatus)}</b><small>{sku.activationReady ? "Ready to activate" : blockerSummary(sku.activationBlockers)}</small></span></span>
-      <button className="secondary-button" type="button" onClick={() => void onDelete(sku)} disabled={disabled}>Delete permanently</button><button className="secondary-button" type="submit" disabled={disabled || !canSave}>{changed ? "Save changes" : "Up to date"}</button>
+      <button className="secondary-button" type="button" onClick={() => { setStatus("INACTIVE"); }} disabled={disabled || status === "INACTIVE"}>Archive SKU</button><button className="secondary-button" type="button" onClick={() => void onDelete(sku)} disabled={disabled}>Delete permanently</button><button className="secondary-button" type="submit" disabled={disabled || !canSave}>{changed ? "Save changes" : "Up to date"}</button>
     </section>
 
     <AdminCatalogueAssets auth={auth} sku={sku} onCatalogueChanged={onCatalogueChanged} />
