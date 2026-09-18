@@ -266,6 +266,8 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   };
 
   const showProducts = Boolean(query.trim() || categoryTypeId || categoryId || subcategoryId || status || qaStatus);
+  const activeSkus = skus.filter((sku) => sku.status !== "INACTIVE");
+  const archivedSkus = skus.filter((sku) => sku.status === "INACTIVE");
   const selectedType = snapshot?.categoryTypes.find((type) => type.id === categoryTypeId);
   const navigationGroups = adminNavigationGroups(snapshot?.categoryTypes ?? []);
 
@@ -292,7 +294,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
       <header><Tags size={20} /><div><h3>Product records</h3><p>Results reflect your filters. Open an exact SKU to review its full record.</p></div></header>
       <div className={`admin-catalogue-browser ${categoryTypeId && visibleCategories.length ? "with-rail" : ""}`}>
         {categoryTypeId && visibleCategories.length ? <div className="admin-subcategory-rail" role="group" aria-label="Subcategories">{visibleCategories.map((category) => <button type="button" className={categoryId === category.id ? "selected" : ""} aria-pressed={categoryId === category.id} key={category.id} onClick={() => chooseCategory(category.id)}><AdminCategoryArtwork item={{ ...category, imageKey: category.imageKey ?? artworkKeys.categories.get(category.id) }} supabaseUrl={auth.supabaseUrl} /><strong>{category.name}</strong></button>)}</div> : null}
-        <div className="admin-catalogue-products" key={categoryId}>{loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 && pageLoaded ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : skus.length > 0 ? <div className="v1-admin-sku-grid">{skus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div> : null}</div>
+        <div className="admin-catalogue-products" key={categoryId}>{loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 && pageLoaded ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : skus.length > 0 ? <><div className="v1-admin-sku-grid">{activeSkus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div>{archivedSkus.length > 0 ? <section className="admin-archived-skus"><h3>Archived</h3><p>Inactive SKUs are kept here for historical continuity.</p><div className="v1-admin-sku-grid">{archivedSkus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div></section> : null}</> : null}</div>
       </div>
       {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadMore().catch(() => undefined)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 products"}</button> : null}
     </section> : null}
