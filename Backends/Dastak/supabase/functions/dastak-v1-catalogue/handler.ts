@@ -3,6 +3,7 @@ import { V1RequestError } from "../_shared/v1-rpc.ts";
 
 export type V1Actor = { accountId: string; accessToken: string };
 export type V1CatalogueDependencies = {
+  adminCatalogueSkuDelete?: (input: { accessToken: string; skuId: string; idempotencyKey: string }) => Promise<unknown>;
   adminCatalogueTaxonomyMutation?: (input: { accessToken: string; idempotencyKey: string; operation: string; payload: Record<string, unknown> }) => Promise<unknown>;
   authenticateBearer: (authorization: string) => Promise<V1Actor>;
   customerCatalogue: (input: {
@@ -315,6 +316,13 @@ export async function handleV1Catalogue(
         return json(await dependencies.adminCatalogueTaxonomyMutation({
           accessToken: actor.accessToken, idempotencyKey, operation, payload,
         }));
+      }
+      case "deleteAdminCatalogueSku": {
+        if (!dependencies.adminCatalogueSkuDelete) return validationError();
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const skuId = typeof body.skuId === "string" ? body.skuId : "";
+        if (!skuId || !idempotencyKey) return validationError();
+        return json(await dependencies.adminCatalogueSkuDelete({ accessToken: actor.accessToken, skuId, idempotencyKey }));
       }
       case "updateSku":
         return await updateSku(request, body, actor, dependencies);

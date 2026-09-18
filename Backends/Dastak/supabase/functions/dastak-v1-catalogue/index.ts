@@ -19,6 +19,11 @@ async function callServiceRPC(functionName: string, parameters: Record<string, u
 
 Deno.serve((request) =>
   handleV1Catalogue(request, {
+    adminCatalogueSkuDelete: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_catalogue_sku_delete", {
+        p_sku_id: input.skuId,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     adminCatalogueTaxonomyMutation: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_catalogue_taxonomy_mutation", {
         p_idempotency_key: input.idempotencyKey,

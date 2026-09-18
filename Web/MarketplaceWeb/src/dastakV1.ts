@@ -1559,6 +1559,12 @@ export async function updateV1AdminSku(
   return source;
 }
 
+export async function deleteV1AdminSku(input: DastakV1Auth & { skuId: string; idempotencyKey: string; signal?: AbortSignal }, fetcher: Fetcher = fetch) {
+  const source = record(await invoke(input, "dastak-v1-catalogue", { operation: "deleteAdminCatalogueSku", skuId: requiredUuid(input.skuId) }, input.idempotencyKey, fetcher));
+  if (!source) invalid("SKU deletion response");
+  return source;
+}
+
 export async function getV1MerchantCanonicalCatalogue(
   input: DastakV1Auth & { branchId?: string; limit?: number; signal?: AbortSignal },
   fetcher: Fetcher = fetch,
