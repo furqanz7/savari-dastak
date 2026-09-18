@@ -1534,6 +1534,18 @@ export async function importV1AdminCatalogue(
   return source;
 }
 
+export async function mutateV1AdminCatalogueTaxonomy(
+  input: DastakV1Auth & { operation: string; payload: Record<string, unknown>; idempotencyKey: string; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+) {
+  const source = record(await invoke(input, "dastak-v1-catalogue", {
+    operation: "manageCatalogueTaxonomy", mutationOperation: input.operation,
+    payload: input.payload,
+  }, input.idempotencyKey, fetcher));
+  if (!source) invalid("catalogue taxonomy mutation response");
+  return source;
+}
+
 export async function updateV1AdminSku(
   input: DastakV1Auth & {
     skuId: string; expectedVersion: number; patch: Record<string, unknown>; idempotencyKey: string; signal?: AbortSignal;

@@ -3,6 +3,7 @@ import { V1RequestError } from "../_shared/v1-rpc.ts";
 
 export type V1Actor = { accountId: string; accessToken: string };
 export type V1CatalogueDependencies = {
+  adminCatalogueTaxonomyMutation?: (input: { accessToken: string; idempotencyKey: string; operation: string; payload: Record<string, unknown> }) => Promise<unknown>;
   authenticateBearer: (authorization: string) => Promise<V1Actor>;
   customerCatalogue: (input: {
     accessToken: string;
@@ -304,6 +305,16 @@ export async function handleV1Catalogue(
           catalogue,
         });
         return json(result);
+      }
+      case "manageCatalogueTaxonomy": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const operation = typeof body.mutationOperation === "string" ? body.mutationOperation : "";
+        const payload = record(body.payload);
+        if (!idempotencyKey || !operation || !payload) return validationError();
+        if (!dependencies.adminCatalogueTaxonomyMutation) return validationError();
+        return json(await dependencies.adminCatalogueTaxonomyMutation({
+          accessToken: actor.accessToken, idempotencyKey, operation, payload,
+        }));
       }
       case "updateSku":
         return await updateSku(request, body, actor, dependencies);

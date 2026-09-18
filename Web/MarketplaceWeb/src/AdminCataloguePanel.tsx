@@ -25,6 +25,7 @@ import { AdminRecordDialog } from "./AdminRecordDialog";
 import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
   getV1AdminCatalogue, getV1AdminCataloguePage, importV1AdminCatalogue, updateV1AdminSku,
+  mutateV1AdminCatalogueTaxonomy,
   type DastakV1Auth, type V1AdminCataloguePageSku, type V1AdminSnapshot,
 } from "./dastakV1";
 import { catalogueImageUrl } from "./catalogue";
@@ -65,6 +66,11 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   const [notice, setNotice] = useState<string>();
   const [editingSku, setEditingSku] = useState<V1AdminCataloguePageSku>();
   const [reconciliationBlocked, setReconciliationBlocked] = useState(false);
+  const [taxonomyOperation, setTaxonomyOperation] = useState("CREATE_CATEGORY_TYPE");
+  const [taxonomyName, setTaxonomyName] = useState("");
+  const [taxonomySlug, setTaxonomySlug] = useState("");
+  const [taxonomyTypeSlug, setTaxonomyTypeSlug] = useState("");
+  const [taxonomyCategorySlug, setTaxonomyCategorySlug] = useState("");
   const [intent, setIntent] = useState<{
     dialog: AdminPrivilegedActionIntent;
     identity: string;
@@ -229,6 +235,18 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     });
   };
 
+  const submitTaxonomy = (event: FormEvent) => {
+    event.preventDefault();
+    const payload: Record<string, unknown> = { name: taxonomyName.trim(), slug: taxonomySlug.trim() };
+    if (taxonomyOperation.includes("CATEGORY") && taxonomyOperation !== "CREATE_CATEGORY_TYPE" && taxonomyOperation !== "ARCHIVE_CATEGORY_TYPE") payload.categoryTypeSlug = taxonomyTypeSlug.trim();
+    if (taxonomyOperation.includes("SUBCATEGORY")) payload.categorySlug = taxonomyCategorySlug.trim();
+    setIntent({ identity: `catalogue-taxonomy:${taxonomyOperation}:${JSON.stringify(payload)}`, success: "Catalogue taxonomy change committed and recorded in audit history.", dialog: {
+      title: `${taxonomyOperation.startsWith("ARCHIVE") ? "Archive" : "Create or update"} catalogue taxonomy?`, entityLabel: "Taxonomy record", entityValue: `${taxonomyName} · ${taxonomySlug}`,
+      currentState: "Authoritative catalogue", resultingState: taxonomyOperation.startsWith("ARCHIVE") ? "Inactive (recoverable)" : "Draft taxonomy record",
+      consequence: "Archiving is soft and preserves historical SKU/order references. Creating records leaves them Draft until imagery, QA, pricing and activation requirements are complete.", confirmLabel: taxonomyOperation.startsWith("ARCHIVE") ? "Archive safely" : "Save taxonomy", tone: taxonomyOperation.startsWith("ARCHIVE") ? "danger" : "primary",
+    }, mutate: (idempotencyKey) => mutateV1AdminCatalogueTaxonomy({ ...auth, operation: taxonomyOperation, payload, idempotencyKey }) });
+  };
+
   const confirmMutation = async () => {
     if (!intent || busy) return;
     setBusy(true); setError(undefined); setNotice(undefined); setReconciliationBlocked(false);
@@ -278,7 +296,8 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
       {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadMore().catch(() => undefined)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 products"}</button> : null}
     </section> : null}
     {snapshot ? <details className="admin-catalogue-operations"><summary><Settings2 size={18} /><span><strong>Catalogue operations</strong><small>Counts, hierarchy and launch configuration</small></span><ChevronDown size={17} /></summary><div className="admin-catalogue-operations-body"><div className="v1-admin-summary"><Summary label="Departments" value={snapshot.categoryTypes.length} /><Summary label="Categories" value={snapshot.categories.length} /><Summary label="Subcategories" value={snapshot.subcategories.length} /><Summary label="Canonical SKUs" value={snapshot.skuCount} /><Summary label="Retail branches" value={snapshot.branches.length} /></div><section className="v1-admin-config"><header><Settings2 size={20} /><div><h3>Launch configuration</h3><p>Effective settings and validation state for the customer catalogue.</p></div></header><div>{snapshot.configuration.map((setting) => <article key={setting.key} className={!setting.valid || (setting.required && !setting.explicit) ? "attention" : ""}><code>{setting.key}</code><strong>{displayValue(setting.value)}</strong><span>{setting.explicit ? "Explicit" : "Default"} · {setting.valid ? "Valid" : "Invalid"}</span></article>)}</div></section></div></details> : null}
-    <details className="v1-admin-import"><summary><Upload size={18} /><span><strong>Advanced atomic import</strong><small>Imports enter Draft and require taxonomy, QA, price and cleared imagery before activation</small></span><ChevronDown size={17} /></summary><form onSubmit={runImport}><label htmlFor="v1-catalogue-import">Catalogue JSON</label><textarea id="v1-catalogue-import" value={source} onChange={(event) => setSource(event.target.value)} rows={16} spellCheck={false} disabled={busy} /><p className="field-help">Use approved taxonomy slugs. A successful import does not make a product customer-visible.</p><button className="primary-button" type="submit" disabled={busy}>{busy ? "Importing…" : "Validate and import as Draft"}</button></form></details>
+    <details className="v1-admin-import"><summary><Tags size={18} /><span><strong>Create or archive taxonomy</strong><small>Manage departments, categories and subcategories without deleting historical data</small></span><ChevronDown size={17} /></summary><form onSubmit={submitTaxonomy} className="v1-taxonomy-form"><label><span>Action</span><select value={taxonomyOperation} onChange={(event) => setTaxonomyOperation(event.target.value)}><option value="CREATE_CATEGORY_TYPE">Create department</option><option value="CREATE_CATEGORY">Create category</option><option value="CREATE_SUBCATEGORY">Create subcategory</option><option value="ARCHIVE_CATEGORY_TYPE">Archive department</option><option value="ARCHIVE_CATEGORY">Archive category</option><option value="ARCHIVE_SUBCATEGORY">Archive subcategory</option></select></label><label><span>Name</span><input required value={taxonomyName} onChange={(event) => setTaxonomyName(event.target.value)} /></label><label><span>Slug</span><input required value={taxonomySlug} onChange={(event) => setTaxonomySlug(event.target.value)} placeholder="fresh-produce" /></label>{taxonomyOperation.includes("CATEGORY") && !taxonomyOperation.includes("TYPE") ? <label><span>Department slug</span><input required value={taxonomyTypeSlug} onChange={(event) => setTaxonomyTypeSlug(event.target.value)} /></label> : null}{taxonomyOperation.includes("SUBCATEGORY") ? <label><span>Category slug</span><input required value={taxonomyCategorySlug} onChange={(event) => setTaxonomyCategorySlug(event.target.value)} /></label> : null}<button className="primary-button" type="submit" disabled={busy}>Review taxonomy change</button></form></details>
+    <details className="v1-admin-import"><summary><Upload size={18} /><span><strong>Advanced atomic import</strong><small>Create or update brands and SKUs in batches; imports enter Draft until separately activated</small></span><ChevronDown size={17} /></summary><form onSubmit={runImport}><label htmlFor="v1-catalogue-import">Catalogue JSON</label><textarea id="v1-catalogue-import" value={source} onChange={(event) => setSource(event.target.value)} rows={16} spellCheck={false} disabled={busy} /><p className="field-help">Use this for SKU creation, pack-size variants, brands, prices and batch updates. A successful import does not make a product customer-visible.</p><button className="primary-button" type="submit" disabled={busy}>{busy ? "Importing…" : "Validate and import as Draft"}</button></form></details>
     {editingSku ? <AdminRecordDialog title={editingSku.name} busy={busy} onDismiss={() => setEditingSku(undefined)}><SkuEditor auth={auth} sku={editingSku} taxonomy={snapshot} supabaseUrl={auth.supabaseUrl} disabled={busy} onSave={updateSku} onCatalogueChanged={reconcileCatalogue} /></AdminRecordDialog> : null}
     {intent ? <AdminPrivilegedActionDialog intent={intent.dialog} busy={busy} error={error} notice={notice}
       reconciliationBlocked={reconciliationBlocked} onConfirm={() => confirmMutation()}
