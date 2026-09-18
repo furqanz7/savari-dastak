@@ -37,6 +37,7 @@ type Props = {
 export function DastakCustomerView(props: Props) {
   const online = useCustomerOnline();
   const [orderRefreshToken, setOrderRefreshToken] = useState(0);
+  const [homeResetToken, setHomeResetToken] = useState(0);
   const [destination, setDestination] = useState<CustomerDestination>(() =>
     parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
   );
@@ -91,7 +92,10 @@ export function DastakCustomerView(props: Props) {
     };
   }, [navigate]);
 
-  const navigateSection = (nextSection: CustomerSection) => navigate({ section: nextSection });
+  const navigateSection = (nextSection: CustomerSection) => {
+    if (nextSection === "home") setHomeResetToken((current) => current + 1);
+    navigate({ section: nextSection });
+  };
 
   return (
     <div className="customer-workspace customer-experience">
@@ -122,6 +126,7 @@ export function DastakCustomerView(props: Props) {
           supabaseUrl={props.supabaseUrl}
           publishableKey={props.publishableKey}
           orderRefreshToken={orderRefreshToken}
+          homeResetToken={homeResetToken}
           realtimeHealth={realtimeHealth}
           initialOrderId={destination.entityType === "dastakV1Order" ? destination.entityId : undefined}
           section={v1Section}

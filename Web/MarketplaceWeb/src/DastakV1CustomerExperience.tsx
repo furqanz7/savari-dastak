@@ -68,6 +68,7 @@ type Props = DastakV1Auth & {
   email?: string;
   phoneNumber?: string;
   orderRefreshToken: number;
+  homeResetToken: number;
   realtimeHealth?: OrderRealtimeHealth;
   initialOrderId?: string;
   section: Extract<CustomerSection, "home" | "search" | "orders" | "wishlist" | "payments">;
@@ -165,6 +166,24 @@ export function DastakV1CustomerExperience(props: Props) {
   const selectedOrderStatus = selectedOrder?.status;
   const onCloseOrder = props.onCloseOrder;
   const onSessionExpired = props.onSessionExpired;
+  useEffect(() => {
+    if (props.homeResetToken === 0) return;
+    setHomeMode("grocery");
+    setSelectedCategoryType(undefined);
+    setSelectedCategory(undefined);
+    setSelectedSubcategory(undefined);
+    setSelectedRestaurant(undefined);
+    setSelectedOrder(undefined);
+    setPendingReorder(undefined);
+    setShowingLaunchPayment(false);
+    setShowingCart(false);
+    setShowingAddressBook(false);
+    setEditingAddress(undefined);
+    setError(undefined);
+    setOrderActionError(undefined);
+    setPaymentMessage(undefined);
+    setLiveOrderError(undefined);
+  }, [props.homeResetToken]);
   const presentRequestFailure = useCallback((requestError: unknown, setter = setError) => {
     const issue = customerDataIssue(requestError);
     if (issue.action === "sign_in") {
@@ -1031,9 +1050,6 @@ export function HomeSection({ mode = "grocery", onMode = () => undefined, supaba
           {categorySubcategories.length ? <label className="v1-catalogue-type-filter">Type<select aria-label="Product type" value={selectedSubcategory ?? ""} onChange={(event) => onSubcategory(event.target.value || undefined)}><option value="">All types</option>{categorySubcategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
           {loadingProducts ? <CustomerSkeleton label="Loading this category" /> : selectedCategory ? <ProductGrid supabaseUrl={supabaseUrl} skus={visible} quantities={quantities} onQuantity={onQuantity} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <p>Products coming soon.</p>}</div>
       </div>}
-    </section> : null}
-    {mode === "grocery" && !loadingCatalogue && !selectedCategory && !selectedCategoryType && visible.length ? <section className="v1-section"><header><div><p>FOR YOUR EVERYDAY</p><h2>Everyday essentials</h2></div><span>{visible.length} products</span></header>
-      <ProductGrid supabaseUrl={supabaseUrl} skus={visible} quantities={quantities} onQuantity={onQuantity} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />
     </section> : null}
     {!selectedType ? <button className="v1-order-link" type="button" onClick={onOrders}>View your Dastak orders <ArrowRight size={17} /></button> : null}
   </>;
