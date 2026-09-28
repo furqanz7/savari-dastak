@@ -51,7 +51,6 @@ const emptyProduct = (categoryId = ""): ProductDraft => ({
 
 export function MerchantCatalogueView({
   accessToken,
-  accountId,
   client,
   supabaseUrl,
   publishableKey,

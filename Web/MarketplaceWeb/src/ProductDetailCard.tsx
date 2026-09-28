@@ -6,7 +6,7 @@ import "./design/product-detail.css";
 import { productUnitPrice, sameProductFamily, type DetailProduct } from "./productDetail";
 export type { DetailProduct } from "./productDetail";
 
-export function ProductDetailCard({ product, products, supabaseUrl, onSelect, onClose, action, children, saved, savingWishlist, onWishlist }: {
+export function ProductDetailCard({ product, products, supabaseUrl, onClose, action, children, saved, savingWishlist, onWishlist }: {
   product: DetailProduct; products: DetailProduct[]; supabaseUrl: string;
   onSelect: (id: string) => void; onClose: () => void; action: ReactNode | ((product: DetailProduct) => ReactNode); children?: ReactNode;
   saved?: boolean; savingWishlist?: boolean; onWishlist?: () => void;
