@@ -1,6 +1,20 @@
 -- Seed one catalogue SKU for every Fresh Produce subcategory.
 -- These are owner-curated draft records: they provide the complete SKU
 -- catalogue without claiming image/rights or QA verification prematurely.
+-- Historical catalogue migrations use the production owner's UUID for audit
+-- foreign keys. A fresh database has no such account, so provide an inert,
+-- deleted placeholder only when that account is absent. It has no Auth user,
+-- membership, or permission grant and cannot sign in.
+insert into public.accounts (
+  id, display_name, phone_number, phone_verification_state, account_state,
+  deletion_requested_at, anonymized_at, deleted_at
+) values (
+  '7105206a-6fec-45c9-8c00-3dfd5178fc1b',
+  'Legacy catalogue migration actor', '+919999999997', 'unverified', 'DELETED',
+  pg_catalog.now(), pg_catalog.now(), pg_catalog.now()
+)
+on conflict (id) do nothing;
+
 do $$
 declare
   v_actor constant uuid := '7105206a-6fec-45c9-8c00-3dfd5178fc1b';
