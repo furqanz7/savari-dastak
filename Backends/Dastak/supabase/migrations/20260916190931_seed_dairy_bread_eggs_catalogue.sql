@@ -85,7 +85,8 @@ begin
         verified_by=v_actor, verified_at=v_now, rights_status='CLEARED',
         rights_reference=excluded.rights_reference, rights_verified_by=v_actor,
         rights_verified_at=v_now, version=dastak_v1.sku_images.version+1;
-      update dastak_v1.skus set brand_id='e00f7178-f579-44a1-bc3d-379a59882514'::uuid, image_key=v_image_key,
+      -- Preserve each SKU's real brand; generic starters have no brand.
+      update dastak_v1.skus set image_key=v_image_key,
         list_price_paise=coalesce(list_price_paise,9900), selling_price_paise=coalesce(selling_price_paise,9900),
         status='ACTIVE', qa_status='VERIFIED',
         qa_verified_by=v_actor, qa_verified_at=v_now, updated_at=v_now, version=version+1
