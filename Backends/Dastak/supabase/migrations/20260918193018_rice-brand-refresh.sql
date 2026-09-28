@@ -6,6 +6,24 @@ declare
   v_batch uuid := gen_random_uuid();
   v_brand uuid; v_subcategory uuid; v_sku uuid; v_item record;
 begin
+  -- The rice range can go live only after its complete taxonomy path is active.
+  update dastak_v1.category_types
+  set status='ACTIVE', updated_at=now(), version=version+1
+  where slug='staples-pantry' and status<>'ACTIVE';
+
+  update dastak_v1.categories c
+  set status='ACTIVE', updated_at=now(), version=c.version+1
+  from dastak_v1.category_types ct
+  where c.category_type_id=ct.id and ct.slug='staples-pantry'
+    and c.slug='rice' and c.status<>'ACTIVE';
+
+  update dastak_v1.subcategories sc
+  set status='ACTIVE', updated_at=now(), version=sc.version+1
+  from dastak_v1.categories c
+  join dastak_v1.category_types ct on ct.id=c.category_type_id
+  where sc.category_id=c.id and ct.slug='staples-pantry'
+    and c.slug='rice' and sc.slug='basmati-rice' and sc.status<>'ACTIVE';
+
   insert into dastak_v1.catalogue_import_batches
     (id,source_type,source_name,source_reference,status,counts,created_by,completed_at)
   values
