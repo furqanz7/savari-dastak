@@ -1,5 +1,15 @@
 -- Give the Atta, Rice & Dal rail real catalogue destinations.
 -- Existing SKU identities are preserved; only their subcategory bucket moves.
+-- A no-seed replay can leave the empty pulse and millet parents in DRAFT.
+-- Activate them before inserting ACTIVE curated subcategories.
+update dastak_v1.categories c
+   set status = 'ACTIVE', updated_at = now(), version = c.version + 1
+  from dastak_v1.category_types ct
+ where c.category_type_id = ct.id
+   and ct.slug = 'staples-pantry'
+   and c.slug in ('atta-flours', 'rice', 'dals-pulses', 'millets-grains')
+   and c.status <> 'ACTIVE';
+
 with actor as (
   select g.account_id
   from dastak_v1.platform_permission_grants g
@@ -44,7 +54,6 @@ join dastak_v1.subcategories target on target.category_id = old_c.id
 where s.subcategory_id = old_sc.id
   and old_ct.slug = 'staples-pantry'
   and target.slug = case
-    when old_sc.slug in ('multigrain-atta') then 'high-protein-atta'
     when old_sc.slug in ('besan', 'sooji-rava', 'maida') then 'besan-sooji-maida'
     when old_sc.slug in ('rice-flour', 'ragi-flour', 'corn-flour', 'bajra-flour', 'jowar-flour', 'idiyappam-flour', 'puttu-flour') then 'other-flours'
     else null

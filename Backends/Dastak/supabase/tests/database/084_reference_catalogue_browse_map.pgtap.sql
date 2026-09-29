@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(24);
+select plan(25);
 
 select is((select state from dastak_v1.catalogue_browse_versions where version = 1),
   'ACTIVE', 'reconciled reference browse map is the active release');
@@ -12,12 +12,16 @@ select is((select count(*)::integer from dastak_v1.catalogue_browse_nodes
   where version = 1 and kind = 'DESTINATION'), 36, 'all reference home destinations');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_nodes
   where version = 1 and kind = 'RAIL'), 71, 'confirmed reference rails are explicit');
+select is((select count(*)::integer from dastak_v1.catalogue_browse_sources
+  where version = 1 and node_key = 'dairy-alternatives'
+    and type_slug = 'dairy-bread-eggs' and category_slug = 'dairy-alternatives'),
+  1, 'Dairy Alternatives has its exact canonical source path');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_nodes
   where version = 1 and label = 'High Protein Atta'), 0,
   'removed High Protein Atta is not browsable');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_sources
-  where version = 1 and node_key = 'sauces-spreads'), 2,
-  'Sauces and Spreads has both existing source paths');
+  where version = 1 and node_key = 'sauces-spreads'), 3,
+  'Sauces and Spreads includes spreads, condiments, and honey');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_sources
   where version = 1 and node_key = 'rice'
     and excluded_subcategory_slugs @> array['basmati-rice','poha-puffed-rice']), 1,
@@ -36,7 +40,7 @@ select is((select count(*)::integer from dastak_v1.catalogue_browse_sources
 select is((select count(*)::integer from dastak_v1.catalogue_browse_nodes
   where version = 1 and parent_key = 'grocery-kitchen'
     and label in ('Atta, Flour & Dal','Masalas','Oils and Ghee','Cereals and Breakfast')),
-  4, 'grocery labels match the user's final naming');
+  4, 'grocery labels match the user''s final naming');
 select is((select count(*)::integer from pg_catalog.pg_proc p
   join pg_catalog.pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'dastak_v1_api' and p.proname = 'catalogue_browse_sku_ids'
@@ -47,6 +51,7 @@ select is((select count(*)::integer from dastak_v1.catalogue_browse_versions
   'exactly one reference browse version is active after reconciliation');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_sources
   where version = 1 and node_key = 'atta-flour-dal'
+    and type_slug = 'staples-pantry' and category_slug is null
     and excluded_category_slugs @> array['dry-fruits-nuts','seeds']), 1,
   'staples does not borrow Dry Fruits and Seeds Mix products');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_sources
@@ -55,6 +60,7 @@ select is((select count(*)::integer from dastak_v1.catalogue_browse_sources
   'Masalas does not duplicate Sauces and Spreads');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_sources
   where version = 1 and node_key = 'cereals-breakfast'
+    and type_slug = 'breakfast-spreads' and category_slug is null
     and excluded_category_slugs @> array['spreads','pancake-baking-mixes']), 1,
   'Breakfast does not duplicate Sauces or Dessert Mixes');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_sources

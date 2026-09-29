@@ -23,6 +23,10 @@ begin
     raise exception 'Masalas category type is missing';
   end if;
 
+  update dastak_v1.category_types
+     set status = 'ACTIVE', updated_at = now(), version = version + 1
+   where id = v_type_id and status <> 'ACTIVE';
+
   if exists (
     select 1 from dastak_v1.categories c
     where c.slug in ('cold-grind', 'herbs-seasoning')

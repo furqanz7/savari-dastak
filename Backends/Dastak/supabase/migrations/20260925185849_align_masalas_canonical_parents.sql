@@ -123,6 +123,16 @@ begin
 
   -- These are prepared meals, not dry ready masala powders. Keep their SKU IDs
   -- and existing merchant selections while correcting the canonical leaf.
+  -- A no-seed replay has neither source SKU; keep the taxonomy changes above
+  -- without inventing products. A partial source set remains an error.
+  if (select count(*) from dastak_v1.skus
+      where slug in (
+        'mtr-ready-to-eat-chana-masala-300-g-da35287d',
+        'mtr-ready-to-eat-pav-bhaji-300-g-6be1feee'
+      )) = 0 then
+    return;
+  end if;
+
   select sub.id into strict v_ready_curries_id
   from dastak_v1.subcategories sub
   join dastak_v1.categories c on c.id = sub.category_id

@@ -15,6 +15,12 @@ begin
   limit 1;
   if v_actor_id is null then return; end if;
 
+  -- A no-seed replay may leave the department in DRAFT; active child groups
+  -- cannot be inserted beneath it while the activation guard is enabled.
+  update dastak_v1.category_types
+     set status = 'ACTIVE', updated_at = now(), version = version + 1
+   where id = v_type_id and status <> 'ACTIVE';
+
   update dastak_v1.categories
   set name = 'Seasonal Fruits', updated_at = now(), version = version + 1
   where category_type_id = v_type_id and slug = 'seasonal-fruits';

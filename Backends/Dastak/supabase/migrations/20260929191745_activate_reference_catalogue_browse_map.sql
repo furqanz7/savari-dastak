@@ -22,10 +22,26 @@ begin
   ) then
     raise exception 'Another catalogue browse map is already active';
   end if;
+
+  -- The reference has a Dairy Alternatives rail. Its exact canonical category
+  -- can contain an active soy-milk SKU on a clean replay, so map that path.
+  insert into dastak_v1.catalogue_browse_sources
+    (version, node_key, source_order, type_slug, category_slug, subcategory_slug)
+  values (1, 'dairy-alternatives', 10, 'dairy-bread-eggs', 'dairy-alternatives', null)
+  on conflict (version, node_key, source_order) do nothing;
+  if not exists (
+    select 1 from dastak_v1.catalogue_browse_sources
+    where version = 1 and node_key = 'dairy-alternatives' and source_order = 10
+      and type_slug = 'dairy-bread-eggs' and category_slug = 'dairy-alternatives'
+      and subcategory_slug is null
+  ) then
+    raise exception 'Dairy Alternatives source path differs from the reference map';
+  end if;
+
   if (select count(*) from dastak_v1.catalogue_browse_nodes
       where version = 1) <> 112
      or (select count(*) from dastak_v1.catalogue_browse_sources
-      where version = 1) <> 124 then
+      where version = 1) <> 125 then
     raise exception 'Reference catalogue browse map shape differs from the reviewed release';
   end if;
 

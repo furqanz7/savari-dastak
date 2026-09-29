@@ -36,6 +36,10 @@ begin
   join dastak_v1.categories c on c.id=sc.category_id
   join dastak_v1.category_types ct on ct.id=c.category_type_id
   where ct.slug='fresh-produce'
+    and not exists (
+      select 1 from dastak_v1.sku_images existing
+       where existing.image_key = 'canonical/staging/fresh-produce/fresh-produce-' || sc.slug || '-primary.png'
+    )
   on conflict (sku_id) where role='PRIMARY' do update set
     image_key=excluded.image_key,
     status='VERIFIED',

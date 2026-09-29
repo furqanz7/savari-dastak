@@ -67,7 +67,7 @@ begin
     for v_sku in
       select s.id from dastak_v1.skus s where s.subcategory_id=v_subcategory.id
     loop
-      if exists (select 1 from dastak_v1.sku_images i where i.image_key=v_image_key and i.sku_id<>v_sku.id) then
+      if exists (select 1 from dastak_v1.sku_images i where i.image_key=v_image_key) then
         update dastak_v1.skus set image_key=v_image_key, updated_at=v_now, version=version+1 where id=v_sku.id;
         continue;
       end if;

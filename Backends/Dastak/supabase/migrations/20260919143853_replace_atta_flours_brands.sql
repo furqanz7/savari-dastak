@@ -17,6 +17,26 @@ begin
      'dastak://catalogue/staples-pantry/atta-flours-brands-2026-09-19', 'COMPLETED',
      jsonb_build_object('brands', 4, 'skus', 20), v_actor, now());
 
+  -- A clean replay can still have these catalogue parents in DRAFT. The SKU
+  -- activation guard requires the whole taxonomy path to be ACTIVE first.
+  update dastak_v1.categories c
+     set status = 'ACTIVE', updated_at = now(), version = c.version + 1
+    from dastak_v1.category_types ct
+   where c.category_type_id = ct.id
+     and ct.slug = 'staples-pantry'
+     and c.slug = 'atta-flours'
+     and c.status <> 'ACTIVE';
+
+  update dastak_v1.subcategories sc
+     set status = 'ACTIVE', updated_at = now(), version = sc.version + 1
+    from dastak_v1.categories c
+    join dastak_v1.category_types ct on ct.id = c.category_type_id
+   where sc.category_id = c.id
+     and ct.slug = 'staples-pantry'
+     and c.slug = 'atta-flours'
+     and sc.slug in ('whole-wheat-atta','maida','sooji-rava','besan','multigrain-atta')
+     and sc.status <> 'ACTIVE';
+
   -- Retire unrelated live Atta & Flours records without hard-deleting SKU identities.
   update dastak_v1.skus s
      set status = 'DRAFT', updated_at = now(), version = s.version + 1
