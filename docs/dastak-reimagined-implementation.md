@@ -6,6 +6,13 @@ Reimagined is the Customer experience over the existing Dastak platform. Custome
 
 ## Real-time Grocery scene — local prototype, 2026-09-30
 
+### Mobile shopping-panel pass — 2026-10-07
+
+- Fixed intrinsic grid sizing that let Home's horizontal content stretch the shopping panel. Home and Food now use shrinkable grid columns; panel horizontal overflow is contained while shelf and category tracks remain swipeable. Authenticated desktop Grocery also overrides the old scenery-study directory-height cap without changing the scene.
+- Phones now have a full-width four-button bottom navigation, a horizontal category directory, reserved notice/Bucket/order space and 44px-or-larger main controls. Food has no empty Grocery-directory gap. Very short phones use page scrolling instead of squeezing the content between fixed controls; text fields retain 16px text. Background, staff, shopping state and checkout behavior are unchanged.
+- Five focused suites / 47 tests passed. Codex-browser emulation checked 320×568, 360×640, 390×844, 430×932, 720×900 and 881×804 with no horizontal page or shopping-content overflow. Synthetic Grocery quick-pick, Bucket/review and Food menu/detail interactions passed; checkout remains disabled. Physical-device and live-catalogue verification remain unverified.
+- Phone evidence: `/tmp/dastak-mobile-panel-home-2026-10-07.png` and `/tmp/dastak-mobile-panel-food-2026-10-07.png`. React guidance kept this a layout-focused change without new requests or commerce effects. Local only: not pushed or deployed; no database change, real order, payment, subagent or paid generation. Final build/lint completion is reported with the handoff.
+
 ### Production release preparation — 2026-10-07
 
 - Owner requested push and deployment of pending work. The existing hosted opt-in remains `?reimagined=1`; normal Customer entry retains the existing experience and Reimagined Grocery/Food order submission stays disabled.

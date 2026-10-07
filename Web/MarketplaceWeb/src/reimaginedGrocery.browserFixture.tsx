@@ -10,6 +10,7 @@ import { initialReimaginedState, reimaginedReducer } from "./reimaginedState";
 export function Fixture() {
   const [state, dispatch] = useReducer(reimaginedReducer, undefined, () => {
     let initial = reimaginedReducer(initialReimaginedState(), { type: "signedIn", accountId: "__reimagined_grocery_layout_check__" });
+    if (new URLSearchParams(window.location.search).has("home")) return initial;
     initial = reimaginedReducer(initial, { type: "typeSearch", query: "Test" });
     return reimaginedReducer(initial, { type: "submitSearch" });
   });
