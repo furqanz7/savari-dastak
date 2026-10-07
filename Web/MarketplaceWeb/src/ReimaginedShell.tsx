@@ -32,6 +32,7 @@ type Props = {
   onSignIn: (provider: "apple" | "google") => void;
   signInBusy?: boolean;
   signInError?: string;
+  authFooter?: ReactNode;
   children: ReactNode;
   searchSuggestions?: ReactNode;
   sectionContent: Partial<Record<Exclude<ReimaginedSection, "home">, ReactNode>>;
@@ -41,7 +42,7 @@ type Props = {
   environment?: ReactNode;
 };
 
-export function ReimaginedShell({ state, dispatch, directory, directoryStatus = "ready", onRetryDirectory, displayName, greeting, locationLabel, locationContent, onSignIn, signInBusy, signInError, children, searchSuggestions, sectionContent, shoppingTotalLabel, activeOrderLabel, onOpenActiveOrder, environment }: Props) {
+export function ReimaginedShell({ state, dispatch, directory, directoryStatus = "ready", onRetryDirectory, displayName, greeting, locationLabel, locationContent, onSignIn, signInBusy, signInError, authFooter, children, searchSuggestions, sectionContent, shoppingTotalLabel, activeOrderLabel, onOpenActiveOrder, environment }: Props) {
   const searchId = useId();
   const directoryId = useId();
   const scene = reimaginedEnvironment(state);
@@ -135,6 +136,7 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
       </div>
       {signInBusy ? <p role="status">Opening sign in…</p> : null}
       {signInError ? <p role="alert">{signInError}</p> : null}
+      {authFooter}
     </main> : <>
       <header className="reimagined-wordmark" aria-label="Dastak">Dastak<span>.</span></header>
       <nav className="reimagined-navigation glass-panel" aria-label="Dastak navigation">

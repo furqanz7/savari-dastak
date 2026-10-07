@@ -4,16 +4,16 @@ export function reimaginedLocalOptIn(development: boolean, location?: Pick<Locat
     && new URLSearchParams(location.search).get("reimagined") === "1");
 }
 
-// Explicitly approved hosted browsing trial; authentication remains owned by App.
-// This is not an authorization mechanism. Checkout remains independently disabled.
+// Approved Customer hosts open Reimagined by default; other app roles are unchanged.
+// Authentication remains owned by App. An explicit opt-out preserves recovery access.
 export function reimaginedHostedOptIn(location?: Pick<Location, "hostname" | "search">) {
   return Boolean(location && ["dastak-customer.vercel.app", "dastak-liquiflows-projects.vercel.app"].includes(location.hostname)
-    && new URLSearchParams(location.search).get("reimagined") === "1");
+    && new URLSearchParams(location.search).get("reimagined") !== "0");
 }
 
 export function existingCustomerUrl(section: "home" | "orders" | "account", href: string) {
   const url = new URL(href);
-  url.searchParams.delete("reimagined");
+  url.searchParams.set("reimagined", "0");
   url.hash = section;
   return url.href;
 }

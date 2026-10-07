@@ -45,9 +45,11 @@ import { readAppConfig } from "./config";
 import { PhoneNumberField } from "./PhoneNumberField";
 import { AppleLogo, GoogleLogo } from "./IdentityProviderLogos";
 import { readableErrorMessage, userFacingError } from "./userFacingError";
+import { reimaginedHostedOptIn, reimaginedLocalOptIn } from "./reimaginedOptIn";
 
 const AdminDashboard = lazy(() => import("./AdminDashboard").then((module) => ({ default: module.AdminDashboard })));
 const DastakCustomerView = lazy(() => import("./DastakCustomerView").then((module) => ({ default: module.DastakCustomerView })));
+const ReimaginedSignIn = lazy(() => import("./ReimaginedSignIn").then(module => ({ default: module.ReimaginedSignIn })));
 const DeliveryPartnerApplicationForm = lazy(() => import("./DeliveryPartnerApplicationForm").then((module) => ({ default: module.DeliveryPartnerApplicationForm })));
 const DeliveryPartnerView = lazy(() => import("./DeliveryPartnerView").then((module) => ({ default: module.DeliveryPartnerView })));
 const MerchantApplicationForm = lazy(() => import("./MerchantApplicationForm").then((module) => ({ default: module.MerchantApplicationForm })));
@@ -369,6 +371,9 @@ function CustomerSignIn({ busy, signingInProvider, onSignIn }: {
   signingInProvider?: Provider;
   onSignIn: (provider: Provider) => void;
 }) {
+  if (reimaginedHostedOptIn(window.location) || reimaginedLocalOptIn(import.meta.env.DEV, window.location)) {
+    return <Suspense fallback={<p role="status">Opening Dastak…</p>}><ReimaginedSignIn busy={busy} onSignIn={onSignIn} legalLinks={config.legalLinks} /></Suspense>;
+  }
   const providerName = signingInProvider === "apple"
     ? "Apple"
     : signingInProvider === "google" ? "Google" : undefined;

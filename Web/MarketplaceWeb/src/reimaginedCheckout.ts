@@ -97,6 +97,8 @@ export class ReimaginedGroceryCheckout {
     if (this.recoveryError) throw new Error(this.recoveryError);
     if (this.controller) throw new Error("A checkout request is already running.");
     const controller = new AbortController(); this.controller = controller;
+    // A failed or mismatched response must not leave an old quote confirmable.
+    this.attempt!.order = undefined;
     try {
       const order = await operation(controller.signal);
       if (controller.signal.aborted) throw new DOMException("Checkout session changed", "AbortError");

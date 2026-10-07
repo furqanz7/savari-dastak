@@ -55,6 +55,8 @@ describe("Grocery-only reservation and commitment", () => {
   it("retries confirmation with the same key, order and expected version", async () => {
     const { api, checkout } = setup(); await checkout.reserve(draft); api.commit.mockRejectedValueOnce(new Error("timeout"));
     await expect(checkout.confirm()).rejects.toThrow("timeout"); expect(checkout.committed).toBe(false);
+    await expect(checkout.confirm()).rejects.toThrow("Refresh its server status");
+    await checkout.refresh();
     await checkout.confirm(); expect(api.commit.mock.calls.map(([input]) => [input.orderId, input.expectedVersion, input.idempotencyKey])).toEqual([[order().id, 3, "key-2"], [order().id, 3, "key-2"]]);
     expect(api.submit).toHaveBeenCalledOnce();
   });

@@ -10,13 +10,17 @@ import { useReimaginedAddresses } from "./useReimaginedAddresses";
 import { useReimaginedActiveOrder } from "./useReimaginedActiveOrder";
 import { useReimaginedFood } from "./useReimaginedFood";
 import { foodMenuFixture } from "./reimaginedFood.testFixtures";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { submitV1Order, commitV1LaunchPayment, getV1Order, type V1Order } from "./dastakV1";
+vi.mock("./dastakV1", async importOriginal => ({ ...await importOriginal<typeof import("./dastakV1")>(), submitV1Order: vi.fn(), commitV1LaunchPayment: vi.fn(), getV1Order: vi.fn() }));
+vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: string; embedded?: boolean }) => <section aria-label="Operational account workspace">{props.initialSection}<button type="button" onClick={props.onSignOut}>Sign out</button></section> }));
 vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }));
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
 vi.mock("./useReimaginedFood", () => ({ useReimaginedFood: vi.fn() }));
 vi.mock("./useReimaginedActiveOrder", () => ({ useReimaginedActiveOrder: vi.fn(() => ({ activeOrder: undefined, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() })) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root; let host: HTMLDivElement;
-const props = { accountId: "a", accessToken: "session-token", supabaseUrl: "https://example.supabase.co", publishableKey: "publishable", displayName: "Customer", onSignOut: vi.fn() };
+const props = { accountId: "a", accessToken: "session-token", supabaseUrl: "https://example.supabase.co", publishableKey: "publishable", displayName: "Customer", onSignOut: vi.fn(), client: {} as SupabaseClient, legalLinks: { terms: "/terms", privacy: "/privacy", support: "/support" }, webPushPublicKey: "", deliveryPartnerUrl: "", merchantUrl: "" };
 function click(label: string) {
   const button = [...host.querySelectorAll("button")].find(element => (element.getAttribute("aria-label") ?? element.textContent) === label);
   if (!button) throw new Error(`Missing button ${label}`);
@@ -43,7 +47,7 @@ describe("authenticated local customer integration", () => {
     expect(host.querySelector('[aria-label="Grocery checkout checks"]')?.textContent).toContain("name and phone number");
     act(() => host.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].click());
     expect(select).toHaveBeenCalledWith("test-office");
-    expect([...host.querySelectorAll("button")].find(button => button.textContent === "Checkout integration pending")?.disabled).toBe(true);
+    expect([...host.querySelectorAll("button")].find(button => button.textContent === "Reserve Grocery order")?.disabled).toBe(true);
     click("1Items"); click("Continue Shopping");
     expect(loadCustomerCart("a")).toEqual(shopping); expect(fetcher).not.toHaveBeenCalled();
   });
@@ -114,7 +118,7 @@ describe("authenticated local customer integration", () => {
     expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true);
     const review = host.querySelector('[aria-label="Food checkout preparation"]')!;
     expect(review.textContent).toContain("₹360.00"); expect(review.textContent).toContain("Choose a valid saved delivery address");
-    expect([...review.querySelectorAll("button")].find(button => button.textContent === "Food checkout integration pending")?.disabled).toBe(true);
+    expect([...review.querySelectorAll("button")].find(button => button.textContent === "Reserve Food order")?.disabled).toBe(true);
     click("Continue Shopping"); expect(loadCustomerCart("a")).toEqual(shopping);
     expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), false);
     expect(fetcher).not.toHaveBeenCalled();
@@ -128,10 +132,10 @@ describe("authenticated local customer integration", () => {
     click("Open Test Café menu"); click("View Test Paneer Rice details"); click("Grocery");
     expect(loadCustomerCart("a")).toEqual(shopping);
   });
-  it("keeps the server-driven order strip independent of shopping and navigation", () => {
+  it("keeps the server-driven order strip independent of shopping and navigation", async () => {
     vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: { id: fixtureId(20), service: "grocery" }, error: undefined, storageIssue: undefined, label: "Out for delivery", retry: vi.fn() });
     saveCustomerCart("a", { retail: { [fixtureId(6)]: 2 }, food: [] }); mount();
-    click("Food"); click("Orders");
+    click("Food"); await act(async () => click("Orders"));
     expect(host.querySelector(".reimagined-order-strip")?.textContent).toContain("Out for delivery");
     expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 2 });
   });
@@ -154,7 +158,7 @@ describe("authenticated local customer integration", () => {
     click("Take to Cart");
     expect(host.textContent).toContain("Estimated item subtotal: ₹300.00");
     expect(host.querySelector('[aria-label="Review Grocery Bucket"]')?.textContent).not.toContain("meal");
-    expect([...host.querySelectorAll("button")].find(button => button.textContent === "Checkout integration pending")?.disabled).toBe(true);
+    expect([...host.querySelectorAll("button")].find(button => button.textContent === "Reserve Grocery order")?.disabled).toBe(true);
     click("Continue Shopping"); click("Food"); click("Grocery");
     expect(loadCustomerCart("a")).toEqual({ retail: { [fixtureId(6)]: 3 }, food });
   });
@@ -175,8 +179,56 @@ describe("authenticated local customer integration", () => {
     expect(review.textContent).toContain("Test Poha"); expect(review.textContent).not.toContain("Test Plain Rice");
     expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 2 });
   });
-  it("uses the real host sign-out callback without deleting the saved cart", () => {
-    saveCustomerCart("a", { retail: { [fixtureId(6)]: 2 }, food: [] }); mount(); click("Settings"); click("Sign out");
+  it("uses the real host sign-out callback without deleting the saved cart", async () => {
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 2 }, food: [] }); mount();
+    await act(async () => click("Settings")); click("Sign out");
     expect(props.onSignOut).toHaveBeenCalledOnce(); expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 2 });
+  });
+  it("enables real Grocery checkout only on explicit clicks and clears only server-confirmed quantities", async () => {
+    const address = { addressId: "home", label: "Home", address: "Test street", building: "1", details: "", displayAddress: "Test street", location: { latitude: 12, longitude: 77 }, isDefault: true, updatedAt: "today" };
+    vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [address], selected: address, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() });
+    const reserved = { id: fixtureId(20), displayOrderNumber: "TEST-20", version: 3, status: "AWAITING_PAYMENT", lines: [{ lineType: "RETAIL_SKU", skuId: fixtureId(6), quantity: 2 }], price: { subtotalPaise: 20000, totalPaise: 22000 }, launchPayment: { state: "READY_TO_CONFIRM", reservationState: "ACTIVE", reservationExpiresAt: "2099-01-01T00:00:00Z", canCommit: true, noChargeNow: true, payAtDoorstep: true } } as V1Order;
+    vi.mocked(submitV1Order).mockResolvedValue(reserved);
+    vi.mocked(commitV1LaunchPayment).mockRejectedValueOnce(new Error("Lost confirmation response"));
+    const foodLines = [{ branchId: fixtureId(30), itemId: fixtureId(31), optionIds: [], quantity: 1 }];
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 2 }, food: foodLines });
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    await act(async () => root.render(<ReimaginedCustomerRoot {...props} phoneNumber="+919876543210" />));
+    click("Take to Cart"); click("2Delivery & billing");
+    expect(submitV1Order).not.toHaveBeenCalled(); expect(commitV1LaunchPayment).not.toHaveBeenCalled();
+    await act(async () => click("Reserve Grocery order"));
+    expect(submitV1Order).toHaveBeenCalledWith(expect.objectContaining({ accessToken: props.accessToken, order: expect.objectContaining({ lines: [{ lineType: "RETAIL_SKU", skuId: fixtureId(6), quantity: 2 }] }) }));
+    expect(commitV1LaunchPayment).not.toHaveBeenCalled();
+    await act(async () => click("Confirm Grocery order"));
+    expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 2 });
+    vi.mocked(getV1Order).mockResolvedValue({ ...reserved, status: "PREPARING", version: 4, launchPayment: { ...reserved.launchPayment!, state: "PAYMENT_DUE_AT_DELIVERY", reservationState: "COMMITTED", canCommit: false } });
+    await act(async () => click("Recover Grocery reservation"));
+    expect(commitV1LaunchPayment).toHaveBeenCalledOnce();
+    expect(loadCustomerCart("a")).toEqual({ retail: {}, food: foodLines });
+  });
+  it("enables Food checkout with exact options and leaves the Grocery Bucket untouched", async () => {
+    const menu = foodMenuFixture(); const item = menu.categories[0].items[0]; const option = item.optionGroups[0].options[0];
+    const address = { addressId: "home", label: "Home", address: "Test street", building: "1", details: "", displayAddress: "Test street", location: { latitude: 12, longitude: 77 }, isDefault: true, updatedAt: "today" };
+    vi.mocked(useReimaginedFood).mockReturnValue({ data: [menu], error: undefined, status: "ready", retry: vi.fn() });
+    vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [address], selected: address, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() });
+    const food = [{ branchId: menu.restaurant.branchId, itemId: item.id, optionIds: [option.id], quantity: 2 }];
+    const reserved: V1Order = {
+      id: fixtureId(70), createdAt: "2026-10-07T00:00:00Z", updatedAt: "2026-10-07T00:00:00Z", displayOrderNumber: "TEST-70", orderType: "FOOD_ONLY", restaurant: menu.restaurant, version: 3, status: "AWAITING_PAYMENT",
+      lines: [{ id: fixtureId(71), name: item.name, status: "SECURED", unitPricePaise: 18000, lineTotalPaise: 36000, lineType: "FOOD_MENU_ITEM", menuItemId: item.id, quantity: 2, foodSelection: { options: [{ ...option, groupId: item.optionGroups[0].id, groupName: "Size" }] } }],
+      price: { snapshotKind: "FINAL", subtotalPaise: 36000, deliveryFeePaise: 1000, platformFeePaise: 0, discountPaise: 0, taxPaise: 0, totalPaise: 37000, currencyCode: "INR" },
+      launchPayment: { optionLabel: "Pay via UPI/Cash on Delivery", reservationSecondsRemaining: 60, state: "READY_TO_CONFIRM", reservationState: "ACTIVE", reservationExpiresAt: "2099-01-01T00:00:00Z", canCommit: true, noChargeNow: true, payAtDoorstep: true },
+    };
+    vi.mocked(submitV1Order).mockResolvedValue(reserved);
+    vi.mocked(commitV1LaunchPayment).mockResolvedValue({ ...reserved, version: 4, status: "PREPARING", launchPayment: { ...reserved.launchPayment!, state: "PAYMENT_DUE_AT_DELIVERY", reservationState: "COMMITTED", canCommit: false } });
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 1 }, food });
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    await act(async () => root.render(<ReimaginedCustomerRoot {...props} phoneNumber="+919876543210" />));
+    click("Food"); click("Review Food cart");
+    expect(submitV1Order).not.toHaveBeenCalled();
+    await act(async () => click("Reserve Food order"));
+    expect(submitV1Order).toHaveBeenCalledWith(expect.objectContaining({ accessToken: props.accessToken, order: expect.objectContaining({ restaurantBranchId: menu.restaurant.branchId, lines: [{ lineType: "FOOD_MENU_ITEM", menuItemId: item.id, quantity: 2, optionIds: [option.id] }] }) }));
+    expect(commitV1LaunchPayment).not.toHaveBeenCalled();
+    await act(async () => click("Confirm Food order"));
+    expect(loadCustomerCart("a")).toEqual({ retail: { [fixtureId(6)]: 1 }, food: [] });
   });
 });

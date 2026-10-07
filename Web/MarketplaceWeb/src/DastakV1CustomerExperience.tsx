@@ -80,6 +80,9 @@ type Props = DastakV1Auth & {
   onOpenOrder: (orderId: string) => void;
   onCloseOrder: () => void;
   onSessionExpired: () => void;
+  // Embedded Orders has a separate cart owner. Reordering hands off rather than
+  // mounting a second cart writer inside the Reimagined session.
+  onOrderAgainInExisting?: () => void;
 };
 
 type Cart = RetailCart;
@@ -186,6 +189,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const selectedOrderStatus = selectedOrder?.status;
   const onCloseOrder = props.onCloseOrder;
   const onSessionExpired = props.onSessionExpired;
+  const onOrderAgainInExisting = props.onOrderAgainInExisting;
   useEffect(() => {
     if (props.homeResetToken === 0) return;
     setHomeMode("grocery");
@@ -443,8 +447,9 @@ export function DastakV1CustomerExperience(props: Props) {
     void refreshOrders();
   }, [props.orderRefreshToken, refreshOrders]);
   useEffect(() => {
+    if (props.onOrderAgainInExisting) return;
     saveCustomerCart(props.accountId, { retail: cart, food: foodCartEntries });
-  }, [cart, foodCartEntries, props.accountId]);
+  }, [cart, foodCartEntries, props.accountId, props.onOrderAgainInExisting]);
 
   useEffect(() => {
     const normalized = query.trim();
@@ -694,11 +699,13 @@ export function DastakV1CustomerExperience(props: Props) {
   }, [menuItemById, onCloseOrder, selectedOrderId, skuById]);
 
   const requestReorder = useCallback((order: V1Order) => {
+    if (onOrderAgainInExisting) { onOrderAgainInExisting(); return; }
     if (cartCount > 0) setPendingReorder(order);
     else reorderOrder(order);
-  }, [cartCount, reorderOrder]);
+  }, [cartCount, reorderOrder, onOrderAgainInExisting]);
 
   const submit = async () => {
+    if (props.onOrderAgainInExisting) return;
     if (!defaultAddress) { setShowingAddressBook(true); return; }
     if (!props.displayName?.trim() || !props.phoneNumber?.trim()) {
       setError("Complete your name and phone number in Account before placing an order.");
@@ -881,7 +888,7 @@ export function DastakV1CustomerExperience(props: Props) {
   }
 
   return <div className="v1-customer-shell">
-    <CustomerHeader address={defaultAddress} count={cartCount} onAddress={() => addresses.length ? setShowingAddressBook(true) : setEditingAddress(null)} onSearch={() => props.onNavigate("search")} onCart={() => setShowingCart(true)} />
+    {!props.onOrderAgainInExisting ? <CustomerHeader address={defaultAddress} count={cartCount} onAddress={() => addresses.length ? setShowingAddressBook(true) : setEditingAddress(null)} onSearch={() => props.onNavigate("search")} onCart={() => setShowingCart(true)} /> : null}
     {props.section === "search" || props.section === "wishlist" || props.section === "payments" ? <button className="customer-back-link" type="button" onClick={() => props.onNavigate(props.section === "search" ? "home" : "account")}><ArrowLeft size={17} />{props.section === "search" ? "Home" : "Account"}</button> : null}
     {error && !showingCart && editingAddress === undefined && !showingAddressBook ? <CustomerNotice title="We couldn’t complete that action" onDismiss={() => setError(undefined)}>{error}</CustomerNotice> : null}
     {storefrontIssues.addresses && (props.section === "home" || showingCart) ? <CustomerNotice title="Saved places couldn’t update" onRetry={() => void refreshAddresses()}>{addresses.length ? "Your saved address is still shown. Reconnect before changing it." : storefrontIssues.addresses}</CustomerNotice> : null}

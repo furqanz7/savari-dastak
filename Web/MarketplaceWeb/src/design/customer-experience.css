@@ -55,6 +55,7 @@
 .customer-experience .customer-navigation button svg { width: 19px; height: 19px; }
 .customer-content { max-width: 1280px; min-width: 0; margin: 0 auto; padding: 0 40px 100px; outline: none; }
 .customer-content > .customer-notice { margin-top: 20px; }
+.reimagined .customer-workspace[data-embedded] .customer-content { padding: 0; max-width: none; }
 .customer-experience .v1-customer-shell { max-width: none; padding-bottom: 32px; }
 .customer-experience .v1-customer-header { grid-template-columns: minmax(0, 1fr) auto; gap: 24px; min-height: 94px; padding: 20px 0; border: 0; }
 .customer-experience .v1-deliver-to { display: flex; width: 100%; min-width: 0; min-height: 48px; padding: 0; border: 0; background: transparent; text-align: left; }

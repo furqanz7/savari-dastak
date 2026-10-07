@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { reimaginedHostedOptIn, reimaginedLocalOptIn } from "./reimaginedOptIn";
+import { existingCustomerUrl, reimaginedHostedOptIn, reimaginedLocalOptIn } from "./reimaginedOptIn";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Home, ReceiptText, UserRound } from "lucide-react";
 import { CustomerNotice } from "./CustomerUI";
@@ -19,7 +19,7 @@ import { useOrderRealtime } from "./orderRealtime";
 import { useDastakWebPush } from "./useDastakWebPush";
 import { WebNotificationOnboarding } from "./WebNotificationOnboarding";
 
-type Props = {
+export type DastakCustomerProps = {
   accessToken: string;
   accountId: string;
   client: SupabaseClient;
@@ -34,6 +34,7 @@ type Props = {
   merchantUrl: string;
   onSignOut: () => void;
 };
+type Props = DastakCustomerProps;
 
 const ReimaginedCustomerRoot = lazy(() => import("./ReimaginedCustomerRoot").then(module => ({ default: module.ReimaginedCustomerRoot })));
 
@@ -45,12 +46,13 @@ export function DastakCustomerView(props: Props) {
   return <ExistingDastakCustomerView key={props.accountId} {...props} />;
 }
 
-function ExistingDastakCustomerView(props: Props) {
+export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; onReturnToShopping?: () => void }) {
   const online = useCustomerOnline();
   const [orderRefreshToken, setOrderRefreshToken] = useState(0);
   const [homeResetToken, setHomeResetToken] = useState(0);
   const [destination, setDestination] = useState<CustomerDestination>(() =>
-    parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
+    props.embedded ? { section: props.initialSection ?? "orders", entityType: props.initialOrderId ? "dastakV1Order" : undefined, entityId: props.initialOrderId }
+      : parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
   );
   const section = destination.section;
   const v1Section = section === "search" || section === "orders" || section === "wishlist" || section === "payments"
@@ -86,13 +88,14 @@ function ExistingDastakCustomerView(props: Props) {
   const navigate = useCallback((next: CustomerDestination, replace = false) => {
     const hash = serializeCustomerDestination(next);
     setDestination(next);
-    if (typeof window !== "undefined" && window.location.hash !== hash) {
+    if (!props.embedded && typeof window !== "undefined" && window.location.hash !== hash) {
       window.history[replace ? "replaceState" : "pushState"](null, "", hash);
     }
     window.scrollTo({ top: 0, behavior: "instant" });
-  }, []);
+  }, [props.embedded]);
 
   useEffect(() => {
+    if (props.embedded) return;
     const restore = () => setDestination(parseCustomerDestination(window.location.hash));
     window.addEventListener("hashchange", restore);
     window.addEventListener("popstate", restore);
@@ -101,29 +104,30 @@ function ExistingDastakCustomerView(props: Props) {
       window.removeEventListener("hashchange", restore);
       window.removeEventListener("popstate", restore);
     };
-  }, [navigate]);
+  }, [navigate, props.embedded]);
 
   const navigateSection = (nextSection: CustomerSection) => {
+    if (props.embedded && nextSection === "home") { props.onReturnToShopping?.(); return; }
     if (nextSection === "home") setHomeResetToken((current) => current + 1);
     navigate({ section: nextSection });
   };
 
   return (
-    <div className="customer-workspace customer-experience">
+    <div className="customer-workspace customer-experience" data-embedded={props.embedded || undefined}>
       <a className="customer-skip-link" href="#customer-content" onClick={(event) => {
         event.preventDefault();
         const content = document.getElementById("customer-content");
         content?.focus({ preventScroll: true });
         content?.scrollIntoView({ behavior: "instant" });
       }}>Skip to content</a>
-      <header className="customer-app-header">
+      {!props.embedded ? <header className="customer-app-header">
         <button className="customer-brand" type="button" onClick={() => navigateSection("home")} aria-label="Dastak Home">Dastak<span>.</span><small>Everyday, at your doorstep.</small></button>
       <nav className="customer-navigation" aria-label="Dastak">
         <CustomerNavigationButton icon={<Home />} label="Home" selected={section === "home" || section === "search" || section === "parcel"} onClick={() => navigateSection("home")} />
         <CustomerNavigationButton icon={<ReceiptText />} label="Orders" selected={section === "orders"} onClick={() => navigateSection("orders")} />
         <CustomerNavigationButton icon={<UserRound />} label="Account" selected={section === "account" || section === "wishlist" || section === "payments"} onClick={() => navigateSection("account")} />
       </nav>
-      </header>
+      </header> : null}
       <div className="customer-content" id="customer-content" tabIndex={-1}>
       {!online ? <CustomerNotice title="You’re offline" tone="offline">You can browse what’s already loaded. Your orders will update when you reconnect.</CustomerNotice> : null}
       {shouldMountV1CustomerExperience(section) ? <div className="customer-view">
@@ -148,6 +152,7 @@ function ExistingDastakCustomerView(props: Props) {
           })}
           onCloseOrder={() => navigate({ section: "orders" })}
           onSessionExpired={props.onSignOut}
+          onOrderAgainInExisting={props.embedded ? () => { window.location.href = existingCustomerUrl("orders", window.location.href); } : undefined}
         />
       </div> : null}
       {section === "account" && <div className="customer-view">

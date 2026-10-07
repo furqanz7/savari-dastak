@@ -6,6 +6,15 @@ Reimagined is the Customer experience over the existing Dastak platform. Custome
 
 ## Real-time Grocery scene — local prototype, 2026-09-30
 
+### Default Customer entry and checkout activation — 2026-10-07
+
+- Owner explicitly requested enabled checkout and normal-address production activation. Approved Customer hosts now open Reimagined without a query parameter; `?reimagined=0` retains the existing operational interface and every fallback link sets that opt-out explicitly. Merchant, Admin and Delivery entry remains unchanged.
+- Enabled Grocery and Food reservation/confirmation adapters in the authenticated root. No order write happens on render or navigation. Name, phone, saved delivery coordinates, online connectivity and exclusive cart ownership are required; server reservation/stock readiness and expiry determine confirmation. Payment remains UPI/Cash on Delivery, with no online charge initiated.
+- Grocery requests invalidate stale snapshots before network calls, so a failed/mismatched response cannot leave an old quote confirmable. Added ownership cancellation/session guards. Durable request keys, recovery locks and account-scoped journals remain in use; uncertain results retain carts and recover by reading the same order. Confirmed quantities are removed only from the purchased service.
+- Orders, Profile and Settings now embed existing operational views instead of placeholder links. Order tracking opens real details. Embedded Orders does not save or submit another shopping cart; reorder hands off to the explicit existing-interface route. Authentication still belongs to App, with an outside-store sign-in shell and the same Apple/Google callbacks and legal links.
+- Read-only Supabase inspection confirmed catalogue v23, Orders v19 and outbox v11 ACTIVE. Downloaded production Orders index/handler matched local files exactly. No function deployment, schema migration or production order/payment was performed. Background/rig assets are unchanged and the two excluded RPM avatar files remain excluded.
+- Verification/deployment results are reported separately in the release handoff; mocked checkout tests do not constitute a live purchase or fulfilment test.
+
 ### Mobile shopping-panel pass — 2026-10-07
 
 - Fixed intrinsic grid sizing that let Home's horizontal content stretch the shopping panel. Home and Food now use shrinkable grid columns; panel horizontal overflow is contained while shelf and category tracks remain swipeable. Authenticated desktop Grocery also overrides the old scenery-study directory-height cap without changing the scene.

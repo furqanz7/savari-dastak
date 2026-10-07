@@ -12,13 +12,13 @@ let root: Root; let host: HTMLDivElement;
 const skuId = "11111111-1111-4111-8111-111111111111";
 const draft: GroceryCheckoutDraft = { retail: { [skuId]: 1 }, recipient: { name: "Test", phoneNumber: "+919876543210" }, address: { addressId: "home", label: "Home", address: "Test", building: "1", details: "", displayAddress: "Test", location: { latitude: 12, longitude: 77 }, isDefault: true, updatedAt: "today" } };
 const reserved = { id: "22222222-2222-4222-8222-222222222222", displayOrderNumber: "TEST-1", status: "AWAITING_PAYMENT", version: 3, lines: [{ lineType: "RETAIL_SKU", skuId, quantity: 1 }], price: { snapshotKind: "SERVER", subtotalPaise: 10000, deliveryFeePaise: 2000, platformFeePaise: 500, discountPaise: 400, taxPaise: 200, totalPaise: 12300, currencyCode: "INR" }, launchPayment: { state: "READY_TO_CONFIRM", reservationState: "ACTIVE", reservationExpiresAt: "2099-01-01T00:00:00Z", canCommit: true, noChargeNow: true, payAtDoorstep: true } } as V1Order;
-function setup(enabled = false, online = true, journal?: ReturnType<typeof checkoutJournal>) {
+function setup(enabled = false, online = true, journal?: ReturnType<typeof checkoutJournal>, canEdit = true) {
   const committed = { ...reserved, version: 4, status: "PREPARING", launchPayment: { ...reserved.launchPayment!, state: "PAYMENT_DUE_AT_DELIVERY", reservationState: "COMMITTED", canCommit: false } } as V1Order;
   const api = { submit: vi.fn<CheckoutClients["submit"]>().mockResolvedValue(reserved), commit: vi.fn<CheckoutClients["commit"]>().mockResolvedValue(committed), read: vi.fn<CheckoutClients["read"]>().mockResolvedValue(reserved) };
   const checkout = new ReimaginedGroceryCheckout({ accessToken: "test", supabaseUrl: "https://example.supabase.co", publishableKey: "public" }, api, undefined, undefined, journal);
   const dispatch = vi.fn(); host = document.createElement("div"); document.body.append(host); root = createRoot(host);
-  act(() => root.render(<ReimaginedCheckoutCounter checkout={checkout} draft={draft} enabled={enabled} online={online} dispatch={dispatch} onSessionExpired={vi.fn()} ordersUrl="/#orders" />));
-  return { api, dispatch };
+  act(() => root.render(<ReimaginedCheckoutCounter checkout={checkout} draft={draft} enabled={enabled} canEdit={canEdit} online={online} dispatch={dispatch} onSessionExpired={vi.fn()} ordersUrl="/#orders" />));
+  return { api, dispatch, checkout };
 }
 function button(text: string) { return [...host.querySelectorAll("button")].find(element => element.textContent === text)!; }
 beforeEach(() => vi.stubGlobal("navigator", { locks: checkoutLocksFixture() }));
@@ -40,6 +40,22 @@ describe("Grocery counter controls", () => {
   });
   it("blocks reservation while offline even when explicitly enabled", () => {
     const { api } = setup(true, false); expect(button("Reserve Grocery order").disabled).toBe(true); expect(api.submit).not.toHaveBeenCalled();
+  });
+  it("blocks writes in a tab that does not own the cart", () => {
+    const { api } = setup(true, true, undefined, false);
+    expect(button("Reserve Grocery order").disabled).toBe(true);
+    act(() => button("Reserve Grocery order").click());
+    expect(api.submit).not.toHaveBeenCalled();
+  });
+  it("invalidates the old quote when a refresh returns mismatched cart lines", async () => {
+    const { api, dispatch, checkout } = setup(true);
+    await act(async () => button("Reserve Grocery order").click());
+    api.read.mockResolvedValue({ ...reserved, lines: [] });
+    await act(async () => button("Refresh order status").click());
+    expect(checkout.order).toBeUndefined();
+    expect(host.textContent).toContain("does not match this Grocery Bucket");
+    expect(button("Recover Grocery reservation")).toBeTruthy();
+    expect(api.commit).not.toHaveBeenCalled(); expect(dispatch).not.toHaveBeenCalled();
   });
   it("recovers a saved reservation by reading its status without submitting another order", async () => {
     const journal = checkoutJournal("account", "https://example.supabase.co", cartStorageFixture());

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "react";
 import { formatV1Price, type V1Order } from "./dastakV1";
 import { customerDataIssue } from "./customerDataState";
@@ -9,49 +9,61 @@ export function GroceryPaymentNotice() {
   return <div className="reimagined-checkout-payment"><strong>UPI / Cash on Delivery</strong><p>Pay via UPI/Cash on Delivery — pay your delivery partner at the doorstep. No charge now.</p></div>;
 }
 
-// Controlled adapter: writes are opt-in and remain OFF in the local Customer root.
-export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, online, dispatch, onSessionExpired, ordersUrl }: {
-  checkout: ReimaginedGroceryCheckout; draft?: GroceryCheckoutDraft; enabled?: boolean; online: boolean;
+// Writes require explicit activation, an online session and exclusive cart ownership.
+export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, canEdit = true, online, dispatch, onSessionExpired, ordersUrl }: {
+  checkout: ReimaginedGroceryCheckout; draft?: GroceryCheckoutDraft; enabled?: boolean; canEdit?: boolean; online: boolean;
   dispatch: Dispatch<ReimaginedAction>; onSessionExpired: () => void; ordersUrl: string;
 }) {
   const [order, setOrder] = useState<V1Order>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => () => checkout.cancelRequests(), [checkout]);
+  const session = useRef(0);
+  const blocked = !enabled || !online || !canEdit || busy;
+  useEffect(() => () => { session.current++; checkout.cancelRequests(); }, [checkout]);
+  useEffect(() => {
+    if (!enabled || !online || !canEdit) checkout.cancelRequests();
+  }, [checkout, enabled, online, canEdit]);
   useEffect(() => {
     if (!order?.launchPayment?.reservationExpiresAt) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [order?.launchPayment?.reservationExpiresAt]);
   async function run(operation: "reserve" | "confirm" | "refresh" | "restart") {
-    if (!enabled || !online || busy || checkout.busy) return;
+    if (!enabled || !online || !canEdit || busy || checkout.busy) return;
+    const epoch = session.current;
+    const acknowledge = (action: ReimaginedAction) => {
+      if (epoch !== session.current) throw new DOMException("Checkout session changed", "AbortError");
+      dispatch(action);
+    };
     setBusy(true); setError(undefined);
     try {
       if (operation === "reserve" && draft) setOrder(await checkout.reserve(draft));
       else if (operation === "refresh") setOrder(await checkout.refresh());
       else if (operation === "restart") { await checkout.restartAfterTerminalReservation(); setOrder(undefined); }
       else if (operation === "confirm") {
-        await checkout.confirm(dispatch);
+        await checkout.confirm(acknowledge);
         setOrder(checkout.order);
       }
       // Reconcile a lost confirmation response using the authoritative refreshed order.
       if (operation !== "confirm" && checkout.committed) {
-        await checkout.confirm(dispatch);
+        await checkout.confirm(acknowledge);
       }
     } catch (issue) {
-      if (issue instanceof Error && issue.name === "AbortError") return;
+      if (epoch !== session.current || (issue instanceof Error && issue.name === "AbortError")) return;
       if (customerDataIssue(issue).action === "sign_in") onSessionExpired();
       else setError(issue instanceof Error ? issue.message : "Checkout could not complete. Your Bucket is retained.");
-    } finally { setBusy(false); }
+    } finally {
+      if (epoch === session.current) { setOrder(checkout.order); setNow(Date.now()); setBusy(false); }
+    }
   }
   return <section className="reimagined-checkout-confirmation" aria-label="Grocery checkout confirmation">
     <h3>Payment & confirmation</h3>
     <GroceryPaymentNotice />
     {!enabled ? <><p>Order submission remains disabled until recovery and authenticated end-to-end verification are complete.</p><button type="button" disabled>Checkout integration pending</button></>
       : checkout.recoveryIssue ? <p role="alert">{checkout.recoveryIssue}</p>
-      : !order && checkout.recoverableOrderId ? <><p>A saved Grocery reservation needs a server status check. No new order will be created.</p><button type="button" disabled={!online || busy} onClick={() => void run("refresh")}>Recover Grocery reservation</button></>
-      : !order ? <><p>{checkout.hasPendingAttempt ? "An earlier attempt is unresolved. Retry the same Bucket, recipient and address using its saved request key." : "Reserve this Grocery Bucket to obtain the server-calculated total. Food items are not included."}</p><button type="button" disabled={!draft || !online || busy} onClick={() => void run("reserve")}>{busy ? "Reserving Grocery order…" : "Reserve Grocery order"}</button></>
+      : !order && checkout.recoverableOrderId ? <><p>A saved Grocery reservation needs a server status check. No new order will be created.</p><button type="button" disabled={blocked} onClick={() => void run("refresh")}>Recover Grocery reservation</button></>
+      : !order ? <><p>{checkout.hasPendingAttempt ? "An earlier attempt is unresolved. Retry the same Bucket, recipient and address using its saved request key." : "Reserve this Grocery Bucket to obtain the server-calculated total. Food items are not included."}</p><button type="button" disabled={!draft || blocked} onClick={() => void run("reserve")}>{busy ? "Reserving Grocery order…" : "Reserve Grocery order"}</button></>
       : <><h4>{order.displayOrderNumber}</h4><dl className="reimagined-server-bill" aria-label="Server-confirmed Grocery bill">
         {([
           ["Items", order.price.subtotalPaise], ["Delivery", order.price.deliveryFeePaise], ["Platform fee", order.price.platformFeePaise], ["Tax", order.price.taxPaise],
@@ -59,9 +71,9 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, on
         {Number.isSafeInteger(order.price.discountPaise) && order.price.discountPaise > 0 ? <div><dt>Discount</dt><dd>−{formatV1Price(order.price.discountPaise)}</dd></div> : null}
         <div className="reimagined-server-total"><dt>Server order total: </dt><dd>{formatV1Price(order.price.totalPaise)}</dd></div>
       </dl><p className="reimagined-checkout-status">Status: {order.status.replaceAll("_", " ").toLowerCase()}</p>
-        <button type="button" disabled={!online || busy} onClick={() => void run("refresh")}>Refresh order status</button>
-        <button type="button" disabled={!online || busy || !canConfirmGroceryOrder(order, now)} onClick={() => void run("confirm")}>Confirm Grocery order</button>
-        {["PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(order.status) ? <><p>This unpaid reservation is closed. Your Bucket is retained.</p><button type="button" disabled={!online || busy} onClick={() => void run("restart")}>Recheck closed reservation and return to Bucket</button></> : null}
+        <button type="button" disabled={blocked} onClick={() => void run("refresh")}>Refresh order status</button>
+        <button type="button" disabled={blocked || !canConfirmGroceryOrder(order, now)} onClick={() => void run("confirm")}>Confirm Grocery order</button>
+        {["PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(order.status) ? <><p>This unpaid reservation is closed. Your Bucket is retained.</p><button type="button" disabled={blocked} onClick={() => void run("restart")}>Recheck closed reservation and return to Bucket</button></> : null}
         <a href={ordersUrl}>Open Orders to review or manage this reservation</a></>}
     {error ? <p role="alert">{error}</p> : null}
   </section>;

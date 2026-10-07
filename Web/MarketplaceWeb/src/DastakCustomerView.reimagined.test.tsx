@@ -2,7 +2,7 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DastakCustomerView } from "./DastakCustomerView";
+import { DastakCustomerView, ExistingDastakCustomerView } from "./DastakCustomerView";
 import { DastakV1CustomerExperience } from "./DastakV1CustomerExperience";
 import { ReimaginedCustomerRoot } from "./ReimaginedCustomerRoot";
 vi.mock("./DastakV1CustomerExperience", () => ({ DastakV1CustomerExperience: vi.fn(() => <p>Existing catalogue</p>) }));
@@ -34,5 +34,14 @@ describe("customer entry ownership", () => {
     await mount("/#home");
     expect(host.textContent).toContain("Existing catalogue");
     expect(ReimaginedCustomerRoot).not.toHaveBeenCalled();
+  });
+  it("embeds real Orders without another shopping owner or duplicate navigation", async () => {
+    window.history.replaceState(null, "", "/?reimagined=1"); vi.stubGlobal("scrollTo", vi.fn());
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    const orderId = "11111111-1111-4111-8111-111111111111";
+    await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="orders" initialOrderId={orderId} />));
+    expect(DastakV1CustomerExperience).toHaveBeenCalledWith(expect.objectContaining({ section: "orders", initialOrderId: orderId, onOrderAgainInExisting: expect.any(Function) }), undefined);
+    expect(host.querySelector('[aria-label="Dastak"]')).toBeNull();
+    expect(window.location.hash).toBe("");
   });
 });

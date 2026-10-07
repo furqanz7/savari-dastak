@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { acknowledgeFoodCheckout, acknowledgeGroceryCheckout, loadCustomerCart, loadCustomerCartStrict, saveCustomerCartStrict } from "./customerCartPersistence";
 import { initialReimaginedState, reimaginedReducer, type ReimaginedAction } from "./reimaginedState";
 
@@ -9,7 +9,7 @@ function restore(accountId: string, storage: StorageAdapter) {
   }) };
 }
 
-// Sole cart owner while the local opt-in is mounted. Uses the existing v2 key
+// Sole cart owner while Reimagined is mounted. Uses the existing v2 key
 // and serializer, so returning to the existing UI restores the same shopping.
 export function usePersistedReimaginedState(accountId: string, storage?: StorageAdapter) {
   const liveAccount = useRef<string | undefined>(accountId);
@@ -55,7 +55,7 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
     window.addEventListener("storage", sync);
     return () => { closed = true; editing.current = false; controller.abort(); release?.(); window.removeEventListener("storage", sync); };
   }, [accountId, storage]);
-  const dispatch = (action: ReimaginedAction) => {
+  const dispatch = useCallback((action: ReimaginedAction) => {
     if (liveAccount.current !== accountId) return;
     // Authentication is owned by the application's existing session, not UI events.
     if (action.type === "signedIn" || action.type === "signedOut") return;
@@ -99,6 +99,6 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
     }
     const next = { accountId, state };
     snapshot.current = next; setOwned(next);
-  };
+  }, [accountId, storage]);
   return { state: current, dispatch, cartIssue, canEditCart: editorAccount === accountId };
 }
