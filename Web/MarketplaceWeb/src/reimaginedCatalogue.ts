@@ -1,10 +1,25 @@
 import { browseChildren, browseSkuIds, validateBrowseMap } from "./catalogueBrowse";
 import { getV1Catalogue, getV1CatalogueBrowseMap, type DastakV1Auth, type V1CatalogueBrowseMap, type V1CatalogueSku, type V1CatalogueSnapshot } from "./dastakV1";
 import type { ReimaginedState, ReimaginedView } from "./reimaginedState";
+import { productFamilyKey } from "./productDetail";
 
 export type ReimaginedCatalogue = { map: V1CatalogueBrowseMap; catalogue: V1CatalogueSnapshot };
 export type GroceryShelf = { key: string; label: string; skus: V1CatalogueSku[] };
 export type GroceryQuickPick = { key: string; label: string; destinationKey: string };
+
+// Presentation only: every member remains an exact purchasable SKU. Do not
+// guess families for unbranded products or across canonical category boundaries.
+export function groupGroceryProducts(skus: V1CatalogueSku[]): V1CatalogueSku[][] {
+  const groups = new Map<string, V1CatalogueSku[]>();
+  for (const sku of skus) {
+    const key = sku.brand?.name ? JSON.stringify([sku.categoryId, sku.subcategoryId, sku.brand.name, sku.variant ?? "",
+      productFamilyKey({ ...sku, brand: sku.brand.name, price: sku.sellingPricePaise, listPrice: sku.listPricePaise })]) : sku.id;
+    const group = groups.get(key) ?? [];
+    if (!group.some(member => member.id === sku.id)) group.push(sku);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
 
 export function grocerySubtotal(state: ReimaginedState, data?: ReimaginedCatalogue): number | undefined {
   if (!data) return undefined;

@@ -1,11 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
-import { groceryQuickPicks, groceryShelves, loadReimaginedCatalogue, searchGrocery } from "./reimaginedCatalogue";
+import { groupGroceryProducts, groceryQuickPicks, groceryShelves, loadReimaginedCatalogue, searchGrocery } from "./reimaginedCatalogue";
 import { fixtureId, groceryFixture as data } from "./reimaginedCatalogue.testFixtures";
 import { parseReimaginedCatalogueImport } from "./reimaginedCatalogueImport";
 
 const auth = { supabaseUrl: "https://example.supabase.co", publishableKey: "test-key", accessToken: "test-token" };
 const clients = () => ({ getV1CatalogueBrowseMap: vi.fn().mockResolvedValue(data.map), getV1Catalogue: vi.fn().mockResolvedValue(data.catalogue) });
 describe("Reimagined canonical Grocery projection", () => {
+  it("groups genuine branded packs without combining flavours, brands, unbranded or unrelated rails", () => {
+    const rice = { ...data.catalogue.skus[0], brand: { id: fixtureId(30), name: "Test", slug: "test" } };
+    const large = { ...rice, id: fixtureId(31), packSize: "5 kg", name: "Test Plain Rice 5 kg" };
+    const chocolate = { ...large, id: fixtureId(32), variant: "Chocolate" };
+    const otherBrand = { ...large, id: fixtureId(33), brand: { id: fixtureId(34), name: "Other", slug: "other" } };
+    const otherRail = { ...large, id: fixtureId(35), subcategoryId: fixtureId(4) };
+    const unbranded = { ...rice, id: fixtureId(36), brand: undefined };
+    const groups = groupGroceryProducts([rice, large, chocolate, otherBrand, otherRail, unbranded, { ...unbranded, id: fixtureId(37) }, rice]);
+    expect(groups.map(group => group.map(sku => sku.id))).toEqual([[rice.id, large.id], [chocolate.id], [otherBrand.id], [otherRail.id], [unbranded.id], [fixtureId(37)]]);
+    expect(groupGroceryProducts(searchGrocery({ ...data, catalogue: { ...data.catalogue, skus: [rice, large] } }, "5 kg"))[0][0].id).toBe(large.id);
+  });
   it("builds populated canonical shortcuts and refuses rails from another destination", () => {
     expect(groceryQuickPicks(data).map(pick => pick.key)).toEqual(["rice", "basmati", "poha"]);
     expect(groceryQuickPicks({ ...data, catalogue: { ...data.catalogue, skus: [data.catalogue.skus[1]] } }).map(pick => pick.key)).toEqual(["basmati"]);

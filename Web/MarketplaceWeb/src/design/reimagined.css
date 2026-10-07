@@ -206,9 +206,10 @@
 .reimagined-shelf-track { display: flex; gap: 18px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 12px 8px 20px; border-bottom: 13px solid #a98a60; box-shadow: 0 10px 12px -9px #574025, inset 0 -15px 25px -20px #8b6d43; scrollbar-width: thin; }
 .reimagined-shelf-track:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 .reimagined-shelf-product { width: 152px; flex: 0 0 152px; scroll-snap-align: start; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.reimagined-product-open { padding: 0; width: 100%; text-align: left; }
-.reimagined-sku-image { position: relative; height: 145px; display: grid; place-items: center; }
-.reimagined-sku-image img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 5px #47382122); }
+.reimagined-product-open { display: block; padding: 0; width: 100%; min-width: 0; text-align: left; }
+.reimagined-sku-image { position: relative; height: 145px; min-width: 0; overflow: hidden; display: grid; place-items: center; }
+/* Intrinsic tall-pack dimensions must not grow the grid row into the title. */
+.reimagined-sku-image img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; padding: 7px; box-sizing: border-box; object-fit: contain; filter: drop-shadow(0 8px 5px #47382122); }
 .reimagined-sku-image-fallback { display: none; align-items: center; gap: 8px; flex-direction: column; color: var(--muted); }
 .reimagined-sku-image-fallback[data-fallback="true"], .reimagined-sku-image[data-image-unavailable="true"] .reimagined-sku-image-fallback { display: flex; }
 .reimagined-product-name { display: block; font-size: 12px; line-height: 1.4; font-weight: 650; margin-top: 12px; }
@@ -229,7 +230,26 @@
 .reimagined-grocery-shelf .reimagined-sku-add { gap: 6px; font-weight: 650; }
 .reimagined-grocery-shelf .reimagined-sku-quantity button { flex: 0 0 44px; }
 .reimagined-grocery-shelf .reimagined-sku-quantity output { flex: 1; min-width: 20px; font-weight: 650; }
+.reimagined-grocery-shelf .reimagined-shelf-product { position: relative; width: 168px; flex-basis: 168px; gap: 6px; }
+.reimagined-grocery-shelf .reimagined-product-name { min-height: 2.8em; -webkit-line-clamp: 2; margin-top: 8px; }
+.reimagined-product-brand { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--muted); }
+.reimagined-product-saving { position: absolute; z-index: 1; top: 22px; left: 3px; padding: 3px 6px; border-radius: 7px; background: #e0eadc; color: #31563c; font-size: 10px; font-weight: 700; pointer-events: none; }
+.reimagined-shelf-packs { display: grid; gap: 3px; width: 100%; min-width: 0; font-size: 10px; color: var(--muted); }
+.reimagined-shelf-packs select { width: 100%; min-width: 0; min-height: 44px; padding: 6px; box-sizing: border-box; border: 1px solid #36594035; border-radius: 9px; background: #ffffff70; color: var(--ink); font: inherit; font-size: 12px; }
+.reimagined-shelf-single-pack { min-height: 60px; display: flex; align-items: center; }
+.reimagined-shelf-actions { display: flex; align-items: stretch; gap: 4px; width: 100%; margin-top: auto; }
+.reimagined-shelf-actions > .reimagined-sku-add, .reimagined-shelf-actions > .reimagined-sku-quantity { flex: 1; min-width: 0; width: auto; margin-top: 0; }
+.reimagined .reimagined-shelf-actions > .reimagined-save { flex: 0 0 44px; width: 44px; padding: 0; justify-content: center; }
+.reimagined-shelf-actions > .reimagined-save span { display: none; }
 .reimagined-grocery-shelf .reimagined-shelf-product > .reimagined-sku-price { min-height: 2.8em; }
+/* Short laptop windows still need the first shelf's price and purchase row in view. */
+@media (min-width: 721px) and (max-height: 850px) {
+  .reimagined[data-authenticated="true"][data-scene^="grocery"] { --panel-top: 110px; }
+  .reimagined[data-authenticated="true"][data-scene^="grocery"] .reimagined-main { padding: 20px; }
+  .reimagined[data-authenticated="true"][data-scene^="grocery"] .reimagined-panel-content { margin-top: 14px; }
+  .reimagined-grocery-shelf .reimagined-sku-image { height: 104px; }
+  .reimagined-grocery-shelf .reimagined-shelf-product > .reimagined-sku-price { min-height: 22px; }
+}
 .reimagined-availability { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .reimagined-empty-shelf { padding: 28px 12px; border-bottom: 13px solid #a98a60; font-size: 12px; color: var(--muted); }
 .reimagined-product-detail { display: grid; gap: 16px; }.reimagined-product-detail > .reimagined-sku-image { height: 250px; }.reimagined-product-detail > .reimagined-sku-image img { max-width: 250px; }
@@ -243,6 +263,28 @@
 .reimagined-detail-close { display: flex; align-items: center; gap: 8px; justify-self: start; font-size: 12px !important; }
 .reimagined-variants { display: flex; flex-wrap: wrap; gap: 8px; }.reimagined-variants button { padding: 8px 12px; border: 1px solid #c1cebc; font-size: 12px; }.reimagined-variants button[aria-pressed="true"] { background: #e0eadf; }
 .reimagined-grocery-browse[hidden] { display: none !important; }
+.reimagined-product-browser { min-width: 0; }
+.reimagined-product-paging { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 12px; border-radius: 12px; background: #f1f2e8; }
+.reimagined-product-paging button { min-width: 44px; min-height: 44px; display: grid; place-items: center; border-radius: 12px; background: #ffffff70; }
+.reimagined-product-paging button:disabled { opacity: .4; }
+.reimagined-product-paging output { font-size: 12px; color: var(--muted); }
+.reimagined-product-paging .reimagined-detail-close { flex-shrink: 0; }
+.reimagined-product-page { touch-action: pan-y pinch-zoom; animation: reimagined-product-arrival .18s ease-out; }
+.reimagined-product-page:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.reimagined-product-orbit { --orbit-spacing: 88px; position: relative; height: 132px; min-width: 0; overflow: hidden; touch-action: pan-y pinch-zoom; border-bottom: 1px solid #36594024; margin-bottom: 12px; }
+.reimagined-product-orbit button { position: absolute; left: calc(50% + var(--orbit-distance) * var(--orbit-spacing)); top: calc(8px + var(--orbit-drop)); width: 78px; height: 104px; padding: 6px; border: 1px solid #36594035; border-radius: 14px; background: #ffffff90; transform: translateX(-50%) scale(var(--orbit-scale)) rotate(var(--orbit-rotation)); transition: transform .18s ease, left .18s ease, top .18s ease; }
+.reimagined-product-orbit button[aria-current="true"] { border: 2px solid #365f48; background: #e5ede0; }
+.reimagined-product-orbit button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.reimagined-product-orbit img { width: 100%; height: 66px; object-fit: contain; pointer-events: none; }
+.reimagined-orbit-fallback { display: none; height: 66px; align-items: center; justify-content: center; }
+.reimagined-orbit-fallback[data-fallback="true"], .reimagined-product-orbit [data-image-unavailable="true"] .reimagined-orbit-fallback { display: flex; }
+.reimagined-orbit-label { display: block; font-size: 10px; line-height: 1.2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@keyframes reimagined-product-arrival { from { opacity: .65; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+@media (max-width: 720px) { .reimagined-product-orbit { --orbit-spacing: 64px; } }
+@media (prefers-reduced-motion: reduce) {
+  .reimagined-product-page { animation: none; }
+  .reimagined-product-orbit button { transition: none; }
+}
 .reimagined-product-detail.reimagined-grocery-detail { gap: 18px; padding-bottom: 16px; }
 .reimagined-detail-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 20px; }
 .reimagined-detail-hero > .reimagined-sku-image { height: 220px; padding: 14px; border-radius: 20px; background: #ffffff45; border: 1px solid #ffffff80; }
@@ -441,6 +483,8 @@
   .reimagined-grocery-shelf .reimagined-shelf-product { width: auto; flex-basis: max(108px, calc((100% - 24px) / 2.3)); min-width: 0; gap: 6px; }
   .reimagined-grocery-shelf .reimagined-shelf-track { padding-top: 8px; padding-bottom: 14px; }
   .reimagined-grocery-shelf .reimagined-product-name { margin-top: 8px; }
+  .reimagined-grocery-shelf .reimagined-shelf-actions > .reimagined-save { position: absolute; top: 18px; right: 0; border-radius: 10px; background: #f5f6eecc; }
+  .reimagined-grocery-shelf .reimagined-shelf-actions > .reimagined-sku-quantity { flex-basis: 100%; }
   .reimagined-sku-image { height: 124px; }
   .reimagined-food .reimagined-shelf-product { width: 164px; flex-basis: 164px; }
   .reimagined-main { min-height: 340px; }

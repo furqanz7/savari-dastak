@@ -7,9 +7,10 @@ import { initialReimaginedState, reimaginedReducer } from "./reimaginedState";
 import { fixtureId, groceryFixture as data } from "./reimaginedCatalogue.testFixtures";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root; let host: HTMLDivElement;
-function Harness({ unavailable = false, home = false, preview = false, catalogue = data, related = [fixtureId(6), fixtureId(7)] }: { unavailable?: boolean; home?: boolean; preview?: boolean; catalogue?: typeof data; related?: string[] }) {
+function Harness({ unavailable = false, home = false, preview = false, catalogue = data, related = [fixtureId(6), fixtureId(7)], searchQuery }: { unavailable?: boolean; home?: boolean; preview?: boolean; catalogue?: typeof data; related?: string[] | null; searchQuery?: string }) {
   const [state, dispatch] = useReducer(reimaginedReducer, undefined, () => {
     const initial = reimaginedReducer(initialReimaginedState(), { type: "signedIn", accountId: "test" });
+    if (searchQuery) return reimaginedReducer(reimaginedReducer(initial, { type: "typeSearch", query: searchQuery }), { type: "submitSearch" });
     return home ? initial : reimaginedReducer(initial, { type: "openBrowseDestination", nodeKey: "atta-flour-dal" });
   });
   return <><button onClick={() => dispatch({ type: "takeBucket" })}>Take Bucket</button><button onClick={() => dispatch({ type: "openSearch" })}>Search</button>
@@ -17,7 +18,7 @@ function Harness({ unavailable = false, home = false, preview = false, catalogue
     <button onClick={() => dispatch({ type: "reviewShopping" })}>Review Bucket</button>
     <button onClick={() => dispatch({ type: "continueShopping" })}>Continue Shopping</button>
     <output data-testid="state">{JSON.stringify(state)}</output>
-    <ReimaginedGrocery state={state} dispatch={dispatch} data={catalogue} status="ready" onRetry={() => undefined} supabaseUrl="https://example.supabase.co" trending={preview ? { city: "Preview city", skuIds: [fixtureId(7), "unknown", fixtureId(7), fixtureId(6)], preview: true } : undefined} eligibility={sku => ({ canAdd: !(unavailable && sku.id === fixtureId(7)), maximumQuantity: 2, reason: unavailable && sku.id === fixtureId(7) ? "Temporarily unavailable" : undefined })} relatedSkuIds={() => related} checkoutContent="Checkout slot" />
+    <ReimaginedGrocery state={state} dispatch={dispatch} data={catalogue} status="ready" onRetry={() => undefined} supabaseUrl="https://example.supabase.co" trending={preview ? { city: "Preview city", skuIds: [fixtureId(7), "unknown", fixtureId(7), fixtureId(6)], preview: true } : undefined} eligibility={sku => ({ canAdd: !(unavailable && sku.id === fixtureId(7)), maximumQuantity: 2, reason: unavailable && sku.id === fixtureId(7) ? "Temporarily unavailable" : undefined })} relatedSkuIds={related ? () => related : undefined} checkoutContent="Checkout slot" />
     {state.exploration.grocery.searchOpen ? <ReimaginedGrocerySuggestions data={data} query="basmati" dispatch={dispatch} /> : null}</>;
 }
 function mount(unavailable = false, home = false, preview = false) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness unavailable={unavailable} home={home} preview={preview} />)); }
@@ -25,6 +26,84 @@ function button(label: string) { const found = Array.from(host.querySelectorAll(
 function click(label: string) { act(() => button(label).click()); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); });
 describe("Reimagined Grocery interactions", () => {
+  it("removes browser controls and shows the exact-product unavailable state if its SKU disappears", () => {
+    mount(); click("View Test Plain Rice, 1 kg details");
+    act(() => root.render(<Harness catalogue={{ ...data, catalogue: { ...data.catalogue, skus: [] } }} />));
+    expect(host.textContent).toContain("This exact product is no longer in the loaded catalogue");
+    expect(host.querySelector('.reimagined-product-browser')).toBeNull();
+    click("Back to shelves"); expect(host.querySelector('.reimagined-grocery-browse')?.hasAttribute('hidden')).toBe(false);
+  });
+  it("limits detail paging to search products while retaining every size in the matching family", () => {
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    const rice = { ...data.catalogue.skus[0], brand: { id: fixtureId(30), name: "Test", slug: "test" } };
+    const large = { ...rice, id: fixtureId(31), packSize: "5 kg" };
+    act(() => root.render(<Harness searchQuery="5 kg" related={null} catalogue={{ ...data, catalogue: { ...data.catalogue, skus: [rice, large, data.catalogue.skus[1]] } }} />));
+    click("View Test Plain Rice, 5 kg details");
+    expect(host.textContent).toContain("Product 1 of 1");
+    expect(button("Next product").disabled).toBe(true);
+    expect(host.querySelectorAll('.reimagined-detail-packs button')).toHaveLength(2);
+    click("Test Plain Rice · 1 kg");
+    expect(host.textContent).toContain("Product 1 of 1");
+    expect(host.querySelector('.reimagined-product-orbit')).toBeNull();
+  });
+  it("browses products without adding or replacing exact pack lines and restores shelf position", () => {
+    mount();
+    const rice = { ...data.catalogue.skus[0], brand: { id: fixtureId(30), name: "Test", slug: "test" } };
+    const large = { ...rice, id: fixtureId(31), packSize: "5 kg" };
+    act(() => root.render(<Harness related={null} catalogue={{ ...data, catalogue: { ...data.catalogue, skus: [rice, large, data.catalogue.skus[1]] } }} />));
+    click("Take Bucket"); click("Add Test Plain Rice, 1 kg");
+    const track = host.querySelector<HTMLElement>('.reimagined-shelf-track')!; track.scrollLeft = 77;
+    click("View Test Plain Rice, 1 kg details"); click("Test Plain Rice · 5 kg");
+    click("Add Test Plain Rice, 5 kg"); click("Next product");
+    expect(host.querySelector('.reimagined-product-detail h2')?.textContent).toBe("Test Basmati Rice");
+    click("Previous product"); expect(button("Test Plain Rice · 5 kg").getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('output[data-testid="state"]')?.textContent).toContain(`"${rice.id}":1`);
+    expect(host.querySelector('output[data-testid="state"]')?.textContent).toContain(`"${large.id}":1`);
+    click("Close product details"); expect(track.scrollLeft).toBe(77);
+  });
+  it("uses the same genuine pack family in shelves and details without crossing taxonomy boundaries", () => {
+    mount();
+    const rice = { ...data.catalogue.skus[0], brand: { id: fixtureId(30), name: "Test", slug: "test" } };
+    const large = { ...rice, id: fixtureId(31), packSize: "5 kg" };
+    const unrelated = { ...large, id: fixtureId(32), subcategoryId: fixtureId(4), packSize: "10 kg" };
+    act(() => root.render(<Harness related={null} catalogue={{ ...data, catalogue: { ...data.catalogue, skus: [rice, large, unrelated] } }} />));
+    click("View Test Plain Rice, 1 kg details");
+    expect(host.querySelectorAll('.reimagined-detail-packs button')).toHaveLength(2);
+    expect(host.querySelector('.reimagined-detail-packs')?.textContent).not.toContain("10 kg");
+  });
+  it("shows one card per product and switches price, image, add and quantity to the exact selected pack", () => {
+    mount();
+    const rice = { ...data.catalogue.skus[0], brand: { id: fixtureId(30), name: "Test brand", slug: "test-brand" }, imageKey: "sku-images/small.jpg" };
+    const large = { ...rice, id: fixtureId(31), packSize: "5 kg", sellingPricePaise: 42000, listPricePaise: 50000, imageKey: "sku-images/large.jpg" };
+    const catalogue = { ...data, catalogue: { ...data.catalogue, skus: [rice, large] } };
+    act(() => root.render(<Harness catalogue={catalogue} related={[rice.id, large.id]} />));
+    expect(host.querySelectorAll(".reimagined-shelf-product")).toHaveLength(1);
+    expect(host.textContent).toContain("1 product");
+    expect(host.textContent).toContain("2 pack sizes");
+    click("Take Bucket"); click("Add Test Plain Rice, 1 kg");
+    const picker = host.querySelector<HTMLSelectElement>(".reimagined-shelf-packs select")!;
+    act(() => { picker.value = large.id; picker.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(host.querySelector(".reimagined-shelf-product")?.getAttribute("data-sku-id")).toBe(large.id);
+    expect(host.querySelector<HTMLImageElement>(".reimagined-grocery-shelf img")?.src).toContain("large.jpg");
+    expect(host.querySelector(".reimagined-sku-price strong")?.textContent).toBe("₹420.00");
+    expect(host.querySelector(".reimagined-product-saving")?.textContent).toBe("16% off");
+    click("Add Test Plain Rice, 5 kg"); click("Add one Test Plain Rice, 5 kg");
+    expect(button("Add one Test Plain Rice, 5 kg").disabled).toBe(true);
+    expect(host.querySelector("output")?.textContent).toContain(`"${rice.id}":1`);
+    expect(host.querySelector("output")?.textContent).toContain(`"${large.id}":2`);
+    click("View Test Plain Rice, 5 kg details"); click("Close product details");
+    expect(picker.value).toBe(large.id);
+  });
+  it("keeps unavailable packs selectable without enabling their addition or discarding other packs", () => {
+    mount();
+    const rice = { ...data.catalogue.skus[0], brand: { id: fixtureId(30), name: "Test", slug: "test" } };
+    const large = { ...rice, id: fixtureId(7), packSize: "5 kg" };
+    act(() => root.render(<Harness unavailable catalogue={{ ...data, catalogue: { ...data.catalogue, skus: [rice, large] } }} />));
+    const picker = host.querySelector<HTMLSelectElement>("select")!;
+    act(() => { picker.value = large.id; picker.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(button("Add Test Plain Rice, 5 kg").disabled).toBe(true);
+    expect(picker.options).toHaveLength(2);
+  });
   it("retains shelf tracks and horizontal position through cart review", () => {
     mount(); click("Take Bucket"); click("Add Test Plain Rice, 1 kg");
     const track = host.querySelector<HTMLElement>(".reimagined-shelf-track")!;

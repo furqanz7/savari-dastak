@@ -7,7 +7,7 @@ Comparison: previous `DastakCustomerView`, `DastakV1CustomerExperience` and `Cat
 | Save Grocery products and Food dishes | Native shelf/detail Save controls; existing `customer-wishlist` snapshot/set API |
 | Wishlist browsing and removal | Native Wishlist from the header or Account; exact SKU/dish details; unavailable saved identities retained |
 | Product images and detail content | Photo gallery, brand/variant/pack/manufacturer/origin/diet/shelf-life/barcode when supplied, unit price, description and sharing |
-| Pack-size choices | Existing product-family matcher; selection retains exact SKU identity and price |
+| Pack-size choices | Detail choices were retained in the 2026-10-07 pass, but shelf cards were still per SKU. The 2026-10-08 local correction groups genuine branded packs into one shelf card; selection retains exact SKU identity, price and quantity. See `dastak-reimagined-shelf-parity.md`. |
 | Saved-address add/edit/delete/default | Existing address sheets embedded in Location and Grocery/Food checkout; existing authenticated address API; explicit actions and retry keys |
 | Profile editing used by checkout | Shared account editor; successful server profile response updates root recipient immediately |
 | Order again | Native exact-SKU/option reconstruction, review-before-order, approval before replacing that service's cart; other cart retained |
