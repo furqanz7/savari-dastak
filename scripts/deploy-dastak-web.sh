@@ -141,7 +141,13 @@ if [[ "$mode" == "--staged-production" ]]; then
   # coordinated native/backend rollout. Promote this exact artifact afterwards.
   deploy_args+=(--skip-domain)
 fi
-deployment_output="$(VERCEL_ORG_ID="$org_id" VERCEL_PROJECT_ID="$project_id" vercel "${deploy_args[@]}" 2>&1)"
+if deployment_output="$(VERCEL_ORG_ID="$org_id" VERCEL_PROJECT_ID="$project_id" vercel "${deploy_args[@]}" 2>&1)"; then
+  :
+else
+  deployment_status=$?
+  printf '%s\n' "$deployment_output" >&2
+  exit "$deployment_status"
+fi
 printf '%s\n' "$deployment_output"
 deployment_url="$(rg -o 'https://[^[:space:]]+\.vercel\.app' <<<"$deployment_output" | tail -1)"
 if [[ -z "$deployment_url" ]]; then
