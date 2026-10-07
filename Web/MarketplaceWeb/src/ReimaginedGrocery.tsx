@@ -1,9 +1,13 @@
-import { useMemo, useRef, type Dispatch, type ReactNode } from "react";
+import { useMemo, useRef, useState, type Dispatch, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Minus, Package, Plus, ShoppingBasket, TrendingUp, X } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
 import { formatV1Price, type V1CatalogueSku } from "./dastakV1";
 import { groceryQuickPicks, groceryShelves, searchGrocery, type GroceryShelf, type ReimaginedCatalogue } from "./reimaginedCatalogue";
 import type { ReimaginedAction, ReimaginedState } from "./reimaginedState";
+import { WishlistButton } from "./ReimaginedWishlist";
+import type { useReimaginedWishlist } from "./useReimaginedWishlist";
+import { sameProductFamily, productUnitPrice, type DetailProduct } from "./productDetail";
+import { DetailImage } from "./ProductDetailCard";
 
 export type GroceryEligibility = { canAdd: boolean; canRemove?: boolean; maximumQuantity: number; reason?: string };
 export type GroceryTrending = { city: string; skuIds: string[]; preview?: boolean };
@@ -14,9 +18,11 @@ type Props = {
   relatedSkuIds?: (sku: V1CatalogueSku) => string[];
   checkoutContent: ReactNode;
   trending?: GroceryTrending;
+  wishlist?: ReturnType<typeof useReimaginedWishlist>;
+  online?: boolean;
 };
 
-export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supabaseUrl, eligibility, relatedSkuIds, checkoutContent, trending }: Props) {
+export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supabaseUrl, eligibility, relatedSkuIds, checkoutContent, trending, wishlist, online = true }: Props) {
   const exploration = state.exploration.grocery;
   const shelves = useMemo(() => data ? groceryShelves(data, exploration.view) : [], [data, exploration.view]);
   const quickPicks = useMemo(() => data ? groceryQuickPicks(data) : [], [data]);
@@ -28,7 +34,7 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
     });
   }, [data, trending]);
   const selected = data?.catalogue.skus.find(sku => sku.id === exploration.detailId);
-  const variants = selected && relatedSkuIds && data ? [...new Set([selected.id, ...relatedSkuIds(selected)])]
+  const variants = selected && data ? [...new Set([selected.id, ...(relatedSkuIds ? relatedSkuIds(selected) : data.catalogue.skus.filter(sku => sameProductFamily(detailProduct(selected), detailProduct(sku))).map(sku => sku.id))])]
     .map(id => data.catalogue.skus.find(sku => sku.id === id)).filter((sku): sku is V1CatalogueSku => Boolean(sku)) : [];
   const quantity = (sku: V1CatalogueSku, value: number) => {
     // Removal stays possible even if an existing line is now unavailable.
@@ -45,14 +51,15 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
   const detail = exploration.detailId ? selected ? <section className="reimagined-product-detail reimagined-grocery-detail" aria-label={`${selected.name} details`}>
     <button type="button" className="reimagined-detail-close" onClick={() => dispatch({ type: "closeDetail" })}><X size={18} />Close product details</button>
     <div className="reimagined-detail-hero">
-      <GroceryImage key={selected.id} sku={selected} supabaseUrl={supabaseUrl} />
+      <GroceryGallery key={selected.id} sku={selected} supabaseUrl={supabaseUrl} />
       <div className="reimagined-detail-identity"><p className="reimagined-kicker">{selected.brand?.name ?? "Dastak"}</p><h2>{selected.name}</h2>
-        <p>{[selected.variant, selected.packSize].filter(Boolean).join(" · ")}</p><GroceryPrice sku={selected} /></div>
+        <p>{[selected.variant, selected.packSize].filter(Boolean).join(" · ")}</p><GroceryPrice sku={selected} /><small>{productUnitPrice(detailProduct(selected))}</small><WishlistButton wishlist={wishlist} kind="RETAIL_SKU" id={selected.id} name={selected.name} online={online} /><GroceryShare sku={selected} /></div>
     </div>
     {variants.length > 1 ? <section className="reimagined-detail-packs"><h3>Pack sizes & variants</h3><div className="reimagined-variants" role="group" aria-label="Related pack sizes and variants">{variants.map(sku => <button key={sku.id} type="button" aria-pressed={sku.id === selected.id} onClick={() => dispatch({ type: "openDetail", id: sku.id })}>{sku.name} · {sku.packSize}</button>)}</div></section> : null}
     <div className="reimagined-detail-purchase"><p className="reimagined-availability">{eligibility(selected).reason ?? (eligibility(selected).canAdd ? "Purchase availability will be confirmed at checkout." : "Currently unavailable to add.")}</p>
       <GroceryQuantity sku={selected} count={state.shopping.retail[selected.id] ?? 0} policy={eligibility(selected)} onQuantity={quantity} /></div>
     {selected.description ? <section className="reimagined-detail-information"><h3>About this product</h3><p>{selected.description}</p></section> : null}
+    <section className="reimagined-detail-information"><h3>Product information</h3><dl>{[["Brand", selected.brand?.name], ["Variant", selected.variant], ["Pack size", selected.packSize], ["Manufacturer", selected.manufacturerName], ["Country of origin", selected.countryOfOriginCode], ["Diet", selected.dietType], ["Shelf life", selected.shelfLifeDays ? `${selected.shelfLifeDays} days` : undefined], ["Barcode", selected.barcode]].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p>Refer to product packaging for current ingredients, allergens and usage information.</p></section>
   </section> : <section role="status"><p>This exact product is no longer in the loaded catalogue.</p><button type="button" onClick={() => dispatch({ type: "closeDetail" })}>Back to shelves</button></section> : null;
   const browse = exploration.view.kind === "home" ? <div className="reimagined-grocery-home">
     <section className="reimagined-quick-picks" aria-label="Quick subcategory picks">
@@ -63,13 +70,13 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
     </section>
     <section className="reimagined-trending" aria-label="City trending products">
       {trending?.preview ? <p className="reimagined-discovery-note">Preview ranking · sample products, not local order statistics.</p> : null}
-      {trendingSkus.length ? <WoodenShelf shelf={{ key: "city-trending", label: trending?.preview ? "Trending in your city" : `Trending in ${trending!.city}`, skus: trendingSkus }} state={state} dispatch={dispatch} supabaseUrl={supabaseUrl} eligibility={eligibility} onQuantity={quantity} /> : <>
+      {trendingSkus.length ? <WoodenShelf shelf={{ key: "city-trending", label: trending?.preview ? "Trending in your city" : `Trending in ${trending!.city}`, skus: trendingSkus }} state={state} dispatch={dispatch} supabaseUrl={supabaseUrl} eligibility={eligibility} onQuantity={quantity} wishlist={wishlist} online={online} /> : <>
         <h2>Trending in your city</h2>
         <div className="reimagined-trending-empty"><TrendingUp size={24} aria-hidden="true" /><div><strong>Local favourites are on their way.</strong><p>Explore the quick picks or store directory while city favourites are unavailable.</p></div></div>
       </>}
     </section>
   </div> : <div className="reimagined-grocery-shelves">
-    {!shelves.length ? <p role="status">This category could not be resolved. Choose a category from the directory.</p> : shelves.map(shelf => <WoodenShelf key={shelf.key} shelf={shelf} state={state} dispatch={dispatch} supabaseUrl={supabaseUrl} eligibility={eligibility} onQuantity={quantity} />)}
+    {!shelves.length ? <p role="status">This category could not be resolved. Choose a category from the directory.</p> : shelves.map(shelf => <WoodenShelf key={shelf.key} shelf={shelf} state={state} dispatch={dispatch} supabaseUrl={supabaseUrl} eligibility={eligibility} onQuantity={quantity} wishlist={wishlist} online={online} />)}
   </div>;
   // Retain the same DOM tracks (and their scroll positions), but remove the
   // underlying shelves from keyboard/accessibility navigation during details or review.
@@ -84,7 +91,7 @@ export function ReimaginedGrocerySuggestions({ data, query, dispatch }: { data?:
   return <div className="reimagined-grocery-suggestions">{results.length ? results.map(sku => <button key={sku.id} type="button" onClick={() => { dispatch({ type: "closeSearch" }); dispatch({ type: "openDetail", id: sku.id }); }}><span>{sku.name}</span><small>{sku.packSize}</small></button>) : <p>No matching products in the loaded catalogue.</p>}</div>;
 }
 
-function WoodenShelf({ shelf, state, dispatch, supabaseUrl, eligibility, onQuantity }: { shelf: GroceryShelf; state: ReimaginedState; dispatch: Dispatch<ReimaginedAction>; supabaseUrl: string; eligibility: Props["eligibility"]; onQuantity: (sku: V1CatalogueSku, quantity: number) => void }) {
+function WoodenShelf({ shelf, state, dispatch, supabaseUrl, eligibility, onQuantity, wishlist, online }: { shelf: GroceryShelf; state: ReimaginedState; dispatch: Dispatch<ReimaginedAction>; supabaseUrl: string; eligibility: Props["eligibility"]; onQuantity: (sku: V1CatalogueSku, quantity: number) => void; wishlist?: Props["wishlist"]; online: boolean }) {
   const track = useRef<HTMLDivElement>(null);
   const move = (direction: number) => track.current?.scrollBy({ left: direction * track.current.clientWidth * .8, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   return <section className="reimagined-wooden-shelf reimagined-grocery-shelf" aria-label={shelf.label}>
@@ -94,6 +101,7 @@ function WoodenShelf({ shelf, state, dispatch, supabaseUrl, eligibility, onQuant
       <p>{sku.packSize}</p><GroceryPrice sku={sku} />
       {!eligibility(sku).canAdd ? <small className="reimagined-availability">{eligibility(sku).reason ?? "Currently unavailable"}</small> : null}
       <GroceryQuantity sku={sku} count={state.shopping.retail[sku.id] ?? 0} policy={eligibility(sku)} onQuantity={onQuantity} />
+      <WishlistButton wishlist={wishlist} kind="RETAIL_SKU" id={sku.id} name={sku.name} online={online} />
     </article>)}</div> : <p className="reimagined-empty-shelf">No products in this shelf yet.</p>}
   </section>;
 }
@@ -114,4 +122,29 @@ function maximumQuantity(policy: GroceryEligibility) {
 export function GroceryImage({ sku, supabaseUrl }: { sku: V1CatalogueSku; supabaseUrl: string }) {
   const url = sku.imageKey && (sku.imageKey.startsWith("local/") || supabaseUrl) ? catalogueImageUrl(supabaseUrl, sku.imageKey) : null;
   return <div className="reimagined-sku-image" key={url ?? sku.id}>{url ? <img src={url} alt={`${sku.name}, ${sku.packSize}`} loading="lazy" onError={event => { event.currentTarget.hidden = true; event.currentTarget.parentElement?.setAttribute("data-image-unavailable", "true"); }} /> : null}<span className="reimagined-sku-image-fallback" aria-hidden="true" data-fallback={!url}><Package size={30} /><small>Image unavailable</small></span></div>;
+}
+
+function detailProduct(sku: V1CatalogueSku): DetailProduct {
+  return { ...sku, brand: sku.brand?.name, price: sku.sellingPricePaise, listPrice: sku.listPricePaise };
+}
+
+function GroceryGallery({ sku, supabaseUrl }: { sku: V1CatalogueSku; supabaseUrl: string }) {
+  const [index, setIndex] = useState(0);
+  const keys = [...new Set([sku.imageKey, ...sku.galleryImageKeys].filter((key): key is string => Boolean(key)))];
+  if (keys.length < 2) return <GroceryImage sku={sku} supabaseUrl={supabaseUrl} />;
+  return <div className="reimagined-product-gallery"><div className="reimagined-sku-image"><DetailImage key={keys[index]} source={catalogueImageUrl(supabaseUrl, keys[index], 1024)} name={`${sku.name}, ${sku.packSize}`} /></div>
+    <div role="group" aria-label="Product photos"><button type="button" aria-label="Previous product photo" onClick={() => setIndex(value => (value - 1 + keys.length) % keys.length)}>←</button><output>{index + 1} / {keys.length}</output><button type="button" aria-label="Next product photo" onClick={() => setIndex(value => (value + 1) % keys.length)}>→</button></div>
+  </div>;
+}
+
+function GroceryShare({ sku }: { sku: V1CatalogueSku }) {
+  const [message, setMessage] = useState("");
+  async function share() {
+    const text = `${sku.name} · ${sku.packSize} · ${formatV1Price(sku.sellingPricePaise)} — Dastak`;
+    try {
+      if (navigator.share) await navigator.share({ title: sku.name, text });
+      else { await navigator.clipboard.writeText(text); setMessage("Product details copied"); }
+    } catch (issue) { if (!(issue instanceof DOMException && issue.name === "AbortError")) setMessage("Sharing is unavailable on this device"); }
+  }
+  return <><button type="button" onClick={() => void share()}>Share product</button>{message ? <p role="status">{message}</p> : null}</>;
 }

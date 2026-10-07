@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, type Dispatch, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Check, Home, MapPin, Package, Printer, ReceiptText, Search, Settings, ShoppingBasket, ShoppingBag, UserRound, Utensils, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bookmark, Check, Home, MapPin, Package, Printer, ReceiptText, Search, Settings, ShoppingBasket, ShoppingBag, UserRound, Utensils, X } from "lucide-react";
 import type { ReimaginedDirectory } from "./reimaginedDirectory";
 import { reimaginedEnvironment, type ReimaginedAction, type ReimaginedSection, type ReimaginedState } from "./reimaginedState";
 import "./design/reimagined.css";
@@ -33,6 +33,8 @@ type Props = {
   signInBusy?: boolean;
   signInError?: string;
   authFooter?: ReactNode;
+  onOpenWishlist?: () => void;
+  featureTitle?: string;
   children: ReactNode;
   searchSuggestions?: ReactNode;
   sectionContent: Partial<Record<Exclude<ReimaginedSection, "home">, ReactNode>>;
@@ -42,7 +44,7 @@ type Props = {
   environment?: ReactNode;
 };
 
-export function ReimaginedShell({ state, dispatch, directory, directoryStatus = "ready", onRetryDirectory, displayName, greeting, locationLabel, locationContent, onSignIn, signInBusy, signInError, authFooter, children, searchSuggestions, sectionContent, shoppingTotalLabel, activeOrderLabel, onOpenActiveOrder, environment }: Props) {
+export function ReimaginedShell({ state, dispatch, directory, directoryStatus = "ready", onRetryDirectory, displayName, greeting, locationLabel, locationContent, onSignIn, signInBusy, signInError, authFooter, onOpenWishlist, featureTitle, children, searchSuggestions, sectionContent, shoppingTotalLabel, activeOrderLabel, onOpenActiveOrder, environment }: Props) {
   const searchId = useId();
   const directoryId = useId();
   const scene = reimaginedEnvironment(state);
@@ -53,6 +55,11 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
   const detailReturnScroll = useRef<number | null>(null);
   const cartReturnScroll = useRef<number | null>(null);
   const previousFocus = useRef({ account: state.accountId, service: state.service, section: state.section, search: exploration.searchOpen, location: state.locationOpen, detail: exploration.detailId, checkout: exploration.checkout });
+  useEffect(() => {
+    const content = shell.current?.querySelector<HTMLElement>(".reimagined-panel-content");
+    if (content) content.scrollTop = 0;
+    shell.current?.querySelector<HTMLElement>("main")?.focus({ preventScroll: true });
+  }, [featureTitle]);
   useEffect(() => {
     const previous = previousFocus.current;
     previousFocus.current = { account: state.accountId, service: state.service, section: state.section, search: exploration.searchOpen, location: state.locationOpen, detail: exploration.detailId, checkout: exploration.checkout };
@@ -163,8 +170,9 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
       </aside>
       <main id="reimagined-main" className="reimagined-main glass-panel" tabIndex={-1}>
         <header className="reimagined-main-heading">
-          <div><span className="reimagined-kicker">{greeting}{displayName ? `, ${displayName}` : ""}</span><h1>{state.section === "home" ? title : navigation.find(item => item.section === state.section)?.label}</h1></div>
+          <div><span className="reimagined-kicker">{greeting}{displayName ? `, ${displayName}` : ""}</span><h1>{featureTitle ?? (state.section === "home" ? title : navigation.find(item => item.section === state.section)?.label)}</h1></div>
           {state.section === "home" ? <div className="reimagined-header-actions">
+            {onOpenWishlist ? <button type="button" aria-label="Open Wishlist" onClick={onOpenWishlist}><Bookmark size={20} /></button> : null}
             <button type="button" aria-label="Open search" aria-expanded={exploration.searchOpen} aria-controls={searchId} onClick={() => dispatch({ type: "openSearch" })}><Search size={21} /></button>
             {state.service === "grocery" ? <button type="button" className={state.bucketPrompt ? "bucket-prompt" : undefined} aria-label={state.bucketAcquired ? "Bucket taken" : "Take a Bucket"} aria-pressed={state.bucketAcquired} onClick={() => dispatch({ type: "takeBucket" })}><ShoppingBasket size={23} />{state.bucketAcquired ? <Check className="bucket-check" size={12} /> : null}</button> : null}
           </div> : <button type="button" aria-label="Return Home" onClick={() => dispatch({ type: "navigate", section: "home" })}><X size={20} /></button>}

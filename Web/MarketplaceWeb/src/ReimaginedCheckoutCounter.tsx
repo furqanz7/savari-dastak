@@ -10,9 +10,10 @@ export function GroceryPaymentNotice() {
 }
 
 // Writes require explicit activation, an online session and exclusive cart ownership.
-export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, canEdit = true, online, dispatch, onSessionExpired, ordersUrl }: {
+export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, canEdit = true, online, dispatch, onSessionExpired, ordersUrl, onOpenOrders }: {
   checkout: ReimaginedGroceryCheckout; draft?: GroceryCheckoutDraft; enabled?: boolean; canEdit?: boolean; online: boolean;
   dispatch: Dispatch<ReimaginedAction>; onSessionExpired: () => void; ordersUrl: string;
+  onOpenOrders?: (id?: string) => void;
 }) {
   const [order, setOrder] = useState<V1Order>();
   const [busy, setBusy] = useState(false);
@@ -64,7 +65,7 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, ca
       : checkout.recoveryIssue ? <p role="alert">{checkout.recoveryIssue}</p>
       : !order && checkout.recoverableOrderId ? <><p>A saved Grocery reservation needs a server status check. No new order will be created.</p><button type="button" disabled={blocked} onClick={() => void run("refresh")}>Recover Grocery reservation</button></>
       : !order ? <><p>{checkout.hasPendingAttempt ? "An earlier attempt is unresolved. Retry the same Bucket, recipient and address using its saved request key." : "Reserve this Grocery Bucket to obtain the server-calculated total. Food items are not included."}</p><button type="button" disabled={!draft || blocked} onClick={() => void run("reserve")}>{busy ? "Reserving Grocery order…" : "Reserve Grocery order"}</button></>
-      : <><h4>{order.displayOrderNumber}</h4><dl className="reimagined-server-bill" aria-label="Server-confirmed Grocery bill">
+      : <><h4>{order.displayOrderNumber}</h4><ServerOrderDelivery order={order} /><dl className="reimagined-server-bill" aria-label="Server-confirmed Grocery bill">
         {([
           ["Items", order.price.subtotalPaise], ["Delivery", order.price.deliveryFeePaise], ["Platform fee", order.price.platformFeePaise], ["Tax", order.price.taxPaise],
         ] as const).filter(([, value]) => Number.isSafeInteger(value) && value >= 0).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatV1Price(value)}</dd></div>)}
@@ -74,7 +75,15 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, ca
         <button type="button" disabled={blocked} onClick={() => void run("refresh")}>Refresh order status</button>
         <button type="button" disabled={blocked || !canConfirmGroceryOrder(order, now)} onClick={() => void run("confirm")}>Confirm Grocery order</button>
         {["PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(order.status) ? <><p>This unpaid reservation is closed. Your Bucket is retained.</p><button type="button" disabled={blocked} onClick={() => void run("restart")}>Recheck closed reservation and return to Bucket</button></> : null}
-        <a href={ordersUrl}>Open Orders to review or manage this reservation</a></>}
+        {onOpenOrders ? <button type="button" onClick={() => onOpenOrders(order.id)}>Open Orders to review or manage this reservation</button> : <a href={ordersUrl}>Open Orders to review or manage this reservation</a>}</>}
     {error ? <p role="alert">{error}</p> : null}
+  </section>;
+}
+
+export function ServerOrderDelivery({ order }: { order: V1Order }) {
+  return <section aria-label="Reserved order delivery details"><h4>This reservation</h4>
+    {order.recipient ? <p>{order.recipient.name} · {order.recipient.phoneNumber}</p> : null}
+    {order.deliveryAddress ? <p>{[order.deliveryAddress.label, order.deliveryAddress.line1, order.deliveryAddress.line2].filter(Boolean).join(" · ")}</p> : null}
+    <p>The reservation keeps the recipient and address submitted with it. Later profile or address edits do not rewrite this order. Review it in Orders before confirming.</p>
   </section>;
 }

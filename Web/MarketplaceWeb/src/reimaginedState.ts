@@ -53,6 +53,7 @@ export type ReimaginedAction =
   | { type: "reviewShopping" }
   | { type: "continueShopping" }
   | { type: "checkoutFailed" }
+  | { type: "replaceServiceShopping"; service: ReimaginedService; shopping: PersistedCustomerCart }
   | { type: "checkoutSucceeded"; service: ReimaginedService; orderId: string; purchased: PersistedCustomerCart }
   | { type: "orderUpdated"; order?: ReimaginedState["activeOrder"] }
   | { type: "outsideInteraction" };
@@ -85,6 +86,13 @@ export function reimaginedReducer(state: ReimaginedState, action: ReimaginedActi
   }
   if (!state.accountId) return state;
   switch (action.type) {
+    case "replaceServiceShopping": {
+      const next = resetHome({ ...state, service: action.service, shopping: {
+        retail: action.service === "grocery" ? { ...action.shopping.retail } : state.shopping.retail,
+        food: action.service === "food" ? action.shopping.food.map(line => ({ ...line, optionIds: [...line.optionIds] })) : state.shopping.food,
+      }, bucketAcquired: action.service === "grocery" || state.bucketAcquired });
+      return explore(next, { checkout: true });
+    }
     case "selectService":
       if (action.service === "parcel" || action.service === "print") return state;
       if (action.service === state.service) return resetHome(state);

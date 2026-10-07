@@ -17,7 +17,7 @@ export type DastakWebPushController = {
   refresh: () => Promise<void>;
 };
 
-export function useDastakWebPush(authentication: WebPushAuthentication): DastakWebPushController {
+export function useDastakWebPush(authentication: WebPushAuthentication, enabled = true): DastakWebPushController {
   const storageKey = useMemo(
     () => webPushOnboardingStorageKey(authentication.accountId),
     [authentication.accountId],
@@ -68,7 +68,7 @@ export function useDastakWebPush(authentication: WebPushAuthentication): DastakW
     setStatus(dismissed ? "dismissed" : "prompt");
   }, [registerCurrentSubscription, storageKey]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { if (enabled) void refresh(); }, [refresh, enabled]);
 
   const enable = useCallback(async () => {
     if (!webPushSupported()) {

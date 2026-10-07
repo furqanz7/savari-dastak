@@ -6,15 +6,17 @@ import { foodAvailability, foodCategoryControls, foodCategoryRestaurants, foodRe
 import type { ReimaginedAction, ReimaginedState } from "./reimaginedState";
 import type { useReimaginedFood } from "./useReimaginedFood";
 import { foodSelection, sameFoodOptions } from "./reimaginedFoodSelection";
+import { WishlistButton } from "./ReimaginedWishlist";
+import type { useReimaginedWishlist } from "./useReimaginedWishlist";
 
-type Props = { state: ReimaginedState; dispatch: Dispatch<ReimaginedAction>; resource: ReturnType<typeof useReimaginedFood>; supabaseUrl: string; online: boolean; legacyUrl: string; canEdit?: boolean; checkoutContent?: ReactNode };
+type Props = { state: ReimaginedState; dispatch: Dispatch<ReimaginedAction>; resource: ReturnType<typeof useReimaginedFood>; supabaseUrl: string; online: boolean; legacyUrl: string; canEdit?: boolean; checkoutContent?: ReactNode; wishlist?: ReturnType<typeof useReimaginedWishlist> };
 
-export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online, legacyUrl, canEdit = true, checkoutContent }: Props) {
+export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online, canEdit = true, checkoutContent, wishlist }: Props) {
   const exploration = state.exploration.food;
   const categoryControls = useMemo(() => foodCategoryControls(resource.data ?? []), [resource.data]);
   const restaurants = useMemo(() => foodCategoryRestaurants(resource.data ?? [], exploration.foodCategoryFilter), [resource.data, exploration.foodCategoryFilter]);
   if (exploration.checkout) return <section aria-label="Review Food cart"><h2>Your saved Food items</h2>
-    <p>Your Food cart is separate from Grocery. Prices are estimates; checkout remains disabled.</p>
+    <p>Your Food cart is separate from Grocery. Final prices and availability are confirmed by the server at checkout.</p>
     <ul>{state.shopping.food.map(line => {
       const menu = resource.data?.find(value => value.restaurant.branchId === line.branchId);
       const item = menu?.categories.flatMap(category => category.items).find(value => value.id === line.itemId);
@@ -23,8 +25,10 @@ export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online,
         {item?.name ?? "Saved dish"} · {menu ? foodRestaurantName(menu) : "Restaurant unavailable"} · Quantity {line.quantity}
         {selection?.valid ? <><p>{selection.options.map(option => option.name).join(", ") || "No options"}</p><p>{formatV1Price(selection.pricePaise * line.quantity)} estimated</p></> : <p>Saved selection unavailable in the current menu; retained unchanged.</p>}
         <button type="button" disabled={!canEdit} aria-label={`Remove ${item?.name ?? "saved dish"}`} onClick={() => dispatch({ type: "setFoodQuantity", line: { ...line, quantity: 0 } })}>Remove</button>
+        <button type="button" disabled={!canEdit} aria-label={`Decrease ${item?.name ?? "saved dish"} in Food cart`} onClick={() => dispatch({ type: "setFoodQuantity", line: { ...line, quantity: line.quantity - 1 } })}>−</button>
+        <button type="button" disabled={!canEdit || !online || !selection?.valid || !menu?.restaurant.isOpen || !menu.restaurant.acceptingOrders || menu.restaurant.branchStatus !== "ACTIVE" || line.quantity >= 99} aria-label={`Increase ${item?.name ?? "saved dish"} in Food cart`} onClick={() => dispatch({ type: "setFoodQuantity", line: { ...line, quantity: line.quantity + 1 } })}>+</button>
       </li>;
-    })}</ul><a href={legacyUrl}>Open existing Food</a>
+    })}</ul>
     {checkoutContent ?? <button type="button" disabled>Food checkout integration pending</button>}</section>;
   if (!resource.data) return <section role="status"><p>{!online ? "You’re offline. Reconnect to load Food menus." : resource.status === "unavailable" ? "Couldn’t load Food menus. Your saved carts are unchanged." : "Opening restaurants and menus…"}</p>
     {online && resource.status === "unavailable" ? <button type="button" onClick={resource.retry}>Retry Food menus</button> : null}</section>;
@@ -32,18 +36,19 @@ export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online,
   const menu = resource.data.find(value => value.restaurant.branchId === branchId);
   const item = menu?.categories.flatMap(category => category.items).find(value => value.id === exploration.detailId);
   return <div className="reimagined-food">
-    <p className="reimagined-commerce-note">Food preview · Choose your options explicitly. Prices are estimates; checkout is disabled.</p>
+    <p className="reimagined-commerce-note">Choose your options explicitly. Prices are estimates until the server confirms your order.</p>
     {resource.data.length === 100 ? <p role="status">Showing the first 100 restaurants returned by Dastak. Search covers these loaded menus only.</p> : null}
     <button type="button" disabled={!online} onClick={resource.retry}>Refresh Food menus</button>
     {exploration.detailId ? item && menu ? <section className="reimagined-product-detail" aria-label={`${item.name} dish details`}>
       <button type="button" className="reimagined-detail-close" onClick={() => dispatch({ type: "closeDetail" })}>Back to menu</button>
       <FoodImage name={item.name} imageKey={item.imageKey} supabaseUrl={supabaseUrl} />
       <h2>{item.name}</h2><p>{foodRestaurantName(menu)}</p><p>{item.description}</p><p>Base price: {formatV1Price(item.basePricePaise)}</p><p>{foodAvailability(menu)}</p>
+      <WishlistButton wishlist={wishlist} kind="MENU_ITEM" id={item.id} name={item.name} online={online} />
       <FoodChoices key={JSON.stringify([menu.restaurant.branchId, item])} item={item} menu={menu} state={state} dispatch={dispatch} online={online} canEdit={canEdit} />
     </section> : <p role="status">This dish is no longer in the loaded menu. <button type="button" onClick={() => dispatch({ type: "closeDetail" })}>Back to menu</button></p>
       : exploration.view.kind === "restaurant" ? menu ? <><button type="button" onClick={() => dispatch({ type: "navigate", section: "home" })}>Back to restaurants</button>
         <h2>{foodRestaurantName(menu)}</h2><p>{menu.restaurant.description}</p><p>{foodAvailability(menu)}</p>
-        {menu.categories.length ? menu.categories.map(category => <DishShelf key={category.id} name={category.name} items={category.items} supabaseUrl={supabaseUrl} dispatch={dispatch} />) : <p>No dishes in this menu yet.</p>}</>
+        {menu.categories.length ? menu.categories.map(category => <DishShelf key={category.id} name={category.name} items={category.items} supabaseUrl={supabaseUrl} dispatch={dispatch} wishlist={wishlist} online={online} />) : <p>No dishes in this menu yet.</p>}</>
         : <p role="status">This restaurant is not in the loaded catalogue. <button type="button" onClick={() => dispatch({ type: "navigate", section: "home" })}>Back to restaurants</button></p>
       : exploration.view.kind === "search" ? <FoodResults menus={resource.data} query={exploration.view.query} dispatch={dispatch} />
       : <><nav className="reimagined-food-categories" aria-label="Food menu categories">
@@ -77,10 +82,11 @@ function FoodResults({ menus, query, dispatch, suggestions = false }: { menus: V
   </div>;
 }
 
-function DishShelf({ name, items, dispatch, supabaseUrl }: { name: string; items: V1RestaurantMenuItem[]; dispatch: Dispatch<ReimaginedAction>; supabaseUrl: string }) {
+function DishShelf({ name, items, dispatch, supabaseUrl, wishlist, online }: { name: string; items: V1RestaurantMenuItem[]; dispatch: Dispatch<ReimaginedAction>; supabaseUrl: string; wishlist?: ReturnType<typeof useReimaginedWishlist>; online: boolean }) {
   return <section className="reimagined-wooden-shelf" aria-label={name}><header><h3>{name}</h3></header>{items.length ? <div className="reimagined-shelf-track" tabIndex={0} aria-label={`${name} dish shelf`}>{items.map(item => <article className="reimagined-shelf-product" key={item.id}>
     <button type="button" className="reimagined-product-open" aria-label={`View ${item.name} details`} onClick={() => dispatch({ type: "openDetail", id: item.id })}><FoodImage name={item.name} imageKey={item.imageKey} supabaseUrl={supabaseUrl} /><span className="reimagined-product-name">{item.name}</span></button>
     <p>{formatV1Price(item.basePricePaise)} base</p><small>{item.optionGroups.length ? "Options available in details" : "No customisation options"}</small>
+    <WishlistButton wishlist={wishlist} kind="MENU_ITEM" id={item.id} name={item.name} online={online} />
     <button type="button" onClick={() => dispatch({ type: "openDetail", id: item.id })}>Choose dish</button>
   </article>)}</div> : <p>No dishes in this category yet.</p>}</section>;
 }

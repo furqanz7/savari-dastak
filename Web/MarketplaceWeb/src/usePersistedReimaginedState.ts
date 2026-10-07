@@ -59,7 +59,7 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
     if (liveAccount.current !== accountId) return;
     // Authentication is owned by the application's existing session, not UI events.
     if (action.type === "signedIn" || action.type === "signedOut") return;
-    const changesCart = action.type === "setGroceryQuantity" || action.type === "setFoodQuantity" || action.type === "checkoutSucceeded";
+    const changesCart = action.type === "setGroceryQuantity" || action.type === "setFoodQuantity" || action.type === "checkoutSucceeded" || action.type === "replaceServiceShopping";
     let base = snapshot.current.state;
     if (changesCart) {
       if (!editing.current) {

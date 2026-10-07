@@ -5,10 +5,12 @@ import { canConfirmGroceryOrder } from "./reimaginedCheckout";
 import { prepareFoodCheckout } from "./reimaginedFoodCheckoutPreparation";
 import type { ReimaginedFoodRecovery } from "./reimaginedFoodRecovery";
 import type { ReimaginedAction } from "./reimaginedState";
+import { ServerOrderDelivery } from "./ReimaginedCheckoutCounter";
 
-export function ReimaginedFoodCounter({ checkout, input, enabled = false, dispatch, onSessionExpired, ordersUrl }: {
+export function ReimaginedFoodCounter({ checkout, input, enabled = false, dispatch, onSessionExpired, ordersUrl, onOpenOrders }: {
   checkout: ReimaginedFoodRecovery; input: Parameters<typeof prepareFoodCheckout>[0]; enabled?: boolean;
   dispatch: Dispatch<ReimaginedAction>; onSessionExpired: () => void; ordersUrl: string;
+  onOpenOrders?: (id?: string) => void;
 }) {
   const [order, setOrder] = useState(checkout.order);
   const [busy, setBusy] = useState(false);
@@ -53,11 +55,15 @@ export function ReimaginedFoodCounter({ checkout, input, enabled = false, dispat
       : checkout.recoveryIssue ? <p role="alert">{checkout.recoveryIssue}</p>
       : !order && checkout.recoverableOrderId ? <button type="button" disabled={blocked} onClick={() => void run("refresh")}>Recover Food reservation</button>
       : !order ? <><p>{checkout.hasPendingAttempt ? "Retry the exact original Food selections, recipient and address using the saved request key." : "Reserve Food to obtain the server-calculated total. Grocery items are not included."}</p><button type="button" disabled={blocked || !prepareFoodCheckout(input).submission} onClick={() => void run("reserve")}>Reserve Food order</button></>
-      : <><h3>{order.displayOrderNumber}</h3><p>Server order total: {formatV1Price(order.price.totalPaise)}</p><p>{order.status}</p>
+      : <><h3>{order.displayOrderNumber}</h3><ServerOrderDelivery order={order} /><p>Server order total: {formatV1Price(order.price.totalPaise)}</p><p>{order.status}</p>
+        <dl className="reimagined-server-bill" aria-label="Server-confirmed Food bill">{([
+          ["Items", order.price.subtotalPaise], ["Delivery", order.price.deliveryFeePaise], ["Platform fee", order.price.platformFeePaise], ["Tax", order.price.taxPaise],
+        ] as const).filter(([, value]) => Number.isSafeInteger(value) && value >= 0).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{formatV1Price(value)}</dd></div>)}
+        {order.price.discountPaise > 0 ? <div><dt>Discount</dt><dd>−{formatV1Price(order.price.discountPaise)}</dd></div> : null}</dl>
         <button type="button" disabled={blocked} onClick={() => void run("refresh")}>Refresh Food order status</button>
         <button type="button" disabled={blocked || (!checkout.committed && !canConfirmGroceryOrder(order, now))} onClick={() => void run("confirm")}>{checkout.committed ? "Recover confirmed Food cart" : "Confirm Food order"}</button>
         {["PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(order.status) ? <button type="button" disabled={blocked} onClick={() => void run("restart")}>Recheck closed Food reservation</button> : null}</>}
-    <a href={ordersUrl}>Review Food reservations in Orders</a>
+    {onOpenOrders ? <button type="button" onClick={() => onOpenOrders(order?.id)}>Review Food reservations in Orders</button> : <a href={ordersUrl}>Review Food reservations in Orders</a>}
     {error ? <p role="alert">{error}</p> : null}
   </section>;
 }

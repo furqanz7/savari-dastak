@@ -16,8 +16,10 @@ import {
   type CustomerSection,
 } from "./customerNavigation";
 import { useOrderRealtime } from "./orderRealtime";
-import { useDastakWebPush } from "./useDastakWebPush";
+import { useDastakWebPush, type DastakWebPushController } from "./useDastakWebPush";
 import { WebNotificationOnboarding } from "./WebNotificationOnboarding";
+import type { V1Order } from "./dastakV1";
+import type { AccountProfile } from "./accountProfile";
 
 export type DastakCustomerProps = {
   accessToken: string;
@@ -46,7 +48,7 @@ export function DastakCustomerView(props: Props) {
   return <ExistingDastakCustomerView key={props.accountId} {...props} />;
 }
 
-export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; onReturnToShopping?: () => void }) {
+export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; onReturnToShopping?: () => void; onOpenWishlist?: () => void; onReorder?: (order: V1Order) => void; webPushController?: DastakWebPushController; onProfileChanged?: (profile: AccountProfile) => void }) {
   const online = useCustomerOnline();
   const [orderRefreshToken, setOrderRefreshToken] = useState(0);
   const [homeResetToken, setHomeResetToken] = useState(0);
@@ -65,7 +67,8 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
     publishableKey: props.publishableKey,
     publicKey: props.webPushPublicKey,
   }), [props.accountId, props.accessToken, props.publishableKey, props.supabaseUrl, props.webPushPublicKey]);
-  const webPush = useDastakWebPush(webPushAuthentication);
+  const ownedWebPush = useDastakWebPush(webPushAuthentication, !props.webPushController);
+  const webPush = props.webPushController ?? ownedWebPush;
   const reconcileOrders = useCallback(() => {
     setOrderRefreshToken((current) => current + 1);
   }, []);
@@ -107,6 +110,7 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
   }, [navigate, props.embedded]);
 
   const navigateSection = (nextSection: CustomerSection) => {
+    if (props.embedded && nextSection === "wishlist" && props.onOpenWishlist) { props.onOpenWishlist(); return; }
     if (props.embedded && nextSection === "home") { props.onReturnToShopping?.(); return; }
     if (nextSection === "home") setHomeResetToken((current) => current + 1);
     navigate({ section: nextSection });
@@ -153,6 +157,7 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
           onCloseOrder={() => navigate({ section: "orders" })}
           onSessionExpired={props.onSignOut}
           onOrderAgainInExisting={props.embedded ? () => { window.location.href = existingCustomerUrl("orders", window.location.href); } : undefined}
+          onReorderInReimagined={props.onReorder}
         />
       </div> : null}
       {section === "account" && <div className="customer-view">
@@ -183,7 +188,7 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
           />
         </div>
       )}
-      {webPush.shouldPrompt && <WebNotificationOnboarding
+      {!props.webPushController && webPush.shouldPrompt && <WebNotificationOnboarding
         busy={webPush.status === "enabling"}
         onEnable={() => void webPush.enable()}
         onDismiss={webPush.dismiss}

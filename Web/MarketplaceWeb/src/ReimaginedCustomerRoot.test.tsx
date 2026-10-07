@@ -11,9 +11,11 @@ import { useReimaginedActiveOrder } from "./useReimaginedActiveOrder";
 import { useReimaginedFood } from "./useReimaginedFood";
 import { foodMenuFixture } from "./reimaginedFood.testFixtures";
 import type { SupabaseClient } from "@supabase/supabase-js";
+vi.mock("./useReimaginedWishlist", () => ({ useReimaginedWishlist: () => ({ items: [], ready: true, busy: false, error: undefined, retry: vi.fn(), saved: () => false, toggle: vi.fn() }) }));
+vi.mock("./useDastakWebPush", () => ({ useDastakWebPush: () => ({ shouldPrompt: false }) }));
 import { submitV1Order, commitV1LaunchPayment, getV1Order, type V1Order } from "./dastakV1";
 vi.mock("./dastakV1", async importOriginal => ({ ...await importOriginal<typeof import("./dastakV1")>(), submitV1Order: vi.fn(), commitV1LaunchPayment: vi.fn(), getV1Order: vi.fn() }));
-vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: string; embedded?: boolean }) => <section aria-label="Operational account workspace">{props.initialSection}<button type="button" onClick={props.onSignOut}>Sign out</button></section> }));
+vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: string; embedded?: boolean; onReorder?: (order: V1Order) => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => <section aria-label="Operational account workspace">{props.initialSection}<button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button></section> }));
 vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }));
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
 vi.mock("./useReimaginedFood", () => ({ useReimaginedFood: vi.fn() }));
@@ -35,6 +37,26 @@ beforeEach(() => {
 beforeEach(() => { vi.stubGlobal("localStorage", cartStorageFixture()); vi.mocked(useReimaginedCatalogue).mockReturnValue({ data: groceryFixture, status: "ready", error: undefined, retry: vi.fn() }); vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [], selected: undefined, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() }); });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("opens a native Wishlist without leaving Reimagined", () => {
+    mount(); click("Open Wishlist"); expect(host.textContent).toContain("Your Wishlist");
+    click("Back to shopping"); expect(host.textContent).toContain("Quick picks");
+  });
+  it("requires approval before restoring an old order and retains the other cart", async () => {
+    const food = [{ branchId: fixtureId(30), itemId: fixtureId(33), optionIds: [], quantity: 1 }];
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 3 }, food }); mount();
+    await act(async () => click("Orders")); click("Fixture Order again");
+    expect(host.textContent).toContain("Replace your current Bucket?"); expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 3 });
+    click("Keep current cart"); expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 3 });
+    click("Fixture Order again"); click("Replace cart and review");
+    expect(loadCustomerCart("a")).toEqual({ retail: { [fixtureId(6)]: 2 }, food });
+    expect(host.textContent).toContain("Review your Grocery items"); expect(submitV1Order).not.toHaveBeenCalled();
+  });
+  it("uses a successfully edited profile for the next billing review", async () => {
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 1 }, food: [] }); mount();
+    await act(async () => click("Profile")); click("Fixture profile update"); click("Home"); click("Take to Cart"); click("2Delivery & billing");
+    expect(host.querySelector('[aria-label="Delivery recipient"]')?.textContent).toContain("Updated recipient");
+    expect(host.querySelector('[aria-label="Delivery recipient"]')?.textContent).toContain("+919876543210");
+  });
   it("reviews delivery with the existing address resource without order requests or Bucket changes", () => {
     const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
     const select = vi.fn();

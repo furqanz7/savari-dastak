@@ -83,6 +83,7 @@ type Props = DastakV1Auth & {
   // Embedded Orders has a separate cart owner. Reordering hands off rather than
   // mounting a second cart writer inside the Reimagined session.
   onOrderAgainInExisting?: () => void;
+  onReorderInReimagined?: (order: V1Order) => void;
 };
 
 type Cart = RetailCart;
@@ -190,6 +191,7 @@ export function DastakV1CustomerExperience(props: Props) {
   const onCloseOrder = props.onCloseOrder;
   const onSessionExpired = props.onSessionExpired;
   const onOrderAgainInExisting = props.onOrderAgainInExisting;
+  const onReorderInReimagined = props.onReorderInReimagined;
   useEffect(() => {
     if (props.homeResetToken === 0) return;
     setHomeMode("grocery");
@@ -699,10 +701,11 @@ export function DastakV1CustomerExperience(props: Props) {
   }, [menuItemById, onCloseOrder, selectedOrderId, skuById]);
 
   const requestReorder = useCallback((order: V1Order) => {
+    if (onReorderInReimagined) { onReorderInReimagined(order); return; }
     if (onOrderAgainInExisting) { onOrderAgainInExisting(); return; }
     if (cartCount > 0) setPendingReorder(order);
     else reorderOrder(order);
-  }, [cartCount, reorderOrder, onOrderAgainInExisting]);
+  }, [cartCount, reorderOrder, onOrderAgainInExisting, onReorderInReimagined]);
 
   const submit = async () => {
     if (props.onOrderAgainInExisting) return;
@@ -992,7 +995,7 @@ export function DastakV1CustomerExperience(props: Props) {
       }}
     />}
 
-    {cartCount > 0 && !showingCart && <button className="v1-cart-bar" type="button" onClick={() => setShowingCart(true)}>
+    {!props.onOrderAgainInExisting && cartCount > 0 && !showingCart && <button className="v1-cart-bar" type="button" onClick={() => setShowingCart(true)}>
       <span><ShoppingBag size={18} /> {cartCount} {cartCount === 1 ? "item" : "items"}</span>
       <strong>{formatV1Price(cartSubtotal)}</strong><span>Review <ArrowRight size={17} /></span>
     </button>}

@@ -132,6 +132,7 @@ type Props = {
   onCloseOrder: () => void;
   onOpenParcel: () => void;
   onSignOut: () => void;
+  onProfileChanged?: (profile: AccountProfile) => void;
   legalLinks?: { privacy: string; terms: string; support: string };
   webPush?: DastakWebPushController;
   deliveryPartnerUrl: string;
@@ -260,6 +261,7 @@ export function CatalogueView({
   webPush,
   deliveryPartnerUrl,
   merchantUrl,
+  onProfileChanged,
 }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [initialDiscovery] = useState(savedCustomerDiscovery);
@@ -765,6 +767,7 @@ export function CatalogueView({
     try {
       const updated = await updateAccountProfile({ ...auth, ...profile });
       setAccountProfile(updated);
+      onProfileChanged?.(updated);
       setProfileEditorOpen(false);
     } catch (error) {
       if (error instanceof AccountProfileRequestError && error.status === 401) {

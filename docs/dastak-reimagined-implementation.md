@@ -6,6 +6,13 @@ Reimagined is the Customer experience over the existing Dastak platform. Custome
 
 ## Real-time Grocery scene — local prototype, 2026-09-30
 
+### Previous-Customer feature restoration — 2026-10-07
+
+- Added native Wishlist/Save controls, exact product galleries/facts/unit prices/sharing and automatic genuine pack-family choices. Existing Wishlist IDs and APIs are used; unresolved saved identities stay visible. Added native Location/checkout address sheets, safe retries, Food quantity editing, notification onboarding, profile-to-recipient updates and checkout-to-Orders links.
+- Order again now restores exact current SKUs/menu options in Reimagined, requests approval before replacing the relevant cart, preserves the other service and opens review without any order submission. Old mixed orders and unavailable exact selections fail safely with guidance. Embedded operational screens still cannot own/save/submit a second shopping cart.
+- Feature map and deliberate exclusions: `docs/dastak-reimagined-feature-parity.md`. Full suite passed 788 tests, followed by 50 focused tests after final Wishlist scroll/Food bill refinements. TypeScript, lint, whitespace checks and production build passed. Local synthetic browser checks covered Save/open-details, Grocery and Food Wishlist, required Food options, review quantity changes, 390×844/320×568 and no horizontal overflow. Fixed one preview HMR duplicate-root warning; no new captured errors after reload.
+- Local only: not pushed or deployed in this pass, no production wishlist/address/order/payment/notification-permission mutations. No background/staff changes, subagents or paid generation. The production checkout-enabled release remains unchanged.
+
 ### Default Customer entry and checkout activation — 2026-10-07
 
 - Owner explicitly requested enabled checkout and normal-address production activation. Approved Customer hosts now open Reimagined without a query parameter; `?reimagined=0` retains the existing operational interface and every fallback link sets that opt-out explicitly. Merchant, Admin and Delivery entry remains unchanged.
