@@ -123,6 +123,10 @@ mkdir -p "$deploy_root/Web/MarketplaceWeb"
 rsync -a \
   --exclude node_modules \
   --exclude dist \
+  --exclude .vercel \
+  --exclude '.env*' \
+  --exclude src/assets/reimagined/staff-rpm.glb \
+  --exclude src/assets/reimagined/staff-rpm-idle.glb \
   "$repo_root/Web/MarketplaceWeb/" \
   "$deploy_root/Web/MarketplaceWeb/"
 
