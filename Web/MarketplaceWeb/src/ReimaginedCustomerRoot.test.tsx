@@ -197,6 +197,7 @@ describe("authenticated local customer integration", () => {
     click("Take to Cart"); click("2Delivery & billing");
     expect(submitV1Order).not.toHaveBeenCalled(); expect(commitV1LaunchPayment).not.toHaveBeenCalled();
     await act(async () => click("Reserve Grocery order"));
+    await act(async () => { await vi.waitFor(() => expect(submitV1Order).toHaveBeenCalledOnce()); });
     expect(submitV1Order).toHaveBeenCalledWith(expect.objectContaining({ accessToken: props.accessToken, order: expect.objectContaining({ lines: [{ lineType: "RETAIL_SKU", skuId: fixtureId(6), quantity: 2 }] }) }));
     expect(commitV1LaunchPayment).not.toHaveBeenCalled();
     await act(async () => click("Confirm Grocery order"));
@@ -226,6 +227,7 @@ describe("authenticated local customer integration", () => {
     click("Food"); click("Review Food cart");
     expect(submitV1Order).not.toHaveBeenCalled();
     await act(async () => click("Reserve Food order"));
+    await act(async () => { await vi.waitFor(() => expect(submitV1Order).toHaveBeenCalledOnce()); });
     expect(submitV1Order).toHaveBeenCalledWith(expect.objectContaining({ accessToken: props.accessToken, order: expect.objectContaining({ restaurantBranchId: menu.restaurant.branchId, lines: [{ lineType: "FOOD_MENU_ITEM", menuItemId: item.id, quantity: 2, optionIds: [option.id] }] }) }));
     expect(commitV1LaunchPayment).not.toHaveBeenCalled();
     await act(async () => click("Confirm Food order"));
