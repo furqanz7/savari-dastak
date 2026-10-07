@@ -166,6 +166,19 @@ Deno.test("V1 Restaurant discovery and merchant menu commands preserve authentic
   });
 });
 
+Deno.test("Food pages preserve authenticated cursors and reject malformed or oversized requests", async () => {
+  const calls: unknown[] = [];
+  const deps = dependencies({ customerRestaurantPage: input => { calls.push(input); return Promise.resolve({ restaurants: [], nextCursor: null }); } });
+  const response = await handleV1Catalogue(request({ operation: "customerRestaurantPage", query: " Cafe ", limit: 100, cursor: { name: " Exact name ", branchId: skuId } }), deps);
+  assertEquals(response.status, 200);
+  assertEquals(calls, [{ accessToken: actor.accessToken, query: "Cafe", limit: 100, afterName: " Exact name ", afterBranchId: skuId, branchId: null }]);
+  for (const payload of [{ limit: 101 }, { cursor: { name: "Cafe" } }, { cursor: "bad" }, { branchId: "bad" }, { branchId: skuId, cursor: { name: "Cafe", branchId: skuId } }]) {
+    const bad = await handleV1Catalogue(request({ operation: "customerRestaurantPage", ...payload }), deps);
+    assertEquals(bad.status, 400);
+  }
+  assertEquals(calls.length, 1);
+});
+
 Deno.test("V1 Restaurant menu mutation rejects unsupported entities without calling RPC", async () => {
   let calls = 0;
   const response = await handleV1Catalogue(
@@ -786,6 +799,7 @@ function dependencies(
     catalogueBrowseSkuIds: overrides.catalogueBrowseSkuIds ?? (() => Promise.resolve([])),
     customerRestaurants: overrides.customerRestaurants ??
       (() => Promise.resolve({ restaurants: [] })),
+    customerRestaurantPage: overrides.customerRestaurantPage ?? (() => Promise.resolve({ restaurants: [], nextCursor: null })),
     adminSnapshot: overrides.adminSnapshot ?? (() => Promise.resolve(snapshot)),
     adminTaxonomy: overrides.adminTaxonomy ??
       (() =>

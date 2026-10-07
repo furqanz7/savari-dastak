@@ -14,7 +14,15 @@ type Props = { state: ReimaginedState; dispatch: Dispatch<ReimaginedAction>; res
 export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online, canEdit = true, checkoutContent, wishlist }: Props) {
   const exploration = state.exploration.food;
   const categoryControls = useMemo(() => foodCategoryControls(resource.data ?? []), [resource.data]);
-  const restaurants = useMemo(() => foodCategoryRestaurants(resource.data ?? [], exploration.foodCategoryFilter), [resource.data, exploration.foodCategoryFilter]);
+  const restaurants = useMemo(() => {
+    const selected = exploration.foodCategoryFilter;
+    const current = categoryControls.find(filter => filter.label === selected?.label);
+    if (!selected || !current) return foodCategoryRestaurants(resource.data ?? [], selected);
+    const knownBranches = new Set(selected.members.map(member => member.branchId));
+    // New pages may extend a shared label, but must not replace a selected
+    // category with a different identity in an already-known restaurant.
+    return foodCategoryRestaurants(resource.data ?? [], { ...selected, members: [...selected.members, ...current.members.filter(member => !knownBranches.has(member.branchId))] });
+  }, [resource.data, exploration.foodCategoryFilter, categoryControls]);
   if (exploration.checkout) return <section aria-label="Review Food cart"><h2>Your saved Food items</h2>
     <p>Your Food cart is separate from Grocery. Final prices and availability are confirmed by the server at checkout.</p>
     <ul>{state.shopping.food.map(line => {
@@ -37,7 +45,9 @@ export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online,
   const item = menu?.categories.flatMap(category => category.items).find(value => value.id === exploration.detailId);
   return <div className="reimagined-food">
     <p className="reimagined-commerce-note">Choose your options explicitly. Prices are estimates until the server confirms your order.</p>
-    {resource.data.length === 100 ? <p role="status">Showing the first 100 restaurants returned by Dastak. Search covers these loaded menus only.</p> : null}
+    {resource.status === "loading" ? <p role="status">Searching Dastak’s restaurant catalogue…</p> : null}
+    {resource.error && resource.data ? <p role="alert">More Food results could not load. The menus already loaded are retained.</p> : null}
+    {resource.hasMore && resource.loadMore ? <button type="button" disabled={!online || resource.loadingMore} onClick={() => void resource.loadMore?.()}>{resource.loadingMore ? "Loading more Food results…" : exploration.view.kind === "search" ? "Load more Food search results" : "Load more restaurants"}</button> : null}
     <button type="button" disabled={!online} onClick={resource.retry}>Refresh Food menus</button>
     {exploration.detailId ? item && menu ? <section className="reimagined-product-detail" aria-label={`${item.name} dish details`}>
       <button type="button" className="reimagined-detail-close" onClick={() => dispatch({ type: "closeDetail" })}>Back to menu</button>
@@ -50,7 +60,7 @@ export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online,
         <h2>{foodRestaurantName(menu)}</h2><p>{menu.restaurant.description}</p><p>{foodAvailability(menu)}</p>
         {menu.categories.length ? menu.categories.map(category => <DishShelf key={category.id} name={category.name} items={category.items} supabaseUrl={supabaseUrl} dispatch={dispatch} wishlist={wishlist} online={online} />) : <p>No dishes in this menu yet.</p>}</>
         : <p role="status">This restaurant is not in the loaded catalogue. <button type="button" onClick={() => dispatch({ type: "navigate", section: "home" })}>Back to restaurants</button></p>
-      : exploration.view.kind === "search" ? <FoodResults menus={resource.data} query={exploration.view.query} dispatch={dispatch} />
+      : exploration.view.kind === "search" ? resource.status === "loading" ? null : resource.error && !resource.searchData ? <p role="status">The server search did not complete. Refresh Food menus to retry; your saved carts are unchanged.</p> : <><p className="reimagined-commerce-note">{online ? "Search results come from Dastak’s restaurant catalogue. Load more if further matches are available." : "Offline: showing only menus already loaded on this device."}</p><FoodResults menus={resource.searchData ?? resource.data} query={exploration.view.query} dispatch={dispatch} /></>
       : <><nav className="reimagined-food-categories" aria-label="Food menu categories">
         <button type="button" aria-pressed={!exploration.foodCategoryFilter} onClick={() => dispatch({ type: "selectFoodCategory" })}>All restaurants</button>
         {categoryControls.map(filter => <button key={filter.label} type="button" aria-label={`Browse Food category ${filter.label}`} aria-pressed={exploration.foodCategoryFilter?.label === filter.label} onClick={() => dispatch({ type: "selectFoodCategory", filter })}>{filter.label}</button>)}

@@ -15,7 +15,7 @@ vi.mock("./useReimaginedWishlist", () => ({ useReimaginedWishlist: () => ({ item
 vi.mock("./useDastakWebPush", () => ({ useDastakWebPush: () => ({ shouldPrompt: false }) }));
 import { submitV1Order, commitV1LaunchPayment, getV1Order, type V1Order } from "./dastakV1";
 vi.mock("./dastakV1", async importOriginal => ({ ...await importOriginal<typeof import("./dastakV1")>(), submitV1Order: vi.fn(), commitV1LaunchPayment: vi.fn(), getV1Order: vi.fn() }));
-vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: string; embedded?: boolean; onReorder?: (order: V1Order) => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => <section aria-label="Operational account workspace">{props.initialSection}<button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button></section> }));
+vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: string; embedded?: boolean; onReorder?: (order: V1Order) => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => <section aria-label="Operational account workspace">{props.initialSection}<button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onReorder?.(mixedOrderFixture())}>Fixture mixed order</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button></section> }));
 vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }));
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
 vi.mock("./useReimaginedFood", () => ({ useReimaginedFood: vi.fn() }));
@@ -23,6 +23,12 @@ vi.mock("./useReimaginedActiveOrder", () => ({ useReimaginedActiveOrder: vi.fn((
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root; let host: HTMLDivElement;
 const props = { accountId: "a", accessToken: "session-token", supabaseUrl: "https://example.supabase.co", publishableKey: "publishable", displayName: "Customer", onSignOut: vi.fn(), client: {} as SupabaseClient, legalLinks: { terms: "/terms", privacy: "/privacy", support: "/support" }, webPushPublicKey: "", deliveryPartnerUrl: "", merchantUrl: "" };
+function mixedOrderFixture(): V1Order {
+  const menu = foodMenuFixture(); const item = menu.categories[0].items[0]; const option = item.optionGroups[0].options[0];
+  return { id: fixtureId(90), displayOrderNumber: "TEST", orderType: "MIXED", status: "DELIVERED", version: 1, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", restaurant: menu.restaurant,
+    price: { snapshotKind: "FINAL", subtotalPaise: 56000, deliveryFeePaise: 0, platformFeePaise: 0, taxPaise: 0, discountPaise: 0, totalPaise: 56000, currencyCode: "INR" },
+    lines: [{ id: fixtureId(91), name: "Rice", lineType: "RETAIL_SKU", skuId: fixtureId(6), quantity: 2, status: "DELIVERED", unitPricePaise: 10000, lineTotalPaise: 20000 }, { id: fixtureId(92), name: item.name, lineType: "FOOD_MENU_ITEM", menuItemId: item.id, quantity: 2, status: "DELIVERED", unitPricePaise: 18000, lineTotalPaise: 36000, foodSelection: { options: [{ ...option, groupId: item.optionGroups[0].id, groupName: "Size" }] } }] };
+}
 function click(label: string) {
   const button = [...host.querySelectorAll("button")].find(element => (element.getAttribute("aria-label") ?? element.textContent) === label);
   if (!button) throw new Error(`Missing button ${label}`);
@@ -37,6 +43,27 @@ beforeEach(() => {
 beforeEach(() => { vi.stubGlobal("localStorage", cartStorageFixture()); vi.mocked(useReimaginedCatalogue).mockReturnValue({ data: groceryFixture, status: "ready", error: undefined, retry: vi.fn() }); vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [], selected: undefined, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() }); });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("rebuilds each part of a mixed order by choice and approval without submitting either order", async () => {
+    const menu = foodMenuFixture(); const findRestaurant = vi.fn().mockResolvedValue(menu);
+    vi.mocked(useReimaginedFood).mockReturnValue({ data: [], status: "ready", error: undefined, retry: vi.fn(), findRestaurant });
+    const food = [{ branchId: fixtureId(30), itemId: fixtureId(33), optionIds: [fixtureId(35)], quantity: 1 }];
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 3 }, food }); mount(); await act(async () => click("Orders")); click("Fixture mixed order");
+    expect(host.textContent).toContain("Rebuild this order as separate carts");
+    await act(async () => click("Rebuild Grocery")); expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 3 });
+    click("Replace cart and review"); expect(loadCustomerCart("a")).toEqual({ retail: { [fixtureId(6)]: 2 }, food });
+    await act(async () => click("Orders")); click("Fixture mixed order"); await act(async () => click("Rebuild Food"));
+    expect(findRestaurant).toHaveBeenCalledWith(menu.restaurant.branchId); expect(loadCustomerCart("a").food).toEqual(food);
+    click("Replace cart and review"); expect(loadCustomerCart("a")).toEqual({ retail: { [fixtureId(6)]: 2 }, food: [{ ...food[0], quantity: 2 }] });
+    expect(submitV1Order).not.toHaveBeenCalled(); expect(commitV1LaunchPayment).not.toHaveBeenCalled();
+  });
+  it("does not apply a late restaurant lookup after the user leaves Orders", async () => {
+    let finish!: (menu: ReturnType<typeof foodMenuFixture>) => void;
+    const findRestaurant = vi.fn().mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    vi.mocked(useReimaginedFood).mockReturnValue({ data: [], status: "ready", error: undefined, retry: vi.fn(), findRestaurant });
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 3 }, food: [] }); mount(); await act(async () => click("Orders")); click("Fixture mixed order");
+    await act(async () => click("Rebuild Food")); click("Home"); await act(async () => finish(foodMenuFixture()));
+    expect(loadCustomerCart("a")).toEqual({ retail: { [fixtureId(6)]: 3 }, food: [] }); expect(submitV1Order).not.toHaveBeenCalled();
+  });
   it("opens a native Wishlist without leaving Reimagined", () => {
     mount(); click("Open Wishlist"); expect(host.textContent).toContain("Your Wishlist");
     click("Back to shopping"); expect(host.textContent).toContain("Quick picks");
@@ -149,8 +176,8 @@ describe("authenticated local customer integration", () => {
     vi.mocked(useReimaginedFood).mockReturnValue({ data: [foodMenuFixture()], error: undefined, status: "ready", retry: vi.fn() });
     const shopping = { retail: { [fixtureId(6)]: 2 }, food: [{ branchId: "saved", itemId: "meal", optionIds: [], quantity: 3 }] };
     saveCustomerCart("a", shopping); mount();
-    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), false, true);
-    click("Food"); expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true, true);
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), false, true, undefined, "");
+    click("Food"); expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true, true, undefined, "");
     click("Open Test Café menu"); click("View Test Paneer Rice details"); click("Grocery");
     expect(loadCustomerCart("a")).toEqual(shopping);
   });

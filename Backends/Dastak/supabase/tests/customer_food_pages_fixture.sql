@@ -1,0 +1,24 @@
+-- Isolated disposable PostgreSQL only: synthetic schema and actor helper.
+create role anon;
+create role authenticated;
+create schema auth;
+create schema dastak_v1;
+create schema dastak_v1_api;
+grant usage on schema auth, dastak_v1_api to authenticated;
+create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+create function dastak_v1_api.assert_customer_actor(actor uuid) returns void language plpgsql as $$ begin if actor is distinct from 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid then raise exception using errcode='42501',message='customer required'; end if; end $$;
+create table public.service_zones(id uuid primary key, active boolean);
+create table dastak_v1.merchant_organizations(id uuid primary key,display_name text,merchant_type text,status text);
+create table dastak_v1.merchant_branches(id uuid primary key,organization_id uuid,service_zone_id uuid,display_name text,status text);
+create table dastak_v1.branch_operational_states(branch_id uuid,is_open boolean,accepting_orders boolean);
+create table dastak_v1.restaurant_menu_categories(id uuid,status text);
+create table dastak_v1.restaurant_menu_items(branch_id uuid,category_id uuid,status text,name text);
+create table dastak_v1.operational_pause_controls(active boolean,scope text,branch_id uuid,service_zone_id uuid);
+create function dastak_v1_api.restaurant_menu_json(branch uuid, admin_mode boolean) returns jsonb language sql as $$ select jsonb_build_object('restaurant',jsonb_build_object('branchId',branch)) $$;
+insert into public.service_zones values ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',true);
+insert into dastak_v1.restaurant_menu_categories values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc','ACTIVE');
+insert into dastak_v1.merchant_organizations select md5('org'||i)::uuid,'Restaurant '||lpad(i::text,4,'0'),'RESTAURANT_CAFE','ACTIVE' from generate_series(1,205)i;
+update dastak_v1.merchant_organizations set display_name='Restaurant 0100' where id=md5('org201')::uuid;
+insert into dastak_v1.merchant_branches select md5('branch'||i)::uuid,md5('org'||i)::uuid,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','Branch '||i,'ACTIVE' from generate_series(1,205)i;
+insert into dastak_v1.branch_operational_states select id,true,false from dastak_v1.merchant_branches;
+insert into dastak_v1.restaurant_menu_items select id,'cccccccc-cccc-4ccc-8ccc-cccccccccccc','ACTIVE',case when id=md5('branch205')::uuid then 'Beyond cap dish' else 'Test dish' end from dastak_v1.merchant_branches;

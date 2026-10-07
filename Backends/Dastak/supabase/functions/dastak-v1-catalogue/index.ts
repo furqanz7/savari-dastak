@@ -55,6 +55,10 @@ Deno.serve((request) =>
           p_limit: input.limit,
         },
       ),
+    customerRestaurantPage: (input) => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_restaurants_page", {
+      p_query: input.query, p_limit: input.limit, p_after_name: input.afterName,
+      p_after_branch_id: input.afterBranchId, p_branch_id: input.branchId,
+    }),
     adminSnapshot: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

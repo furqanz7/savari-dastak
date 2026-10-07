@@ -28,4 +28,15 @@ describe("Reimagined reordering", () => {
     expect(() => prepareReimaginedReorder({ lines: [{ lineType: "RETAIL_SKU", skuId: fixtureId(6), quantity: 100 }] } as V1Order, groceryFixture)).toThrow("quantities");
     expect(() => prepareReimaginedReorder({ lines: [{ lineType: "RETAIL_SKU" }, { lineType: "FOOD_MENU_ITEM" }] } as V1Order, groceryFixture)).toThrow("mixed order");
   });
+  it("splits an old mixed order by explicit service while preserving exact quantities and options", () => {
+    const menu = foodMenuFixture(); const item = menu.categories[0].items[0]; const option = item.optionGroups[0].options[0];
+    const order = { restaurant: menu.restaurant, lines: [
+      { id: "retail", name: "Rice", status: "DELIVERED", unitPricePaise: 10000, lineTotalPaise: 20000, lineType: "RETAIL_SKU", skuId: fixtureId(6), quantity: 2 },
+      { id: "food", name: item.name, status: "DELIVERED", unitPricePaise: 18000, lineTotalPaise: 36000, lineType: "FOOD_MENU_ITEM", menuItemId: item.id, quantity: 2, foodSelection: { options: [{ ...option, groupId: "size", groupName: "Size" }] } },
+    ] };
+    expect(prepareReimaginedReorder(order, groceryFixture, [menu], "grocery").shopping).toEqual({ retail: { [fixtureId(6)]: 2 }, food: [] });
+    expect(prepareReimaginedReorder(order, groceryFixture, [menu], "food").shopping).toEqual({ retail: {}, food: [{ branchId: menu.restaurant.branchId, itemId: item.id, optionIds: [option.id], quantity: 2 }] });
+    expect(() => prepareReimaginedReorder(order, groceryFixture, [], "food")).toThrow("unavailable");
+    expect(prepareReimaginedReorder(order, groceryFixture, [], "grocery").shopping.retail).toEqual({ [fixtureId(6)]: 2 });
+  });
 });

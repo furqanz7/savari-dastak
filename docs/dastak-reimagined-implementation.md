@@ -6,6 +6,12 @@ Reimagined is the Customer experience over the existing Dastak platform. Custome
 
 ## Real-time Grocery scene — local prototype, 2026-09-30
 
+### Food paging/search and mixed-order rebuild — 2026-10-08
+
+- Prepared additive cursor-page discovery SQL/Edge/client changes, preserving the legacy API and visibility/authentication gates. Customer pages/search explicitly load more rather than auto-fetching all menus or querying on each keystroke. Mixed orders can rebuild a chosen service with exact identities, approval and other-cart preservation; stale asynchronous lookups are rejected.
+- SQL executed successfully in a disposable local PostgreSQL cluster with 205 synthetic restaurants and visibility/privilege/cursor assertions. 26 catalogue handler tests passed. Full web suite passed 804 tests before the final session-error refinement; final checks are reported in the handoff.
+- Deployment dependency and evidence: `docs/dastak-reimagined-food-pagination.md`. Not pushed/deployed/applied to production. Approval is required for the additive migration, then catalogue function and Customer rollout in that order. No production inventory/order/payment writes, subagents or paid generation.
+
 ### Dedicated account and order workspaces — 2026-10-08
 
 - Separated Profile and Settings using explicit account-pane presentation with shared established handlers, and adapted Orders/payment history to the Reimagined panel. Order details/tracking/receipts/support are inline regions rather than blocking full-screen sheets; other confirmations remain modal. Cross-view order selection, payment titles and Back navigation retain account/cart boundaries.

@@ -1092,6 +1092,22 @@ export async function getV1Restaurants(
   return requiredArray(source.restaurants).map(parseRestaurantMenu);
 }
 
+export type V1RestaurantCursor = { name: string; branchId: string };
+export type V1RestaurantPage = { restaurants: V1RestaurantMenu[]; nextCursor?: V1RestaurantCursor };
+export async function getV1RestaurantPage(input: DastakV1Auth & {
+  query?: string; limit?: number; cursor?: V1RestaurantCursor; branchId?: string; signal?: AbortSignal;
+}, fetcher: Fetcher = fetch): Promise<V1RestaurantPage> {
+  const source = requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "customerRestaurantPage", query: input.query?.trim() || null,
+    limit: input.limit ?? 100, cursor: input.cursor ?? null, branchId: input.branchId ?? null,
+  }, undefined, fetcher));
+  if (!Object.prototype.hasOwnProperty.call(source, "nextCursor")) invalid("restaurant page cursor");
+  const cursor = source.nextCursor == null ? undefined : requiredRecord(source.nextCursor);
+  if (cursor && (typeof cursor.name !== "string" || cursor.name.length < 1 || cursor.name.length > 160)) invalid("restaurant cursor name");
+  return { restaurants: requiredArray(source.restaurants).map(parseRestaurantMenu),
+    nextCursor: cursor ? { name: cursor.name as string, branchId: requiredUuid(cursor.branchId) } : undefined };
+}
+
 export async function getV1Orders(
   input: DastakV1Auth & { limit?: number; cursor?: V1OrderCursor; signal?: AbortSignal },
   fetcher: Fetcher = fetch,

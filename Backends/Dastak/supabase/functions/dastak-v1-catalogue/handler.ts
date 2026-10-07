@@ -22,6 +22,10 @@ export type V1CatalogueDependencies = {
     query: string | null;
     limit: number;
   }) => Promise<unknown>;
+  customerRestaurantPage: (input: {
+    accessToken: string; query: string | null; limit: number;
+    afterName: string | null; afterBranchId: string | null; branchId: string | null;
+  }) => Promise<unknown>;
   adminSnapshot: (
     input: { accessToken: string; skuLimit: number },
   ) => Promise<unknown>;
@@ -227,6 +231,19 @@ export async function handleV1Catalogue(
             limit: parsedLimit ?? 50,
           }),
         );
+      }
+      case "customerRestaurantPage": {
+        const query = optionalText(body.query, 80);
+        const limit = optionalInteger(body.limit, 1, 100);
+        const cursor = record(body.cursor);
+        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length > 0 && cursor.name.length <= 160 ? cursor.name : null;
+        const afterBranchId = cursor ? optionalUUID(cursor.branchId) : null;
+        const branchId = optionalUUID(body.branchId);
+        if (query === undefined || branchId === undefined
+          || (body.limit != null && limit === undefined)
+          || (body.cursor != null && (!cursor || !afterName || !afterBranchId))
+          || (branchId && cursor)) return validationError();
+        return json(await dependencies.customerRestaurantPage({ accessToken: actor.accessToken, query, limit: limit ?? 100, afterName, afterBranchId: afterBranchId ?? null, branchId }));
       }
       case "adminSnapshot": {
         const parsedLimit = optionalInteger(body.skuLimit, 1, 1000);

@@ -1,31 +1,86 @@
 import { useEffect, useRef, useState } from "react";
-import { getV1Restaurants, type DastakV1Auth, type V1RestaurantMenu } from "./dastakV1";
+import { getV1RestaurantPage, type DastakV1Auth, type V1RestaurantCursor, type V1RestaurantMenu } from "./dastakV1";
 import { prepareFoodMenus } from "./reimaginedFoodCatalogue";
 
 type Session = DastakV1Auth & { accountId: string };
-type Resource = { owner: string; revision: number; data?: V1RestaurantMenu[]; error?: unknown };
+type Page = { ids: string[]; cursor?: V1RestaurantCursor; seen: Set<string> };
+type Cache = { owner: string; revision: number; menus: Map<string, V1RestaurantMenu>; pages: Map<string, Page> };
+type Resource = { owner: string; revision: number; query: string; data?: V1RestaurantMenu[]; searchData?: V1RestaurantMenu[]; cursor?: V1RestaurantCursor; error?: unknown; loadingMore?: boolean };
+export type ReimaginedFoodResource = {
+  data?: V1RestaurantMenu[]; error?: unknown; status: "ready" | "unavailable" | "loading" | "idle"; retry: () => void;
+  searchData?: V1RestaurantMenu[]; hasMore?: boolean; loadingMore?: boolean; loadMore?: () => Promise<void>;
+  findRestaurant?: (branchId: string) => Promise<V1RestaurantMenu | undefined>;
+};
 
-// One bounded read on Food entry, cached in memory for this session. No per-keystroke calls.
-export function useReimaginedFood(session: Session, enabled: boolean, online: boolean, loader = getV1Restaurants) {
+// Bounded pages on explicit entry/search/load-more, never per keystroke.
+export function useReimaginedFood(session: Session, enabled: boolean, online: boolean, loader = getV1RestaurantPage, submittedQuery = ""): ReimaginedFoodResource {
   const { accountId, accessToken, supabaseUrl, publishableKey } = session;
   const owner = JSON.stringify([accountId, accessToken, supabaseUrl, publishableKey]);
+  const query = submittedQuery.trim();
   const [revision, setRevision] = useState(0);
   const [resource, setResource] = useState<Resource>();
-  const cache = useRef<Resource | undefined>(undefined);
+  const cache = useRef<Cache | undefined>(undefined);
+  const epoch = useRef(0);
+  const request = useRef<AbortController | undefined>(undefined);
+  const lookups = useRef(new Set<AbortController>());
+  function publish(store: Cache, page: Page, error?: unknown, loadingMore = false) {
+    setResource({ owner, revision, query, data: [...store.menus.values()], searchData: page.ids.map(id => store.menus.get(id)!), cursor: page.cursor, error, loadingMore });
+  }
+  async function fetchPage(store: Cache, cursor?: V1RestaurantCursor) {
+    const generation = epoch.current; const controller = new AbortController(); request.current = controller;
+    const previous = store.pages.get(query);
+    if (cursor && previous) publish(store, previous, undefined, true);
+    try {
+      if (query.length > 80) throw new Error("Use a Food search of 80 characters or fewer.");
+      const result = await loader({ accessToken, supabaseUrl, publishableKey, limit: 100, query: query || undefined, cursor, signal: controller.signal });
+      if (generation !== epoch.current || controller.signal.aborted) return;
+      const menus = prepareFoodMenus(result.restaurants);
+      const nextKey = result.nextCursor ? JSON.stringify(result.nextCursor) : undefined;
+      if (nextKey && (nextKey === JSON.stringify(cursor) || previous?.seen.has(nextKey))) throw new Error("Food pagination did not advance. Loaded menus are retained.");
+      for (const menu of menus) store.menus.set(menu.restaurant.branchId, menu);
+      const page: Page = { ids: [...new Set([...(cursor ? previous?.ids ?? [] : []), ...menus.map(menu => menu.restaurant.branchId)])], cursor: result.nextCursor, seen: new Set(cursor ? previous?.seen : []) };
+      if (nextKey) page.seen.add(nextKey);
+      store.pages.set(query, page); publish(store, page);
+    } catch (error) {
+      if (generation === epoch.current && !controller.signal.aborted) {
+        if (previous) publish(store, previous, error);
+        else setResource({ owner, revision, query, data: store.menus.size ? [...store.menus.values()] : undefined, error });
+      }
+    } finally { if (request.current === controller) request.current = undefined; }
+  }
   useEffect(() => {
-    if (!enabled || !online || (cache.current?.owner === owner && cache.current.revision === revision && cache.current.data)) return;
-    const controller = new AbortController();
-    loader({ accessToken, supabaseUrl, publishableKey, limit: 100, signal: controller.signal }).then(menus => {
-      if (controller.signal.aborted) return;
-      const next = { owner, revision, data: prepareFoodMenus(menus) };
-      cache.current = next; setResource(next);
-    }).catch((error: unknown) => { if (!controller.signal.aborted) setResource({ owner, revision, error }); });
-    return () => controller.abort();
-  }, [enabled, online, owner, revision, accessToken, supabaseUrl, publishableKey, loader]);
+    const generation = ++epoch.current; request.current?.abort();
+    for (const controller of lookups.current) controller.abort();
+    if (!enabled || !online) return;
+    if (!cache.current || cache.current.owner !== owner || cache.current.revision !== revision) cache.current = { owner, revision, menus: new Map(), pages: new Map() };
+    const store = cache.current; const saved = store.pages.get(query);
+    if (saved) publish(store, saved); else void fetchPage(store);
+    const pendingLookups = lookups.current;
+    return () => { epoch.current = generation + 1; request.current?.abort(); for (const controller of pendingLookups) controller.abort(); };
+    // Reads and explicit actions share this account/query cancellation boundary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, online, owner, revision, query, loader]);
   const current = resource?.owner === owner && resource.revision === revision ? resource : undefined;
+  const scoped = current?.query === query ? current : undefined;
+  async function findRestaurant(branchId: string) {
+    const store = cache.current;
+    if (!enabled || !online || !store || store.owner !== owner || store.revision !== revision) return undefined;
+    const cached = store.menus.get(branchId); if (cached) return cached;
+    const generation = epoch.current;
+    const controller = new AbortController(); lookups.current.add(controller);
+    try {
+      const result = await loader({ accessToken, supabaseUrl, publishableKey, branchId, limit: 1, signal: controller.signal });
+      if (generation !== epoch.current || controller.signal.aborted) throw new DOMException("Food session changed", "AbortError");
+      const menu = prepareFoodMenus(result.restaurants).find(value => value.restaurant.branchId === branchId);
+      if (menu) { store.menus.set(branchId, menu); const page = store.pages.get(query); if (page) publish(store, page); }
+      return menu;
+    } finally { lookups.current.delete(controller); }
+  }
   return {
-    data: current?.data, error: current?.error,
-    status: current?.data ? "ready" as const : current?.error || !online ? "unavailable" as const : enabled ? "loading" as const : "idle" as const,
-    retry: () => setRevision(value => value + 1),
+    data: current?.data, searchData: scoped?.searchData, error: scoped?.error,
+    status: scoped?.data ? "ready" : scoped?.error || !online ? "unavailable" : enabled ? "loading" : "idle",
+    hasMore: Boolean(scoped?.cursor), loadingMore: scoped?.loadingMore,
+    loadMore: async () => { if (online && enabled && scoped?.cursor && cache.current && !request.current) await fetchPage(cache.current, scoped.cursor); },
+    findRestaurant, retry: () => setRevision(value => value + 1),
   };
 }

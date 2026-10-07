@@ -3,15 +3,19 @@ import type { ReimaginedCatalogue } from "./reimaginedCatalogue";
 import type { PersistedCustomerCart } from "./customerCartPersistence";
 import { foodSelection } from "./reimaginedFoodSelection";
 
-export function prepareReimaginedReorder(order: Pick<V1Order, "lines" | "restaurant">, catalogue?: ReimaginedCatalogue, menus?: V1RestaurantMenu[]): { service: "grocery" | "food"; shopping: PersistedCustomerCart } {
+export function prepareReimaginedReorder(order: Pick<V1Order, "lines" | "restaurant">, catalogue?: ReimaginedCatalogue, menus?: V1RestaurantMenu[], selectedService?: "grocery" | "food"): { service: "grocery" | "food"; shopping: PersistedCustomerCart } {
   if (!order.lines.length) throw new Error("This order has no items to reorder.");
   const shopping: PersistedCustomerCart = { retail: {}, food: [] };
   const retail = order.lines.every(line => line.lineType === "RETAIL_SKU");
   const food = order.lines.every(line => line.lineType === "FOOD_MENU_ITEM");
-  if (!retail && !food) throw new Error("This older mixed order needs to be rebuilt as separate Grocery and Food carts. Your carts are unchanged.");
-  for (const line of order.lines) {
+  if (order.lines.some(line => line.lineType !== "RETAIL_SKU" && line.lineType !== "FOOD_MENU_ITEM")) throw new Error("This order contains unsupported items. Your carts are unchanged.");
+  if (!retail && !food && !selectedService) throw new Error("Choose Grocery or Food to rebuild this mixed order separately. Your carts are unchanged.");
+  const service = selectedService ?? (retail ? "grocery" : "food");
+  const lines = order.lines.filter(line => line.lineType === (service === "grocery" ? "RETAIL_SKU" : "FOOD_MENU_ITEM"));
+  if (!lines.length) throw new Error(`This order contains no ${service} items.`);
+  for (const line of lines) {
     if (!Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > 99) throw new Error("Review this order’s quantities before reordering.");
-    if (retail) {
+    if (service === "grocery") {
       const sku = catalogue?.catalogue.skus.find(value => value.id === line.skuId);
       if (!sku) throw new Error("Some exact products are unavailable in the current catalogue. Nothing was replaced.");
       const quantity = (shopping.retail[sku.id] ?? 0) + line.quantity;
@@ -29,5 +33,5 @@ export function prepareReimaginedReorder(order: Pick<V1Order, "lines" | "restaur
       } else shopping.food.push({ branchId: menu.restaurant.branchId, itemId: item.id, optionIds, quantity: line.quantity });
     }
   }
-  return { service: retail ? "grocery" : "food", shopping };
+  return { service, shopping };
 }

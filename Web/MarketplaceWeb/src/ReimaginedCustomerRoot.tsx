@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatV1Price, submitV1Order, commitV1LaunchPayment, getV1Order } from "./dastakV1";
 import type { DastakCustomerProps } from "./DastakCustomerView";
 import { parseCustomerDestination } from "./customerNavigation";
@@ -48,6 +48,10 @@ function AccountExperience(props: Props) {
   const [workspaceTitle, setWorkspaceTitle] = useState<string>();
   const [reorder, setReorder] = useState<ReturnType<typeof prepareReimaginedReorder>>();
   const [reorderError, setReorderError] = useState<string>();
+  const [mixedOrder, setMixedOrder] = useState<V1Order>();
+  const [reorderBusy, setReorderBusy] = useState(false);
+  const reorderLock = useRef(false);
+  const reorderContext = useRef("");
   const [profile, setProfile] = useState<AccountProfile>();
   const displayName = profile?.displayName ?? props.displayName;
   const phoneNumber = profile?.phoneNumber ?? props.phoneNumber;
@@ -61,13 +65,16 @@ function AccountExperience(props: Props) {
   }, [entry, dispatch]);
   const resource = useReimaginedCatalogue(props);
   const online = useCustomerOnline();
+  reorderContext.current = JSON.stringify([props.accountId, props.accessToken, state.section, state.shopping, online, canEditCart]);
   const wishlist = useReimaginedWishlist(props, online);
   const { accountId, accessToken, supabaseUrl, publishableKey } = props;
   const checkout = useMemo(() => new ReimaginedGroceryCheckout({ accessToken, supabaseUrl, publishableKey }, undefined, undefined, undefined, checkoutJournal(accountId, supabaseUrl)), [accountId, accessToken, supabaseUrl, publishableKey]);
   const foodCheckout = useMemo(() => new ReimaginedFoodRecovery({ accessToken, supabaseUrl, publishableKey }, { submit: submitV1Order, commit: commitV1LaunchPayment, read: getV1Order }, foodRecoveryJournal(accountId, supabaseUrl, { getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value) })), [accountId, accessToken, supabaseUrl, publishableKey]);
   const addresses = useReimaginedAddresses(props, online && (state.locationOpen || (state.service === "grocery" ? state.exploration.grocery.checkout : state.exploration.food.checkout)));
   const tracking = useReimaginedActiveOrder(props, state.activeOrder, online);
-  const food = useReimaginedFood(props, state.service === "food" || savedOpen || state.section === "orders", online);
+  const foodView = state.exploration.food.view;
+  const foodQuery = foodView.kind === "search" && !state.exploration.food.checkout && state.section === "home" ? foodView.query : "";
+  const food = useReimaginedFood(props, state.service === "food" || savedOpen || state.section === "orders", online, undefined, foodQuery);
   const pushAuth = useMemo(() => ({ accountId, accessToken, supabaseUrl, publishableKey, publicKey: props.webPushPublicKey }), [accountId, accessToken, supabaseUrl, publishableKey, props.webPushPublicKey]);
   const webPush = useDastakWebPush(pushAuth);
   const onSessionExpired = props.onSignOut;
@@ -81,17 +88,41 @@ function AccountExperience(props: Props) {
   const addressPicker = <ReimaginedAddressPicker key={`location:${accessToken}`} resource={addresses} online={online} accountUrl={accountUrl} auth={props} onSessionExpired={onSessionExpired} />;
   const openWishlist = () => { dispatch({ type: "navigate", section: "home" }); setSavedOpen(true); };
   const openOrders = (id?: string) => { setSelectedOrderId(id); dispatch({ type: "navigate", section: "orders" }); };
-  function requestReorder(order: V1Order) {
+  async function requestReorder(order: V1Order, selectedService?: "grocery" | "food") {
+    if (reorderLock.current) return;
     setReorderError(undefined);
+    const mixed = order.lines.some(line => line.lineType === "RETAIL_SKU") && order.lines.some(line => line.lineType === "FOOD_MENU_ITEM");
+    if (mixed && !selectedService) { setMixedOrder(order); return; }
+    reorderLock.current = true; setReorderBusy(true);
+    const context = reorderContext.current;
     try {
       if (!online || !canEditCart) throw new Error("Reconnect and use the cart-editing tab before reordering.");
-      const next = prepareReimaginedReorder(order, resource.data, food.data);
+      let menus = food.data;
+      const needsFood = selectedService === "food" || (!selectedService && order.lines.every(line => line.lineType === "FOOD_MENU_ITEM"));
+      if (needsFood && order.restaurant && !menus?.some(menu => menu.restaurant.branchId === order.restaurant!.branchId) && food.findRestaurant) {
+        const menu = await food.findRestaurant(order.restaurant.branchId);
+        if (context !== reorderContext.current) throw new DOMException("Reorder context changed", "AbortError");
+        if (menu) menus = [...(menus ?? []), menu];
+      }
+      const next = prepareReimaginedReorder(order, resource.data, menus, selectedService);
       const controller = next.service === "grocery" ? checkout : foodCheckout;
       if (controller.hasPendingAttempt && !controller.committed) throw new Error("Recover your pending checkout before replacing this cart.");
+      setMixedOrder(undefined);
       const nonempty = next.service === "grocery" ? Object.keys(state.shopping.retail).length > 0 : state.shopping.food.length > 0;
       if (nonempty) setReorder(next);
       else dispatch({ type: "replaceServiceShopping", ...next });
-    } catch (issue) { setReorderError(issue instanceof Error ? issue.message : "Order could not be added. Your carts are unchanged."); }
+    } catch (issue) {
+      if (!(issue instanceof DOMException && issue.name === "AbortError")) {
+        if (customerDataIssue(issue).action === "sign_in") onSessionExpired();
+        else setReorderError(issue instanceof Error ? issue.message : "Order could not be added. Your carts are unchanged.");
+      }
+    } finally { reorderLock.current = false; setReorderBusy(false); }
+  }
+  function approveReorder() {
+    if (!reorder || !online || !canEditCart) return;
+    const controller = reorder.service === "grocery" ? checkout : foodCheckout;
+    if (controller.hasPendingAttempt && !controller.committed) { setReorderError("Recover your pending checkout before replacing this cart."); return; }
+    dispatch({ type: "replaceServiceShopping", ...reorder }); setReorder(undefined);
   }
   const foodInput = { food: state.shopping.food, menus: food.data, online, canEdit: canEditCart, address: addresses.selected, addressesReady: addresses.status === "ready", recipient: { name: displayName, phoneNumber } };
   const draft = subtotal !== undefined && addresses.status === "ready" && addresses.selected && displayName?.trim() && phoneNumber?.trim()
@@ -116,7 +147,9 @@ function AccountExperience(props: Props) {
       sectionContent={{
         [state.section]: state.section === "home" ? null : <Suspense fallback={<p role="status">Opening your {state.section}…</p>}>
           {reorderError ? <p role="alert">{reorderError}</p> : null}
-          {reorder ? <section aria-label="Confirm cart replacement"><h3>Replace your current {reorder.service === "grocery" ? "Bucket" : "Food cart"}?</h3><p>The other service’s cart stays unchanged. Nothing is ordered until you complete checkout.</p><button type="button" onClick={() => setReorder(undefined)}>Keep current cart</button><button type="button" disabled={!online || !canEditCart} onClick={() => { dispatch({ type: "replaceServiceShopping", ...reorder }); setReorder(undefined); }}>Replace cart and review</button></section> : null}
+          {mixedOrder ? <section aria-label="Rebuild mixed order"><h3>Rebuild this order as separate carts</h3><p>Choose which part to restore. The other cart is kept. Each service has its own checkout.</p><button type="button" disabled={!online || !canEditCart || reorderBusy} onClick={() => void requestReorder(mixedOrder, "grocery")}>Rebuild Grocery</button><button type="button" disabled={!online || !canEditCart || reorderBusy} onClick={() => void requestReorder(mixedOrder, "food")}>Rebuild Food</button><button type="button" disabled={reorderBusy} onClick={() => setMixedOrder(undefined)}>Keep current carts</button></section> : null}
+          {reorderBusy ? <p role="status">Checking exact items and options…</p> : null}
+          {reorder ? <section aria-label="Confirm cart replacement"><h3>Replace your current {reorder.service === "grocery" ? "Bucket" : "Food cart"}?</h3><p>The other service’s cart stays unchanged. Nothing is ordered until you complete checkout.</p><button type="button" onClick={() => setReorder(undefined)}>Keep current cart</button><button type="button" disabled={!online || !canEditCart} onClick={approveReorder}>Replace cart and review</button></section> : null}
           <AccountWorkspace key={`${state.section}:${selectedOrderId ?? ""}`} {...props} displayName={displayName} phoneNumber={phoneNumber} embedded accountPane={state.section === "profile" || state.section === "settings" ? state.section : undefined} onOpenProfile={() => dispatch({ type: "navigate", section: "profile" })} onOpenSettings={() => dispatch({ type: "navigate", section: "settings" })} onOpenOrders={openOrders} onOrderRecordClosed={() => setSelectedOrderId(undefined)} onViewChange={updateWorkspaceTitle} initialSection={state.section === "orders" ? "orders" : "account"} initialOrderId={state.section === "orders" ? selectedOrderId : undefined} onReturnToShopping={() => dispatch({ type: "navigate", section: "home" })} onOpenWishlist={openWishlist} onReorder={requestReorder} webPushController={webPush} onProfileChanged={setProfile} />
         </Suspense>,
       }}>
