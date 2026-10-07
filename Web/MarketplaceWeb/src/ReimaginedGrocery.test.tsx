@@ -26,6 +26,71 @@ function button(label: string) { const found = Array.from(host.querySelectorAll(
 function click(label: string) { act(() => button(label).click()); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); });
 describe("Reimagined Grocery interactions", () => {
+  it("scopes Product Type to its rail and detail pager, retains both pack choices and never changes the cart", () => {
+    mount();
+    const rice = { ...data.catalogue.skus[0], variant: "Plain", brand: { id: fixtureId(30), name: "Test", slug: "test" } };
+    const large = { ...rice, id: fixtureId(31), packSize: "5 kg" };
+    const brown = { ...rice, id: fixtureId(32), name: "Test Brown Rice", variant: "Brown" };
+    const catalogue = { ...data, catalogue: { ...data.catalogue, skus: [rice, large, brown, data.catalogue.skus[1]] } };
+    act(() => root.render(<Harness related={null} catalogue={catalogue} />));
+    click("Take Bucket"); click("Add Test Plain Rice, 1 kg");
+    const shopping = () => JSON.parse(host.querySelector('[data-testid="state"]')!.textContent!).shopping;
+    const before = shopping();
+    const picker = host.querySelector<HTMLSelectElement>('[aria-label="Product Type in Rice"]')!;
+    expect([...picker.options].map(option => option.text)).toEqual(["All", "Plain", "Brown"]);
+    act(() => { picker.value = "Plain"; picker.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(host.querySelector('[aria-label="View Test Brown Rice, 1 kg details"]')).toBeNull();
+    expect(host.querySelector('[aria-label="View Test Basmati Rice, 1 kg details"]')).not.toBeNull();
+    click("View Test Plain Rice, 1 kg details");
+    expect(host.textContent).toContain("Product 1 of 2");
+    expect(host.querySelectorAll('.reimagined-detail-packs button')).toHaveLength(2);
+    click("Next product"); expect(host.querySelector('.reimagined-product-detail h2')?.textContent).toBe("Test Basmati Rice");
+    expect(shopping()).toEqual(before);
+    click("Close product details");
+    expect(picker.value).toBe("Plain");
+    act(() => { picker.value = ""; picker.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(host.querySelector('[aria-label="View Test Brown Rice, 1 kg details"]')).not.toBeNull();
+    expect(shopping()).toEqual(before);
+    // A refreshed catalogue without that type has an honest All fallback.
+    act(() => { picker.value = "Brown"; picker.dispatchEvent(new Event("change", { bubbles: true })); });
+    act(() => root.render(<Harness related={null} catalogue={{ ...catalogue, catalogue: { ...catalogue.catalogue, skus: [rice, large] } }} />));
+    expect(host.querySelector('[aria-label="Product Type in Rice"]')).toBeNull();
+    expect(host.querySelector('[aria-label="View Test Plain Rice, 1 kg details"]')).not.toBeNull();
+    expect(shopping()).toEqual(before);
+  });
+  it("keeps unclassified products in All and does not apply rail filters to search", () => {
+    mount();
+    expect(host.querySelector('.reimagined-product-type')).toBeNull();
+    const skus = [{ ...data.catalogue.skus[0], variant: "Plain" }, { ...data.catalogue.skus[0], id: fixtureId(31), variant: "Brown" }, { ...data.catalogue.skus[0], id: fixtureId(32), name: "Unclassified Rice" }];
+    const catalogue = { ...data, catalogue: { ...data.catalogue, skus } };
+    act(() => root.render(<Harness catalogue={catalogue} />));
+    expect(host.querySelectorAll('.reimagined-shelf-product')).toHaveLength(3);
+    // Remount to initialise an explicit search rather than the browse harness.
+    act(() => root.unmount()); root = createRoot(host);
+    act(() => root.render(<Harness searchQuery="rice" catalogue={catalogue} />));
+    expect(host.querySelector('.reimagined-product-type')).toBeNull();
+    expect(host.querySelectorAll('.reimagined-shelf-product')).toHaveLength(3);
+  });
+  it("shows each exact pack's price and unit price and supports direct gallery dots with refresh clamping", () => {
+    mount();
+    const rice = { ...data.catalogue.skus[0], quantityValue: 1, quantityUnit: "kg", imageKey: "sku-images/front.jpg", galleryImageKeys: ["sku-images/front.jpg", "sku-images/back.jpg", "sku-images/side.jpg"], brand: { id: fixtureId(30), name: "Test", slug: "test" } };
+    const large = { ...rice, id: fixtureId(31), packSize: "5 kg", quantityValue: 5, sellingPricePaise: 42000 };
+    const catalogue = { ...data, catalogue: { ...data.catalogue, skus: [rice, large] } };
+    act(() => root.render(<Harness related={null} catalogue={catalogue} />));
+    click("View Test Plain Rice, 1 kg details");
+    expect(button("Test Plain Rice · 1 kg").textContent).toContain("₹100.00");
+    expect(button("Test Plain Rice · 5 kg").textContent).toContain("₹420.00");
+    expect(button("Test Plain Rice · 5 kg").textContent).toContain("₹8.40/100 g");
+    expect(host.querySelectorAll('.reimagined-photo-dots button')).toHaveLength(3);
+    click("View product photo 3");
+    expect(host.querySelector<HTMLImageElement>('.reimagined-product-gallery img')?.src).toContain("side.jpg");
+    expect(button("View product photo 3").getAttribute("aria-current")).toBe("true");
+    const updated = { ...catalogue, catalogue: { ...catalogue.catalogue, skus: [{ ...rice, galleryImageKeys: ["sku-images/back.jpg"] }, large] } };
+    act(() => root.render(<Harness related={null} catalogue={updated} />));
+    expect(host.querySelector<HTMLImageElement>('.reimagined-product-gallery img')?.src).toContain("back.jpg");
+    click("Test Plain Rice · 5 kg");
+    expect(button("View product photo 1").getAttribute("aria-current")).toBe("true");
+  });
   it("removes browser controls and shows the exact-product unavailable state if its SKU disappears", () => {
     mount(); click("View Test Plain Rice, 1 kg details");
     act(() => root.render(<Harness catalogue={{ ...data, catalogue: { ...data.catalogue, skus: [] } }} />));

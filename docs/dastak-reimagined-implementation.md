@@ -6,6 +6,16 @@ Reimagined is the Customer experience over the existing Dastak platform. Custome
 
 ## Real-time Grocery scene — local prototype, 2026-09-30
 
+### Remaining discovery UI parity — local, 2026-10-08
+
+- Added rail-scoped Product Type selectors, using only explicit `sku.variant` metadata and showing them only where multiple distinct values exist. All includes unclassified SKUs. No type is guessed from names; missing/stale filters fall back to All. Filtered detail paging follows the visible product set while preserving genuine pack families and exact cart identities. Search and city trending are not silently filtered.
+- Restaurant menus now have category jump buttons with branch/component-scoped targets, keyboard focus and reduced-motion scrolling. Jumping does not alter either cart or choose a dish/options.
+- Detail size choices display each exact SKU's selling price and available unit price, with accessible price descriptions. Gallery photo dots support direct selection; an updated/shrunk gallery cannot read a missing image. Single-photo products do not get invented gallery controls.
+- The authenticated Customer shell greets by device-local morning (05:00–12:00), afternoon (12:00–18:00) or evening. One timer updates at the next boundary; focus/visibility refresh handles resumed tabs, and hidden/unmounted views clear the timer. No location, network or account-data request is added.
+- React guidance informed render-derived filtering, controlled selectors and timer cleanup. Verification uses local synthetic Grocery/Food fixtures, not real orders. A Food fixture's previously loaded 3D background hit a local shader/HTML-response error; it is now isolated from 3D and has HMR root cleanup. The actual background/staff implementation is frozen and that independent local scene issue is not claimed fixed.
+- Automated suite: 826 tests across 126 files. Lint, TypeScript/production bundling and whitespace checks pass. Browser checks covered Grocery at 390px and 320px, gallery/pack selection and preserved cart; Food category jumps preserved both carts at 390px. Local screenshots: `/tmp/dastak-parity-type-filter-phone.jpg`, `/tmp/dastak-parity-menu-shortcuts-phone.jpg`.
+- Not pushed or deployed in this slice. No migrations, backend/auth/payment/checkout-rule changes, production writes, paid generation or subagents. Current live catalogue variant coverage was not audited here; classification improvements and genuine distance/city-trending ranking remain separate data work. This is completion of the approved UI slice, not certification that the whole platform/reference is complete.
+
 ### Food paging/search and mixed-order rebuild — 2026-10-08
 
 - Prepared additive cursor-page discovery SQL/Edge/client changes, preserving the legacy API and visibility/authentication gates. Customer pages/search explicitly load more rather than auto-fetching all menus or querying on each keystroke. Mixed orders can rebuild a chosen service with exact identities, approval and other-cart preservation; stale asynchronous lookups are rejected.

@@ -1,8 +1,8 @@
-import { useMemo, useRef, useState, type Dispatch, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type Dispatch, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Minus, Package, Plus, ShoppingBasket, TrendingUp } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
 import { formatV1Price, type V1CatalogueSku } from "./dastakV1";
-import { groupGroceryProducts, groceryQuickPicks, groceryShelves, searchGrocery, type GroceryShelf, type ReimaginedCatalogue } from "./reimaginedCatalogue";
+import { filterGroceryShelf, groceryProductTypes, groupGroceryProducts, groceryQuickPicks, groceryShelves, searchGrocery, type GroceryShelf, type ReimaginedCatalogue } from "./reimaginedCatalogue";
 import type { ReimaginedAction, ReimaginedState } from "./reimaginedState";
 import { WishlistButton } from "./ReimaginedWishlist";
 import type { useReimaginedWishlist } from "./useReimaginedWishlist";
@@ -24,8 +24,10 @@ type Props = {
 };
 
 export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supabaseUrl, eligibility, relatedSkuIds, checkoutContent, trending, wishlist, online = true }: Props) {
+  const packChoicePrefix = useId();
   const exploration = state.exploration.grocery;
-  const shelves = useMemo(() => data ? groceryShelves(data, exploration.view) : [], [data, exploration.view]);
+  const sourceShelves = useMemo(() => data ? groceryShelves(data, exploration.view) : [], [data, exploration.view]);
+  const shelves = useMemo(() => exploration.view.kind === "browse" ? sourceShelves.map(shelf => filterGroceryShelf(shelf, exploration.productTypeFilters[shelf.key])) : sourceShelves, [sourceShelves, exploration.productTypeFilters, exploration.view.kind]);
   const quickPicks = useMemo(() => data ? groceryQuickPicks(data) : [], [data]);
   const productFamilies = useMemo(() => data ? groupGroceryProducts(data.catalogue.skus) : [], [data]);
   const trendingSkus = useMemo(() => {
@@ -70,7 +72,7 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
       <div className="reimagined-detail-identity"><p className="reimagined-kicker">{selected.brand?.name ?? "Dastak"}</p><h2>{selected.name}</h2>
         <p>{[selected.variant, selected.packSize].filter(Boolean).join(" · ")}</p><GroceryPrice sku={selected} /><small>{productUnitPrice(detailProduct(selected))}</small><WishlistButton wishlist={wishlist} kind="RETAIL_SKU" id={selected.id} name={selected.name} online={online} /><GroceryShare sku={selected} /></div>
     </div>
-    {variants.length > 1 ? <section className="reimagined-detail-packs"><h3>Pack sizes & variants</h3><div className="reimagined-variants" role="group" aria-label="Related pack sizes and variants">{variants.map(sku => <button key={sku.id} type="button" aria-pressed={sku.id === selected.id} onClick={() => select(sku.id)}>{sku.name} · {sku.packSize}</button>)}</div></section> : null}
+    {variants.length > 1 ? <section className="reimagined-detail-packs"><h3>Pack sizes & variants</h3><div className="reimagined-variants" role="group" aria-label="Related pack sizes and variants">{variants.map(sku => <button key={sku.id} type="button" aria-label={`${sku.name} · ${sku.packSize}`} aria-describedby={`${packChoicePrefix}-${sku.id}-price ${packChoicePrefix}-${sku.id}-unit`} aria-pressed={sku.id === selected.id} onClick={() => select(sku.id)}><span>{sku.name} · {sku.packSize}</span><strong id={`${packChoicePrefix}-${sku.id}-price`}>{formatV1Price(sku.sellingPricePaise)}</strong><small id={`${packChoicePrefix}-${sku.id}-unit`}>{productUnitPrice(detailProduct(sku))}</small></button>)}</div></section> : null}
     <div className="reimagined-detail-purchase"><p className="reimagined-availability">{eligibility(selected).reason ?? (eligibility(selected).canAdd ? "Purchase availability will be confirmed at checkout." : "Currently unavailable to add.")}</p>
       <GroceryQuantity sku={selected} count={state.shopping.retail[selected.id] ?? 0} policy={eligibility(selected)} onQuantity={quantity} /></div>
     {selected.description ? <section className="reimagined-detail-information"><h3>About this product</h3><p>{selected.description}</p></section> : null}
@@ -91,7 +93,7 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
       </>}
     </section>
   </div> : <div className="reimagined-grocery-shelves">
-    {!shelves.length ? <p role="status">This category could not be resolved. Choose a category from the directory.</p> : shelves.map(shelf => <WoodenShelf key={shelf.key} shelf={shelf} state={state} dispatch={dispatch} supabaseUrl={supabaseUrl} eligibility={eligibility} onQuantity={quantity} wishlist={wishlist} online={online} />)}
+    {!shelves.length ? <p role="status">This category could not be resolved. Choose a category from the directory.</p> : shelves.map((shelf, index) => <WoodenShelf key={shelf.key} shelf={shelf} productTypes={exploration.view.kind === "browse" ? groceryProductTypes(sourceShelves[index].skus) : undefined} state={state} dispatch={dispatch} supabaseUrl={supabaseUrl} eligibility={eligibility} onQuantity={quantity} wishlist={wishlist} online={online} />)}
   </div>;
   // Retain the same DOM tracks (and their scroll positions), but remove the
   // underlying shelves from keyboard/accessibility navigation during details or review.
@@ -106,12 +108,13 @@ export function ReimaginedGrocerySuggestions({ data, query, dispatch }: { data?:
   return <div className="reimagined-grocery-suggestions">{results.length ? results.map(([sku, ...packs]) => <button key={sku.id} type="button" onClick={() => { dispatch({ type: "closeSearch" }); dispatch({ type: "openDetail", id: sku.id }); }}><span>{sku.name}</span><small>{sku.packSize}{packs.length ? ` · ${packs.length + 1} sizes` : ""}</small></button>) : <p>No matching products in the loaded catalogue.</p>}</div>;
 }
 
-function WoodenShelf({ shelf, state, dispatch, supabaseUrl, eligibility, onQuantity, wishlist, online }: { shelf: GroceryShelf; state: ReimaginedState; dispatch: Dispatch<ReimaginedAction>; supabaseUrl: string; eligibility: Props["eligibility"]; onQuantity: (sku: V1CatalogueSku, quantity: number) => void; wishlist?: Props["wishlist"]; online: boolean }) {
+function WoodenShelf({ shelf, productTypes = [], state, dispatch, supabaseUrl, eligibility, onQuantity, wishlist, online }: { shelf: GroceryShelf; productTypes?: string[]; state: ReimaginedState; dispatch: Dispatch<ReimaginedAction>; supabaseUrl: string; eligibility: Props["eligibility"]; onQuantity: (sku: V1CatalogueSku, quantity: number) => void; wishlist?: Props["wishlist"]; online: boolean }) {
   const track = useRef<HTMLDivElement>(null);
   const groups = useMemo(() => groupGroceryProducts(shelf.skus), [shelf.skus]);
+  const chosenType = state.exploration.grocery.productTypeFilters[shelf.key];
   const move = (direction: number) => track.current?.scrollBy({ left: direction * track.current.clientWidth * .8, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   return <section className="reimagined-wooden-shelf reimagined-grocery-shelf" aria-label={shelf.label}>
-    <header><div><h2>{shelf.label}</h2><small>{groups.length} {groups.length === 1 ? "product" : "products"}</small></div>{groups.length ? <div><button type="button" aria-label={`Previous products in ${shelf.label}`} onClick={() => move(-1)}><ArrowLeft size={18} /></button><button type="button" aria-label={`Next products in ${shelf.label}`} onClick={() => move(1)}><ArrowRight size={18} /></button></div> : null}</header>
+    <header><div><h2>{shelf.label}</h2><small>{groups.length} {groups.length === 1 ? "product" : "products"}</small></div><div className="reimagined-shelf-tools">{productTypes.length > 1 ? <label className="reimagined-product-type"><span>Product Type</span><select aria-label={`Product Type in ${shelf.label}`} value={chosenType && productTypes.includes(chosenType) ? chosenType : ""} onChange={event => dispatch({ type: "setProductType", subcategoryId: shelf.key, productTypeId: event.target.value || undefined })}><option value="">All</option>{productTypes.map(type => <option key={type} value={type}>{type}</option>)}</select></label> : null}{groups.length ? <div className="reimagined-shelf-arrows"><button type="button" aria-label={`Previous products in ${shelf.label}`} onClick={() => move(-1)}><ArrowLeft size={18} /></button><button type="button" aria-label={`Next products in ${shelf.label}`} onClick={() => move(1)}><ArrowRight size={18} /></button></div> : null}</div></header>
     {groups.length ? <div className="reimagined-shelf-track" ref={track} tabIndex={0} aria-label={`${shelf.label} product shelf`}>{groups.map(packs => <GroceryShelfProduct key={packs[0].id} packs={packs} state={state} dispatch={dispatch} supabaseUrl={supabaseUrl} eligibility={eligibility} onQuantity={onQuantity} wishlist={wishlist} online={online} />)}</div> : <p className="reimagined-empty-shelf">No products in this shelf yet.</p>}
   </section>;
 }
@@ -158,8 +161,10 @@ function GroceryGallery({ sku, supabaseUrl }: { sku: V1CatalogueSku; supabaseUrl
   const [index, setIndex] = useState(0);
   const keys = [...new Set([sku.imageKey, ...sku.galleryImageKeys].filter((key): key is string => Boolean(key)))];
   if (keys.length < 2) return <GroceryImage sku={sku} supabaseUrl={supabaseUrl} />;
-  return <div className="reimagined-product-gallery"><div className="reimagined-sku-image"><DetailImage key={keys[index]} source={catalogueImageUrl(supabaseUrl, keys[index], 1024)} name={`${sku.name}, ${sku.packSize}`} /></div>
-    <div role="group" aria-label="Product photos"><button type="button" aria-label="Previous product photo" onClick={() => setIndex(value => (value - 1 + keys.length) % keys.length)}>←</button><output>{index + 1} / {keys.length}</output><button type="button" aria-label="Next product photo" onClick={() => setIndex(value => (value + 1) % keys.length)}>→</button></div>
+  const activeIndex = Math.min(index, keys.length - 1);
+  return <div className="reimagined-product-gallery"><div className="reimagined-sku-image"><DetailImage key={keys[activeIndex]} source={catalogueImageUrl(supabaseUrl, keys[activeIndex], 1024)} name={`${sku.name}, ${sku.packSize}`} /></div>
+    <div role="group" aria-label="Product photos"><button type="button" aria-label="Previous product photo" onClick={() => setIndex((activeIndex - 1 + keys.length) % keys.length)}>←</button><output>{activeIndex + 1} / {keys.length}</output><button type="button" aria-label="Next product photo" onClick={() => setIndex((activeIndex + 1) % keys.length)}>→</button></div>
+    <nav className="reimagined-photo-dots" aria-label="Choose product photo">{keys.map((key, photo) => <button key={key} type="button" aria-label={`View product photo ${photo + 1}`} aria-current={photo === activeIndex ? "true" : undefined} onClick={() => setIndex(photo)}><span aria-hidden="true" /></button>)}</nav>
   </div>;
 }
 

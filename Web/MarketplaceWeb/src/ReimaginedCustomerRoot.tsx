@@ -33,6 +33,7 @@ import type { ReimaginedAction } from "./reimaginedState";
 import type { V1Order } from "./dastakV1";
 import type { AccountProfile } from "./accountProfile";
 import type { CustomerSection } from "./customerNavigation";
+import { useReimaginedGreeting } from "./useReimaginedGreeting";
 
 type Props = DastakCustomerProps;
 const AccountWorkspace = lazy(() => import("./DastakCustomerView").then(module => ({ default: module.ExistingDastakCustomerView })));
@@ -43,6 +44,7 @@ export function ReimaginedCustomerRoot(props: Props) {
 }
 
 function AccountExperience(props: Props) {
+  const greeting = useReimaginedGreeting();
   const { state, dispatch: cartDispatch, cartIssue, canEditCart } = usePersistedReimaginedState(props.accountId);
   const [savedOpen, setSavedOpen] = useState(false);
   const [workspaceTitle, setWorkspaceTitle] = useState<string>();
@@ -138,7 +140,7 @@ function AccountExperience(props: Props) {
     <ReimaginedShell state={{ ...state, activeOrder: tracking.activeOrder }} dispatch={dispatch} activeOrderLabel={tracking.label}
       directory={resource.data ? reimaginedDirectory(resource.data.map) : []}
       directoryStatus={resource.status} onRetryDirectory={resource.retry}
-      displayName={displayName} greeting="Welcome" locationLabel={online && addresses.selected ? addresses.selected.label : "Choose your location"}
+      displayName={displayName} greeting={greeting} locationLabel={online && addresses.selected ? addresses.selected.label : "Choose your location"}
       locationContent={addressPicker}
       onOpenWishlist={openWishlist} featureTitle={savedOpen ? "Wishlist" : workspaceTitle}
       onSignIn={onSessionExpired} onOpenActiveOrder={openOrders}

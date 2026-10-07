@@ -22,8 +22,31 @@ function Harness({ resource = ready, online = true, empty = false, canEdit = tru
 }
 function mount(resource = ready, online = true, empty = false) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness resource={resource} online={online} empty={empty} />)); }
 function click(label: string) { const button = [...host.querySelectorAll("button")].find(value => (value.getAttribute("aria-label") ?? value.textContent) === label); if (!button) throw new Error(`Missing ${label}`); act(() => button.click()); }
-afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); });
+afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("Food discovery and menus", () => {
+  it("jumps to exact menu categories in the opened branch without changing either cart", () => {
+    const menu = foodMenuFixture();
+    menu.categories.push({ ...menu.categories[0], id: fixtureId(40), name: "Drinks", items: [] });
+    const other = foodMenuFixture(fixtureId(41)); other.restaurant.branchName = "Other Café";
+    const scroll = vi.fn();
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
+    mount({ ...ready, data: prepareFoodMenus([menu, other]) });
+    const shopping = host.querySelector("output")!.textContent;
+    click("Open Test Café menu"); click("Drinks");
+    const target = host.querySelector('[aria-label="Drinks menu category"]')!;
+    expect(document.activeElement).toBe(target);
+    expect(scroll).toHaveBeenCalledWith({ block: "start", behavior: "instant" });
+    expect(scroll.mock.instances[0]).toBe(target);
+    const shortcut = [...host.querySelectorAll('.reimagined-menu-shortcuts button')].find(button => button.textContent === "Drinks")!;
+    expect(shortcut.getAttribute("aria-controls")).toBe(target.id);
+    const firstTarget = host.querySelector('[aria-label="Meals menu category"]')!.id;
+    click("Back to restaurants"); click("Open Other Café menu"); click("Meals");
+    expect(host.querySelector('[aria-label="Meals menu category"]')!.id).not.toBe(firstTarget);
+    expect(host.querySelector('[aria-label="Drinks menu category"]')).toBeNull();
+    expect(host.querySelector("output")!.textContent).toBe(shopping);
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
   it("filters restaurants by real menu categories and keeps both carts through service switching", () => {
     const drinks = foodMenuFixture(fixtureId(40)); drinks.restaurant.branchName = "Drinks Café"; drinks.categories[0].name = "Hot Drinks";
     mount({ ...ready, data: prepareFoodMenus([foodMenuFixture(), drinks]) });

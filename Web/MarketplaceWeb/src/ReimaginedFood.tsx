@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type Dispatch, type ReactNode } from "react";
 import { Utensils } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
 import { formatV1Price, type V1RestaurantMenu, type V1RestaurantMenuItem } from "./dastakV1";
@@ -58,7 +58,7 @@ export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online,
     </section> : <p role="status">This dish is no longer in the loaded menu. <button type="button" onClick={() => dispatch({ type: "closeDetail" })}>Back to menu</button></p>
       : exploration.view.kind === "restaurant" ? menu ? <><button type="button" onClick={() => dispatch({ type: "navigate", section: "home" })}>Back to restaurants</button>
         <h2>{foodRestaurantName(menu)}</h2><p>{menu.restaurant.description}</p><p>{foodAvailability(menu)}</p>
-        {menu.categories.length ? menu.categories.map(category => <DishShelf key={category.id} name={category.name} items={category.items} supabaseUrl={supabaseUrl} dispatch={dispatch} wishlist={wishlist} online={online} />) : <p>No dishes in this menu yet.</p>}</>
+        <RestaurantMenu key={menu.restaurant.branchId} menu={menu} supabaseUrl={supabaseUrl} dispatch={dispatch} wishlist={wishlist} online={online} /></>
         : <p role="status">This restaurant is not in the loaded catalogue. <button type="button" onClick={() => dispatch({ type: "navigate", section: "home" })}>Back to restaurants</button></p>
       : exploration.view.kind === "search" ? resource.status === "loading" ? null : resource.error && !resource.searchData ? <p role="status">The server search did not complete. Refresh Food menus to retry; your saved carts are unchanged.</p> : <><p className="reimagined-commerce-note">{online ? "Search results come from Dastak’s restaurant catalogue. Load more if further matches are available." : "Offline: showing only menus already loaded on this device."}</p><FoodResults menus={resource.searchData ?? resource.data} query={exploration.view.query} dispatch={dispatch} /></>
       : <><nav className="reimagined-food-categories" aria-label="Food menu categories">
@@ -90,6 +90,20 @@ function FoodResults({ menus, query, dispatch, suggestions = false }: { menus: V
       {(suggestions ? dishes.slice(0, 3) : dishes).map(({ item }) => <button type="button" key={item.id} onClick={() => open(menu, item.id)}>{item.name}<small>{formatV1Price(item.basePricePaise)} base</small></button>)}
     </section>)}
   </div>;
+}
+
+function RestaurantMenu({ menu, ...props }: { menu: V1RestaurantMenu; dispatch: Dispatch<ReimaginedAction>; supabaseUrl: string; wishlist?: ReturnType<typeof useReimaginedWishlist>; online: boolean }) {
+  const prefix = useId();
+  const sections = useRef(new Map<string, HTMLDivElement>());
+  const jump = (id: string) => {
+    const target = sections.current.get(id);
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  };
+  if (!menu.categories.length) return <p>No dishes in this menu yet.</p>;
+  return <><nav className="reimagined-menu-shortcuts" aria-label="Jump to menu category">{menu.categories.map(category => <button key={category.id} type="button" aria-controls={`${prefix}-${category.id}`} onClick={() => jump(category.id)}>{category.name}</button>)}</nav>
+    {menu.categories.map(category => <div key={category.id} id={`${prefix}-${category.id}`} className="reimagined-menu-target" tabIndex={-1} aria-label={`${category.name} menu category`} ref={element => { if (element) sections.current.set(category.id, element); else sections.current.delete(category.id); }}><DishShelf name={category.name} items={category.items} {...props} /></div>)}</>;
 }
 
 function DishShelf({ name, items, dispatch, supabaseUrl, wishlist, online }: { name: string; items: V1RestaurantMenuItem[]; dispatch: Dispatch<ReimaginedAction>; supabaseUrl: string; wishlist?: ReturnType<typeof useReimaginedWishlist>; online: boolean }) {

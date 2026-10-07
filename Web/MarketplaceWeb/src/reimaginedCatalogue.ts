@@ -7,6 +7,18 @@ export type ReimaginedCatalogue = { map: V1CatalogueBrowseMap; catalogue: V1Cata
 export type GroceryShelf = { key: string; label: string; skus: V1CatalogueSku[] };
 export type GroceryQuickPick = { key: string; label: string; destinationKey: string };
 
+// The current catalogue supplies variants, not a separate product-type taxonomy.
+// Use those explicit values only: never classify a SKU by guessing from its name.
+export function groceryProductTypes(skus: V1CatalogueSku[]): string[] {
+  const types = [...new Set(skus.map(sku => sku.variant?.trim()).filter((value): value is string => Boolean(value)))];
+  return types.length > 1 ? types : [];
+}
+
+export function filterGroceryShelf(shelf: GroceryShelf, selectedType?: string): GroceryShelf {
+  if (!selectedType || !groceryProductTypes(shelf.skus).includes(selectedType)) return shelf;
+  return { ...shelf, skus: shelf.skus.filter(sku => sku.variant?.trim() === selectedType) };
+}
+
 // Presentation only: every member remains an exact purchasable SKU. Do not
 // guess families for unbranded products or across canonical category boundaries.
 export function groupGroceryProducts(skus: V1CatalogueSku[]): V1CatalogueSku[][] {

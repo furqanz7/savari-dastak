@@ -1,11 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import { groupGroceryProducts, groceryQuickPicks, groceryShelves, loadReimaginedCatalogue, searchGrocery } from "./reimaginedCatalogue";
+import { filterGroceryShelf, groceryProductTypes, groupGroceryProducts, groceryQuickPicks, groceryShelves, loadReimaginedCatalogue, searchGrocery } from "./reimaginedCatalogue";
 import { fixtureId, groceryFixture as data } from "./reimaginedCatalogue.testFixtures";
 import { parseReimaginedCatalogueImport } from "./reimaginedCatalogueImport";
 
 const auth = { supabaseUrl: "https://example.supabase.co", publishableKey: "test-key", accessToken: "test-token" };
 const clients = () => ({ getV1CatalogueBrowseMap: vi.fn().mockResolvedValue(data.map), getV1Catalogue: vi.fn().mockResolvedValue(data.catalogue) });
 describe("Reimagined canonical Grocery projection", () => {
+  it("filters only explicit catalogue variants, keeps unclassified SKUs in All and ignores stale filters", () => {
+    const skus = [{ ...data.catalogue.skus[0], variant: " Full Cream " }, { ...data.catalogue.skus[1], variant: "Toned" }, { ...data.catalogue.skus[2], name: "Skimmed Milk" }];
+    const shelf = { key: "milk", label: "Milk", skus };
+    expect(groceryProductTypes(skus)).toEqual(["Full Cream", "Toned"]);
+    expect(filterGroceryShelf(shelf, "Full Cream").skus).toEqual([skus[0]]);
+    expect(filterGroceryShelf(shelf, "Skimmed")).toBe(shelf);
+    expect(filterGroceryShelf(shelf)).toBe(shelf);
+    expect(groceryProductTypes([skus[0], skus[0], skus[2]])).toEqual([]);
+    expect(groceryProductTypes(data.catalogue.skus)).toEqual([]);
+  });
   it("groups genuine branded packs without combining flavours, brands, unbranded or unrelated rails", () => {
     const rice = { ...data.catalogue.skus[0], brand: { id: fixtureId(30), name: "Test", slug: "test" } };
     const large = { ...rice, id: fixtureId(31), packSize: "5 kg", name: "Test Plain Rice 5 kg" };
