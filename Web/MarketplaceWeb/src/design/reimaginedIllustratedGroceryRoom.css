@@ -1,0 +1,14 @@
+/* Archived illustrated study; not imported by the customer interface. */
+.grocery-room { background: #dedbc7; }
+.grocery-room-camera { position: absolute; inset: 0; transform-origin: 84% 76%; }
+.grocery-room-art { display: block; width: 100%; height: 100%; }
+.grocery-room-art text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.grocery-room-art-compact { display: none; }
+.grocery-room-atmosphere { position: absolute; inset: 0; background: linear-gradient(115deg, #fff9dc14, transparent 65%), radial-gradient(ellipse at 50% 10%, #fff9dd26, transparent 65%); }
+.reimagined[data-scene="groceryCounter"] .grocery-room-camera { transform: translate(-11%, -12%) scale(1.75); }
+@media (max-width: 720px) {
+  .grocery-room-art-wide { display: none; }
+  .grocery-room-art-compact { display: block; }
+  .reimagined[data-scene="groceryCounter"] .grocery-room-camera { transform-origin: 73% 78%; transform: translate(-5%, -5%) scale(1.23); }
+}
+@media (prefers-reduced-motion: reduce) { .grocery-room { animation: room-arrive-reduced 120ms linear both; } }

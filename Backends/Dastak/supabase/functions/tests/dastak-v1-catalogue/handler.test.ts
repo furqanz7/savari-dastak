@@ -64,6 +64,33 @@ Deno.test("V1 customer catalogue forwards only validated customer filters", asyn
   assertEquals(await body(response), snapshot);
 });
 
+Deno.test("V1 browse map is read-only and bound to the authenticated actor", async () => {
+  let mapToken: unknown;
+  let skuInput: unknown;
+  const deps = dependencies({
+    catalogueBrowseMap: ({ accessToken }) => {
+      mapToken = accessToken;
+      return Promise.resolve({ version: 1, nodes: [] });
+    },
+    catalogueBrowseSkuIds: (input) => {
+      skuInput = input;
+      return Promise.resolve([skuId]);
+    },
+  });
+  const map = await handleV1Catalogue(request({ operation: "catalogueBrowseMap" }), deps);
+  const skus = await handleV1Catalogue(
+    request({ operation: "catalogueBrowseSkuIds", nodeKey: "ready-masala" }), deps);
+  const invalid = await handleV1Catalogue(
+    request({ operation: "catalogueBrowseSkuIds", nodeKey: "../ready-masala" }), deps);
+  assertEquals(map.status, 200);
+  assertEquals(await body(map), { version: 1, nodes: [] });
+  assertEquals(mapToken, actor.accessToken);
+  assertEquals(skus.status, 200);
+  assertEquals(await body(skus), [skuId]);
+  assertEquals(skuInput, { accessToken: actor.accessToken, nodeKey: "ready-masala" });
+  assertEquals(invalid.status, 400);
+});
+
 Deno.test("V1 customer catalogue rejects incomplete cursors and invalid limits", async () => {
   let calls = 0;
   const deps = dependencies({
@@ -755,6 +782,8 @@ function dependencies(
       (() => Promise.resolve(actor)),
     customerCatalogue: overrides.customerCatalogue ??
       (() => Promise.resolve(snapshot)),
+    catalogueBrowseMap: overrides.catalogueBrowseMap ?? (() => Promise.resolve(null)),
+    catalogueBrowseSkuIds: overrides.catalogueBrowseSkuIds ?? (() => Promise.resolve([])),
     customerRestaurants: overrides.customerRestaurants ??
       (() => Promise.resolve({ restaurants: [] })),
     adminSnapshot: overrides.adminSnapshot ?? (() => Promise.resolve(snapshot)),

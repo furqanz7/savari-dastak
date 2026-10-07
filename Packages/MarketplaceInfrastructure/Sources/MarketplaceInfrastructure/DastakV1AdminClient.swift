@@ -658,6 +658,7 @@ public struct DastakAdminRoyaltyPayout: Codable, Equatable, Identifiable, Sendab
 }
 
 public protocol DastakV1AdminClient: Sendable {
+    func catalogueBrowseMap(idempotencyKey: IdempotencyKey) async throws -> DastakV1CatalogueBrowseMap?
     func orders(limit: Int, idempotencyKey: IdempotencyKey) async throws -> [DastakV1AdminOrder]
     func trace(orderID: UUID, idempotencyKey: IdempotencyKey) async throws -> DastakV1AdminExecutionTrace
     func cancelOrder(orderID: UUID, reason: String, expectedVersion: Int, idempotencyKey: IdempotencyKey) async throws -> DastakV1AdminCancellationResult
@@ -726,6 +727,13 @@ public protocol DastakV1AdminClient: Sendable {
 }
 
 public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
+    public func catalogueBrowseMap(idempotencyKey: IdempotencyKey) async throws -> DastakV1CatalogueBrowseMap? {
+        try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: DastakV1CatalogueBrowseRequest(),
+            idempotencyKey: idempotencyKey
+        )
+    }
     private struct Request: Encodable, Sendable {
         let operation: String
         let limit: Int?

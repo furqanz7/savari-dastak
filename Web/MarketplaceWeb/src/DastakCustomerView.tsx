@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { reimaginedHostedOptIn, reimaginedLocalOptIn } from "./reimaginedOptIn";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Home, ReceiptText, UserRound } from "lucide-react";
 import { CustomerNotice } from "./CustomerUI";
@@ -34,7 +35,17 @@ type Props = {
   onSignOut: () => void;
 };
 
+const ReimaginedCustomerRoot = lazy(() => import("./ReimaginedCustomerRoot").then(module => ({ default: module.ReimaginedCustomerRoot })));
+
 export function DastakCustomerView(props: Props) {
+  const location = typeof window === "undefined" ? undefined : window.location;
+  if (reimaginedLocalOptIn(import.meta.env.DEV, location) || reimaginedHostedOptIn(location)) {
+    return <Suspense fallback={<p role="status">Opening Dastak Reimagined…</p>}><ReimaginedCustomerRoot {...props} /></Suspense>;
+  }
+  return <ExistingDastakCustomerView key={props.accountId} {...props} />;
+}
+
+function ExistingDastakCustomerView(props: Props) {
   const online = useCustomerOnline();
   const [orderRefreshToken, setOrderRefreshToken] = useState(0);
   const [homeResetToken, setHomeResetToken] = useState(0);

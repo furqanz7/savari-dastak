@@ -1,0 +1,257 @@
+import { Engine } from "@babylonjs/core/Engines/engine";
+import { Scene } from "@babylonjs/core/scene";
+import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
+import { Viewport } from "@babylonjs/core/Maths/math.viewport";
+import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
+import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
+import { PointLight } from "@babylonjs/core/Lights/pointLight";
+import { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
+import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
+import "@babylonjs/core/Shaders/shadowMap.vertex";
+import "@babylonjs/core/Shaders/shadowMap.fragment";
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+import { CubeTexture } from "@babylonjs/core/Materials/Textures/cubeTexture";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture";
+import { createRestaurantStaff } from "./reimaginedRestaurantStaff";
+import woodColor from "./assets/reimagined/wood_floor-color.jpg?url";
+import woodNormal from "./assets/reimagined/wood_floor-normal.jpg?url";
+import "@babylonjs/core/Shaders/rgbdDecode.fragment";
+import lightUrl from "./assets/reimagined/store-light.env?url";
+
+export type CafeScene = { setCounter(value: boolean): void; dispose(): void };
+export function cafeCamera(counter: boolean, mobile: boolean) {
+  return { position: counter ? [0, 1.6, 1.65] : [mobile ? 0 : -.45, 1.62, mobile ? -4.7 : -5.5],
+    target: counter ? [0, 1.65, 4.22] : [0, 1.65, 3.5], fov: mobile ? (counter ? 1.0 : 1.18) : .94 };
+}
+
+export function createCafeScene(canvas: HTMLCanvasElement, atCounter: boolean, onStatus: (text: string) => void): CafeScene {
+  const engine = new Engine(canvas, true, { powerPreference: "low-power", stencil: true });
+  try {
+    const scene = new Scene(engine);
+    const mobile = matchMedia("(max-width: 720px)"); const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+    engine.setHardwareScalingLevel(1 / Math.min(devicePixelRatio || 1, mobile.matches ? 1.25 : 1.5));
+    scene.clearColor = Color4.FromHexString("#e9e4d7ff");
+    scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(lightUrl, scene); scene.environmentIntensity = .32;
+    scene.imageProcessingConfiguration.toneMappingEnabled = true; scene.imageProcessingConfiguration.exposure = 1.08;
+    scene.imageProcessingConfiguration.contrast = 1.3;
+    const camera = new FreeCamera("cafe-customer-eye-level", Vector3.Zero(), scene); camera.minZ = .08; camera.maxZ = 40;
+    const ambient = new HemisphericLight("cafe-soft-fill", new Vector3(0, 1, 0), scene); ambient.intensity = .22;
+    ambient.groundColor = new Color3(.27,.23,.18);
+    const daylight = new DirectionalLight("cafe-window-daylight", new Vector3(.6,-1,.5), scene);
+    daylight.position.set(-4,7,-4); daylight.intensity = 2.1; daylight.diffuse = new Color3(1,.95,.85);
+    const shadow = new ShadowGenerator(mobile.matches ? 512 : 1024, daylight); shadow.usePercentageCloserFiltering = true; shadow.normalBias = .025;
+    const meshes: Mesh[] = [];
+    function mat(name: string, hex: string, roughness = .8, metallic = 0) {
+      const m = new PBRMaterial(name, scene); m.albedoColor = Color3.FromHexString(hex); m.roughness = roughness; m.metallic = metallic; return m;
+    }
+    const plaster = mat("restaurant-white-wall", "#deded9"); const wood = mat("restaurant-light-oak", "#b99162", .72);
+    const dark = mat("restaurant-charcoal", "#171b1d", .52); const green = mat("restaurant-red-upholstery", "#ac1825", .65);
+    const yellow = mat("restaurant-golden-yellow", "#ffbd18", .4);
+    const stone = mat("cafe-ivory-terrazzo", "#e4dfd3", .44); const metal = mat("cafe-brushed-steel", "#b5b9b8", .25, .8);
+    const brass = mat("restaurant-black-metal", "#262a2b", .35, .45); const ceramic = mat("cafe-porcelain", "#eee5d5", .25);
+    const warm = mat("cafe-warm-light", "#fff0cf", .5); warm.emissiveColor = new Color3(1,.72,.35);
+    let seed = 311;
+    const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    function texture(name: string, paint: (ctx: CanvasRenderingContext2D) => void) {
+      const t = new DynamicTexture(name, {width:512,height:512}, scene, false); paint(t.getContext() as unknown as CanvasRenderingContext2D); t.update(); return t;
+    }
+    stone.albedoTexture = texture("cafe-terrazzo-grain", ctx => {
+      ctx.fillStyle = "#e4dfd3"; ctx.fillRect(0,0,512,512);
+      for(let i=0;i<1000;i++){ctx.fillStyle = ["#d2cec4","#eee8de","#d9d7cf"][i%3];ctx.fillRect(random()*512,random()*512,1,1);}
+    });
+    wood.albedoTexture = texture("cafe-oak-grain", ctx => {
+      ctx.fillStyle="#a77e4e";ctx.fillRect(0,0,512,512);
+      for(let i=0;i<520;i++){ctx.strokeStyle=`rgba(54,30,9,${random()*.13})`;ctx.beginPath();const x=random()*512;ctx.moveTo(x,0);ctx.bezierCurveTo(x+9,170,x-6,310,x,512);ctx.stroke();}
+    });
+    wood.albedoTexture.dispose();
+    wood.albedoTexture = new Texture(woodColor, scene);
+    wood.albedoColor.set(1,1,1);
+    wood.bumpTexture = new Texture(woodNormal, scene); wood.bumpTexture.level = .3;
+    const graphite = mat("honed-counter-stone", "#292c2b", .34);
+    graphite.albedoTexture = texture("counter-stone-grain", ctx => {
+      ctx.fillStyle="#373b39";ctx.fillRect(0,0,512,512);
+      for(let i=0;i<16000;i++){const v=40+Math.floor(random()*35);ctx.fillStyle=`rgb(${v},${v+2},${v})`;ctx.fillRect(random()*512,random()*512,1,1);}
+    });
+    function box(name:string,x:number,y:number,z:number,w:number,h:number,d:number,m:PBRMaterial) {
+      const mesh=MeshBuilder.CreateBox(name,{width:w,height:h,depth:d},scene);mesh.position.set(x,y,z);mesh.material=m;meshes.push(mesh);return mesh;
+    }
+    function cylinder(name:string,x:number,y:number,z:number,diameter:number,height:number,m:PBRMaterial,top=diameter) {
+      const mesh=MeshBuilder.CreateCylinder(name,{diameterBottom:diameter,diameterTop:top,height,tessellation:24},scene);mesh.position.set(x,y,z);mesh.material=m;meshes.push(mesh);return mesh;
+    }
+    function roundedTop(name:string,x:number,y:number,z:number,w:number,h:number,d:number,m:PBRMaterial,r=.07) {
+      box(name,x,y,z,w-2*r,h,d,m);box(name,x,y,z,w,h,d-2*r,m);
+      for(const dx of [-1,1])for(const dz of [-1,1])cylinder(name+"-corner",x+dx*(w/2-r),y,z+dz*(d/2-r),r*2,h,m);
+    }
+    function board(name:string,x:number,y:number,z:number,w:number,h:number,lines:string[],light=false) {
+      const height=Math.round(1024*h/w);
+      const t=new DynamicTexture(name,{width:1024,height},scene,false);const ctx=t.getContext() as unknown as CanvasRenderingContext2D;
+      ctx.fillStyle=light?"#ffca22":"#191c20";ctx.fillRect(0,0,1024,height);ctx.fillStyle=light?"#171b1d":"#fff7e8";
+      ctx.textAlign="center";lines.forEach((line,i)=>{
+        const size=lines.length===1?height*.46:height*(i===0?.34:.20);
+        ctx.font=`${i===0?600:400} ${size}px sans-serif`;
+        ctx.fillText(line,512,height*(lines.length===1?.65:i===0?.44:.79),900);
+      });
+      ctx.fillStyle="#e12532";ctx.fillRect(90,height*.95,844,Math.max(2,height*.012));t.update();
+      const m=mat(name,"#ffffff",.65);m.albedoTexture=t;m.emissiveTexture=t;m.emissiveColor=new Color3(.22,.22,.22);
+      // Dedicated front face keeps text upright; box UVs repeat/mirror the
+      // artwork on its side and back faces, especially on rotated wall art.
+      const face=MeshBuilder.CreatePlane(name,{width:w,height:h},scene);
+      face.position.set(x,y,z);face.material=m;meshes.push(face);return face;
+    }
+    // Compact room, with the customer facing the service counter from the entry.
+    box("cafe-floor",0,-.09,1,7,.16,13,stone);
+    for(let x=-3.5;x<=3.5;x+=.8)box("floor-joint",x,-.004,1,.008,.003,13,plaster);
+    for(let z=-5;z<7.5;z+=.8)box("floor-joint",0,-.003,z,7,.003,.008,plaster);
+    box("cafe-back-wall",0,1.75,6.4,7,3.5,.2,plaster);
+    box("cafe-left-wall",-3.45,1.75,1,.15,3.5,13,plaster);box("cafe-right-wall",3.45,1.75,1,.15,3.5,13,plaster);
+    box("cafe-ceiling",0,3.55,1,7,.15,13,dark);
+    for(let z=-4;z<6;z+=1.4)box("ceiling-service-beam",0,3.4,z,7,.15,.09,dark);
+    for(const x of [-2.7,2.7])box("ceiling-linear-led",x,3.32,1,.075,.045,12.8,warm);
+    box("yellow-ceiling-portal",0,3.2,3.25,7,.36,.6,yellow);
+    // Daylit side glazing; window frames and plants give the seating corner depth.
+    const windowLight=mat("cafe-window-diffuse", "#d8e2dc");windowLight.emissiveColor=new Color3(.4,.46,.42);
+    for(const z of [-2.3,.1,2.5]){
+      box("cafe-side-window",-3.35,2,z,.035,1.95,2.1,windowLight);
+      for(const dz of [-1.06,0,1.06])box("window-brass-mullion",-3.29,2,z+dz,.045,2,.035,brass);
+      box("window-sill",-3.18,1.03,z,.36,.07,2.2,wood);
+    }
+    // Upholstered banquette, compact tables and chairs, all clear of the walkway.
+    box("banquette-base",-2.95,.25,.05,.78,.5,6.4,dark);
+    box("banquette-cushion",-2.9,.52,.05,.78,.16,6.4,green);
+    box("banquette-back",-3.17,.94,.05,.18,.78,6.4,green);
+    for(const z of [.25,2.55]){
+      box("dining-table-top",-2,.79,z,1.12,.075,.8,wood);cylinder("bistro-table-stem",-2,.4,z,.075,.75,brass);cylinder("bistro-table-base",-2,.045,z,.5,.07,dark);
+      box("chair-seat",-1.07,.46,z,.48,.095,.48,yellow);box("chair-back",-.85,.77,z,.09,.55,.48,yellow);
+      for(const dx of [-.18,.18])for(const dz of [-.18,.18])cylinder("chair-leg",-1.07+dx,.23,z+dz,.035,.46,dark);
+      box("dining-tray",-2,.85,z,.5,.035,.35,dark);
+      cylinder("table-drink",-2,.99,z,.12,.25,green,.17);cylinder("drink-lid",-2,1.12,z,.18,.02,ceramic);cylinder("drink-straw",-2,1.21,z,.012,.18,ceramic);
+    }
+    // Quick-service restaurant: a broad counter, kitchen pass and bold signage.
+    box("service-counter-body",.35,.51,3.5,5.55,1.02,1.03,wood);
+    box("counter-red-front",.35,.61,2.969,5.5,.74,.04,dark);
+    for(let x=-2.35;x<3.08;x+=.105)box("counter-oak-rib",x,.6,2.934,.062,.77,.065,wood);
+    box("counter-dark-plinth",.35,.10,3.45,5.48,.2,.92,dark);
+    box("counter-yellow-band",.35,1.01,2.94,5.6,.11,.08,yellow);
+    roundedTop("counter-stone-top",.35,1.11,3.45,5.7,.1,1.23,graphite);
+    board("order-here",-1.25,.64,2.89,1.36,.29,["ORDER HERE"]);
+    board("pickup-here",1.9,.64,2.89,1.36,.29,["PICK UP HERE"]);
+    box("kitchen-pass-dark-wall",.3,1.9,6.23,6.1,2.7,.07,dark);
+    box("kitchen-service-opening",.25,1.56,6.16,4.5,1.05,.08,metal);
+    box("kitchen-opening-shadow",.25,1.56,6.10,4.25,.83,.04,dark);
+    box("kitchen-pass-shelf",.25,1.15,5.88,4.7,.075,.65,metal);
+    box("kitchen-extraction-hood",.25,2.07,5.84,4.65,.29,.7,metal);
+    for(const x of [-1.4,-.5,.4,1.3]) {
+      box("kitchen-food-warmer",x,1.37,6.01,.69,.34,.35,metal);
+      box("kitchen-warmer-front",x,1.37,5.81,.59,.24,.015,dark);
+    }
+    board("restaurant-brand",.35,3.1,4.24,5.7,.3,["DASTAK / KITCHEN","FRESH. FAST. FULL OF FLAVOUR."]);
+    for(let x=-2.7;x<3.3;x+=.3)box("kitchen-tile-grout",x,1.57,6.08,.008,1.65,.01,metal);
+    for(let y=.75;y<2.4;y+=.15)box("kitchen-tile-grout",.3,y,6.075,5.95,.008,.01,metal);
+    // Original illustrated menu artwork, built locally; no brand logos or live prices.
+    function foodScreen(name:string,x:number,y:number,z:number,w:number,h:number,title:string,kind:number) {
+      const width=Math.round(768*w/h);
+      const t=new DynamicTexture(name,{width,height:768},scene,false);
+      const ctx=t.getContext() as unknown as CanvasRenderingContext2D;
+      ctx.fillStyle=kind===1?"#c61929":kind===2?"#ffc328":"#f7f1e5";ctx.fillRect(0,0,width,768);
+      ctx.translate((width-768)/2,0);
+      ctx.fillStyle=kind===1?"#ffffff":"#191c20";ctx.textAlign="center";ctx.font="900 69px sans-serif";ctx.fillText(title,384,100,700);
+      ctx.font="500 30px sans-serif";ctx.fillText("MADE FRESH. SERVED HAPPY.",384,151);
+      const ellipse=(cx:number,cy:number,rx:number,ry:number,color:string)=>{ctx.fillStyle=color;ctx.beginPath();ctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);ctx.fill();};
+      if(kind===1){
+        for(let i=0;i<18;i++){ctx.fillStyle=i%2?"#f5b43e":"#fbd16b";ctx.fillRect(207+i*18,266+(i%3)*17,14,225);}
+        ctx.fillStyle="#faf0db";ctx.beginPath();ctx.moveTo(210,413);ctx.lineTo(574,413);ctx.lineTo(536,626);ctx.lineTo(249,626);ctx.fill();
+        ctx.fillStyle="#b91526";ctx.font="900 76px sans-serif";ctx.fillText("D",392,554);
+      }else if(kind===2){
+        ellipse(380,570,193,38,"#42261d");ellipse(384,530,193,48,"#efb94a");
+        for(let i=0;i<9;i++)ellipse(259+i*31,437+(i%3)*30,56,64,i%2?"#b96829":"#d78a33");
+        ctx.fillStyle="#ffffff";ctx.font="bold 46px sans-serif";ctx.fillText("CRISPY & GOLDEN",384,656);
+      }else{
+        ellipse(384,573,219,39,"#9c5b25");ellipse(384,546,223,43,"#e4a344");
+        ellipse(384,508,230,34,"#4b2919");ellipse(384,477,233,19,"#fbc83c");
+        ellipse(384,450,231,22,"#68923d");ellipse(384,425,223,19,"#ce3328");
+        ellipse(384,380,225,72,"#e5a449");ellipse(384,354,203,47,"#f0bc65");
+        for(let i=0;i<38;i++)ellipse(224+(i*53)%325,330+(i*29)%74,5,2,"#ffe6a3");
+      }
+      ctx.fillStyle=kind===1?"#ffffff":"#191c20";ctx.font="bold 34px sans-serif";ctx.fillText("BURGERS  /  SIDES  /  MEALS",384,717);t.update();
+      const m=mat(name,"#ffffff",.6);m.albedoTexture=t;m.emissiveTexture=t;m.emissiveColor=new Color3(.48,.48,.48);
+      const face=MeshBuilder.CreatePlane(name,{width:w,height:h},scene);face.position.set(x,y,z);face.material=m;meshes.push(face);
+    }
+    for(const [i,title] of ["SIGNATURE BURGERS","FRIES & SIDES","CRISPY CHICKEN"].entries()){
+      const x=-1.52+i*1.88;
+      box("digital-menu-bezel",x,2.52,4.3,1.82,.91,.10,dark);
+      foodScreen("digital-menu-"+i,x,2.52,4.235,1.76,.85,title,i);
+    }
+    for(const x of [-1.35,.65]){
+      cylinder("pos-stand",x,1.27,3.31,.045,.24,metal);
+      box("pos-screen-back",x,1.47,3.31,.49,.31,.045,dark);
+      board("pos-welcome-"+x,x,1.47,3.277,.45,.27,["WELCOME","ORDER HERE"]);
+      box("payment-reader",x+.39,1.21,3.13,.17,.085,.24,dark);
+    }
+    roundedTop("staff-keyboard",0,1.195,3.94,.48,.035,.18,dark,.015);
+    for(let row=0;row<4;row++)for(let col=0;col<13;col++)box("keyboard-key",-.215+col*.035,1.22,3.885+row*.035,.028,.007,.027,metal);
+    box("pickup-tray",2.13,1.195,3.37,1.15,.035,.62,dark);
+    for(const x of [1.8,2.12,2.44]){
+      cylinder("takeaway-drink",x,1.35,3.45,.16,.3,green,.22);
+      cylinder("takeaway-lid",x,1.51,3.45,.23,.02,ceramic);
+      cylinder("takeaway-straw",x,1.62,3.45,.014,.24,ceramic);
+    }
+    box("takeaway-bag",2.8,1.40,3.46,.36,.46,.25,wood);
+    board("pickup-progress",2.12,1.48,5.7,1.15,.37,["PICK UP","ORDER STATUS"]);
+    // A pair of tall self-service kiosks makes the right-hand side recognisably QSR.
+    for(const z of [-.15,1.65]){
+      box("kiosk-foot",2.57,.055,z,.7,.11,.52,dark);
+      box("kiosk-pedestal",2.57,.7,z,.24,1.35,.19,ceramic);
+      box("kiosk-red-body",2.57,1.5,z,.69,1.06,.18,green);
+      box("kiosk-black-bezel",2.57,1.52,z-.103,.62,.94,.024,dark);
+      foodScreen("kiosk-menu-"+z,2.57,1.59,z-.12,.55,.65,"ORDER & PAY",0);
+      board("kiosk-start-"+z,2.57,1.18,z-.12,.55,.12,["START HERE"],true);
+      box("kiosk-card-reader",2.87,1.1,z-.15,.13,.16,.09,dark);
+    }
+    for(const z of [-1.5,1.2]){
+      cylinder("pendant-cord",-2,3.02,z,.014,.65,dark);
+      cylinder("red-pendant",-2,2.7,z,.46,.24,green,.13);
+      cylinder("pendant-diffuser",-2,2.575,z,.40,.012,warm);
+    }
+    const task=new PointLight("restaurant-counter-light",new Vector3(.3,2.9,2.1),scene);task.intensity=8;task.range=7;task.diffuse=new Color3(1,.94,.84);
+    const seating=new PointLight("restaurant-seating-light",new Vector3(-2,2.65,-.5),scene);seating.intensity=5;seating.range=5;
+    box("right-red-feature-wall",3.34,1.75,.5,.045,2.95,6.5,green);
+    for(const z of [-1,1.5]){
+      const art=board("restaurant-wall-sign-"+z,3.30,2.3,z,1.55,.7,["BIG FLAVOUR.","GOOD TIMES."],true);art.rotation.y=Math.PI/2;
+    }
+    // Merge static geometry by material to keep the phone render lightweight.
+    const batches=new Map<PBRMaterial,Mesh[]>();
+    for(const mesh of meshes){mesh.isPickable=false;const m=mesh.material as PBRMaterial;const group=batches.get(m)??[];group.push(mesh);batches.set(m,group);}
+    for(const group of batches.values()){const merged=Mesh.MergeMeshes(group,true,true)!;merged.receiveShadows=true;merged.isPickable=false;merged.freezeWorldMatrix();shadow.addShadowCaster(merged);}
+    let counter=atCounter;let dirty=true;let disposed=false;
+    let staffUpdate: ((time:number)=>void)|undefined;
+    let staffState="Loading staff"; let lastStatus=""; let clock=0; let previousTime=performance.now();
+    void createRestaurantStaff(scene,shadow,canvas,()=>disposed).then(update=>{
+      if(disposed)return;staffUpdate=update;staffState=update?"Live staff":"Staff unavailable";dirty=true;
+    }).catch(()=>{if(!disposed){staffState="Staff unavailable";canvas.dataset.staff="unavailable";dirty=true;}});
+    const destination=Vector3.Zero();const target=Vector3.Zero();const gaze=Vector3.Zero();
+    function frame(){const view=cafeCamera(counter,mobile.matches);destination.copyFromFloats(...view.position as [number,number,number]);target.copyFromFloats(...view.target as [number,number,number]);camera.fov=view.fov;camera.viewport=new Viewport(0,mobile.matches?.18:0,1,mobile.matches?.82:1);dirty=true;}
+    frame();camera.position.copyFrom(destination);gaze.copyFrom(target);camera.setTarget(gaze);
+    const resize=()=>{frame();engine.resize();};const observer=new ResizeObserver(resize);observer.observe(canvas);
+    const render=()=>{
+      if(disposed||document.hidden)return;
+      const now=performance.now();const elapsed=Math.min((now-previousTime)/1000,.1);previousTime=now;
+      if(!dirty&&scene.isReady()&&(!staffUpdate||reduced.matches))return;
+      if(!reduced.matches)clock+=elapsed;
+      staffUpdate?.(clock);
+      const blend=reduced.matches?1:1-Math.exp(-Math.min(engine.getDeltaTime()/1000,.05)*4);
+      Vector3.LerpToRef(camera.position,destination,blend,camera.position);Vector3.LerpToRef(gaze,target,blend,gaze);camera.setTarget(gaze);
+      const ready=scene.isReady();scene.render();dirty=!ready||Vector3.Distance(camera.position,destination)>.002||Vector3.Distance(gaze,target)>.002;
+      canvas.dataset.view=counter?"cafe-counter":"cafe-entrance";canvas.dataset.sceneReady=String(ready);
+      const status=`Restaurant counter study · ${staffState}${reduced.matches?" · reduced motion":""}`;
+      if(ready&&status!==lastStatus){lastStatus=status;onStatus(status);}
+    };
+    const visibility=()=>{if(document.hidden)engine.stopRenderLoop(render);else{dirty=true;engine.runRenderLoop(render);}};
+    document.addEventListener("visibilitychange",visibility);mobile.addEventListener("change",resize);reduced.addEventListener("change",resize);engine.runRenderLoop(render);
+    return {setCounter(value){counter=value;frame();},dispose(){disposed=true;observer.disconnect();document.removeEventListener("visibilitychange",visibility);mobile.removeEventListener("change",resize);reduced.removeEventListener("change",resize);engine.stopRenderLoop(render);scene.dispose();engine.dispose();}};
+  } catch(error){engine.dispose();throw error;}
+}

@@ -6,10 +6,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowLeft, ArrowRight, Ban, Check, ChevronRight, CircleAlert, ClockAlert, Copy, Download,
   Heart, Leaf, LockKeyhole, MapPin, Minus, PackageCheck, PackageX, Plus, Printer,
-  ReceiptText, RefreshCw, RotateCcw, Search, ShieldCheck, ShoppingBag,
+  Phone, ReceiptText, RefreshCw, RotateCcw, Search, ShieldCheck, ShoppingBag,
   UserRound, UtensilsCrossed, X,
 } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
+import { catalogueDepartmentName, catalogueHomeTiles, catalogueNavigationGroups, curatedCatalogueRails, resolveCatalogueRail, riceRailExcludedSubcategoryIds } from "./cataloguePresentation";
+import { browseChildren, browseSkuIds, validateBrowseMap } from "./catalogueBrowse";
+import { referenceBrowseArtworkKey } from "./referenceBrowseArtwork";
 import {
   foodCartKey, loadCustomerCart, persistedFoodCart, resolveFoodCart, saveCustomerCart,
   validateRetailCart, type PersistedFoodCartLine, type ResolvedFoodCartLine, type RetailCart,
@@ -29,10 +32,10 @@ import {
   type CustomerWishlistItemKind,
 } from "./customerWishlist";
 import {
-  cancelV1Order, commitV1LaunchPayment, formatV1Price, getV1Catalogue, getV1Order, getV1Orders,
+  cancelV1Order, commitV1LaunchPayment, formatV1Price, getV1Catalogue, getV1CatalogueBrowseMap, getV1Order, getV1Orders,
   getV1Restaurants, reportV1CustomerIssue, submitV1Order, uploadV1CustomerIssueEvidence,
   type DastakV1Auth, type V1CatalogueCategory, type V1CatalogueCategoryType,
-  type V1CatalogueSku, type V1CatalogueSubcategory, type V1Order,
+  type V1CatalogueSku, type V1CatalogueSubcategory, type V1CatalogueBrowseMap, type V1Order,
   type V1OrderCursor, type V1RestaurantMenu, type V1RestaurantMenuItem,
 } from "./dastakV1";
 import { CustomerTimeline } from "./CustomerDeliveryDetails";
@@ -95,17 +98,31 @@ const cancellableStatuses = new Set(["CREATED", "MATCHING", "FULLY_SECURED", "AW
 async function loadCompleteV1Category(
   auth: DastakV1Auth,
   categoryId: string,
+  subcategoryId: string | undefined,
   signal: AbortSignal,
 ) {
   const skus = new Map<string, V1CatalogueSku>();
   let cursor: { name: string; skuId: string } | undefined;
   for (let page = 0; page < 20; page += 1) {
-    const result = await getV1Catalogue({ ...auth, categoryId, limit: 250, cursor, signal });
+    const result = await getV1Catalogue({ ...auth, categoryId, subcategoryId, limit: 250, cursor, signal });
     result.skus.forEach((sku) => skus.set(sku.id, sku));
     if (!result.nextCursor || (cursor?.name === result.nextCursor.name && cursor.skuId === result.nextCursor.skuId)) break;
     cursor = result.nextCursor;
   }
   return [...skus.values()];
+}
+
+async function loadCompleteV1Catalogue(auth: DastakV1Auth, first: Awaited<ReturnType<typeof getV1Catalogue>>, signal: AbortSignal) {
+  const skus = new Map(first.skus.map((sku) => [sku.id, sku]));
+  let cursor = first.nextCursor;
+  for (let page = 1; cursor && page < 50; page += 1) {
+    const result = await getV1Catalogue({ ...auth, limit: 250, cursor, signal });
+    result.skus.forEach((sku) => skus.set(sku.id, sku));
+    if (result.nextCursor && result.nextCursor.name === cursor.name && result.nextCursor.skuId === cursor.skuId) throw new Error("Catalogue pagination did not advance.");
+    cursor = result.nextCursor;
+  }
+  if (cursor) throw new Error("The full catalogue could not be loaded.");
+  return { ...first, skus: [...skus.values()], nextCursor: undefined };
 }
 
 export function DastakV1CustomerExperience(props: Props) {
@@ -115,6 +132,7 @@ export function DastakV1CustomerExperience(props: Props) {
     supabaseUrl: props.supabaseUrl,
   }), [props.accessToken, props.publishableKey, props.supabaseUrl]);
   const [catalogue, setCatalogue] = useState<Awaited<ReturnType<typeof getV1Catalogue>>>();
+  const [browseMap, setBrowseMap] = useState<V1CatalogueBrowseMap | null>();
   const [categorySkus, setCategorySkus] = useState<Record<string, V1CatalogueSku[]>>({});
   const [loadingCategoryId, setLoadingCategoryId] = useState<string>();
   const [restaurants, setRestaurants] = useState<V1RestaurantMenu[]>([]);
@@ -128,6 +146,8 @@ export function DastakV1CustomerExperience(props: Props) {
   const [selectedCategoryType, setSelectedCategoryType] = useState<string>();
   const [selectedCategory, setSelectedCategory] = useState<string>();
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>();
+  const [selectedRailLabel, setSelectedRailLabel] = useState<string>();
+  const [selectedHomeTile, setSelectedHomeTile] = useState<{ label: string; categoryId?: string }>();
   const [homeMode, setHomeMode] = useState<CustomerHomeMode>("grocery");
   const [initialCart] = useState(() => loadCustomerCart(props.accountId));
   const [cart, setCart] = useState<Cart>(() => initialCart.retail);
@@ -172,6 +192,7 @@ export function DastakV1CustomerExperience(props: Props) {
     setSelectedCategoryType(undefined);
     setSelectedCategory(undefined);
     setSelectedSubcategory(undefined);
+    setSelectedHomeTile(undefined);
     setSelectedRestaurant(undefined);
     setSelectedOrder(undefined);
     setPendingReorder(undefined);
@@ -216,14 +237,33 @@ export function DastakV1CustomerExperience(props: Props) {
       catalogueController.current = controller;
       setLoadingCatalogue(true);
       try {
-        const next = await getV1Catalogue({ ...auth, limit: 250, signal: controller.signal });
+        const [nextBrowseMap, first] = await Promise.all([
+          getV1CatalogueBrowseMap({ ...auth, signal: controller.signal }),
+          getV1Catalogue({ ...auth, limit: 250, signal: controller.signal }),
+        ]);
+        if (nextBrowseMap && validateBrowseMap(nextBrowseMap).length) throw new Error("The catalogue map needs attention.");
+        const next = nextBrowseMap
+          ? await loadCompleteV1Catalogue(auth, first, controller.signal)
+          : first;
         if (controller.signal.aborted) return;
+        setBrowseMap(nextBrowseMap);
+        if (nextBrowseMap) {
+          setSelectedCategoryType(undefined);
+          setSelectedCategory(undefined);
+          setSelectedSubcategory(undefined);
+          setSelectedRailLabel(undefined);
+          setSelectedHomeTile(undefined);
+        }
         setCatalogue(next);
         setCategorySkus({});
         setCart((current) => validateRetailCart(current, next.skus, !next.nextCursor));
         clearStorefrontFailure("catalogue");
       } catch (requestError) {
-        if (!controller.signal.aborted) recordStorefrontFailure("catalogue", requestError);
+        if (!controller.signal.aborted) {
+          setCatalogue(undefined);
+          setBrowseMap(undefined);
+          recordStorefrontFailure("catalogue", requestError);
+        }
       } finally {
         if (!controller.signal.aborted) setLoadingCatalogue(false);
         if (catalogueController.current === controller) catalogueController.current = undefined;
@@ -343,17 +383,19 @@ export function DastakV1CustomerExperience(props: Props) {
     };
   }, [refreshAddresses, refreshCatalogue, refreshRestaurants]);
   useEffect(() => {
-    if (!selectedCategory || Object.prototype.hasOwnProperty.call(categorySkus, selectedCategory)) {
+    const categoryKey = selectedCategory ? `${selectedCategory}:${selectedSubcategory ?? ""}` : undefined;
+    if (!selectedCategory || !categoryKey || Object.prototype.hasOwnProperty.call(categorySkus, categoryKey)) {
       setLoadingCategoryId(undefined);
       return;
     }
     const categoryId = selectedCategory;
+    const subcategoryId = selectedSubcategory;
     const controller = new AbortController();
     setLoadingCategoryId(categoryId);
-    void loadCompleteV1Category(auth, categoryId, controller.signal)
+    void loadCompleteV1Category(auth, categoryId, subcategoryId, controller.signal)
       .then((skus) => {
         if (!controller.signal.aborted) {
-          setCategorySkus((current) => ({ ...current, [categoryId]: skus }));
+          setCategorySkus((current) => ({ ...current, [`${categoryId}:${subcategoryId ?? ""}`]: skus }));
           setError(undefined);
         }
       })
@@ -366,7 +408,7 @@ export function DastakV1CustomerExperience(props: Props) {
         }
       });
     return () => controller.abort();
-  }, [auth, categorySkus, presentRequestFailure, selectedCategory]);
+  }, [auth, categorySkus, presentRequestFailure, selectedCategory, selectedSubcategory]);
   useEffect(() => {
     const controller = new AbortController();
     void refreshWishlist(controller.signal);
@@ -850,13 +892,15 @@ export function DastakV1CustomerExperience(props: Props) {
         setSelectedCategoryType(undefined);
         setSelectedCategory(undefined);
         setSelectedSubcategory(undefined);
+        setSelectedHomeTile(undefined);
       }}
       supabaseUrl={props.supabaseUrl}
       restaurants={restaurants}
       categoryTypes={catalogue?.categoryTypes ?? []}
+      browseMap={browseMap}
       categories={catalogue?.categories ?? []}
       subcategories={catalogue?.subcategories ?? []}
-      skus={selectedCategory ? categorySkus[selectedCategory] ?? [] : catalogue?.skus ?? []}
+      skus={selectedCategory ? categorySkus[`${selectedCategory}:${selectedSubcategory ?? ""}`] ?? [] : catalogue?.skus ?? []}
       loadingProducts={Boolean(selectedCategory && loadingCategoryId === selectedCategory)}
       loadingCatalogue={loadingCatalogue && !catalogue}
       catalogueIssue={storefrontIssues.catalogue}
@@ -867,18 +911,26 @@ export function DastakV1CustomerExperience(props: Props) {
       selectedCategoryType={selectedCategoryType}
       selectedCategory={selectedCategory}
       selectedSubcategory={selectedSubcategory}
+      selectedRailLabel={selectedRailLabel}
+      selectedHomeTile={selectedHomeTile}
       onCategoryType={(id) => {
         const children = id ? catalogue?.categories.filter((item) => item.categoryTypeId === id) ?? [] : [];
         setSelectedCategoryType(id);
-        setSelectedCategory((children.find((item) => item.status === "ACTIVE") ?? children[0])?.id);
+        const selectedType = catalogue?.categoryTypes.find((item) => item.id === id);
+        const preferred = selectedType?.slug === "staples-pantry"
+          ? children.find((item) => item.slug === "atta-flours")
+          : undefined;
+        setSelectedCategory((preferred ?? children.find((item) => item.status === "ACTIVE") ?? children[0])?.id);
         setSelectedSubcategory(undefined);
+        setSelectedRailLabel(undefined);
+        setSelectedHomeTile(undefined);
       }}
       onCategory={(id) => {
         setSelectedCategory(id);
-        setSelectedSubcategory(undefined);
-        if (id) setSelectedCategoryType(catalogue?.categories.find((item) => item.id === id)?.categoryTypeId);
       }}
-      onSubcategory={setSelectedSubcategory}
+      onSubcategory={(id) => { setSelectedSubcategory(id); }}
+      onRailSelection={setSelectedRailLabel}
+      onHomeTileSelection={setSelectedHomeTile}
       onOrders={() => props.onNavigate("orders")}
       onAdd={add}
       quantities={cart}
@@ -994,18 +1046,22 @@ export function CustomerHeader({ address, count, onAddress, onSearch, onCart }: 
   </header>;
 }
 
-export function HomeSection({ mode = "grocery", onMode = () => undefined, supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, loadingProducts, loadingCatalogue = false, catalogueIssue, restaurantIssue, onRetryCatalogue, onRetryRestaurants, onSearch, selectedCategoryType, selectedCategory, selectedSubcategory, onCategoryType, onCategory, onSubcategory, onOrders, onAdd, onRestaurant, quantities = {}, onQuantity = () => undefined, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+export function HomeSection({ mode = "grocery", onMode = () => undefined, supabaseUrl, restaurants, categoryTypes, categories, subcategories, skus, browseMap, loadingProducts, loadingCatalogue = false, catalogueIssue, restaurantIssue, onRetryCatalogue, onRetryRestaurants, selectedCategoryType, selectedCategory, selectedSubcategory, selectedRailLabel, selectedHomeTile, onCategoryType, onCategory, onSubcategory, onRailSelection = () => undefined, onHomeTileSelection = () => undefined, onOrders, onAdd, onRestaurant, quantities = {}, onQuantity = () => undefined, wishlistIds, wishlistUpdatingIds, onWishlist }: {
   mode?: CustomerHomeMode; onMode?: (mode: CustomerHomeMode) => void;
   supabaseUrl: string;
   restaurants: V1RestaurantMenu[];
   categoryTypes: V1CatalogueCategoryType[]; categories: V1CatalogueCategory[];
+  browseMap?: V1CatalogueBrowseMap | null;
   subcategories: V1CatalogueSubcategory[]; skus: V1CatalogueSku[];
   loadingProducts: boolean;
   loadingCatalogue?: boolean; catalogueIssue?: string; restaurantIssue?: string;
   onRetryCatalogue?: () => void; onRetryRestaurants?: () => void; onSearch?: () => void;
-  selectedCategoryType?: string; selectedCategory?: string; selectedSubcategory?: string;
+  selectedCategoryType?: string; selectedCategory?: string; selectedSubcategory?: string; selectedRailLabel?: string;
+  selectedHomeTile?: { label: string; categoryId?: string };
   onCategoryType: (id?: string) => void;
   onCategory: (id?: string) => void; onSubcategory: (id?: string) => void;
+  onRailSelection?: (label?: string) => void;
+  onHomeTileSelection?: (tile?: { label: string; categoryId?: string }) => void;
   onOrders: () => void;
   onAdd: (sku: V1CatalogueSku) => void; onRestaurant: (restaurant: V1RestaurantMenu) => void;
   quantities?: RetailCart; onQuantity?: (sku: V1CatalogueSku, delta: -1 | 1) => void;
@@ -1016,19 +1072,47 @@ export function HomeSection({ mode = "grocery", onMode = () => undefined, supaba
   useEffect(() => {
     if (selectedCategoryType) directoryRef.current?.scrollIntoView({ block: "start" });
   }, [selectedCategoryType]);
+  const effectiveSelectedSubcategory = selectedSubcategory;
+  const selectedCategoryRecord = categories.find((item) => item.id === selectedCategory);
+  const riceRailExclusions = selectedRailLabel === "Rice" && selectedCategoryRecord?.slug === "rice"
+    ? riceRailExcludedSubcategoryIds(subcategories.filter((item) => item.categoryId === selectedCategory))
+    : undefined;
   const visible = skus.filter((sku) =>
+    (!selectedCategoryType || Boolean(selectedCategory)) &&
     (!selectedCategory || sku.categoryId === selectedCategory) &&
-    (!selectedSubcategory || sku.subcategoryId === selectedSubcategory));
+    (!effectiveSelectedSubcategory || sku.subcategoryId === effectiveSelectedSubcategory) &&
+    (!riceRailExclusions || !riceRailExclusions.has(sku.subcategoryId)));
   const categorySubcategories = subcategories.filter((item) => item.categoryId === selectedCategory);
   const selectedType = categoryTypes.find((item) => item.id === selectedCategoryType);
-  const selectedTypeCategories = categories.filter((item) => item.categoryTypeId === selectedCategoryType);
+  const freshVegetablesOnlyRailExclusions = new Set(["fresh-meat-seafood", "seasonal-fruits", "fresh-exotic-fruits", "fresh-pooja-festive", "fresh-cut-fruits-juices", "fresh-certified-organics", "fresh-frozen-fruits"]);
+  const freshFruitRailCategories = new Set(["fresh-fruits", "seasonal-fruits", "fresh-premium-produce", "fresh-exotic-fruits", "fresh-cut-fruits-juices", "fresh-frozen-fruits"]);
+  const freshVegetableRailCategories = new Set(["fresh-vegetables", "leafy-greens-herbs", "fresh-cuts-sprouts", "exotic-premium-produce", "flowers-leaves", "fresh-frozen-vegetables"]);
+  const freshProduceRailCategories = selectedCategoryRecord?.slug && freshFruitRailCategories.has(selectedCategoryRecord.slug)
+    ? freshFruitRailCategories
+    : selectedCategoryRecord?.slug && freshVegetableRailCategories.has(selectedCategoryRecord.slug)
+      ? freshVegetableRailCategories
+      : selectedCategoryRecord?.slug ? new Set([selectedCategoryRecord.slug]) : undefined;
+  const selectedTypeCategories = categories.filter((item) => item.categoryTypeId === selectedCategoryType && !(selectedType?.slug === "fresh-produce" && freshProduceRailCategories && !freshProduceRailCategories.has(item.slug)) && !(selectedType?.slug === "fresh-produce" && selectedCategoryRecord?.slug === "fresh-vegetables" && freshVegetablesOnlyRailExclusions.has(item.slug)));
+  const staplesCategory = selectedType?.slug === "staples-pantry";
+  const categoryRailItems: Array<{ label: string; item?: V1CatalogueCategory | V1CatalogueSubcategory }> = selectedHomeTile?.categoryId && selectedType?.slug !== "fresh-produce"
+    ? categorySubcategories.map((item) => ({ label: item.name, item }))
+    : staplesCategory
+    ? curatedCatalogueRails["staples-pantry"].map((target) => ({ label: target.label, item: resolveCatalogueRail(target, categoryTypes, categories, subcategories) }))
+    : selectedType?.slug === "masala-cooking"
+      ? curatedCatalogueRails["masala-cooking"].map((target) => ({ label: target.label, item: resolveCatalogueRail(target, categoryTypes, categories, subcategories) }))
+    : (categorySubcategories.length ? [...selectedTypeCategories, ...categorySubcategories] : selectedTypeCategories).map((item) => ({ label: item.name, item }));
   const navigationGroups = catalogueNavigationGroups(categoryTypes);
-  const selectedName = subcategories.find((item) => item.id === selectedSubcategory)?.name
-    ?? categories.find((item) => item.id === selectedCategory)?.name;
+  const selectedName = selectedRailLabel
+    ?? (selectedHomeTile?.categoryId && selectedHomeTile.categoryId === selectedCategory ? selectedHomeTile.label : undefined)
+    ?? subcategories.find((item) => item.id === selectedSubcategory)?.name
+    ?? (() => {
+      const selectedCategoryRecord = categories.find((item) => item.id === selectedCategory);
+      if (selectedCategoryRecord?.slug === "masala-cooking") return "Masalas";
+      if (selectedCategoryRecord?.slug === "atta-flours") return "Atta";
+      return selectedCategoryRecord?.name;
+    })();
   return <>
     {!selectedType ? <CustomerCommerceNavigation mode={mode} onMode={onMode} /> : null}
-    {!selectedType && mode === "grocery" ? <section className="customer-home-hero"><div><p className="customer-eyebrow">YOUR EVERYDAY, DELIVERED</p><h1>A little more ease.<br /><em>Every day.</em></h1><p>Groceries and everyday essentials, selected carefully and brought to your doorstep.</p><button className="customer-button" type="button" onClick={() => directoryRef.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}>Shop grocery<ArrowRight size={19} /></button><span className="customer-hero-assurance"><ShieldCheck size={17} /> Pay via UPI or cash at your doorstep</span></div><div className="customer-hero-display" aria-hidden="true"><span className="customer-hero-orbit" />{skus.filter((sku) => sku.imageKey).slice(0, 3).map((sku) => <div key={sku.id}><ProductImage src={catalogueImageUrl(supabaseUrl, sku.imageKey ?? null)} alt="" /></div>)}<span className="customer-hero-seal">The everyday<br /><b>made easy.</b></span></div></section> : null}
-    {!selectedType && mode === "grocery" ? <div className="customer-discovery-shortcuts"><button type="button" onClick={() => directoryRef.current?.scrollIntoView({ block: "start" })}><ShoppingBag size={20} /><span>Shop essentials</span><ArrowRight size={16} /></button><button type="button" onClick={onSearch}><Search size={20} /><span>Find your favourites</span><ArrowRight size={16} /></button><button type="button" onClick={() => onMode("food")}><UtensilsCrossed size={20} /><span>Order food</span><ArrowRight size={16} /></button></div> : null}
     {!selectedType && mode === "food" ? <section className="customer-food-hero"><div><p className="customer-eyebrow">FOOD, MADE NEARBY</p><h1>Your table is closer<br /><em>than you think.</em></h1><p>Choose a restaurant or café, build your order, and let the kitchen confirm every detail.</p></div><UtensilsCrossed size={46} aria-hidden="true" /></section> : null}
     {!selectedType && mode === "food" && (restaurants.length || restaurantIssue) ? <section className="v1-section" id="customer-restaurants"><header><div><p>RESTAURANTS &amp; CAFES</p><h2>Something delicious, nearby.</h2></div><span>{restaurants.length ? `${restaurants.length} ${restaurants.length === 1 ? "kitchen" : "kitchens"}` : ""}</span></header>
       {restaurantIssue ? <CustomerNotice title="Restaurant menus couldn’t update" onRetry={onRetryRestaurants}>{restaurantIssue}</CustomerNotice> : null}
@@ -1040,19 +1124,88 @@ export function HomeSection({ mode = "grocery", onMode = () => undefined, supaba
     </section> : null}
     {!selectedType && mode === "food" && !restaurants.length && !restaurantIssue ? <CustomerEmptyState title="Kitchens are opening soon" copy="Restaurants and cafés available for your area will appear here." icon={<UtensilsCrossed size={30} />} /> : null}
     {!selectedType && (mode === "parcel" || mode === "print") ? <CustomerComingSoon mode={mode} onGrocery={() => onMode("grocery")} /> : null}
-    {mode === "grocery" || selectedType ? <section ref={directoryRef} className="v1-section v1-catalogue-directory"><header><div><p>SHOP DASTAK</p><h2>{selectedType?.name ?? "What does your day need?"}</h2></div>{selectedType ? <button type="button" className="v1-text-action" onClick={() => onCategoryType(undefined)}><ArrowLeft size={16} />All categories</button> : null}</header>
+    {mode === "grocery" && browseMap ? <ReferenceCustomerCatalogue map={browseMap} supabaseUrl={supabaseUrl} categoryTypes={categoryTypes} categories={categories} subcategories={subcategories} skus={skus} quantities={quantities} onQuantity={onQuantity} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : null}
+    {(mode === "grocery" || selectedType) && !browseMap ? <section ref={directoryRef} className={`v1-section v1-catalogue-directory${selectedType ? " has-selected-type" : " is-category-home"}`}>
+      {selectedType ? <header><div><p>SHOP DASTAK</p><h2>{selectedHomeTile?.label ?? catalogueDepartmentName(selectedType.slug, selectedType.name)}</h2></div><button type="button" className="v1-text-action" onClick={() => { onCategoryType(undefined); onHomeTileSelection(undefined); }}><ArrowLeft size={16} />All categories</button></header> : null}
       {catalogueIssue ? <CustomerNotice title="Products couldn’t update" onRetry={onRetryCatalogue}>{catalogueIssue}</CustomerNotice> : null}
-      {loadingCatalogue ? <CustomerSkeleton label="Opening Dastak catalogue" /> : !selectedType ? <div className="v1-category-groups">{navigationGroups.map((group) => <section key={group.key}><header><h3>{group.name}</h3></header><div className="v1-category-grid">{group.types.map((type) => <button type="button" key={type.id} onClick={() => onCategoryType(type.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={type} /><strong>{type.name}</strong>{type.status && type.status !== "ACTIVE" ? <small>Coming soon</small> : null}</button>)}</div></section>)}</div> : <div className="v1-category-browser">
-        <div className="v1-subcategory-rail" role="group" aria-label="Subcategories">
-          {selectedTypeCategories.map((category) => <button className={selectedCategory === category.id ? "selected" : ""} aria-pressed={selectedCategory === category.id} type="button" key={category.id} onClick={() => onCategory(category.id)}><CategoryArtwork supabaseUrl={supabaseUrl} item={category} /><strong>{category.name}</strong></button>)}
+      {loadingCatalogue ? <CustomerSkeleton label="Opening Dastak catalogue" /> : !selectedType ? <div className="v1-category-groups">{navigationGroups.map((group) => <section className={`v1-category-group-${group.key}`} key={group.key}><header><h3>{group.name}</h3></header><div className="v1-category-grid">{catalogueHomeTiles(group.key, group.types, categoryTypes, categories).map((tile) => {
+        return <button type="button" key={tile.key} onClick={() => { onCategoryType(tile.typeId); if (tile.categoryId) onCategory(tile.categoryId); onHomeTileSelection({ label: tile.label, categoryId: tile.categoryId }); }}><CategoryArtwork supabaseUrl={supabaseUrl} item={tile.item} /><strong>{tile.label}</strong>{tile.item.status && tile.item.status !== "ACTIVE" ? <small>Coming soon</small> : null}</button>;
+      })}</div></section>)}</div> : <div className="v1-category-browser">
+        <div className="v1-subcategory-rail" role="group" aria-label={categorySubcategories.length ? "Categories" : "Subcategories"}>
+          {categoryRailItems.map(({ label, item }, index) => {
+            const isSubcategory = item !== undefined && "categoryId" in item;
+            const firstMatchingRailIndex = item ? categoryRailItems.findIndex((entry) => entry.item?.id === item.id && Boolean(entry.item && "categoryId" in entry.item) === isSubcategory) : index;
+            const selected = !item ? selectedRailLabel === label && !selectedCategory : isSubcategory
+              ? selectedSubcategory === item.id && index === firstMatchingRailIndex
+              : !selectedSubcategory && selectedCategory === item.id && index === firstMatchingRailIndex;
+            return <button className={selected ? "selected" : ""} aria-pressed={selected} type="button" disabled={!item} key={`${label}-${item?.id ?? "unavailable"}`} onClick={() => {
+              onRailSelection(staplesCategory || selectedType?.slug === "masala-cooking" ? label : undefined);
+              if (!item) return;
+              const targetCategory = "categoryId" in item ? categories.find((category) => category.id === item.categoryId) : item;
+              const switchesParentType = Boolean(targetCategory?.categoryTypeId && targetCategory.categoryTypeId !== selectedCategoryType);
+              if (switchesParentType) onCategoryType(targetCategory!.categoryTypeId);
+              if (switchesParentType) return;
+              if ("categoryId" in item) {
+                onCategory(item.categoryId);
+                onSubcategory(item.id);
+              } else { onSubcategory(undefined); onCategory(item.id); }
+            }}>{item ? <CategoryArtwork supabaseUrl={supabaseUrl} item={item as V1CatalogueCategory} /> : <span className="v1-category-art count-0" aria-hidden="true"><PackageCheck size={28} /></span>}<strong>{label}</strong></button>;
+          })}
         </div>
-        <div className="v1-category-results" key={selectedCategory}><header><h3>{selectedName ?? "Products"}</h3><span>{loadingProducts ? "Loading…" : `${visible.length} products`}</span></header>
-          {categorySubcategories.length ? <label className="v1-catalogue-type-filter">Type<select aria-label="Product type" value={selectedSubcategory ?? ""} onChange={(event) => onSubcategory(event.target.value || undefined)}><option value="">All types</option>{categorySubcategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
+        <div className="v1-category-results" key={selectedCategory}><header><div><p className="customer-eyebrow">SHOP DASTAK</p><h3>{selectedName ?? "Products"}</h3></div><span>{loadingProducts ? "Loading…" : `${visible.length} products`}</span></header>
           {loadingProducts ? <CustomerSkeleton label="Loading this category" /> : selectedCategory ? <ProductGrid supabaseUrl={supabaseUrl} skus={visible} quantities={quantities} onQuantity={onQuantity} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} /> : <p>Products coming soon.</p>}</div>
       </div>}
     </section> : null}
     {!selectedType ? <button className="v1-order-link" type="button" onClick={onOrders}>View your Dastak orders <ArrowRight size={17} /></button> : null}
   </>;
+}
+
+function ReferenceCustomerCatalogue({ map, supabaseUrl, categoryTypes, categories, subcategories, skus, quantities, onQuantity, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: {
+  map: V1CatalogueBrowseMap;
+  supabaseUrl: string;
+  categoryTypes: V1CatalogueCategoryType[];
+  categories: V1CatalogueCategory[];
+  subcategories: V1CatalogueSubcategory[];
+  skus: V1CatalogueSku[];
+  quantities: RetailCart;
+  onQuantity: (sku: V1CatalogueSku, delta: -1 | 1) => void;
+  onAdd: (sku: V1CatalogueSku) => void;
+  wishlistIds: Set<string>;
+  wishlistUpdatingIds: Set<string>;
+  onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void;
+}) {
+  const [destinationKey, setDestinationKey] = useState<string>();
+  const [railKey, setRailKey] = useState<string>();
+  const destination = map.nodes.find((node) => node.key === destinationKey && node.kind === "DESTINATION");
+  const rails = destination ? browseChildren(map, destination.key).filter((node) => node.kind === "RAIL") : [];
+  const selectedNode = rails.find((node) => node.key === railKey) ?? destination;
+  const taxonomy = useMemo(() => ({
+    types: categoryTypes.map((item) => ({ id: item.id, slug: item.slug })),
+    categories: categories.flatMap((item) => item.categoryTypeId ? [{ id: item.id, typeId: item.categoryTypeId, slug: item.slug }] : []),
+    subcategories: subcategories.map((item) => ({ id: item.id, categoryId: item.categoryId, slug: item.slug })),
+  }), [categoryTypes, categories, subcategories]);
+  const selectedIds = useMemo(() => selectedNode ? browseSkuIds(map, selectedNode.key, taxonomy, skus) : new Set<string>(), [map, selectedNode, taxonomy, skus]);
+  const visible = skus.filter((sku) => selectedIds.has(sku.id));
+  const artwork = (node: V1CatalogueBrowseMap["nodes"][number]) => {
+    const destinationImageKey = referenceBrowseArtworkKey(node);
+    const source = node.sources[0];
+    const category = categories.find((item) => item.slug === source?.categorySlug &&
+      categoryTypes.some((type) => type.id === item.categoryTypeId && type.slug === source.typeSlug));
+    const subcategory = subcategories.find((item) => item.categoryId === category?.id && item.slug === source?.subcategorySlug);
+    const imageKey = node.kind === "DESTINATION" ? destinationImageKey : subcategory?.imageKey ?? category?.imageKey;
+    return <span className={`v1-category-art count-${imageKey ? 1 : 0}`} aria-hidden="true">{imageKey ? <ProductImage src={catalogueImageUrl(supabaseUrl, imageKey)} alt="" /> : <PackageCheck size={42} />}</span>;
+  };
+  return <section className={`v1-section v1-catalogue-directory${destination ? " has-selected-type" : " is-category-home"}`}>
+    {destination ? <header><div><p>SHOP DASTAK</p><h2>{destination.label}</h2></div><button type="button" className="v1-text-action" onClick={() => { setDestinationKey(undefined); setRailKey(undefined); }}><ArrowLeft size={16} />All categories</button></header> : null}
+    {!destination ? <div className="v1-category-groups">{browseChildren(map, null).map((section) => <section className={`v1-category-group-${section.key}`} key={section.key}>
+      <header><h3>{section.label}</h3></header><div className="v1-category-grid">{browseChildren(map, section.key).map((node) => <button type="button" key={node.key} onClick={() => { setDestinationKey(node.key); setRailKey(undefined); }}>{artwork(node)}<strong>{node.label}</strong></button>)}</div>
+    </section>)}</div> : <div className="v1-category-browser">
+      <div className="v1-subcategory-rail" role="group" aria-label="Categories">{rails.map((node) => <button type="button" key={node.key} aria-pressed={selectedNode?.key === node.key} className={selectedNode?.key === node.key ? "selected" : ""} onClick={() => setRailKey(node.key)}>{artwork(node)}<strong>{node.label}</strong></button>)}</div>
+      <div className="v1-category-results" key={selectedNode?.key}><header><div><p className="customer-eyebrow">SHOP DASTAK</p><h3>{selectedNode?.label}</h3></div><span>{visible.length} products</span></header>
+        <ProductGrid supabaseUrl={supabaseUrl} skus={visible} quantities={quantities} onQuantity={onQuantity} onAdd={onAdd} wishlistIds={wishlistIds} wishlistUpdatingIds={wishlistUpdatingIds} onWishlist={onWishlist} />
+      </div>
+    </div>}
+  </section>;
 }
 
 function CustomerCommerceNavigation({ mode, onMode }: { mode: CustomerHomeMode; onMode: (mode: CustomerHomeMode) => void }) {
@@ -1088,18 +1241,126 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     "toys-games-kids": "canonical/taxonomy/toys-games-kids-v2.png",
     "automotive-travel-utility": "canonical/taxonomy/automotive-travel-utility-v2.png",
     "home-improvement-hardware": "canonical/taxonomy/home-improvement-hardware-v2.png",
+    chips: "local/snacks-munchies/chips.avif",
+    namkeen: "local/snacks-munchies/namkeen.avif",
+    "extruded-snacks": "local/snacks-munchies/extruded-snacks.avif",
+    popcorn: "local/snacks-munchies/popcorn.avif",
+    "nuts-trail-mixes": "local/snacks-munchies/nuts-trail-mixes.avif",
+    "traditional-snacks": "local/snacks-munchies/traditional-snacks.avif",
+    "papad-fryums": "local/snacks-munchies/papad-fryums.avif",
+    "healthy-snacks": "local/snacks-munchies/healthy-snacks.avif",
+    biscuits: "local/biscuits-bakery/biscuits.avif",
+    cookies: "local/biscuits-bakery/cookies.avif",
+    crackers: "local/biscuits-bakery/crackers.avif",
+    "cakes-muffins": "local/biscuits-bakery/cakes-muffins.avif",
+    "rusks-toasts": "local/biscuits-bakery/rusks-toasts.avif",
+    "bakery-snacks": "local/biscuits-bakery/bakery-snacks.avif",
+    water: "local/beverages/water.avif",
+    "soft-drinks": "local/beverages/soft-drinks.avif",
+    "fruit-juices": "local/beverages/fruit-juices.avif",
+    "coconut-water": "local/beverages/coconut-water.avif",
+    "energy-drinks": "local/beverages/energy-drinks.avif",
+    "sports-functional-drinks": "local/beverages/sports-functional-drinks.avif",
+    "soda-mixers": "local/beverages/soda-mixers.avif",
+    "non-alcoholic-speciality-drinks": "local/beverages/non-alcoholic-speciality-drinks.avif",
+    tea: "local/tea-coffee-drink-mixes/tea.avif",
+    coffee: "local/tea-coffee-drink-mixes/coffee.avif",
+    "health-drinks": "local/tea-coffee-drink-mixes/health-drinks.avif",
+    "malt-cocoa": "local/tea-coffee-drink-mixes/malt-cocoa.avif",
+    "drink-mixes": "local/tea-coffee-drink-mixes/drink-mixes.avif",
+    chocolates: "local/chocolates-sweets/chocolates.avif",
+    candy: "local/chocolates-sweets/candy.avif",
+    "gum-mints": "local/chocolates-sweets/gum-mints.avif",
+    "indian-sweets": "local/chocolates-sweets/indian-sweets.avif",
+    "sweet-snacks": "local/chocolates-sweets/sweet-snacks.avif",
+    noodles: "local/instant-ready-frozen-food/noodles.avif",
+    pasta: "local/instant-ready-frozen-food/pasta.avif",
+    vermicelli: "local/instant-ready-frozen-food/vermicelli.avif",
+    "ready-to-eat": "local/instant-ready-frozen-food/ready-to-eat.avif",
+    "ready-to-cook": "local/instant-ready-frozen-food/ready-to-cook.avif",
+    "frozen-snacks": "local/instant-ready-frozen-food/frozen-snacks.avif",
+    "frozen-vegetables": "local/instant-ready-frozen-food/frozen-vegetables.avif",
+    "ice-cream-frozen-desserts": "local/instant-ready-frozen-food/ice-cream-frozen-desserts.avif",
+    soups: "local/instant-ready-frozen-food/soups.avif",
   } as Record<string, string>;
   const subcategoryArtwork = {
+    "breakfast-cereals": "local/breakfast-spreads/breakfast-cereals.avif",
+    oats: "local/breakfast-spreads/oats.avif",
+    "muesli-granola": "local/breakfast-spreads/muesli-granola.avif",
+    "instant-breakfast": "local/breakfast-spreads/instant-breakfast.avif",
+    spreads: "local/breakfast-spreads/spreads.avif",
+    "honey-syrups": "local/breakfast-spreads/honey-syrups.avif",
+    "pancake-baking-mixes": "local/breakfast-spreads/pancake-baking-mixes.avif",
+    makeup: "local/beauty-grooming/makeup.avif",
+    fragrance: "local/beauty-grooming/fragrance.avif",
+    "mens-grooming": "local/beauty-grooming/mens-grooming.avif",
+    "womens-grooming": "local/beauty-grooming/womens-grooming.avif",
+    "beauty-tools": "local/beauty-grooming/beauty-tools.avif",
+    "hair-styling": "local/beauty-grooming/hair-styling.avif",
+    "feminine-care": "local/health-hygiene/feminine-care.avif",
+    "first-aid": "local/health-hygiene/first-aid.avif",
+    "masks-sanitizers": "local/health-hygiene/masks-sanitizers.avif",
+    "adult-care": "local/health-hygiene/adult-care.avif",
+    "cotton-dressing": "local/health-hygiene/cotton-dressing.avif",
+    "wellness-accessories": "local/health-hygiene/wellness-accessories.avif",
+    "eye-ear-care": "local/health-hygiene/eye-ear-care.avif",
+    diapers: "local/baby-care/diapers.avif",
+    "baby-wipes": "local/baby-care/baby-wipes.avif",
+    "baby-food": "local/baby-care/baby-food.avif",
+    "baby-feeding": "local/baby-care/baby-feeding.avif",
+    "baby-bath": "local/baby-care/baby-bath.avif",
+    "baby-skin-care": "local/baby-care/baby-skin-care.avif",
+    "baby-oral-care": "local/baby-care/baby-oral-care.avif",
+    "baby-accessories": "local/baby-care/baby-accessories.avif",
+    "vitamins-supplements": "local/pharmacy/vitamins-supplements.avif",
+    medicines: "local/pharmacy/medicines.avif",
+    "first-aid-medical-supplies": "local/pharmacy/first-aid-medical-supplies.avif",
+    laundry: "local/home-cleaning/laundry.avif",
+    dishwashing: "local/home-cleaning/dishwashing.avif",
+    "floor-cleaning": "local/home-cleaning/floor-cleaning.avif",
+    "toilet-cleaning": "local/home-cleaning/toilet-cleaning.avif",
+    "surface-cleaning": "local/home-cleaning/surface-cleaning.avif",
+    "glass-metal-cleaning": "local/home-cleaning/glass-metal-cleaning.avif",
+    "cleaning-tools": "local/home-cleaning/cleaning-tools.avif",
+    "air-fresheners": "local/home-cleaning/air-fresheners.avif",
+    "home-protection": "local/home-cleaning/home-protection.avif",
+    cookware: "local/kitchen-dining/cookware.avif",
+    bakeware: "local/kitchen-dining/bakeware.avif",
+    "kitchen-tools": "local/kitchen-dining/kitchen-tools.avif",
+    "food-storage": "local/kitchen-dining/food-storage.avif",
+    "bottles-flasks": "local/kitchen-dining/bottles-flasks.avif",
+    dinnerware: "local/kitchen-dining/dinnerware.avif",
+    serveware: "local/kitchen-dining/serveware.avif",
+    "disposable-tableware": "local/kitchen-dining/disposable-tableware.avif",
+    "foil-wraps": "local/kitchen-dining/foil-wraps.avif",
+    "bath-body": "local/personal-care/bath-body.avif",
+    "hair-care": "local/personal-care/hair-care.avif",
+    "oral-care": "local/personal-care/oral-care.avif",
+    "skin-care": "local/personal-care/skin-care.avif",
+    deodorants: "local/personal-care/deodorants.avif",
+    shaving: "local/personal-care/shaving.avif",
+    "hand-foot-care": "local/personal-care/hand-foot-care.avif",
     "fresh-produce-all": "canonical/taxonomy/subcategories/fresh-produce-all.png",
-    "fresh-fruits": "canonical/taxonomy/subcategories/fresh-fruits-provided.png",
-    "fresh-vegetables": "canonical/taxonomy/subcategories/fresh-vegetables-provided.png",
+    "fresh-fruits": "local/fresh-produce/fresh-fruits.avif",
+    "fresh-vegetables": "local/fresh-produce/fresh-vegetables.avif",
+    "fresh-meat-seafood": "local/fresh-produce/meat-seafood.avif",
+    "fresh-premium-produce": "local/fresh-produce/premium-produce.avif",
+    "fresh-exotic-fruits": "local/fresh-produce/exotic-fruits.avif",
+    "fresh-cut-fruits-juices": "local/fresh-produce/cut-fruits-juices.avif",
+    "fresh-frozen-fruits": "local/fresh-produce/frozen-fruits.avif",
+    "exotic-premium-produce": "local/fresh-produce/premium-produce.avif",
+    "fresh-chicken": "local/meat-seafood/fresh-chicken.avif",
+    "fresh-seafood": "local/meat-seafood/fresh-seafood.avif",
+    "fresh-mutton": "local/meat-seafood/fresh-mutton.avif",
+    "frozen-food": "local/meat-seafood/frozen-food.avif",
+    "dry-fish": "local/meat-seafood/dry-fish.avif",
+    "ready-to-cook": "local/meat-seafood/ready-to-cook.avif",
     "leafy-greens-herbs": "canonical/taxonomy/subcategories/leafy-greens-herbs-provided.png",
     "seasonal-fruits": "canonical/taxonomy/subcategories/seasonal-fruits-provided.png",
     "fresh-cuts-sprouts": "canonical/taxonomy/subcategories/fresh-cuts-sprouts-provided.png",
-    "exotic-premium-produce": "canonical/taxonomy/subcategories/exotic-premium-produce-provided.png",
     "flowers-leaves": "canonical/taxonomy/subcategories/flowers-leaves-provided.png",
     "trusted-organics": "canonical/taxonomy/subcategories/trusted-organics-web.png",
-    "frozen-vegetables": "canonical/taxonomy/subcategories/frozen-veg-v3.png",
+    "frozen-vegetables": "local/instant-ready-frozen-food/frozen-vegetables.avif",
     milk: "canonical/taxonomy/subcategories/milk-provided.png",
     "curd-and-yogurt": "canonical/taxonomy/subcategories/curd-yogurt-provided.png",
     "paneer-and-cream": "canonical/taxonomy/subcategories/paneer-cream-provided.png",
@@ -1113,7 +1374,21 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     "bakery-essentials": "canonical/taxonomy/subcategories/bakery-essentials-provided.png",
     "dairy-alternatives": "canonical/taxonomy/subcategories/dairy-alternatives-provided.png",
     "milk-powders-creamers": "canonical/taxonomy/subcategories/milk-powders-creamers-provided.png",
-    rice: "canonical/taxonomy/subcategories/rice-provided.png",
+    "batters-chutneys": "local/dairy-bread-eggs/batters-chutneys.avif",
+    "lassi-buttermilk": "local/dairy-bread-eggs/lassi-buttermilk.avif",
+    "indian-breads": "local/dairy-bread-eggs/indian-breads.avif",
+    "cream-condensed-milk": "local/dairy-bread-eggs/cream-condensed-milk.avif",
+    "milkshakes-more": "local/dairy-bread-eggs/milkshakes-more.avif",
+    rice: "local/staples/rice.avif",
+    "basmati-rice": "local/staples/basmati-rice.avif",
+    "besan-sooji-maida": "local/staples/besan-sooji-maida.avif",
+    "rajma-chola-others": "local/staples/rajma-chola-others.avif",
+    "poha-puffed-rice": "local/staples/poha-puffed-rice.avif",
+    "premium-brands": "local/staples/premium-brands.avif",
+    "soya-chunk-badi": "local/staples/soya-chunk-badi.avif",
+    "other-flours": "local/staples/other-flours.avif",
+    "millets-daliya": "local/staples/millets-daliya.avif",
+    "ready-to-cook-flour-mix": "local/staples/ready-to-cook-flour-mix.avif",
     "atta-flours": "canonical/taxonomy/subcategories/atta-flours-provided.png",
     "dals-pulses": "canonical/taxonomy/subcategories/dals-pulses-provided.png",
     "millets-grains": "canonical/taxonomy/subcategories/millets-grains-provided.png",
@@ -1146,24 +1421,6 @@ function CategoryArtwork({ supabaseUrl, item }: { supabaseUrl: string; item: V1C
     : item.slug.includes("paan") || item.slug.includes("produce") ? <Leaf size={29} />
       : item.slug.includes("pharmacy") || item.slug.includes("medicine") || item.slug.includes("health") ? <ShieldCheck size={29} />
       : <PackageCheck size={28} />}</span>;
-}
-
-function catalogueNavigationGroups(categoryTypes: V1CatalogueCategoryType[]) {
-  const groups = new Map<string, {
-    key: string;
-    name: string;
-    sortOrder: number;
-    types: V1CatalogueCategoryType[];
-  }>();
-  for (const type of categoryTypes) {
-    const section = type.navigationSection ?? { key: "more", name: "More to explore", sortOrder: 999 };
-    const group = groups.get(section.key) ?? { ...section, types: [] };
-    group.types.push(type);
-    groups.set(section.key, group);
-  }
-  return [...groups.values()]
-    .map((group) => ({ ...group, types: [...group.types].sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name)) }))
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
 }
 
 export function ProductGrid({ supabaseUrl, skus, quantities = {}, onQuantity, onAdd, wishlistIds, wishlistUpdatingIds, onWishlist }: { supabaseUrl: string; skus: V1CatalogueSku[]; quantities?: RetailCart; onQuantity?: (sku: V1CatalogueSku, delta: -1 | 1) => void; onAdd?: (sku: V1CatalogueSku) => void; wishlistIds: Set<string>; wishlistUpdatingIds: Set<string>; onWishlist: (kind: CustomerWishlistItemKind, itemId: string) => void }) {
@@ -1563,6 +1820,7 @@ export function MatchingSheet({
     </div> : null}
 
     {order.tracking || order.status === "OUT_FOR_DELIVERY" ? <CustomerLiveDelivery order={order} delayed={Boolean(liveError)} /> : null}
+    {order.tracking?.riderPhoneNumber && order.status !== "DELIVERED" && order.status !== "CANCELLED" ? <section className="customer-contact-card"><span className="order-icon"><UserRound size={20} /></span><div><strong>{order.tracking.riderName}</strong><small>Your delivery partner</small><a className="customer-call-link" href={`tel:${order.tracking.riderPhoneNumber}`}><Phone size={16} /> Call delivery partner</a></div></section> : null}
 
     <section className="v1-order-contents" aria-label="Order items"><header><div><p>ITEMS IN THIS ORDER</p><h3>{orderItemCount(order)} {orderItemCount(order) === 1 ? "item" : "items"}</h3>{order.restaurant ? <small>{order.restaurant.branchName}</small> : null}</div></header><div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><ProductImage src={imageUrlForLine(line)} alt="" /><span><b>{line.name}</b>{orderLineDetail(line) ? <small>{orderLineDetail(line)}</small> : null}<small>{line.quantity} × {formatV1Price(line.unitPricePaise)}</small></span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}</div></section>
 

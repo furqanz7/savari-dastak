@@ -59,14 +59,101 @@ export function saveCustomerCart(
 ) {
   if (!storage) return;
   try {
+    const previous = JSON.parse(storage.getItem(cartKey(accountId)) ?? "null") as unknown;
+    const acknowledgements = checkoutAcknowledgements(previous);
     storage.setItem(cartKey(accountId), JSON.stringify({
       version: cartVersion,
       retail: parseRetail(cart.retail),
       food: parseFood(cart.food),
+      ...(checkoutAcknowledgements(previous, "reimaginedFoodAcknowledgements").length ? { reimaginedFoodAcknowledgements: checkoutAcknowledgements(previous, "reimaginedFoodAcknowledgements") } : {}),
+      ...(acknowledgements.length ? { reimaginedGroceryAcknowledgements: acknowledgements } : {}),
     }));
   } catch {
     // Private browsing or a full storage quota must not break the basket.
   }
+}
+
+function checkoutAcknowledgements(value: unknown, field = "reimaginedGroceryAcknowledgements"): string[] {
+  if (!isRecord(value) || value[field] === undefined) return [];
+  const ids = value[field];
+  if (!Array.isArray(ids) || ids.some(id => typeof id !== "string" || !id.length || id.length > 200)) throw new Error("Checkout acknowledgement data is invalid.");
+  return [...new Set(ids)] as string[];
+}
+
+// Strict opt-in editor helpers: invalid storage must not become an empty cart write.
+export function loadCustomerCartStrict(accountId: string, storage = browserStorage()): PersistedCustomerCart {
+  if (!storage) throw new Error("Cart storage is unavailable. Your saved cart was not changed.");
+  const value = JSON.parse(storage.getItem(cartKey(accountId)) ?? "null") as unknown;
+  if (value === null) return emptyCart();
+  if (!isRecord(value) || (value.version !== 1 && value.version !== 2)) throw new Error("Saved cart data is invalid. It was not overwritten.");
+  checkoutAcknowledgements(value);
+  checkoutAcknowledgements(value, "reimaginedFoodAcknowledgements");
+  const retail = value.version === 1 ? value.quantities : value.retail;
+  if (!isRecord(retail) || Object.keys(parseRetail(retail)).length !== Object.keys(retail).length
+    || (value.version === 2 && (!Array.isArray(value.food) || parseFood(value.food).length !== value.food.length))) throw new Error("Saved cart data is invalid. It was not overwritten.");
+  return { retail: parseRetail(retail), food: value.version === 1 ? [] : parseFood(value.food) };
+}
+
+export function saveCustomerCartStrict(accountId: string, cart: PersistedCustomerCart, storage = browserStorage()) {
+  if (!storage) throw new Error("Cart storage is unavailable. Your saved cart was not changed.");
+  loadCustomerCartStrict(accountId, storage);
+  const previous = JSON.parse(storage.getItem(cartKey(accountId)) ?? "null") as unknown;
+  const ids = checkoutAcknowledgements(previous);
+  storage.setItem(cartKey(accountId), JSON.stringify({ version: 2, retail: parseRetail(cart.retail), food: parseFood(cart.food),
+    ...(checkoutAcknowledgements(previous, "reimaginedFoodAcknowledgements").length ? { reimaginedFoodAcknowledgements: checkoutAcknowledgements(previous, "reimaginedFoodAcknowledgements") } : {}),
+    ...(ids.length ? { reimaginedGroceryAcknowledgements: ids } : {}) }));
+}
+
+export function groceryCheckoutAcknowledged(accountId: string, orderId: string, storage = browserStorage()) {
+  if (!storage) throw new Error("Checkout recovery storage is unavailable.");
+  return checkoutAcknowledgements(JSON.parse(storage.getItem(cartKey(accountId)) ?? "null")).includes(orderId);
+}
+
+// Basket and acknowledgement are one localStorage write: a crash cannot persist only one.
+// Cross-tab read/write exclusion remains an activation prerequisite.
+export function acknowledgeGroceryCheckout(accountId: string, orderId: string, purchased: RetailCart, storage = browserStorage()) {
+  if (!storage) throw new Error("Checkout recovery storage is unavailable. Your Bucket is retained.");
+  const raw = storage.getItem(cartKey(accountId));
+  const value = JSON.parse(raw ?? "null") as unknown;
+  if (value !== null && (!isRecord(value) || (value.version !== 1 && value.version !== 2))) throw new Error("Saved cart data is invalid. Your Bucket is retained.");
+  const ids = checkoutAcknowledgements(value);
+  if (ids.includes(orderId)) return false;
+  if (isRecord(value)) {
+    const retail = value.version === 1 ? value.quantities : value.retail;
+    if (!isRecord(retail) || Object.keys(parseRetail(retail)).length !== Object.keys(retail).length
+      || (value.version === 2 && (!Array.isArray(value.food) || parseFood(value.food).length !== value.food.length))) throw new Error("Saved cart data is invalid. Your Bucket is retained.");
+  }
+  const cart = !isRecord(value) ? emptyCart() : value.version === 1
+    ? { retail: parseRetail(value.quantities), food: [] }
+    : { retail: parseRetail(value.retail), food: parseFood(value.food) };
+  const retail = Object.fromEntries(Object.entries(cart.retail).flatMap(([id, quantity]) => {
+    const remaining = quantity - (purchased[id] ?? 0);
+    return remaining > 0 ? [[id, remaining]] : [];
+  }));
+  storage.setItem(cartKey(accountId), JSON.stringify({ version: 2, retail, food: cart.food, reimaginedGroceryAcknowledgements: [...ids, orderId], reimaginedFoodAcknowledgements: checkoutAcknowledgements(value, "reimaginedFoodAcknowledgements") }));
+  return true;
+}
+
+export function foodCheckoutAcknowledged(accountId: string, orderId: string, storage = browserStorage()) {
+  if (!storage) throw new Error("Checkout recovery storage is unavailable.");
+  return checkoutAcknowledgements(JSON.parse(storage.getItem(cartKey(accountId)) ?? "null"), "reimaginedFoodAcknowledgements").includes(orderId);
+}
+
+export function acknowledgeFoodCheckout(accountId: string, orderId: string, purchased: PersistedFoodCartLine[], storage = browserStorage()) {
+  if (!storage) throw new Error("Checkout recovery storage is unavailable. Your Food cart is retained.");
+  const cart = loadCustomerCartStrict(accountId, storage);
+  const value = JSON.parse(storage.getItem(cartKey(accountId)) ?? "null") as unknown;
+  const ids = checkoutAcknowledgements(value, "reimaginedFoodAcknowledgements");
+  if (ids.includes(orderId)) return false;
+  const identity = (line: PersistedFoodCartLine) => JSON.stringify([line.branchId, line.itemId, [...line.optionIds].sort()]);
+  const quantities = new Map(purchased.map(line => [identity(line), line.quantity]));
+  if (quantities.size !== purchased.length || purchased.some(line => !Number.isSafeInteger(line.quantity) || line.quantity < 1)) throw new Error("Purchased Food quantities are invalid.");
+  const food = cart.food.flatMap(line => {
+    const quantity = line.quantity - (quantities.get(identity(line)) ?? 0);
+    return quantity > 0 ? [{ ...line, quantity }] : [];
+  });
+  storage.setItem(cartKey(accountId), JSON.stringify({ version: 2, retail: cart.retail, food, reimaginedGroceryAcknowledgements: checkoutAcknowledgements(value), reimaginedFoodAcknowledgements: [...ids, orderId] }));
+  return true;
 }
 
 export function validateRetailCart(

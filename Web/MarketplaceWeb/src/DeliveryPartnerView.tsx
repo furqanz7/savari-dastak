@@ -3,7 +3,7 @@ import "./design/customer-experience.css";
 import "./design/delivery-experience.css";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Banknote, Bell, BellOff, Camera, Check, CircleAlert, History as HistoryIcon, MapPin, Navigation, PackageCheck, Power, RefreshCw, Store, WalletCards, X } from "lucide-react";
+import { Banknote, Bell, BellOff, Camera, Check, CircleAlert, History as HistoryIcon, MapPin, Navigation, PackageCheck, Phone, Power, RefreshCw, Store, WalletCards, X } from "lucide-react";
 import {
   acceptV1DeliveryOffer,
   acceptDeliveryOffer,
@@ -1431,7 +1431,7 @@ export function CurrentV1Mission({
               <small>Customer destination</small>
               <strong>{mission.customerDestination.address}</strong>
               {mission.customerDestination.recipientName && (
-                <p>Recipient: {mission.customerDestination.recipientName}</p>
+                <p className="delivery-contact-row">Recipient: {mission.customerDestination.recipientName}{mission.customerDestination.recipientPhoneNumber ? <a className={`delivery-call-button ${canArriveAtDestination(mission.customerArrival) ? "enabled" : "locked"}`} href={`tel:${mission.customerDestination.recipientPhoneNumber}`} aria-label="Call customer" aria-disabled={!canArriveAtDestination(mission.customerArrival)} tabIndex={canArriveAtDestination(mission.customerArrival) ? 0 : -1} onClick={(event) => { if (!canArriveAtDestination(mission.customerArrival)) event.preventDefault(); }}><Phone size={15} /> Call customer</a> : null}</p>
               )}
             </div>
           </div>

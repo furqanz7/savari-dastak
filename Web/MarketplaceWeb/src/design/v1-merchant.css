@@ -127,7 +127,7 @@
 .merchant-v1-category-directory .merchant-v1-visual-categories span:last-child { min-height: 30px; font-size: 11px; font-weight: 740; line-height: 1.3; white-space: normal; }
 .merchant-v1-category-directory .merchant-v1-visual-categories span:last-child small { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 8px; font-weight: 650; }
 .merchant-v1-category-art { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); gap: 2px; }
-.merchant-v1-category-art.count-1 { grid-template: 1fr / 1fr; }
+.merchant-v1-category-art.count-0, .merchant-v1-category-art.count-1 { grid-template: 1fr / 1fr; }
 .merchant-v1-category-art.count-2 { grid-template: 1fr / repeat(2, 1fr); }
 .merchant-v1-category-art.count-3 > :first-child { grid-row: 1 / span 2; }
 .merchant-v1-category-art img { min-width: 0; min-height: 0; padding: 6px; }

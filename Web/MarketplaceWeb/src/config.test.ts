@@ -89,6 +89,44 @@ describe("assertBrowserSafeKey", () => {
   });
 });
 
+describe("explicit development-only local Customer configuration", () => {
+  const local = { ...customerEnvironment, VITE_DASTAK_LOCAL_SUPABASE: "1", VITE_SUPABASE_URL: "http://127.0.0.1:54321" };
+  const context = { development: true, pageUrl: "http://127.0.0.1:5179/?reimagined=1" };
+  it.each(["127.0.0.1", "localhost", "[::1]"])("accepts explicit local configuration on %s", host => {
+    expect(readAppConfig({ ...local, VITE_SUPABASE_URL: `http://${host}:54321/` }, { ...context, pageUrl: `http://${host}:5179/` }).supabaseUrl).toBe(`http://${host}:54321`);
+  });
+  it("does not infer opt-in from a local page, environment DEV, or URL", () => {
+    expect(() => readAppConfig({ ...local, VITE_DASTAK_LOCAL_SUPABASE: undefined }, context)).toThrow(/hosted/);
+    expect(() => readAppConfig({ ...local, DEV: true })).toThrow(/development Customer/);
+    expect(() => readAppConfig(local)).toThrow(/development Customer/);
+  });
+  it("rejects production even on loopback and rejects hosted targets under local opt-in", () => {
+    expect(() => readAppConfig(local, { ...context, development: false })).toThrow(/development Customer/);
+    expect(() => readAppConfig({ ...customerEnvironment, VITE_DASTAK_LOCAL_SUPABASE: "1" }, context)).toThrow(/loopback API/);
+  });
+  it.each(["https://dastak.example", "http://192.168.1.2:5179", "http://localhost.evil.example:5179", "file:///tmp/index.html", "http://user@localhost:5179", "not a URL"])("rejects unsafe page context %s", pageUrl => {
+    expect(() => readAppConfig(local, { ...context, pageUrl })).toThrow(/development Customer/);
+  });
+  it.each(["https://example.supabase.co", "http://192.168.1.2:54321", "http://localhost.evil.example:54321", "http://user:pass@localhost:54321", "http://127.0.0.1:54322", "http://127.0.0.1:54321/functions/v1", "http://127.0.0.1:54321?target=remote", "http://127.0.0.1:54321#fragment", "http://2130706433:54321", "http://127.1:54321", "https://localhost:54321"])("rejects unsafe API target %s", VITE_SUPABASE_URL => {
+    expect(() => readAppConfig({ ...local, VITE_SUPABASE_URL }, context)).toThrow(/loopback API/);
+  });
+  it.each(["true", "0", "yes"])("rejects ambiguous opt-in %s", VITE_DASTAK_LOCAL_SUPABASE => {
+    expect(() => readAppConfig({ ...local, VITE_DASTAK_LOCAL_SUPABASE }, context)).toThrow(/must be 1/);
+  });
+  it.each(["dastak-admin", "dastak-merchant", "dastak-delivery", "savari-rider"])("does not expand the local Customer slice to %s", VITE_APP_VARIANT => {
+    expect(() => readAppConfig({ ...local, VITE_APP_VARIANT }, context)).toThrow(/development Customer/);
+  });
+  it("preserves secret-key and complete public-configuration checks locally", () => {
+    expect(() => readAppConfig({ ...local, VITE_SUPABASE_PUBLISHABLE_KEY: "sb_secret_test" }, context)).toThrow(/secret key/);
+    expect(() => readAppConfig({ ...local, VITE_SUPABASE_PUBLISHABLE_KEY: makeJwt({ role: "service_role" }) }, context)).toThrow(/anon JWT/);
+    expect(() => readAppConfig({ ...local, VITE_DASTAK_TERMS_URL: undefined }, context)).toThrow(/TERMS/);
+    expect(() => readAppConfig({ ...local, VITE_DASTAK_WEB_PUSH_PUBLIC_KEY: "invalid" }, context)).toThrow(/VAPID/);
+  });
+  it("preserves hosted production configuration with no opt-in", () => {
+    expect(readAppConfig(customerEnvironment, { development: false, pageUrl: "https://dastak.example" }).supabaseUrl).toBe(customerEnvironment.VITE_SUPABASE_URL);
+  });
+});
+
 function makeJwt(payload: object) {
   return ["e30", Buffer.from(JSON.stringify(payload)).toString("base64url"), "signature"].join(".");
 }

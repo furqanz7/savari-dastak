@@ -31,6 +31,12 @@ Deno.serve((request) =>
         p_payload: input.payload,
       }),
     authenticateBearer: verifyBearerSession,
+    catalogueBrowseMap: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_catalogue_browse_map", {}),
+    catalogueBrowseSkuIds: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_catalogue_browse_sku_ids", {
+        p_node_key: input.nodeKey,
+      }),
     customerCatalogue: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_catalogue", {
         p_query: input.query,

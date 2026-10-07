@@ -54,7 +54,7 @@ const MerchantApplicationForm = lazy(() => import("./MerchantApplicationForm").t
 const MerchantOrdersView = lazy(() => import("./MerchantOrdersView").then((module) => ({ default: module.MerchantOrdersView })));
 const SavariRideView = lazy(() => import("./SavariRideView").then((module) => ({ default: module.SavariRideView })));
 
-const config = readAppConfig(import.meta.env);
+const config = readAppConfig(import.meta.env, { development: import.meta.env.DEV, pageUrl: window.location.href });
 document.title = `${config.brand} ${config.roleLabel}`;
 document.querySelector('meta[name="description"]')?.setAttribute(
   "content",

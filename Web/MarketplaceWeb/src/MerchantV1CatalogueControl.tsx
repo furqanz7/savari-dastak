@@ -1,6 +1,9 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CirclePause, Leaf, PackageCheck, Search, ShieldCheck, Store } from "lucide-react";
 import { catalogueImageUrl, formatPrice } from "./catalogue";
+import { catalogueDepartmentName, catalogueHomeTiles, catalogueNavigationGroups, curatedCatalogueRails, resolveCatalogueRail, riceRailExcludedSubcategoryIds } from "./cataloguePresentation";
+import { browseChildren, browseSkuIds, validateBrowseMap } from "./catalogueBrowse";
+import { referenceBrowseArtworkKey } from "./referenceBrowseArtwork";
 import { ProductDetailCard, type DetailProduct } from "./ProductDetailCard";
 import { ProductDetailOverlay } from "./ProductDetailOverlay";
 import { merchantStockAction } from "./productDetail";
@@ -9,10 +12,12 @@ import { CustomerEmptyState, CustomerNotice, CustomerSkeleton } from "./Customer
 import {
   DastakV1RequestError,
   getV1MerchantCanonicalCatalogue,
+  getV1CatalogueBrowseMap,
   updateV1MerchantBranchState,
   updateV1MerchantSkuSelections,
   type DastakV1Auth,
   type V1MerchantCanonicalCatalogue,
+  type V1CatalogueBrowseMap,
 } from "./dastakV1";
 
 type Props = { auth: DastakV1Auth; branchId: string; onSessionExpired: () => void };
@@ -21,6 +26,7 @@ const cataloguePageSize = 80;
 
 export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }: Props) {
   const [snapshot, setSnapshot] = useState<V1MerchantCanonicalCatalogue>();
+  const [browseMap, setBrowseMap] = useState<V1CatalogueBrowseMap | null>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
@@ -28,6 +34,8 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
   const [categoryTypeId, setCategoryTypeId] = useState<string>();
   const [categoryId, setCategoryId] = useState<string>();
   const [subcategoryId, setSubcategoryId] = useState<string>();
+  const [selectedRailLabel, setSelectedRailLabel] = useState<string>();
+  const [selectedHomeTile, setSelectedHomeTile] = useState<{ label: string; categoryId?: string }>();
   const [selectedOnly, setSelectedOnly] = useState(false);
   const [pendingSelections, setPendingSelections] = useState<Record<string, boolean>>({});
   const [detailId, setDetailId] = useState<string>();
@@ -42,8 +50,13 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
 
   const refresh = useCallback(async () => {
     try {
-      const next = await getV1MerchantCanonicalCatalogue({ ...auth, branchId, limit: 5000 });
+      const [next, nextBrowseMap] = await Promise.all([
+        getV1MerchantCanonicalCatalogue({ ...auth, branchId, limit: 5000 }),
+        getV1CatalogueBrowseMap(auth),
+      ]);
+      if (nextBrowseMap && validateBrowseMap(nextBrowseMap).length) throw new Error("The catalogue map needs attention. Please retry later.");
       setSnapshot(next);
+      setBrowseMap(nextBrowseMap);
       setPendingSelections((current) => {
         const retained = Object.fromEntries(Object.entries(current).filter(([skuId, selected]) =>
           next.skus.find((sku) => sku.skuId === skuId)?.selected !== selected));
@@ -54,6 +67,8 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
       return next;
     } catch (requestError) {
       if (isSessionError(requestError)) onSessionExpired();
+      setSnapshot(undefined);
+      setBrowseMap(undefined);
       setError(message(requestError));
     } finally {
       setLoading(false);
@@ -72,15 +87,19 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
     const normalized = deferredQuery.trim().toLowerCase();
     const categories = new Map((snapshot?.categories ?? []).map((item) => [item.categoryId, item.name]));
     const subcategories = new Map((snapshot?.subcategories ?? []).map((item) => [item.subcategoryId, item.name]));
+    const riceExclusions = selectedRailLabel === "Rice" && snapshot?.categories.find((item) => item.categoryId === categoryId)?.slug === "rice"
+      ? riceRailExcludedSubcategoryIds((snapshot?.subcategories ?? []).filter((item) => item.categoryId === categoryId).map((item) => ({ id: item.subcategoryId, slug: item.slug })))
+      : undefined;
     return (snapshot?.skus ?? []).filter((sku) =>
-      (!categoryTypeId || sku.categoryTypeId === categoryTypeId) &&
+      (!categoryTypeId || Boolean(categoryId)) &&
       (!categoryId || sku.categoryId === categoryId) &&
       (!subcategoryId || sku.subcategoryId === subcategoryId) &&
+      (!riceExclusions || !riceExclusions.has(sku.subcategoryId)) &&
       (!selectedOnly || (pendingSelections[sku.skuId] ?? sku.selected)) &&
       (!normalized || `${sku.name} ${sku.brandName ?? ""} ${sku.variant ?? ""} ${sku.packSize} ${categories.get(sku.categoryId) ?? ""} ${subcategories.get(sku.subcategoryId) ?? ""} ${sku.searchTerms.join(" ")}`
         .toLowerCase().includes(normalized))
     );
-  }, [categoryId, categoryTypeId, deferredQuery, pendingSelections, selectedOnly, snapshot, subcategoryId]);
+  }, [categoryId, categoryTypeId, deferredQuery, pendingSelections, selectedOnly, selectedRailLabel, snapshot, subcategoryId]);
 
   const artworkKeys = useMemo(() => {
     const categories = new Map<string, string>();
@@ -186,13 +205,33 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
   };
 
   if (loading) return <CustomerSkeleton label="Loading your Store" />;
-  if (!snapshot) return <section className="merchant-v1-control"><CustomerNotice title="Store couldn’t load" onRetry={() => void refresh()}>{error ?? "Your product library is temporarily unavailable."}</CustomerNotice></section>;
+  if (!snapshot || browseMap === undefined) return <section className="merchant-v1-control"><CustomerNotice title="Store couldn’t load" onRetry={() => void refresh()}>{error ?? "Your product library is temporarily unavailable."}</CustomerNotice></section>;
 
   const { branch } = snapshot;
   const selectedType = snapshot.categoryTypes.find((type) => type.categoryTypeId === categoryTypeId);
-  const navigationGroups = merchantNavigationGroups(snapshot.categoryTypes);
+  const navigationGroups = catalogueNavigationGroups(snapshot.categoryTypes);
   const showDirectory = !categoryTypeId && !selectedOnly && !deferredQuery.trim();
   const railCategories = snapshot.categories.filter((category) => category.categoryTypeId === categoryTypeId);
+  const curatedTargets = selectedType && curatedCatalogueRails[selectedType.slug];
+  const presentationTypes = snapshot.categoryTypes.map((item) => ({ ...item, id: item.categoryTypeId }));
+  const presentationCategories = snapshot.categories.map((item) => ({ ...item, id: item.categoryId }));
+  const presentationSubcategories = snapshot.subcategories.map((item) => ({ ...item, id: item.subcategoryId }));
+  const curatedRail = curatedTargets?.map((target) => {
+    const resolved = resolveCatalogueRail(
+      target,
+      presentationTypes,
+      presentationCategories,
+      presentationSubcategories,
+    );
+    const category = resolved && "categoryId" in resolved
+      ? snapshot.categories.find((item) => item.categoryId === resolved.categoryId)
+      : resolved;
+    return { label: target.label, categoryId: category?.categoryId, subcategoryId: resolved && "categoryId" in resolved ? resolved.id : undefined,
+      imageKey: resolved?.imageKey, previewImageKeys: resolved?.previewImageKeys ?? [], slug: resolved?.slug ?? target.categorySlug };
+  });
+  const displayedRail = selectedHomeTile?.categoryId
+    ? snapshot.subcategories.filter((item) => item.categoryId === selectedHomeTile.categoryId).map((item) => ({ label: item.name, categoryId: item.categoryId, subcategoryId: item.subcategoryId, imageKey: item.imageKey, previewImageKeys: item.previewImageKeys, slug: item.slug }))
+    : curatedRail;
   const productTypes = snapshot.subcategories.filter((item) => item.categoryId === categoryId);
   const detailSku = snapshot.skus.find((sku) => sku.skuId === detailId);
   return <section className="merchant-v1-control">
@@ -213,36 +252,114 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
     <div className="merchant-v1-catalogue-tools">
       <label><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products, brands, packs or categories" aria-label="Search products" /></label>
       <div className="merchant-v1-view-switch" role="group" aria-label="Catalogue scope"><button type="button" aria-pressed={!selectedOnly} className={!selectedOnly ? "selected" : ""} onClick={() => setSelectedOnly(false)}>Product library</button><button type="button" aria-pressed={selectedOnly} className={selectedOnly ? "selected" : ""} onClick={() => setSelectedOnly(true)}>In my store</button></div>
-      {showDirectory ? <div className="merchant-v1-category-directory">
+      {!browseMap && showDirectory ? <div className="merchant-v1-category-directory">
         {navigationGroups.map((group) => <section key={group.key}>
           <header><div><small>PRODUCT LIBRARY</small><h2>{group.name}</h2></div></header>
-          <div className="merchant-v1-visual-categories" role="group" aria-label={`${group.name} categories`}>{group.types.map((type) => <button key={type.categoryTypeId} type="button" onClick={() => {
-            const children = snapshot.categories.filter((item) => item.categoryTypeId === type.categoryTypeId);
-            setCategoryTypeId(type.categoryTypeId);
-            setCategoryId((children.find((item) => item.status === "ACTIVE") ?? children[0])?.categoryId);
+          <div className="merchant-v1-visual-categories" role="group" aria-label={`${group.name} categories`}>{catalogueHomeTiles(group.key, group.types.map((item) => ({ ...item, id: item.categoryTypeId })), presentationTypes, presentationCategories).map((tile) => <button key={tile.key} type="button" onClick={() => {
+            const children = snapshot.categories.filter((item) => item.categoryTypeId === tile.typeId);
+            setCategoryTypeId(tile.typeId);
+            setCategoryId(tile.categoryId ?? (children.find((item) => item.status === "ACTIVE") ?? children[0])?.categoryId);
             setSubcategoryId(undefined);
+            setSelectedRailLabel(undefined);
+            setSelectedHomeTile({ label: tile.label, categoryId: tile.categoryId });
           }}>
-            <MerchantCategoryImage supabaseUrl={auth.supabaseUrl} imageKey={type.imageKey} previewImageKeys={type.previewImageKeys} slug={type.slug} />
-            <span>{type.name}{type.status && type.status !== "ACTIVE" ? <small>Coming soon</small> : null}</span>
+            <MerchantCategoryImage supabaseUrl={auth.supabaseUrl} imageKey={tile.item.imageKey} previewImageKeys={tile.item.previewImageKeys} slug={tile.item.slug} />
+            <span>{tile.label}{tile.item.status && tile.item.status !== "ACTIVE" ? <small>Coming soon</small> : null}</span>
           </button>)}</div>
         </section>)}
       </div> : null}
     </div>
 
-    {selectedType ? <header ref={headingRef} className="merchant-v1-browser-heading"><h2>{selectedType.name}</h2><button type="button" className="secondary-button" onClick={() => { setCategoryTypeId(undefined); setCategoryId(undefined); setSubcategoryId(undefined); }}>All categories</button></header> : null}
-    {categoryTypeId ? <label className="merchant-category-select">Category<select value={categoryId ?? ""} onChange={(event) => { setCategoryId(event.target.value || undefined); setSubcategoryId(undefined); }}>{railCategories.map((item) => <option key={item.categoryId} value={item.categoryId}>{item.name}</option>)}</select></label> : null}
-    {categoryTypeId ? <section className="merchant-v1-category-browser">
+    {browseMap ? <MerchantReferenceBrowser map={browseMap} snapshot={snapshot} auth={auth} query={deferredQuery} selectedOnly={selectedOnly} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /> : null}
+    {!browseMap && selectedType ? <header ref={headingRef} className="merchant-v1-browser-heading"><h2>{selectedHomeTile?.label ?? catalogueDepartmentName(selectedType.slug, selectedType.name)}</h2><button type="button" className="secondary-button" onClick={() => { setCategoryTypeId(undefined); setCategoryId(undefined); setSubcategoryId(undefined); setSelectedRailLabel(undefined); setSelectedHomeTile(undefined); }}>All categories</button></header> : null}
+    {!browseMap && categoryTypeId ? <label className="merchant-category-select">Category<select value={categoryId ?? ""} onChange={(event) => { setCategoryId(event.target.value || undefined); setSubcategoryId(undefined); setSelectedRailLabel(undefined); setSelectedHomeTile(undefined); }}>{railCategories.map((item) => <option key={item.categoryId} value={item.categoryId}>{item.name}</option>)}</select></label> : null}
+    {!browseMap && categoryTypeId ? <section className="merchant-v1-category-browser">
       <aside className="merchant-v1-subcategory-rail" role="group" aria-label="Subcategories">
-        {railCategories.map((item) => <button key={item.categoryId} type="button" aria-pressed={categoryId === item.categoryId} className={categoryId === item.categoryId ? "selected" : ""} onClick={() => { setCategoryId(item.categoryId); setSubcategoryId(undefined); }}><MerchantCategoryImage supabaseUrl={auth.supabaseUrl} imageKey={item.imageKey ?? artworkKeys.categories.get(item.categoryId)} previewImageKeys={item.previewImageKeys} slug={item.slug} /><strong>{item.name}</strong></button>)}
+        {displayedRail ? displayedRail.map((item) => {
+          const selected = selectedRailLabel ? selectedRailLabel === item.label : Boolean(item.categoryId) && categoryId === item.categoryId && subcategoryId === item.subcategoryId;
+          return <button key={item.label} type="button" disabled={!item.categoryId} aria-pressed={selected} className={selected ? "selected" : ""} onClick={() => { setCategoryId(item.categoryId); setSubcategoryId(item.subcategoryId); setSelectedRailLabel(item.label); }}><MerchantCategoryImage supabaseUrl={auth.supabaseUrl} imageKey={item.imageKey} previewImageKeys={item.previewImageKeys} slug={item.slug} /><strong>{item.label}</strong></button>;
+        }) : railCategories.map((item) => <button key={item.categoryId} type="button" aria-pressed={categoryId === item.categoryId} className={categoryId === item.categoryId ? "selected" : ""} onClick={() => { setCategoryId(item.categoryId); setSubcategoryId(undefined); setSelectedRailLabel(undefined); }}><MerchantCategoryImage supabaseUrl={auth.supabaseUrl} imageKey={item.imageKey ?? artworkKeys.categories.get(item.categoryId)} previewImageKeys={item.previewImageKeys} slug={item.slug} /><strong>{item.name}</strong></button>)}
       </aside>
-      <div className="merchant-v1-category-results" key={categoryId}><header><h2>{snapshot.categories.find((item) => item.categoryId === categoryId)?.name ?? "Products"}</h2><span>{visibleSkus.length} products</span></header>
+      <div className="merchant-v1-category-results" key={categoryId}><header><h2>{selectedRailLabel ?? (selectedHomeTile?.categoryId && selectedHomeTile.categoryId === categoryId ? selectedHomeTile.label : undefined) ?? snapshot.categories.find((item) => item.categoryId === categoryId)?.name ?? "Products"}</h2><span>{visibleSkus.length} products</span></header>
         {productTypes.length ? <label className="merchant-v1-type-filter">Type<select aria-label="Product type" value={subcategoryId ?? ""} onChange={(event) => setSubcategoryId(event.target.value || undefined)}><option value="">All types</option>{productTypes.map((item) => <option key={item.subcategoryId} value={item.subcategoryId}>{item.name}</option>)}</select></label> : null}
         <MerchantSkuGallery auth={auth} skus={visibleSkus.slice(0, visibleLimit)} total={visibleSkus.length} onLoadMore={() => setVisibleLimit((current) => current + cataloguePageSize)} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /></div>
-    </section> : selectedOnly || deferredQuery.trim() ? <MerchantSkuGallery auth={auth} skus={visibleSkus.slice(0, visibleLimit)} total={visibleSkus.length} onLoadMore={() => setVisibleLimit((current) => current + cataloguePageSize)} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /> : null}
+    </section> : !browseMap && (selectedOnly || deferredQuery.trim()) ? <MerchantSkuGallery auth={auth} skus={visibleSkus.slice(0, visibleLimit)} total={visibleSkus.length} onLoadMore={() => setVisibleLimit((current) => current + cataloguePageSize)} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /> : null}
     {Object.keys(pendingSelections).length ? <div className="merchant-v1-save-bar" role="status"><span><strong>{Object.keys(pendingSelections).length} unsaved {Object.keys(pendingSelections).length === 1 ? "change" : "changes"}</strong><small>Keep selecting, then save once.</small></span><button type="button" className="secondary-button" disabled={busy === "catalogue"} onClick={() => { setPendingSelections({}); selectionSaveKey.current = undefined; }}>Discard</button><button type="button" className="primary-button" disabled={busy === "catalogue"} onClick={() => void saveSelections()}>{busy === "catalogue" ? "Saving…" : "Save storefront"}</button></div> : null}
     {snapshot.truncated && <p className="merchant-v1-truncated">Dastak loaded the first 5,000 authorised catalogue products. Use search or a category to narrow this branch’s storefront.</p>}
     {detailSku ? <MerchantProductDetail sku={detailSku} products={snapshot.skus.filter((item) => item.categoryId === detailSku.categoryId)} branch={branch.branchName} supabaseUrl={auth.supabaseUrl} onSelect={(id) => { if (!busy) setDetailId(id); }} onClose={() => { if (!busy) setDetailId(undefined); }} onAdd={addSku} onSave={saveStock} busy={Boolean(busy)} error={error} /> : null}
   </section>;
+}
+
+function MerchantReferenceBrowser({ map, snapshot, auth, query, selectedOnly, pendingSelections, busy, onSelection, onDetail }: {
+  map: V1CatalogueBrowseMap;
+  snapshot: V1MerchantCanonicalCatalogue;
+  auth: DastakV1Auth;
+  query: string;
+  selectedOnly: boolean;
+  pendingSelections: Record<string, boolean>;
+  busy?: string;
+  onSelection: (sku: V1MerchantCanonicalCatalogue["skus"][number]) => void;
+  onDetail: (id: string) => void;
+}) {
+  const [destinationKey, setDestinationKey] = useState<string>();
+  const [railKey, setRailKey] = useState<string>();
+  const [limit, setLimit] = useState(cataloguePageSize);
+  useEffect(() => setLimit(cataloguePageSize), [destinationKey, railKey, query, selectedOnly]);
+  const destination = map.nodes.find((node) => node.key === destinationKey && node.kind === "DESTINATION");
+  const rails = destination ? browseChildren(map, destination.key).filter((node) => node.kind === "RAIL") : [];
+  const selectedNode = rails.find((node) => node.key === railKey) ?? destination;
+  const taxonomy = useMemo(() => ({
+    types: snapshot.categoryTypes.map((item) => ({ id: item.categoryTypeId, slug: item.slug })),
+    categories: snapshot.categories.flatMap((item) => item.categoryTypeId ? [{ id: item.categoryId, typeId: item.categoryTypeId, slug: item.slug }] : []),
+    subcategories: snapshot.subcategories.map((item) => ({ id: item.subcategoryId, categoryId: item.categoryId, slug: item.slug })),
+  }), [snapshot]);
+  const nodeSkuIds = useMemo(() => selectedNode ? browseSkuIds(map, selectedNode.key, taxonomy,
+    snapshot.skus.map((sku) => ({ id: sku.skuId, categoryId: sku.categoryId, subcategoryId: sku.subcategoryId }))) : undefined,
+  [map, selectedNode, snapshot.skus, taxonomy]);
+  const normalized = query.trim().toLowerCase();
+  const visibleSkus = snapshot.skus.filter((sku) =>
+    sku.catalogueStatus === "ACTIVE" &&
+    (!nodeSkuIds || nodeSkuIds.has(sku.skuId)) &&
+    (!selectedOnly || (pendingSelections[sku.skuId] ?? sku.selected)) &&
+    (!normalized || `${sku.name} ${sku.brandName ?? ""} ${sku.variant ?? ""} ${sku.packSize} ${sku.searchTerms.join(" ")}`.toLowerCase().includes(normalized)));
+  const imageFor = (node: V1CatalogueBrowseMap["nodes"][number]) => {
+    if (node.kind === "DESTINATION") return { imageKey: referenceBrowseArtworkKey(node) ?? undefined, previewImageKeys: [], slug: node.key };
+    const source = node.sources[0];
+    const category = snapshot.categories.find((item) => item.slug === source?.categorySlug &&
+      snapshot.categoryTypes.some((type) => type.categoryTypeId === item.categoryTypeId && type.slug === source.typeSlug));
+    const subcategory = snapshot.subcategories.find((item) => item.categoryId === category?.categoryId && item.slug === source?.subcategorySlug);
+    return subcategory ?? category;
+  };
+  return <>
+    {!destination && !selectedOnly && !normalized ? <div className="merchant-v1-category-directory">
+      {browseChildren(map, null).map((section) => <section key={section.key}>
+        <header><div><small>PRODUCT LIBRARY</small><h2>{section.label}</h2></div></header>
+        <div className="merchant-v1-visual-categories" role="group" aria-label={`${section.label} categories`}>
+          {browseChildren(map, section.key).map((node) => {
+            const image = imageFor(node);
+            return <button key={node.key} type="button" onClick={() => { setDestinationKey(node.key); setRailKey(undefined); }}>
+              <MerchantCategoryImage supabaseUrl={auth.supabaseUrl} imageKey={image?.imageKey} previewImageKeys={image?.previewImageKeys ?? []} slug={image?.slug ?? node.key} />
+              <span>{node.label}</span>
+            </button>;
+          })}
+        </div>
+      </section>)}
+    </div> : null}
+    {destination ? <header className="merchant-v1-browser-heading"><h2>{destination.label}</h2><button type="button" className="secondary-button" onClick={() => { setDestinationKey(undefined); setRailKey(undefined); }}>All categories</button></header> : null}
+    {destination ? <section className="merchant-v1-category-browser">
+      <aside className="merchant-v1-subcategory-rail" role="group" aria-label="Subcategories">
+        {rails.map((node) => {
+          const image = imageFor(node);
+          return <button key={node.key} type="button" aria-pressed={selectedNode?.key === node.key} className={selectedNode?.key === node.key ? "selected" : ""} onClick={() => setRailKey(node.key)}>
+            <MerchantCategoryImage supabaseUrl={auth.supabaseUrl} imageKey={image?.imageKey} previewImageKeys={image?.previewImageKeys ?? []} slug={image?.slug ?? node.key} /><strong>{node.label}</strong>
+          </button>;
+        })}
+      </aside>
+      <div className="merchant-v1-category-results" key={selectedNode?.key}><header><h2>{selectedNode?.label}</h2><span>{visibleSkus.length} products</span></header>
+        <MerchantSkuGallery auth={auth} skus={visibleSkus.slice(0, limit)} total={visibleSkus.length} onLoadMore={() => setLimit((current) => current + cataloguePageSize)} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={onSelection} onDetail={onDetail} />
+      </div>
+    </section> : selectedOnly || normalized ? <MerchantSkuGallery auth={auth} skus={visibleSkus.slice(0, limit)} total={visibleSkus.length} onLoadMore={() => setLimit((current) => current + cataloguePageSize)} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={onSelection} onDetail={onDetail} /> : null}
+  </>;
 }
 
 function MerchantSkuGallery({ auth, skus, total, onLoadMore, subcategories, pendingSelections, busy, onSelection, onDetail }: {
@@ -300,24 +417,6 @@ function MerchantArtworkImage({ source }: { source: string | null }) {
   return source && !failed
     ? <img src={source} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />
     : <PackageCheck size={22} />;
-}
-
-function merchantNavigationGroups(categoryTypes: V1MerchantCanonicalCatalogue["categoryTypes"]) {
-  const groups = new Map<string, {
-    key: string;
-    name: string;
-    sortOrder: number;
-    types: V1MerchantCanonicalCatalogue["categoryTypes"];
-  }>();
-  for (const type of categoryTypes) {
-    const section = type.navigationSection ?? { key: "more", name: "More to explore", sortOrder: 999 };
-    const group = groups.get(section.key) ?? { ...section, types: [] };
-    group.types.push(type);
-    groups.set(section.key, group);
-  }
-  return [...groups.values()]
-    .map((group) => ({ ...group, types: [...group.types].sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name)) }))
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
 }
 
 function message(error: unknown) {

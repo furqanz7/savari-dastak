@@ -54,6 +54,8 @@ struct DastakWishlistMenuSelection: Identifiable {
 final class DastakCustomerModel: ObservableObject {
     @Published private(set) var catalogue: CatalogueSnapshot?
     @Published private(set) var v1Catalogue: DastakV1CatalogueSnapshot?
+    @Published private(set) var v1BrowseMap: DastakV1CatalogueBrowseMap?
+    @Published private(set) var v1BrowseProducts: [DastakV1CatalogueSKU] = []
     @Published private(set) var v1CategoryProducts: [UUID: [DastakV1CatalogueSKU]] = [:]
     @Published private(set) var loadingV1CategoryIDs: Set<UUID> = []
     @Published private(set) var failedV1CategoryIDs: Set<UUID> = []
@@ -510,6 +512,10 @@ final class DastakCustomerModel: ObservableObject {
         isLoadingV1Catalogue = true
         defer { isLoadingV1Catalogue = false }
         do {
+            let browseMap = try await v1Client.catalogueBrowseMap(idempotencyKey: makeKey())
+            guard browseMap?.isValid != false else {
+                throw DastakV1BrowseLoadError.invalidMap
+            }
             async let catalogue = v1Client.catalogue(
                 query: nil,
                 categoryID: nil,
@@ -523,7 +529,29 @@ final class DastakCustomerModel: ObservableObject {
                 limit: 50,
                 idempotencyKey: makeKey()
             )
-            v1Catalogue = try await catalogue
+            let firstPage = try await catalogue
+            var browseProducts = firstPage.skus
+            if browseMap != nil {
+                var cursor = firstPage.nextCursor
+                var seenCursors = Set<UUID>()
+                while let current = cursor, seenCursors.insert(current.skuID).inserted {
+                    let page = try await v1Client.catalogue(
+                        query: nil,
+                        categoryID: nil,
+                        subcategoryID: nil,
+                        limit: 250,
+                        cursor: current,
+                        idempotencyKey: makeKey()
+                    )
+                    browseProducts.append(contentsOf: page.skus)
+                    guard browseProducts.count <= 10_000 else { throw DastakV1BrowseLoadError.invalidPagination }
+                    cursor = page.nextCursor
+                }
+                guard cursor == nil else { throw DastakV1BrowseLoadError.invalidPagination }
+            }
+            v1Catalogue = firstPage
+            v1BrowseMap = browseMap
+            v1BrowseProducts = browseMap == nil ? [] : browseProducts
             v1CategoryProducts = [:]
             failedV1CategoryIDs = []
             v1Restaurants = try await restaurants

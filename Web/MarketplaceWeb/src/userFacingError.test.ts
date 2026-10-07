@@ -25,4 +25,9 @@ describe("user-facing errors", () => {
     expect(userFacingError(new Error("permission denied for relation auth.users"), "Please try again."))
       .toBe("Please try again.");
   });
+
+  it("explains that referenced catalogue SKUs must be archived", () => {
+    expect(userFacingError({ code: "23503", message: "SKU has historical or operational references and can only be archived" }, "Please try again."))
+      .toContain("Use ‘Archive SKU’");
+  });
 });

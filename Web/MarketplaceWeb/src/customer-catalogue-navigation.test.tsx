@@ -72,7 +72,7 @@ describe("two-level customer catalogue", () => {
     expect(html).toContain("Bread &amp; Buns");
     expect(html).toContain("toned product");
     expect(html).toContain("full product");
-    expect(html).toContain('<option value="toned">Toned milk</option>');
+    expect(html).toContain("Toned milk</strong>");
     expect(html).toContain('aria-pressed="true"');
     expect(html).not.toContain("Everyday essentials");
   });
@@ -82,6 +82,93 @@ describe("two-level customer catalogue", () => {
     expect(html).toContain("toned product");
     expect(html).not.toContain("full product");
     expect(html).toContain("Bread &amp; Buns");
-    expect(html).toContain('value="toned" selected=""');
+    expect(html).toMatch(/class="selected" aria-pressed="true"[^>]*>.*?<strong>Toned milk<\/strong>/);
+  });
+
+  it("keeps a Masalas rail target under its canonical Masalas heading", () => {
+    const html = renderToStaticMarkup(<HomeSection
+      {...props}
+      categoryTypes={[
+        { id: "masalas", name: "Masala & Cooking", slug: "masala-cooking", sortOrder: 0, previewImageKeys: [] },
+        { id: "staples", name: "Staples & Pantry", slug: "staples-pantry", sortOrder: 1, previewImageKeys: [] },
+      ]}
+      categories={[{ id: "sugar", categoryTypeId: "masalas", name: "Sugar and Jaggery", slug: "sugar-sweeteners", sortOrder: 0, previewImageKeys: [] }]}
+      subcategories={[]}
+      skus={[]}
+      selectedCategoryType="masalas"
+      selectedCategory="sugar"
+      selectedRailLabel="Sugar and Jaggery"
+    />);
+    expect(html).toContain("<h2>Masalas</h2>");
+    expect(html).toContain("<h3>Sugar and Jaggery</h3>");
+    expect(html).toContain("0 products");
+    expect(html).toContain("Sugar and Jaggery</strong>");
+    expect(html).not.toContain("Atta, Flour &amp; Dal");
+  });
+
+  it("does not turn a display label into a global subcategory filter", () => {
+    const html = renderToStaticMarkup(<HomeSection {...props} selectedCategoryType="dairy" selectedCategory="milk" selectedRailLabel="Toned milk" />);
+    expect(html).toContain("toned product");
+    expect(html).toContain("full product");
+  });
+
+  it("shows unresolved reference rails as empty instead of matching an unrelated category", () => {
+    const html = renderToStaticMarkup(<HomeSection
+      {...props}
+      categoryTypes={[{ id: "masalas", name: "Masala & Cooking", slug: "masala-cooking", sortOrder: 0, previewImageKeys: [] }]}
+      categories={[{ id: "leafy", categoryTypeId: "fresh", name: "Leafy and Seasonings", slug: "leafy-greens-herbs", sortOrder: 0, previewImageKeys: [] }]}
+      subcategories={[]}
+      selectedCategoryType="masalas"
+      selectedRailLabel="Herbs & Seasoning"
+      selectedCategory={undefined}
+    />);
+    expect(html).toContain("Herbs &amp; Seasoning</strong>");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Herbs &amp; Seasoning<\/strong>/);
+    expect(html).toContain("Cold Grind</strong>");
+    expect(html).toContain("<h3>Herbs &amp; Seasoning</h3>");
+    expect(html).toContain("0 products");
+    expect(html).not.toContain("toned product");
+  });
+
+  it("does not repeat Basmati SKUs in the broad Rice rail", () => {
+    const riceProps = {
+      ...props,
+      categoryTypes: [{ id: "staples", name: "Staples & Pantry", slug: "staples-pantry", sortOrder: 0, previewImageKeys: [] }],
+      categories: [{ id: "rice", categoryTypeId: "staples", name: "Rice", slug: "rice", sortOrder: 0, previewImageKeys: [] }],
+      subcategories: [
+        { id: "basmati", categoryId: "rice", name: "Basmati Rice", slug: "basmati-rice", sortOrder: 0, previewImageKeys: [] },
+        { id: "ponni", categoryId: "rice", name: "Ponni Rice", slug: "ponni-rice", sortOrder: 1, previewImageKeys: [] },
+      ],
+      skus: props.skus.map((sku, index) => ({ ...sku, categoryId: "rice", subcategoryId: index ? "ponni" : "basmati", name: index ? "Ponni bag" : "Basmati bag" })),
+      selectedCategoryType: "staples",
+      selectedCategory: "rice",
+    };
+    const broad = renderToStaticMarkup(<HomeSection {...riceProps} selectedRailLabel="Rice" />);
+    expect(broad).toContain("Ponni bag");
+    expect(broad).not.toContain("Basmati bag");
+    const basmati = renderToStaticMarkup(<HomeSection {...riceProps} selectedRailLabel="Basmati Rice" selectedSubcategory="basmati" />);
+    expect(basmati).toContain("Basmati bag");
+    expect(basmati).not.toContain("Ponni bag");
+  });
+
+  it("opens Oils and Ghee as its own department with both categories", () => {
+    const html = renderToStaticMarkup(<HomeSection
+      {...props}
+      categoryTypes={[{ id: "oils-type", name: "Oils and Ghee", slug: "oils-ghee", sortOrder: 0, previewImageKeys: [] }]}
+      categories={[
+        { id: "oils", categoryTypeId: "oils-type", name: "Cooking Oils", slug: "cooking-oils", sortOrder: 0, previewImageKeys: [] },
+        { id: "ghee", categoryTypeId: "oils-type", name: "Ghee", slug: "ghee", sortOrder: 1, previewImageKeys: [] },
+      ]}
+      subcategories={[{ id: "sunflower", categoryId: "oils", name: "Sunflower Oil", slug: "sunflower-oil", sortOrder: 0, previewImageKeys: [] }]}
+      skus={[]}
+      selectedCategoryType="oils-type"
+      selectedCategory="oils"
+      selectedHomeTile={{ label: "Oils and Ghee" }}
+    />);
+    expect(html).toContain("<h2>Oils and Ghee</h2>");
+    expect(html).toContain("<h3>Cooking Oils</h3>");
+    expect(html).toContain("Sunflower Oil</strong>");
+    expect(html).toContain("Ghee</strong>");
+    expect(html).not.toContain("Basmati Rice</strong>");
   });
 });

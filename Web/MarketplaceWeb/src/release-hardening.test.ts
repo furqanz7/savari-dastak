@@ -3,6 +3,19 @@ import { describe, expect, it } from "vitest";
 import { metadataForVariant } from "./releaseMetadata";
 
 describe("Dastak Web production release hardening", () => {
+  it("bundles the CC0 staff asset in both opt-in rooms without the uncleared RPM assets", () => {
+    const grocery = readFileSync(new URL("./reimaginedGroceryScene.ts", import.meta.url), "utf8");
+    const cafe = readFileSync(new URL("./reimaginedRestaurantStaff.ts", import.meta.url), "utf8");
+    for (const source of [grocery, cafe]) {
+      expect(source).toContain('./assets/reimagined/staff-makehuman.glb?url');
+      expect(source).not.toContain("staff-rpm");
+    }
+    expect(grocery).toContain(": bundledStaffUrl;");
+    expect(cafe).toContain("LoadAssetContainerAsync(staffUrl, scene)");
+    expect(cafe).not.toContain("if (!import.meta.env.DEV)");
+    const room = readFileSync(new URL("./ReimaginedCafeRoom.tsx", import.meta.url), "utf8");
+    expect(room).not.toContain("!import.meta.env.DEV");
+  });
   it("publishes dedicated Admin branding without changing other variants", () => {
     expect(metadataForVariant("dastak-admin")).toEqual({
       title: "Dastak Admin — Operations Control",

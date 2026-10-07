@@ -304,6 +304,11 @@ export function formatPrice(paise: number) {
 
 export function catalogueImageUrl(supabaseUrl: string, path: string | null, pixelSize = 512) {
   if (!path) return null;
+  if (path.startsWith("local/")) {
+    if (typeof window === "undefined") return null;
+    const localPath = path.slice("local/".length).split("/").map(encodeURIComponent).join("/");
+    return `${window.location.origin}/catalogue/${localPath}`;
+  }
   const segments = path.split("/");
   if (segments.some((segment) => !segment || segment === "." || segment === ".." || segment.includes("\\"))) return null;
   const dimension = Math.min(Math.max(Math.round(pixelSize), 128), 1024);

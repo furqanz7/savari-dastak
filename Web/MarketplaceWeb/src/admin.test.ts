@@ -291,7 +291,7 @@ describe("Dastak Admin client", () => {
         init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
       }));
       const assertion = expect(pending).rejects.toMatchObject({ code: "request_timeout", status: 0 });
-      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       await assertion;
     } finally {
       vi.useRealTimers();

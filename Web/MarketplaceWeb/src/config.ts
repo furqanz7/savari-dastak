@@ -40,6 +40,7 @@ type PublicEnvironment = {
   VITE_DASTAK_WEB_PUSH_PUBLIC_KEY?: string;
   VITE_DASTAK_DELIVERY_URL?: string;
   VITE_DASTAK_MERCHANT_URL?: string;
+  VITE_DASTAK_LOCAL_SUPABASE?: string;
 };
 
 const variants: Record<AppVariant, Omit<AppConfig, "supabaseUrl" | "supabasePublishableKey">> = {
@@ -87,14 +88,31 @@ const variants: Record<AppVariant, Omit<AppConfig, "supabaseUrl" | "supabasePubl
   },
 };
 
-export function readAppConfig(environment: PublicEnvironment): AppConfig {
+// Build/page context is supplied by the entry point, never by VITE_* configuration.
+type ConfigurationContext = { development: boolean; pageUrl: string };
+
+export function readAppConfig(environment: PublicEnvironment, context?: ConfigurationContext): AppConfig {
   const variant = environment.VITE_APP_VARIANT;
   if (!appVariants.includes(variant as AppVariant)) {
     throw new Error("VITE_APP_VARIANT must identify a supported web app.");
   }
 
   const supabaseUrl = environment.VITE_SUPABASE_URL?.trim() ?? "";
-  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(supabaseUrl)) {
+  const localOptIn = environment.VITE_DASTAK_LOCAL_SUPABASE;
+  if (localOptIn !== undefined && localOptIn !== "" && localOptIn !== "1") {
+    throw new Error("VITE_DASTAK_LOCAL_SUPABASE must be 1 for explicit local testing.");
+  }
+  if (localOptIn === "1") {
+    let localPage = false;
+    try {
+      const page = new URL(context?.pageUrl ?? "");
+      localPage = ["http:", "https:"].includes(page.protocol) && ["localhost", "127.0.0.1", "[::1]"].includes(page.hostname) && !page.username && !page.password;
+    } catch { /* Missing or malformed page context fails closed. */ }
+    if (!context?.development || !localPage || variant !== "dastak-customer"
+      || !/^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):54321\/?$/.test(supabaseUrl)) {
+      throw new Error("Local Supabase requires a development Customer build on loopback and a loopback API on port 54321.");
+    }
+  } else if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(supabaseUrl)) {
     throw new Error("VITE_SUPABASE_URL must be a hosted Supabase project URL.");
   }
 

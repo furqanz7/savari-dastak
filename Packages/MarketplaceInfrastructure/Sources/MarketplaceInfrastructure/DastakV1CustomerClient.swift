@@ -692,6 +692,7 @@ public struct DastakV1OrderCollection: Codable, Equatable, Sendable {
 }
 
 public protocol DastakV1CustomerClient: Sendable {
+    func catalogueBrowseMap(idempotencyKey: IdempotencyKey) async throws -> DastakV1CatalogueBrowseMap?
     func catalogue(
         query: String?,
         categoryID: UUID?,
@@ -790,6 +791,14 @@ public struct SupabaseDastakV1CustomerClient: DastakV1CustomerClient {
 
     public init(functions: any FunctionClient) {
         self.functions = functions
+    }
+
+    public func catalogueBrowseMap(idempotencyKey: IdempotencyKey) async throws -> DastakV1CatalogueBrowseMap? {
+        try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: DastakV1CatalogueBrowseRequest(),
+            idempotencyKey: idempotencyKey
+        )
     }
 
     public func catalogue(

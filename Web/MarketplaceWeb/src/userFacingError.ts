@@ -30,6 +30,9 @@ export function userFacingError(error: unknown, fallback: string) {
   if (isRateLimited(lowered, errorCode(error))) {
     return "Too many attempts were made. Wait a moment, then try again.";
   }
+  if (isArchiveOnlyCatalogueDelete(lowered, errorCode(error))) {
+    return "This SKU is already referenced by catalogue or order history, so it cannot be permanently deleted. Use ‘Archive SKU’ to remove it from the live catalogue while preserving history.";
+  }
   if (INTERNAL_ERROR_PATTERNS.some((pattern) => pattern.test(message))) return fallback;
   return message;
 }
@@ -85,6 +88,12 @@ function isExpiredSession(message: string, code: string) {
 function isRateLimited(message: string, code: string) {
   return code.includes("rate_limit") || code === "over_request_rate_limit" ||
     message.includes("too many requests");
+}
+
+function isArchiveOnlyCatalogueDelete(message: string, code: string) {
+  return code === "23503" ||
+    (message.includes("sku") && message.includes("can only be archived")) ||
+    (message.includes("historical or operational references") && message.includes("archiv"));
 }
 
 function looksLikeMarkup(value: string) {

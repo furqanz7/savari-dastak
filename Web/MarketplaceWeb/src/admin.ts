@@ -293,7 +293,10 @@ async function call(
   idempotencyKey: string | undefined,
   fetcher: Fetcher,
 ) {
-  const deadline = requestDeadline(auth.signal);
+  // Catalogue reconciliation can legitimately exceed the generic 15s UI deadline
+  // while the server reads large governed SKU/selection projections. Keep the
+  // idempotent admin operation alive long enough for the authoritative response.
+  const deadline = requestDeadline(auth.signal, 60_000);
   let response: Response;
   let payload: unknown;
   try {

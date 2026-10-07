@@ -15,6 +15,8 @@ export type V1CatalogueDependencies = {
     afterName: string | null;
     afterSkuId: string | null;
   }) => Promise<unknown>;
+  catalogueBrowseMap: (input: { accessToken: string }) => Promise<unknown>;
+  catalogueBrowseSkuIds: (input: { accessToken: string; nodeKey: string }) => Promise<unknown>;
   customerRestaurants: (input: {
     accessToken: string;
     query: string | null;
@@ -194,6 +196,18 @@ export async function handleV1Catalogue(
 
   try {
     switch (body.operation) {
+      case "catalogueBrowseMap":
+        return json(await dependencies.catalogueBrowseMap({ accessToken: actor.accessToken }));
+      case "catalogueBrowseSkuIds": {
+        const nodeKey = body.nodeKey;
+        if (typeof nodeKey !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(nodeKey)) {
+          return validationError();
+        }
+        return json(await dependencies.catalogueBrowseSkuIds({
+          accessToken: actor.accessToken,
+          nodeKey,
+        }));
+      }
       case "customerCatalogue":
         return await customerCatalogue(body, actor, dependencies);
       case "customerRestaurants": {

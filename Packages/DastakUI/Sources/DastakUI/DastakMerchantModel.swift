@@ -61,6 +61,7 @@ final class DastakMerchantModel: ObservableObject {
     let notifications: DastakMerchantNotifications
     @Published private(set) var catalogue: CatalogueSnapshot?
     @Published private(set) var canonicalCatalogue: DastakV1MerchantCatalogueSnapshot?
+    @Published private(set) var canonicalBrowseMap: DastakV1CatalogueBrowseMap?
     @Published private(set) var restaurantMenu: DastakV1RestaurantMenu?
     @Published private(set) var pendingCanonicalSelections: [UUID: Bool] = [:]
     @Published private(set) var earnings: DastakEarningsSnapshot?
@@ -181,12 +182,15 @@ final class DastakMerchantModel: ObservableObject {
 
     func refreshCanonicalCatalogue(reportFailure: Bool = true) async {
         do {
+            let browseMap = try await v1Client.catalogueBrowseMap(idempotencyKey: makeKey())
+            guard browseMap?.isValid != false else { throw DastakV1BrowseLoadError.invalidMap }
             let refreshed = try await v1Client.canonicalCatalogue(
                 branchID: canonicalCatalogue?.branch.branchID,
                 limit: 5_000,
                 idempotencyKey: makeKey()
             )
             canonicalCatalogue = refreshed
+            canonicalBrowseMap = browseMap
             pendingCanonicalSelections = pendingCanonicalSelections.filter { skuID, desired in
                 refreshed.skus.first(where: { $0.skuID == skuID })?.selected != desired
             }

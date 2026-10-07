@@ -20,6 +20,8 @@ import {
   getV1AdminOperationalSafety,
   correctV1AdminCustomerPhone,
   getV1Catalogue,
+  getV1CatalogueBrowseMap,
+  getV1CatalogueBrowseSkuIds,
   getV1Order,
   getV1Orders,
   getV1Restaurants,
@@ -75,6 +77,29 @@ const fulfilmentId = "66666666-6666-4666-8666-666666666666";
 const packageId = "99999999-9999-4999-8999-999999999999";
 
 describe("Dastak V1 web contract", () => {
+  it("keeps the draft browse map hidden and validates active browse identifiers", async () => {
+    const draft = await getV1CatalogueBrowseMap(auth, async () => Response.json(null));
+    expect(draft).toBeNull();
+    const active = await getV1CatalogueBrowseMap(auth, async () => Response.json({
+      version: 1,
+      nodes: [{ key: "masalas", parentKey: "grocery-kitchen", kind: "DESTINATION", label: "Masalas", sortOrder: 20, sources: [{
+        typeSlug: "masala-cooking", categorySlug: null, subcategorySlug: null,
+        excludedCategorySlugs: ["sauces-condiments"], excludedSubcategorySlugs: [],
+      }] }],
+    }));
+    expect(active?.nodes[0].label).toBe("Masalas");
+    expect(active?.nodes[0].sources[0].excludedCategorySlugs).toEqual(["sauces-condiments"]);
+    let requestBody: unknown;
+    const ids = await getV1CatalogueBrowseSkuIds({ ...auth, nodeKey: "ready-masala" }, async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return Response.json([skuId]);
+    });
+    expect(ids).toEqual([skuId]);
+    expect(requestBody).toEqual({ operation: "catalogueBrowseSkuIds", nodeKey: "ready-masala" });
+    await expect(getV1CatalogueBrowseSkuIds({ ...auth, nodeKey: "../ready-masala" }, async () => {
+      throw new Error("invalid keys must not reach the server");
+    })).rejects.toBeInstanceOf(DastakV1RequestError);
+  });
   it("aborts and classifies a stalled backend request after the client deadline", async () => {
     vi.useFakeTimers();
     const request = getV1Catalogue(auth, async (_url, init) => new Promise<Response>((_resolve, reject) => {

@@ -331,6 +331,7 @@ public struct DastakV1GovernedMediaMutation: Decodable, Sendable {
 }
 
 public protocol DastakV1MerchantClient: Sendable {
+    func catalogueBrowseMap(idempotencyKey: IdempotencyKey) async throws -> DastakV1CatalogueBrowseMap?
     func fulfilments(limit: Int, idempotencyKey: IdempotencyKey) async throws -> [DastakV1MerchantFulfilment]
     func declarePackages(
         fulfilmentID: UUID,
@@ -379,6 +380,13 @@ public protocol DastakV1MerchantClient: Sendable {
 }
 
 public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
+    public func catalogueBrowseMap(idempotencyKey: IdempotencyKey) async throws -> DastakV1CatalogueBrowseMap? {
+        try await functions.invoke(
+            "dastak-v1-catalogue",
+            request: DastakV1CatalogueBrowseRequest(),
+            idempotencyKey: idempotencyKey
+        )
+    }
     private struct Request: Encodable, Sendable {
         let operation: String
         let limit: Int?

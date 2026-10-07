@@ -25,10 +25,14 @@ import { AdminRecordDialog } from "./AdminRecordDialog";
 import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
   getV1AdminCatalogue, getV1AdminCataloguePage, importV1AdminCatalogue, updateV1AdminSku, deleteV1AdminSku,
+  getV1CatalogueBrowseMap,
   mutateV1AdminCatalogueTaxonomy,
-  type DastakV1Auth, type V1AdminCataloguePageSku, type V1AdminSnapshot,
+  type DastakV1Auth, type V1AdminCataloguePageSku, type V1AdminSnapshot, type V1CatalogueBrowseMap,
 } from "./dastakV1";
 import { catalogueImageUrl } from "./catalogue";
+import { catalogueDepartmentName, catalogueHomeTiles, catalogueNavigationGroups, curatedCatalogueRails, resolveCatalogueRail, riceRailExcludedSubcategoryIds } from "./cataloguePresentation";
+import { browseChildren, browseSkuIds, validateBrowseMap } from "./catalogueBrowse";
+import { referenceBrowseArtworkKey } from "./referenceBrowseArtwork";
 import { useAdminWorkspaceRefresh } from "./adminRefresh";
 import { useAdminRuntime } from "./AdminRuntimeContext";
 import { RefreshQueue } from "./orderRealtime";
@@ -48,6 +52,7 @@ const importTemplate = `{
 
 export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   const [snapshot, setSnapshot] = useState<V1AdminSnapshot>();
+  const [browseMap, setBrowseMap] = useState<V1CatalogueBrowseMap | null>();
   const [skus, setSkus] = useState<V1AdminCataloguePageSku[]>([]);
   const [cursor, setCursor] = useState<{ name: string; skuId: string }>();
   const [hasMore, setHasMore] = useState(false);
@@ -55,6 +60,8 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   const [categoryTypeId, setCategoryTypeId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
+  const [selectedRailLabel, setSelectedRailLabel] = useState("");
+  const [selectedHomeTile, setSelectedHomeTile] = useState<{ label: string; categoryId?: string }>();
   const [status, setStatus] = useState("");
   const [qaStatus, setQaStatus] = useState("");
   const [source, setSource] = useState(importTemplate);
@@ -65,6 +72,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [editingSku, setEditingSku] = useState<V1AdminCataloguePageSku>();
+  const [selectedSkuIds, setSelectedSkuIds] = useState<Set<string>>(new Set());
   const [reconciliationBlocked, setReconciliationBlocked] = useState(false);
   const [taxonomyOperation, setTaxonomyOperation] = useState("CREATE_CATEGORY_TYPE");
   const [taxonomyName, setTaxonomyName] = useState("");
@@ -80,6 +88,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   }>();
   const headingRef = useRef<HTMLElement>(null);
   const pageGeneration = useRef(0);
+  const loadedPageCount = useRef(1);
   const pageController = useRef<AbortController | undefined>(undefined);
   const refreshQueue = useRef(new RefreshQueue());
   const { reportRequestError } = useAdminRuntime();
@@ -89,15 +98,15 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
 
   const filters = useMemo(() => ({
     query: query.trim(),
-    categoryTypeId: categoryTypeId || undefined,
+    categoryTypeId: (categoryId ? snapshot?.categories.find((item) => item.id === categoryId)?.categoryTypeId : categoryTypeId) || undefined,
     categoryId: categoryId || undefined,
     subcategoryId: subcategoryId || undefined,
     status: status ? status as V1AdminCataloguePageSku["status"] : undefined,
     qaStatus: qaStatus ? qaStatus as V1AdminCataloguePageSku["qaStatus"] : undefined,
-  }), [categoryId, categoryTypeId, qaStatus, query, status, subcategoryId]);
+  }), [categoryId, categoryTypeId, qaStatus, query, snapshot?.categories, status, subcategoryId]);
 
   const visibleCategories = useMemo(() => snapshot?.categories.filter((category) =>
-    !categoryTypeId || category.categoryTypeId === categoryTypeId) ?? [], [categoryTypeId, snapshot]);
+    !categoryTypeId || category.categoryTypeId === categoryTypeId || category.id === categoryId) ?? [], [categoryId, categoryTypeId, snapshot]);
   const visibleSubcategories = useMemo(() => snapshot?.subcategories.filter((subcategory) =>
     (!categoryId || subcategory.categoryId === categoryId) &&
     (!categoryTypeId || visibleCategories.some((category) => category.id === subcategory.categoryId))) ?? [],
@@ -115,7 +124,13 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     return { categories, subcategories };
   }, [skus, snapshot]);
 
-  const loadMetadata = useCallback(async (signal?: AbortSignal) => setSnapshot(await getV1AdminCatalogue({ ...auth, signal })), [auth]);
+  const loadMetadata = useCallback(async (signal?: AbortSignal) => {
+    const [nextSnapshot, nextBrowseMap] = await Promise.all([
+      getV1AdminCatalogue({ ...auth, signal }), getV1CatalogueBrowseMap({ ...auth, signal }),
+    ]);
+    if (nextBrowseMap && validateBrowseMap(nextBrowseMap).length) throw new Error("The catalogue map needs attention.");
+    if (!signal?.aborted) { setSnapshot(nextSnapshot); setBrowseMap(nextBrowseMap); }
+  }, [auth]);
   const loadPage = useCallback(async (append: boolean, signal?: AbortSignal) => {
     const generation = ++pageGeneration.current;
     if (append) setLoadingMore(true);
@@ -126,6 +141,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
       setSkus((current) => append ? [...current, ...page.skus] : page.skus);
       setCursor(page.nextCursor);
       setHasMore(page.hasMore);
+      loadedPageCount.current = append ? loadedPageCount.current + 1 : 1;
       setPageLoaded(true);
       setError(undefined);
     } catch (loadError) {
@@ -144,7 +160,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   useEffect(() => {
     const controller = new AbortController();
     void loadMetadata(controller.signal).catch((loadError) => {
-      if (!controller.signal.aborted) { reportRequestError(loadError); setError(message(loadError)); }
+      if (!controller.signal.aborted) { setBrowseMap(undefined); setSnapshot(undefined); reportRequestError(loadError); setError(message(loadError)); }
     });
     return () => controller.abort();
   }, [loadMetadata, reportRequestError]);
@@ -153,6 +169,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     const controller = new AbortController();
     pageController.current = controller;
     setPageLoaded(false);
+    loadedPageCount.current = 1;
     const timer = window.setTimeout(() => void loadPage(false, controller.signal).catch(() => undefined), 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
     // Cursor changes only while appending and must not restart page one.
@@ -164,13 +181,29 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     const controller = new AbortController();
     pageController.current = controller;
     const generation = ++pageGeneration.current;
-    const [metadata, page] = await Promise.all([
-      getV1AdminCatalogue({ ...auth, signal: controller.signal }),
-      getV1AdminCataloguePage({ ...auth, ...filters, limit: 50, signal: controller.signal }),
-    ]);
+    // Reconciliation is primarily about the exact SKU page.  A malformed or
+    // temporarily stale metadata snapshot must not turn a completed mutation
+    // into an "invalid text" failure and block the operator.  Keep the last
+    // authoritative taxonomy snapshot when metadata cannot be refreshed.
+    const metadataPromise = getV1AdminCatalogue({ ...auth, signal: controller.signal })
+      .catch(() => snapshot);
+    const pages: V1AdminCataloguePageSku[] = [];
+    let nextCursor: { name: string; skuId: string } | undefined;
+    let more = false;
+    for (let pageNumber = 0; pageNumber < loadedPageCount.current; pageNumber += 1) {
+      const page = await getV1AdminCataloguePage({
+        ...auth, ...filters, limit: 50, cursor: nextCursor, signal: controller.signal,
+      });
+      pages.push(...page.skus);
+      nextCursor = page.nextCursor;
+      more = page.hasMore;
+      if (!more) break;
+    }
+    const metadata = await metadataPromise;
     if (controller.signal.aborted || generation !== pageGeneration.current) return;
-    setSnapshot(metadata); setSkus(page.skus); setCursor(page.nextCursor); setHasMore(page.hasMore); setPageLoaded(true);
-  }, [auth, filters]);
+    if (metadata) setSnapshot(metadata);
+    setSkus(pages); setCursor(nextCursor); setHasMore(more); setPageLoaded(true);
+  }, [auth, filters, snapshot]);
 
   const refresh = useCallback(() => refreshQueue.current.request(false, async () => {
     try { await reconcileCatalogue(); setError(undefined); }
@@ -189,11 +222,15 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     setCategoryTypeId(value);
     setCategoryId((children.find((item) => item.status === "ACTIVE") ?? children[0])?.id ?? "");
     setSubcategoryId("");
+    setSelectedRailLabel("");
+    setSelectedHomeTile(undefined);
   };
   const chooseCategory = (value: string) => {
     setCategoryId(value);
     if (value) setCategoryTypeId(snapshot?.categories.find((item) => item.id === value)?.categoryTypeId ?? "");
     setSubcategoryId("");
+    setSelectedRailLabel("");
+    setSelectedHomeTile(undefined);
   };
 
   const runImport = (event: FormEvent) => {
@@ -236,6 +273,44 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   };
   const deleteSku = async (sku: V1AdminCataloguePageSku) => setIntent({ identity: `catalogue-sku-delete:${sku.id}`, success: `${sku.name} was permanently deleted.`, closeEditor: true, dialog: { title: `Permanently delete ${sku.name}?`, entityLabel: "Canonical SKU", entityValue: `${sku.name} · ${sku.id}`, currentState: `${label(sku.status)} · ${sku.packSize}`, resultingState: "Removed permanently", consequence: "Allowed only when no order, inventory, recovery, or merchant-selection records reference it. Otherwise the server requires archiving.", confirmLabel: "Delete permanently", tone: "danger" }, mutate: (idempotencyKey) => deleteV1AdminSku({ ...auth, skuId: sku.id, idempotencyKey }) });
 
+  const selectedSkus = skus.filter((sku) => selectedSkuIds.has(sku.id));
+  const toggleSkuSelection = (skuId: string) => setSelectedSkuIds((current) => {
+    const next = new Set(current);
+    if (next.has(skuId)) next.delete(skuId); else next.add(skuId);
+    return next;
+  });
+  const clearSkuSelection = () => setSelectedSkuIds(new Set());
+  const bulkMutation = (action: "ACTIVE" | "INACTIVE" | "DELETE") => {
+    if (!selectedSkus.length) return;
+    const selectedFingerprint = selectedSkus.map((sku) => `${sku.id}:${sku.version}`).sort().join(",");
+    const blockedActivation = action === "ACTIVE" ? selectedSkus.filter((sku) => !sku.activationReady && sku.status !== "ACTIVE") : [];
+    if (blockedActivation.length) {
+      setError(`${blockedActivation.length} selected SKU${blockedActivation.length === 1 ? " is" : "s are"} not ready to activate. Select only verified SKUs.`);
+      return;
+    }
+    const actionLabel = action === "DELETE" ? "permanently delete" : action === "ACTIVE" ? "activate" : "archive";
+    setIntent({
+      identity: `catalogue-sku-bulk:${action}:${selectedFingerprint}`,
+      success: `${selectedSkus.length} SKU${selectedSkus.length === 1 ? "" : "s"} ${action === "DELETE" ? "were permanently deleted" : action === "ACTIVE" ? "are now active" : "were archived"}.`,
+      dialog: {
+        title: `${actionLabel[0].toUpperCase()}${actionLabel.slice(1)} ${selectedSkus.length} selected SKU${selectedSkus.length === 1 ? "" : "s"}?`,
+        entityLabel: "Selected canonical SKUs",
+        entityValue: `${selectedSkus.slice(0, 8).map((sku) => sku.name).join(" · ")}${selectedSkus.length > 8 ? ` · … and ${selectedSkus.length - 8} more` : ""}`,
+        currentState: `${selectedSkus.length} selected · ${selectedSkus.filter((sku) => sku.status === "ACTIVE").length} active · ${selectedSkus.filter((sku) => sku.status === "INACTIVE").length} archived`,
+        resultingState: action === "DELETE" ? "Removed permanently" : action === "ACTIVE" ? "Active and customer-visible when otherwise eligible" : "Archived (inactive and hidden from customers)",
+        consequence: action === "DELETE" ? "Permanent deletion is governed per SKU. Any SKU with order, inventory, recovery or merchant-selection references will be rejected and must be archived instead." : "This updates the authoritative catalogue records and is recorded in audit history.",
+        confirmLabel: action === "DELETE" ? "Delete permanently" : action === "ACTIVE" ? "Activate selected" : "Archive selected",
+        tone: action === "ACTIVE" ? "primary" : "danger",
+      },
+      mutate: async (idempotencyKey) => {
+        for (const sku of selectedSkus) {
+          if (action === "DELETE") await deleteV1AdminSku({ ...auth, skuId: sku.id, idempotencyKey: `${idempotencyKey}:${sku.id}` });
+          else await updateV1AdminSku({ ...auth, skuId: sku.id, expectedVersion: sku.version, patch: { status: action }, idempotencyKey: `${idempotencyKey}:${sku.id}` });
+        }
+      },
+    });
+  };
+
   const submitTaxonomy = (event: FormEvent) => {
     event.preventDefault();
     const payload: Record<string, unknown> = { name: taxonomyName.trim(), slug: taxonomySlug.trim() };
@@ -256,6 +331,7 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
     if (result.kind === "completed") {
       setNotice(intent.success);
       if (intent.closeEditor) setEditingSku(undefined);
+      if (intent.identity.startsWith("catalogue-sku-bulk:")) clearSkuSelection();
       setIntent(undefined);
     } else if (result.kind === "reconciled" || result.kind === "uncertain_reconciled") {
       setNotice(result.message);
@@ -266,35 +342,54 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
   };
 
   const showProducts = Boolean(query.trim() || categoryTypeId || categoryId || subcategoryId || status || qaStatus);
-  const activeSkus = skus.filter((sku) => sku.status !== "INACTIVE");
-  const archivedSkus = skus.filter((sku) => sku.status === "INACTIVE");
+  const riceExclusions = selectedRailLabel === "Rice" && snapshot?.categories.find((item) => item.id === categoryId)?.slug === "rice"
+    ? riceRailExcludedSubcategoryIds((snapshot?.subcategories ?? []).filter((item) => item.categoryId === categoryId))
+    : undefined;
+  const displaySkus = selectedRailLabel && !categoryId ? []
+    : riceExclusions ? skus.filter((sku) => !riceExclusions.has(sku.subcategoryId)) : skus;
+  const activeSkus = displaySkus.filter((sku) => sku.status !== "INACTIVE");
+  const archivedSkus = displaySkus.filter((sku) => sku.status === "INACTIVE");
   const selectedType = snapshot?.categoryTypes.find((type) => type.id === categoryTypeId);
-  const navigationGroups = adminNavigationGroups(snapshot?.categoryTypes ?? []);
+  const navigationGroups = catalogueNavigationGroups(snapshot?.categoryTypes ?? []);
+  const curatedRail = selectedType && snapshot && curatedCatalogueRails[selectedType.slug]?.map((target) => {
+    const resolved = resolveCatalogueRail(target, snapshot.categoryTypes, snapshot.categories, snapshot.subcategories);
+    const category = resolved && "categoryId" in resolved
+      ? snapshot.categories.find((item) => item.id === resolved.categoryId)
+      : resolved;
+    return { label: target.label, item: resolved, categoryId: category?.id,
+      subcategoryId: resolved && "categoryId" in resolved ? resolved.id : undefined };
+  });
+  const displayedRail = selectedHomeTile?.categoryId
+    ? snapshot?.subcategories.filter((item) => item.categoryId === selectedHomeTile.categoryId).map((item) => ({ label: item.name, item, categoryId: item.categoryId, subcategoryId: item.id }))
+    : curatedRail;
+
+  if (browseMap === undefined) return <section className="admin-section v1-admin-catalogue" role="tabpanel">{error ? <><p className="order-error" role="alert"><CircleAlert size={16} /> {error}</p><button type="button" className="secondary-button" onClick={() => void loadMetadata().then(() => setError(undefined)).catch((cause) => setError(message(cause)))}>Retry catalogue</button></> : <div className="catalogue-loading" role="status"><span /> Loading catalogue map</div>}</section>;
 
   return <section className="admin-section v1-admin-catalogue" role="tabpanel">
-    <header ref={headingRef} className="admin-section-heading admin-catalogue-heading"><div><p className="eyebrow">MASTER CATALOGUE</p><h2>{selectedType?.name ?? "Browse departments"}</h2><p>{categoryTypeId ? "Review exact SKU facts, visibility, readiness and governed imagery." : "Find the exact product before reviewing its record or managing its images."}</p></div>{categoryTypeId ? <button type="button" className="admin-directory-back" onClick={() => chooseCategoryType("")}>All categories</button> : null}</header>
+    <header ref={headingRef} className="admin-section-heading admin-catalogue-heading"><div><p className="eyebrow">MASTER CATALOGUE</p><h2>{browseMap ? "Browse Dastak" : selectedType ? selectedHomeTile?.label ?? catalogueDepartmentName(selectedType.slug, selectedType.name) : "Browse departments"}</h2><p>{categoryTypeId ? "Review exact SKU facts, visibility, readiness and governed imagery." : "Find the exact product before reviewing its record or managing its images."}</p></div>{!browseMap && categoryTypeId ? <button type="button" className="admin-directory-back" onClick={() => chooseCategoryType("")}>All categories</button> : null}</header>
     {error ? <p className="order-error" role="alert"><CircleAlert size={16} /> {error}</p> : null}
     {notice ? <p className="v1-admin-notice" role="status"><Check size={17} /> {notice}</p> : null}
     <div className="admin-catalogue-toolbar">
       <label className="admin-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search SKU, brand, alias or category" aria-label="Search catalogue" /></label>
-      <Select label="Department" value={categoryTypeId} onChange={chooseCategoryType}><option value="">All departments</option>{snapshot?.categoryTypes.map((type) => <option value={type.id} key={type.id}>{type.name}</option>)}</Select>
+      {!browseMap ? <><Select label="Department" value={categoryTypeId} onChange={chooseCategoryType}><option value="">All departments</option>{snapshot?.categoryTypes.map((type) => <option value={type.id} key={type.id}>{catalogueDepartmentName(type.slug, type.name)}</option>)}</Select>
       <Select label="Category" value={categoryId} onChange={chooseCategory}><option value="">All categories</option>{visibleCategories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</Select>
-      <Select label="Subcategory" value={subcategoryId} onChange={setSubcategoryId}><option value="">All subcategories</option>{visibleSubcategories.map((subcategory) => <option value={subcategory.id} key={subcategory.id}>{subcategory.name}</option>)}</Select>
+      <Select label="Subcategory" value={subcategoryId} onChange={(value) => { setSubcategoryId(value); setSelectedRailLabel(""); }}><option value="">All subcategories</option>{visibleSubcategories.map((subcategory) => <option value={subcategory.id} key={subcategory.id}>{subcategory.name}</option>)}</Select></> : null}
       <Select label="Visibility" value={status} onChange={setStatus}><option value="">Any status</option><option value="ACTIVE">Active</option><option value="DRAFT">Draft</option><option value="INACTIVE">Inactive</option></Select>
       <Select label="QA" value={qaStatus} onChange={setQaStatus}><option value="">Any QA state</option><option value="VERIFIED">Verified</option><option value="NEEDS_REVIEW">Needs review</option><option value="PENDING">Pending</option><option value="REJECTED">Rejected</option></Select>
     </div>
-    {snapshot && !showProducts ? <div className="admin-catalogue-directory">{navigationGroups.map((group) => <section key={group.key}>
+    {snapshot && browseMap && !showProducts ? <AdminReferenceBrowser auth={auth} map={browseMap} snapshot={snapshot} onOpen={setEditingSku} /> : null}
+    {snapshot && !browseMap && !showProducts ? <div className="admin-catalogue-directory">{navigationGroups.map((group) => <section key={group.key}>
       <header><div><small>MASTER CATALOGUE</small><h3>{group.name}</h3></div></header>
-      <div>{group.types.map((type) => <button type="button" key={type.id} onClick={() => chooseCategoryType(type.id)}>
-        <AdminCategoryArtwork item={type} supabaseUrl={auth.supabaseUrl} />
-        <strong>{type.name}</strong>{type.status !== "ACTIVE" ? <small>Coming soon</small> : null}
+      <div>{catalogueHomeTiles(group.key, group.types, snapshot.categoryTypes, snapshot.categories).map((tile) => <button type="button" key={tile.key} onClick={() => { chooseCategoryType(tile.typeId); if (tile.categoryId) setCategoryId(tile.categoryId); setSelectedHomeTile({ label: tile.label, categoryId: tile.categoryId }); }}>
+        <AdminCategoryArtwork item={tile.item} supabaseUrl={auth.supabaseUrl} />
+        <strong>{tile.label}</strong>{tile.item.status !== "ACTIVE" ? <small>Coming soon</small> : null}
       </button>)}</div>
     </section>)}</div> : null}
     {snapshot && showProducts ? <section className="v1-admin-skus">
-      <header><Tags size={20} /><div><h3>Product records</h3><p>Results reflect your filters. Open an exact SKU to review its full record.</p></div></header>
+      <header><Tags size={20} /><div><h3>{selectedRailLabel || (selectedHomeTile?.categoryId === categoryId ? selectedHomeTile.label : undefined) || "Product records"}</h3><p>Results reflect your filters. Open an exact SKU to review its full record.</p></div></header>
       <div className={`admin-catalogue-browser ${categoryTypeId && visibleCategories.length ? "with-rail" : ""}`}>
-        {categoryTypeId && visibleCategories.length ? <div className="admin-subcategory-rail" role="group" aria-label="Subcategories">{visibleCategories.map((category) => <button type="button" className={categoryId === category.id ? "selected" : ""} aria-pressed={categoryId === category.id} key={category.id} onClick={() => chooseCategory(category.id)}><AdminCategoryArtwork item={{ ...category, imageKey: category.imageKey ?? artworkKeys.categories.get(category.id) }} supabaseUrl={auth.supabaseUrl} /><strong>{category.name}</strong></button>)}</div> : null}
-        <div className="admin-catalogue-products" key={categoryId}>{loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : skus.length === 0 && pageLoaded ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : skus.length > 0 ? <><div className="v1-admin-sku-grid">{activeSkus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div>{archivedSkus.length > 0 ? <section className="admin-archived-skus"><h3>Archived</h3><p>Inactive SKUs are kept here for historical continuity.</p><div className="v1-admin-sku-grid">{archivedSkus.map((sku) => <button type="button" key={`${sku.id}:${sku.version}`} onClick={() => setEditingSku(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div></section> : null}</> : null}</div>
+        {categoryTypeId && visibleCategories.length ? <div className="admin-subcategory-rail" role="group" aria-label="Subcategories">{displayedRail ? displayedRail.map(({ label, item, categoryId: targetCategoryId, subcategoryId: targetSubcategoryId }) => <button type="button" disabled={!item} className={selectedRailLabel === label ? "selected" : ""} aria-pressed={selectedRailLabel === label} key={label} onClick={() => { setCategoryId(targetCategoryId ?? ""); setSubcategoryId(targetSubcategoryId ?? ""); setSelectedRailLabel(label); }}>{item ? <AdminCategoryArtwork item={item} supabaseUrl={auth.supabaseUrl} /> : <Database size={28} />}<strong>{label}</strong></button>) : visibleCategories.map((category) => <button type="button" className={categoryId === category.id ? "selected" : ""} aria-pressed={categoryId === category.id} key={category.id} onClick={() => chooseCategory(category.id)}><AdminCategoryArtwork item={{ ...category, imageKey: category.imageKey ?? artworkKeys.categories.get(category.id) }} supabaseUrl={auth.supabaseUrl} /><strong>{category.name}</strong></button>)}</div> : null}
+      <div className="admin-catalogue-products" key={categoryId}>{loading ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : displaySkus.length === 0 && pageLoaded ? <div className="admin-empty-state"><Database size={28} /><h3>No SKUs match these filters</h3><p>Clear a filter or search for another exact product.</p></div> : displaySkus.length > 0 ? <><BulkSkuToolbar selectedCount={selectedSkus.length} onArchive={() => bulkMutation("INACTIVE")} onActivate={() => bulkMutation("ACTIVE")} onDelete={() => bulkMutation("DELETE")} onClear={clearSkuSelection} /><div className="v1-admin-sku-grid">{activeSkus.map((sku) => <SkuSelectionCard key={`${sku.id}:${sku.version}`} sku={sku} selected={selectedSkuIds.has(sku.id)} onToggle={() => toggleSkuSelection(sku.id)} onOpen={() => setEditingSku(sku)} supabaseUrl={auth.supabaseUrl} />)}</div>{archivedSkus.length > 0 ? <section className="admin-archived-skus"><h3>Archived</h3><p>Inactive SKUs are kept here for historical continuity.</p><div className="v1-admin-sku-grid">{archivedSkus.map((sku) => <SkuSelectionCard key={`${sku.id}:${sku.version}`} sku={sku} selected={selectedSkuIds.has(sku.id)} onToggle={() => toggleSkuSelection(sku.id)} onOpen={() => setEditingSku(sku)} supabaseUrl={auth.supabaseUrl} />)}</div></section> : null}</> : null}</div>
       </div>
       {hasMore ? <button type="button" className="admin-load-more wide" onClick={() => void loadMore().catch(() => undefined)} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load next 50 products"}</button> : null}
     </section> : null}
@@ -311,6 +406,72 @@ export function AdminCataloguePanel({ auth }: { auth: DastakV1Auth }) {
         catch (cause) { setError(message(cause)); } finally { setBusy(false); }
       }} /> : null}
   </section>;
+}
+
+function AdminReferenceBrowser({ auth, map, snapshot, onOpen }: {
+  auth: DastakV1Auth;
+  map: V1CatalogueBrowseMap;
+  snapshot: V1AdminSnapshot;
+  onOpen: (sku: V1AdminCataloguePageSku) => void;
+}) {
+  const [destinationKey, setDestinationKey] = useState<string>();
+  const [railKey, setRailKey] = useState<string>();
+  const [allActiveSkus, setAllActiveSkus] = useState<V1AdminCataloguePageSku[]>();
+  const [browseError, setBrowseError] = useState<string>();
+  const destination = map.nodes.find((node) => node.key === destinationKey && node.kind === "DESTINATION");
+  const rails = destination ? browseChildren(map, destination.key).filter((node) => node.kind === "RAIL") : [];
+  const selectedNode = rails.find((node) => node.key === railKey) ?? destination;
+  const activeDestinationKey = destination?.key;
+  useEffect(() => {
+    if (!activeDestinationKey) return;
+    const controller = new AbortController();
+    setAllActiveSkus(undefined);
+    setBrowseError(undefined);
+    void (async () => {
+      const all: V1AdminCataloguePageSku[] = [];
+      let cursor: { name: string; skuId: string } | undefined;
+      for (let pageNumber = 0; pageNumber < 100; pageNumber += 1) {
+        const page = await getV1AdminCataloguePage({ ...auth, status: "ACTIVE", limit: 50, cursor, signal: controller.signal });
+        all.push(...page.skus);
+        if (!page.hasMore) {
+          if (!controller.signal.aborted) setAllActiveSkus(all);
+          return;
+        }
+        if (!page.nextCursor || (cursor && cursor.name === page.nextCursor.name && cursor.skuId === page.nextCursor.skuId)) throw new Error("Catalogue pagination did not advance.");
+        cursor = page.nextCursor;
+      }
+      throw new Error("The full catalogue could not be loaded.");
+    })().catch((cause) => { if (!controller.signal.aborted) setBrowseError(message(cause)); });
+    return () => controller.abort();
+  }, [auth, activeDestinationKey]);
+  const taxonomy = useMemo(() => ({
+    types: snapshot.categoryTypes.map((item) => ({ id: item.id, slug: item.slug })),
+    categories: snapshot.categories.flatMap((item) => item.categoryTypeId ? [{ id: item.id, typeId: item.categoryTypeId, slug: item.slug }] : []),
+    subcategories: snapshot.subcategories.map((item) => ({ id: item.id, categoryId: item.categoryId, slug: item.slug })),
+  }), [snapshot]);
+  const selectedIds = useMemo(() => selectedNode && allActiveSkus ? browseSkuIds(map, selectedNode.key, taxonomy, allActiveSkus) : new Set<string>(), [allActiveSkus, map, selectedNode, taxonomy]);
+  const visibleSkus = allActiveSkus?.filter((sku) => selectedIds.has(sku.id)) ?? [];
+  const artworkFor = (node: V1CatalogueBrowseMap["nodes"][number]) => {
+    const destinationImageKey = referenceBrowseArtworkKey(node);
+    if (node.kind === "DESTINATION") return <AdminCategoryArtwork item={{ name: node.label, slug: node.key, imageKey: destinationImageKey ?? undefined }} supabaseUrl={auth.supabaseUrl} />;
+    const source = node.sources[0];
+    const category = snapshot.categories.find((item) => item.slug === source?.categorySlug &&
+      snapshot.categoryTypes.some((type) => type.id === item.categoryTypeId && type.slug === source.typeSlug));
+    const subcategory = snapshot.subcategories.find((item) => item.categoryId === category?.id && item.slug === source?.subcategorySlug);
+    return <AdminCategoryArtwork item={subcategory ?? category ?? { name: node.label, slug: node.key }} supabaseUrl={auth.supabaseUrl} />;
+  };
+  return <>
+    {!destination ? <div className="admin-catalogue-directory">{browseChildren(map, null).map((section) => <section key={section.key}>
+      <header><div><small>MASTER CATALOGUE</small><h3>{section.label}</h3></div></header>
+      <div>{browseChildren(map, section.key).map((node) => <button type="button" key={node.key} onClick={() => { setDestinationKey(node.key); setRailKey(undefined); }}>{artworkFor(node)}<strong>{node.label}</strong></button>)}</div>
+    </section>)}</div> : <section className="v1-admin-skus">
+      <header><Tags size={20} /><div><h3>{destination.label}</h3><p>Reference catalogue shelves and exact active SKUs.</p></div><button type="button" className="admin-directory-back" onClick={() => { setDestinationKey(undefined); setRailKey(undefined); }}>All categories</button></header>
+      <div className="admin-catalogue-browser with-rail">
+        <div className="admin-subcategory-rail" role="group" aria-label="Subcategories">{rails.map((node) => <button type="button" key={node.key} aria-pressed={selectedNode?.key === node.key} className={selectedNode?.key === node.key ? "selected" : ""} onClick={() => setRailKey(node.key)}>{artworkFor(node)}<strong>{node.label}</strong></button>)}</div>
+        <div className="admin-catalogue-products" key={selectedNode?.key}>{browseError ? <p className="order-error" role="alert">{browseError}</p> : !allActiveSkus ? <div className="catalogue-loading" role="status"><span /> Loading exact SKUs</div> : <><header><h3>{selectedNode?.label}</h3><p>{visibleSkus.length} products</p></header>{visibleSkus.length ? <div className="v1-admin-sku-grid">{visibleSkus.map((sku) => <button className="admin-sku-open" type="button" key={sku.id} onClick={() => onOpen(sku)}><AdminSkuTile sku={sku} supabaseUrl={auth.supabaseUrl} /><ChevronRight size={18} /></button>)}</div> : <div className="admin-empty-state"><Database size={28} /><h3>No products here yet</h3></div>}</>}</div>
+      </div>
+    </section>}
+  </>;
 }
 
 function AdminCategoryArtwork({ item, supabaseUrl }: { item: { imageKey?: string; previewImageKeys?: string[]; name: string; slug?: string }; supabaseUrl: string }) {
@@ -333,24 +494,6 @@ function AdminArtworkImage({ source }: { source: string | null }) {
     : <Boxes size={21} />;
 }
 
-function adminNavigationGroups(categoryTypes: V1AdminSnapshot["categoryTypes"]) {
-  const groups = new Map<string, {
-    key: string;
-    name: string;
-    sortOrder: number;
-    types: V1AdminSnapshot["categoryTypes"];
-  }>();
-  for (const type of categoryTypes) {
-    const section = type.navigationSection ?? { key: "more", name: "More to explore", sortOrder: 999 };
-    const group = groups.get(section.key) ?? { ...section, types: [] };
-    group.types.push(type);
-    groups.set(section.key, group);
-  }
-  return [...groups.values()]
-    .map((group) => ({ ...group, types: [...group.types].sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name)) }))
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
-}
-
 function AdminSkuTile({ sku, supabaseUrl }: { sku: V1AdminCataloguePageSku; supabaseUrl: string }) {
   return <span className="admin-sku-tile">
     <SkuArtwork sku={sku} supabaseUrl={supabaseUrl} />
@@ -362,6 +505,20 @@ function AdminSkuTile({ sku, supabaseUrl }: { sku: V1AdminCataloguePageSku; supa
       <em className={sku.activationReady ? "ready" : "attention"}>{sku.activationReady ? "Verified" : label(sku.qaStatus)}</em>
     </span>
   </span>;
+}
+
+function BulkSkuToolbar({ selectedCount, onArchive, onActivate, onDelete, onClear }: { selectedCount: number; onArchive: () => void; onActivate: () => void; onDelete: () => void; onClear: () => void }) {
+  return <div className="admin-bulk-toolbar" role="region" aria-label="Bulk SKU actions">
+    <strong>{selectedCount ? `${selectedCount} selected` : "Select SKUs for bulk actions"}</strong>
+    {selectedCount ? <><button type="button" className="secondary-button" onClick={onActivate}>Make active</button><button type="button" className="secondary-button" onClick={onArchive}>Archive</button><button type="button" className="secondary-button danger" onClick={onDelete}>Delete permanently</button><button type="button" className="admin-bulk-clear" onClick={onClear}>Clear selection</button></> : <span>Select the checkbox on any product card.</span>}
+  </div>;
+}
+
+function SkuSelectionCard({ sku, selected, onToggle, onOpen, supabaseUrl }: { sku: V1AdminCataloguePageSku; selected: boolean; onToggle: () => void; onOpen: () => void; supabaseUrl: string }) {
+  return <article className={`admin-sku-selection-card${selected ? " selected" : ""}`}>
+    <label className="admin-sku-select"><input type="checkbox" checked={selected} onChange={onToggle} aria-label={`Select ${sku.name}`} /><span aria-hidden="true">{selected ? "✓" : ""}</span></label>
+    <button type="button" className="admin-sku-open" onClick={onOpen}><AdminSkuTile sku={sku} supabaseUrl={supabaseUrl} /><ChevronRight size={18} /></button>
+  </article>;
 }
 
 function SkuEditor({ auth, sku, taxonomy, supabaseUrl, disabled, onSave, onDelete, onCatalogueChanged }: { auth: DastakV1Auth; sku: V1AdminCataloguePageSku; taxonomy?: V1AdminSnapshot; supabaseUrl: string; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void>; onDelete: (sku: V1AdminCataloguePageSku) => Promise<void>; onCatalogueChanged: () => Promise<void> }) {

@@ -317,3 +317,7 @@
 .v1-delivery-bill > header strong { font-size: 20px; color: var(--dastak-accent); }
 .v1-delivery-bill > div { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: 13px; }
 .v1-delivery-bill > div b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.delivery-contact-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.delivery-call-button, .customer-call-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 700; }
+.delivery-call-button.enabled, .customer-call-link { color: var(--dastak-accent); }
+.delivery-call-button.locked { color: var(--text-secondary); opacity: .55; cursor: not-allowed; pointer-events: none; }

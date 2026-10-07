@@ -317,6 +317,8 @@ private struct DastakAdminCatalogueView: View {
     @State private var categoryTypeID: UUID?
     @State private var categoryID: UUID?
     @State private var subcategoryID: UUID?
+    @State private var browseDestinationKey: String?
+    @State private var browseRailKey: String?
     @State private var status: String?
     @State private var qaStatus: String?
     @State private var selectedSKU: DastakAdminCatalogueSKU?
@@ -324,7 +326,11 @@ private struct DastakAdminCatalogueView: View {
 
     var body: some View {
         Group {
-            if let selectedCategory {
+            if let map = model.catalogueBrowseMap,
+               let taxonomy = model.catalogueTaxonomy,
+               trimmedQuery.isEmpty, status == nil, qaStatus == nil {
+                referenceBrowse(map: map, taxonomy: taxonomy)
+            } else if let selectedCategory {
                 selectedCategoryBrowser(selectedCategory)
             } else {
                 ScrollView {
@@ -380,6 +386,86 @@ private struct DastakAdminCatalogueView: View {
             }
             .marketplacePage()
             .presentationDetents([.medium, .large])
+        }
+    }
+
+    private func referenceBrowse(map: DastakV1CatalogueBrowseMap, taxonomy: DastakAdminCatalogueTaxonomy) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                catalogueIntroduction
+                if let destination = map.nodes.first(where: { $0.key == browseDestinationKey && $0.kind == "DESTINATION" }) {
+                    HStack {
+                        Text(destination.label).font(.title2.bold())
+                        Spacer()
+                        Button("All categories") {
+                            browseDestinationKey = nil
+                            browseRailKey = nil
+                        }
+                    }
+                    ScrollView(.horizontal) {
+                        HStack {
+                            Button("All \(destination.label)") { browseRailKey = nil }
+                                .buttonStyle(.bordered)
+                            ForEach(map.children(of: destination.key)) { rail in
+                                Button(rail.label) { browseRailKey = rail.key }
+                                    .buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                    let node = map.children(of: destination.key).first(where: { $0.key == browseRailKey }) ?? destination
+                    let products = referenceProducts(nodeKey: node.key, map: map, taxonomy: taxonomy)
+                    HStack {
+                        Text(node.label).font(.title3.bold())
+                        Spacer()
+                        Text("\(products.count) products").foregroundStyle(.secondary)
+                    }
+                    if products.isEmpty {
+                        ContentUnavailableView("No products here yet", systemImage: "shippingbox")
+                    } else {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: MarketplaceSpacing.compact) {
+                            ForEach(products) { sku in
+                                Button { selectedSKU = sku } label: { AdminCatalogueGridCard(sku: sku) }
+                                    .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(map.children(of: nil)) { section in
+                        Text(section.label).font(.title3.bold())
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: MarketplaceSpacing.compact) {
+                            ForEach(map.children(of: section.key)) { destination in
+                                Button(destination.label) {
+                                    browseDestinationKey = destination.key
+                                    browseRailKey = nil
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 70)
+                                .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 16))
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
+            .padding(MarketplaceSpacing.medium)
+            .padding(.bottom, 132)
+            .frame(maxWidth: .infinity)
+        }
+        .refreshable { await load() }
+    }
+
+    private func referenceProducts(nodeKey: String, map: DastakV1CatalogueBrowseMap, taxonomy: DastakAdminCatalogueTaxonomy) -> [DastakAdminCatalogueSKU] {
+        let browseTaxonomy = DastakV1CatalogueBrowseMap.Taxonomy(
+            typeSlugs: Dictionary(taxonomy.categoryTypes.map { ($0.id, $0.slug) }, uniquingKeysWith: { first, _ in first }),
+            categories: taxonomy.categories.compactMap { category in
+                category.categoryTypeID.map { DastakV1CatalogueBrowseMap.Taxonomy.Category(id: category.id, typeID: $0, slug: category.slug) }
+            },
+            subcategories: taxonomy.subcategories.map {
+                DastakV1CatalogueBrowseMap.Taxonomy.Subcategory(id: $0.id, categoryID: $0.categoryID, slug: $0.slug)
+            }
+        )
+        return model.catalogueBrowseSKUs.filter { sku in
+            guard let categoryID = sku.categoryID, let subcategoryID = sku.subcategoryID else { return false }
+            return map.matches(nodeKey: nodeKey, categoryID: categoryID, subcategoryID: subcategoryID, taxonomy: browseTaxonomy)
         }
     }
 

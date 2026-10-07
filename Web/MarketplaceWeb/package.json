@@ -10,6 +10,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@babylonjs/core": "9.28.0",
+    "@babylonjs/loaders": "9.28.0",
     "@supabase/supabase-js": "^2.52.1",
     "libphonenumber-js": "^1.13.11",
     "lucide-react": "^0.468.0",

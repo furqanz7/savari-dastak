@@ -31,6 +31,8 @@ struct DastakHomeView: View {
     @State private var selectedCategoryTypeID: UUID?
     @State private var selectedCategoryID: UUID?
     @State private var selectedSubcategoryID: UUID?
+    @State private var selectedBrowseDestinationKey: String?
+    @State private var selectedBrowseRailKey: String?
     @State private var homeMode: DastakHomeMode = .grocery
     @State private var isSearchPresented = false
     @FocusState private var isSearchFieldFocused: Bool
@@ -38,7 +40,10 @@ struct DastakHomeView: View {
     var body: some View {
         GeometryReader { _ in
             ZStack(alignment: .top) {
-                if let selectedCategoryType {
+                if let map = model.v1BrowseMap, homeMode == .grocery {
+                    referenceCatalogue(map)
+                        .allowsHitTesting(!isSearchPresented)
+                } else if let selectedCategoryType {
                     selectedDepartmentBrowser(selectedCategoryType)
                         .allowsHitTesting(!isSearchPresented)
                 } else {
@@ -114,6 +119,8 @@ struct DastakHomeView: View {
                     selectedCategoryTypeID = nil
                     selectedCategoryID = nil
                     selectedSubcategoryID = nil
+                    selectedBrowseDestinationKey = nil
+                    selectedBrowseRailKey = nil
                 } label: {
                     VStack(spacing: 3) {
                         Image(systemName: mode.symbol).font(.subheadline.weight(.semibold))
@@ -335,6 +342,96 @@ struct DastakHomeView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func referenceCatalogue(_ map: DastakV1CatalogueBrowseMap) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+                header
+                commerceNavigation
+                if let destination = map.nodes.first(where: { $0.key == selectedBrowseDestinationKey && $0.kind == "DESTINATION" }) {
+                    HStack {
+                        Text(destination.label).font(.title2.bold())
+                        Spacer()
+                        Button("All categories") {
+                            selectedBrowseDestinationKey = nil
+                            selectedBrowseRailKey = nil
+                        }
+                    }
+                    let rails = map.children(of: destination.key)
+                    if !rails.isEmpty {
+                        ScrollView(.horizontal) {
+                            HStack {
+                                Button("All \(destination.label)") { selectedBrowseRailKey = nil }
+                                    .buttonStyle(.bordered)
+                                ForEach(rails) { rail in
+                                    Button(rail.label) { selectedBrowseRailKey = rail.key }
+                                        .buttonStyle(.bordered)
+                                }
+                            }
+                        }
+                    }
+                    let selectedNode = rails.first(where: { $0.key == selectedBrowseRailKey }) ?? destination
+                    let products = referenceProducts(for: selectedNode.key, map: map)
+                    HStack {
+                        Text(selectedNode.label).font(.title3.bold())
+                        Spacer()
+                        Text("\(products.count) products").foregroundStyle(.secondary)
+                    }
+                    if products.isEmpty {
+                        DastakEmptyState(
+                            symbol: "shippingbox",
+                            title: "No products here yet",
+                            message: "Choose another category."
+                        )
+                        .frame(minHeight: 280)
+                    } else {
+                        productGrid(products)
+                    }
+                } else {
+                    ForEach(map.children(of: nil)) { section in
+                        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                            Text(section.label).font(.title3.bold())
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())]) {
+                                ForEach(map.children(of: section.key)) { destination in
+                                    Button {
+                                        selectedBrowseDestinationKey = destination.key
+                                        selectedBrowseRailKey = nil
+                                    } label: {
+                                        Text(destination.label)
+                                            .font(.headline)
+                                            .frame(maxWidth: .infinity, minHeight: 76)
+                                            .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 16))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, MarketplaceSpacing.medium)
+            .padding(.bottom, 148)
+        }
+        .refreshable { await model.refreshV1Catalogue() }
+    }
+
+    private func referenceProducts(for nodeKey: String, map: DastakV1CatalogueBrowseMap) -> [DastakV1CatalogueSKU] {
+        guard let catalogue = model.v1Catalogue, let types = catalogue.categoryTypes else { return [] }
+        let taxonomy = DastakV1CatalogueBrowseMap.Taxonomy(
+            typeSlugs: Dictionary(types.map { ($0.id, $0.slug) }, uniquingKeysWith: { first, _ in first }),
+            categories: catalogue.categories.compactMap { category in
+                category.categoryTypeID.map {
+                    DastakV1CatalogueBrowseMap.Taxonomy.Category(id: category.id, typeID: $0, slug: category.slug)
+                }
+            },
+            subcategories: catalogue.subcategories.map {
+                DastakV1CatalogueBrowseMap.Taxonomy.Subcategory(id: $0.id, categoryID: $0.categoryID, slug: $0.slug)
+            }
+        )
+        return model.v1BrowseProducts.filter {
+            map.matches(nodeKey: nodeKey, categoryID: $0.categoryID, subcategoryID: $0.subcategoryID, taxonomy: taxonomy)
         }
     }
 

@@ -123,6 +123,8 @@ final class DastakOwnerOperationsModel: ObservableObject {
     @Published private(set) var networkPeople: [DastakAdminNetworkPerson] = []
     @Published private(set) var networkHasMore = false
     @Published private(set) var catalogueTaxonomy: DastakAdminCatalogueTaxonomy?
+    @Published private(set) var catalogueBrowseMap: DastakV1CatalogueBrowseMap?
+    @Published private(set) var catalogueBrowseSKUs: [DastakAdminCatalogueSKU] = []
     @Published private(set) var catalogueSKUs: [DastakAdminCatalogueSKU] = []
     @Published private(set) var catalogueHasMore = false
     @Published private(set) var isLoadingNetwork = false
@@ -569,9 +571,31 @@ final class DastakOwnerOperationsModel: ObservableObject {
         defer { isLoadingCatalogue = false }
         do {
             if !append, catalogueTaxonomy == nil {
-                catalogueTaxonomy = try await v1Client.catalogueTaxonomy(
-                    idempotencyKey: key()
-                )
+                let browseMap = try await v1Client.catalogueBrowseMap(idempotencyKey: key())
+                guard browseMap?.isValid != false else { throw DastakV1BrowseLoadError.invalidMap }
+                let taxonomy = try await v1Client.catalogueTaxonomy(idempotencyKey: key())
+                var browseSKUs: [DastakAdminCatalogueSKU] = []
+                if browseMap != nil {
+                    var cursor: DastakAdminCatalogueCursor?
+                    var seenCursors = Set<UUID>()
+                    repeat {
+                        let page = try await v1Client.cataloguePage(
+                            query: nil, categoryTypeID: nil, categoryID: nil, subcategoryID: nil,
+                            status: "ACTIVE", qaStatus: nil, limit: 100, cursor: cursor,
+                            idempotencyKey: key()
+                        )
+                        browseSKUs.append(contentsOf: page.skus)
+                        guard browseSKUs.count <= 10_000 else { throw DastakV1BrowseLoadError.invalidPagination }
+                        guard page.hasMore else { cursor = nil; break }
+                        guard let next = page.nextCursor, seenCursors.insert(next.skuId).inserted else {
+                            throw DastakV1BrowseLoadError.invalidPagination
+                        }
+                        cursor = next
+                    } while cursor != nil
+                }
+                catalogueTaxonomy = taxonomy
+                catalogueBrowseMap = browseMap
+                catalogueBrowseSKUs = browseSKUs
             }
             let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
             let page = try await v1Client.cataloguePage(

@@ -1000,6 +1000,72 @@ export class DastakV1RequestError extends Error {
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+export type V1CatalogueBrowseNode = {
+  key: string;
+  parentKey: string | null;
+  kind: "SECTION" | "DESTINATION" | "RAIL";
+  label: string;
+  sortOrder: number;
+  sources: V1CatalogueBrowseSource[];
+};
+
+export type V1CatalogueBrowseSource = {
+  typeSlug: string;
+  categorySlug: string | null;
+  subcategorySlug: string | null;
+  excludedCategorySlugs: string[];
+  excludedSubcategorySlugs: string[];
+};
+
+export type V1CatalogueBrowseMap = {
+  version: number;
+  nodes: V1CatalogueBrowseNode[];
+};
+
+// Null means the reference map has not passed reconciliation and is not live.
+export async function getV1CatalogueBrowseMap(
+  input: DastakV1Auth & { signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<V1CatalogueBrowseMap | null> {
+  const payload = await invoke(input, "dastak-v1-catalogue", { operation: "catalogueBrowseMap" }, undefined, fetcher);
+  if (payload === null) return null;
+  const source = requiredRecord(payload);
+  const nodes = requiredArray(source.nodes).map((value): V1CatalogueBrowseNode => {
+    const node = requiredRecord(value);
+    const kind = node.kind;
+    if (kind !== "SECTION" && kind !== "DESTINATION" && kind !== "RAIL") invalid("browse node kind");
+    return {
+      key: requiredText(node.key, 120),
+      parentKey: node.parentKey === null ? null : requiredText(node.parentKey, 120),
+      kind,
+      label: requiredText(node.label, 160),
+      sortOrder: requiredInteger(node.sortOrder, 0),
+      sources: requiredArray(node.sources).map((value): V1CatalogueBrowseSource => {
+        const source = requiredRecord(value);
+        return {
+          typeSlug: requiredText(source.typeSlug, 120),
+          categorySlug: source.categorySlug === null ? null : requiredText(source.categorySlug, 120),
+          subcategorySlug: source.subcategorySlug === null ? null : requiredText(source.subcategorySlug, 120),
+          excludedCategorySlugs: requiredArray(source.excludedCategorySlugs).map((slug) => requiredText(slug, 120)),
+          excludedSubcategorySlugs: requiredArray(source.excludedSubcategorySlugs).map((slug) => requiredText(slug, 120)),
+        };
+      }),
+    };
+  });
+  return { version: requiredInteger(source.version, 1), nodes };
+}
+
+export async function getV1CatalogueBrowseSkuIds(
+  input: DastakV1Auth & { nodeKey: string; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<string[]> {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.nodeKey)) invalid("browse node key");
+  const payload = await invoke(input, "dastak-v1-catalogue", {
+    operation: "catalogueBrowseSkuIds", nodeKey: input.nodeKey,
+  }, undefined, fetcher);
+  return requiredArray(payload).map(requiredUuid);
+}
+
 export async function getV1Catalogue(
   input: DastakV1Auth & { query?: string; categoryId?: string; subcategoryId?: string; limit?: number; cursor?: V1CatalogueSnapshot["nextCursor"]; signal?: AbortSignal },
   fetcher: Fetcher = fetch,
@@ -1560,9 +1626,15 @@ export async function updateV1AdminSku(
 }
 
 export async function deleteV1AdminSku(input: DastakV1Auth & { skuId: string; idempotencyKey: string; signal?: AbortSignal }, fetcher: Fetcher = fetch) {
-  const source = record(await invoke(input, "dastak-v1-catalogue", { operation: "deleteAdminCatalogueSku", skuId: requiredUuid(input.skuId) }, input.idempotencyKey, fetcher));
-  if (!source) invalid("SKU deletion response");
-  return source;
+  // The delete RPC is a command: a successful HTTP response is authoritative
+  // even when PostgREST returns its JSONB result as a scalar/string value.
+  // Requiring an object here incorrectly converted successful deletions into
+  // the generic "invalid text" reconciliation state.
+  const payload = await invoke(input, "dastak-v1-catalogue", {
+    operation: "deleteAdminCatalogueSku", skuId: requiredUuid(input.skuId),
+  }, input.idempotencyKey, fetcher);
+  if (payload === undefined || payload === null) invalid("SKU deletion response");
+  return payload;
 }
 
 export async function getV1MerchantCanonicalCatalogue(
@@ -2875,7 +2947,7 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
     categories: categories.map((item) => {
       const category = requiredRecord(item);
       return {
-        categoryId: requiredUuid(category.categoryId),
+        id: requiredUuid(category.categoryId), categoryId: requiredUuid(category.categoryId),
         categoryTypeId: category.categoryTypeId === null || category.categoryTypeId === undefined
           ? undefined : requiredUuid(category.categoryTypeId),
         name: requiredText(category.name, 100),
@@ -2891,7 +2963,7 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
     subcategories: subcategories.map((item) => {
       const subcategory = requiredRecord(item);
       return {
-        subcategoryId: requiredUuid(subcategory.subcategoryId),
+        id: requiredUuid(subcategory.subcategoryId), subcategoryId: requiredUuid(subcategory.subcategoryId),
         categoryId: requiredUuid(subcategory.categoryId),
         name: requiredText(subcategory.name, 100),
         slug: requiredText(subcategory.slug, 120),
@@ -2906,7 +2978,7 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
     skus: skus.map((item) => {
       const sku = requiredRecord(item);
       return {
-        skuId: requiredUuid(sku.skuId),
+        id: requiredUuid(sku.skuId), skuId: requiredUuid(sku.skuId),
         categoryTypeId: sku.categoryTypeId === null || sku.categoryTypeId === undefined
           ? undefined : requiredUuid(sku.categoryTypeId),
         categoryId: requiredUuid(sku.categoryId),

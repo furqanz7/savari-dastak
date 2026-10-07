@@ -5,6 +5,7 @@ export type CustomerDeliveryTracking = {
   missionId: string;
   phase: string;
   riderName: string;
+  riderPhoneNumber?: string;
   transportType?: string;
   location?: { latitude: number; longitude: number };
   recordedAt?: string;
@@ -27,6 +28,7 @@ export function parseCustomerDeliveryTracking(value: unknown): CustomerDeliveryT
   return {
     missionId: source.missionId, phase: source.phase,
     riderName: typeof source.riderName === "string" && source.riderName.trim() ? source.riderName.slice(0, 160) : "Your delivery partner",
+    riderPhoneNumber: typeof source.riderPhoneNumber === "string" && /^\+[1-9][0-9]{7,14}$/.test(source.riderPhoneNumber) ? source.riderPhoneNumber : undefined,
     transportType: typeof source.transportType === "string" ? source.transportType : undefined,
     location: point, recordedAt: timestamp(source.recordedAt), liveUntil: timestamp(source.liveUntil),
     accuracyMeters: typeof source.accuracyMeters === "number" && Number.isFinite(source.accuracyMeters) ? source.accuracyMeters : undefined,
