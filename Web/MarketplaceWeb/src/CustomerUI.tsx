@@ -4,10 +4,11 @@ import type { OrderRealtimeHealth } from "./orderRealtime";
 import { useCustomerOnline } from "./useCustomerOnline";
 
 /** Customer presentation primitives. Network ownership stays with the calling screen. */
-export function CustomerPageHeading({ eyebrow, title, description, children }: {
-  eyebrow: string; title: string; description?: string; children?: ReactNode;
+export function CustomerPageHeading({ eyebrow, title, description, children, headingLevel = 1 }: {
+  eyebrow: string; title: string; description?: string; children?: ReactNode; headingLevel?: 1 | 2;
 }) {
-  return <header className="customer-page-title"><div><p className="customer-eyebrow">{eyebrow}</p><h1>{title}</h1>{description ? <p>{description}</p> : null}</div>{children}</header>;
+  const Heading = headingLevel === 2 ? "h2" : "h1";
+  return <header className="customer-page-title"><div><p className="customer-eyebrow">{eyebrow}</p><Heading>{title}</Heading>{description ? <p>{description}</p> : null}</div>{children}</header>;
 }
 
 export function CustomerNotice({ title, children, onRetry, onDismiss, actionLabel = "Try again", tone = "warning" }: {

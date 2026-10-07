@@ -48,7 +48,7 @@ export function DastakCustomerView(props: Props) {
   return <ExistingDastakCustomerView key={props.accountId} {...props} />;
 }
 
-export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; onReturnToShopping?: () => void; onOpenWishlist?: () => void; onReorder?: (order: V1Order) => void; webPushController?: DastakWebPushController; onProfileChanged?: (profile: AccountProfile) => void }) {
+export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; onReturnToShopping?: () => void; onOpenWishlist?: () => void; onOpenOrders?: (id?: string) => void; onOrderRecordClosed?: () => void; onReorder?: (order: V1Order) => void; webPushController?: DastakWebPushController; onProfileChanged?: (profile: AccountProfile) => void; accountPane?: "profile" | "settings"; onOpenProfile?: () => void; onOpenSettings?: () => void; onViewChange?: (section: CustomerSection) => void }) {
   const online = useCustomerOnline();
   const [orderRefreshToken, setOrderRefreshToken] = useState(0);
   const [homeResetToken, setHomeResetToken] = useState(0);
@@ -57,6 +57,8 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
       : parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
   );
   const section = destination.section;
+  const onViewChange = props.onViewChange;
+  useEffect(() => { onViewChange?.(section); }, [section, onViewChange]);
   const v1Section = section === "search" || section === "orders" || section === "wishlist" || section === "payments"
     ? section
     : "home";
@@ -110,6 +112,7 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
   }, [navigate, props.embedded]);
 
   const navigateSection = (nextSection: CustomerSection) => {
+    if (props.embedded && nextSection === "orders" && props.onOpenOrders) { props.onOpenOrders(); return; }
     if (props.embedded && nextSection === "wishlist" && props.onOpenWishlist) { props.onOpenWishlist(); return; }
     if (props.embedded && nextSection === "home") { props.onReturnToShopping?.(); return; }
     if (nextSection === "home") setHomeResetToken((current) => current + 1);
@@ -151,13 +154,15 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
           section={v1Section}
           onNavigate={navigateSection}
           onOpenParcel={() => navigate({ section: "parcel" })}
-          onOpenOrder={(orderId) => navigate({
-            section: "orders", entityType: "dastakV1Order", entityId: orderId,
-          })}
-          onCloseOrder={() => navigate({ section: "orders" })}
+          onOpenOrder={(orderId) => {
+            if (props.embedded && props.initialSection !== "orders" && props.onOpenOrders) props.onOpenOrders(orderId);
+            else navigate({ section: "orders", entityType: "dastakV1Order", entityId: orderId });
+          }}
+          onCloseOrder={() => { navigate({ section: "orders" }); props.onOrderRecordClosed?.(); }}
           onSessionExpired={props.onSignOut}
           onOrderAgainInExisting={props.embedded ? () => { window.location.href = existingCustomerUrl("orders", window.location.href); } : undefined}
           onReorderInReimagined={props.onReorder}
+          presentation={props.embedded ? "reimagined" : undefined}
         />
       </div> : null}
       {section === "account" && <div className="customer-view">

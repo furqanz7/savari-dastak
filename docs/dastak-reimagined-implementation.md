@@ -6,6 +6,12 @@ Reimagined is the Customer experience over the existing Dastak platform. Custome
 
 ## Real-time Grocery scene — local prototype, 2026-09-30
 
+### Dedicated account and order workspaces — 2026-10-08
+
+- Separated Profile and Settings using explicit account-pane presentation with shared established handlers, and adapted Orders/payment history to the Reimagined panel. Order details/tracking/receipts/support are inline regions rather than blocking full-screen sheets; other confirmations remain modal. Cross-view order selection, payment titles and Back navigation retain account/cart boundaries.
+- Fixed old sheet margins, short-phone minimum width and filter sizing. Full suite: 797 passed. TypeScript, lint, whitespace and production build passed. Synthetic static browser preview covered 390×844 and 320×568, with corrected overflow and no captured console errors. The actual background/staff and all backend/payment logic are unchanged.
+- Full scope/evidence/limitations: `docs/dastak-reimagined-workspaces.md`. Local only: no push/deployment/migration or live account/order/payment/support mutation. No subagents or paid generation.
+
 ### Previous-Customer feature restoration — 2026-10-07
 
 - Added native Wishlist/Save controls, exact product galleries/facts/unit prices/sharing and automatic genuine pack-family choices. Existing Wishlist IDs and APIs are used; unresolved saved identities stay visible. Added native Location/checkout address sheets, safe retries, Food quantity editing, notification onboarding, profile-to-recipient updates and checkout-to-Orders links.

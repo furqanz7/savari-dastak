@@ -5,6 +5,9 @@ const css = readFileSync(new URL("./design/reimagined.css", import.meta.url), "u
 const phone = css.slice(css.indexOf("/* Phone controls use full-width rows"));
 
 describe("Reimagined responsive layout safeguards", () => {
+  it("does not inherit the old page minimum width when a short phone needs a scrollbar", () => {
+    expect(css).toMatch(/body:has\(\.reimagined\) \{ min-width: 0; \}/);
+  });
   it("contains home and Food tracks in a shrinkable grid column", () => {
     for (const selector of ["reimagined-grocery-home", "reimagined-food"]) {
       expect(css).toMatch(new RegExp(`\\.${selector} \\{[^}]*grid-template-columns: minmax\\(0, 1fr\\)`));

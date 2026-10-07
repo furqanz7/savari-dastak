@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DastakCustomerView, ExistingDastakCustomerView } from "./DastakCustomerView";
 import { DastakV1CustomerExperience } from "./DastakV1CustomerExperience";
 import { ReimaginedCustomerRoot } from "./ReimaginedCustomerRoot";
+import { CatalogueView } from "./CatalogueView";
+vi.mock("./CatalogueView", () => ({ CatalogueView: vi.fn(() => <p>Operational account controller</p>) }));
 vi.mock("./DastakV1CustomerExperience", () => ({ DastakV1CustomerExperience: vi.fn(() => <p>Existing catalogue</p>) }));
 vi.mock("./ReimaginedCustomerRoot", () => ({ ReimaginedCustomerRoot: vi.fn(() => <p>Authenticated Reimagined root</p>) }));
 vi.mock("./orderRealtime", () => ({ useOrderRealtime: () => "subscribed" }));
@@ -40,8 +42,27 @@ describe("customer entry ownership", () => {
     host = document.createElement("div"); document.body.append(host); root = createRoot(host);
     const orderId = "11111111-1111-4111-8111-111111111111";
     await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="orders" initialOrderId={orderId} />));
-    expect(DastakV1CustomerExperience).toHaveBeenCalledWith(expect.objectContaining({ section: "orders", initialOrderId: orderId, onOrderAgainInExisting: expect.any(Function) }), undefined);
+    expect(DastakV1CustomerExperience).toHaveBeenCalledWith(expect.objectContaining({ section: "orders", initialOrderId: orderId, onOrderAgainInExisting: expect.any(Function), presentation: "reimagined" }), undefined);
     expect(host.querySelector('[aria-label="Dastak"]')).toBeNull();
     expect(window.location.hash).toBe("");
+  });
+  it("routes account shortcuts through global Reimagined Orders while retaining the selected pane", async () => {
+    window.history.replaceState(null, "", "/?reimagined=1"); vi.stubGlobal("scrollTo", vi.fn());
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    const onOpenOrders = vi.fn(); const onViewChange = vi.fn();
+    await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="account" accountPane="settings" onOpenOrders={onOpenOrders} onViewChange={onViewChange} />));
+    const account = vi.mocked(CatalogueView).mock.calls.at(-1)![0];
+    expect(account.accountPane).toBe("settings"); expect(onViewChange).toHaveBeenCalledWith("account");
+    act(() => account.onNavigate("orders")); expect(onOpenOrders).toHaveBeenCalledOnce();
+    expect(window.location.hash).toBe("");
+  });
+  it("hands a payment-history selection to the global Orders record without changing URL state", async () => {
+    window.history.replaceState(null, "", "/?reimagined=1"); vi.stubGlobal("scrollTo", vi.fn());
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    const onOpenOrders = vi.fn();
+    await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="payments" onOpenOrders={onOpenOrders} />));
+    const experience = vi.mocked(DastakV1CustomerExperience).mock.calls.at(-1)![0];
+    act(() => experience.onOpenOrder("11111111-1111-4111-8111-111111111111"));
+    expect(onOpenOrders).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111"); expect(window.location.hash).toBe("");
   });
 });

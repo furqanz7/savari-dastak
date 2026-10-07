@@ -12,9 +12,11 @@ type ModalDialogOptions = {
   initialFocus?: RefObject<HTMLElement | null>;
   /** Admin record editors may open a separate governed confirmation above them. */
   layered?: boolean;
+  /** Inline panels must not trap focus or lock the surrounding application. */
+  enabled?: boolean;
 };
 
-export function useModalDialog<T extends HTMLElement = HTMLElement>({ busy = false, onDismiss, initialFocus, layered = false }: ModalDialogOptions) {
+export function useModalDialog<T extends HTMLElement = HTMLElement>({ busy = false, onDismiss, initialFocus, layered = false, enabled = true }: ModalDialogOptions) {
   const dialog = useRef<T>(null);
   const busyState = useRef(busy);
   const dismiss = useRef(onDismiss);
@@ -22,6 +24,7 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({ busy = fal
   dismiss.current = onDismiss;
 
   useEffect(() => {
+    if (!enabled) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     const originalOverflow = document.body.style.overflow;
     const isolated = isolateDialog(dialog.current, layered);
@@ -84,7 +87,7 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({ busy = fal
       });
       opener?.focus();
     };
-  }, [initialFocus, layered]);
+  }, [initialFocus, layered, enabled]);
 
   return dialog;
 }

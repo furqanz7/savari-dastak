@@ -24,6 +24,8 @@ import {
   Phone,
   ReceiptText,
   RefreshCw,
+  Settings,
+  UserRound,
   Search,
   ShieldAlert,
   ShoppingBag,
@@ -133,6 +135,9 @@ type Props = {
   onOpenParcel: () => void;
   onSignOut: () => void;
   onProfileChanged?: (profile: AccountProfile) => void;
+  accountPane?: "profile" | "settings";
+  onOpenProfile?: () => void;
+  onOpenSettings?: () => void;
   legalLinks?: { privacy: string; terms: string; support: string };
   webPush?: DastakWebPushController;
   deliveryPartnerUrl: string;
@@ -262,6 +267,9 @@ export function CatalogueView({
   deliveryPartnerUrl,
   merchantUrl,
   onProfileChanged,
+  accountPane,
+  onOpenProfile,
+  onOpenSettings,
 }: Props) {
   const auth = useMemo(() => ({ accessToken, supabaseUrl, publishableKey }), [accessToken, publishableKey, supabaseUrl]);
   const [initialDiscovery] = useState(savedCustomerDiscovery);
@@ -1108,19 +1116,17 @@ export function CatalogueView({
       )}
 
       {section === "account" && (
-        <section className="customer-account">
+        <section className="customer-account" data-account-pane={accountPane} aria-label={accountPane === "profile" ? "Your profile" : accountPane === "settings" ? "Your settings" : "Your account"}>
           <header className="customer-page-heading customer-account-heading">
-            <p className="eyebrow">Account</p>
-            <h1>Your Dastak</h1>
-            <p>Your details, saved places and account controls—kept together and protected.</p>
+            {accountPane ? <><p className="eyebrow">{accountPane === "profile" ? "PERSONAL DETAILS" : "PREFERENCES & SECURITY"}</p><h2>{accountPane === "profile" ? "Your details, in one place." : "Make Dastak work for you."}</h2><p>{accountPane === "profile" ? "Keep your delivery details and saved places ready for your next order." : "Control alerts, sign-ins, privacy and support without leaving the store."}</p></> : <><p className="eyebrow">Account</p><h1>Your Dastak</h1><p>Your details, saved places and account controls—kept together and protected.</p></>}
           </header>
-          <CustomerProfileCard initials={accountInitials} displayName={accountProfile.displayName}
+          {accountPane !== "settings" ? <CustomerProfileCard initials={accountInitials} displayName={accountProfile.displayName}
             phoneNumber={accountProfile.phoneNumber} email={email} onEdit={() => setProfileEditorOpen(true)}
             signInLabel={customerIdentities.length > 0
                 ? `${customerIdentities.map((identity) => identity.provider === "apple" ? "Apple" : "Google").join(" + ")} sign-in`
-                : "Secure sign-in"} savedPlaceCount={savedAddresses.length} />
+                : "Secure sign-in"} savedPlaceCount={savedAddresses.length} /> : null}
 
-          <section className="customer-account-group" aria-labelledby="account-delivery-title">
+          {accountPane !== "settings" ? <section className="customer-account-group" aria-labelledby="account-delivery-title">
             <div className="customer-account-section-heading"><div><h2 id="account-delivery-title">Saved places</h2><small>Your default doorstep for checkout</small></div><span>{savedAddresses.length}/10</span></div>
             <button className="customer-saved-place" type="button" onClick={() => { setReviewAfterAddress(false); setAddressBookOpen(true); }} disabled={addressLoading}>
               <span className="customer-account-icon"><MapPin size={20} /></span>
@@ -1128,9 +1134,9 @@ export function CatalogueView({
               <span className="customer-saved-place-action">Manage<ChevronRight size={17} /></span>
             </button>
             {addressError && <small className="error-text customer-account-error">{addressError}</small>}
-          </section>
+          </section> : null}
 
-          <section className="customer-account-group" aria-labelledby="account-shopping-title">
+          {accountPane !== "settings" ? <section className="customer-account-group" aria-labelledby="account-shopping-title">
             <div className="customer-account-section-heading"><div><h2 id="account-shopping-title">Shopping</h2><small>Saved items, payments and order history</small></div></div>
             <div className="customer-account-rows">
               <button className="customer-account-row" type="button" onClick={() => onNavigate("wishlist")}>
@@ -1143,9 +1149,9 @@ export function CatalogueView({
                 <ReceiptText size={20} /><span><strong>Orders and receipts</strong><small>Track, reorder, download receipts and get help</small></span><ChevronRight size={18} />
               </button>
             </div>
-          </section>
+          </section> : null}
 
-          <section className="customer-account-group" aria-labelledby="account-preferences-title">
+          {accountPane !== "profile" ? <section className="customer-account-group" aria-labelledby="account-preferences-title">
             <div className="customer-account-section-heading"><div><h2 id="account-preferences-title">Preferences</h2><small>How Dastak works on this device</small></div></div>
             <div className="customer-account-rows">
               <button
@@ -1163,9 +1169,9 @@ export function CatalogueView({
                 <b>{webPushPresentation(webPush).label}</b>
               </button>
             </div>
-          </section>
+          </section> : null}
 
-          <section className="customer-account-group" aria-labelledby="account-support-title">
+          {accountPane !== "profile" ? <section className="customer-account-group" aria-labelledby="account-support-title">
             <div className="customer-account-section-heading"><div><h2 id="account-support-title">Help and safety</h2><small>Support, policies and emergency help</small></div></div>
             <div className="customer-account-rows">
               <button className="customer-account-row" type="button" onClick={() => onNavigate("orders")}>
@@ -1178,9 +1184,9 @@ export function CatalogueView({
                 <ShieldAlert size={20} /><span><strong>Emergency assistance</strong><small>Call India emergency services</small></span><ChevronRight size={18} />
               </a>
             </div>
-          </section>
+          </section> : null}
 
-          <section className="customer-account-group" aria-labelledby="account-privacy-title">
+          {accountPane !== "profile" ? <section className="customer-account-group" aria-labelledby="account-privacy-title">
             <div className="customer-account-section-heading"><div><h2 id="account-privacy-title">Account and data</h2><small>Identity, sessions, privacy and access</small></div></div>
             <div className="customer-account-rows">
               {legalLinks?.privacy ? <a className="customer-account-row customer-privacy-row" href={legalLinks.privacy} target="_blank" rel="noreferrer">
@@ -1234,9 +1240,9 @@ export function CatalogueView({
                 <Trash2 size={20} /><span><strong>Delete Customer</strong><small>Remove only your Customer profile and access</small></span><ChevronRight size={18} />
               </button>
             </div>
-          </section>
+          </section> : null}
 
-          <section className="customer-account-group customer-earn-section" aria-labelledby="account-sell-title">
+          {accountPane !== "settings" ? <section className="customer-account-group customer-earn-section" aria-labelledby="account-sell-title">
             <div className="customer-account-section-heading">
               <div><h2 id="account-sell-title">{merchantAccountPresentation.sectionTitle}</h2><small>{merchantAccountPresentation.sectionDetail}</small></div>
               {merchantAccountPresentation.status ? <span className={`customer-partner-status ${merchantAccountPresentation.tone}`}>{merchantAccountPresentation.status}</span> : null}
@@ -1249,9 +1255,9 @@ export function CatalogueView({
               </span>
               {merchantAccountState === "loading" ? <RefreshCw className="customer-partner-loading" size={18} /> : merchantAccountState === "not_applied" ? <ArrowUpRight size={19} /> : <ChevronRight size={19} />}
             </a>
-          </section>
+          </section> : null}
 
-          <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">
+          {accountPane !== "settings" ? <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">
             <div className="customer-account-section-heading">
               <div><h2 id="account-earn-title">{partnerAccountPresentation.sectionTitle}</h2><small>One account, a separate partner workspace</small></div>
               {partnerAccountPresentation.status && (
@@ -1277,8 +1283,10 @@ export function CatalogueView({
                   ? <ArrowUpRight size={19} />
                   : <ChevronRight size={19} />}
             </a>
-          </section>
+          </section> : null}
           {profileError && !profileEditorOpen && <p className="error-text" role="alert">{profileError}</p>}
+          {accountPane === "profile" && onOpenSettings ? <button className="reimagined-account-switch" type="button" onClick={onOpenSettings}><Settings size={19} />Open Settings</button> : null}
+          {accountPane === "settings" && onOpenProfile ? <button className="reimagined-account-switch" type="button" onClick={onOpenProfile}><UserRound size={19} />Edit your Profile</button> : null}
         </section>
       )}
       {addressBookOpen && <CustomerAddressBookSheet

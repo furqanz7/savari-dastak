@@ -84,6 +84,7 @@ type Props = DastakV1Auth & {
   // mounting a second cart writer inside the Reimagined session.
   onOrderAgainInExisting?: () => void;
   onReorderInReimagined?: (order: V1Order) => void;
+  presentation?: "reimagined";
 };
 
 type Cart = RetailCart;
@@ -187,6 +188,22 @@ export function DastakV1CustomerExperience(props: Props) {
   const addressController = useRef<AbortController | undefined>(undefined);
   const ordersController = useRef<AbortController | undefined>(undefined);
   const selectedOrderId = selectedOrder?.id;
+  const orderReturn = useRef<{ opener?: HTMLElement; scroller?: HTMLElement; scrollTop: number } | undefined>(undefined);
+  useEffect(() => {
+    if (selectedOrderId || props.presentation !== "reimagined" || !orderReturn.current) return;
+    const previous = orderReturn.current; orderReturn.current = undefined;
+    if (previous.opener?.isConnected) previous.opener.focus({ preventScroll: true });
+    if (previous.scroller?.isConnected) previous.scroller.scrollTop = previous.scrollTop;
+  }, [selectedOrderId, props.presentation]);
+  function openOrderRecord(order: V1Order) {
+    if (props.presentation === "reimagined") {
+      const opener = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+      const scroller = opener?.closest<HTMLElement>(".reimagined-panel-content") ?? undefined;
+      orderReturn.current = { opener, scroller, scrollTop: scroller?.scrollTop ?? 0 };
+    }
+    setSelectedOrder(order); setOrderActionError(undefined); setLiveOrderError(undefined);
+    props.onOpenOrder(order.id);
+  }
   const selectedOrderStatus = selectedOrder?.status;
   const onCloseOrder = props.onCloseOrder;
   const onSessionExpired = props.onSessionExpired;
@@ -874,6 +891,7 @@ export function DastakV1CustomerExperience(props: Props) {
 
   if (showingLaunchPayment && selectedOrder) {
     return <LaunchPaymentScreen
+      presentation={props.presentation}
       auth={auth}
       order={selectedOrder}
       onSessionExpired={props.onSessionExpired}
@@ -890,7 +908,8 @@ export function DastakV1CustomerExperience(props: Props) {
     />;
   }
 
-  return <div className="v1-customer-shell">
+  return <div className="v1-customer-shell" data-presentation={props.presentation}>
+    <div hidden={Boolean(selectedOrder) && props.presentation === "reimagined"} inert={Boolean(selectedOrder) && props.presentation === "reimagined"}>
     {!props.onOrderAgainInExisting ? <CustomerHeader address={defaultAddress} count={cartCount} onAddress={() => addresses.length ? setShowingAddressBook(true) : setEditingAddress(null)} onSearch={() => props.onNavigate("search")} onCart={() => setShowingCart(true)} /> : null}
     {props.section === "search" || props.section === "wishlist" || props.section === "payments" ? <button className="customer-back-link" type="button" onClick={() => props.onNavigate(props.section === "search" ? "home" : "account")}><ArrowLeft size={17} />{props.section === "search" ? "Home" : "Account"}</button> : null}
     {error && !showingCart && editingAddress === undefined && !showingAddressBook ? <CustomerNotice title="We couldn’t complete that action" onDismiss={() => setError(undefined)}>{error}</CustomerNotice> : null}
@@ -967,14 +986,15 @@ export function DastakV1CustomerExperience(props: Props) {
       onChooseFood={(restaurant) => setSelectedRestaurant(restaurant)}
       onRemove={(kind, itemId) => void toggleWishlist(kind, itemId)}
     /> : props.section === "payments" ? <PaymentsSection
+      presentation={props.presentation}
       orders={orders}
       loading={loadingOrders}
       onRefresh={() => void refreshOrders()}
       onOpen={(order) => {
-        setSelectedOrder(order);
-        props.onOpenOrder(order.id);
+        openOrderRecord(order);
       }}
     /> : <OrdersSection
+      presentation={props.presentation}
       imageUrlForLine={imageUrlForLine}
       orders={orders}
       loading={loadingOrders}
@@ -988,10 +1008,7 @@ export function DastakV1CustomerExperience(props: Props) {
       onLoadMore={() => void loadMoreOrders()}
       onReorder={requestReorder}
       onOpen={(order) => {
-        setSelectedOrder(order);
-        setOrderActionError(undefined);
-        setLiveOrderError(undefined);
-        props.onOpenOrder(order.id);
+        openOrderRecord(order);
       }}
     />}
 
@@ -1014,7 +1031,9 @@ export function DastakV1CustomerExperience(props: Props) {
       wishlistUpdatingIds={wishlistUpdatingIds}
       onWishlist={(itemId) => void toggleWishlist("MENU_ITEM", itemId)}
     />}
+    </div>
     {selectedOrder && <MatchingSheet
+      presentation={props.presentation === "reimagined" ? "panel" : "modal"}
       order={selectedOrder} busy={busy} error={orderActionError} liveError={liveOrderError}
       paymentMessage={paymentMessage}
       imageUrlForLine={imageUrlForLine}
@@ -1604,12 +1623,13 @@ function WishlistSection({
   </section>;
 }
 
-function LaunchPaymentScreen({ auth, order, onDismiss, onCommitted, onSessionExpired }: {
+function LaunchPaymentScreen({ auth, order, onDismiss, onCommitted, onSessionExpired, presentation }: {
   auth: DastakV1Auth;
   order: V1Order;
   onDismiss: () => void;
   onCommitted: (order: V1Order) => void;
   onSessionExpired: () => void;
+  presentation?: "reimagined";
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [state, setState] = useState<"ready" | "confirming" | "committed" | "failure">("ready");
@@ -1650,9 +1670,9 @@ function LaunchPaymentScreen({ auth, order, onDismiss, onCommitted, onSessionExp
     }
   };
 
-  return <div className="v1-launch-payment-page">
+  return <div className="v1-launch-payment-page" data-presentation={presentation}>
     <section className="v1-launch-payment-card" aria-labelledby="launch-payment-title">
-      <header><button type="button" onClick={onDismiss} disabled={state === "confirming"} aria-label="Back to order"><X size={19} /></button><div><p>SECURED CHECKOUT</p><h1 id="launch-payment-title">Confirm your order</h1></div></header>
+      <header><button type="button" onClick={onDismiss} disabled={state === "confirming"} aria-label="Back to order"><X size={19} /></button><div><p>SECURED CHECKOUT</p>{presentation === "reimagined" ? <h2 id="launch-payment-title">Confirm your order</h2> : <h1 id="launch-payment-title">Confirm your order</h1>}</div></header>
       <div className="v1-launch-payment-total"><span><small>YOUR ORDER TOTAL</small><strong>{formatV1Price(order.launchPayment?.amountPaise ?? order.price.totalPaise)}</strong></span><ShieldCheck size={27} /></div>
       <section className="v1-launch-payment-reservation"><PackageCheck size={21} /><span><strong>{expired ? "Reservation expired" : "Your full basket is secured"}</strong><small>{expired ? "Return to your order to see the latest status." : `${formatDuration(secondsRemaining)} remaining to confirm`}</small></span></section>
       <section className="v1-launch-payment-address"><MapPin size={20} /><span><small>DELIVER TO</small><strong>{orderAddress(order)}</strong></span></section>
@@ -1665,16 +1685,17 @@ function LaunchPaymentScreen({ auth, order, onDismiss, onCommitted, onSessionExp
   </div>;
 }
 
-function PaymentsSection({ orders, loading, onRefresh, onOpen }: {
+export function PaymentsSection({ orders, loading, onRefresh, onOpen, presentation }: {
   orders: V1Order[];
   loading: boolean;
   onRefresh: () => void;
   onOpen: (order: V1Order) => void;
+  presentation?: "reimagined";
 }) {
   const paid = orders.filter((order) => order.launchPayment?.state === "PAYMENT_COLLECTED" || Boolean(order.paidAt));
   return <section className="v1-payments-page">
     <header className="v1-feature-header">
-      <div><p>PAYMENTS</p><h1>Pay at your doorstep</h1><span>Confirm after Dastak secures your full basket. Pay the delivery partner by UPI or cash—there is no charge now.</span></div>
+      <div><p>PAYMENTS</p>{presentation === "reimagined" ? <h2>Pay at your doorstep</h2> : <h1>Pay at your doorstep</h1>}<span>Confirm after Dastak secures your full basket. Pay the delivery partner by UPI or cash—there is no charge now.</span></div>
       <button type="button" onClick={onRefresh} disabled={loading}><RefreshCw size={17} className={loading ? "spinning" : ""} /> Refresh</button>
     </header>
     <section className="v1-payment-security"><LockKeyhole size={26} /><div><strong>Pay via UPI/Cash on Delivery</strong><span>Your delivery partner records the exact amount as collected before delivery is completed.</span></div></section>
@@ -1690,7 +1711,7 @@ type OrderScope = "active" | "past";
 
 export function OrdersSection({
   orders, loading, loadingMore, canLoadMore, error, imageUrlForLine,
-  onRefresh, onLoadMore, onOpen, onReorder, onSessionExpired, realtimeHealth, onShop,
+  onRefresh, onLoadMore, onOpen, onReorder, onSessionExpired, realtimeHealth, onShop, presentation,
 }: {
   orders: V1Order[];
   loading: boolean;
@@ -1705,6 +1726,7 @@ export function OrdersSection({
   onSessionExpired: () => void;
   realtimeHealth?: OrderRealtimeHealth;
   onShop?: () => void;
+  presentation?: "reimagined";
 }) {
   const [scope, setScope] = useState<OrderScope>("active");
   const scopeWasChosen = useRef(false);
@@ -1722,7 +1744,7 @@ export function OrdersSection({
   }, [activeCount, orders.length]);
 
   return <section className="v1-orders-page">
-    <CustomerPageHeading eyebrow="YOUR DASTAK" title="Orders" description="From your first pick to your doorstep. Follow it all here."><CustomerSyncStatus health={realtimeHealth} refreshing={loading} failed={Boolean(error)} /></CustomerPageHeading>
+    <CustomerPageHeading eyebrow="YOUR DASTAK" title="Orders" description="From your first pick to your doorstep. Follow it all here." headingLevel={presentation === "reimagined" ? 2 : 1}><CustomerSyncStatus health={realtimeHealth} refreshing={loading} failed={Boolean(error)} /></CustomerPageHeading>
     <div className="v1-order-scopes" role="group" aria-label="Filter orders">
       {(["active", "past"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => { scopeWasChosen.current = true; setScope(value); }}><span>{value[0].toUpperCase() + value.slice(1)}</span><small>{value === "active" ? activeCount : orders.length - activeCount}</small></button>)}
     </div>
@@ -1767,7 +1789,7 @@ function OrderJourneyProgress({ status, arrived = false, compact = false }: {
 
 export function MatchingSheet({
   order, busy, error, liveError, paymentMessage, onDismiss, onCancel, onPay,
-  imageUrlForLine, onRefresh, onReportIssue, onReorder,
+  imageUrlForLine, onRefresh, onReportIssue, onReorder, presentation = "modal",
 }: {
   order: V1Order;
   busy: boolean;
@@ -1779,12 +1801,19 @@ export function MatchingSheet({
   onCancel: () => void;
   onPay: () => void;
   onReorder: () => void;
+  presentation?: "modal" | "panel";
   onRefresh: () => void;
   onReportIssue: (input: {
     category: string; description: string; orderLineId?: string; evidenceFile?: File;
   }) => Promise<boolean>;
 }) {
-  const dialog = useModalDialog<HTMLElement>({ busy, onDismiss });
+  const dialog = useModalDialog<HTMLElement>({ busy, onDismiss, enabled: presentation === "modal" });
+  useEffect(() => {
+    if (presentation !== "panel") return;
+    dialog.current?.focus({ preventScroll: true });
+    const scroller = dialog.current?.closest<HTMLElement>(".reimagined-panel-content");
+    if (scroller) scroller.scrollTop = 0;
+  }, [order.id, presentation, dialog]);
   const matching = matchingStatuses.has(order.status);
   const paid = Boolean(order.paidAt);
   const launchPayment = order.launchPayment;
@@ -1817,8 +1846,10 @@ export function MatchingSheet({
     (readyAt && Date.parse(readyAt) < now));
   const arrived = customerRiderArrived(order);
 
-  return <div className="v1-overlay" role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-matching-sheet" role="dialog" aria-modal="true" aria-labelledby="v1-order-status-title">
-    <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">Order status</h2><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)} · {formatOrderDate(order.submittedAt ?? order.createdAt)}</small></div><button type="button" onClick={onDismiss} aria-label="Close order status"><X size={19} /></button></header>
+  return <div className={presentation === "panel" ? "reimagined-order-record" : "v1-overlay"} role="presentation"><section ref={dialog} tabIndex={-1} className="v1-sheet v1-matching-sheet" role={presentation === "panel" ? "region" : "dialog"} aria-modal={presentation === "modal" ? true : undefined} aria-labelledby="v1-order-status-title" onKeyDown={event => {
+    if (presentation === "panel" && event.key === "Escape" && !busy && !confirmingCancellation && !reportingIssue) { event.preventDefault(); onDismiss(); }
+  }}>
+    <header><div><p>{order.displayOrderNumber}</p><h2 id="v1-order-status-title">{presentation === "panel" ? "Order details" : "Order status"}</h2><small>{order.restaurant?.name ?? orderKindLabel(order.orderType)} · {formatOrderDate(order.submittedAt ?? order.createdAt)}</small></div><button type="button" onClick={onDismiss} aria-label={presentation === "panel" ? "Back to Orders" : "Close order status"}>{presentation === "panel" ? <><ArrowLeft size={18} />Back</> : <X size={19} />}</button></header>
     <div className={`v1-status-hero ${isFailureStatus(order.status) ? "failure" : ""}`}><span className={matching ? "matching" : ""}>{matching ? <i /> : <OrderStatusIcon status={order.status} size={25} />}</span><div><header><h3>{deliveredDurationLabel(order) ?? (arrived ? "Your rider has arrived" : statusTitle(order.status))}</h3><strong>{formatV1Price(order.price.totalPaise)}</strong></header><p>{arrived ? "Your delivery partner is at the destination. Check every package before sharing your delivery PIN." : statusMessage(order.status)}</p></div>{isV1OrderActive(order.status) ? <OrderJourneyProgress status={order.status} arrived={arrived} /> : null}<small className="v1-order-assurance"><ShieldCheck size={16} /> {statusAssurance(order.status)}</small></div>
 
     {(order.status === "PAID" || order.status === "PREPARING") && readyAt ? <section className={`v1-order-eta ${runningLate ? "late" : ""}`} aria-label="Preparation estimate"><ClockAlert size={21} /><span><strong>{runningLate ? "Taking a little longer" : "Preparation estimate"}</strong><small>{runningLate ? "Your order stays in preparation until it is genuinely ready." : `Expected around ${formatOrderTime(readyAt)}`}</small></span><b>{runningLate ? "We’re watching" : relativeTime(readyAt, now)}</b></section> : null}
