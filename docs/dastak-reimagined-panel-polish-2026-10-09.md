@@ -33,3 +33,9 @@ Proofs: `docs/verification/dastak-panel-polish-2026-10-09/` contains orders-sing
 ## Boundaries
 
 These fixes are **not deployed**. No real cart, account, stock, order or payment changes were made. Background/staff redesign and SKU work remain paused. The owner did not identify a particular failing account write; this pass fixes the concrete reproduced/source-tested defects, not an unsupported claim that every possible Profile/Settings bug is eliminated. Physical phone keyboard, authenticated saves and destructive account controls remain untested.
+
+## Release follow-up: layout boundary discovered live
+
+The owner subsequently approved release. Commit `cde15ae` was deployed and live checks confirmed one Orders title, Settings-to-Profile scroll reset and Payments-to-Profile navigation. The same check exposed a further layout-boundary defect: external cart/storage/retry messages shifted the shell down (89px in the checked phone view), while legacy container padding changed when an account workspace mounted. The phone wordmark could sit behind navigation.
+
+Moved these notices into the scrollable panel, showing cart-ownership notices in shopping rather than unrelated account screens. Added stable authenticated Reimagined container overrides so loading legacy account CSS cannot change the shell's position or width. Existing ownership/order guards and retry callbacks are unchanged. Added component and CSS regression tests. The production release receipt will record verification of this follow-up; the preceding local-only boundary describes the original implementation pass, not the final release status.

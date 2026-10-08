@@ -60,6 +60,15 @@ beforeEach(() => {
 });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("contains storage and recovery notices inside the panel rather than shifting the shell", () => {
+    vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: undefined, activeCount: 0, error: new Error("Synthetic tracking failure"), storageIssue: "Synthetic tracking storage issue", label: "", retry: vi.fn() });
+    mount();
+    const status = [...host.querySelectorAll('[role="status"]')].find(element => element.textContent === "Synthetic tracking storage issue")!;
+    expect(status.closest('.reimagined-panel-content')).not.toBeNull();
+    expect([...host.children].some(element => element.matches('p[role="status"], button'))).toBe(false);
+    click("Settings");
+    expect([...host.querySelectorAll('p')].find(element => element.textContent === "Synthetic tracking storage issue")?.closest('.reimagined-panel-content')).not.toBeNull();
+  });
   it("never signs out when background active-order discovery denies access", () => {
     vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: undefined, activeCount: 0, error: { status: 403 } as unknown as Error, storageIssue: undefined, label: "", retry: vi.fn() });
     mount();

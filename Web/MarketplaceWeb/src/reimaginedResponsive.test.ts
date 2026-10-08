@@ -5,6 +5,10 @@ const css = readFileSync(new URL("./design/reimagined.css", import.meta.url), "u
 const phone = css.slice(css.indexOf("/* Preserve the brief's spatial model on phones"));
 
 describe("Reimagined responsive layout safeguards", () => {
+  it("keeps authenticated shell layout independent of legacy account-screen mounting", () => {
+    expect(css).toMatch(/\.app\.variant-dastak-customer:has\(\.reimagined\[data-authenticated="true"\]\) \{ padding: 0; background: transparent; \}/);
+    expect(css).toMatch(/\.content\.workspace-content:has\(\.reimagined\[data-authenticated="true"\]\) \{[^}]*max-width: none;[^}]*padding: 0; margin: 0/);
+  });
   it("keeps legacy workspaces and body-portalled dialogs readable on light glass in system dark mode", () => {
     expect(css).toMatch(/\.reimagined \.customer-workspace, \.reimagined-address-modal\.customer-experience \{[^}]*color-scheme: light;[^}]*--text-primary: #28231d;[^}]*--text-secondary: #71695e;/);
     expect(css).toMatch(/\.reimagined \.customer-workspace, \.reimagined-address-modal\.customer-experience \{[^}]*--surface: #fdfcf9;[^}]*--surface-raised: #ffffff;/);

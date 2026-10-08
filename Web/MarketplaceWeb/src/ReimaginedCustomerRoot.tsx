@@ -185,10 +185,12 @@ function AccountExperience(props: Props) {
     counter={<ReimaginedCheckoutCounter key={accessToken} checkout={checkout} draft={draft} enabled submissionIssue={groceryIssue} deliveryIssue={deliveryIssue} canEdit={canEditCart} online={online} dispatch={dispatch} onSessionExpired={onSessionExpired} ordersUrl={ordersUrl} onOpenOrders={openOrders} />} />;
   return <>
     <aside className="reimagined-local-notice" aria-label="Dastak interface recovery"><a href={homeUrl}>Use the existing Dastak interface</a></aside>
-    {cartIssue ? <p role="status">{cartIssue}</p> : null}
-    {tracking.storageIssue ? <p role="status">{tracking.storageIssue}</p> : null}
-    {tracking.error && online ? <button type="button" onClick={tracking.retry}>Retry order status</button> : null}
     <ReimaginedShell state={{ ...state, activeOrder: tracking.activeOrder }} dispatch={dispatch} activeOrderLabel={tracking.label}
+      noticeContent={(state.section === "home" && cartIssue) || tracking.storageIssue || (tracking.error && online) ? <div className="reimagined-status-stack">
+        {state.section === "home" && cartIssue ? <p role="status">{cartIssue}</p> : null}
+        {tracking.storageIssue ? <p role="status">{tracking.storageIssue}</p> : null}
+        {tracking.error && online ? <button type="button" onClick={tracking.retry}>Retry order status</button> : null}
+      </div> : null}
       directory={resource.data ? reimaginedDirectory(resource.data.map) : []}
       directoryStatus={resource.status} onRetryDirectory={resource.retry}
       displayName={displayName} greeting={greeting} locationLabel={online && addresses.selected ? addresses.selected.label : "Choose your location"}

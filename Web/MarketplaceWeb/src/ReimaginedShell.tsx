@@ -38,6 +38,7 @@ type Props = {
   authFooter?: ReactNode;
   onOpenWishlist?: () => void;
   featureTitle?: string;
+  noticeContent?: ReactNode;
   children: ReactNode;
   searchSuggestions?: ReactNode;
   sectionContent: Partial<Record<Exclude<ReimaginedSection, "home">, ReactNode>>;
@@ -47,7 +48,7 @@ type Props = {
   environment?: ReactNode;
 };
 
-export function ReimaginedShell({ state, dispatch, directory, directoryStatus = "ready", onRetryDirectory, displayName, greeting, locationLabel, locationContent, onSignIn, signInBusy, signingInProvider, signInError, authFooter, onOpenWishlist, featureTitle, children, searchSuggestions, sectionContent, shoppingTotalLabel, activeOrderLabel, onOpenActiveOrder, environment }: Props) {
+export function ReimaginedShell({ state, dispatch, directory, directoryStatus = "ready", onRetryDirectory, displayName, greeting, locationLabel, locationContent, onSignIn, signInBusy, signingInProvider, signInError, authFooter, onOpenWishlist, featureTitle, noticeContent, children, searchSuggestions, sectionContent, shoppingTotalLabel, activeOrderLabel, onOpenActiveOrder, environment }: Props) {
   const searchId = useId();
   const directoryId = useId();
   const scene = reimaginedEnvironment(state);
@@ -203,7 +204,7 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
           {searchSuggestions ? <div className="reimagined-search-suggestions">{searchSuggestions}</div> : null}
         </section></div> : null}
         {exploration.checkout && state.section === "home" ? <button className="reimagined-continue" type="button" onClick={() => dispatch({ type: "continueShopping" })}><ArrowLeft size={17} />Continue Shopping</button> : null}
-        <div className="reimagined-panel-content" tabIndex={0} role="region" aria-label={state.section === "home" ? "Shopping content" : `${state.section} content`}>{state.section === "home" ? children : sectionContent[state.section]}</div>
+        <div className="reimagined-panel-content" tabIndex={0} role="region" aria-label={state.section === "home" ? "Shopping content" : `${state.section} content`}>{noticeContent}{state.section === "home" ? children : sectionContent[state.section]}</div>
       </main>
       <div className="reimagined-bottom">
         {quantity > 0 && !exploration.checkout ? <section className="reimagined-shopping-strip glass-panel" aria-label={state.service === "grocery" ? "Grocery Bucket summary" : "Food cart summary"}><ShoppingBasket size={22} aria-hidden="true" /><div><strong>{quantity} {quantity === 1 ? "item" : "items"}</strong>{shoppingTotalLabel ? <span> · {shoppingTotalLabel}</span> : null}<small>{state.service === "grocery" ? "In your Bucket" : "In your Food cart"}</small></div><button type="button" onClick={() => dispatch({ type: "reviewShopping" })}>{state.service === "grocery" ? "Take to Cart" : "Review Food cart"}<ArrowRight size={17} aria-hidden="true" /></button></section> : null}

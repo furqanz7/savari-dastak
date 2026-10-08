@@ -612,6 +612,12 @@
   .reimagined .customer-account[data-account-pane] .customer-account-row > svg { flex-shrink: 0; }
 }
 body:has(.reimagined) { min-width: 0; }
+/* The immersive shell owns its layout, even before legacy account CSS loads. */
+.app.variant-dastak-customer:has(.reimagined[data-authenticated="true"]) { padding: 0; background: transparent; }
+.app.variant-dastak-customer:has(.reimagined[data-authenticated="true"])::before { display: none; }
+.content.workspace-content:has(.reimagined[data-authenticated="true"]) { display: block; max-width: none; width: 100%; padding: 0; margin: 0; }
+.reimagined-status-stack { display: grid; gap: 8px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid #35604730; border-radius: 14px; background: #e3eadc; font-size: 12px; line-height: 1.5; }
+.reimagined-status-stack button { justify-self: start; min-height: 44px; border: 1px solid #35604740; padding: 8px 12px; }
 /* The old onboarding wrapper must not crop the full-screen sign-in scene or
    trap the legal links on short phones. Other onboarding flows stay unchanged. */
 .app.customer-onboarding-active:has(.reimagined[data-authenticated="false"]) { height: auto; min-height: 100dvh; overflow: visible; padding: 0; color-scheme: light; background: transparent; }
