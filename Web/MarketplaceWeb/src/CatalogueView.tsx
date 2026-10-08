@@ -768,9 +768,11 @@ export function CatalogueView({
       const selected = snapshot.addresses.find((item) => item.isDefault) ?? snapshot.addresses[0];
       setSavedAddresses(snapshot.addresses);
       setDeliveryAddress(selected);
+      return true;
     } catch (error) {
-      if (error instanceof CustomerAddressRequestError && error.status === 401) return onSignOut();
+      if (error instanceof CustomerAddressRequestError && error.status === 401) { onSignOut(); return false; }
       setAddressError(orderMessage(error));
+      return false;
     } finally {
       setOrderBusy(false);
     }

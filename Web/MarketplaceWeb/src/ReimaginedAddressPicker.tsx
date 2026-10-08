@@ -20,12 +20,12 @@ export function ReimaginedAddressPicker({ resource, online, accountUrl, compact 
   const session = useRef(0);
   useEffect(() => () => { session.current++; }, []);
   async function change(fingerprint: string, operation: (key: string) => Promise<unknown>) {
-    if (!auth || !online || writing.current) return;
+    if (!auth || !online || writing.current) return false;
     const intent = attempt.current?.fingerprint === fingerprint ? attempt.current : { fingerprint, key: crypto.randomUUID() };
     const epoch = session.current;
     attempt.current = intent; writing.current = true; setBusy(true); setError(undefined);
-    try { await operation(intent.key); if (epoch === session.current) { attempt.current = undefined; resource.retry(); setEditor(undefined); setBook(false); } }
-    catch (issue) { if (epoch === session.current) { if (customerDataIssue(issue).action === "sign_in") onSessionExpired?.(); else setError(issue instanceof Error ? issue.message : "Addresses could not update."); } }
+    try { await operation(intent.key); if (epoch === session.current) { attempt.current = undefined; resource.retry(); setEditor(undefined); setBook(false); return true; } return false; }
+    catch (issue) { if (epoch === session.current) { if (customerDataIssue(issue).action === "sign_in") onSessionExpired?.(); else setError(issue instanceof Error ? issue.message : "Addresses could not update."); } return false; }
     finally { if (epoch === session.current) { writing.current = false; setBusy(false); } }
   }
   async function save(draft: CustomerAddressDraft) {
@@ -51,7 +51,7 @@ export function ReimaginedAddressPicker({ resource, online, accountUrl, compact 
     {auth ? <button type="button" disabled={!online || busy || resource.status !== "ready"} onClick={() => { setError(undefined); if (resource.addresses.length) setBook(true); else setEditor({}); }}>Add or manage delivery addresses</button> : <a href={accountUrl}>Add or edit addresses in your existing account</a>}
     {/* Backdrop-filter panels create containing blocks for fixed-position sheets. */}
     {(book || editor) && auth ? <ReimaginedModalLayer>
-      {book ? <CustomerAddressBookSheet addresses={resource.addresses} selectedAddressId={selected?.addressId} busy={busy} error={error} context="account" onDismiss={() => setBook(false)} onAdd={() => { setBook(false); setEditor({}); }} onEdit={address => { setBook(false); setEditor({ address }); }} onSelect={address => change(`default:${address.addressId}`, key => setDefaultCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key }))} onDelete={address => change(`delete:${address.addressId}`, key => deleteCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key }))} /> : null}
+      {book ? <CustomerAddressBookSheet addresses={resource.addresses} selectedAddressId={selected?.addressId} busy={busy} error={error} context="account" onDismiss={() => setBook(false)} onAdd={() => { setBook(false); setEditor({}); }} onEdit={address => { setBook(false); setEditor({ address }); }} onSelect={async address => { await change(`default:${address.addressId}`, key => setDefaultCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key })); }} onDelete={address => change(`delete:${address.addressId}`, key => deleteCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key }))} /> : null}
       {editor ? <CustomerAddressSheet address={editor.address} busy={busy} error={error} context="checkout" onDismiss={() => { if (!busy) setEditor(undefined); }} onSave={save} /> : null}
     </ReimaginedModalLayer> : null}
   </section>;

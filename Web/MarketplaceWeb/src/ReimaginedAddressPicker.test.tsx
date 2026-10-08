@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { ReimaginedAddressPicker } from "./ReimaginedAddressPicker";
-import { setDefaultCustomerAddress } from "./customerAddresses";
+import { deleteCustomerAddress, setDefaultCustomerAddress } from "./customerAddresses";
 vi.mock("./customerAddresses", () => ({ setDefaultCustomerAddress: vi.fn(), saveCustomerAddress: vi.fn(), deleteCustomerAddress: vi.fn() }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let host: HTMLDivElement; let root: Root;
@@ -52,4 +52,20 @@ it("keeps the editor outside the panel with modal keyboard focus", () => {
 it("blocks address writes while offline", () => {
   act(() => root.render(<ReimaginedAddressPicker resource={resource} auth={auth} online={false} accountUrl="/#account" />));
   expect(button("Add or manage delivery addresses").disabled).toBe(true); expect(setDefaultCustomerAddress).not.toHaveBeenCalled();
+});
+it("keeps a failed deletion visible and retries with the same request key", async () => {
+  act(() => root.render(<ReimaginedAddressPicker resource={resource} auth={auth} online accountUrl="/#account" />));
+  act(() => button("Add or manage delivery addresses").click());
+  const opener = document.querySelector<HTMLButtonElement>('[aria-label="Delete Home"]')!;
+  opener.focus(); act(() => opener.click());
+  expect(document.activeElement?.textContent).toBe("Keep address");
+  vi.mocked(deleteCustomerAddress).mockRejectedValueOnce(new Error("Synthetic failed deletion")).mockResolvedValueOnce({ addresses: [] });
+  const confirm = () => [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(x => x.textContent === "Delete")!;
+  await act(async () => confirm().click());
+  expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain("Synthetic failed deletion");
+  expect(resource.retry).not.toHaveBeenCalled();
+  await act(async () => confirm().click());
+  expect(document.querySelector('.reimagined-address-modal')).toBeNull(); expect(resource.retry).toHaveBeenCalledOnce();
+  const calls = vi.mocked(deleteCustomerAddress).mock.calls;
+  expect(calls).toHaveLength(2); expect(calls[0][0].idempotencyKey).toBe(calls[1][0].idempotencyKey);
 });

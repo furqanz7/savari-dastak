@@ -885,7 +885,8 @@ export function DastakV1CustomerExperience(props: Props) {
     try {
       const result = await deleteCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: crypto.randomUUID() });
       setAddresses(result.addresses);
-    } catch (addressError) { presentRequestFailure(addressError); }
+      return true;
+    } catch (addressError) { presentRequestFailure(addressError); return false; }
     finally { setBusy(false); }
   };
 

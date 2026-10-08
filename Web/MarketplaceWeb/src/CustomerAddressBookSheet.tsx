@@ -17,12 +17,13 @@ export function CustomerAddressBookSheet({
   onAdd: () => void;
   onEdit: (address: CustomerDeliveryAddress) => void;
   onSelect: (address: CustomerDeliveryAddress) => Promise<void>;
-  onDelete: (address: CustomerDeliveryAddress) => Promise<void>;
+  onDelete: (address: CustomerDeliveryAddress) => Promise<boolean>;
 }) {
   const [deleting, setDeleting] = useState<CustomerDeliveryAddress>();
   const closeButton = useRef<HTMLButtonElement>(null);
   const dialog = useModalDialog<HTMLElement>({
     busy,
+    layered: true,
     initialFocus: closeButton,
     onDismiss: () => deleting ? setDeleting(undefined) : onDismiss(),
   });
@@ -67,10 +68,33 @@ export function CustomerAddressBookSheet({
       {error && <p className="order-error" role="alert">{error}</p>}
       <button className="primary-button customer-address-add" type="button" onClick={onAdd} disabled={busy || addresses.length >= 10}><Plus size={18} /> Add address</button>
 
-      {deleting && <div className="customer-address-confirm" role="alertdialog" aria-modal="true" aria-labelledby="delete-address-title">
-        <section><div><h3 id="delete-address-title">Delete {deleting.label}?</h3><p>Orders already placed keep their original delivery details.</p></div>
-        <div className="customer-address-confirm-actions"><button type="button" onClick={() => setDeleting(undefined)} disabled={busy}>Keep address</button><button className="destructive" type="button" disabled={busy} onClick={() => void onDelete(deleting).then(() => setDeleting(undefined))}>{busy ? "Deleting..." : "Delete"}</button></div></section>
-      </div>}
+      {deleting && <AddressDeleteConfirmation address={deleting} busy={busy} error={error} onDismiss={() => setDeleting(undefined)} onDelete={onDelete} />}
     </section>
+  </div>;
+}
+
+function AddressDeleteConfirmation({ address, busy, error, onDismiss, onDelete }: {
+  address: CustomerDeliveryAddress;
+  busy: boolean;
+  error?: string;
+  onDismiss: () => void;
+  onDelete: (address: CustomerDeliveryAddress) => Promise<boolean>;
+}) {
+  const keepButton = useRef<HTMLButtonElement>(null);
+  const dialog = useModalDialog<HTMLDivElement>({ busy, layered: true, initialFocus: keepButton, onDismiss });
+  const [unexpectedError, setUnexpectedError] = useState<string>();
+  const deleting = useRef(false);
+  const remove = async () => {
+    if (busy || deleting.current) return;
+    deleting.current = true; setUnexpectedError(undefined);
+    try { if (await onDelete(address)) onDismiss(); }
+    catch { setUnexpectedError("The address couldn’t be deleted. Try again."); }
+    finally { deleting.current = false; }
+  };
+  return <div ref={dialog} className="customer-address-confirm" role="alertdialog" aria-modal="true" aria-labelledby="delete-address-title" tabIndex={-1}>
+    <section><div><h3 id="delete-address-title">Delete {address.label}?</h3><p>Orders already placed keep their original delivery details.</p>
+      {error || unexpectedError ? <p className="order-error" role="alert">{error ?? unexpectedError}</p> : null}
+    </div>
+    <div className="customer-address-confirm-actions"><button ref={keepButton} type="button" onClick={onDismiss} disabled={busy}>Keep address</button><button className="destructive" type="button" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting..." : "Delete"}</button></div></section>
   </div>;
 }

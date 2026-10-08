@@ -21,6 +21,7 @@ export function AccountProfileSheet({ profile, busy, error, contactMessage, pres
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (busy) return;
     setNameTouched(true);
     if (isValidAccountProfile(draft)) void onSave(draft);
   };
