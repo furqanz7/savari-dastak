@@ -26,7 +26,8 @@ vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }))
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
 vi.mock("./useReimaginedFood", () => ({ useReimaginedFood: vi.fn() }));
 vi.mock("./useReimaginedAvailability", () => ({ useReimaginedAvailability: vi.fn() }));
-vi.mock("./useReimaginedActiveOrder", () => ({ useReimaginedActiveOrder: vi.fn(() => ({ activeOrder: undefined, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() })) }));
+vi.mock("./useReimaginedActiveOrder", () => ({ useReimaginedActiveOrder: vi.fn(() => ({ activeOrder: undefined, activeCount: 0, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() })) }));
+vi.mock("./useReimaginedGrocerySearch", () => ({ useReimaginedGrocerySearch: () => ({ suggestions: undefined, results: undefined, error: undefined, resultsError: undefined, resultsLoading: false, loading: false, retry: vi.fn() }) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root; let host: HTMLDivElement;
 const props = { accountId: "a", accessToken: "session-token", supabaseUrl: "https://example.supabase.co", publishableKey: "publishable", displayName: "Customer", onSignOut: vi.fn(), client: {} as SupabaseClient, legalLinks: { terms: "/terms", privacy: "/privacy", support: "/support" }, webPushPublicKey: "", deliveryPartnerUrl: "", merchantUrl: "" };
@@ -46,19 +47,29 @@ beforeEach(() => {
   window.history.replaceState(null, "", "#/home");
   vi.stubGlobal("navigator", { locks: checkoutLocksFixture() });
   vi.mocked(useReimaginedFood).mockReturnValue({ data: [], error: undefined, status: "ready", retry: vi.fn() });
-  vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: undefined, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() });
+  vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: undefined, activeCount: 0, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() });
 });
 const localAddress = { addressId: fixtureId(70), updatedAt: "2026-10-08T00:00:00Z", label: "Home", address: "Local test address", building: "1", details: "", displayAddress: "Local test address", location: { latitude: 12, longitude: 77 }, isDefault: true };
 const localAvailability = { addressId: localAddress.addressId, addressVersion: localAddress.updatedAt, checkedAt: "2026-10-08T00:00:00Z", groceryServiceable: true, foodServiceable: true, deliveryAvailable: true,
   stock: Object.fromEntries(groceryFixture.catalogue.skus.map(sku => [sku.id, 99])), restaurants: Object.fromEntries(Array.from({ length: 100 }, (_, index) => [fixtureId(index), true])) };
 beforeEach(() => {
   vi.stubGlobal("localStorage", cartStorageFixture());
-  vi.mocked(useReimaginedCatalogue).mockReturnValue({ data: groceryFixture, status: "ready", error: undefined, retry: vi.fn() });
+  vi.mocked(useReimaginedCatalogue).mockReturnValue({ data: groceryFixture, status: "ready", refreshing: false, error: undefined, retry: vi.fn() });
   vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [localAddress], selected: localAddress, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() });
   vi.mocked(useReimaginedAvailability).mockReturnValue({ data: localAvailability, status: "ready", error: undefined, retry: vi.fn() });
 });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("opens legacy active orders in their existing controller and multiple active orders in the list", async () => {
+    vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: { id: fixtureId(20), service: "grocery", kind: "merchant" }, activeCount: 1, error: undefined, storageIssue: undefined, label: "Preparing your order", retry: vi.fn() });
+    mount(); click("Preparing your order"); await act(async () => {});
+    expect(host.querySelector('[data-merchant-order-id]')?.getAttribute("data-merchant-order-id")).toBe(fixtureId(20));
+    vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: { id: fixtureId(20), service: "grocery" }, activeCount: 2, error: undefined, storageIssue: undefined, label: "2 active orders — view Orders", retry: vi.fn() });
+    act(() => root.render(<ReimaginedCustomerRoot {...props} />)); click("2 active orders — view Orders"); await act(async () => {});
+    expect(host.querySelector('[aria-label="Operational account workspace"]')).not.toBeNull();
+    expect(host.querySelector('[data-order-id]')?.getAttribute("data-order-id") ?? null).toBeNull();
+    expect(host.querySelector('[data-merchant-order-id]')?.getAttribute("data-merchant-order-id") ?? null).toBeNull();
+  });
   it("removes an Admin-unlisted restaurant from already-loaded cards using the fresh area snapshot", () => {
     const menu = foodMenuFixture();
     vi.mocked(useReimaginedFood).mockReturnValue({ data: [menu], status: "ready", error: undefined, retry: vi.fn() });
@@ -307,7 +318,7 @@ describe("authenticated local customer integration", () => {
     expect(loadCustomerCart("a")).toEqual(shopping);
   });
   it("keeps the server-driven order strip independent of shopping and navigation", async () => {
-    vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: { id: fixtureId(20), service: "grocery" }, error: undefined, storageIssue: undefined, label: "Out for delivery", retry: vi.fn() });
+    vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: { id: fixtureId(20), service: "grocery" }, activeCount: 1, error: undefined, storageIssue: undefined, label: "Out for delivery", retry: vi.fn() });
     saveCustomerCart("a", { retail: { [fixtureId(6)]: 2 }, food: [] }); mount();
     click("Food"); await act(async () => click("Orders"));
     expect(host.querySelector(".reimagined-order-strip")?.textContent).toContain("Out for delivery");

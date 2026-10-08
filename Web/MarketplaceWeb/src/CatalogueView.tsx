@@ -341,7 +341,7 @@ export function CatalogueView({
   }, [auth, onSignOut, section]);
 
   useEffect(() => {
-    if (section !== "account") return;
+    if (section !== "account" || accountPane === "profile") return;
     let active = true;
     setDeliveryPartnerAccountState("loading");
     void getDeliveryPartnerSnapshot(auth)
@@ -352,17 +352,17 @@ export function CatalogueView({
         if (active) setDeliveryPartnerAccountState("unavailable");
       });
     return () => { active = false; };
-  }, [auth, section]);
+  }, [auth, section, accountPane]);
 
   useEffect(() => {
-    if (section !== "account") return;
+    if (section !== "account" || accountPane === "profile") return;
     let active = true;
     setMerchantAccountState("loading");
     void getMerchantAccountState(auth)
       .then((state) => { if (active) setMerchantAccountState(state); })
       .catch(() => { if (active) setMerchantAccountState("unavailable"); });
     return () => { active = false; };
-  }, [auth, section]);
+  }, [auth, section, accountPane]);
 
   useEffect(() => {
     if (section !== "account") return;
@@ -1242,7 +1242,7 @@ export function CatalogueView({
             </div>
           </section> : null}
 
-          {accountPane !== "settings" ? <section className="customer-account-group customer-earn-section" aria-labelledby="account-sell-title">
+          {accountPane !== "profile" ? <section className="customer-account-group customer-earn-section" aria-labelledby="account-sell-title">
             <div className="customer-account-section-heading">
               <div><h2 id="account-sell-title">{merchantAccountPresentation.sectionTitle}</h2><small>{merchantAccountPresentation.sectionDetail}</small></div>
               {merchantAccountPresentation.status ? <span className={`customer-partner-status ${merchantAccountPresentation.tone}`}>{merchantAccountPresentation.status}</span> : null}
@@ -1257,7 +1257,7 @@ export function CatalogueView({
             </a>
           </section> : null}
 
-          {accountPane !== "settings" ? <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">
+          {accountPane !== "profile" ? <section className="customer-account-group customer-earn-section" aria-labelledby="account-earn-title">
             <div className="customer-account-section-heading">
               <div><h2 id="account-earn-title">{partnerAccountPresentation.sectionTitle}</h2><small>One account, a separate partner workspace</small></div>
               {partnerAccountPresentation.status && (

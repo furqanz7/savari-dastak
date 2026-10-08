@@ -23,15 +23,17 @@ export function useReimaginedCatalogue(session?: Session, loader = loadReimagine
     loader(owner, controller.signal).then(data => {
       if (!controller.signal.aborted) setResource({ owner, revision, data });
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted) setResource({ owner, revision, error });
+      if (!controller.signal.aborted) setResource(previous => ({ owner, revision, error,
+        data: previous && sameSession(previous.owner, owner) ? previous.data : undefined }));
     });
     return () => controller.abort();
   }, [accountId, accessToken, supabaseUrl, publishableKey, revision, loader]);
-  const current = session && resource && sameSession(resource.owner, session) && resource.revision === revision ? resource : undefined;
+  const current = session && resource && sameSession(resource.owner, session) ? resource : undefined;
   return {
     data: current?.data,
-    error: current?.error,
-    status: !session ? "unavailable" as const : !current ? "loading" as const : current.data ? "ready" as const : "unavailable" as const,
+    error: current?.data || current?.revision === revision ? current?.error : undefined,
+    refreshing: Boolean(current?.data && current.revision !== revision),
+    status: !session ? "unavailable" as const : !current ? "loading" as const : current.data ? "ready" as const : current.revision !== revision ? "loading" as const : "unavailable" as const,
     retry: () => setRevision(value => value + 1),
   };
 }

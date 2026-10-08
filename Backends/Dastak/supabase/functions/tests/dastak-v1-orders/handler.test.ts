@@ -2,6 +2,12 @@ import { assertEquals } from "jsr:@std/assert";
 import { V1RequestError } from "../../_shared/v1-rpc.ts";
 import { handleV1Orders, type V1OrderDependencies } from "../../dastak-v1-orders/handler.ts";
 
+Deno.test("Customer active-order discovery forwards only the verified bearer, never an actor or order override", async()=>{
+ let recorded:unknown;
+ const response=await handleV1Orders(request({operation:"customerActiveOrders",actorId:"forged",orderId,limit:999}),dependencies({customerActiveOrders:input=>{recorded=input;return Promise.resolve({orders:[],totalCount:0});}}));
+ assertEquals(response.status,200);assertEquals(recorded,{accessToken:actor.accessToken});
+});
+
 Deno.test("Admin Customer removal binds bearer identity and preserves reason/version/retry key", async () => {
   let recorded: unknown;
   const response = await handleV1Orders(request({operation:"setAdminRestaurantCustomerVisibility",branchId:skuId,visible:false,expectedVersion:3,reason:" Reviewed removal ",actorId:"forged"},"visibility-once"), dependencies({
@@ -1482,6 +1488,7 @@ function dependencies(
       (() => Promise.resolve({})),
     listAdminExecutionOrders: overrides.listAdminExecutionOrders ??
       (() => Promise.resolve({ orders: [] })),
+    customerActiveOrders: overrides.customerActiveOrders,
     getAdminExecutionTrace: overrides.getAdminExecutionTrace ??
       (() => Promise.resolve({})),
     getAdminAccess: overrides.getAdminAccess ?? (() => Promise.resolve({})),

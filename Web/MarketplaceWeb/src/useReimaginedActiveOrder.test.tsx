@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { V1Order } from "./dastakV1";
+import type { V1Order, V1ActiveOrders } from "./dastakV1";
 import { activeOrderStorageKey, useReimaginedActiveOrder } from "./useReimaginedActiveOrder";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const id = "22222222-2222-4222-8222-222222222222";
@@ -11,14 +11,15 @@ const key = activeOrderStorageKey(session.accountId, session.supabaseUrl);
 const incoming = { id, service: "grocery" as const };
 const order = (status = "PREPARING", version = 4) => ({ id, status, version } as V1Order);
 type Loader = typeof import("./dastakV1").getV1Order;
+type Discovery = typeof import("./dastakV1").getV1ActiveOrders;
 let root: Root; let host: HTMLDivElement;
-function Harness({ loader, online = true, token = session.accessToken, account = "a", hint }: { loader: Loader; online?: boolean; token?: string; account?: string; hint?: typeof incoming }) {
-  const result = useReimaginedActiveOrder({ ...session, accountId: account, accessToken: token }, hint, online, loader);
-  return <><output>{JSON.stringify({ id: result.activeOrder?.id, label: result.label, issue: result.storageIssue })}</output><button onClick={result.retry}>Retry</button></>;
+function Harness({ loader, online = true, token = session.accessToken, account = "a", hint, discover = null }: { loader: Loader; online?: boolean; token?: string; account?: string; hint?: typeof incoming; discover?: Discovery | null }) {
+  const result = useReimaginedActiveOrder({ ...session, accountId: account, accessToken: token }, hint, online, loader, discover);
+  return <><output>{JSON.stringify({ id: result.activeOrder?.id, kind: result.activeOrder?.kind, count: result.activeCount, label: result.label, issue: result.storageIssue })}</output><button onClick={result.retry}>Retry</button></>;
 }
-function mount(loader: Loader, hint?: typeof incoming, online = true) {
+function mount(loader: Loader, hint?: typeof incoming, online = true, discover: Discovery | null = null) {
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
-  act(() => root.render(<Harness loader={loader} hint={hint} online={online} />));
+  act(() => root.render(<Harness loader={loader} hint={hint} online={online} discover={discover} />));
 }
 beforeEach(() => {
   const values = new Map<string, string>();
@@ -27,6 +28,30 @@ beforeEach(() => {
 });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("persistent read-only active order", () => {
+  it("discovers multiple owned orders on a fresh device, clears completed hints and later discovers legacy work", async () => {
+    vi.useFakeTimers();
+    const active: V1ActiveOrders = { totalCount: 2, orders: [{ id, kind: "v1", service: "grocery", status: "PREPARING", version: 4, createdAt: "2026-10-08T00:00:00Z" },
+      { id: "33333333-3333-4333-8333-333333333333", kind: "v1", service: "food", status: "OUT_FOR_DELIVERY", version: 2, createdAt: "2026-10-07T00:00:00Z" }] };
+    const discover = vi.fn<Discovery>().mockResolvedValueOnce(active).mockResolvedValueOnce({ totalCount: 0, orders: [] }).mockResolvedValue({ totalCount: 1, orders: [{ ...active.orders[0], kind: "merchant", status: "merchant_accepted" }] });
+    const loader = vi.fn<Loader>(); mount(loader, undefined, true, discover); await act(async () => {});
+    expect(loader).not.toHaveBeenCalled(); expect(discover).toHaveBeenCalledOnce();
+    expect(host.textContent).toContain("2 active orders"); expect(localStorage.getItem(key)).toContain(id);
+    await act(async () => vi.advanceTimersByTimeAsync(60000));
+    expect(host.textContent).toContain('"count":0'); expect(localStorage.getItem(key)).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(60000));
+    expect(host.textContent).toContain('"kind":"merchant"'); expect(host.textContent).toContain("Preparing your order");
+  });
+  it("discards late discovery after account/token switch and pauses discovery offline", async () => {
+    let resolve!: (value: V1ActiveOrders) => void;
+    const discover = vi.fn<Discovery>().mockReturnValueOnce(new Promise(yes => { resolve = yes; })).mockReturnValue(new Promise(() => {}));
+    const loader = vi.fn<Loader>(); mount(loader, undefined, true, discover);
+    act(() => root.render(<Harness loader={loader} discover={discover} account="b" token="new" />));
+    expect(discover.mock.calls[0][0].signal?.aborted).toBe(true);
+    await act(async () => resolve({ totalCount: 1, orders: [{ id, kind: "v1", service: "food", status: "PREPARING", version: 1, createdAt: "2026-10-08T00:00:00Z" }] }));
+    expect(host.textContent).not.toContain(id);
+    act(() => root.render(<Harness loader={loader} discover={discover} account="b" token="new" online={false} />));
+    expect(discover.mock.calls[1][0].signal?.aborted).toBe(true);
+  });
   it("saves only a versioned ID/service hint and recovers server status after remount", async () => {
     const loader = vi.fn().mockResolvedValue(order()); mount(loader, incoming); await act(async () => {});
     expect(host.textContent).toContain("Preparing your order");

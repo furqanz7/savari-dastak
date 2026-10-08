@@ -6,6 +6,7 @@ import { handleV1Orders } from "./handler.ts";
 Deno.serve((request) =>
   handleV1Orders(request, {
     authenticateBearer: verifyBearerSession,
+    customerActiveOrders: input => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_active_orders", {}),
     submitOrder: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_submit_order", {
         p_idempotency_key: input.idempotencyKey,

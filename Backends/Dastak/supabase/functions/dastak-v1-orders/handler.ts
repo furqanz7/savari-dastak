@@ -26,6 +26,7 @@ export type V1OrderDependencies = {
     beforeCreatedAt: string | null;
     beforeOrderId: string | null;
   }) => Promise<unknown>;
+  customerActiveOrders?: (input: { accessToken: string }) => Promise<unknown>;
   getOrder: (
     input: { accessToken: string; orderId: string },
   ) => Promise<unknown>;
@@ -419,6 +420,10 @@ export async function handleV1Orders(
         return json(body.supportsConfirmedCancellation === true || !Array.isArray(collection?.orders)
           ? result
           : { ...collection, orders: collection.orders.map(legacyCancellationSnapshot) });
+      }
+      case "customerActiveOrders": {
+        if (!dependencies.customerActiveOrders) throw new V1RequestError(503, "unavailable", "Active order discovery is unavailable.");
+        return json(await dependencies.customerActiveOrders({ accessToken: actor.accessToken }));
       }
       case "get": {
         const orderId = requiredUUID(body.orderId);

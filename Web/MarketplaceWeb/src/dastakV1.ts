@@ -164,6 +164,8 @@ export type V1OrderLine = {
 };
 
 export type V1OrderCursor = { createdAt: string; orderId: string };
+export type V1ActiveOrderHint = { id: string; kind: "v1" | "merchant"; service: "food" | "grocery"; status: string; version: number; createdAt: string };
+export type V1ActiveOrders = { orders: V1ActiveOrderHint[]; totalCount: number };
 
 export type V1Order = {
   tracking?: CustomerDeliveryTracking;
@@ -1171,6 +1173,20 @@ export async function getV1Orders(
       orderId: requiredUuid(cursor.orderId),
     } : undefined,
   };
+}
+
+export async function getV1ActiveOrders(input: DastakV1Auth & { signal?: AbortSignal }, fetcher: Fetcher = fetch): Promise<V1ActiveOrders> {
+  const source = requiredRecord(await invoke(input, "dastak-v1-orders", { operation: "customerActiveOrders" }, undefined, fetcher));
+  const totalCount = requiredInteger(source.totalCount, 0);
+  if (!Array.isArray(source.orders) || source.orders.length !== Math.min(20, totalCount)) invalid("active order collection");
+  const orders = source.orders.map(value => {
+    const row = requiredRecord(value);
+    if ((row.kind !== "v1" && row.kind !== "merchant") || (row.service !== "food" && row.service !== "grocery")) invalid("active order identity");
+    return { id: requiredUuid(row.id), kind: row.kind, service: row.service, status: requiredText(row.status, 80),
+      version: requiredInteger(row.version, 1), createdAt: requiredTimestamp(row.createdAt) } as V1ActiveOrderHint;
+  });
+  if (new Set(orders.map(row => `${row.kind}:${row.id}`)).size !== orders.length) invalid("duplicate active order");
+  return { orders, totalCount };
 }
 
 export async function getV1Order(input: DastakV1Auth & { orderId: string; signal?: AbortSignal }, fetcher: Fetcher = fetch) {

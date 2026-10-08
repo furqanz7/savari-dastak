@@ -18,12 +18,14 @@ describe("dedicated Reimagined workspaces", () => {
     expect(html).toContain('data-account-pane="profile"'); expect(html).toContain('aria-label="Your profile"');
     expect(html).toContain("Saved places"); expect(html).toContain("Wishlist"); expect(html).toContain("Open Settings");
     expect(html).not.toContain("Delete Customer"); expect(html).not.toContain("Devices and sessions"); expect(html).not.toContain("Order alerts"); expect(html).not.toContain("<h1");
+    expect(html).not.toContain('href="/merchant"'); expect(html).not.toContain('href="/delivery"');
   });
   it("puts alerts, sign-ins, privacy and account actions in Settings only", () => {
     const html = renderToStaticMarkup(<CatalogueView {...props} accountPane="settings" onOpenProfile={noop} />);
     expect(html).toContain('aria-label="Your settings"'); expect(html).toContain("Order alerts"); expect(html).toContain("Devices and sessions");
     expect(html).toContain("Download your data"); expect(html).toContain("Privacy Policy"); expect(html).toContain("Delete Customer"); expect(html).toContain("Edit your Profile");
     expect(html).not.toContain('aria-label="Edit profile"'); expect(html).not.toContain("Saved places</h2>"); expect(html).not.toContain("Wishlist</strong>"); expect(html).not.toContain("<h1");
+    expect(html).toContain('href="/merchant"'); expect(html).toContain('href="/delivery"');
   });
   it("retains the complete previous account experience when no pane is requested", () => {
     const html = renderToStaticMarkup(<CatalogueView {...props} />);

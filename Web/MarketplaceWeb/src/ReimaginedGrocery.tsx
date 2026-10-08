@@ -20,14 +20,17 @@ type Props = {
   checkoutContent: ReactNode;
   availabilityNotice?: ReactNode;
   trending?: GroceryTrending;
+  searchResults?: V1CatalogueSku[]; searchLoading?: boolean; searchError?: unknown; onRetrySearch?: () => void;
   wishlist?: ReturnType<typeof useReimaginedWishlist>;
   online?: boolean;
 };
 
-export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supabaseUrl, eligibility, relatedSkuIds, checkoutContent, availabilityNotice, trending, wishlist, online = true }: Props) {
+export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supabaseUrl, eligibility, relatedSkuIds, checkoutContent, availabilityNotice, trending, wishlist, online = true, searchResults, searchLoading, searchError, onRetrySearch }: Props) {
   const packChoicePrefix = useId();
   const exploration = state.exploration.grocery;
-  const sourceShelves = useMemo(() => data ? groceryShelves(data, exploration.view) : [], [data, exploration.view]);
+  const sourceShelves = useMemo(() => exploration.view.kind === "search" && searchResults !== undefined
+    ? [{ key: `search:${exploration.view.query}`, label: `Results for “${exploration.view.query}”`, skus: searchResults }]
+    : data ? groceryShelves(data, exploration.view) : [], [data, exploration.view, searchResults]);
   const shelves = useMemo(() => exploration.view.kind === "browse" ? sourceShelves.map(shelf => filterGroceryShelf(shelf, exploration.productTypeFilters[shelf.key])) : sourceShelves, [sourceShelves, exploration.productTypeFilters, exploration.view.kind]);
   const quickPicks = useMemo(() => data ? groceryQuickPicks(data) : [], [data]);
   const productFamilies = useMemo(() => data ? groupGroceryProducts(data.catalogue.skus) : [], [data]);
@@ -67,6 +70,8 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
   if (exploration.checkout && (status !== "ready" || !data)) return <>{checkoutContent}</>;
   if (availabilityNotice && !exploration.checkout) return <>{availabilityNotice}</>;
   if (status === "loading") return <div className="reimagined-shelf-loading" role="status" aria-label="Loading Grocery products">Opening the shelves…<div /><div /></div>;
+  if (!exploration.detailId && exploration.view.kind === "search" && searchResults === undefined && searchLoading) return <p role="status">Searching the catalogue…</p>;
+  if (!exploration.detailId && exploration.view.kind === "search" && searchError) return <section role="alert"><p>{searchError === "offline" ? "Reconnect to search the catalogue. Your cart is retained." : "Couldn’t load search results. Your cart is retained."}</p><button type="button" disabled={!online} onClick={onRetrySearch}>Retry search</button></section>;
   if (status === "unavailable" || !data) return <section role="status"><p>Couldn’t open the Grocery shelves right now.</p><button type="button" onClick={onRetry}>Try again</button></section>;
   const detail = exploration.detailId ? selected ? <ReimaginedProductBrowser groups={detailGroups} selectedId={selected.id} supabaseUrl={supabaseUrl} onSelect={id => dispatch({ type: "openDetail", id })} onClose={() => dispatch({ type: "closeDetail" })}>{select => <section className="reimagined-product-detail reimagined-grocery-detail" aria-label={`${selected.name} details`}>
     <div className="reimagined-detail-hero">
@@ -103,8 +108,8 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
   return <><div className="reimagined-grocery-browse" hidden={hideBrowse} inert={hideBrowse}>{browse}</div>{exploration.checkout ? checkoutContent : detail}</>;
 }
 
-export function ReimaginedGrocerySuggestions({ data, query, dispatch }: { data?: ReimaginedCatalogue; query: string; dispatch: Dispatch<ReimaginedAction> }) {
-  const results = useMemo(() => data ? groupGroceryProducts(searchGrocery(data, query)).slice(0, 8) : [], [data, query]);
+export function ReimaginedGrocerySuggestions({ data, results: canonicalResults, query, dispatch }: { data?: ReimaginedCatalogue; results?: V1CatalogueSku[]; query: string; dispatch: Dispatch<ReimaginedAction> }) {
+  const results = useMemo(() => canonicalResults ? groupGroceryProducts(canonicalResults).slice(0, 8) : data ? groupGroceryProducts(searchGrocery(data, query)).slice(0, 8) : [], [data, query, canonicalResults]);
   if (!query.trim()) return <p>Search products, brands or categories.</p>;
   if (!data) return <p role="status">Load the catalogue to see suggestions.</p>;
   return <div className="reimagined-grocery-suggestions">{results.length ? results.map(([sku, ...packs]) => <button key={sku.id} type="button" onClick={() => { dispatch({ type: "closeSearch" }); dispatch({ type: "openDetail", id: sku.id }); }}><span>{sku.name}</span><small>{sku.packSize}{packs.length ? ` · ${packs.length + 1} sizes` : ""}</small></button>) : <p>No matching products in the loaded catalogue.</p>}</div>;

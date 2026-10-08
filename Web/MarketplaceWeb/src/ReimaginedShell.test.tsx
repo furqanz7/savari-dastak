@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, useReducer } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReimaginedShell } from "./ReimaginedShell";
 import { reimaginedDirectory } from "./reimaginedDirectory";
 import { initialReimaginedState, reimaginedReducer } from "./reimaginedState";
@@ -29,9 +29,20 @@ function Harness({ signedOut = false }: { signedOut?: boolean }) {
 function mount(signedOut = false) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness signedOut={signedOut} />)); }
 function button(label: string) { const found = Array.from(host.querySelectorAll("button")).find(item => (item.getAttribute("aria-label") ?? item.textContent?.trim()) === label); if (!found) throw new Error(`Missing button: ${label}`); return found; }
 function click(label: string) { act(() => button(label).click()); }
-afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); });
+afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.restoreAllMocks(); });
 
 describe("Reimagined shell", () => {
+  it("reveals the selected directory row without scrolling the page or the shopping panel", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("reimagined-directory")) return new DOMRect(0, 100, 200, 140);
+      if (this.closest(".reimagined-directory") && this.getAttribute("aria-pressed") === "true") return new DOMRect(0, 300, 200, 44);
+      return new DOMRect();
+    });
+    mount(); const content = host.querySelector<HTMLElement>(".reimagined-panel-content")!; content.scrollTop = 70;
+    click("Atta, Flour & Dal");
+    expect(host.querySelector<HTMLElement>(".reimagined-directory")!.scrollTop).toBe(108);
+    expect(content.scrollTop).toBe(70); expect(window.scrollY).toBe(0);
+  });
   it("opens cart review at the top and restores shopping scroll and focus", () => {
     mount(); click("Take a Bucket"); click("Test add");
     const content = host.querySelector<HTMLElement>(".reimagined-panel-content")!;

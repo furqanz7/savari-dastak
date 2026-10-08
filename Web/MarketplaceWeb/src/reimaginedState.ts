@@ -27,7 +27,7 @@ export type ReimaginedState = {
   bucketAcquired: boolean;
   bucketPrompt: boolean;
   locationOpen: boolean;
-  activeOrder?: { id: string; service: ReimaginedService };
+  activeOrder?: { id: string; service: ReimaginedService; kind?: "merchant" };
 };
 export type ReimaginedNavigationState = Pick<ReimaginedState, "service" | "section"> & {
   exploration: Pick<ReimaginedExploration, "view" | "searchOpen" | "detailId" | "checkout">;

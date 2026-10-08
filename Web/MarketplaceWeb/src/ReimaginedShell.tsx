@@ -112,6 +112,16 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
     : state.shopping.food.reduce((total, line) => total + line.quantity, 0);
   const bottomRows = Number(quantity > 0 && !exploration.checkout) + Number(Boolean(state.activeOrder));
   const selectedDestination = exploration.view.kind === "browse" ? exploration.view.nodeKey : undefined;
+  const directoryKeys = directory.flatMap(section => section.destinations.map(destination => destination.key)).join("|");
+  useEffect(() => {
+    // Reveal only within the directory; never scroll the document or reset shelves.
+    const directory = shell.current?.querySelector<HTMLElement>(".reimagined-directory");
+    const selected = directory?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!directory || !selected) return;
+    const frame = directory.getBoundingClientRect(), row = selected.getBoundingClientRect();
+    if (row.top < frame.top + 4) directory.scrollTop += row.top - frame.top - 4;
+    else if (row.bottom > frame.bottom - 4) directory.scrollTop += row.bottom - frame.bottom + 4;
+  }, [selectedDestination, state.service, directoryKeys]);
   const title = exploration.checkout ? (state.service === "grocery" ? "Your Bucket" : "Your Food cart")
     : exploration.view.kind === "search" ? `Results for “${exploration.view.query}”`
       : selectedDestination ? directory.flatMap(section => section.destinations).find(destination => destination.key === selectedDestination)?.label ?? "Grocery"

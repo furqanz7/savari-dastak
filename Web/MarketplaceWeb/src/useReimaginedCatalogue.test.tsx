@@ -16,6 +16,15 @@ function Harness({ accountId, loader }: { accountId?: string; loader: typeof loa
 function mount(accountId: string, loader: typeof loadReimaginedCatalogue) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness accountId={accountId} loader={loader} />)); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); });
 describe("Reimagined authenticated catalogue ownership", () => {
+  it("retains same-session shelves through a slow or failed refresh", async () => {
+    const refresh = deferred();
+    const loader = vi.fn<typeof loadReimaginedCatalogue>().mockResolvedValueOnce(groceryFixture).mockReturnValueOnce(refresh.promise).mockReturnValue(new Promise(() => {}));
+    mount("first", loader); await act(async () => {});
+    act(() => host.querySelector("button")!.click()); expect(host.textContent).toContain('"status":"ready"');
+    await act(async () => refresh.reject(new Error("network")));
+    expect(host.textContent).toContain('"status":"ready"'); expect(host.textContent).toContain(groceryFixture.catalogue.catalogueVersion);
+    act(() => root.render(<Harness accountId="second" loader={loader} />)); expect(host.textContent).not.toContain(groceryFixture.catalogue.catalogueVersion);
+  });
   it("cancels requests and hides another account's late data on switch/sign-out", async () => {
     const first = deferred(); const second = deferred();
     const loader = vi.fn<typeof loadReimaginedCatalogue>().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
