@@ -19,7 +19,7 @@ describe("customerDataIssue", () => {
   it("does not hide an access-denied account as a generic failure", () => {
     expect(customerDataIssue({ status: 403 })).toMatchObject({
       kind: "access",
-      action: "sign_in",
+      action: "retry",
     });
   });
 

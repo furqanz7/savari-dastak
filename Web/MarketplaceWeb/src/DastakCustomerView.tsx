@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Home, ReceiptText, UserRound } from "lucide-react";
 import { CustomerNotice } from "./CustomerUI";
 import { useCustomerOnline } from "./useCustomerOnline";
+import { useCustomerSessionRecovery } from "./useCustomerSessionRecovery";
 import "./design/customer-experience.css";
 import { CatalogueView } from "./CatalogueView";
 import { DastakV1CustomerExperience } from "./DastakV1CustomerExperience";
@@ -49,6 +50,7 @@ export function DastakCustomerView(props: Props) {
 }
 
 export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; initialMerchantOrderId?: string; onReturnToShopping?: () => void; onOpenWishlist?: () => void; onOpenOrders?: (id?: string) => void; onOpenMerchantOrder?: (id: string) => void; onOrderRecordClosed?: () => void; onReorder?: (order: V1Order) => void; webPushController?: DastakWebPushController; onProfileChanged?: (profile: AccountProfile) => void; accountPane?: "profile" | "settings"; onOpenProfile?: () => void; onOpenSettings?: () => void; onViewChange?: (section: CustomerSection) => void }) {
+  const onSessionExpired = useCustomerSessionRecovery(props.client, props.accessToken);
   const online = useCustomerOnline();
   const [orderRefreshToken, setOrderRefreshToken] = useState(0);
   const [homeResetToken, setHomeResetToken] = useState(0);
@@ -160,7 +162,7 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
             else navigate({ section: "orders", entityType: "dastakV1Order", entityId: orderId });
           }}
           onCloseOrder={() => { navigate({ section: "orders" }); props.onOrderRecordClosed?.(); }}
-          onSessionExpired={props.onSignOut}
+          onSessionExpired={onSessionExpired}
           onOrderAgainInExisting={props.embedded ? () => { window.location.href = existingCustomerUrl("orders", window.location.href); } : undefined}
           onReorderInReimagined={props.onReorder}
           presentation={props.embedded ? "reimagined" : undefined}

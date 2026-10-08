@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { formatV1Price, submitV1Order, commitV1LaunchPayment, getV1Order } from "./dastakV1";
 import type { DastakCustomerProps } from "./DastakCustomerView";
 import { customerDataIssue } from "./customerDataState";
+import { useCustomerSessionRecovery } from "./useCustomerSessionRecovery";
 import { existingCustomerUrl } from "./reimaginedOptIn";
 import { reimaginedDirectory } from "./reimaginedDirectory";
 import { ReimaginedBucketReview } from "./ReimaginedBucketReview";
@@ -121,7 +122,7 @@ function AccountExperience(props: Props) {
   </section>;
   const pushAuth = useMemo(() => ({ accountId, accessToken, supabaseUrl, publishableKey, publicKey: props.webPushPublicKey }), [accountId, accessToken, supabaseUrl, publishableKey, props.webPushPublicKey]);
   const webPush = useDastakWebPush(pushAuth);
-  const onSessionExpired = props.onSignOut;
+  const onSessionExpired = useCustomerSessionRecovery(props.client, accessToken);
   useEffect(() => {
     if ([resource.error, grocerySearch.error, addresses.error, tracking.error, food.error, wishlist.error, availability.error].some(error => error && customerDataIssue(error).action === "sign_in")) onSessionExpired();
   }, [resource.error, grocerySearch.error, addresses.error, tracking.error, food.error, wishlist.error, availability.error, onSessionExpired]);

@@ -21,4 +21,6 @@ psql -h "$task_test_root/socket" -p 55489 -d postgres -v ON_ERROR_STOP=1 \
   -f "$task_supabase_root/tests/customer_visibility_assertions.sql" \
   -f "$task_supabase_root/tests/customer_active_orders_fixture.sql" \
   -f "$task_supabase_root/migrations/20261008130951_customer_active_order_discovery.sql" \
+  -f "$task_supabase_root/tests/customer_active_orders_permissions_before.sql" \
+  -f "$task_supabase_root/migrations/20261008174027_repair_customer_active_order_discovery_permissions.sql" \
   -f "$task_supabase_root/tests/customer_active_orders_assertions.sql"

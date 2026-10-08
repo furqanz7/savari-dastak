@@ -21,8 +21,8 @@ export function customerDataIssue(error: unknown): CustomerDataIssue {
     return {
       kind: "access",
       title: "Customer access unavailable",
-      message: "This account cannot load customer updates right now. Sign in again if the issue continues.",
-      action: "sign_in",
+      message: "Customer updates cannot be loaded right now. Please retry or contact support if this continues.",
+      action: "retry",
     };
   }
 

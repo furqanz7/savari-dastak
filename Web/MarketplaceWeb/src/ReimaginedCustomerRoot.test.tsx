@@ -60,6 +60,11 @@ beforeEach(() => {
 });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("never signs out when background active-order discovery denies access", () => {
+    vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: undefined, activeCount: 0, error: { status: 403 } as unknown as Error, storageIssue: undefined, label: "", retry: vi.fn() });
+    mount();
+    expect(props.onSignOut).not.toHaveBeenCalled();
+  });
   it("opens legacy active orders in their existing controller and multiple active orders in the list", async () => {
     vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: { id: fixtureId(20), service: "grocery", kind: "merchant" }, activeCount: 1, error: undefined, storageIssue: undefined, label: "Preparing your order", retry: vi.fn() });
     mount(); click("Preparing your order"); await act(async () => {});
