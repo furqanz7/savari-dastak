@@ -6,7 +6,8 @@ type Session = DastakV1Auth & { accountId: string };
 type Resource = { owner: string; revision: number; data?: CustomerDeliveryAddressCollection; error?: unknown };
 type Loader = (input: DastakV1Auth & { signal?: AbortSignal }) => Promise<CustomerDeliveryAddressCollection>;
 
-// Fetch only when Location/counter is opened. Selection is local, not a default-address write.
+// Caller enables reads for Location, checkout or Food distance discovery.
+// Selection is local, not a default-address write.
 export function useReimaginedAddresses(session: Session, enabled: boolean, loader: Loader = getCustomerAddresses) {
   const { accountId, accessToken, supabaseUrl, publishableKey } = session;
   const owner = JSON.stringify([accountId, accessToken, supabaseUrl, publishableKey]);

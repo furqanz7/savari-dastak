@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { getV1RestaurantPage, type DastakV1Auth, type V1RestaurantCursor, type V1RestaurantMenu } from "./dastakV1";
-import { prepareFoodMenus } from "./reimaginedFoodCatalogue";
+import { getV1RestaurantPage, type DastakV1Auth, type V1RestaurantCursor, type V1RestaurantLocation, type V1RestaurantMenu } from "./dastakV1";
+import { nearestFoodMenus, prepareFoodMenus } from "./reimaginedFoodCatalogue";
 
 type Session = DastakV1Auth & { accountId: string };
 type Page = { ids: string[]; cursor?: V1RestaurantCursor; seen: Set<string> };
@@ -10,12 +10,13 @@ export type ReimaginedFoodResource = {
   data?: V1RestaurantMenu[]; error?: unknown; status: "ready" | "unavailable" | "loading" | "idle"; retry: () => void;
   searchData?: V1RestaurantMenu[]; hasMore?: boolean; loadingMore?: boolean; loadMore?: () => Promise<void>;
   findRestaurant?: (branchId: string) => Promise<V1RestaurantMenu | undefined>;
+  nearest?: boolean;
 };
 
 // Bounded pages on explicit entry/search/load-more, never per keystroke.
-export function useReimaginedFood(session: Session, enabled: boolean, online: boolean, loader = getV1RestaurantPage, submittedQuery = ""): ReimaginedFoodResource {
+export function useReimaginedFood(session: Session, enabled: boolean, online: boolean, loader = getV1RestaurantPage, submittedQuery = "", location?: V1RestaurantLocation): ReimaginedFoodResource {
   const { accountId, accessToken, supabaseUrl, publishableKey } = session;
-  const owner = JSON.stringify([accountId, accessToken, supabaseUrl, publishableKey]);
+  const owner = JSON.stringify([accountId, accessToken, supabaseUrl, publishableKey, location?.addressId, location?.updatedAt]);
   const query = submittedQuery.trim();
   const [revision, setRevision] = useState(0);
   const [resource, setResource] = useState<Resource>();
@@ -24,7 +25,8 @@ export function useReimaginedFood(session: Session, enabled: boolean, online: bo
   const request = useRef<AbortController | undefined>(undefined);
   const lookups = useRef(new Set<AbortController>());
   function publish(store: Cache, page: Page, error?: unknown, loadingMore = false) {
-    setResource({ owner, revision, query, data: [...store.menus.values()], searchData: page.ids.map(id => store.menus.get(id)!), cursor: page.cursor, error, loadingMore });
+    const menus = [...store.menus.values()];
+    setResource({ owner, revision, query, data: location ? nearestFoodMenus(menus) : menus, searchData: page.ids.map(id => store.menus.get(id)!), cursor: page.cursor, error, loadingMore });
   }
   async function fetchPage(store: Cache, cursor?: V1RestaurantCursor) {
     const generation = epoch.current; const controller = new AbortController(); request.current = controller;
@@ -32,8 +34,9 @@ export function useReimaginedFood(session: Session, enabled: boolean, online: bo
     if (cursor && previous) publish(store, previous, undefined, true);
     try {
       if (query.length > 80) throw new Error("Use a Food search of 80 characters or fewer.");
-      const result = await loader({ accessToken, supabaseUrl, publishableKey, limit: 100, query: query || undefined, cursor, signal: controller.signal });
+      const result = await loader({ accessToken, supabaseUrl, publishableKey, limit: 100, query: query || undefined, cursor, location, signal: controller.signal });
       if (generation !== epoch.current || controller.signal.aborted) return;
+      if (location && result.ordering !== "NEAREST") throw new Error("Nearest restaurants could not be verified. Refresh your location and Food menus.");
       const menus = prepareFoodMenus(result.restaurants);
       const nextKey = result.nextCursor ? JSON.stringify(result.nextCursor) : undefined;
       if (nextKey && (nextKey === JSON.stringify(cursor) || previous?.seen.has(nextKey))) throw new Error("Food pagination did not advance. Loaded menus are retained.");
@@ -44,7 +47,10 @@ export function useReimaginedFood(session: Session, enabled: boolean, online: bo
     } catch (error) {
       if (generation === epoch.current && !controller.signal.aborted) {
         if (previous) publish(store, previous, error);
-        else setResource({ owner, revision, query, data: store.menus.size ? [...store.menus.values()] : undefined, error });
+        else {
+          const menus = [...store.menus.values()];
+          setResource({ owner, revision, query, data: menus.length ? location ? nearestFoodMenus(menus) : menus : undefined, error });
+        }
       }
     } finally { if (request.current === controller) request.current = undefined; }
   }
@@ -82,5 +88,6 @@ export function useReimaginedFood(session: Session, enabled: boolean, online: bo
     hasMore: Boolean(scoped?.cursor), loadingMore: scoped?.loadingMore,
     loadMore: async () => { if (online && enabled && scoped?.cursor && cache.current && !request.current) await fetchPage(cache.current, scoped.cursor); },
     findRestaurant, retry: () => setRevision(value => value + 1),
+    nearest: Boolean(location && current?.data),
   };
 }

@@ -17,3 +17,7 @@ psql -h "$task_test_root/socket" -p 55488 -d postgres -v ON_ERROR_STOP=1 \
   -f "$task_supabase_root/tests/customer_food_pages_fixture.sql" \
   -f "$task_supabase_root/migrations/20261007200623_customer_food_cursor_pages.sql" \
   -f "$task_supabase_root/tests/customer_food_pages_assertions.sql"
+psql -h "$task_test_root/socket" -p 55488 -d postgres -v ON_ERROR_STOP=1 \
+  -f "$task_supabase_root/tests/customer_food_nearest_fixture.sql" \
+  -f "$task_supabase_root/migrations/20261008084004_customer_food_nearest_pages.sql" \
+  -f "$task_supabase_root/tests/customer_food_nearest_assertions.sql"

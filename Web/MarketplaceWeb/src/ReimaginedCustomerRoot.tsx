@@ -79,11 +79,13 @@ function AccountExperience(props: Props) {
   const { accountId, accessToken, supabaseUrl, publishableKey } = props;
   const checkout = useMemo(() => new ReimaginedGroceryCheckout({ accessToken, supabaseUrl, publishableKey }, undefined, undefined, undefined, checkoutJournal(accountId, supabaseUrl)), [accountId, accessToken, supabaseUrl, publishableKey]);
   const foodCheckout = useMemo(() => new ReimaginedFoodRecovery({ accessToken, supabaseUrl, publishableKey }, { submit: submitV1Order, commit: commitV1LaunchPayment, read: getV1Order }, foodRecoveryJournal(accountId, supabaseUrl, { getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value) })), [accountId, accessToken, supabaseUrl, publishableKey]);
-  const addresses = useReimaginedAddresses(props, online && (state.locationOpen || (state.service === "grocery" ? state.exploration.grocery.checkout : state.exploration.food.checkout)));
+  const foodEnabled = state.service === "food" || savedOpen || state.section === "orders";
+  const addresses = useReimaginedAddresses(props, online && (foodEnabled || state.locationOpen || state.exploration.grocery.checkout));
   const tracking = useReimaginedActiveOrder(props, state.activeOrder, online);
   const foodView = state.exploration.food.view;
   const foodQuery = foodView.kind === "search" && !state.exploration.food.checkout && state.section === "home" ? foodView.query : "";
-  const food = useReimaginedFood(props, state.service === "food" || savedOpen || state.section === "orders", online, undefined, foodQuery);
+  const foodLocation = addresses.selected ? { addressId: addresses.selected.addressId, updatedAt: addresses.selected.updatedAt } : undefined;
+  const food = useReimaginedFood(props, foodEnabled && addresses.status !== "loading" && addresses.status !== "idle", online, undefined, foodQuery, foodLocation);
   const pushAuth = useMemo(() => ({ accountId, accessToken, supabaseUrl, publishableKey, publicKey: props.webPushPublicKey }), [accountId, accessToken, supabaseUrl, publishableKey, props.webPushPublicKey]);
   const webPush = useDastakWebPush(pushAuth);
   const onSessionExpired = props.onSignOut;

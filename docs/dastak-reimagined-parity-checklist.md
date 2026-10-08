@@ -42,8 +42,9 @@ It consolidates the earlier feature, shelf, workspace and navigation passes.
 
 ## Remaining work — explicit, not silently marked complete
 
-1. **Nearest-first Food discovery:** current server/menu ordering is retained;
-   there is no verified location-distance ranking wired into the Reimagined list.
+1. **Nearest-first Food discovery:** local implementation now adds server-side
+   saved-address distance paging and UI labels. Not yet released; real PostGIS
+   verification and production rollout remain. See `dastak-reimagined-nearest-food.md`.
 2. **Genuine city trending:** Grocery displays the unavailable state; authenticated
    root has no actual city-ranking data, and Food lacks the requested ranked
    city-trending entries/badges. Do not fabricate rankings.
@@ -82,3 +83,13 @@ untracked RPM assets. Local-only statements above describe the checkpoint before
 this approval. The actual release identity and live verification results are
 reported in the deployment handoff. No database changes, other app releases or
 live commerce/account mutations are included.
+
+## Follow-up checkpoints
+
+- The older-order correction above was subsequently pushed/deployed as `c143970`.
+  The normal Customer URL served that release. A deliberately nonexistent older
+  ID reached the correct controller; a real delivered V1 order opened. This
+  account's older-order list was empty, so no actual older record was verified.
+- The nearest-first follow-up is local-only; its rollout and test limitations
+  are recorded in `dastak-reimagined-nearest-food.md`. Historical local/release
+  statements earlier in this checklist describe their respective checkpoints.

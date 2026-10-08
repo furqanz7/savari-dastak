@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { foodAvailability, foodCategoryControls, foodCategoryRestaurants, prepareFoodMenus, searchFood } from "./reimaginedFoodCatalogue";
+import { foodAvailability, foodCategoryControls, foodCategoryRestaurants, foodDistance, nearestFoodMenus, prepareFoodMenus, searchFood } from "./reimaginedFoodCatalogue";
 import { foodMenuFixture } from "./reimaginedFood.testFixtures";
 import { fixtureId } from "./reimaginedCatalogue.testFixtures";
 
 describe("read-only Food projection", () => {
+  it("merges loaded search/lookup menus in distance order without mutation, keeping unknowns last", () => {
+    const near = foodMenuFixture(); near.restaurant.distanceMeters = 0;
+    const far = foodMenuFixture(fixtureId(40)); far.restaurant.distanceMeters = 1250;
+    const tied = foodMenuFixture(fixtureId(41)); tied.restaurant.distanceMeters = 1250;
+    const unknown = foodMenuFixture(fixtureId(42));
+    const original = [unknown, far, near, tied];
+    expect(nearestFoodMenus(original)).toEqual([near, far, tied, unknown]);
+    expect(original).toEqual([unknown, far, near, tied]);
+    expect(foodDistance(near)).toBe("0 m away"); expect(foodDistance(far)).toBe("1.3 km away");
+    expect(foodDistance(unknown)).toBe("Distance unavailable");
+  });
   it("groups exact labels with branch-scoped category references, without fuzzy matching", () => {
     const first = foodMenuFixture(); const second = foodMenuFixture(fixtureId(40));
     const third = foodMenuFixture(fixtureId(41)); third.categories[0].name = "meals";

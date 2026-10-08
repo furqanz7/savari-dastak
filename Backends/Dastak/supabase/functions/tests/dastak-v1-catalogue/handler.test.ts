@@ -179,6 +179,26 @@ Deno.test("Food pages preserve authenticated cursors and reject malformed or ove
   assertEquals(calls.length, 1);
 });
 
+Deno.test("Nearest Food pages bind saved address and cursor to authenticated RPC, never caller actor or GPS", async () => {
+  const calls: unknown[] = [];
+  const deps = dependencies({ customerRestaurantNearestPage: input => { calls.push(input); return Promise.resolve({ restaurants: [], nextCursor: null }); } });
+  const addressVersion = "2026-10-08T00:00:00Z";
+  const cursor = { name: " Exact name ", branchId: skuId, distanceMeters: 1234, addressId: categoryId, addressVersion };
+  const response = await handleV1Catalogue(request({ operation: "customerRestaurantNearestPage", addressId: categoryId, addressVersion,
+    cursor, query: " dish ", accountId: otherAccountId, latitude: 1, longitude: 2 }), deps);
+  assertEquals(response.status, 200);
+  assertEquals(calls, [{ accessToken: actor.accessToken, addressId: categoryId, addressVersion, query: "dish", limit: 100,
+    afterName: " Exact name ", afterBranchId: skuId, afterDistanceMeters: 1234 }]);
+  for (const payload of [{ addressId: "bad" }, { addressVersion: "bad" }, { limit: 101 }, { cursor: { ...cursor, addressId: otherAccountId } },
+    { cursor: { ...cursor, addressVersion: "2026-10-09T00:00:00Z" } }, { cursor: { ...cursor, distanceMeters: -1 } },
+    { cursor: { ...cursor, distanceMeters: 41000001 } }, { cursor: { name: "x", branchId: skuId } }, { cursor: "bad" }, { branchId: skuId }]) {
+    assertEquals((await handleV1Catalogue(request({ operation: "customerRestaurantNearestPage", addressId: categoryId, addressVersion, ...payload }), deps)).status,400);
+  }
+  assertEquals(calls.length, 1);
+  assertEquals((await handleV1Catalogue(request({ operation: "customerRestaurantNearestPage", addressId: categoryId, addressVersion,
+    cursor: { ...cursor, distanceMeters: null } }), deps)).status,200);
+});
+
 Deno.test("V1 Restaurant menu mutation rejects unsupported entities without calling RPC", async () => {
   let calls = 0;
   const response = await handleV1Catalogue(
@@ -800,6 +820,7 @@ function dependencies(
     customerRestaurants: overrides.customerRestaurants ??
       (() => Promise.resolve({ restaurants: [] })),
     customerRestaurantPage: overrides.customerRestaurantPage ?? (() => Promise.resolve({ restaurants: [], nextCursor: null })),
+    customerRestaurantNearestPage: overrides.customerRestaurantNearestPage,
     adminSnapshot: overrides.adminSnapshot ?? (() => Promise.resolve(snapshot)),
     adminTaxonomy: overrides.adminTaxonomy ??
       (() =>

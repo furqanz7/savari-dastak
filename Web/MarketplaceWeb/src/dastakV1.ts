@@ -129,6 +129,7 @@ export type V1RestaurantMenu = {
     acceptingOrders: boolean; isOpen: boolean; branchStatus: string; merchantType: string;
     operationalVersion: number;
     softActiveOrderThreshold: number; activeOrderCount: number;
+    distanceMeters?: number;
   };
   categories: V1RestaurantMenuCategory[];
 };
@@ -1092,20 +1093,39 @@ export async function getV1Restaurants(
   return requiredArray(source.restaurants).map(parseRestaurantMenu);
 }
 
-export type V1RestaurantCursor = { name: string; branchId: string };
-export type V1RestaurantPage = { restaurants: V1RestaurantMenu[]; nextCursor?: V1RestaurantCursor };
+export type V1RestaurantLocation = { addressId: string; updatedAt: string };
+export type V1RestaurantCursor = { name: string; branchId: string; distanceMeters?: number | null; addressId?: string; addressVersion?: string };
+export type V1RestaurantPage = { restaurants: V1RestaurantMenu[]; nextCursor?: V1RestaurantCursor; ordering?: "NEAREST" };
 export async function getV1RestaurantPage(input: DastakV1Auth & {
-  query?: string; limit?: number; cursor?: V1RestaurantCursor; branchId?: string; signal?: AbortSignal;
+  query?: string; limit?: number; cursor?: V1RestaurantCursor; branchId?: string; signal?: AbortSignal; location?: V1RestaurantLocation;
 }, fetcher: Fetcher = fetch): Promise<V1RestaurantPage> {
+  const location = input.location;
+  if (location && (input.branchId || (input.cursor && (input.cursor.addressId !== location.addressId
+    || Date.parse(input.cursor.addressVersion ?? "") !== Date.parse(location.updatedAt))))) invalid("restaurant location cursor");
   const source = requiredRecord(await invoke(input, "dastak-v1-catalogue", {
-    operation: "customerRestaurantPage", query: input.query?.trim() || null,
+    operation: location ? "customerRestaurantNearestPage" : "customerRestaurantPage", query: input.query?.trim() || null,
     limit: input.limit ?? 100, cursor: input.cursor ?? null, branchId: input.branchId ?? null,
+    ...(location ? { addressId: requiredUuid(location.addressId), addressVersion: requiredTimestamp(location.updatedAt) } : {}),
   }, undefined, fetcher));
   if (!Object.prototype.hasOwnProperty.call(source, "nextCursor")) invalid("restaurant page cursor");
   const cursor = source.nextCursor == null ? undefined : requiredRecord(source.nextCursor);
   if (cursor && (typeof cursor.name !== "string" || cursor.name.length < 1 || cursor.name.length > 160)) invalid("restaurant cursor name");
-  return { restaurants: requiredArray(source.restaurants).map(parseRestaurantMenu),
-    nextCursor: cursor ? { name: cursor.name as string, branchId: requiredUuid(cursor.branchId) } : undefined };
+  let nearestCursor: Partial<V1RestaurantCursor> = {};
+  if (location) {
+    if (source.ordering !== "NEAREST" || source.addressId !== location.addressId
+      || Date.parse(requiredTimestamp(source.addressVersion)) !== Date.parse(location.updatedAt)) invalid("restaurant distance context");
+    if (cursor) {
+      if (!Object.hasOwn(cursor, "distanceMeters") || cursor.addressId !== location.addressId
+        || Date.parse(requiredTimestamp(cursor.addressVersion)) !== Date.parse(location.updatedAt)) invalid("restaurant distance cursor");
+      const distance = cursor.distanceMeters == null ? null : requiredInteger(cursor.distanceMeters, 0);
+      if (distance !== null && distance > 41000000) invalid("restaurant distance");
+      nearestCursor = { distanceMeters: distance, addressId: location.addressId, addressVersion: cursor.addressVersion as string };
+    }
+  }
+  const values = requiredArray(source.restaurants);
+  if (location && values.some(value => !Object.hasOwn(requiredRecord(requiredRecord(value).restaurant), "distanceMeters"))) invalid("restaurant distance missing");
+  return { restaurants: values.map(parseRestaurantMenu), ordering: location ? "NEAREST" : undefined,
+    nextCursor: cursor ? { name: cursor.name as string, branchId: requiredUuid(cursor.branchId), ...nearestCursor } : undefined };
 }
 
 export async function getV1Orders(
@@ -2498,6 +2518,8 @@ export function parseV1Catalogue(value: unknown): V1CatalogueSnapshot {
 function parseRestaurantMenu(value: unknown): V1RestaurantMenu {
   const source = requiredRecord(value);
   const restaurant = requiredRecord(source.restaurant);
+  const distanceMeters = optionalInteger(restaurant.distanceMeters, 0);
+  if (distanceMeters !== undefined && distanceMeters > 41000000) invalid("restaurant distance");
   return {
     restaurant: {
       organizationId: requiredUuid(restaurant.organizationId),
@@ -2516,6 +2538,7 @@ function parseRestaurantMenu(value: unknown): V1RestaurantMenu {
       merchantType: requiredText(restaurant.merchantType, 40),
       softActiveOrderThreshold: requiredInteger(restaurant.softActiveOrderThreshold, 1),
       activeOrderCount: requiredInteger(restaurant.activeOrderCount, 0),
+      distanceMeters,
     },
     categories: requiredArray(source.categories).map((categoryValue) => {
       const category = requiredRecord(categoryValue);

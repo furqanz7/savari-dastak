@@ -27,6 +27,17 @@ export function foodRestaurantName(menu: V1RestaurantMenu) {
   return menu.restaurant.branchName.trim() || menu.restaurant.name;
 }
 
+// Preserve the server's stable tie order; unknown locations never appear as 0m.
+export function nearestFoodMenus(menus: V1RestaurantMenu[]): V1RestaurantMenu[] {
+  return [...menus].sort((a, b) => (a.restaurant.distanceMeters ?? Infinity) - (b.restaurant.distanceMeters ?? Infinity));
+}
+
+export function foodDistance(menu: V1RestaurantMenu): string {
+  const metres = menu.restaurant.distanceMeters;
+  if (metres === undefined) return "Distance unavailable";
+  return metres < 1000 ? `${metres} m away` : `${(metres / 1000).toFixed(1)} km away`;
+}
+
 export function foodAvailability(menu: V1RestaurantMenu) {
   if (menu.restaurant.branchStatus !== "ACTIVE" || !menu.restaurant.isOpen) return "Closed — menu browsing only";
   return menu.restaurant.acceptingOrders ? "Open — availability checked at checkout" : "Orders paused — menu browsing only";

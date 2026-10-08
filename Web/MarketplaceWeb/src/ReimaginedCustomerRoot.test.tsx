@@ -49,6 +49,19 @@ beforeEach(() => {
 beforeEach(() => { vi.stubGlobal("localStorage", cartStorageFixture()); vi.mocked(useReimaginedCatalogue).mockReturnValue({ data: groceryFixture, status: "ready", error: undefined, retry: vi.fn() }); vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [], selected: undefined, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() }); });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("waits for saved locations on Food entry, then passes only address identity/version without cart writes", () => {
+    const resource = { addresses: [], selected: undefined, error: undefined, status: "loading" as const, select: vi.fn(), retry: vi.fn() };
+    vi.mocked(useReimaginedAddresses).mockReturnValue(resource);
+    const shopping = { retail: { [fixtureId(6)]: 2 }, food: [] }; saveCustomerCart("a", shopping);
+    mount(); click("Food");
+    expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.anything(), true);
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.anything(), false, true, undefined, "", undefined);
+    const selected = { addressId: fixtureId(70), updatedAt: "2026-10-08T00:00:00Z", label: "Home", address: "Private test street", building: "1", details: "", displayAddress: "Private test street", location: { latitude: 12, longitude: 77 }, isDefault: true };
+    vi.mocked(useReimaginedAddresses).mockReturnValue({ ...resource, status: "ready", addresses: [selected], selected });
+    act(() => root.render(<ReimaginedCustomerRoot {...props} />));
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.anything(), true, true, undefined, "", { addressId: selected.addressId, updatedAt: selected.updatedAt });
+    expect(loadCustomerCart("a")).toEqual(shopping); expect(submitV1Order).not.toHaveBeenCalled(); expect(commitV1LaunchPayment).not.toHaveBeenCalled();
+  });
   it.each(["#/wishlist", "#/payments", "#/search", "#/account", "#/settings", `#/v1-orders/${fixtureId(20)}`, `#/orders/${fixtureId(20)}`])("restores %s without changing either cart or submitting an order", async hash => {
     const shopping = { retail: { [fixtureId(6)]: 2 }, food: [{ branchId: "saved", itemId: "meal", optionIds: [], quantity: 3 }] };
     saveCustomerCart("a", shopping); window.history.replaceState(null, "", hash);
@@ -99,7 +112,7 @@ describe("authenticated local customer integration", () => {
     await act(async () => mount());
     await act(async () => { window.location.hash = "#/search?service=food&q=rice"; await new Promise<void>(resolve => window.addEventListener("hashchange", () => resolve(), { once: true })); });
     expect(host.textContent).toContain("Results for “rice”");
-    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.anything(), true, true, undefined, "rice");
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.anything(), true, true, undefined, "rice", undefined);
     const remove = vi.spyOn(window, "removeEventListener"); act(() => root.unmount());
     expect(remove).toHaveBeenCalledWith("popstate", expect.any(Function)); expect(remove).toHaveBeenCalledWith("hashchange", expect.any(Function)); remove.mockRestore();
   });
@@ -229,15 +242,15 @@ describe("authenticated local customer integration", () => {
     expect(review.textContent).toContain("₹360.00"); expect(review.textContent).toContain("Choose a valid saved delivery address");
     expect([...review.querySelectorAll("button")].find(button => button.textContent === "Reserve Food order")?.disabled).toBe(true);
     click("Continue Shopping"); expect(loadCustomerCart("a")).toEqual(shopping);
-    expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), false);
+    expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true);
     expect(fetcher).not.toHaveBeenCalled();
   });
   it("enables Food loading only on Food entry and preserves both carts through menus", () => {
     vi.mocked(useReimaginedFood).mockReturnValue({ data: [foodMenuFixture()], error: undefined, status: "ready", retry: vi.fn() });
     const shopping = { retail: { [fixtureId(6)]: 2 }, food: [{ branchId: "saved", itemId: "meal", optionIds: [], quantity: 3 }] };
     saveCustomerCart("a", shopping); mount();
-    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), false, true, undefined, "");
-    click("Food"); expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true, true, undefined, "");
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), false, true, undefined, "", undefined);
+    click("Food"); expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true, true, undefined, "", undefined);
     click("Open Test Café menu"); click("View Test Paneer Rice details"); click("Grocery");
     expect(loadCustomerCart("a")).toEqual(shopping);
   });

@@ -26,6 +26,10 @@ export type V1CatalogueDependencies = {
     accessToken: string; query: string | null; limit: number;
     afterName: string | null; afterBranchId: string | null; branchId: string | null;
   }) => Promise<unknown>;
+  customerRestaurantNearestPage?: (input: {
+    accessToken: string; addressId: string; addressVersion: string; query: string | null; limit: number;
+    afterName: string | null; afterBranchId: string | null; afterDistanceMeters: number | null;
+  }) => Promise<unknown>;
   adminSnapshot: (
     input: { accessToken: string; skuLimit: number },
   ) => Promise<unknown>;
@@ -244,6 +248,25 @@ export async function handleV1Catalogue(
           || (body.cursor != null && (!cursor || !afterName || !afterBranchId))
           || (branchId && cursor)) return validationError();
         return json(await dependencies.customerRestaurantPage({ accessToken: actor.accessToken, query, limit: limit ?? 100, afterName, afterBranchId: afterBranchId ?? null, branchId }));
+      }
+      case "customerRestaurantNearestPage": {
+        const query = optionalText(body.query, 80);
+        const limit = optionalInteger(body.limit, 1, 100);
+        const addressId = requiredUUID(body.addressId);
+        const addressVersion = typeof body.addressVersion === "string" && body.addressVersion.length <= 40
+          && /^\d{4}-\d{2}-\d{2}T/.test(body.addressVersion) && Number.isFinite(Date.parse(body.addressVersion)) ? body.addressVersion : null;
+        const cursor = record(body.cursor);
+        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length > 0 && cursor.name.length <= 160 ? cursor.name : null;
+        const afterBranchId = cursor ? requiredUUID(cursor.branchId) : null;
+        const afterDistanceMeters = cursor?.distanceMeters == null ? null : optionalInteger(cursor.distanceMeters, 0, 41000000);
+        if (!addressId || !addressVersion || query === undefined || (body.limit != null && limit === undefined)
+          || body.branchId != null || afterDistanceMeters === undefined
+          || (body.cursor != null && (!cursor || !afterName || !afterBranchId
+            || !Object.hasOwn(cursor, "distanceMeters") || cursor.addressId !== addressId
+            || typeof cursor.addressVersion !== "string" || Date.parse(cursor.addressVersion) !== Date.parse(addressVersion)))) return validationError();
+        if (!dependencies.customerRestaurantNearestPage) throw new V1RequestError(503, "unavailable", "Nearest restaurants are unavailable.");
+        return json(await dependencies.customerRestaurantNearestPage({ accessToken: actor.accessToken, addressId, addressVersion, query,
+          limit: limit ?? 100, afterName, afterBranchId: afterBranchId ?? null, afterDistanceMeters }));
       }
       case "adminSnapshot": {
         const parsedLimit = optionalInteger(body.skuLimit, 1, 1000);

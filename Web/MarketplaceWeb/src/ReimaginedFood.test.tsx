@@ -24,6 +24,19 @@ function mount(resource = ready, online = true, empty = false) { host = document
 function click(label: string) { const button = [...host.querySelectorAll("button")].find(value => (value.getAttribute("aria-label") ?? value.textContent) === label); if (!button) throw new Error(`Missing ${label}`); act(() => button.click()); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("Food discovery and menus", () => {
+  it("shows verified distances without implying road ETA or changing shopping", () => {
+    const near = foodMenuFixture(); near.restaurant.distanceMeters = 350;
+    const unknown = foodMenuFixture(fixtureId(40)); unknown.restaurant.branchName = "Unknown Café";
+    mount({ ...ready, data: [near, unknown], nearest: true });
+    const shopping = host.querySelector('output')!.textContent;
+    expect(host.textContent).toContain("Nearest first"); expect(host.textContent).toContain("straight-line distance");
+    expect(host.textContent).toContain("350 m away"); expect(host.textContent).toContain("Distance unavailable");
+    click("Browse Food category Meals"); expect(host.querySelector('output')!.textContent).toBe(shopping);
+  });
+  it("does not claim nearest ordering when no delivery location is selected", () => {
+    mount(); expect(host.textContent).toContain("Choose a saved delivery location");
+    expect(host.textContent).not.toContain("Distance unavailable");
+  });
   it("jumps to exact menu categories in the opened branch without changing either cart", () => {
     const menu = foodMenuFixture();
     menu.categories.push({ ...menu.categories[0], id: fixtureId(40), name: "Drinks", items: [] });

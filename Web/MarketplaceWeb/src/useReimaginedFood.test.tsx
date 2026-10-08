@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { V1RestaurantMenu, V1RestaurantPage } from "./dastakV1";
+import type { V1RestaurantLocation, V1RestaurantMenu, V1RestaurantPage } from "./dastakV1";
 import { useReimaginedFood } from "./useReimaginedFood";
 import { foodMenuFixture } from "./reimaginedFood.testFixtures";
 import { fixtureId } from "./reimaginedCatalogue.testFixtures";
@@ -10,13 +10,38 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 type Loader = NonNullable<Parameters<typeof useReimaginedFood>[3]>;
 let root: Root; let host: HTMLDivElement;
 const page = (restaurants: V1RestaurantMenu[], nextCursor?: V1RestaurantPage["nextCursor"]) => ({ restaurants, nextCursor });
-function Harness({ loader, enabled = true, online = true, token = "token", account = "a", query = "" }: { loader: Loader; enabled?: boolean; online?: boolean; token?: string; account?: string; query?: string }) {
-  const result = useReimaginedFood({ accountId: account, accessToken: token, supabaseUrl: "https://example.supabase.co", publishableKey: "test" }, enabled, online, loader, query);
+function Harness({ loader, enabled = true, online = true, token = "token", account = "a", query = "", location }: { loader: Loader; enabled?: boolean; online?: boolean; token?: string; account?: string; query?: string; location?: V1RestaurantLocation }) {
+  const result = useReimaginedFood({ accountId: account, accessToken: token, supabaseUrl: "https://example.supabase.co", publishableKey: "test" }, enabled, online, loader, query, location);
   return <><output>{JSON.stringify({ status: result.status, count: result.data?.length, more: result.hasMore, matches: result.searchData?.length })}</output><button onClick={result.retry}>Retry</button><button onClick={() => void result.loadMore?.()}>More</button></>;
 }
 function mount(loader: Loader, enabled = true, online = true) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness loader={loader} enabled={enabled} online={online} />)); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); });
 describe("Food session resource", () => {
+  it("scopes distance reads and cursors to the selected address, rejecting late old-location replies", async () => {
+    const home = { addressId: fixtureId(70), updatedAt: "2026-10-08T00:00:00Z" };
+    const office = { ...home, addressId: fixtureId(71) };
+    let resolve!: (data: V1RestaurantPage) => void;
+    const cursor = { name: "Cafe", branchId: fixtureId(30), addressId: office.addressId, addressVersion: office.updatedAt, distanceMeters: 800 };
+    const loader = vi.fn().mockResolvedValueOnce(page([])).mockReturnValueOnce(new Promise<V1RestaurantPage>(yes => { resolve = yes; }))
+      .mockResolvedValue({ ...page([foodMenuFixture(fixtureId(999))], cursor), ordering: "NEAREST" });
+    mount(loader); await act(async () => {});
+    act(() => root.render(<Harness loader={loader} location={home} />));
+    await act(async () => root.render(<Harness loader={loader} location={office} />));
+    expect(loader.mock.calls[1][0].signal.aborted).toBe(true);
+    await act(async () => resolve({ ...page([foodMenuFixture(), foodMenuFixture(fixtureId(800))]), ordering: "NEAREST" }));
+    expect(host.textContent).toContain('"count":1');
+    await act(async () => host.querySelectorAll('button')[1].click());
+    expect(loader.mock.calls[3][0]).toMatchObject({ location: office, cursor });
+    expect(loader.mock.calls[3][0]).not.toHaveProperty("latitude");
+    expect(loader.mock.calls[3][0]).not.toHaveProperty("longitude");
+    await act(async () => root.render(<Harness loader={loader} location={{ ...office, updatedAt: "2026-10-09T00:00:00Z" }} />));
+    expect(loader.mock.calls[4][0].cursor).toBeUndefined();
+  });
+  it("does not label an unverified alphabetical response as nearest", async () => {
+    const loader = vi.fn().mockResolvedValue(page([foodMenuFixture()])); mount(loader, false);
+    await act(async () => root.render(<Harness loader={loader} location={{ addressId: fixtureId(70), updatedAt: "2026-10-08T00:00:00Z" }} />));
+    expect(host.textContent).toContain("unavailable"); expect(host.textContent).not.toContain('"count":1');
+  });
   it("loads only on Food entry and reuses the same-session in-memory result", async () => {
     const loader = vi.fn().mockResolvedValue(page([foodMenuFixture()])); mount(loader, false); expect(loader).not.toHaveBeenCalled();
     await act(async () => root.render(<Harness loader={loader} />)); expect(loader).toHaveBeenCalledOnce();
