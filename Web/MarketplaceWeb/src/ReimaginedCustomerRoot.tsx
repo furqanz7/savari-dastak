@@ -95,8 +95,9 @@ function AccountExperience(props: Props) {
     return { ...menu, restaurant: { ...menu.restaurant, acceptingOrders: accepting,
       isOpen: accepting, branchStatus: accepting ? "ACTIVE" : menu.restaurant.branchStatus } };
   };
-  const food = { ...foodResource, data: foodResource.data?.map(localMenu), searchData: foodResource.searchData?.map(localMenu),
-    findRestaurant: async (id: string) => { const menu = await foodResource.findRestaurant?.(id); return menu ? localMenu(menu) : undefined; } };
+  const locallyListed = (menu: NonNullable<typeof foodResource.data>[number]) => !availability.data || Object.hasOwn(availability.data.restaurants, menu.restaurant.branchId);
+  const food = { ...foodResource, data: foodResource.data?.filter(locallyListed).map(localMenu), searchData: foodResource.searchData?.filter(locallyListed).map(localMenu),
+    findRestaurant: async (id: string) => { const menu = await foodResource.findRestaurant?.(id); return menu && locallyListed(menu) ? localMenu(menu) : undefined; } };
   const groceryEligibility = (sku: { id: string }) => localGroceryEligibility(sku.id, availability.data, online, canEditCart, Boolean(foodLocation));
   const deliveryIssue = areaCheckoutIssue(availability.data, Boolean(foodLocation));
   const groceryIssue = areaCheckoutIssue(availability.data, Boolean(foodLocation), state.shopping.retail);

@@ -809,6 +809,7 @@ export type V1AdminMerchantGovernanceRow = {
     longitude?: number;
     serviceZone: { id?: string; name?: string };
     capacityLimit: number;
+    customerListingVisible?: boolean;
     operationalState: { isOpen: boolean; acceptingOrders: boolean; version?: number };
     activeNonTerminalFulfilmentCount: number;
     activePickupReturnWorkCount: number;
@@ -1466,6 +1467,16 @@ export async function setV1AdminMerchantBranchStatus(
     status: input.status,
     expectedVersion: input.expectedVersion,
     reason: input.reason.trim(),
+  }, input.idempotencyKey, fetcher));
+}
+
+export async function setV1AdminRestaurantCustomerVisibility(
+  input: DastakV1Auth & { branchId: string; visible: boolean; expectedVersion: number; reason: string; idempotencyKey: string; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+) {
+  return requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "setAdminRestaurantCustomerVisibility", branchId: requiredUuid(input.branchId), visible: input.visible,
+    expectedVersion: input.expectedVersion, reason: input.reason.trim(),
   }, input.idempotencyKey, fetcher));
 }
 
@@ -3959,6 +3970,7 @@ function parseAdminMerchantGovernanceRow(value: unknown): V1AdminMerchantGoverna
         name: optionalText(zone.name, 120),
       },
       capacityLimit: requiredInteger(branch.capacityLimit, 1),
+      customerListingVisible: branch.customerListingVisible == null ? undefined : requiredBoolean(branch.customerListingVisible),
       operationalState: {
         isOpen: requiredBoolean(operational.isOpen),
         acceptingOrders: requiredBoolean(operational.acceptingOrders),

@@ -8,6 +8,7 @@ import {
   correctV1AdminMerchantBranchDetails,
   getV1AdminMerchantGovernancePage,
   setV1AdminMerchantBranchStatus,
+  setV1AdminRestaurantCustomerVisibility,
   setV1AdminMerchantOrganizationStatus,
   type DastakV1Auth,
   type V1AdminMerchantBranchChanges,
@@ -158,6 +159,25 @@ export function AdminMerchantGovernancePanel({ auth }: { auth: DastakV1Auth }) {
     setNotice(undefined);
   };
 
+  const beginVisibility = (row: V1AdminMerchantGovernanceRow) => {
+    if (row.branch.customerListingVisible === undefined) return;
+    const visible = !row.branch.customerListingVisible;
+    setIntent({
+      operationIdentity: `restaurant-visibility:${row.branch.id}:${row.branch.version}:${visible}`,
+      success: visible ? "Restaurant restored to Customer listings." : "Restaurant removed from Customer listings. Its records are preserved.",
+      dialog: {
+        eyebrow: "Customer restaurant visibility", title: visible ? "Restore this restaurant to Customer?" : "Remove this restaurant from Customer?",
+        entityLabel: "Restaurant branch", entityValue: `${row.organization.displayName} / ${row.branch.displayName} · ${row.branch.id}`,
+        currentState: visible ? "Removed from Customer" : "Listed in Customer", resultingState: visible ? "Listed in Customer" : "Removed from Customer",
+        consequence: "This changes Customer visibility only. Open/closed state, suspension, menus, orders and financial history remain unchanged. Already-confirmed orders continue. Restoration does not reopen a closed store.",
+        confirmLabel: visible ? "Confirm restoration" : "Confirm removal", tone: visible ? "primary" : "danger",
+        reasonOptions: ["Merchant requested", "Listing correction", "Authorized support action", "Other"],
+        confirmationValue: visible ? undefined : row.branch.displayName,
+      },
+      mutate: (idempotencyKey, reason) => setV1AdminRestaurantCustomerVisibility({ ...auth, branchId: row.branch.id, visible, expectedVersion: row.branch.version, reason, idempotencyKey }),
+    });
+  };
+
   const reviewCorrection = (row: V1AdminMerchantGovernanceRow) => {
     if (!draft) return;
     const latitude = Number(draft.latitude);
@@ -268,6 +288,7 @@ export function AdminMerchantGovernancePanel({ auth }: { auth: DastakV1Auth }) {
           <div><strong>{row.branch.displayName}</strong><span><MapPin size={14} /> {summaryAddress(row)}</span><small>{row.branch.serviceZone.name ?? "No service zone"} · {formatCoordinates(row)}</small></div>
           <dl>
             <div><dt>Operations</dt><dd>{row.branch.operationalState.isOpen ? "Open" : "Closed"} · {row.branch.operationalState.acceptingOrders ? "Accepting" : "Not accepting"}</dd></div>
+            {row.organization.merchantType === "RESTAURANT_CAFE" ? <div><dt>Customer listing</dt><dd>{row.branch.customerListingVisible === undefined ? "Visibility control unavailable" : row.branch.customerListingVisible ? "Listed — closed stores remain visible" : "Removed by Admin"}</dd></div> : null}
             <div><dt>Capacity</dt><dd>{row.branch.capacityLimit}</dd></div>
             <div><dt>Active fulfilments</dt><dd>{row.branch.activeNonTerminalFulfilmentCount}</dd></div>
             <div><dt>Pickup / returns</dt><dd>{row.branch.activePickupReturnWorkCount}</dd></div>
@@ -282,6 +303,7 @@ export function AdminMerchantGovernancePanel({ auth }: { auth: DastakV1Auth }) {
             {row.branch.status === "SUSPENDED" ? <CheckCircle2 size={16} /> : <ShieldAlert size={16} />} {row.branch.status === "SUSPENDED" ? "Reactivate branch" : "Suspend branch"}
           </button>
           <button className="secondary-button" type="button" disabled={busy} onClick={() => beginEdit(row)}><Settings2 size={16} /> Correct details</button>
+          {row.organization.merchantType === "RESTAURANT_CAFE" && row.branch.status !== "PENDING_REVIEW" ? <button className="secondary-button" type="button" disabled={busy || row.branch.customerListingVisible === undefined} onClick={() => beginVisibility(row)}>{row.branch.customerListingVisible === false ? "Restore to Customer" : "Remove from Customer"}</button> : null}
           {row.organization.status === "ACTIVE" && (row.organization.activeNonTerminalFulfilmentCount > 0 || row.organization.activePickupReturnWorkCount > 0) ? <small>Resolve {row.organization.activeNonTerminalFulfilmentCount} fulfilment(s) and {row.organization.activePickupReturnWorkCount} custody journey(s) before organization suspension.</small> : null}
         </footer>
         {editing === row.branch.id && draft ? <BranchCorrectionForm draft={draft} serviceZones={serviceZones.some((zone) => zone.id === row.branch.serviceZone.id) || !row.branch.serviceZone.id ? serviceZones : [{ id: row.branch.serviceZone.id, name: `${row.branch.serviceZone.name ?? "Current zone"} (current)` }, ...serviceZones]} disabled={busy} onChange={setDraft} onCancel={() => { setEditing(undefined); setDraft(undefined); }} onReview={() => reviewCorrection(row)} /> : null}

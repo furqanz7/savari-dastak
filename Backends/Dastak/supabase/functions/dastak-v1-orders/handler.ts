@@ -218,6 +218,7 @@ export type V1OrderDependencies = {
     reason: string;
     idempotencyKey: string;
   }) => Promise<unknown>;
+  setAdminRestaurantCustomerVisibility?: (input: { accessToken: string; branchId: string; visible: boolean; expectedVersion: number; reason: string; idempotencyKey: string }) => Promise<unknown>;
   correctAdminMerchantBranchDetails: (input: {
     accessToken: string;
     branchId: string;
@@ -1041,6 +1042,15 @@ export async function handleV1Orders(
           reason,
           idempotencyKey,
         }));
+      }
+      case "setAdminRestaurantCustomerVisibility": {
+        const idempotencyKey = requiredIdempotencyKey(request);
+        const branchId = requiredUUID(body.branchId);
+        const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
+        const reason = requiredText(body.reason, 500);
+        if (!branchId || typeof body.visible !== "boolean" || !expectedVersion || !reason || reason.length < 3 || !idempotencyKey) return validationError();
+        if (!dependencies.setAdminRestaurantCustomerVisibility) throw new V1RequestError(503, "unavailable", "Restaurant visibility control is unavailable.");
+        return json(await dependencies.setAdminRestaurantCustomerVisibility({ accessToken: actor.accessToken, branchId, visible: body.visible, expectedVersion, reason, idempotencyKey }));
       }
       case "correctAdminMerchantBranchDetails": {
         const idempotencyKey = requiredIdempotencyKey(request);

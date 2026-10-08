@@ -15,4 +15,7 @@ psql -h "$task_test_root/socket" -p 55489 -d postgres -v ON_ERROR_STOP=1 \
   -f "$task_supabase_root/tests/customer_area_fixture.sql" \
   -f "$task_supabase_root/migrations/20261007200623_customer_food_cursor_pages.sql" \
   -f "$task_supabase_root/migrations/20261008095639_customer_area_availability.sql" \
-  -f "$task_supabase_root/tests/customer_area_assertions.sql"
+  -f "$task_supabase_root/tests/customer_area_assertions.sql" \
+  -f "$task_supabase_root/tests/customer_visibility_fixture.sql" \
+  -f "$task_supabase_root/migrations/20261008114655_admin_customer_restaurant_visibility.sql" \
+  -f "$task_supabase_root/tests/customer_visibility_assertions.sql"

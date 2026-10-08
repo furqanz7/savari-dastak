@@ -279,6 +279,10 @@ Deno.serve((request) =>
         p_reason: input.reason,
         p_idempotency_key: input.idempotencyKey,
       }),
+    setAdminRestaurantCustomerVisibility: input => callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_set_restaurant_customer_visibility", {
+      p_branch_id: input.branchId, p_visible: input.visible, p_expected_version: input.expectedVersion,
+      p_reason: input.reason, p_idempotency_key: input.idempotencyKey,
+    }),
     correctAdminMerchantBranchDetails: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_correct_merchant_branch_details", {
         p_branch_id: input.branchId,

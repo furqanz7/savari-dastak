@@ -47,6 +47,7 @@ import {
   setV1OperationalPause,
   setV1AdminMerchantOrganizationStatus,
   setV1AdminMerchantBranchStatus,
+  setV1AdminRestaurantCustomerVisibility,
   setV1AdminDeliveryPartnerStatus,
   correctV1AdminMerchantBranchDetails,
   setV1ExecutiveAdmin,
@@ -765,7 +766,7 @@ describe("Dastak V1 web contract", () => {
             id: branchId, displayName: "Craft Central", status: "ACTIVE", version: 5,
             normalizedAddress: { line1: "128 Mandi Street", city: "Vaniyambadi", state: "Tamil Nadu", postalCode: "635751", countryCode: "IN" },
             latitude: 12.6812, longitude: 78.6202,
-            serviceZone: { id: skuId, name: "Vaniyambadi" }, capacityLimit: 12,
+            serviceZone: { id: skuId, name: "Vaniyambadi" }, capacityLimit: 12, customerListingVisible: false,
             operationalState: { isOpen: true, acceptingOrders: false, version: 4 },
             activeNonTerminalFulfilmentCount: 1, activePickupReturnWorkCount: 0,
             operationalPause: { id: packageId, active: true, reason: "Safety review", version: 2, updatedAt: "2026-09-12T10:00:00Z" },
@@ -782,16 +783,18 @@ describe("Dastak V1 web contract", () => {
     const page = await getV1AdminMerchantGovernancePage({ ...auth, query: " Craft ", limit: 40 }, fetcher);
     await setV1AdminMerchantOrganizationStatus({ ...auth, organizationId, status: "SUSPENDED", expectedVersion: 3, reason: " Reviewed compliance ", idempotencyKey: "org-key" }, fetcher);
     await setV1AdminMerchantBranchStatus({ ...auth, branchId, status: "SUSPENDED", expectedVersion: 5, reason: " Reviewed branch ", idempotencyKey: "branch-key" }, fetcher);
+    await setV1AdminRestaurantCustomerVisibility({ ...auth, branchId, visible: false, expectedVersion: 5, reason: " Reviewed removal ", idempotencyKey: "remove-key" }, fetcher);
     await correctV1AdminMerchantBranchDetails({ ...auth, branchId, changes: { displayName: "Craft Central", capacityLimit: 12 }, expectedVersion: 5, reason: " Verified details ", idempotencyKey: "correction-key" }, fetcher);
 
     expect(page.merchants[0]).toMatchObject({
       organization: { id: organizationId, status: "ACTIVE", activeNonTerminalFulfilmentCount: 1 },
-      branch: { id: branchId, serviceZone: { name: "Vaniyambadi" }, operationalPause: { active: true } },
+      branch: { id: branchId, serviceZone: { name: "Vaniyambadi" }, operationalPause: { active: true }, customerListingVisible: false },
     });
     expect(bodies).toEqual([
       { operation: "adminMerchantGovernancePage", query: "Craft", organizationId: null, branchId: null, limit: 40, cursor: null },
       { operation: "setAdminMerchantOrganizationStatus", organizationId, status: "SUSPENDED", expectedVersion: 3, reason: "Reviewed compliance" },
       { operation: "setAdminMerchantBranchStatus", branchId, status: "SUSPENDED", expectedVersion: 5, reason: "Reviewed branch" },
+      { operation: "setAdminRestaurantCustomerVisibility", branchId, visible: false, expectedVersion: 5, reason: "Reviewed removal" },
       { operation: "correctAdminMerchantBranchDetails", branchId, changes: { displayName: "Craft Central", capacityLimit: 12 }, expectedVersion: 5, reason: "Verified details" },
     ]);
   });

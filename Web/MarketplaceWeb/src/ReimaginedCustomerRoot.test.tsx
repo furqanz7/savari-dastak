@@ -59,6 +59,14 @@ beforeEach(() => {
 });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("removes an Admin-unlisted restaurant from already-loaded cards using the fresh area snapshot", () => {
+    const menu = foodMenuFixture();
+    vi.mocked(useReimaginedFood).mockReturnValue({ data: [menu], status: "ready", error: undefined, retry: vi.fn() });
+    vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, restaurants: {} }, status: "ready", error: undefined, retry: vi.fn() });
+    mount(); click("Food");
+    expect(host.querySelector('button[aria-label="Open Test Café menu"]')).toBeNull();
+    expect(host.textContent).not.toContain("Test Café");
+  });
   it("keeps local cart editing enabled without a delivery partner but blocks new Grocery reservation", () => {
     vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, deliveryAvailable: false }, status: "ready", error: undefined, retry: vi.fn() });
     mount(); click("Take a Bucket"); click("Rice"); click("Add Test Plain Rice, 1 kg");

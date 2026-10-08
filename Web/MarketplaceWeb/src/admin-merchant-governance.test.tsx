@@ -2,6 +2,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("Admin Merchant governance workspace", () => {
+  it("keeps explicit reversible Customer removal separate from suspension and closing", () => {
+    const panel = readFileSync(new URL("./AdminMerchantGovernancePanel.tsx", import.meta.url), "utf8");
+    expect(panel).toContain("setV1AdminRestaurantCustomerVisibility");
+    expect(panel).toContain("Remove from Customer"); expect(panel).toContain("Restore to Customer");
+    expect(panel).toContain("Visibility control unavailable");
+    expect(panel).toContain("Restoration does not reopen a closed store");
+    expect(panel).toContain("confirmationValue: visible ? undefined : row.branch.displayName");
+  });
   it("is permission-scoped, independently synchronized and wired into Admin navigation", () => {
     const dashboard = readFileSync(new URL("./AdminDashboard.tsx", import.meta.url), "utf8");
     const panel = readFileSync(new URL("./AdminMerchantGovernancePanel.tsx", import.meta.url), "utf8");

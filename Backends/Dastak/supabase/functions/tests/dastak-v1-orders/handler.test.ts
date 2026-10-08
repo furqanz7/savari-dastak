@@ -2,6 +2,23 @@ import { assertEquals } from "jsr:@std/assert";
 import { V1RequestError } from "../../_shared/v1-rpc.ts";
 import { handleV1Orders, type V1OrderDependencies } from "../../dastak-v1-orders/handler.ts";
 
+Deno.test("Admin Customer removal binds bearer identity and preserves reason/version/retry key", async () => {
+  let recorded: unknown;
+  const response = await handleV1Orders(request({operation:"setAdminRestaurantCustomerVisibility",branchId:skuId,visible:false,expectedVersion:3,reason:" Reviewed removal ",actorId:"forged"},"visibility-once"), dependencies({
+    setAdminRestaurantCustomerVisibility: input => { recorded=input; return Promise.resolve({}); },
+  }));
+  assertEquals(response.status,200);
+  assertEquals(recorded,{accessToken:actor.accessToken,branchId:skuId,visible:false,expectedVersion:3,reason:"Reviewed removal",idempotencyKey:"visibility-once"});
+});
+Deno.test("Admin Customer removal rejects invalid booleans, versions, reasons and missing keys", async () => {
+  let calls=0;
+  const deps=dependencies({setAdminRestaurantCustomerVisibility:()=>{calls++;return Promise.resolve({});}});
+  const valid={operation:"setAdminRestaurantCustomerVisibility",branchId:skuId,visible:false,expectedVersion:3,reason:"Reviewed"};
+  for(const body of [{...valid,visible:"false"},{...valid,expectedVersion:0},{...valid,branchId:"bad"},{...valid,reason:""}]) assertEquals((await handleV1Orders(request(body,"once"),deps)).status,400);
+  assertEquals((await handleV1Orders(request(valid),deps)).status,400);
+  assertEquals(calls,0);
+});
+
 Deno.test("admin cancellation binds authenticated identity and forwards audited intent", async () => {
   let recorded: unknown;
   const response = await handleV1Orders(request({
@@ -1490,6 +1507,7 @@ function dependencies(
       (() => Promise.resolve({})),
     setAdminMerchantBranchStatus: overrides.setAdminMerchantBranchStatus ??
       (() => Promise.resolve({})),
+    setAdminRestaurantCustomerVisibility: overrides.setAdminRestaurantCustomerVisibility,
     correctAdminMerchantBranchDetails: overrides.correctAdminMerchantBranchDetails ??
       (() => Promise.resolve({})),
     setExecutiveAdmin: overrides.setExecutiveAdmin ??

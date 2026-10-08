@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("./design/reimagined.css", import.meta.url), "utf8");
-const phone = css.slice(css.indexOf("/* Phone controls use full-width rows"));
+const phone = css.slice(css.indexOf("/* Preserve the brief's spatial model on phones"));
 
 describe("Reimagined responsive layout safeguards", () => {
   it("does not inherit the old page minimum width when a short phone needs a scrollbar", () => {
@@ -19,16 +19,18 @@ describe("Reimagined responsive layout safeguards", () => {
       expect(css).toMatch(new RegExp(`\\.${selector} \\{[^}]*overflow-x: auto`));
     }
   });
-  it("uses four bottom navigation targets and a full-width category row on phones", () => {
-    expect(phone).toMatch(/\.reimagined-navigation \{[^}]*top: auto;[^}]*right:[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
-    expect(phone).toMatch(/\.reimagined-navigation button \{[^}]*min-height: 56px/);
-    expect(phone).toMatch(/\.reimagined-directory \{[^}]*overflow-x: auto; overflow-y: hidden/);
-    expect(phone).toMatch(/\.reimagined-directory section button \{[^}]*min-height: 48px/);
+  it("preserves top-left vertical navigation and a right-hand vertical directory on phones", () => {
+    expect(phone).toMatch(/\.reimagined-navigation \{[^}]*bottom: auto;[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+    expect(phone).toMatch(/\.reimagined-navigation button \{[^}]*flex-direction: row;[^}]*min-height: 44px/);
+    expect(phone).toMatch(/\.reimagined-right \{[^}]*left: max\(116px/);
+    expect(phone).toMatch(/\.reimagined-location \{[^}]*left: max\(116px/);
+    expect(phone).toMatch(/\.reimagined-directory \{[^}]*overflow-x: hidden; overflow-y: auto/);
+    expect(phone).toMatch(/\.reimagined-directory section button \{[^}]*min-height: 44px/);
   });
-  it("reserves space for the testing notice, cart and navigation", () => {
+  it("reserves bottom space only for the testing notice and contextual shopping/order state", () => {
     expect(phone).toContain("--panel-preview-space: 56px");
-    expect(phone).toMatch(/data-bottom-rows="1"[^}]*--panel-bottom: max\(162px/);
-    expect(phone).toMatch(/data-bottom-rows="2"[^}]*--panel-bottom: max\(220px/);
+    expect(phone).toMatch(/data-bottom-rows="1"[^}]*--panel-bottom: max\(88px/);
+    expect(phone).toMatch(/data-bottom-rows="2"[^}]*--panel-bottom: max\(146px/);
   });
   it("keeps phone text inputs readable without changing selection controls", () => {
     expect(phone).toMatch(/input:not\(\[type="radio"\]\):not\(\[type="checkbox"\]\)[^}]*font-size: 16px/);
