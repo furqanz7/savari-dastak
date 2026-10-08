@@ -6,6 +6,34 @@ import {
   type V1CatalogueDependencies,
 } from "../../dastak-v1-catalogue/handler.ts";
 
+Deno.test("Customer area reads bind to the bearer actor and an owned-address version, not client coordinates", async () => {
+  let recorded: unknown;
+  const response = await handleV1Catalogue(request({ operation: "customerAreaAvailability", addressId: skuId,
+    addressVersion: "2026-10-08T00:00:00Z", accountId: otherAccountId, latitude: 50, longitude: 50 }),
+    dependencies({ customerAreaAvailability: input => { recorded = input; return Promise.resolve({ stock: {} }); } }));
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accessToken: actor.accessToken, addressId: skuId, addressVersion: "2026-10-08T00:00:00Z" });
+});
+Deno.test("Customer area reads reject invalid IDs and stale-location cursors before invoking SQL", async () => {
+  let calls = 0;
+  const deps = dependencies({ customerAreaAvailability: () => { calls++; return Promise.resolve({}); }, customerRestaurantAreaPage: () => { calls++; return Promise.resolve({}); } });
+  for (const payload of [
+    { operation: "customerAreaAvailability", addressId: "bad", addressVersion: "2026-10-08T00:00:00Z" },
+    { operation: "customerAreaAvailability", addressId: skuId, addressVersion: "bad" },
+    { operation: "customerRestaurantAreaPage", addressId: skuId, addressVersion: "2026-10-08T00:00:00Z", cursor: { name: "Cafe", branchId: categoryId, distanceMeters: 2, addressId: otherAccountId, addressVersion: "2026-10-08T00:00:00Z" } },
+  ]) assertEquals((await handleV1Catalogue(request(payload), deps)).status, 400);
+  assertEquals(calls, 0);
+});
+Deno.test("Area Food exact lookups remain location-scoped and never receive an actor override", async () => {
+  let recorded: unknown;
+  const response = await handleV1Catalogue(request({ operation: "customerRestaurantAreaPage", addressId: skuId,
+    addressVersion: "2026-10-08T00:00:00Z", branchId: categoryId, limit: 1, accountId: otherAccountId }),
+    dependencies({ customerRestaurantAreaPage: input => { recorded = input; return Promise.resolve({ restaurants: [], nextCursor: null }); } }));
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accessToken: actor.accessToken, addressId: skuId, addressVersion: "2026-10-08T00:00:00Z",
+    branchId: categoryId, query: null, limit: 1, afterName: null, afterBranchId: null, afterDistanceMeters: null });
+});
+
 Deno.test("V1 catalogue serves CORS preflight before authentication", async () => {
   let authCalls = 0;
   const response = await handleV1Catalogue(
@@ -821,6 +849,8 @@ function dependencies(
       (() => Promise.resolve({ restaurants: [] })),
     customerRestaurantPage: overrides.customerRestaurantPage ?? (() => Promise.resolve({ restaurants: [], nextCursor: null })),
     customerRestaurantNearestPage: overrides.customerRestaurantNearestPage,
+    customerAreaAvailability: overrides.customerAreaAvailability,
+    customerRestaurantAreaPage: overrides.customerRestaurantAreaPage,
     adminSnapshot: overrides.adminSnapshot ?? (() => Promise.resolve(snapshot)),
     adminTaxonomy: overrides.adminTaxonomy ??
       (() =>

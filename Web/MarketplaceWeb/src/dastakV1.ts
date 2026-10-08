@@ -1094,16 +1094,41 @@ export async function getV1Restaurants(
 }
 
 export type V1RestaurantLocation = { addressId: string; updatedAt: string };
+export type V1AreaAvailability = {
+  addressId: string; addressVersion: string; checkedAt: string;
+  groceryServiceable: boolean; foodServiceable: boolean; deliveryAvailable: boolean;
+  stock: Record<string, number>;
+  restaurants: Record<string, boolean>;
+};
+export async function getV1AreaAvailability(input: DastakV1Auth & { location: V1RestaurantLocation; signal?: AbortSignal }, fetcher: Fetcher = fetch): Promise<V1AreaAvailability> {
+  const source = requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "customerAreaAvailability", addressId: requiredUuid(input.location.addressId), addressVersion: requiredTimestamp(input.location.updatedAt),
+  }, undefined, fetcher));
+  if (source.addressId !== input.location.addressId || Date.parse(requiredTimestamp(source.addressVersion)) !== Date.parse(input.location.updatedAt)) invalid("area location context");
+  for (const key of ["groceryServiceable", "foodServiceable", "deliveryAvailable"]) if (typeof source[key] !== "boolean") invalid("area availability");
+  const stock: Record<string, number> = {};
+  const restaurants: Record<string, boolean> = {};
+  for (const [id, value] of Object.entries(requiredRecord(source.restaurants))) {
+    if (typeof value !== "boolean") invalid("restaurant availability");
+    restaurants[requiredUuid(id)] = value as boolean;
+  }
+  for (const [id, value] of Object.entries(requiredRecord(source.stock))) {
+    const quantity = requiredInteger(value, 1); if (quantity > 1000000) invalid("area stock");
+    stock[requiredUuid(id)] = quantity;
+  }
+  return { addressId: input.location.addressId, addressVersion: source.addressVersion as string, checkedAt: requiredTimestamp(source.checkedAt),
+    groceryServiceable: source.groceryServiceable as boolean, foodServiceable: source.foodServiceable as boolean, deliveryAvailable: source.deliveryAvailable as boolean, stock, restaurants };
+}
 export type V1RestaurantCursor = { name: string; branchId: string; distanceMeters?: number | null; addressId?: string; addressVersion?: string };
 export type V1RestaurantPage = { restaurants: V1RestaurantMenu[]; nextCursor?: V1RestaurantCursor; ordering?: "NEAREST" };
 export async function getV1RestaurantPage(input: DastakV1Auth & {
   query?: string; limit?: number; cursor?: V1RestaurantCursor; branchId?: string; signal?: AbortSignal; location?: V1RestaurantLocation;
 }, fetcher: Fetcher = fetch): Promise<V1RestaurantPage> {
   const location = input.location;
-  if (location && (input.branchId || (input.cursor && (input.cursor.addressId !== location.addressId
+  if (location && ((input.branchId && input.cursor) || (input.cursor && (input.cursor.addressId !== location.addressId
     || Date.parse(input.cursor.addressVersion ?? "") !== Date.parse(location.updatedAt))))) invalid("restaurant location cursor");
   const source = requiredRecord(await invoke(input, "dastak-v1-catalogue", {
-    operation: location ? "customerRestaurantNearestPage" : "customerRestaurantPage", query: input.query?.trim() || null,
+    operation: location ? "customerRestaurantAreaPage" : "customerRestaurantPage", query: input.query?.trim() || null,
     limit: input.limit ?? 100, cursor: input.cursor ?? null, branchId: input.branchId ?? null,
     ...(location ? { addressId: requiredUuid(location.addressId), addressVersion: requiredTimestamp(location.updatedAt) } : {}),
   }, undefined, fetcher));

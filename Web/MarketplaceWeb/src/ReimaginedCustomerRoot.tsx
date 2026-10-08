@@ -9,6 +9,9 @@ import { ReimaginedGroceryBilling } from "./ReimaginedGroceryBilling";
 import { grocerySubtotal } from "./reimaginedCatalogue";
 import { usePersistedReimaginedState } from "./usePersistedReimaginedState";
 import { useReimaginedCatalogue } from "./useReimaginedCatalogue";
+import { useReimaginedAvailability } from "./useReimaginedAvailability";
+import { areaCheckoutIssue, localGroceryEligibility } from "./reimaginedAvailability";
+import { foodAcceptingOrders } from "./reimaginedFoodCatalogue";
 import { useCustomerOnline } from "./useCustomerOnline";
 import { useReimaginedAddresses } from "./useReimaginedAddresses";
 import { useReimaginedActiveOrder } from "./useReimaginedActiveOrder";
@@ -74,24 +77,40 @@ function AccountExperience(props: Props) {
     exploration: { view: exploration.view, searchOpen: exploration.searchOpen, checkout: exploration.checkout, ...(exploration.detailId ? { detailId: exploration.detailId } : {}) } }, restoreNavigation);
   const resource = useReimaginedCatalogue(props);
   const online = useCustomerOnline();
-  reorderContext.current = JSON.stringify([props.accountId, props.accessToken, state.section, state.shopping, online, canEditCart]);
   const wishlist = useReimaginedWishlist(props, online);
   const { accountId, accessToken, supabaseUrl, publishableKey } = props;
   const checkout = useMemo(() => new ReimaginedGroceryCheckout({ accessToken, supabaseUrl, publishableKey }, undefined, undefined, undefined, checkoutJournal(accountId, supabaseUrl)), [accountId, accessToken, supabaseUrl, publishableKey]);
   const foodCheckout = useMemo(() => new ReimaginedFoodRecovery({ accessToken, supabaseUrl, publishableKey }, { submit: submitV1Order, commit: commitV1LaunchPayment, read: getV1Order }, foodRecoveryJournal(accountId, supabaseUrl, { getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value) })), [accountId, accessToken, supabaseUrl, publishableKey]);
   const foodEnabled = state.service === "food" || savedOpen || state.section === "orders";
-  const addresses = useReimaginedAddresses(props, online && (foodEnabled || state.locationOpen || state.exploration.grocery.checkout));
+  const addresses = useReimaginedAddresses(props, online);
   const tracking = useReimaginedActiveOrder(props, state.activeOrder, online);
   const foodView = state.exploration.food.view;
   const foodQuery = foodView.kind === "search" && !state.exploration.food.checkout && state.section === "home" ? foodView.query : "";
   const foodLocation = addresses.selected ? { addressId: addresses.selected.addressId, updatedAt: addresses.selected.updatedAt } : undefined;
-  const food = useReimaginedFood(props, foodEnabled && addresses.status !== "loading" && addresses.status !== "idle", online, undefined, foodQuery, foodLocation);
+  const availability = useReimaginedAvailability(props, foodLocation, online);
+  reorderContext.current = JSON.stringify([props.accountId, props.accessToken, state.section, state.shopping, online, canEditCart, foodLocation, availability.data?.checkedAt]);
+  const foodResource = useReimaginedFood(props, foodEnabled && Boolean(foodLocation), online, undefined, foodQuery, foodLocation);
+  const localMenu = (menu: NonNullable<typeof foodResource.data>[number]) => {
+    const accepting = availability.data?.restaurants[menu.restaurant.branchId] === true;
+    return { ...menu, restaurant: { ...menu.restaurant, acceptingOrders: accepting,
+      isOpen: accepting, branchStatus: accepting ? "ACTIVE" : menu.restaurant.branchStatus } };
+  };
+  const food = { ...foodResource, data: foodResource.data?.map(localMenu), searchData: foodResource.searchData?.map(localMenu),
+    findRestaurant: async (id: string) => { const menu = await foodResource.findRestaurant?.(id); return menu ? localMenu(menu) : undefined; } };
+  const groceryEligibility = (sku: { id: string }) => localGroceryEligibility(sku.id, availability.data, online, canEditCart, Boolean(foodLocation));
+  const deliveryIssue = areaCheckoutIssue(availability.data, Boolean(foodLocation));
+  const groceryIssue = areaCheckoutIssue(availability.data, Boolean(foodLocation), state.shopping.retail);
+  const areaNotice = (service: "grocery" | "food") => <section role="status">
+    <p>{!foodLocation ? "Choose your delivery location to see what’s available nearby." : availability.status === "unavailable" ? "Couldn’t check availability in your area. Your carts are saved." : availability.status !== "ready" ? "Checking availability in your area…" : service === "grocery" ? "Grocery delivery isn’t available in your area yet." : "Food delivery isn’t available in your area yet"}</p>
+    <button type="button" onClick={() => dispatch({ type: "openLocation" })}>Change location</button>
+    {foodLocation ? <button type="button" disabled={!online} onClick={availability.retry}>Check availability again</button> : null}
+  </section>;
   const pushAuth = useMemo(() => ({ accountId, accessToken, supabaseUrl, publishableKey, publicKey: props.webPushPublicKey }), [accountId, accessToken, supabaseUrl, publishableKey, props.webPushPublicKey]);
   const webPush = useDastakWebPush(pushAuth);
   const onSessionExpired = props.onSignOut;
   useEffect(() => {
-    if ([resource.error, addresses.error, tracking.error, food.error, wishlist.error].some(error => error && customerDataIssue(error).action === "sign_in")) onSessionExpired();
-  }, [resource.error, addresses.error, tracking.error, food.error, wishlist.error, onSessionExpired]);
+    if ([resource.error, addresses.error, tracking.error, food.error, wishlist.error, availability.error].some(error => error && customerDataIssue(error).action === "sign_in")) onSessionExpired();
+  }, [resource.error, addresses.error, tracking.error, food.error, wishlist.error, availability.error, onSessionExpired]);
   const homeUrl = existingCustomerUrl("home", window.location.href);
   const accountUrl = existingCustomerUrl("account", window.location.href);
   const ordersUrl = existingCustomerUrl("orders", window.location.href);
@@ -132,6 +151,12 @@ function AccountExperience(props: Props) {
   }
   function approveReorder() {
     if (!reorder || !online || !canEditCart) return;
+    if (reorder.service === "grocery" && Object.entries(reorder.shopping.retail).some(([id, quantity]) => {
+      const policy = groceryEligibility({ id }); return !policy.canAdd || quantity > policy.maximumQuantity;
+    })) { setReorderError("Some exact packs are out of stock in your area. Your current carts are unchanged."); return; }
+    if (reorder.service === "food" && reorder.shopping.food.some(line => availability.data?.restaurants[line.branchId] !== true)) {
+      setReorderError("Store closed. Your current carts are unchanged."); return;
+    }
     const controller = reorder.service === "grocery" ? checkout : foodCheckout;
     if (controller.hasPendingAttempt && !controller.committed) { setReorderError("Recover your pending checkout before replacing this cart."); return; }
     dispatch({ type: "replaceServiceShopping", ...reorder }); setReorder(undefined);
@@ -139,9 +164,9 @@ function AccountExperience(props: Props) {
   const foodInput = { food: state.shopping.food, menus: food.data, online, canEdit: canEditCart, address: addresses.selected, addressesReady: addresses.status === "ready", recipient: { name: displayName, phoneNumber } };
   const draft = subtotal !== undefined && addresses.status === "ready" && addresses.selected && displayName?.trim() && phoneNumber?.trim()
     ? { retail: state.shopping.retail, address: addresses.selected, recipient: { name: displayName, phoneNumber } } : undefined;
-  const review = <ReimaginedGroceryBilling items={<ReimaginedBucketReview state={state} dispatch={dispatch} data={resource.data} supabaseUrl={supabaseUrl} canEdit={canEditCart} canIncrease={online && resource.status === "ready"} />}
+  const review = <ReimaginedGroceryBilling items={<ReimaginedBucketReview state={state} dispatch={dispatch} data={resource.data} supabaseUrl={supabaseUrl} canEdit={canEditCart} eligibility={groceryEligibility} />}
     retail={state.shopping.retail} subtotal={subtotal} addresses={addresses} recipient={{ name: displayName, phoneNumber }} online={online} canEdit={canEditCart} accountUrl={accountUrl} addressManager={<ReimaginedAddressPicker key={`billing:${accessToken}`} resource={addresses} online={online} accountUrl={accountUrl} auth={props} onSessionExpired={onSessionExpired} compact />} onEditRecipient={() => dispatch({ type: "navigate", section: "profile" })}
-    counter={<ReimaginedCheckoutCounter key={accessToken} checkout={checkout} draft={draft} enabled canEdit={canEditCart} online={online} dispatch={dispatch} onSessionExpired={onSessionExpired} ordersUrl={ordersUrl} onOpenOrders={openOrders} />} />;
+    counter={<ReimaginedCheckoutCounter key={accessToken} checkout={checkout} draft={draft} enabled submissionIssue={groceryIssue} deliveryIssue={deliveryIssue} canEdit={canEditCart} online={online} dispatch={dispatch} onSessionExpired={onSessionExpired} ordersUrl={ordersUrl} onOpenOrders={openOrders} />} />;
   return <>
     <aside className="reimagined-local-notice" aria-label="Dastak interface recovery"><a href={homeUrl}>Use the existing Dastak interface</a></aside>
     {cartIssue ? <p role="status">{cartIssue}</p> : null}
@@ -167,23 +192,20 @@ function AccountExperience(props: Props) {
       }}>
       {!online ? <p role="status">You’re offline. Your saved Bucket is retained; adding products is disabled until you reconnect.</p> : null}
       <p className="reimagined-commerce-note">Catalogue prices are estimates. Stock, delivery and final totals must be confirmed at checkout.</p>
+      {availability.data && !availability.data.deliveryAvailable ? <p role="status">No delivery partners are available in your area right now. You can keep adding available items to your cart and order later.</p> : null}
       {wishlist.error ? <p role="alert">Your Wishlist couldn’t update. <button type="button" onClick={wishlist.retry}>Retry Wishlist</button></p> : null}
       {savedOpen ? <ReimaginedWishlist wishlist={wishlist} data={resource.data} menus={food.data} online={online} supabaseUrl={supabaseUrl} onClose={() => setSavedOpen(false)} onOpen={(skuId, branchId, itemId) => {
+        if (branchId && !food.data?.some(menu => menu.restaurant.branchId === branchId && foodAcceptingOrders(menu))) return;
         dispatch({ type: "selectService", service: skuId ? "grocery" : "food" });
         if (branchId) dispatch({ type: "openRestaurant", branchId });
         if (skuId || itemId) dispatch({ type: "openDetail", id: (skuId ?? itemId)! });
       }} /> : state.service === "grocery" ? <ReimaginedGrocery state={state} dispatch={dispatch} data={resource.data} status={resource.status} wishlist={wishlist} online={online}
+        availabilityNotice={!availability.data?.groceryServiceable ? areaNotice("grocery") : undefined}
         onRetry={resource.retry} supabaseUrl={props.supabaseUrl}
-        eligibility={() => ({
-          canAdd: canEditCart && online && resource.status === "ready",
-          canRemove: canEditCart,
-          maximumQuantity: 99,
-          reason: !canEditCart ? "This cart is read-only in this tab"
-            : !online ? "Reconnect to add products"
-              : resource.status !== "ready" ? "Wait for the catalogue to load before adding products" : undefined,
-        })}
+        eligibility={groceryEligibility}
         checkoutContent={review} /> : <ReimaginedFood state={state} dispatch={dispatch} resource={food} supabaseUrl={props.supabaseUrl} online={online} legacyUrl={homeUrl} canEdit={canEditCart} wishlist={wishlist}
-          checkoutContent={<><button type="button" onClick={() => dispatch({ type: "navigate", section: "profile" })}>Edit delivery recipient in Profile</button><ReimaginedFoodCheckout addressPicker={addressPicker} input={foodInput} counter={<ReimaginedFoodCounter key={accessToken} checkout={foodCheckout} input={foodInput} enabled dispatch={dispatch} onSessionExpired={onSessionExpired} ordersUrl={ordersUrl} onOpenOrders={openOrders} />} /></>} />}
+          availabilityNotice={!availability.data?.foodServiceable ? areaNotice("food") : undefined}
+          checkoutContent={<><button type="button" onClick={() => dispatch({ type: "navigate", section: "profile" })}>Edit delivery recipient in Profile</button><ReimaginedFoodCheckout addressPicker={addressPicker} input={foodInput} counter={<ReimaginedFoodCounter key={accessToken} checkout={foodCheckout} input={foodInput} enabled deliveryIssue={deliveryIssue} dispatch={dispatch} onSessionExpired={onSessionExpired} ordersUrl={ordersUrl} onOpenOrders={openOrders} />} /></>} />}
     </ReimaginedShell>
     {webPush.shouldPrompt ? <WebNotificationOnboarding busy={webPush.status === "enabling"} onEnable={() => void webPush.enable()} onDismiss={webPush.dismiss} /> : null}
   </>;

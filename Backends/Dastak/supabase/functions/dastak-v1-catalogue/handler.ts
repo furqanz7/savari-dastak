@@ -3,6 +3,8 @@ import { V1RequestError } from "../_shared/v1-rpc.ts";
 
 export type V1Actor = { accountId: string; accessToken: string };
 export type V1CatalogueDependencies = {
+  customerAreaAvailability?: (input: { accessToken: string; addressId: string; addressVersion: string }) => Promise<unknown>;
+  customerRestaurantAreaPage?: (input: { accessToken: string; addressId: string; addressVersion: string; query: string | null; limit: number; afterName: string | null; afterBranchId: string | null; afterDistanceMeters: number | null; branchId: string | null }) => Promise<unknown>;
   adminCatalogueSkuDelete?: (input: { accessToken: string; skuId: string; idempotencyKey: string }) => Promise<unknown>;
   adminCatalogueTaxonomyMutation?: (input: { accessToken: string; idempotencyKey: string; operation: string; payload: Record<string, unknown> }) => Promise<unknown>;
   authenticateBearer: (authorization: string) => Promise<V1Actor>;
@@ -204,6 +206,28 @@ export async function handleV1Catalogue(
 
   try {
     switch (body.operation) {
+      case "customerAreaAvailability":
+      case "customerRestaurantAreaPage": {
+        const addressId = requiredUUID(body.addressId);
+        const addressVersion = typeof body.addressVersion === "string" && body.addressVersion.length <= 40
+          && /^\d{4}-\d{2}-\d{2}T/.test(body.addressVersion) && Number.isFinite(Date.parse(body.addressVersion)) ? body.addressVersion : null;
+        if (!addressId || !addressVersion) return validationError();
+        if (body.operation === "customerAreaAvailability") {
+          if (!dependencies.customerAreaAvailability) throw new V1RequestError(503, "unavailable", "Area availability is unavailable.");
+          return json(await dependencies.customerAreaAvailability({ accessToken: actor.accessToken, addressId, addressVersion }));
+        }
+        const query = optionalText(body.query, 80), limit = optionalInteger(body.limit, 1, 100);
+        const branchId = optionalUUID(body.branchId), cursor = record(body.cursor);
+        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length > 0 && cursor.name.length <= 160 ? cursor.name : null;
+        const afterBranchId = cursor ? requiredUUID(cursor.branchId) : null;
+        const afterDistanceMeters = cursor?.distanceMeters == null ? null : optionalInteger(cursor.distanceMeters, 0, 41000000);
+        if (query === undefined || branchId === undefined || (body.limit != null && limit === undefined) || afterDistanceMeters === undefined
+          || (branchId && cursor) || (body.cursor != null && (!cursor || !afterName || !afterBranchId || !Object.hasOwn(cursor, "distanceMeters")
+            || cursor.addressId !== addressId || typeof cursor.addressVersion !== "string" || Date.parse(cursor.addressVersion) !== Date.parse(addressVersion)))) return validationError();
+        if (!dependencies.customerRestaurantAreaPage) throw new V1RequestError(503, "unavailable", "Food area menus are unavailable.");
+        return json(await dependencies.customerRestaurantAreaPage({ accessToken: actor.accessToken, addressId, addressVersion,
+          query, limit: limit ?? 100, branchId, afterName, afterBranchId: afterBranchId ?? null, afterDistanceMeters }));
+      }
       case "catalogueBrowseMap":
         return json(await dependencies.catalogueBrowseMap({ accessToken: actor.accessToken }));
       case "catalogueBrowseSkuIds": {

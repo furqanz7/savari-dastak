@@ -75,7 +75,7 @@ export function useReimaginedFood(session: Session, enabled: boolean, online: bo
     const generation = epoch.current;
     const controller = new AbortController(); lookups.current.add(controller);
     try {
-      const result = await loader({ accessToken, supabaseUrl, publishableKey, branchId, limit: 1, signal: controller.signal });
+      const result = await loader({ accessToken, supabaseUrl, publishableKey, branchId, location, limit: 1, signal: controller.signal });
       if (generation !== epoch.current || controller.signal.aborted) throw new DOMException("Food session changed", "AbortError");
       const menu = prepareFoodMenus(result.restaurants).find(value => value.restaurant.branchId === branchId);
       if (menu) { store.menus.set(branchId, menu); const page = store.pages.get(query); if (page) publish(store, page); }

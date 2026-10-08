@@ -9,6 +9,7 @@ import { useReimaginedCatalogue } from "./useReimaginedCatalogue";
 import { useReimaginedAddresses } from "./useReimaginedAddresses";
 import { useReimaginedActiveOrder } from "./useReimaginedActiveOrder";
 import { useReimaginedFood } from "./useReimaginedFood";
+import { useReimaginedAvailability } from "./useReimaginedAvailability";
 import { foodMenuFixture } from "./reimaginedFood.testFixtures";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CustomerSection } from "./customerNavigation";
@@ -24,6 +25,7 @@ vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { o
 vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }));
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
 vi.mock("./useReimaginedFood", () => ({ useReimaginedFood: vi.fn() }));
+vi.mock("./useReimaginedAvailability", () => ({ useReimaginedAvailability: vi.fn() }));
 vi.mock("./useReimaginedActiveOrder", () => ({ useReimaginedActiveOrder: vi.fn(() => ({ activeOrder: undefined, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() })) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root; let host: HTMLDivElement;
@@ -46,9 +48,51 @@ beforeEach(() => {
   vi.mocked(useReimaginedFood).mockReturnValue({ data: [], error: undefined, status: "ready", retry: vi.fn() });
   vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: undefined, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() });
 });
-beforeEach(() => { vi.stubGlobal("localStorage", cartStorageFixture()); vi.mocked(useReimaginedCatalogue).mockReturnValue({ data: groceryFixture, status: "ready", error: undefined, retry: vi.fn() }); vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [], selected: undefined, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() }); });
+const localAddress = { addressId: fixtureId(70), updatedAt: "2026-10-08T00:00:00Z", label: "Home", address: "Local test address", building: "1", details: "", displayAddress: "Local test address", location: { latitude: 12, longitude: 77 }, isDefault: true };
+const localAvailability = { addressId: localAddress.addressId, addressVersion: localAddress.updatedAt, checkedAt: "2026-10-08T00:00:00Z", groceryServiceable: true, foodServiceable: true, deliveryAvailable: true,
+  stock: Object.fromEntries(groceryFixture.catalogue.skus.map(sku => [sku.id, 99])), restaurants: Object.fromEntries(Array.from({ length: 100 }, (_, index) => [fixtureId(index), true])) };
+beforeEach(() => {
+  vi.stubGlobal("localStorage", cartStorageFixture());
+  vi.mocked(useReimaginedCatalogue).mockReturnValue({ data: groceryFixture, status: "ready", error: undefined, retry: vi.fn() });
+  vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [localAddress], selected: localAddress, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() });
+  vi.mocked(useReimaginedAvailability).mockReturnValue({ data: localAvailability, status: "ready", error: undefined, retry: vi.fn() });
+});
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("keeps local cart editing enabled without a delivery partner but blocks new Grocery reservation", () => {
+    vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, deliveryAvailable: false }, status: "ready", error: undefined, retry: vi.fn() });
+    mount(); click("Take a Bucket"); click("Rice"); click("Add Test Plain Rice, 1 kg");
+    expect(loadCustomerCart("a").retail[fixtureId(6)]).toBe(1);
+    click("Take to Cart"); click("Increase Test Plain Rice, 1 kg in Bucket");
+    expect(loadCustomerCart("a").retail[fixtureId(6)]).toBe(2);
+    click("2Delivery & billing");
+    expect([...host.querySelectorAll("button")].find(button => button.textContent === "Reserve Grocery order")?.disabled).toBe(true);
+    expect(host.textContent).toContain("No delivery partners"); expect(submitV1Order).not.toHaveBeenCalled();
+  });
+  it("labels a missing exact pack Out of stock without hiding it or removing saved quantities", () => {
+    vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, stock: {} }, status: "ready", error: undefined, retry: vi.fn() });
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 2 }, food: [] });
+    mount(); click("Rice");
+    expect(host.textContent).toContain("Test Plain Rice"); expect(host.textContent).toContain("Out of stock");
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Add one Test Plain Rice, 1 kg"]')?.disabled).toBe(true);
+    click("Take to Cart"); expect(loadCustomerCart("a").retail[fixtureId(6)]).toBe(2);
+    click("Decrease Test Plain Rice, 1 kg in Bucket"); expect(loadCustomerCart("a").retail[fixtureId(6)]).toBe(1);
+  });
+  it("shows the requested area-specific messages, rather than a globally empty catalogue", () => {
+    vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, groceryServiceable: false, foodServiceable: false }, status: "ready", error: undefined, retry: vi.fn() });
+    mount(); expect(host.textContent).toContain("Grocery delivery isn’t available in your area yet.");
+    click("Food"); expect(host.textContent).toContain("Food delivery isn’t available in your area yet");
+    expect(host.querySelector('button[aria-label="Open Test Café menu"]')).toBeNull();
+  });
+  it("applies a freshly paused restaurant to already-loaded menus without hiding the card", () => {
+    const menu = foodMenuFixture();
+    vi.mocked(useReimaginedFood).mockReturnValue({ data: [menu], status: "ready", error: undefined, retry: vi.fn() });
+    mount(); click("Food");
+    vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, restaurants: { [menu.restaurant.branchId]: false } }, status: "ready", error: undefined, retry: vi.fn() });
+    act(() => root.render(<ReimaginedCustomerRoot {...props} />));
+    expect(host.textContent).toContain("Test Café"); expect(host.textContent).toContain("Store closed");
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Open Test Café menu"]')?.disabled).toBe(true);
+  });
   it("waits for saved locations on Food entry, then passes only address identity/version without cart writes", () => {
     const resource = { addresses: [], selected: undefined, error: undefined, status: "loading" as const, select: vi.fn(), retry: vi.fn() };
     vi.mocked(useReimaginedAddresses).mockReturnValue(resource);
@@ -112,7 +156,7 @@ describe("authenticated local customer integration", () => {
     await act(async () => mount());
     await act(async () => { window.location.hash = "#/search?service=food&q=rice"; await new Promise<void>(resolve => window.addEventListener("hashchange", () => resolve(), { once: true })); });
     expect(host.textContent).toContain("Results for “rice”");
-    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.anything(), true, true, undefined, "rice", undefined);
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.anything(), true, true, undefined, "rice", { addressId: localAddress.addressId, updatedAt: localAddress.updatedAt });
     const remove = vi.spyOn(window, "removeEventListener"); act(() => root.unmount());
     expect(remove).toHaveBeenCalledWith("popstate", expect.any(Function)); expect(remove).toHaveBeenCalledWith("hashchange", expect.any(Function)); remove.mockRestore();
   });
@@ -239,7 +283,7 @@ describe("authenticated local customer integration", () => {
     saveCustomerCart("a", shopping); mount(); click("Food"); click("Review Food cart");
     expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true);
     const review = host.querySelector('[aria-label="Food checkout preparation"]')!;
-    expect(review.textContent).toContain("₹360.00"); expect(review.textContent).toContain("Choose a valid saved delivery address");
+    expect(review.textContent).toContain("₹360.00"); expect(review.textContent).toContain("Complete a valid name and international phone number");
     expect([...review.querySelectorAll("button")].find(button => button.textContent === "Reserve Food order")?.disabled).toBe(true);
     click("Continue Shopping"); expect(loadCustomerCart("a")).toEqual(shopping);
     expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true);
@@ -249,8 +293,8 @@ describe("authenticated local customer integration", () => {
     vi.mocked(useReimaginedFood).mockReturnValue({ data: [foodMenuFixture()], error: undefined, status: "ready", retry: vi.fn() });
     const shopping = { retail: { [fixtureId(6)]: 2 }, food: [{ branchId: "saved", itemId: "meal", optionIds: [], quantity: 3 }] };
     saveCustomerCart("a", shopping); mount();
-    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), false, true, undefined, "", undefined);
-    click("Food"); expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true, true, undefined, "", undefined);
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), false, true, undefined, "", { addressId: localAddress.addressId, updatedAt: localAddress.updatedAt });
+    click("Food"); expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true, true, undefined, "", { addressId: localAddress.addressId, updatedAt: localAddress.updatedAt });
     click("Open Test Café menu"); click("View Test Paneer Rice details"); click("Grocery");
     expect(loadCustomerCart("a")).toEqual(shopping);
   });
@@ -261,9 +305,10 @@ describe("authenticated local customer integration", () => {
     expect(host.querySelector(".reimagined-order-strip")?.textContent).toContain("Out for delivery");
     expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 2 });
   });
-  it("loads addresses only for Location or Grocery review, and shows the same picker", () => {
+  it("loads addresses for local availability immediately, and shares the same picker with Grocery review", () => {
+    vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [], selected: undefined, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() });
     saveCustomerCart("a", { retail: { [fixtureId(6)]: 1 }, food: [] }); mount();
-    expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), false);
+    expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true);
     const location = host.querySelector('button[aria-expanded="false"]')!;
     act(() => (location as HTMLButtonElement).click());
     expect(useReimaginedAddresses).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "a" }), true);

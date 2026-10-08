@@ -1,0 +1,73 @@
+select set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',false);
+insert into dastak_v1.orders values ('00000000-0000-4000-8000-000000000002','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','CREATED',1);
+do $$declare snapshot jsonb; restaurants jsonb; begin
+ snapshot:=public.dastak_v1_customer_area_availability('dddddddd-dddd-4ddd-8ddd-dddddddddddd','2026-10-08T00:00:00Z');
+ assert (snapshot->>'groceryServiceable')::boolean;
+ assert (snapshot->>'foodServiceable')::boolean;
+ assert (snapshot->>'deliveryAvailable')::boolean;
+ assert snapshot->'stock'='{"00000000-0000-4000-8000-000000000001":5,"00000000-0000-4000-8000-000000000004":10}'::jsonb,'NULL/zero not available';
+ snapshot:=public.dastak_v1_customer_area_availability('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','2026-10-08T00:00:00Z');
+ assert not (snapshot->>'groceryServiceable')::boolean and not (snapshot->>'foodServiceable')::boolean and not (snapshot->>'deliveryAvailable')::boolean;
+ assert snapshot->'stock'='{}'::jsonb;
+ restaurants:=public.dastak_v1_customer_restaurants_area_page('dddddddd-dddd-4ddd-8ddd-dddddddddddd','2026-10-08T00:00:00Z',null,100);
+ assert jsonb_array_length(restaurants->'restaurants')=100 and restaurants->'nextCursor'<>'null'::jsonb,'closed stores remain paginated';
+ assert not (restaurants->'restaurants'->0->'restaurant'->>'acceptingOrders')::boolean;
+ assert dastak_v1_api.evaluate_wave1_candidate('00000000-0000-4000-8000-000000000002',null) is not true;
+ assert dastak_v1_api.evaluate_wave1_candidate('00000000-0000-4000-8000-000000000001',null),'legacy NULL-stock recovery retained';
+ perform dastak_v1_api.apply_order_stock('00000000-0000-4000-8000-000000000001','RESERVE');
+ perform dastak_v1_api.apply_order_stock('00000000-0000-4000-8000-000000000002','RELEASE');
+ begin perform dastak_v1_api.apply_order_stock('00000000-0000-4000-8000-000000000002','RESERVE'); raise exception 'unknown stock reserved'; exception when object_not_in_prerequisite_state then null; end;
+ begin perform public.dastak_v1_customer_area_availability('99999999-9999-4999-8999-999999999999','2026-10-08T00:00:00Z'); raise exception 'foreign address accepted'; exception when insufficient_privilege then null; end;
+ begin perform public.dastak_v1_customer_area_availability('dddddddd-dddd-4ddd-8ddd-dddddddddddd','2026-10-09T00:00:00Z'); raise exception 'stale address accepted'; exception when invalid_parameter_value then null; end;
+end;$$;
+insert into dastak_v1.order_context_snapshots values ('00000000-0000-4000-8000-000000000002','{"latitude":0,"longitude":0}');
+insert into dastak_v1.order_lines values ('00000000-0000-4000-8000-000000000002','RETAIL_SKU','00000000-0000-4000-8000-000000000001',5);
+do $$begin
+ begin insert into dastak_v1.order_lines values ('00000000-0000-4000-8000-000000000002','RETAIL_SKU','00000000-0000-4000-8000-000000000003',1); raise exception 'NULL stock accepted'; exception when object_not_in_prerequisite_state then null; end;
+ begin insert into dastak_v1.order_lines values ('00000000-0000-4000-8000-000000000002','RETAIL_SKU','00000000-0000-4000-8000-000000000002',1); raise exception 'zero stock accepted'; exception when object_not_in_prerequisite_state then null; end;
+ begin insert into dastak_v1.order_lines values ('00000000-0000-4000-8000-000000000002','RETAIL_SKU','00000000-0000-4000-8000-000000000001',6); raise exception 'over stock accepted'; exception when object_not_in_prerequisite_state then null; end;
+end;$$;
+update private.delivery_partner_availability set available_until=now()-interval '1 minute';
+do $$begin
+ assert not private.customer_area_delivery_available(point(0,0));
+ insert into dastak_v1.orders values ('00000000-0000-4000-8000-000000000009','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','CREATED',1);
+ begin insert into dastak_v1.order_context_snapshots values ('00000000-0000-4000-8000-000000000009','{"latitude":0,"longitude":0}'); raise exception 'no partner new submission accepted'; exception when object_not_in_prerequisite_state then null; end;
+ begin update dastak_v1.orders set status='PAID' where id='00000000-0000-4000-8000-000000000002'; raise exception 'no partner commit accepted'; exception when object_not_in_prerequisite_state then null; end;
+end;$$;
+-- Already-submitted legacy work and idempotent reads are not retroactively blocked.
+insert into dastak_v1.order_context_snapshots values ('00000000-0000-4000-8000-000000000001','{"latitude":0,"longitude":0}');
+update dastak_v1.orders set status='PAID' where id='00000000-0000-4000-8000-000000000001';
+update private.delivery_partner_availability set available_until=now()+interval '10 minutes';
+update private.delivery_partner_profiles set governance_status='SUSPENDED';
+do $$begin assert not private.customer_area_delivery_available(point(0,0)); end;$$;
+update private.delivery_partner_profiles set governance_status='ACTIVE';
+update private.account_memberships set suspended_until='infinity';
+do $$begin assert not private.customer_area_delivery_available(point(0,0)); end;$$;
+update private.account_memberships set suspended_until=null;
+update private.delivery_partner_availability set service_zone_id='ffffffff-ffff-4fff-8fff-ffffffffffff',location=point(550,550);
+do $$begin assert not private.customer_area_delivery_available(point(0,0)); end;$$;
+update private.delivery_partner_availability set service_zone_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',location=point(0,0);
+update dastak_v1.branch_operational_states set is_open=false;
+do $$declare values jsonb; begin
+ assert not exists(select 1 from private.customer_area_stock(point(0,0)));
+ values:=public.dastak_v1_customer_restaurants_area_page('dddddddd-dddd-4ddd-8ddd-dddddddddddd','2026-10-08T00:00:00Z');
+ assert jsonb_array_length(values->'restaurants')=100,'closed restaurants must not disappear';
+ assert jsonb_array_length(dastak_v1_api.list_customer_restaurants_page('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')->'restaurants')=100,'old caller retains closed stores';
+ assert not has_function_privilege('anon','public.dastak_v1_customer_area_availability(uuid,timestamptz)','execute');
+ assert not has_function_privilege('authenticated','private.customer_area_stock(extensions.geometry,uuid)','execute');
+end;$$;
+update dastak_v1.branch_operational_states set is_open=true,accepting_orders=true;
+update dastak_v1.merchant_branches set status='SUSPENDED' where id=md5('branch1')::uuid;
+delete from dastak_v1.restaurant_menu_items where branch_id=md5('branch2')::uuid;
+insert into dastak_v1.operational_pause_controls values (true,'MERCHANT_BRANCH',md5('branch3')::uuid,null);
+do $$declare page jsonb; begin
+ assert not private.customer_restaurant_accepting(md5('branch1')::uuid);
+ assert not private.customer_restaurant_accepting(md5('branch2')::uuid);
+ assert not private.customer_restaurant_accepting(md5('branch3')::uuid);
+ assert private.customer_restaurant_accepting(md5('branch4')::uuid);
+ page:=public.dastak_v1_customer_restaurants_area_page('dddddddd-dddd-4ddd-8ddd-dddddddddddd','2026-10-08T00:00:00Z',null,1,null,null,null,md5('branch2')::uuid);
+ assert jsonb_array_length(page->'restaurants')=1,'empty-menu restaurants must remain visible';
+end;$$;
+update dastak_v1.merchant_branches set service_zone_id='ffffffff-ffff-4fff-8fff-ffffffffffff' where id='11111111-1111-4111-8111-111111111111';
+do $$begin assert not exists(select 1 from private.customer_area_stock(point(0,0))),'foreign-zone inventory cannot leak'; end;$$;
+select 'Customer area policy assertions passed (synthetic PostGIS and matching stand-ins)' as result;

@@ -4,7 +4,7 @@ import type { ReimaginedCatalogue } from "./reimaginedCatalogue";
 import type { V1RestaurantMenu } from "./dastakV1";
 import { formatV1Price } from "./dastakV1";
 import { GroceryImage } from "./ReimaginedGrocery";
-import { foodRestaurantName } from "./reimaginedFoodCatalogue";
+import { foodAcceptingOrders, foodRestaurantName } from "./reimaginedFoodCatalogue";
 
 export function WishlistButton({ wishlist, kind, id, name, online }: { wishlist?: ReturnType<typeof useReimaginedWishlist>; kind: "RETAIL_SKU" | "MENU_ITEM"; id: string; name: string; online: boolean }) {
   if (!wishlist) return null;
@@ -27,7 +27,8 @@ export function ReimaginedWishlist({ wishlist, data, menus, online, supabaseUrl,
       return <li key={`${saved.kind}:${saved.itemId}`}>
         {sku ? <GroceryImage sku={sku} supabaseUrl={supabaseUrl} /> : null}<strong>{name}</strong>
         {sku ? <p>{sku.packSize} · {formatV1Price(sku.sellingPricePaise)}</p> : item && menu ? <p>{foodRestaurantName(menu)} · {formatV1Price(item.basePricePaise)} base</p> : <p>Retained in your Wishlist; it was not silently removed.</p>}
-        <button type="button" disabled={!sku && !item} onClick={() => onOpen(sku?.id, menu?.restaurant.branchId, item?.id)}>View saved item</button>
+        {menu && !foodAcceptingOrders(menu) ? <p>Store closed</p> : null}
+        <button type="button" disabled={(!sku && !item) || Boolean(menu && !foodAcceptingOrders(menu))} onClick={() => onOpen(sku?.id, menu?.restaurant.branchId, item?.id)}>View saved item</button>
         <WishlistButton wishlist={wishlist} kind={saved.kind} id={saved.itemId} name={name} online={online} />
       </li>;
     })}</ul>}

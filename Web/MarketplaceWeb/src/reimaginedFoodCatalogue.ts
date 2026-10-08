@@ -38,9 +38,11 @@ export function foodDistance(menu: V1RestaurantMenu): string {
   return metres < 1000 ? `${metres} m away` : `${(metres / 1000).toFixed(1)} km away`;
 }
 
+export function foodAcceptingOrders(menu: V1RestaurantMenu) {
+  return menu.restaurant.branchStatus === "ACTIVE" && menu.restaurant.isOpen && menu.restaurant.acceptingOrders;
+}
 export function foodAvailability(menu: V1RestaurantMenu) {
-  if (menu.restaurant.branchStatus !== "ACTIVE" || !menu.restaurant.isOpen) return "Closed — menu browsing only";
-  return menu.restaurant.acceptingOrders ? "Open — availability checked at checkout" : "Orders paused — menu browsing only";
+  return foodAcceptingOrders(menu) ? "Open — availability checked at checkout" : "Store closed";
 }
 
 // Keep identity branch-scoped; duplicate IDs must never select an arbitrary restaurant/dish.

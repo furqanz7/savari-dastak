@@ -18,7 +18,7 @@ it("uses nearest server pages and retains the distance/address cursor including 
   const fetcher = vi.fn().mockResolvedValue(Response.json(response));
   const page = await getV1RestaurantPage({ ...auth, location }, fetcher);
   expect(page.ordering).toBe("NEAREST"); expect(page.restaurants[0].restaurant.distanceMeters).toBe(1250); expect(page.nextCursor).toEqual(cursor);
-  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({ operation: "customerRestaurantNearestPage", addressId: location.addressId, addressVersion: location.updatedAt });
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({ operation: "customerRestaurantAreaPage", addressId: location.addressId, addressVersion: location.updatedAt });
 });
 it("rejects mismatched distance context/cursors instead of pretending an alphabetical page is nearest", async () => {
   const location = { addressId: "22222222-2222-4222-8222-222222222222", updatedAt: "2026-10-08T00:00:00Z" };

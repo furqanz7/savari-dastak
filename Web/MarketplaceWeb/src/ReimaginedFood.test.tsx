@@ -24,6 +24,15 @@ function mount(resource = ready, online = true, empty = false) { host = document
 function click(label: string) { const button = [...host.querySelectorAll("button")].find(value => (value.getAttribute("aria-label") ?? value.textContent) === label); if (!button) throw new Error(`Missing ${label}`); act(() => button.click()); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("Food discovery and menus", () => {
+  it.each([{ isOpen: false }, { acceptingOrders: false }, { branchStatus: "SUSPENDED" }])("retains a closed store and disables its card, dish and search taps", change => {
+    mount({ ...ready, data: [{ ...menus[0], restaurant: { ...menus[0].restaurant, ...change } }] });
+    expect(host.textContent).toContain("Test Café"); expect(host.textContent).toContain("Store closed");
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Open Test Café menu"]')?.disabled).toBe(true);
+    click("Open search");
+    const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "rice"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+    expect([...host.querySelectorAll<HTMLButtonElement>(".reimagined-grocery-suggestions button")].every(button => button.disabled)).toBe(true);
+  });
   it("shows verified distances without implying road ETA or changing shopping", () => {
     const near = foodMenuFixture(); near.restaurant.distanceMeters = 350;
     const unknown = foodMenuFixture(fixtureId(40)); unknown.restaurant.branchName = "Unknown Café";
@@ -122,7 +131,10 @@ describe("Food discovery and menus", () => {
     act(() => (host.querySelector('input[type="radio"]') as HTMLInputElement).click());
     for (const props of [{ online: false }, { canEdit: false }, { resource: { ...ready, data: [{ ...menus[0], restaurant: { ...menus[0].restaurant, acceptingOrders: false } }] } }]) {
       act(() => root.render(<Harness {...props} />));
-      expect([...host.querySelectorAll("button")].find(button => button.textContent === "Add to Food cart")?.disabled).toBe(true);
+      if ("resource" in props) {
+        expect(host.textContent).toContain("Store closed");
+        expect([...host.querySelectorAll("button")].find(button => button.textContent === "Add to Food cart")).toBeUndefined();
+      } else expect([...host.querySelectorAll("button")].find(button => button.textContent === "Add to Food cart")?.disabled).toBe(true);
     }
     expect(JSON.parse(host.querySelector("output")!.textContent!).retail).toEqual({ saved: 2 });
   });

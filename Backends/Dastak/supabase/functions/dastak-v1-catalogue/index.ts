@@ -19,6 +19,13 @@ async function callServiceRPC(functionName: string, parameters: Record<string, u
 
 Deno.serve((request) =>
   handleV1Catalogue(request, {
+    customerAreaAvailability: input => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_area_availability", {
+      p_address_id: input.addressId, p_address_version: input.addressVersion,
+    }),
+    customerRestaurantAreaPage: input => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_restaurants_area_page", {
+      p_address_id: input.addressId, p_address_version: input.addressVersion, p_query: input.query, p_limit: input.limit,
+      p_after_name: input.afterName, p_after_branch_id: input.afterBranchId, p_after_distance_meters: input.afterDistanceMeters, p_branch_id: input.branchId,
+    }),
     adminCatalogueSkuDelete: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_catalogue_sku_delete", {
         p_sku_id: input.skuId,

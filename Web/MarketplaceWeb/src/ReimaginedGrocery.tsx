@@ -18,12 +18,13 @@ type Props = {
   eligibility: (sku: V1CatalogueSku) => GroceryEligibility;
   relatedSkuIds?: (sku: V1CatalogueSku) => string[];
   checkoutContent: ReactNode;
+  availabilityNotice?: ReactNode;
   trending?: GroceryTrending;
   wishlist?: ReturnType<typeof useReimaginedWishlist>;
   online?: boolean;
 };
 
-export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supabaseUrl, eligibility, relatedSkuIds, checkoutContent, trending, wishlist, online = true }: Props) {
+export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supabaseUrl, eligibility, relatedSkuIds, checkoutContent, availabilityNotice, trending, wishlist, online = true }: Props) {
   const packChoicePrefix = useId();
   const exploration = state.exploration.grocery;
   const sourceShelves = useMemo(() => data ? groceryShelves(data, exploration.view) : [], [data, exploration.view]);
@@ -64,6 +65,7 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
   };
   if (state.service !== "grocery") return null;
   if (exploration.checkout && (status !== "ready" || !data)) return <>{checkoutContent}</>;
+  if (availabilityNotice && !exploration.checkout) return <>{availabilityNotice}</>;
   if (status === "loading") return <div className="reimagined-shelf-loading" role="status" aria-label="Loading Grocery products">Opening the shelves…<div /><div /></div>;
   if (status === "unavailable" || !data) return <section role="status"><p>Couldn’t open the Grocery shelves right now.</p><button type="button" onClick={onRetry}>Try again</button></section>;
   const detail = exploration.detailId ? selected ? <ReimaginedProductBrowser groups={detailGroups} selectedId={selected.id} supabaseUrl={supabaseUrl} onSelect={id => dispatch({ type: "openDetail", id })} onClose={() => dispatch({ type: "closeDetail" })}>{select => <section className="reimagined-product-detail reimagined-grocery-detail" aria-label={`${selected.name} details`}>

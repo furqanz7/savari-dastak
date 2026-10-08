@@ -69,7 +69,7 @@ describe("read-only Food projection", () => {
   });
   it("does not equate an open restaurant with guaranteed availability", () => {
     const menu = foodMenuFixture(); expect(foodAvailability(menu)).toContain("checked at checkout");
-    menu.restaurant.acceptingOrders = false; expect(foodAvailability(menu)).toContain("Orders paused");
-    menu.restaurant.isOpen = false; expect(foodAvailability(menu)).toContain("Closed");
+    menu.restaurant.acceptingOrders = false; expect(foodAvailability(menu)).toBe("Store closed");
+    menu.restaurant.isOpen = false; expect(foodAvailability(menu)).toBe("Store closed");
   });
 });

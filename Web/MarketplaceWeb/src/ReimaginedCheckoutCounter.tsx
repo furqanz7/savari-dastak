@@ -10,10 +10,11 @@ export function GroceryPaymentNotice() {
 }
 
 // Writes require explicit activation, an online session and exclusive cart ownership.
-export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, canEdit = true, online, dispatch, onSessionExpired, ordersUrl, onOpenOrders }: {
+export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, canEdit = true, online, dispatch, onSessionExpired, ordersUrl, onOpenOrders, submissionIssue, deliveryIssue }: {
   checkout: ReimaginedGroceryCheckout; draft?: GroceryCheckoutDraft; enabled?: boolean; canEdit?: boolean; online: boolean;
   dispatch: Dispatch<ReimaginedAction>; onSessionExpired: () => void; ordersUrl: string;
   onOpenOrders?: (id?: string) => void;
+  submissionIssue?: string; deliveryIssue?: string;
 }) {
   const [order, setOrder] = useState<V1Order>();
   const [busy, setBusy] = useState(false);
@@ -32,6 +33,7 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, ca
   }, [order?.launchPayment?.reservationExpiresAt]);
   async function run(operation: "reserve" | "confirm" | "refresh" | "restart") {
     if (!enabled || !online || !canEdit || busy || checkout.busy) return;
+    if ((operation === "reserve" && submissionIssue && !checkout.hasPendingAttempt) || (operation === "confirm" && deliveryIssue && !checkout.committed)) return;
     const epoch = session.current;
     const acknowledge = (action: ReimaginedAction) => {
       if (epoch !== session.current) throw new DOMException("Checkout session changed", "AbortError");
@@ -61,10 +63,11 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, ca
   return <section className="reimagined-checkout-confirmation" aria-label="Grocery checkout confirmation">
     <h3>Payment & confirmation</h3>
     <GroceryPaymentNotice />
+    {(order ? deliveryIssue : submissionIssue ?? deliveryIssue) ? <p role="status">{order ? deliveryIssue : submissionIssue ?? deliveryIssue}</p> : null}
     {!enabled ? <><p>Order submission remains disabled until recovery and authenticated end-to-end verification are complete.</p><button type="button" disabled>Checkout integration pending</button></>
       : checkout.recoveryIssue ? <p role="alert">{checkout.recoveryIssue}</p>
       : !order && checkout.recoverableOrderId ? <><p>A saved Grocery reservation needs a server status check. No new order will be created.</p><button type="button" disabled={blocked} onClick={() => void run("refresh")}>Recover Grocery reservation</button></>
-      : !order ? <><p>{checkout.hasPendingAttempt ? "An earlier attempt is unresolved. Retry the same Bucket, recipient and address using its saved request key." : "Reserve this Grocery Bucket to obtain the server-calculated total. Food items are not included."}</p><button type="button" disabled={!draft || blocked} onClick={() => void run("reserve")}>{busy ? "Reserving Grocery order…" : "Reserve Grocery order"}</button></>
+      : !order ? <><p>{checkout.hasPendingAttempt ? "An earlier attempt is unresolved. Retry the same Bucket, recipient and address using its saved request key." : "Reserve this Grocery Bucket to obtain the server-calculated total. Food items are not included."}</p><button type="button" disabled={!draft || blocked || Boolean(submissionIssue && !checkout.hasPendingAttempt)} onClick={() => void run("reserve")}>{busy ? "Reserving Grocery order…" : "Reserve Grocery order"}</button></>
       : <><h4>{order.displayOrderNumber}</h4><ServerOrderDelivery order={order} /><dl className="reimagined-server-bill" aria-label="Server-confirmed Grocery bill">
         {([
           ["Items", order.price.subtotalPaise], ["Delivery", order.price.deliveryFeePaise], ["Platform fee", order.price.platformFeePaise], ["Tax", order.price.taxPaise],
@@ -73,7 +76,7 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, ca
         <div className="reimagined-server-total"><dt>Server order total: </dt><dd>{formatV1Price(order.price.totalPaise)}</dd></div>
       </dl><p className="reimagined-checkout-status">Status: {order.status.replaceAll("_", " ").toLowerCase()}</p>
         <button type="button" disabled={blocked} onClick={() => void run("refresh")}>Refresh order status</button>
-        <button type="button" disabled={blocked || !canConfirmGroceryOrder(order, now)} onClick={() => void run("confirm")}>Confirm Grocery order</button>
+        <button type="button" disabled={blocked || Boolean(deliveryIssue && !checkout.committed) || !canConfirmGroceryOrder(order, now)} onClick={() => void run("confirm")}>Confirm Grocery order</button>
         {["PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(order.status) ? <><p>This unpaid reservation is closed. Your Bucket is retained.</p><button type="button" disabled={blocked} onClick={() => void run("restart")}>Recheck closed reservation and return to Bucket</button></> : null}
         {onOpenOrders ? <button type="button" onClick={() => onOpenOrders(order.id)}>Open Orders to review or manage this reservation</button> : <a href={ordersUrl}>Open Orders to review or manage this reservation</a>}</>}
     {error ? <p role="alert">{error}</p> : null}
