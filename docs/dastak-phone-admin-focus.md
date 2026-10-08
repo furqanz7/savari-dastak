@@ -30,4 +30,12 @@ Migration: `20261008114655_admin_customer_restaurant_visibility.sql`. Only this 
 - Native linked migration trial passed with real schema/function definitions, unauthenticated rejection and default-all-visible assertion. Error-level security advisor scan was clean.
 - No real restaurant, cart, order, stock or account was changed for testing. No subagents, paid model APIs or image generation.
 
-Production release and read-only verification pending at this checkpoint. Keep this focus locked until that is recorded; user visual acceptance is separate from automated geometry checks.
+## Production wrap
+
+- Code commit `3fcd0ecb0e8fe81edede01158edc38bd5674bd5d` released to Customer (`dpl_7gxWWeb8sp7PNbGvkZKbmuBJ21Pf`) and Admin (`dpl_9MqVVrrdXTsCB9gmis1uoAT4VbJF`). Both READY / production at the normal domains; the scoped deployment script verified commit, app variant, environment, deployment ID and security headers.
+- Specific migration applied and recorded; `dastak-v1-orders` deployed. All existing branches remain visible, both listing admission triggers exist, anonymous removal is blocked, unrelated migration `20260929191745` remains pending, and post-release error-level security advisors are clean.
+- Owner signed into Admin. Live Merchant governance shows Craft's “Listed — closed stores remain visible” state and Remove from Customer. The review dialog requires the branch name and includes reason controls with Confirm removal disabled. The dialog was cancelled without sending a mutation. Live Admin Catalogue renders the shared Browse Dastak map.
+- Live Customer at 390×844: vertical navigation starts at y=62, Location beside it, Services to the right, vertical directory under Services, centre panel below without overlap, 2.49-card shelf capacity and no page overflow. Orders/Profile/Settings and Food navigation preserve the layout. Existing availability/pack grouping remain active. No cart or account writes were used for this verification.
+- No browser error/warning entries were captured. Error-level Vercel scans found no logs for either deployment; ongoing monitoring/drains were not changed or claimed verified.
+- Local final focused layout/Admin UI tests: 11 passed after the narrow-phone touch-target refinement. Earlier complete 880-test suite, TypeScript, ESLint and build passed; both remote release builds passed. Existing large-bundle warning is unrelated and unchanged.
+- Phone and scoped Admin implementation/release are wrapped. User visual acceptance remains separate. No real restaurant was removed/restored to test the control; privileged mutation behaviour is covered by isolated tests, not a live action. The two staff assets remain untracked and excluded. Git commits are local, not pushed.

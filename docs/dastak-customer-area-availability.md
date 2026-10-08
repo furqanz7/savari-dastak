@@ -1,5 +1,7 @@
 # Customer area availability — 2026-10-08
 
+Follow-up: explicit Admin Restaurant/Cafe Customer removal/restoration and the phone-brief layout correction are now live; see `dastak-phone-admin-focus.md`. The original availability release evidence below is retained as its own checkpoint.
+
 Status: LIVE on 2026-10-08. The specific migration is applied and recorded on linked Dastak (`zmtsolkfxlrxepshnjdf`), `dastak-v1-catalogue` is deployed, and Customer production is READY at the normal `https://dastak-customer.vercel.app` address.
 Scope: location-aware Grocery inventory, delivery admission, and visible closed Food stores. Background/staff assets unchanged. No live orders, payments, inventory writes or customer account mutations were performed.
 
