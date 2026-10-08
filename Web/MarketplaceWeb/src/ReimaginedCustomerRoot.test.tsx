@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { saveCustomerCart, loadCustomerCart } from "./customerCartPersistence";
@@ -11,11 +11,16 @@ import { useReimaginedActiveOrder } from "./useReimaginedActiveOrder";
 import { useReimaginedFood } from "./useReimaginedFood";
 import { foodMenuFixture } from "./reimaginedFood.testFixtures";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CustomerSection } from "./customerNavigation";
 vi.mock("./useReimaginedWishlist", () => ({ useReimaginedWishlist: () => ({ items: [], ready: true, busy: false, error: undefined, retry: vi.fn(), saved: () => false, toggle: vi.fn() }) }));
 vi.mock("./useDastakWebPush", () => ({ useDastakWebPush: () => ({ shouldPrompt: false }) }));
 import { submitV1Order, commitV1LaunchPayment, getV1Order, type V1Order } from "./dastakV1";
 vi.mock("./dastakV1", async importOriginal => ({ ...await importOriginal<typeof import("./dastakV1")>(), submitV1Order: vi.fn(), commitV1LaunchPayment: vi.fn(), getV1Order: vi.fn() }));
-vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: string; embedded?: boolean; onReorder?: (order: V1Order) => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => <section aria-label="Operational account workspace">{props.initialSection}<button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onReorder?.(mixedOrderFixture())}>Fixture mixed order</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button></section> }));
+vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: CustomerSection; initialOrderId?: string; embedded?: boolean; onViewChange?: (section: CustomerSection) => void; onReorder?: (order: V1Order) => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => {
+  const { initialSection, onViewChange } = props;
+  useEffect(() => { if (initialSection) onViewChange?.(initialSection); }, [initialSection, onViewChange]);
+  return <section aria-label="Operational account workspace" data-order-id={props.initialOrderId}>{props.initialSection}<button type="button" onClick={() => props.onViewChange?.("payments")}>Fixture Payments</button><button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onReorder?.(mixedOrderFixture())}>Fixture mixed order</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button></section>;
+} }));
 vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }));
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
 vi.mock("./useReimaginedFood", () => ({ useReimaginedFood: vi.fn() }));
@@ -36,6 +41,7 @@ function click(label: string) {
 }
 function mount() { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<ReimaginedCustomerRoot {...props} />)); }
 beforeEach(() => {
+  window.history.replaceState(null, "", "#/home");
   vi.stubGlobal("navigator", { locks: checkoutLocksFixture() });
   vi.mocked(useReimaginedFood).mockReturnValue({ data: [], error: undefined, status: "ready", retry: vi.fn() });
   vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: undefined, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() });
@@ -43,6 +49,46 @@ beforeEach(() => {
 beforeEach(() => { vi.stubGlobal("localStorage", cartStorageFixture()); vi.mocked(useReimaginedCatalogue).mockReturnValue({ data: groceryFixture, status: "ready", error: undefined, retry: vi.fn() }); vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [], selected: undefined, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() }); });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it.each(["#/wishlist", "#/payments", "#/search", "#/account", "#/settings", `#/v1-orders/${fixtureId(20)}`])("restores %s without changing either cart or submitting an order", async hash => {
+    const shopping = { retail: { [fixtureId(6)]: 2 }, food: [{ branchId: "saved", itemId: "meal", optionIds: [], quantity: 3 }] };
+    saveCustomerCart("a", shopping); window.history.replaceState(null, "", hash);
+    await act(async () => mount());
+    if (hash === "#/wishlist") expect(host.textContent).toContain("Your Wishlist");
+    if (hash === "#/payments") expect(host.querySelector('[aria-label="Operational account workspace"]')?.textContent).toContain("payments");
+    if (hash === "#/search") expect(host.querySelector('input[type="search"]')).not.toBeNull();
+    if (hash === "#/account" || hash === "#/settings") expect(host.querySelector('[aria-label="Operational account workspace"]')).not.toBeNull();
+    if (hash.includes("v1-orders")) expect(host.querySelector('[data-order-id]')?.getAttribute("data-order-id")).toBe(fixtureId(20));
+    expect(loadCustomerCart("a")).toEqual(shopping); expect(submitV1Order).not.toHaveBeenCalled(); expect(commitV1LaunchPayment).not.toHaveBeenCalled();
+  });
+  it("restores Back/Forward across Wishlist, Payments and shopping while keeping current carts", async () => {
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 2 }, food: [] }); await act(async () => mount());
+    click("Open Wishlist"); expect(window.location.hash).toBe("#/wishlist");
+    await act(async () => click("Orders")); click("Fixture Payments"); expect(window.location.hash).toBe("#/payments");
+    click("Home");
+    const traverse = async (direction: "back" | "forward") => {
+      await act(async () => { await new Promise<void>(resolve => { window.addEventListener("popstate", () => resolve(), { once: true }); window.history[direction](); }); });
+    };
+    await traverse("back"); expect(host.querySelector('[aria-label="Operational account workspace"]')?.textContent).toContain("payments");
+    await traverse("back"); expect(window.location.hash).toBe("#/orders");
+    await traverse("back"); expect(host.textContent).toContain("Your Wishlist");
+    await traverse("forward"); expect(window.location.hash).toBe("#/orders");
+    expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 2 }); expect(submitV1Order).not.toHaveBeenCalled();
+  });
+  it("restores browse/detail history but does not roll back newer quantities", async () => {
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 1 }, food: [] }); await act(async () => mount());
+    click("Rice"); click("View Test Plain Rice, 1 kg details"); click("Add one Test Plain Rice, 1 kg");
+    await act(async () => { await new Promise<void>(resolve => { window.addEventListener("popstate", () => resolve(), { once: true }); window.history.back(); }); });
+    expect(host.querySelector(".reimagined-product-detail")).toBeNull(); expect(host.textContent).toContain("Plain Rice");
+    expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 2 });
+  });
+  it("reacts to an incoming hash link and removes history listeners on unmount", async () => {
+    await act(async () => mount());
+    await act(async () => { window.location.hash = "#/search?service=food&q=rice"; await new Promise<void>(resolve => window.addEventListener("hashchange", () => resolve(), { once: true })); });
+    expect(host.textContent).toContain("Results for “rice”");
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.anything(), true, true, undefined, "rice");
+    const remove = vi.spyOn(window, "removeEventListener"); act(() => root.unmount());
+    expect(remove).toHaveBeenCalledWith("popstate", expect.any(Function)); expect(remove).toHaveBeenCalledWith("hashchange", expect.any(Function)); remove.mockRestore();
+  });
   it("rebuilds each part of a mixed order by choice and approval without submitting either order", async () => {
     const menu = foodMenuFixture(); const findRestaurant = vi.fn().mockResolvedValue(menu);
     vi.mocked(useReimaginedFood).mockReturnValue({ data: [], status: "ready", error: undefined, retry: vi.fn(), findRestaurant });

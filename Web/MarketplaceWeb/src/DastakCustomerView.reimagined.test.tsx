@@ -65,4 +65,12 @@ describe("customer entry ownership", () => {
     act(() => experience.onOpenOrder("11111111-1111-4111-8111-111111111111"));
     expect(onOpenOrders).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111"); expect(window.location.hash).toBe("");
   });
+  it("hands embedded Orders selections to the owning Reimagined navigation", async () => {
+    window.history.replaceState(null, "", "/?reimagined=1#/orders"); vi.stubGlobal("scrollTo", vi.fn());
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    const onOpenOrders = vi.fn(), orderId = "11111111-1111-4111-8111-111111111111";
+    await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="orders" onOpenOrders={onOpenOrders} />));
+    act(() => vi.mocked(DastakV1CustomerExperience).mock.calls.at(-1)![0].onOpenOrder(orderId));
+    expect(onOpenOrders).toHaveBeenCalledWith(orderId); expect(window.location.hash).toBe("#/orders");
+  });
 });

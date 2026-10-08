@@ -155,7 +155,7 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
           onNavigate={navigateSection}
           onOpenParcel={() => navigate({ section: "parcel" })}
           onOpenOrder={(orderId) => {
-            if (props.embedded && props.initialSection !== "orders" && props.onOpenOrders) props.onOpenOrders(orderId);
+            if (props.embedded && props.onOpenOrders) props.onOpenOrders(orderId);
             else navigate({ section: "orders", entityType: "dastakV1Order", entityId: orderId });
           }}
           onCloseOrder={() => { navigate({ section: "orders" }); props.onOrderRecordClosed?.(); }}

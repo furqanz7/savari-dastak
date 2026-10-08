@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatV1Price, submitV1Order, commitV1LaunchPayment, getV1Order } from "./dastakV1";
 import type { DastakCustomerProps } from "./DastakCustomerView";
-import { parseCustomerDestination } from "./customerNavigation";
 import { customerDataIssue } from "./customerDataState";
 import { existingCustomerUrl } from "./reimaginedOptIn";
 import { reimaginedDirectory } from "./reimaginedDirectory";
@@ -34,6 +33,7 @@ import type { V1Order } from "./dastakV1";
 import type { AccountProfile } from "./accountProfile";
 import type { CustomerSection } from "./customerNavigation";
 import { useReimaginedGreeting } from "./useReimaginedGreeting";
+import { useReimaginedNavigation, type ReimaginedNavigation } from "./useReimaginedNavigation";
 
 type Props = DastakCustomerProps;
 const AccountWorkspace = lazy(() => import("./DastakCustomerView").then(module => ({ default: module.ExistingDastakCustomerView })));
@@ -48,6 +48,7 @@ function AccountExperience(props: Props) {
   const { state, dispatch: cartDispatch, cartIssue, canEditCart } = usePersistedReimaginedState(props.accountId);
   const [savedOpen, setSavedOpen] = useState(false);
   const [workspaceTitle, setWorkspaceTitle] = useState<string>();
+  const [selectedOrderId, setSelectedOrderId] = useState<string>();
   const [reorder, setReorder] = useState<ReturnType<typeof prepareReimaginedReorder>>();
   const [reorderError, setReorderError] = useState<string>();
   const [mixedOrder, setMixedOrder] = useState<V1Order>();
@@ -57,14 +58,17 @@ function AccountExperience(props: Props) {
   const [profile, setProfile] = useState<AccountProfile>();
   const displayName = profile?.displayName ?? props.displayName;
   const phoneNumber = profile?.phoneNumber ?? props.phoneNumber;
-  const dispatch = useCallback((action: ReimaginedAction) => { setSavedOpen(false); setWorkspaceTitle(undefined); cartDispatch(action); }, [cartDispatch]);
+  const dispatch = useCallback((action: ReimaginedAction) => { setSavedOpen(false); setWorkspaceTitle(undefined); if (action.type === "navigate") setSelectedOrderId(undefined); cartDispatch(action); }, [cartDispatch]);
   const updateWorkspaceTitle = useCallback((section: CustomerSection) => setWorkspaceTitle(section === "payments" ? "Payments" : undefined), []);
-  const [entry] = useState(() => parseCustomerDestination(window.location.hash));
-  const [selectedOrderId, setSelectedOrderId] = useState(entry.entityType === "dastakV1Order" ? entry.entityId : undefined);
-  useEffect(() => {
-    if (entry.section === "orders" || entry.section === "account") dispatch({ type: "navigate", section: entry.section === "orders" ? "orders" : "profile" });
-    // Restore a notification/deep link once; subsequent navigation belongs to this panel.
-  }, [entry, dispatch]);
+  const restoreNavigation = useCallback((navigation: ReimaginedNavigation) => {
+    setSavedOpen(navigation.savedOpen); setWorkspaceTitle(navigation.payments ? "Payments" : undefined);
+    setSelectedOrderId(navigation.orderId);
+    cartDispatch({ type: "restoreNavigation", navigation });
+  }, [cartDispatch]);
+  const exploration = state.exploration[state.service];
+  useReimaginedNavigation(props.accountId, { service: state.service, section: state.section, savedOpen, payments: workspaceTitle === "Payments",
+    ...(state.section === "orders" && selectedOrderId ? { orderId: selectedOrderId } : {}),
+    exploration: { view: exploration.view, searchOpen: exploration.searchOpen, checkout: exploration.checkout, ...(exploration.detailId ? { detailId: exploration.detailId } : {}) } }, restoreNavigation);
   const resource = useReimaginedCatalogue(props);
   const online = useCustomerOnline();
   reorderContext.current = JSON.stringify([props.accountId, props.accessToken, state.section, state.shopping, online, canEditCart]);
@@ -89,7 +93,7 @@ function AccountExperience(props: Props) {
   const subtotal = grocerySubtotal(state, resource.data);
   const addressPicker = <ReimaginedAddressPicker key={`location:${accessToken}`} resource={addresses} online={online} accountUrl={accountUrl} auth={props} onSessionExpired={onSessionExpired} />;
   const openWishlist = () => { dispatch({ type: "navigate", section: "home" }); setSavedOpen(true); };
-  const openOrders = (id?: string) => { setSelectedOrderId(id); dispatch({ type: "navigate", section: "orders" }); };
+  const openOrders = (id?: string) => { dispatch({ type: "navigate", section: "orders" }); setSelectedOrderId(id); };
   async function requestReorder(order: V1Order, selectedService?: "grocery" | "food") {
     if (reorderLock.current) return;
     setReorderError(undefined);
@@ -152,7 +156,7 @@ function AccountExperience(props: Props) {
           {mixedOrder ? <section aria-label="Rebuild mixed order"><h3>Rebuild this order as separate carts</h3><p>Choose which part to restore. The other cart is kept. Each service has its own checkout.</p><button type="button" disabled={!online || !canEditCart || reorderBusy} onClick={() => void requestReorder(mixedOrder, "grocery")}>Rebuild Grocery</button><button type="button" disabled={!online || !canEditCart || reorderBusy} onClick={() => void requestReorder(mixedOrder, "food")}>Rebuild Food</button><button type="button" disabled={reorderBusy} onClick={() => setMixedOrder(undefined)}>Keep current carts</button></section> : null}
           {reorderBusy ? <p role="status">Checking exact items and options…</p> : null}
           {reorder ? <section aria-label="Confirm cart replacement"><h3>Replace your current {reorder.service === "grocery" ? "Bucket" : "Food cart"}?</h3><p>The other service’s cart stays unchanged. Nothing is ordered until you complete checkout.</p><button type="button" onClick={() => setReorder(undefined)}>Keep current cart</button><button type="button" disabled={!online || !canEditCart} onClick={approveReorder}>Replace cart and review</button></section> : null}
-          <AccountWorkspace key={`${state.section}:${selectedOrderId ?? ""}`} {...props} displayName={displayName} phoneNumber={phoneNumber} embedded accountPane={state.section === "profile" || state.section === "settings" ? state.section : undefined} onOpenProfile={() => dispatch({ type: "navigate", section: "profile" })} onOpenSettings={() => dispatch({ type: "navigate", section: "settings" })} onOpenOrders={openOrders} onOrderRecordClosed={() => setSelectedOrderId(undefined)} onViewChange={updateWorkspaceTitle} initialSection={state.section === "orders" ? "orders" : "account"} initialOrderId={state.section === "orders" ? selectedOrderId : undefined} onReturnToShopping={() => dispatch({ type: "navigate", section: "home" })} onOpenWishlist={openWishlist} onReorder={requestReorder} webPushController={webPush} onProfileChanged={setProfile} />
+          <AccountWorkspace key={`${state.section}:${workspaceTitle ?? ""}:${selectedOrderId ?? ""}`} {...props} displayName={displayName} phoneNumber={phoneNumber} embedded accountPane={state.section === "profile" || state.section === "settings" ? state.section : undefined} onOpenProfile={() => dispatch({ type: "navigate", section: "profile" })} onOpenSettings={() => dispatch({ type: "navigate", section: "settings" })} onOpenOrders={openOrders} onOrderRecordClosed={() => setSelectedOrderId(undefined)} onViewChange={updateWorkspaceTitle} initialSection={workspaceTitle === "Payments" ? "payments" : state.section === "orders" ? "orders" : "account"} initialOrderId={state.section === "orders" ? selectedOrderId : undefined} onReturnToShopping={() => dispatch({ type: "navigate", section: "home" })} onOpenWishlist={openWishlist} onReorder={requestReorder} webPushController={webPush} onProfileChanged={setProfile} />
         </Suspense>,
       }}>
       {!online ? <p role="status">You’re offline. Your saved Bucket is retained; adding products is disabled until you reconnect.</p> : null}

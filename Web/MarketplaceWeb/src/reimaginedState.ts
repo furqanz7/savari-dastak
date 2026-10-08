@@ -29,11 +29,15 @@ export type ReimaginedState = {
   locationOpen: boolean;
   activeOrder?: { id: string; service: ReimaginedService };
 };
+export type ReimaginedNavigationState = Pick<ReimaginedState, "service" | "section"> & {
+  exploration: Pick<ReimaginedExploration, "view" | "searchOpen" | "detailId" | "checkout">;
+};
 export type ReimaginedAction =
   | { type: "signedIn"; accountId: string; shopping?: PersistedCustomerCart }
   | { type: "signedOut" }
   | { type: "selectService"; service: ReimaginedService | "parcel" | "print" }
   | { type: "navigate"; section: ReimaginedSection }
+  | { type: "restoreNavigation"; navigation: ReimaginedNavigationState }
   | { type: "openCategory"; categoryId: string }
   | { type: "openBrowseDestination"; nodeKey: string; railKey?: string }
   | { type: "openLocation" }
@@ -86,6 +90,14 @@ export function reimaginedReducer(state: ReimaginedState, action: ReimaginedActi
   }
   if (!state.accountId) return state;
   switch (action.type) {
+    case "restoreNavigation": {
+      const { service, section, exploration } = action.navigation;
+      const hasItems = service === "grocery" ? Object.keys(state.shopping.retail).length > 0 : state.shopping.food.length > 0;
+      return explore({ ...state, service, section, locationOpen: false, bucketPrompt: false }, {
+        ...exploration, detailId: exploration.detailId, checkout: exploration.checkout && hasItems,
+        ...(exploration.view.kind === "search" ? { searchDraft: exploration.view.query } : {}),
+      });
+    }
     case "replaceServiceShopping": {
       const next = resetHome({ ...state, service: action.service, shopping: {
         retail: action.service === "grocery" ? { ...action.shopping.retail } : state.shopping.retail,
