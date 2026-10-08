@@ -1,6 +1,6 @@
 # Customer feature parity — 2026-10-07
 
-2026-10-08 location-aware follow-up: local stock, delivery admission and closed-store visibility are implemented; the owner authorized production release. The specific database migration and catalogue API are released, with Customer deployment next at this checkpoint. See `dastak-customer-area-availability.md` for rules and verification. Earlier deployment notes below do not apply to this new policy.
+2026-10-08 location-aware follow-up is live: local stock, delivery admission and closed-store visibility are implemented, the specific migration and catalogue API are released, and Customer production is READY at the normal address (code `46ebda3`, deployment `dpl_6koJtmRVYy75nYeWsugsBhFdwQEe`). See `dastak-customer-area-availability.md` for rules and read-only production evidence. Earlier deployment notes below describe earlier releases.
 
 Comparison: previous `DastakCustomerView`, `DastakV1CustomerExperience` and `CatalogueView` versus the authenticated Reimagined root. Uses existing authenticated APIs and canonical SKU/menu IDs. No new inventory, payments engine or account system.
 

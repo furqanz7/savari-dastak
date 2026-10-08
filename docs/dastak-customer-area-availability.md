@@ -1,6 +1,6 @@
 # Customer area availability — 2026-10-08
 
-Status: production release authorized on 2026-10-08. The specific migration is applied and recorded on linked Dastak (`zmtsolkfxlrxepshnjdf`), and `dastak-v1-catalogue` is deployed. Customer deployment and live browser verification are the remaining release steps at this checkpoint.
+Status: LIVE on 2026-10-08. The specific migration is applied and recorded on linked Dastak (`zmtsolkfxlrxepshnjdf`), `dastak-v1-catalogue` is deployed, and Customer production is READY at the normal `https://dastak-customer.vercel.app` address.
 Scope: location-aware Grocery inventory, delivery admission, and visible closed Food stores. Background/staff assets unchanged. No live orders, payments, inventory writes or customer account mutations were performed.
 
 ## Rules
@@ -31,3 +31,13 @@ Scope: location-aware Grocery inventory, delivery admission, and visible closed 
 ## Production next step
 
 Release runner: `Backends/Dastak/scripts/release-customer-area.mjs verify|apply`, run from `Backends/Dastak`. It checks the exact linked project, rejects repeated/unrecorded partial application, sets lock/statement timeouts and applies only this migration in a transaction with its history entry. A blanket database push was not used; unrelated pending migrations were left untouched. The migration aborts on predicate source drift. The backend was released before Customer. Verify the Customer deployment with owned-address read-only checks and closed-store/stock/cart states before attempting any separately authorized real order.
+
+## Production release evidence
+
+- Deployed code commit: `46ebda3dc6780433715a3e8cde0673065e7e0442`. Vercel deployment `dpl_6koJtmRVYy75nYeWsugsBhFdwQEe`, immutable URL `https://dastak-o4wrh09j3-liquiflows-projects.vercel.app`, READY / production. Normal domain provenance, Customer variant, production environment and security headers verified by the existing scoped release script.
+- Migration history entry verified, new order policy default is 1, all three admission triggers exist, private stock helper remains inaccessible to authenticated clients, and unrelated migration `20260929191745` remains pending. Error-level database security advisors remain clean after release.
+- Edge CORS preflight returns 204; unauthenticated availability returns 401.
+- Signed-in production browser: selected Home address loads the new no-delivery-partner message. Craft remains listed and browsable because it is currently accepting orders. Grocery Milk includes available Add controls despite the absent delivery partner. Nestle Everyday Dairy Whitener remains grouped into four pack sizes; 200 g displays Out of stock with Add disabled on the shelf and detail.
+- No browser error/warning logs were captured during these checks. Vercel error-level scan found no logs for the new deployment; this is not continuous backend monitoring or proof that all runtime paths are error-free.
+- Full web suite rerun before deployment: 875 passed; TypeScript and ESLint passed. Remote production build completed successfully. The two unrelated untracked staff GLBs were excluded by the scoped deployment script and left untouched.
+- No production cart, address, merchant state, order, payment or inventory mutations were used for verification. Unserved/closed/stock-race scenarios remain covered by local regression assertions, not simulated by changing live merchants. No full real purchase/fulfilment test was performed. Commits are local; this request did not separately push Git.
