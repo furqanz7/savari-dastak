@@ -99,7 +99,7 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
     if (!props.embedded && typeof window !== "undefined" && window.location.hash !== hash) {
       window.history[replace ? "replaceState" : "pushState"](null, "", hash);
     }
-    window.scrollTo({ top: 0, behavior: "instant" });
+    if (!props.embedded) window.scrollTo({ top: 0, behavior: "instant" });
   }, [props.embedded]);
 
   useEffect(() => {
@@ -126,12 +126,12 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
 
   return (
     <div className="customer-workspace customer-experience" data-embedded={props.embedded || undefined}>
-      <a className="customer-skip-link" href="#customer-content" onClick={(event) => {
+      {!props.embedded ? <a className="customer-skip-link" href="#customer-content" onClick={(event) => {
         event.preventDefault();
         const content = document.getElementById("customer-content");
         content?.focus({ preventScroll: true });
         content?.scrollIntoView({ behavior: "instant" });
-      }}>Skip to content</a>
+      }}>Skip to content</a> : null}
       {!props.embedded ? <header className="customer-app-header">
         <button className="customer-brand" type="button" onClick={() => navigateSection("home")} aria-label="Dastak Home">Dastak<span>.</span><small>Everyday, at your doorstep.</small></button>
       <nav className="customer-navigation" aria-label="Dastak">

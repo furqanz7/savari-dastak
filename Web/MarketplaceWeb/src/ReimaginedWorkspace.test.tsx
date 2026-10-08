@@ -32,6 +32,10 @@ describe("dedicated Reimagined workspaces", () => {
     expect(html).toContain("Download your data"); expect(html).toContain("Privacy Policy"); expect(html).toContain("Delete Customer"); expect(html).toContain("Edit your Profile");
     expect(html).not.toContain('aria-label="Edit profile"'); expect(html).not.toContain("Saved places</h2>"); expect(html).not.toContain("Wishlist</strong>"); expect(html).not.toContain("<h1");
     expect(html).toContain('href="/merchant"'); expect(html).toContain('href="/delivery"');
+    // The global `.loading span` rule rotates every descendant span. A card
+    // loading state must not opt its text and icons into that spinner styling.
+    expect(html).toContain('customer-partner-cta customer-partner-checking');
+    expect(html).not.toMatch(/class="customer-partner-cta loading"/);
   });
   it("retains the complete previous account experience when no pane is requested", () => {
     const html = renderToStaticMarkup(<CatalogueView {...props} />);

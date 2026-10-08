@@ -5,6 +5,11 @@ const css = readFileSync(new URL("./design/reimagined.css", import.meta.url), "u
 const phone = css.slice(css.indexOf("/* Preserve the brief's spatial model on phones"));
 
 describe("Reimagined responsive layout safeguards", () => {
+  it("replaces the legacy two-column account grid with a panel-sized single column", () => {
+    expect(css).toMatch(/\.reimagined \.customer-account\[data-account-pane\] \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*container: reimagined-account \/ inline-size/);
+    expect(css).toContain("@container reimagined-account (max-width: 360px)");
+    expect(css).toMatch(/\.customer-account-row:has\(\.customer-identity-actions\) \{ grid-template-columns: 42px minmax\(0, 1fr\); \}/);
+  });
   it("keeps authenticated shell layout independent of legacy account-screen mounting", () => {
     expect(css).toMatch(/\.app\.variant-dastak-customer:has\(\.reimagined\[data-authenticated="true"\]\) \{ padding: 0; background: transparent; \}/);
     expect(css).toMatch(/\.content\.workspace-content:has\(\.reimagined\[data-authenticated="true"\]\) \{[^}]*max-width: none;[^}]*padding: 0; margin: 0/);

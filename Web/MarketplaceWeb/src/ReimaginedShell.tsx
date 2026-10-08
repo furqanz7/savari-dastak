@@ -80,7 +80,7 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
         : state.section === "home" && exploration.detailId
           ? shell.current?.querySelector<HTMLElement>(".reimagined-detail-close")
           : undefined;
-      (target ?? shell.current?.querySelector<HTMLElement>("main"))?.focus();
+      (target ?? shell.current?.querySelector<HTMLElement>("main"))?.focus({ preventScroll: true });
       return;
     }
     if (exploration.checkout !== previous.checkout) {
@@ -149,7 +149,11 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
     event.preventDefault(); event.stopPropagation();
   }}>
     <div className="reimagined-environment" aria-hidden="true">{environment ?? (scene.startsWith("grocery") ? <ReimaginedGroceryRoom atCounter={scene === "groceryCounter"} /> : scene.startsWith("food") ? <ReimaginedCafeRoom atCounter={scene === "foodCounter"} /> : <ReimaginedSpatialStudy key={scene} />)}</div>
-    <a className="reimagined-skip" href="#reimagined-main">Skip to main content</a>
+    <a className="reimagined-skip" href="#reimagined-main" onClick={event => {
+      // An anchor hash is not an application route. Keep the current screen.
+      event.preventDefault();
+      shell.current?.querySelector<HTMLElement>("main")?.focus({ preventScroll: true });
+    }}>Skip to main content</a>
     {!state.accountId ? <main id="reimagined-main" className="reimagined-auth glass-panel" tabIndex={-1}>
       <span className="reimagined-kicker">WELCOME TO</span><h1><DastakWordmark /></h1>
       <p>Your neighbourhood, through one door.</p>

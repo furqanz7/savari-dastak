@@ -1254,7 +1254,7 @@ export function CatalogueView({
               <div><h2 id="account-sell-title">{merchantAccountPresentation.sectionTitle}</h2><small>{merchantAccountPresentation.sectionDetail}</small></div>
               {merchantAccountPresentation.status ? <span className={`customer-partner-status ${merchantAccountPresentation.tone}`}>{merchantAccountPresentation.status}</span> : null}
             </div>
-            <a className={`customer-partner-cta ${merchantAccountPresentation.tone}`} href={merchantUrl} role="button" aria-busy={merchantAccountState === "loading" || undefined}>
+            <a className={`customer-partner-cta ${merchantAccountPresentation.tone === "loading" ? "customer-partner-checking" : merchantAccountPresentation.tone}`} href={merchantUrl} role="button" aria-busy={merchantAccountState === "loading" || undefined}>
               <span className="customer-account-icon"><Store size={21} /></span>
               <span>
                 <strong>{merchantAccountPresentation.title}</strong>

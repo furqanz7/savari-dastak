@@ -82,7 +82,16 @@ describe("customer entry ownership", () => {
     await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="orders" initialOrderId={orderId} />));
     expect(DastakV1CustomerExperience).toHaveBeenCalledWith(expect.objectContaining({ section: "orders", initialOrderId: orderId, onOrderAgainInExisting: expect.any(Function), presentation: "reimagined" }), undefined);
     expect(host.querySelector('[aria-label="Dastak"]')).toBeNull();
+    expect(host.querySelector('.customer-skip-link')).toBeNull();
     expect(window.location.hash).toBe("");
+  });
+  it("keeps the standalone skip link but never scrolls the document for embedded navigation", async () => {
+    await mount("/#home");
+    expect(host.querySelector('.customer-skip-link')).not.toBeNull();
+    const scroll = vi.mocked(window.scrollTo); scroll.mockClear();
+    await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="account" />));
+    act(() => vi.mocked(CatalogueView).mock.calls.at(-1)![0].onNavigate("search"));
+    expect(scroll).not.toHaveBeenCalled();
   });
   it("routes account shortcuts through global Reimagined Orders while retaining the selected pane", async () => {
     window.history.replaceState(null, "", "/?reimagined=1"); vi.stubGlobal("scrollTo", vi.fn());

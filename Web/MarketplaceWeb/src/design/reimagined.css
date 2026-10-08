@@ -564,16 +564,28 @@
 .reimagined-product-gallery button { min-width: 44px; min-height: 44px; }
 .reimagined-detail-information dl > div { display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; }
 .reimagined-detail-information dd { margin: 0; }
-.reimagined .customer-account[data-account-pane] { display: grid; gap: 20px; padding: 0; }
+.reimagined .customer-account[data-account-pane] { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 0; container: reimagined-account / inline-size; }
 .reimagined .customer-account[data-account-pane] .customer-account-heading { margin: 0; padding: 0 0 8px; }
 .reimagined .customer-account[data-account-pane] .customer-account-heading h2 { font-size: clamp(22px, 3vw, 28px); line-height: 1.15; letter-spacing: -.6px; }
 .reimagined .customer-account[data-account-pane] .customer-account-heading p { max-width: 52ch; }
 .reimagined .customer-account[data-account-pane] .customer-account-group { margin: 0; min-width: 0; }
-.reimagined .customer-account[data-account-pane] .customer-account-rows { background: rgb(255 255 255 / 25%); border: 1px solid rgb(53 96 71 / 15%); border-radius: 18px; }
+.reimagined .customer-account[data-account-pane] .customer-account-rows { background: rgb(255 255 255 / 25%); border: 1px solid rgb(53 96 71 / 15%); border-radius: 18px; padding: 0 12px; }
 .reimagined .customer-account[data-account-pane] :is(.customer-account-row, .customer-saved-place, .customer-partner-cta) { min-height: 64px; background: transparent; box-shadow: none; padding: 12px; overflow-wrap: anywhere; }
 .reimagined .customer-account[data-account-pane] .customer-account-row strong { font-size: 15px; }
 .reimagined .customer-account[data-account-pane] .customer-identity-card { width: 100%; min-width: 0; border: 1px solid rgb(53 96 71 / 18%); border-radius: 20px; background: rgb(255 255 255 / 35%); box-shadow: none; padding: 18px; }
 .reimagined .customer-account[data-account-pane] .customer-identity-contacts { min-width: 0; overflow-wrap: anywhere; }
+.reimagined .customer-account[data-account-pane] .customer-account-row:has(.customer-identity-actions) { grid-template-columns: 42px minmax(0, 1fr); }
+.reimagined .customer-account[data-account-pane] .customer-identity-actions { grid-column: 2; justify-content: flex-start; margin-top: 5px; }
+.reimagined .customer-account[data-account-pane] .customer-identity-actions .secondary-button { min-height: 44px; }
+@container reimagined-account (max-width: 360px) {
+  .reimagined .customer-account[data-account-pane] .customer-identity-heading { grid-template-columns: 42px minmax(0, 1fr); gap: 12px; }
+  .reimagined .customer-account[data-account-pane] .customer-identity-avatar { width: 42px; height: 42px; font-size: 18px; border-radius: 14px; }
+  .reimagined .customer-account[data-account-pane] .customer-identity-heading strong { font-size: 20px; }
+  .reimagined .customer-account[data-account-pane] .customer-identity-edit { grid-column: 2; justify-self: start; padding: 0; }
+  .reimagined .customer-account[data-account-pane] .customer-identity-contacts { margin-left: 0; }
+  .reimagined .customer-account[data-account-pane] .customer-saved-place { grid-template-columns: 42px minmax(0, 1fr); gap: 12px; }
+  .reimagined .customer-account[data-account-pane] .customer-saved-place-action { grid-column: 2; justify-self: start; }
+}
 .reimagined [data-presentation="reimagined"] .customer-page-title { margin: 0 0 16px; padding: 0; flex-wrap: wrap; gap: 12px; }
 .reimagined [data-presentation="reimagined"] .customer-page-title h2 { font-size: 25px; letter-spacing: -.6px; }
 .reimagined .reimagined-order-record > .v1-sheet > header { position: static; top: auto; z-index: auto; display: flex; flex-wrap: wrap; gap: 10px; width: 100%; margin: 0 0 16px; padding: 0 0 12px; background: transparent; backdrop-filter: none; }

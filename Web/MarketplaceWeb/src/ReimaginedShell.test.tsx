@@ -32,6 +32,17 @@ function click(label: string) { act(() => button(label).click()); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.restoreAllMocks(); });
 
 describe("Reimagined shell", () => {
+  it("skips navigation without replacing the current application route", () => {
+    window.history.replaceState(null, "", "/#/settings");
+    mount(); click("Settings");
+    const skip = host.querySelector<HTMLAnchorElement>(".reimagined-skip")!;
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    act(() => skip.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(true);
+    expect(window.location.hash).toBe("#/settings");
+    expect(document.activeElement).toBe(host.querySelector("main"));
+    expect(host.textContent).toContain("Settings content");
+  });
   it("opens Profile and Settings at the top instead of retaining another screen's scroll", () => {
     mount(); click("Settings");
     const content = host.querySelector<HTMLElement>(".reimagined-panel-content")!;
