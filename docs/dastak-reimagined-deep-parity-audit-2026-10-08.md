@@ -74,3 +74,14 @@ The owner authorized implementing and deploying F1–F5. The original evidence i
 Local gates: 893 Web tests across 132 files; TypeScript, ESLint and production build; 40 Orders Edge handler tests; native PostgreSQL fixtures for actor ownership, terminal filtering, legacy discovery, exact counts/page limits and anonymous rejection. Linked migration preflight compiled and verified the actual schema inside a transaction, then rolled back. Vercel Customer project/root/variant checks passed.
 
 Release still pending at this checkpoint. Only migration `20261008130951`, Orders Edge and Customer are in scope; unrelated pending migration `20260929191745` and both untracked RPM staff assets are excluded. F6–F10 remain open, and passing tests are not certification of real fulfilment, role transitions, purchases or refunds.
+
+### Production release evidence
+
+- Feature commit: `b3b4bca54d97f98a4689b754cc6967355a450975`; final local production build passed in 28.30 seconds.
+- Linked migration `20261008130951` committed atomically and recorded. Post-release checks: authenticated execute allowed, anonymous execute denied, unrelated `20260929191745` still unapplied.
+- `dastak-v1-orders` deployed to the verified linked project. Customer deployment `dpl_DXw961QuHeL5zET9q9y83a5R4d29` is READY and aliased to the normal Customer address. The deployment script verified HTML release SHA, Customer variant, production environment, deployment ID and security headers.
+- Error-level database lint for `dastak_v1`, `dastak_v1_api`, `private` and `public` returned no findings. A separate all-schema lint reported existing PostGIS extension helper diagnostics; these are outside the changed application functions and were not modified or represented as a clean global database audit.
+- The Codex browser repeatedly lost its sign-in; the owner requested Safari. In the existing signed-in Safari Customer tab, refreshed Settings displayed both Become a Dastak Merchant and Become a Delivery Partner, and Profile displayed neither. Typing barcode `8904064712041` preserved the Home centre and returned Aachi Curry Masala 100 g through canonical search. Submission changed the heading to the barcode results.
+- Full submitted-result verification paused at a regional availability loading state after visiting Profile. Safari inspection then stopped because the Mac locked. Phone live bounds and authenticated active-discovery response remain unverified at this checkpoint; no production order or stock was manufactured to make a test pass.
+
+Logs: `/tmp/dastak-parity-customer-deploy.log`, `/tmp/dastak-active-discovery-release.log`, `/tmp/dastak-active-advisors-scoped-release.log`, `/tmp/dastak-active-advisors-release.log`, `/tmp/dastak-parity-batch-build-final.log`, `/tmp/dastak-parity-batch-web.log`, `/tmp/dastak-parity-orders-edge.log`, `/tmp/dastak-active-discovery-sql.log`. No Git push performed in this batch.
