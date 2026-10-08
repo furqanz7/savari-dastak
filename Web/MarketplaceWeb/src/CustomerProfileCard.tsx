@@ -1,7 +1,7 @@
 import { Mail, MapPin, Pencil, Phone, ShieldCheck } from "lucide-react";
 import { AppleLogo } from "./IdentityProviderLogos";
 
-export function CustomerProfileCard({ initials, displayName, phoneNumber, email, signInLabel, savedPlaceCount, onEdit }: {
+export function CustomerProfileCard({ initials, displayName, phoneNumber, email, signInLabel, savedPlaceCount, onEdit, disabled = false }: {
   initials: string;
   displayName: string;
   phoneNumber: string;
@@ -9,8 +9,9 @@ export function CustomerProfileCard({ initials, displayName, phoneNumber, email,
   signInLabel: string;
   savedPlaceCount: number;
   onEdit: () => void;
+  disabled?: boolean;
 }) {
-  return <button className="customer-identity-card" type="button" onClick={onEdit}
+  return <button className="customer-identity-card" type="button" onClick={onEdit} disabled={disabled}
     aria-label="Edit profile" aria-describedby="customer-identity-name customer-identity-contacts customer-identity-meta">
     <span className="customer-identity-heading">
       <span className="customer-identity-avatar" aria-hidden="true">{initials}</span>

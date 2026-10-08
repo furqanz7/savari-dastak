@@ -3,6 +3,7 @@ import { act, useReducer } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReimaginedFood, ReimaginedFoodSuggestions } from "./ReimaginedFood";
+import { foodPanelTitle } from "./reimaginedFoodPanel";
 import { ReimaginedShell } from "./ReimaginedShell";
 import { initialReimaginedState, reimaginedReducer } from "./reimaginedState";
 import { foodMenuFixture } from "./reimaginedFood.testFixtures";
@@ -16,14 +17,29 @@ let root: Root; let host: HTMLDivElement;
 function Harness({ resource = ready, online = true, empty = false, canEdit = true }: { resource?: typeof ready; online?: boolean; empty?: boolean; canEdit?: boolean }) {
   const [state, dispatch] = useReducer(reimaginedReducer, undefined, () => reimaginedReducer(reimaginedReducer(initialReimaginedState(), { type: "signedIn", accountId: "a", shopping: { retail: { saved: 2 }, food: empty ? [] : [{ branchId: "saved", itemId: "saved", optionIds: [], quantity: 3 }] } }), { type: "selectService", service: "food" }));
   return <><ReimaginedShell state={state} dispatch={dispatch} directory={[]} greeting="Hi" locationLabel="Location" locationContent={null} onSignIn={() => {}} onOpenActiveOrder={() => {}} sectionContent={{}}
-    searchSuggestions={<ReimaginedFoodSuggestions menus={resource.data} query={state.exploration.food.searchDraft} dispatch={dispatch} />}>
-    <ReimaginedFood state={state} dispatch={dispatch} resource={resource} online={online} supabaseUrl="https://example.supabase.co" legacyUrl="/#home" canEdit={canEdit} />
+    featureTitle={state.section === "home" && state.service === "food" ? foodPanelTitle(state, resource.data) : undefined} searchSuggestions={<ReimaginedFoodSuggestions menus={resource.data} query={state.exploration.food.searchDraft} dispatch={dispatch} />}>
+    <ReimaginedFood state={state} dispatch={dispatch} resource={resource} online={online} supabaseUrl="https://example.supabase.co" legacyUrl="/#home" canEdit={canEdit} headingOwnedByShell />
   </ReimaginedShell><output aria-label="Saved shopping">{JSON.stringify(state.shopping)}</output></>;
 }
 function mount(resource = ready, online = true, empty = false) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness resource={resource} online={online} empty={empty} />)); }
 function click(label: string) { const button = [...host.querySelectorAll("button")].find(value => (value.getAttribute("aria-label") ?? value.textContent) === label); if (!button) throw new Error(`Missing ${label}`); act(() => button.click()); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("Food discovery and menus", () => {
+  it("uses one shell-owned title for restaurants and dish details", () => {
+    mount(ready, true, true); click("Open Test Café menu");
+    expect([...host.querySelectorAll("h1, h2")].filter(heading => heading.textContent === "Test Café")).toHaveLength(1);
+    expect(host.querySelector("h1")?.textContent).toBe("Test Café");
+    click("View Test Paneer Rice details");
+    expect([...host.querySelectorAll("h1, h2")].filter(heading => heading.textContent === "Test Paneer Rice")).toHaveLength(1);
+    expect(host.querySelector("h1")?.textContent).toBe("Test Paneer Rice");
+    click("Back to menu"); expect(host.querySelector("h1")?.textContent).toBe("Test Café");
+  });
+  it("returns to browsing without offering checkout after removing the last cart item", () => {
+    mount(); click("Review Food cart"); click("Remove saved dish");
+    expect(host.querySelector('[aria-label="Restaurant shelf"]')).not.toBeNull();
+    expect(host.textContent).not.toContain("Food checkout integration pending");
+    expect(host.querySelector('[aria-label="Saved shopping"]')?.textContent).toContain('"retail":{"saved":2}');
+  });
   it.each([{ isOpen: false }, { acceptingOrders: false }, { branchStatus: "SUSPENDED" }])("retains a closed store and disables its card, dish and search taps", change => {
     mount({ ...ready, data: [{ ...menus[0], restaurant: { ...menus[0].restaurant, ...change } }] });
     expect(host.textContent).toContain("Test Café"); expect(host.textContent).toContain("Store closed");
@@ -156,7 +172,7 @@ describe("Food discovery and menus", () => {
   });
   it("reviews and exits the retained Food cart with checkout disabled", () => {
     mount(); const shopping = host.querySelector("output")!.textContent; click("Review Food cart");
-    expect(host.textContent).toContain("Quantity 3"); expect([...host.querySelectorAll("button")].find(button => button.textContent === "Food checkout integration pending")?.disabled).toBe(true);
+    expect(host.querySelector('output[aria-label="Saved dish quantity"]')?.textContent).toBe("3"); expect([...host.querySelectorAll("button")].find(button => button.textContent === "Food checkout integration pending")?.disabled).toBe(true);
     click("Continue Shopping"); expect(host.querySelector('[aria-label="Restaurant shelf"]')).not.toBeNull(); expect(host.querySelector("output")!.textContent).toBe(shopping);
   });
   it("shows failures, retry, empty catalogue and offline states honestly", () => {

@@ -38,7 +38,7 @@
 .reimagined-directory button svg { flex-shrink: 0; opacity: .45; }
 .reimagined-directory button[aria-pressed="true"] { background: #e0eadf; color: #214f36; font-weight: 700; }
 .reimagined-directory p { font-size: 12px; line-height: 1.5; padding: 12px; }
-.reimagined-main { position: relative; margin: 124px 302px 22px 167px; min-height: 470px; padding: 28px; z-index: 2; }
+.reimagined-main { position: relative; margin: 124px 302px 22px 167px; min-height: 470px; padding: 28px; z-index: 2; outline: none; }
 .reimagined-main-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .reimagined-main h1 { font-size: clamp(23px, 2.2vw, 34px); font-weight: 650; letter-spacing: -1.1px; line-height: 1.15; margin-top: 10px; }
 .reimagined-header-actions { display: flex; align-items: center; gap: 5px; }
@@ -583,6 +583,17 @@
 .reimagined .customer-account[data-account-pane] .customer-account-row small { font-size: 12px; line-height: 1.5; }
 .reimagined .reimagined-account-switch { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border: 1px solid rgb(53 96 71 / 20%); border-radius: 16px; }
 .reimagined .v1-customer-shell[data-presentation="reimagined"] { padding: 0; }
+.reimagined-workspace-summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 18px; }
+.reimagined-workspace-summary > p { color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
+.reimagined-profile-error { display: grid; gap: 8px; padding: 14px; border: 1px solid #a23f3040; border-radius: 14px; }
+.reimagined-profile-error button { justify-self: start; min-height: 44px; padding: 10px 14px; border: 1px solid #35604740; }
+.reimagined .customer-account[data-account-pane] .customer-account-heading > p { color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
+.reimagined .customer-account[data-account-pane] .customer-account-section-heading { flex-wrap: wrap; gap: 8px; }
+.reimagined .customer-account[data-account-pane] .customer-identity-actions { flex-wrap: wrap; }
+@media (min-width: 721px) and (max-width: 1100px) {
+  .reimagined-wordmark { left: 20px; font-size: 28px; max-width: 132px; }
+  .reimagined-wordmark .dastak-wordmark { white-space: nowrap; }
+}
 .reimagined [data-presentation="reimagined"] .v1-feature-header { padding: 0 0 18px; min-width: 0; flex-wrap: wrap; gap: 12px; }
 .reimagined [data-presentation="reimagined"] .v1-feature-header :is(h1, h2) { font-size: 25px; letter-spacing: -.6px; }
 .reimagined [data-presentation="reimagined"] .v1-order-scopes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: 4px; padding: 4px; }

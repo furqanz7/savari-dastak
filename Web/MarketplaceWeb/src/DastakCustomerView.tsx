@@ -49,7 +49,7 @@ export function DastakCustomerView(props: Props) {
   return <ExistingDastakCustomerView key={props.accountId} {...props} />;
 }
 
-export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; initialMerchantOrderId?: string; onReturnToShopping?: () => void; onOpenWishlist?: () => void; onOpenOrders?: (id?: string) => void; onOpenMerchantOrder?: (id: string) => void; onOrderRecordClosed?: () => void; onReorder?: (order: V1Order) => void; webPushController?: DastakWebPushController; onProfileChanged?: (profile: AccountProfile) => void; accountPane?: "profile" | "settings"; onOpenProfile?: () => void; onOpenSettings?: () => void; onViewChange?: (section: CustomerSection) => void }) {
+export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; initialMerchantOrderId?: string; onReturnToShopping?: () => void; onOpenWishlist?: () => void; onOpenOrders?: (id?: string) => void; onOpenMerchantOrder?: (id: string) => void; onOrderRecordClosed?: () => void; onReorder?: (order: V1Order) => void; webPushController?: DastakWebPushController; onProfileChanged?: (profile: AccountProfile) => void; accountPane?: "profile" | "settings"; onOpenProfile?: () => void; onOpenSettings?: () => void; onOpenPayments?: () => void; onViewChange?: (section: CustomerSection) => void }) {
   const onSessionExpired = useCustomerSessionRecovery(props.client, props.accessToken);
   const online = useCustomerOnline();
   const [orderRefreshToken, setOrderRefreshToken] = useState(0);
@@ -115,6 +115,8 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
   }, [navigate, props.embedded]);
 
   const navigateSection = (nextSection: CustomerSection) => {
+    if (props.embedded && nextSection === "account" && props.onOpenProfile) { props.onOpenProfile(); return; }
+    if (props.embedded && nextSection === "payments" && props.onOpenPayments) { props.onOpenPayments(); return; }
     if (props.embedded && nextSection === "orders" && props.onOpenOrders) { props.onOpenOrders(); return; }
     if (props.embedded && nextSection === "wishlist" && props.onOpenWishlist) { props.onOpenWishlist(); return; }
     if (props.embedded && nextSection === "home") { props.onReturnToShopping?.(); return; }

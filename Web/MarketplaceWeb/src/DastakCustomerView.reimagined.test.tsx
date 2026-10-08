@@ -26,6 +26,22 @@ async function mount(url: string) {
 }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("customer entry ownership", () => {
+  it("returns embedded Payments to the owning Profile instead of showing legacy Account under Orders", async () => {
+    vi.stubGlobal("scrollTo", vi.fn());
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    const onOpenProfile = vi.fn();
+    await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="payments" onOpenProfile={onOpenProfile} />));
+    act(() => vi.mocked(DastakV1CustomerExperience).mock.calls.at(-1)![0].onNavigate("account"));
+    expect(onOpenProfile).toHaveBeenCalledOnce(); expect(CatalogueView).not.toHaveBeenCalled();
+  });
+  it("hands the Profile Payments shortcut to the outer navigation owner", async () => {
+    vi.stubGlobal("scrollTo", vi.fn());
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    const onOpenPayments = vi.fn();
+    await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="account" accountPane="profile" onOpenPayments={onOpenPayments} />));
+    act(() => vi.mocked(CatalogueView).mock.calls.at(-1)![0].onNavigate("payments"));
+    expect(onOpenPayments).toHaveBeenCalledOnce(); expect(DastakV1CustomerExperience).not.toHaveBeenCalled();
+  });
   it.each([true, false])("opens an older record with its own controller (embedded=%s)", async embedded => {
     const id = "11111111-1111-4111-8111-111111111111", onOrderRecordClosed = vi.fn();
     window.history.replaceState(null, "", `/#/orders/${id}`); vi.stubGlobal("scrollTo", vi.fn());

@@ -19,6 +19,7 @@ import { useReimaginedAddresses } from "./useReimaginedAddresses";
 import { useReimaginedActiveOrder } from "./useReimaginedActiveOrder";
 import { useReimaginedFood } from "./useReimaginedFood";
 import { ReimaginedFood, ReimaginedFoodSuggestions } from "./ReimaginedFood";
+import { foodPanelTitle } from "./reimaginedFoodPanel";
 import { ReimaginedFoodCheckout } from "./ReimaginedFoodCheckout";
 import { ReimaginedFoodCounter } from "./ReimaginedFoodCounter";
 import { foodRecoveryJournal, ReimaginedFoodRecovery } from "./reimaginedFoodRecovery";
@@ -192,7 +193,7 @@ function AccountExperience(props: Props) {
       directoryStatus={resource.status} onRetryDirectory={resource.retry}
       displayName={displayName} greeting={greeting} locationLabel={online && addresses.selected ? addresses.selected.label : "Choose your location"}
       locationContent={addressPicker}
-      onOpenWishlist={openWishlist} featureTitle={savedOpen ? "Wishlist" : workspaceTitle}
+      onOpenWishlist={openWishlist} featureTitle={savedOpen ? "Your Wishlist" : workspaceTitle ?? (state.section === "home" && state.service === "food" ? foodPanelTitle(state, food.data) : undefined)}
       onSignIn={onSessionExpired} onOpenActiveOrder={id => {
         if (tracking.activeCount > 1) openOrders();
         else if (tracking.activeOrder?.kind === "merchant") openMerchantOrder(id);
@@ -206,7 +207,7 @@ function AccountExperience(props: Props) {
           {mixedOrder ? <section aria-label="Rebuild mixed order"><h3>Rebuild this order as separate carts</h3><p>Choose which part to restore. The other cart is kept. Each service has its own checkout.</p><button type="button" disabled={!online || !canEditCart || reorderBusy} onClick={() => void requestReorder(mixedOrder, "grocery")}>Rebuild Grocery</button><button type="button" disabled={!online || !canEditCart || reorderBusy} onClick={() => void requestReorder(mixedOrder, "food")}>Rebuild Food</button><button type="button" disabled={reorderBusy} onClick={() => setMixedOrder(undefined)}>Keep current carts</button></section> : null}
           {reorderBusy ? <p role="status">Checking exact items and options…</p> : null}
           {reorder ? <section aria-label="Confirm cart replacement"><h3>Replace your current {reorder.service === "grocery" ? "Bucket" : "Food cart"}?</h3><p>The other service’s cart stays unchanged. Nothing is ordered until you complete checkout.</p><button type="button" onClick={() => setReorder(undefined)}>Keep current cart</button><button type="button" disabled={!online || !canEditCart} onClick={approveReorder}>Replace cart and review</button></section> : null}
-          <AccountWorkspace key={`${state.section}:${workspaceTitle ?? ""}:${selectedOrderId ?? ""}:${selectedMerchantOrderId ?? ""}`} {...props} displayName={displayName} phoneNumber={phoneNumber} embedded accountPane={state.section === "profile" || state.section === "settings" ? state.section : undefined} onOpenProfile={() => dispatch({ type: "navigate", section: "profile" })} onOpenSettings={() => dispatch({ type: "navigate", section: "settings" })} onOpenOrders={openOrders} onOpenMerchantOrder={openMerchantOrder} onOrderRecordClosed={() => { setSelectedOrderId(undefined); setSelectedMerchantOrderId(undefined); }} onViewChange={updateWorkspaceTitle} initialSection={workspaceTitle === "Payments" ? "payments" : state.section === "orders" ? "orders" : "account"} initialOrderId={state.section === "orders" ? selectedOrderId : undefined} initialMerchantOrderId={state.section === "orders" ? selectedMerchantOrderId : undefined} onReturnToShopping={() => dispatch({ type: "navigate", section: "home" })} onOpenWishlist={openWishlist} onReorder={requestReorder} webPushController={webPush} onProfileChanged={setProfile} />
+          <AccountWorkspace key={`${state.section}:${workspaceTitle ?? ""}:${selectedOrderId ?? ""}:${selectedMerchantOrderId ?? ""}`} {...props} displayName={displayName} phoneNumber={phoneNumber} embedded accountPane={state.section === "profile" || state.section === "settings" ? state.section : undefined} onOpenProfile={() => dispatch({ type: "navigate", section: "profile" })} onOpenSettings={() => dispatch({ type: "navigate", section: "settings" })} onOpenPayments={() => { dispatch({ type: "navigate", section: "orders" }); setWorkspaceTitle("Payments"); }} onOpenOrders={openOrders} onOpenMerchantOrder={openMerchantOrder} onOrderRecordClosed={() => { setSelectedOrderId(undefined); setSelectedMerchantOrderId(undefined); }} onViewChange={updateWorkspaceTitle} initialSection={workspaceTitle === "Payments" ? "payments" : state.section === "orders" ? "orders" : "account"} initialOrderId={state.section === "orders" ? selectedOrderId : undefined} initialMerchantOrderId={state.section === "orders" ? selectedMerchantOrderId : undefined} onReturnToShopping={() => dispatch({ type: "navigate", section: "home" })} onOpenWishlist={openWishlist} onReorder={requestReorder} webPushController={webPush} onProfileChanged={setProfile} />
         </Suspense>,
       }}>
       {!online ? <p role="status">You’re offline. Your saved Bucket is retained; adding products is disabled until you reconnect.</p> : null}
@@ -214,7 +215,7 @@ function AccountExperience(props: Props) {
       {resource.data && resource.error ? <p role="alert">Couldn’t refresh the catalogue. Your previous shelves and cart are retained. <button type="button" disabled={!online || resource.refreshing} onClick={resource.retry}>Retry catalogue refresh</button></p> : null}
       {availability.data && !availability.data.deliveryAvailable ? <p role="status">No delivery partners are available in your area right now. You can keep adding available items to your cart and order later.</p> : null}
       {wishlist.error ? <p role="alert">Your Wishlist couldn’t update. <button type="button" onClick={wishlist.retry}>Retry Wishlist</button></p> : null}
-      {savedOpen ? <ReimaginedWishlist wishlist={wishlist} data={resource.data} menus={food.data} online={online} supabaseUrl={supabaseUrl} onClose={() => setSavedOpen(false)} onOpen={(skuId, branchId, itemId) => {
+      {savedOpen ? <ReimaginedWishlist headingOwnedByShell wishlist={wishlist} data={resource.data} menus={food.data} online={online} supabaseUrl={supabaseUrl} onClose={() => setSavedOpen(false)} onOpen={(skuId, branchId, itemId) => {
         if (branchId && !food.data?.some(menu => menu.restaurant.branchId === branchId && foodAcceptingOrders(menu))) return;
         dispatch({ type: "selectService", service: skuId ? "grocery" : "food" });
         if (branchId) dispatch({ type: "openRestaurant", branchId });
@@ -224,7 +225,7 @@ function AccountExperience(props: Props) {
         availabilityNotice={!availability.data?.groceryServiceable ? areaNotice("grocery") : undefined}
         onRetry={resource.retry} supabaseUrl={props.supabaseUrl}
         eligibility={groceryEligibility}
-        checkoutContent={review} /> : <ReimaginedFood state={state} dispatch={dispatch} resource={food} supabaseUrl={props.supabaseUrl} online={online} legacyUrl={homeUrl} canEdit={canEditCart} wishlist={wishlist}
+        checkoutContent={review} /> : <ReimaginedFood state={state} dispatch={dispatch} resource={food} supabaseUrl={props.supabaseUrl} online={online} legacyUrl={homeUrl} canEdit={canEditCart} wishlist={wishlist} headingOwnedByShell
           availabilityNotice={!availability.data?.foodServiceable ? areaNotice("food") : undefined}
           checkoutContent={<><button type="button" onClick={() => dispatch({ type: "navigate", section: "profile" })}>Edit delivery recipient in Profile</button><ReimaginedFoodCheckout addressPicker={addressPicker} input={foodInput} counter={<ReimaginedFoodCounter key={accessToken} checkout={foodCheckout} input={foodInput} enabled deliveryIssue={deliveryIssue} dispatch={dispatch} onSessionExpired={onSessionExpired} ordersUrl={ordersUrl} onOpenOrders={openOrders} />} /></>} />}
     </ReimaginedShell>

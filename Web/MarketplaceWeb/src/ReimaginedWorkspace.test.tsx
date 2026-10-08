@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CatalogueView } from "./CatalogueView";
-import { MatchingSheet, PaymentsSection } from "./DastakV1CustomerExperience";
+import { MatchingSheet, PaymentsSection, OrdersSection } from "./DastakV1CustomerExperience";
 import { workspaceOrderFixture as order } from "./reimaginedWorkspace.testFixtures";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const noop = () => {};
@@ -13,6 +13,12 @@ const props = { accountId: "test", accessToken: "test", client: {} as SupabaseCl
 const orderProps = { order, busy: false, imageUrlForLine: () => null, onDismiss: noop, onCancel: noop, onPay: noop, onReorder: noop, onRefresh: noop, onReportIssue: async () => true };
 
 describe("dedicated Reimagined workspaces", () => {
+  it("lets the shell own the Orders page title, preserving the standalone heading", () => {
+    const input = { orders: [order], loading: false, loadingMore: false, canLoadMore: false, imageUrlForLine: () => null, onRefresh: noop, onLoadMore: noop, onOpen: noop, onReorder: noop, onSessionExpired: noop };
+    const embedded = renderToStaticMarkup(<OrdersSection {...input} presentation="reimagined" />);
+    expect(embedded).not.toMatch(/<h[12][^>]*>Orders<\/h[12]>/); expect(embedded).toContain("Track your deliveries"); expect(embedded).toContain("Filter orders");
+    expect(renderToStaticMarkup(<OrdersSection {...input} />)).toContain("<h1>Orders</h1>");
+  });
   it("keeps personal details and saved places in Profile, not destructive controls", () => {
     const html = renderToStaticMarkup(<CatalogueView {...props} accountPane="profile" onOpenSettings={noop} />);
     expect(html).toContain('data-account-pane="profile"'); expect(html).toContain('aria-label="Your profile"');

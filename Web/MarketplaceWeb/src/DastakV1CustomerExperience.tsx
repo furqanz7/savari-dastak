@@ -1744,7 +1744,7 @@ export function OrdersSection({
   }, [activeCount, orders.length]);
 
   return <section className="v1-orders-page">
-    <CustomerPageHeading eyebrow="YOUR DASTAK" title="Orders" description="From your first pick to your doorstep. Follow it all here." headingLevel={presentation === "reimagined" ? 2 : 1}><CustomerSyncStatus health={realtimeHealth} refreshing={loading} failed={Boolean(error)} /></CustomerPageHeading>
+    {presentation === "reimagined" ? <header className="reimagined-workspace-summary"><p>Track your deliveries, revisit past orders and get help.</p><CustomerSyncStatus health={realtimeHealth} refreshing={loading} failed={Boolean(error)} /></header> : <CustomerPageHeading eyebrow="YOUR DASTAK" title="Orders" description="From your first pick to your doorstep. Follow it all here."><CustomerSyncStatus health={realtimeHealth} refreshing={loading} failed={Boolean(error)} /></CustomerPageHeading>}
     <div className="v1-order-scopes" role="group" aria-label="Filter orders">
       {(["active", "past"] as const).map((value) => <button type="button" key={value} aria-pressed={scope === value} onClick={() => { scopeWasChosen.current = true; setScope(value); }}><span>{value[0].toUpperCase() + value.slice(1)}</span><small>{value === "active" ? activeCount : orders.length - activeCount}</small></button>)}
     </div>

@@ -32,6 +32,13 @@ function click(label: string) { act(() => button(label).click()); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.restoreAllMocks(); });
 
 describe("Reimagined shell", () => {
+  it("opens Profile and Settings at the top instead of retaining another screen's scroll", () => {
+    mount(); click("Settings");
+    const content = host.querySelector<HTMLElement>(".reimagined-panel-content")!;
+    content.scrollTop = 420; click("Profile");
+    expect(content.scrollTop).toBe(0); expect(document.activeElement).toBe(host.querySelector("main"));
+    content.scrollTop = 150; click("Settings"); expect(content.scrollTop).toBe(0);
+  });
   it("reveals the selected directory row without scrolling the page or the shopping panel", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       if (this.classList.contains("reimagined-directory")) return new DOMRect(0, 100, 200, 140);

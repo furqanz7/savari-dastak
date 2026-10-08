@@ -1,0 +1,96 @@
+.reimagined-food, .reimagined-food-cart { min-width: 0; color: var(--ink, #282c26); }
+.reimagined-food :is(p, small, strong, h2, h3), .reimagined-food-cart :is(p, small, strong) { overflow-wrap: anywhere; }
+.reimagined-food-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.reimagined-food-toolbar p { margin: 0; font-size: 13px; color: var(--muted); }
+.reimagined-food-toolbar button, .reimagined-food-back, .reimagined-food .reimagined-detail-close { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 8px 12px; font-size: 13px; }
+.reimagined-food-toolbar { min-width: 0; }
+.reimagined-food-toolbar > button:first-child { padding-left: 0; }
+.reimagined-food-toolbar > button:last-child { flex-shrink: 0; }
+.reimagined-food-distance { border-bottom: 1px solid #35604726; padding-bottom: 12px; color: var(--muted); font-size: 12px; }
+.reimagined-food-distance summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; gap: 8px; }
+.reimagined-food-distance summary::before { content: "+"; font-size: 18px; }
+.reimagined-food-distance[open] summary::before { content: "−"; }
+.reimagined-food-distance p { margin: 4px 0 0; line-height: 1.6; }
+.reimagined-food .reimagined-food-categories { padding: 0 0 8px; gap: 8px; margin: 0; }
+.reimagined-food .reimagined-food-categories button { min-height: 44px; border: 1px solid #35604726; border-radius: 14px; padding: 10px 15px; font-size: 13px; }
+.reimagined-food .reimagined-wooden-shelf > header { padding: 0; margin-bottom: 12px; }
+.reimagined-food .reimagined-wooden-shelf > header h2 { font-size: 19px; }
+.reimagined-restaurant-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.reimagined-restaurant-card { min-width: 0; border: 1px solid #35604726; border-radius: 20px; overflow: hidden; background: #fff7; }
+.reimagined-restaurant-card > button { width: 100%; display: flex; flex-direction: column; align-items: stretch; padding: 0; text-align: left; border-radius: 0; }
+.reimagined-restaurant-card .reimagined-sku-image { width: 100%; height: 148px; border-radius: 0; background: linear-gradient(135deg, #e6e6d9, #f4f2e8); }
+.reimagined-restaurant-card .reimagined-sku-image img { width: 100%; height: 100%; object-fit: cover; }
+.reimagined-restaurant-card-body { display: grid; gap: 9px; padding: 16px; min-width: 0; }
+.reimagined-restaurant-card-body > strong { font-size: 18px; line-height: 1.25; }
+.reimagined-restaurant-card-body small { color: var(--muted); font-size: 12px; line-height: 1.5; display: flex; gap: 5px; align-items: center; }
+.reimagined-restaurant-card-body small svg { flex-shrink: 0; }
+.reimagined-food-status { color: #655c50; font-size: 12px; font-weight: 600; }
+.reimagined-food-status[data-open="true"] { color: #315c41; }
+.reimagined-food-status::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: middle; }
+.reimagined-food-card-action { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid #35604720; padding-top: 10px; color: #315c41; font-size: 13px; font-weight: 650; }
+.reimagined-restaurant-card[data-closed="true"] > button { cursor: not-allowed; opacity: .72; }
+.reimagined-food-restaurant-intro { display: grid; gap: 8px; border-bottom: 1px solid #35604726; padding: 0 0 16px; }
+.reimagined-food-restaurant-intro p { margin: 0; line-height: 1.55; }
+.reimagined-food-restaurant-intro > small { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+.reimagined-menu-shortcuts { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; }
+.reimagined-menu-shortcuts button { min-height: 44px; flex-shrink: 0; border: 1px solid #35604726; border-radius: 12px; padding: 10px 14px; font-size: 13px; }
+.reimagined-food-menu-section > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.reimagined-food-menu-section h3 { font-size: 20px; margin: 0; }
+.reimagined-food-menu-section header small { color: var(--muted); font-size: 12px; }
+.reimagined-dish-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.reimagined-dish-card { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 14px; border: 1px solid #35604726; border-radius: 18px; background: #fff6; }
+.reimagined-dish-card > .reimagined-product-open { grid-column: 1 / -1; display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; width: 100%; align-items: center; text-align: left; padding: 0; }
+.reimagined-dish-card .reimagined-sku-image { width: 82px; height: 82px; border-radius: 14px; background: #e9eadd; }
+.reimagined-dish-card .reimagined-product-name { padding: 0; font-size: 16px; line-height: 1.35; font-weight: 650; }
+.reimagined-food-dish-price { margin: 0; display: grid; gap: 3px; }
+.reimagined-food-dish-price strong { font-size: 16px; }
+.reimagined-food-dish-price small { font-size: 11px; color: var(--muted); }
+.reimagined-dish-card .reimagined-save { justify-self: end; min-width: 44px; }
+.reimagined-dish-card .reimagined-food-choose { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; min-height: 44px; border: 1px solid #35604740; border-radius: 12px; padding: 10px 12px; color: #315c41; background: #e1ebdf; font-size: 13px; font-weight: 650; }
+.reimagined-food .reimagined-product-detail { display: grid; gap: 12px; }
+.reimagined-food .reimagined-product-detail > .reimagined-sku-image { height: 200px; border-radius: 18px; background: #e9eadd; }
+.reimagined-food .reimagined-product-detail > p { margin: 0; line-height: 1.55; }
+.reimagined-food-detail-restaurant { color: var(--muted); font-size: 13px; }
+.reimagined-food-base-price { font-weight: 650; }
+.reimagined-food .reimagined-food-choices { padding-bottom: 16px; display: grid; gap: 12px; }
+.reimagined-food-choices fieldset { margin: 0; padding: 12px; border-color: #35604730; background: #fff5; }
+.reimagined-food-choices legend { padding: 0 6px; font-size: 15px; font-weight: 650; }
+.reimagined-food-choices fieldset p { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.reimagined-food .reimagined-food-choices label { min-height: 48px; padding: 12px 8px; border-radius: 10px; font-size: 14px; line-height: 1.5; }
+.reimagined-food-choices label:has(input:checked) { background: #dce8da; }
+.reimagined-food-choices label input { margin: 0 8px 0 0; vertical-align: middle; }
+.reimagined-food .reimagined-food-choices > button { margin: 0; min-height: 48px; font-weight: 650; }
+.reimagined-food .reimagined-food-choices > button:first-of-type { color: #fff; background: #315c41; border-color: #315c41; }
+.reimagined-food-selection-price { margin: 0; font-size: 13px; }
+.reimagined-food-selection-price strong { font-size: 20px; }
+.reimagined-food-cart > p { font-size: 13px; color: var(--muted); line-height: 1.6; margin-top: 0; }
+.reimagined-food-cart-lines { list-style: none; padding: 0; margin: 18px 0; display: grid; gap: 12px; }
+.reimagined-food-cart-line { min-width: 0; display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 14px; border: 1px solid #35604726; border-radius: 18px; background: #fff6; }
+.reimagined-food-cart-line .reimagined-sku-image { width: 64px; height: 64px; border-radius: 12px; }
+.reimagined-food-cart-line .reimagined-sku-image-fallback small, .reimagined-dish-card .reimagined-sku-image-fallback small { display: none; }
+.reimagined-food-cart-description { min-width: 0; display: grid; gap: 5px; }
+.reimagined-food-cart-description strong { font-size: 15px; }
+.reimagined-food-cart-description small, .reimagined-food-cart-description p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.reimagined-food-cart-actions { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.reimagined-food-quantity { display: flex; align-items: center; border: 1px solid #35604740; border-radius: 12px; }
+.reimagined-food-quantity button { min-width: 44px; min-height: 44px; display: grid; place-items: center; padding: 0; }
+.reimagined-food-quantity output { min-width: 30px; text-align: center; font-size: 14px; font-weight: 650; }
+.reimagined-food-remove { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 12px; }
+.reimagined-food-empty { display: grid; justify-items: center; gap: 12px; text-align: center; padding: 36px 16px; }
+.reimagined-food-empty h2 { font-size: 21px; margin: 0; }
+.reimagined-food-empty button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px solid #35604740; }
+.reimagined-food :is(button, input):focus-visible, .reimagined-food-cart button:focus-visible { outline: 3px solid #315c41; outline-offset: 3px; }
+@media (max-width: 1000px) {
+  .reimagined-restaurant-grid, .reimagined-dish-grid { grid-template-columns: minmax(0, 1fr); }
+  .reimagined-restaurant-card > button { display: grid; grid-template-columns: 96px minmax(0, 1fr); }
+  .reimagined-restaurant-card .reimagined-sku-image { height: 100%; min-height: 148px; }
+  .reimagined-restaurant-card-body { padding: 12px; }
+}
+@media (max-width: 400px) {
+  .reimagined-restaurant-card > button { grid-template-columns: 76px minmax(0, 1fr); }
+  .reimagined-restaurant-card-body > strong { font-size: 16px; }
+  .reimagined-dish-card { padding: 12px; }
+  .reimagined-dish-card > .reimagined-product-open { grid-template-columns: 64px minmax(0, 1fr); }
+  .reimagined-dish-card .reimagined-sku-image { width: 64px; height: 64px; }
+  .reimagined-food-toolbar { align-items: flex-start; }
+}

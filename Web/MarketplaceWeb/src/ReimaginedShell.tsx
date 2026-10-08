@@ -68,6 +68,8 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
     previousFocus.current = { account: state.accountId, service: state.service, section: state.section, search: exploration.searchOpen, location: state.locationOpen, detail: exploration.detailId, checkout: exploration.checkout };
     const scopeChanged = previous.account !== state.accountId || previous.service !== state.service || previous.section !== state.section;
     if (scopeChanged) {
+      const content = shell.current?.querySelector<HTMLElement>(".reimagined-panel-content");
+      if (content) content.scrollTop = 0;
       detailOpener.current = null;
       lastContentButton.current = null;
       detailReturnScroll.current = null;

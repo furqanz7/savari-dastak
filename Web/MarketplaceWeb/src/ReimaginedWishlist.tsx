@@ -12,11 +12,12 @@ export function WishlistButton({ wishlist, kind, id, name, online }: { wishlist?
   return <button className="reimagined-save" type="button" aria-label={`${saved ? "Remove" : "Save"} ${name} ${saved ? "from" : "to"} Wishlist`} aria-pressed={saved} disabled={!online || !wishlist.ready || wishlist.busy} onClick={() => void wishlist.toggle(kind, id)}><Bookmark size={18} fill={saved ? "currentColor" : "none"} /><span>{saved ? "Saved" : "Save"}</span></button>;
 }
 
-export function ReimaginedWishlist({ wishlist, data, menus, online, supabaseUrl, onOpen, onClose }: {
+export function ReimaginedWishlist({ wishlist, data, menus, online, supabaseUrl, onOpen, onClose, headingOwnedByShell = false }: {
   wishlist: ReturnType<typeof useReimaginedWishlist>; data?: ReimaginedCatalogue; menus?: V1RestaurantMenu[]; online: boolean; supabaseUrl: string;
   onOpen: (skuId?: string, branchId?: string, itemId?: string) => void; onClose: () => void;
+  headingOwnedByShell?: boolean;
 }) {
-  return <section aria-label="Your Wishlist"><h2>Your Wishlist</h2><button type="button" onClick={onClose}>Back to shopping</button>
+  return <section aria-label="Your Wishlist">{!headingOwnedByShell ? <h2>Your Wishlist</h2> : null}<button type="button" onClick={onClose}>Back to shopping</button>
     {wishlist.error ? <p role="alert">Wishlist could not update. Your saved items were not discarded.</p> : null}
     <button type="button" disabled={!online || wishlist.busy} onClick={wishlist.retry}>Refresh Wishlist</button>
     {!wishlist.ready ? <p role="status">{online ? "Loading your saved products and dishes…" : "Reconnect to load your Wishlist."}</p> : !wishlist.items.length ? <p>No saved products or dishes yet. Use Save on a shelf or in details.</p> : <ul className="reimagined-saved-list">{wishlist.items.map(saved => {

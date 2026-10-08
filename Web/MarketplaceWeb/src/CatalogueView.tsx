@@ -302,6 +302,8 @@ export function CatalogueView({
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileError, setProfileError] = useState<string>();
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileRevision, setProfileRevision] = useState(0);
   const [customerIdentities, setCustomerIdentities] = useState<CustomerIdentity[]>([]);
   const [identityLoading, setIdentityLoading] = useState(false);
   const [identityMessage, setIdentityMessage] = useState<string>();
@@ -333,15 +335,17 @@ export function CatalogueView({
   useEffect(() => {
     if (section !== "account") return;
     let active = true;
+    setProfileLoading(true);
+    setProfileError(undefined);
     void snapshotAccountProfile(auth)
       .then((profile) => { if (active) setAccountProfile(profile); })
       .catch((error) => {
         if (!active) return;
         if (error instanceof AccountProfileRequestError && error.status === 401) return onSignOut();
         setProfileError("Your latest profile details could not be loaded. Try again.");
-      });
+      }).finally(() => { if (active) setProfileLoading(false); });
     return () => { active = false; };
-  }, [auth, onSignOut, section]);
+  }, [auth, onSignOut, section, profileRevision]);
 
   useEffect(() => {
     if (section !== "account" || accountPane === "profile") return;
@@ -1121,11 +1125,11 @@ export function CatalogueView({
       {section === "account" && (
         <section className="customer-account" data-account-pane={accountPane} aria-label={accountPane === "profile" ? "Your profile" : accountPane === "settings" ? "Your settings" : "Your account"}>
           <header className="customer-page-heading customer-account-heading">
-            {accountPane ? <><p className="eyebrow">{accountPane === "profile" ? "PERSONAL DETAILS" : "PREFERENCES & SECURITY"}</p><h2>{accountPane === "profile" ? "Your details, in one place." : "Make Dastak work for you."}</h2><p>{accountPane === "profile" ? "Keep your delivery details and saved places ready for your next order." : "Control alerts, sign-ins, privacy and support without leaving the store."}</p></> : <><p className="eyebrow">Account</p><h1>Your Dastak</h1><p>Your details, saved places and account controls—kept together and protected.</p></>}
+            {accountPane ? <p>{accountPane === "profile" ? "Your details and saved delivery addresses." : "Notifications, account security and partner workspaces."}</p> : <><p className="eyebrow">Account</p><h1>Your Dastak</h1><p>Your details, saved places and account controls—kept together and protected.</p></>}
           </header>
           {accountPane !== "settings" ? <CustomerProfileCard initials={accountInitials} displayName={accountProfile.displayName}
-            phoneNumber={accountProfile.phoneNumber} email={email} onEdit={() => setProfileEditorOpen(true)}
-            signInLabel={customerIdentities.length > 0
+            phoneNumber={accountProfile.phoneNumber} email={email} onEdit={() => setProfileEditorOpen(true)} disabled={profileLoading || Boolean(profileError)}
+            signInLabel={profileLoading ? "Loading your profile…" : customerIdentities.length > 0
                 ? `${customerIdentities.map((identity) => identity.provider === "apple" ? "Apple" : "Google").join(" + ")} sign-in`
                 : "Secure sign-in"} savedPlaceCount={savedAddresses.length} /> : null}
 
@@ -1287,7 +1291,7 @@ export function CatalogueView({
                   : <ChevronRight size={19} />}
             </a>
           </section> : null}
-          {profileError && !profileEditorOpen && <p className="error-text" role="alert">{profileError}</p>}
+          {profileError && !profileEditorOpen && <div className="reimagined-profile-error" role="alert"><p>{profileError}</p><button type="button" disabled={profileLoading} onClick={() => setProfileRevision(value => value + 1)}>Retry profile</button></div>}
           {accountPane === "profile" && onOpenSettings ? <button className="reimagined-account-switch" type="button" onClick={onOpenSettings}><Settings size={19} />Open Settings</button> : null}
           {accountPane === "settings" && onOpenProfile ? <button className="reimagined-account-switch" type="button" onClick={onOpenProfile}><UserRound size={19} />Edit your Profile</button> : null}
         </section>
