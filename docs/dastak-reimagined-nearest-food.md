@@ -1,7 +1,7 @@
 # Nearest-first Food — implementation and release, 2026-10-08
 
-Status: production rollout explicitly approved. The single migration and catalogue
-Edge Function are applied to linked Dastak; Customer release follows them.
+Status: production rollout completed. The single migration and catalogue Edge
+Function are applied to linked Dastak, and Customer is live on the normal URL.
 
 ## Behaviour
 
@@ -65,7 +65,7 @@ Edge Function are applied to linked Dastak; Customer release follows them.
   verified anonymous execution false and authenticated execution true. Unrelated
   pending `20260929191745` was not replayed or marked applied.
 - Deployed only `dastak-v1-catalogue` to linked project `zmtsolkfxlrxepshnjdf` before
-  publishing Customer. The pre-release security advisor returned six existing
+  publishing Customer; its status is ACTIVE, version 25. Pre/post-release advisors returned six existing
   warnings (public authenticated security-definer functions and leaked-password
   protection), not a clean whole-platform audit; those are outside this rollout.
 - Customer project/root/variant guard and remote branch guard passed. Existing
@@ -83,6 +83,30 @@ Release sequence:
    guarded Customer deployment script. Do not release the frontend first.
 4. Verify the normal production URL, selected-location distances, search/paging,
    address change and no-location fallback without commerce/account mutations.
+
+## Customer release and live evidence
+
+- Pushed feature commit `d1a2db2af754fbd59556d0c13ff38dad45971161` to
+  `origin/codex/dastak-v1-launch`. Deployed Customer only via the guarded script.
+- Vercel deployment `dpl_7xQDYBy7jzokjPwTN8s9VjnTGkRK` is READY / production,
+  unique URL `https://dastak-pstpphddz-liquiflows-projects.vercel.app`, normal alias
+  `https://dastak-customer.vercel.app`. Vite build: 59.20s; existing large-chunk
+  warning remains. Normal alias HTML and browser metadata matched the feature SHA,
+  Customer variant and deployment ID; required CSP/nosniff headers passed.
+- Signed-in production Food displayed Nearest first and Craft at 1m from the
+  selected saved Home origin. Explicit Espresso search returned Craft with its
+  distance plus Espresso; Hot drinks filtering retained Craft and its distance.
+- A 390×844 production check showed the restaurant and distance without document
+  horizontal overflow. Proof: `/tmp/dastak-nearest-food-production-mobile-2026-10-08.png`.
+  The temporary viewport override was reset afterwards.
+- This account has only one saved address and the database currently exposes one
+  eligible restaurant. Live address switching, multi-page/tie ranking and no-saved-
+  address fallback were not exercised; isolated tests cover those paths. No saved
+  default, address, cart, order, inventory, account or payment was changed.
+- Browser captured no warning/error entries. Vercel's deployment-scoped error log
+  query for the last 10 minutes returned no entries; this is not proof about all
+  Supabase runtime traffic. Log drains and whole-platform monitoring were not
+  configured or audited in this release.
 
 Genuine city trending, missing owned Food images and operational end-to-end
 verification remain separate tasks; this does not complete the whole-platform audit.

@@ -90,6 +90,9 @@ live commerce/account mutations are included.
   The normal Customer URL served that release. A deliberately nonexistent older
   ID reached the correct controller; a real delivered V1 order opened. This
   account's older-order list was empty, so no actual older record was verified.
-- The nearest-first follow-up is local-only; its rollout and test limitations
-  are recorded in `dastak-reimagined-nearest-food.md`. Historical local/release
+- The nearest-first follow-up was pushed/deployed as `d1a2db2`, after the single
+  approved read-only migration and catalogue API release. Live Food distance,
+  dish search, category filtering and mobile checks passed. Its exact release
+  identity, remaining live-check limits and evidence are recorded in
+  `dastak-reimagined-nearest-food.md`. Historical local/release
   statements earlier in this checklist describe their respective checkpoints.
