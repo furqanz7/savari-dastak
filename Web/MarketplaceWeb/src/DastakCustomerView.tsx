@@ -184,6 +184,7 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
           legalLinks={props.legalLinks}
           webPush={webPush}
           merchantUrl={props.merchantUrl}
+          overlayPresentation={props.embedded ? "reimagined" : undefined}
         />
       </div>}
       {section === "parcel" && (

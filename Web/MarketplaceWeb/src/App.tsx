@@ -372,7 +372,7 @@ function CustomerSignIn({ busy, signingInProvider, onSignIn }: {
   onSignIn: (provider: Provider) => void;
 }) {
   if (reimaginedHostedOptIn(window.location) || reimaginedLocalOptIn(import.meta.env.DEV, window.location)) {
-    return <Suspense fallback={<p role="status">Opening Dastak…</p>}><ReimaginedSignIn busy={busy} onSignIn={onSignIn} legalLinks={config.legalLinks} /></Suspense>;
+    return <Suspense fallback={<p role="status">Opening Dastak…</p>}><ReimaginedSignIn busy={busy} signingInProvider={signingInProvider === "apple" || signingInProvider === "google" ? signingInProvider : undefined} onSignIn={onSignIn} legalLinks={config.legalLinks} /></Suspense>;
   }
   const providerName = signingInProvider === "apple"
     ? "Apple"

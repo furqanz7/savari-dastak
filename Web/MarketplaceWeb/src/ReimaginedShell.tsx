@@ -5,6 +5,8 @@ import { reimaginedEnvironment, type ReimaginedAction, type ReimaginedSection, t
 import "./design/reimagined.css";
 import { ReimaginedGroceryRoom } from "./ReimaginedGroceryRoom";
 import { ReimaginedCafeRoom } from "./ReimaginedCafeRoom";
+import { DastakWordmark } from "./DastakWordmark";
+import { AppleLogo, GoogleLogo } from "./IdentityProviderLogos";
 
 const navigation = [
   { section: "home", label: "Home", icon: Home },
@@ -31,6 +33,7 @@ type Props = {
   locationContent: ReactNode;
   onSignIn: (provider: "apple" | "google") => void;
   signInBusy?: boolean;
+  signingInProvider?: "apple" | "google";
   signInError?: string;
   authFooter?: ReactNode;
   onOpenWishlist?: () => void;
@@ -44,7 +47,7 @@ type Props = {
   environment?: ReactNode;
 };
 
-export function ReimaginedShell({ state, dispatch, directory, directoryStatus = "ready", onRetryDirectory, displayName, greeting, locationLabel, locationContent, onSignIn, signInBusy, signInError, authFooter, onOpenWishlist, featureTitle, children, searchSuggestions, sectionContent, shoppingTotalLabel, activeOrderLabel, onOpenActiveOrder, environment }: Props) {
+export function ReimaginedShell({ state, dispatch, directory, directoryStatus = "ready", onRetryDirectory, displayName, greeting, locationLabel, locationContent, onSignIn, signInBusy, signingInProvider, signInError, authFooter, onOpenWishlist, featureTitle, children, searchSuggestions, sectionContent, shoppingTotalLabel, activeOrderLabel, onOpenActiveOrder, environment }: Props) {
   const searchId = useId();
   const directoryId = useId();
   const scene = reimaginedEnvironment(state);
@@ -145,17 +148,17 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
     <div className="reimagined-environment" aria-hidden="true">{environment ?? (scene.startsWith("grocery") ? <ReimaginedGroceryRoom atCounter={scene === "groceryCounter"} /> : scene.startsWith("food") ? <ReimaginedCafeRoom atCounter={scene === "foodCounter"} /> : <ReimaginedSpatialStudy key={scene} />)}</div>
     <a className="reimagined-skip" href="#reimagined-main">Skip to main content</a>
     {!state.accountId ? <main id="reimagined-main" className="reimagined-auth glass-panel" tabIndex={-1}>
-      <span className="reimagined-kicker">WELCOME TO</span><h1>Dastak<span>.</span></h1>
+      <span className="reimagined-kicker">WELCOME TO</span><h1><DastakWordmark /></h1>
       <p>Your neighbourhood, through one door.</p>
-      <div className="reimagined-auth-actions">
-        <button type="button" disabled={signInBusy} onClick={() => onSignIn("apple")}>Continue with Apple</button>
-        <button type="button" disabled={signInBusy} onClick={() => onSignIn("google")}>Continue with Google</button>
+      <div className="reimagined-auth-actions" aria-label="Sign in options" aria-busy={signInBusy || undefined}>
+        <button type="button" disabled={signInBusy} onClick={() => onSignIn("apple")}><AppleLogo /><span>{signInBusy && signingInProvider === "apple" ? "Opening Apple…" : "Continue with Apple"}</span></button>
+        <button type="button" disabled={signInBusy} onClick={() => onSignIn("google")}><GoogleLogo /><span>{signInBusy && signingInProvider === "google" ? "Opening Google…" : "Continue with Google"}</span></button>
       </div>
       {signInBusy ? <p role="status">Opening sign in…</p> : null}
       {signInError ? <p role="alert">{signInError}</p> : null}
       {authFooter}
     </main> : <>
-      <header className="reimagined-wordmark" aria-label="Dastak">Dastak<span>.</span></header>
+      <header className="reimagined-wordmark" aria-label="Dastak"><DastakWordmark /></header>
       <nav className="reimagined-navigation glass-panel" aria-label="Dastak navigation">
         {navigation.map(({ section, label, icon: Icon }) => <button key={section} type="button" aria-current={state.section === section ? "page" : undefined} onClick={() => dispatch({ type: "navigate", section })}><Icon aria-hidden="true" size={19} /><span>{label}</span></button>)}
       </nav>
@@ -188,7 +191,7 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
           </div> : <button type="button" aria-label="Return Home" onClick={() => dispatch({ type: "navigate", section: "home" })}><X size={20} /></button>}
         </header>
         {state.bucketPrompt ? <p className="reimagined-bucket-notice" role="status">Take a bucket first. You’ll find it beside Search.</p> : null}
-        {exploration.searchOpen && state.section === "home" ? <section id={searchId} className="reimagined-search glass-panel" aria-label="Search Dastak">
+        {exploration.searchOpen && state.section === "home" ? <div className="reimagined-search-anchor"><section id={searchId} className="reimagined-search glass-panel" aria-label="Search Dastak">
           <form onSubmit={event => { event.preventDefault(); dispatch({ type: "submitSearch" }); }}>
             <label className="reimagined-sr-only" htmlFor={`${searchId}-input`}>{state.service === "grocery" ? "Search Grocery" : "Search Food"}</label>
             <input id={`${searchId}-input`} type="search" autoFocus value={exploration.searchDraft} placeholder={state.service === "grocery" ? "Find a product, brand or aisle" : "Find restaurants, cafés or dishes"} onChange={event => dispatch({ type: "typeSearch", query: event.target.value })} />
@@ -196,7 +199,7 @@ export function ReimaginedShell({ state, dispatch, directory, directoryStatus = 
             <button type="button" aria-label="Close search" onClick={() => dispatch({ type: "closeSearch" })}><X size={20} /></button>
           </form>
           {searchSuggestions ? <div className="reimagined-search-suggestions">{searchSuggestions}</div> : null}
-        </section> : null}
+        </section></div> : null}
         {exploration.checkout && state.section === "home" ? <button className="reimagined-continue" type="button" onClick={() => dispatch({ type: "continueShopping" })}><ArrowLeft size={17} />Continue Shopping</button> : null}
         <div className="reimagined-panel-content" tabIndex={0} role="region" aria-label={state.section === "home" ? "Shopping content" : `${state.section} content`}>{state.section === "home" ? children : sectionContent[state.section]}</div>
       </main>

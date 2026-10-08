@@ -1,12 +1,5 @@
 @import "./design/tokens.css";
-
-@font-face {
-  font-family: "Instrument Serif";
-  src: url("/fonts/InstrumentSerif-Regular.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
+@import "./design/brand.css";
 
 :root {
   font-family: var(--font-system);

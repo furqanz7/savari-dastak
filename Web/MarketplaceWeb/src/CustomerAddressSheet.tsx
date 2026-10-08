@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
+import { useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { BriefcaseBusiness, Check, House, MapPin, MapPinned, X } from "lucide-react";
 import { LocationSearchField, type SelectedPlace } from "./LocationSearchField";
 import type { CustomerDeliveryAddress } from "./customerAddresses";
 import { splitDoorstepDetails } from "./customerAddressDetails";
+import { useModalDialog } from "./useModalDialog";
 
 export type CustomerAddressDraft = {
   addressId?: string;
@@ -43,13 +44,8 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
   const resolvedLabel = kind === "Other" ? customLabel.trim() : kind;
   const canSave = Boolean(place && building.trim() && resolvedLabel);
 
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onDismiss();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [busy, onDismiss]);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const dialog = useModalDialog<HTMLFormElement>({ busy, onDismiss, initialFocus: closeButton });
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -78,7 +74,7 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
 
   return (
     <div className="customer-sheet-backdrop" role="presentation" onMouseDown={dismissFromBackdrop}>
-      <form className="customer-sheet customer-address-sheet" aria-modal="true" aria-labelledby="address-sheet-title" role="dialog" onSubmit={submit}>
+      <form ref={dialog} className="customer-sheet customer-address-sheet" aria-modal="true" aria-labelledby="address-sheet-title" role="dialog" tabIndex={-1} onSubmit={submit}>
         <div className="customer-address-scroll">
           <header>
             <div>
@@ -86,7 +82,7 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
               <h2 id="address-sheet-title">{context === "checkout" ? "Where should we bring it?" : "Your delivery address"}</h2>
               <p>{context === "checkout" ? "Confirm the pin and add details for the right door." : "Keep a precise address ready for faster checkout."}</p>
             </div>
-            <button className="icon-button" type="button" onClick={onDismiss} disabled={busy} aria-label="Close address editor" title="Close"><X size={19} /></button>
+            <button ref={closeButton} className="icon-button" type="button" onClick={onDismiss} disabled={busy} aria-label="Close address editor" title="Close"><X size={19} /></button>
           </header>
           {context === "checkout" && <div className="address-progress" aria-label="Address completion">
             <span className={place ? "complete" : ""}>{place ? <Check size={14} /> : "1"} Pin location</span>

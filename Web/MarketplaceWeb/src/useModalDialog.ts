@@ -95,7 +95,7 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({ busy = fal
 function isolateDialog(dialog: HTMLElement | null, layered = false) {
   const isolated: Array<{ element: HTMLElement; inert: boolean; ariaHidden: string | null }> = [];
   let active: HTMLElement | null = dialog;
-  while (active?.parentElement && active.parentElement !== document.body) {
+  while (active?.parentElement && active !== document.body) {
     const parent: HTMLElement = active.parentElement;
     Array.from(parent.children).forEach((sibling) => {
       if (!(sibling instanceof HTMLElement) || sibling === active || sibling.contains(active)) return;

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { ReimaginedModalLayer } from "./ReimaginedModalLayer";
 import type { useReimaginedAddresses } from "./useReimaginedAddresses";
 import { CustomerAddressBookSheet } from "./CustomerAddressBookSheet";
 import { CustomerAddressSheet, type CustomerAddressDraft } from "./CustomerAddressSheet";
@@ -48,7 +49,10 @@ export function ReimaginedAddressPicker({ resource, online, accountUrl, compact 
     <p className="reimagined-address-guidance">Choosing here does not change your saved default address. Delivery eligibility is still checked at checkout.</p>
     <button type="button" disabled={!online || busy} onClick={resource.retry}>Refresh saved addresses</button>
     {auth ? <button type="button" disabled={!online || busy || resource.status !== "ready"} onClick={() => { setError(undefined); if (resource.addresses.length) setBook(true); else setEditor({}); }}>Add or manage delivery addresses</button> : <a href={accountUrl}>Add or edit addresses in your existing account</a>}
-    {book && auth ? <CustomerAddressBookSheet addresses={resource.addresses} selectedAddressId={selected?.addressId} busy={busy} error={error} context="account" onDismiss={() => setBook(false)} onAdd={() => { setBook(false); setEditor({}); }} onEdit={address => { setBook(false); setEditor({ address }); }} onSelect={address => change(`default:${address.addressId}`, key => setDefaultCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key }))} onDelete={address => change(`delete:${address.addressId}`, key => deleteCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key }))} /> : null}
-    {editor && auth ? <CustomerAddressSheet address={editor.address} busy={busy} error={error} context="checkout" onDismiss={() => { if (!busy) setEditor(undefined); }} onSave={save} /> : null}
+    {/* Backdrop-filter panels create containing blocks for fixed-position sheets. */}
+    {(book || editor) && auth ? <ReimaginedModalLayer>
+      {book ? <CustomerAddressBookSheet addresses={resource.addresses} selectedAddressId={selected?.addressId} busy={busy} error={error} context="account" onDismiss={() => setBook(false)} onAdd={() => { setBook(false); setEditor({}); }} onEdit={address => { setBook(false); setEditor({ address }); }} onSelect={address => change(`default:${address.addressId}`, key => setDefaultCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key }))} onDelete={address => change(`delete:${address.addressId}`, key => deleteCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key }))} /> : null}
+      {editor ? <CustomerAddressSheet address={editor.address} busy={busy} error={error} context="checkout" onDismiss={() => { if (!busy) setEditor(undefined); }} onSave={save} /> : null}
+    </ReimaginedModalLayer> : null}
   </section>;
 }

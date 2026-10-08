@@ -5,6 +5,22 @@ const css = readFileSync(new URL("./design/reimagined.css", import.meta.url), "u
 const phone = css.slice(css.indexOf("/* Preserve the brief's spatial model on phones"));
 
 describe("Reimagined responsive layout safeguards", () => {
+  it("keeps legacy workspaces and body-portalled dialogs readable on light glass in system dark mode", () => {
+    expect(css).toMatch(/\.reimagined \.customer-workspace, \.reimagined-address-modal\.customer-experience \{[^}]*color-scheme: light;[^}]*--text-primary: #28231d;[^}]*--text-secondary: #71695e;/);
+    expect(css).toMatch(/\.reimagined \.customer-workspace, \.reimagined-address-modal\.customer-experience \{[^}]*--surface: #fdfcf9;[^}]*--surface-raised: #ffffff;/);
+  });
+  it("anchors search below the actual heading without moving shopping content", () => {
+    expect(css).toMatch(/\.reimagined-search-anchor \{[^}]*position: relative;[^}]*flex-shrink: 0/);
+    expect(css).toMatch(/\.reimagined-search-anchor \.reimagined-search \{ top: 8px; left: 0; right: 0; \}/);
+  });
+  it("keeps long saved-address lists in a bounded scrollable location panel", () => {
+    expect(css).toMatch(/\.reimagined-location-panel \{[^}]*max-height: min\(70dvh, 640px\);[^}]*overflow-y: auto/);
+    expect(css).toMatch(/\.reimagined-location-panel > \.reimagined-panel-heading \{[^}]*position: sticky/);
+  });
+  it("releases old signed-out onboarding width and overflow constraints", () => {
+    expect(css).toMatch(/\.app\.customer-onboarding-active:has\(\.reimagined\[data-authenticated="false"\]\) \{[^}]*height: auto;[^}]*overflow: visible;[^}]*padding: 0/);
+    expect(css).toMatch(/\.content\.dastak-customer-auth-content:has\(> \.reimagined\[data-authenticated="false"\]\) \{[^}]*max-width: none;[^}]*height: auto;[^}]*padding: 0;[^}]*overflow: visible/);
+  });
   it("does not inherit the old page minimum width when a short phone needs a scrollbar", () => {
     expect(css).toMatch(/body:has\(\.reimagined\) \{ min-width: 0; \}/);
   });
@@ -40,6 +56,7 @@ describe("Reimagined responsive layout safeguards", () => {
     expect(short).toMatch(/data-authenticated="true"[^}]*height: auto/);
     expect(short).toMatch(/\.reimagined-main \{[^}]*position: relative;[^}]*min-height: 320px/);
     expect(short).toMatch(/\.reimagined-panel-content \{[^}]*min-height: 220px/);
+    expect(short).toContain(".reimagined-navigation, .reimagined-right, .reimagined-location { position: absolute; }");
   });
   it("does not inherit the scenery study's tiny desktop directory cap", () => {
     expect(css).toMatch(/data-authenticated="true"\]\[data-scene\^="grocery"\] \.reimagined-right \{ max-height: calc\(100dvh - 180px\)/);

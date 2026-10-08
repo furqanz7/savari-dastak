@@ -1,0 +1,10 @@
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/InstrumentSerif-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+.dastak-wordmark { display: inline-flex; align-items: baseline; gap: .18em; font-family: var(--font-dastak-wordmark, "Instrument Serif", Georgia, serif); font-weight: 400; letter-spacing: 0; line-height: 1.15; }
+.dastak-wordmark bdi { font-family: var(--font-system, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif); font-size: .64em; font-weight: 500; letter-spacing: 0; }

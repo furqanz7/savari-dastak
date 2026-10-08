@@ -16,14 +16,38 @@ function button(text: string) { return [...host.querySelectorAll("button")].find
 it("opens native address management and reuses an ambiguous request key", async () => {
   act(() => root.render(<ReimaginedAddressPicker resource={resource} auth={auth} online accountUrl="/#account" />));
   expect(setDefaultCustomerAddress).not.toHaveBeenCalled(); act(() => button("Add or manage delivery addresses").click());
-  expect(host.querySelector('[role="dialog"]')?.textContent).toContain("Saved addresses");
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('.reimagined-address-modal [role="dialog"]')?.textContent).toContain("Saved addresses");
   vi.mocked(setDefaultCustomerAddress).mockRejectedValueOnce(new Error("Lost response")).mockResolvedValueOnce({ addresses: [home] });
-  await act(async () => host.querySelector<HTMLButtonElement>('.customer-address-book-select')!.click());
-  expect(resource.retry).not.toHaveBeenCalled(); expect(host.textContent).toContain("Lost response");
-  await act(async () => host.querySelector<HTMLButtonElement>('.customer-address-book-select')!.click());
+  await act(async () => document.querySelector<HTMLButtonElement>('.customer-address-book-select')!.click());
+  expect(resource.retry).not.toHaveBeenCalled(); expect(document.querySelector('.reimagined-address-modal')?.textContent).toContain("Lost response");
+  await act(async () => document.querySelector<HTMLButtonElement>('.customer-address-book-select')!.click());
   expect(resource.retry).toHaveBeenCalledOnce();
   const calls = vi.mocked(setDefaultCustomerAddress).mock.calls;
   expect(calls[0][0].idempotencyKey).toBe(calls[1][0].idempotencyKey);
+});
+it("closes the portalled book and returns focus without changing addresses", () => {
+  act(() => root.render(<ReimaginedAddressPicker resource={resource} auth={auth} online accountUrl="/#account" />));
+  const opener = button("Add or manage delivery addresses"); opener.focus();
+  act(() => opener.click());
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Close saved addresses");
+  expect(host.inert).toBe(true);
+  act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(document.querySelector('.reimagined-address-modal')).toBeNull();
+  expect(document.activeElement).toBe(opener);
+  expect(Boolean(host.inert)).toBe(false);
+  expect(setDefaultCustomerAddress).not.toHaveBeenCalled();
+});
+it("keeps the editor outside the panel with modal keyboard focus", () => {
+  act(() => root.render(<ReimaginedAddressPicker resource={{ ...resource, addresses: [], selected: undefined }} auth={auth} online accountUrl="/#account" />));
+  const opener = button("Add or manage delivery addresses"); opener.focus();
+  act(() => opener.click());
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Close address editor");
+  expect(host.inert).toBe(true);
+  act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect(document.querySelector('.reimagined-address-modal')).toBeNull();
+  expect(document.activeElement).toBe(opener);
 });
 it("blocks address writes while offline", () => {
   act(() => root.render(<ReimaginedAddressPicker resource={resource} auth={auth} online={false} accountUrl="/#account" />));

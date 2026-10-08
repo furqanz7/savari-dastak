@@ -41,6 +41,11 @@ import "@babylonjs/core/Shaders/shadowMap.fragment";
 import "@babylonjs/loaders/glTF";
 import lightUrl from "./assets/reimagined/store-light.env?url";
 import bundledStaffUrl from "./assets/reimagined/staff-makehuman.glb?url";
+import pavementColorUrl from "./assets/reimagined/exterior-pavement-color.jpg?url";
+import pavementNormalUrl from "./assets/reimagined/exterior-pavement-normal.jpg?url";
+import pavementArmUrl from "./assets/reimagined/exterior-pavement-arm.jpg?url";
+import woodColorUrl from "./assets/reimagined/wood_floor-color.jpg?url";
+import woodNormalUrl from "./assets/reimagined/wood_floor-normal.jpg?url";
 import { createBlinkPlayback, createEyelidBuffer } from "./reimaginedCashierBlink";
 import { createOutdoor } from "./reimaginedOutdoor";
 import { leafSpray } from "./reimaginedPlanting";
@@ -52,7 +57,7 @@ import type { OutdoorWeather } from "./reimaginedWeather";
 const staffUrl = import.meta.env.DEV ? "/src/assets/reimagined/staff-makehuman.glb?rev=adf9f73504acff6a" : bundledStaffUrl;
 
 export type GroceryScene = { setWeather: (value: OutdoorWeather | null) => void; setCounter: (value: boolean) => void; setOutside: (value: boolean) => void; setStaffPlayback: (value: boolean) => void; setEyesClosed: (value: boolean) => void; testBlink: () => void; dispose: () => void };
-type Options = { weather?: OutdoorWeather | null; counter: boolean; outside?: boolean; playStaff?: boolean; eyesClosed?: boolean; onStatus: (status: string) => void };
+type Options = { weather?: OutdoorWeather | null; counter: boolean; outside?: boolean; playStaff?: boolean; eyesClosed?: boolean; onStatus: (status: string) => void; onReady?: () => void };
 
 // Entirely decorative. No catalogue, pricing, authentication or order state lives here.
 export function createGroceryScene(canvas: HTMLCanvasElement, options: Options): GroceryScene {
@@ -75,7 +80,8 @@ export function createGroceryScene(canvas: HTMLCanvasElement, options: Options):
   scene.fogColor = new Color3(.65, .68, .7);
   let disposed = false;
   let atCounter = options.counter;
-  let outside = import.meta.env.DEV && Boolean(options.outside);
+  let outside = Boolean(options.outside);
+  let firstFrameReady = false;
   let weather = options.weather ?? null;
   let outdoorMinute = -1;
   let clock = 0;
@@ -661,24 +667,29 @@ export function createGroceryScene(canvas: HTMLCanvasElement, options: Options):
     new Vector3(x - 3.45, y, z + .3), checkoutRoot.getWorldMatrix(),
   );
   canvas.dataset.checkoutFacing = Vector3.TransformNormal(new Vector3(0, 0, -1), checkoutRoot.getWorldMatrix()).asArray().map(v => v.toFixed(3)).join(",");
-  // Exterior is a local study layer, kept out of interior static batches so
+  // Exterior is kept out of interior static batches so
   // switching views never changes the approved shop layout or rebuilds WebGL.
   const exterior = new TransformNode("storefront-study", scene);
   const exteriorCasters: Mesh[] = [];
   let exteriorPavement: PBRMaterial | undefined;
-  const outdoor = import.meta.env.DEV ? createOutdoor(scene, exterior) : null;
-  if (import.meta.env.DEV) {
+  let outdoor: ReturnType<typeof createOutdoor> | null = null;
+  let nightLighting: ReturnType<typeof createNightLighting> | null = null;
+  // Build the exterior only when requested, including in production. Interior
+  // shoppers need not allocate trees, weather particles or pavement textures.
+  function ensureExterior() {
+    if (outdoor) return;
+    outdoor = createOutdoor(scene, exterior);
     const exteriorStart = staticMeshes.length;
     const pavement = material("exterior-limestone", "#ffffff", .91);
     exteriorPavement = pavement;
-    const pavementMap = (file: string, linear = false) => {
-      const map = new Texture(`/src/assets/reimagined/exterior-pavement-${file}.jpg`, scene);
+    const pavementMap = (url: string, linear = false) => {
+      const map = new Texture(url, scene);
       map.uScale = 10; map.vScale = 14 / 3; map.gammaSpace = !linear; map.anisotropicFilteringLevel = 8;
       return map;
     };
-    pavement.albedoTexture = pavementMap("color");
-    pavement.bumpTexture = pavementMap("normal", true); pavement.bumpTexture.level = .55;
-    pavement.metallicTexture = pavementMap("arm", true);
+    pavement.albedoTexture = pavementMap(pavementColorUrl);
+    pavement.bumpTexture = pavementMap(pavementNormalUrl, true); pavement.bumpTexture.level = .55;
+    pavement.metallicTexture = pavementMap(pavementArmUrl, true);
     pavement.useRoughnessFromMetallicTextureAlpha = false;
     pavement.useRoughnessFromMetallicTextureGreen = true;
     pavement.useMetallnessFromMetallicTextureBlue = true;
@@ -687,8 +698,8 @@ export function createGroceryScene(canvas: HTMLCanvasElement, options: Options):
     const brand = material("storefront-deep-green", "#203e34", .47, .12);
     const wood = material("storefront-oak", "#967553", .8);
     wood.albedoColor.set(1, 1, 1);
-    wood.albedoTexture = new Texture("/src/assets/reimagined/wood_floor-color.jpg", scene);
-    wood.bumpTexture = new Texture("/src/assets/reimagined/wood_floor-normal.jpg", scene);
+    wood.albedoTexture = new Texture(woodColorUrl, scene);
+    wood.bumpTexture = new Texture(woodNormalUrl, scene);
     wood.bumpTexture.level = .22;
     wood.bumpTexture.gammaSpace = false;
     const foliage = material("storefront-leaves", "#87a961", .79);
@@ -769,9 +780,10 @@ export function createGroceryScene(canvas: HTMLCanvasElement, options: Options):
         if (merged.material !== pavement) exteriorCasters.push(merged);
       }
     }
+    exteriorCasters.forEach(mesh => shadows.addShadowCaster(mesh));
+    nightLighting = createNightLighting(scene, exterior);
   }
   exterior.setEnabled(outside);
-  const nightLighting = import.meta.env.DEV ? createNightLighting(scene, exterior) : null;
   const ceilingLamps = scene.lights.filter(lamp => lamp.name.startsWith("ceiling-bounce-"));
   // Merge architectural parts by material: dozens of render submissions rather
   // than one per ceiling slat, rail or light. Transparent doors stay separate.
@@ -785,7 +797,6 @@ export function createGroceryScene(canvas: HTMLCanvasElement, options: Options):
     batches.set(key, [...(batches.get(key) ?? []), m]);
   }
   shadows.getShadowMap()!.renderList = [];
-  exteriorCasters.forEach(mesh => shadows.addShadowCaster(mesh));
   const counterBatches: Mesh[] = [];
   for (const meshes of batches.values()) {
     const castsShadow = Boolean(meshes[0].metadata?.castsStoreShadow);
@@ -963,6 +974,7 @@ export function createGroceryScene(canvas: HTMLCanvasElement, options: Options):
 
   const targetPosition = new Vector3(); const targetGaze = new Vector3();
   function destinations() {
+    if (outside) ensureExterior();
     exterior.setEnabled(outside);
     canvas.dataset.view = outside ? "outside" : atCounter ? "billing" : "entrance";
     const portraitBilling = mobile.matches && atCounter;
@@ -1050,6 +1062,10 @@ export function createGroceryScene(canvas: HTMLCanvasElement, options: Options):
     staffUpdate?.(staffPlaying() ? clock : 0);
     bodyDrawnThisFrame = false;
     scene.render();
+    if (readyBeforeRender && !firstFrameReady) {
+      firstFrameReady = true;
+      options.onReady?.();
+    }
     // Count a rendered closure followed by reopening, not scheduled events.
     // Keep diagnostics to once per second/blink rather than React per frame.
     const weight = Number(canvas.dataset.blinkWeight ?? 0);
@@ -1080,7 +1096,7 @@ export function createGroceryScene(canvas: HTMLCanvasElement, options: Options):
   canvas.dataset.renderer = "babylon-webgl";
   return {
     setWeather(value) { weather = value; dirty = true; reportMotion(); },
-    setOutside(value) { outside = import.meta.env.DEV && value; destinations(); dirty = true; reportMotion(); },
+    setOutside(value) { outside = value; destinations(); dirty = true; reportMotion(); },
     setCounter(value) { atCounter = value; destinations(); dirty = true; },
     setStaffPlayback(value) { staffPlaybackRequested = import.meta.env.DEV && value; lastFrameTime = performance.now(); dirty = true; reportMotion(); },
     setEyesClosed(value) { eyesClosed = import.meta.env.DEV && value; dirty = true; reportMotion(); },

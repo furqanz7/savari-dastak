@@ -34,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { AccountProfileSheet } from "./AccountProfileSheet";
+import { ReimaginedModalLayer } from "./ReimaginedModalLayer";
 import { CustomerProfileCard } from "./CustomerProfileCard";
 import { AccountActionDialog } from "./AccountActionDialog";
 import { AccountSessionsSheet } from "./AccountSessionsSheet";
@@ -136,6 +137,7 @@ type Props = {
   onSignOut: () => void;
   onProfileChanged?: (profile: AccountProfile) => void;
   accountPane?: "profile" | "settings";
+  overlayPresentation?: "reimagined";
   onOpenProfile?: () => void;
   onOpenSettings?: () => void;
   legalLinks?: { privacy: string; terms: string; support: string };
@@ -268,6 +270,7 @@ export function CatalogueView({
   merchantUrl,
   onProfileChanged,
   accountPane,
+  overlayPresentation,
   onOpenProfile,
   onOpenSettings,
 }: Props) {
@@ -1289,6 +1292,7 @@ export function CatalogueView({
           {accountPane === "settings" && onOpenProfile ? <button className="reimagined-account-switch" type="button" onClick={onOpenProfile}><UserRound size={19} />Edit your Profile</button> : null}
         </section>
       )}
+      {(addressBookOpen || addressEditorOpen || profileEditorOpen || sessionsOpen || showSignOutConfirmation || showDeleteConfirmation || cancellingOrder || supportingOrder) ? <ReimaginedModalLayer enabled={overlayPresentation === "reimagined"}>
       {addressBookOpen && <CustomerAddressBookSheet
         addresses={savedAddresses}
         selectedAddressId={deliveryAddress?.addressId}
@@ -1359,6 +1363,7 @@ export function CatalogueView({
         onDismiss={() => setSupportingOrder(undefined)}
         onSubmit={requestOrderSupport}
       />}
+      </ReimaginedModalLayer> : null}
     </div>
   );
 }
