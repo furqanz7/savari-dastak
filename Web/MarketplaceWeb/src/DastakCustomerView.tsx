@@ -48,15 +48,16 @@ export function DastakCustomerView(props: Props) {
   return <ExistingDastakCustomerView key={props.accountId} {...props} />;
 }
 
-export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; onReturnToShopping?: () => void; onOpenWishlist?: () => void; onOpenOrders?: (id?: string) => void; onOrderRecordClosed?: () => void; onReorder?: (order: V1Order) => void; webPushController?: DastakWebPushController; onProfileChanged?: (profile: AccountProfile) => void; accountPane?: "profile" | "settings"; onOpenProfile?: () => void; onOpenSettings?: () => void; onViewChange?: (section: CustomerSection) => void }) {
+export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; initialSection?: CustomerSection; initialOrderId?: string; initialMerchantOrderId?: string; onReturnToShopping?: () => void; onOpenWishlist?: () => void; onOpenOrders?: (id?: string) => void; onOpenMerchantOrder?: (id: string) => void; onOrderRecordClosed?: () => void; onReorder?: (order: V1Order) => void; webPushController?: DastakWebPushController; onProfileChanged?: (profile: AccountProfile) => void; accountPane?: "profile" | "settings"; onOpenProfile?: () => void; onOpenSettings?: () => void; onViewChange?: (section: CustomerSection) => void }) {
   const online = useCustomerOnline();
   const [orderRefreshToken, setOrderRefreshToken] = useState(0);
   const [homeResetToken, setHomeResetToken] = useState(0);
   const [destination, setDestination] = useState<CustomerDestination>(() =>
-    props.embedded ? { section: props.initialSection ?? "orders", entityType: props.initialOrderId ? "dastakV1Order" : undefined, entityId: props.initialOrderId }
+    props.embedded ? { section: props.initialSection ?? "orders", entityType: props.initialMerchantOrderId ? "merchantOrder" : props.initialOrderId ? "dastakV1Order" : undefined, entityId: props.initialMerchantOrderId ?? props.initialOrderId }
       : parseCustomerDestination(typeof window === "undefined" ? undefined : window.location.hash)
   );
   const section = destination.section;
+  const merchantRecord = section === "orders" && destination.entityType === "merchantOrder";
   const onViewChange = props.onViewChange;
   useEffect(() => { onViewChange?.(section); }, [section, onViewChange]);
   const v1Section = section === "search" || section === "orders" || section === "wishlist" || section === "payments"
@@ -137,7 +138,7 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
       </header> : null}
       <div className="customer-content" id="customer-content" tabIndex={-1}>
       {!online ? <CustomerNotice title="You’re offline" tone="offline">You can browse what’s already loaded. Your orders will update when you reconnect.</CustomerNotice> : null}
-      {shouldMountV1CustomerExperience(section) ? <div className="customer-view">
+      {shouldMountV1CustomerExperience(section) && !merchantRecord ? <div className="customer-view">
         <DastakV1CustomerExperience
           accessToken={props.accessToken}
           accountId={props.accountId}
@@ -165,14 +166,18 @@ export function ExistingDastakCustomerView(props: Props & { embedded?: boolean; 
           presentation={props.embedded ? "reimagined" : undefined}
         />
       </div> : null}
-      {section === "account" && <div className="customer-view">
+      {(section === "account" || merchantRecord) && <div className="customer-view">
         <CatalogueView
           {...props}
           orderRefreshToken={orderRefreshToken}
-          section="account"
+          section={merchantRecord ? "orders" : "account"}
+          selectedOrderId={merchantRecord ? destination.entityId : undefined}
           onNavigate={navigateSection}
-          onOpenOrder={(orderId) => navigate({ section: "orders", entityType: "merchantOrder", entityId: orderId })}
-          onCloseOrder={() => navigate({ section: "orders" })}
+          onOpenOrder={(orderId) => {
+            if (props.embedded && props.onOpenMerchantOrder) props.onOpenMerchantOrder(orderId);
+            else navigate({ section: "orders", entityType: "merchantOrder", entityId: orderId });
+          }}
+          onCloseOrder={() => { navigate({ section: "orders" }); props.onOrderRecordClosed?.(); }}
           onOpenParcel={() => navigate({ section: "parcel" })}
           legalLinks={props.legalLinks}
           webPush={webPush}

@@ -6,6 +6,7 @@ export type ReimaginedNavigation = ReimaginedNavigationState & {
   savedOpen: boolean;
   payments: boolean;
   orderId?: string;
+  merchantOrderId?: string;
 };
 const historyKey = "dastakReimaginedNavigation";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -34,8 +35,11 @@ export function readReimaginedHistory(value: unknown, owner: string, hash: strin
   if (typeof nav.savedOpen !== "boolean" || typeof nav.payments !== "boolean" || typeof exploration.searchOpen !== "boolean" || typeof exploration.checkout !== "boolean") return;
   if (exploration.detailId !== undefined && !text(exploration.detailId)) return;
   if (nav.orderId !== undefined && (typeof nav.orderId !== "string" || !uuid.test(nav.orderId))) return;
+  if (nav.merchantOrderId !== undefined && (typeof nav.merchantOrderId !== "string" || !uuid.test(nav.merchantOrderId))) return;
+  if (nav.orderId && nav.merchantOrderId) return;
   return { service: nav.service as ReimaginedNavigation["service"], section: nav.section as ReimaginedNavigation["section"], savedOpen: nav.savedOpen, payments: nav.payments,
     ...(nav.orderId ? { orderId: nav.orderId as string } : {}),
+    ...(nav.merchantOrderId ? { merchantOrderId: nav.merchantOrderId as string } : {}),
     exploration: { view, searchOpen: exploration.searchOpen, checkout: exploration.checkout, ...(exploration.detailId ? { detailId: exploration.detailId as string } : {}) } };
 }
 
@@ -47,11 +51,12 @@ export function reimaginedLink(hash: string, defaultService: ReimaginedService =
   const search = destination.section === "search", term = params.get("q")?.trim().slice(0, 500);
   return { service, section, savedOpen: destination.section === "wishlist", payments: destination.section === "payments",
     ...(destination.entityType === "dastakV1Order" ? { orderId: destination.entityId } : {}),
+    ...(destination.entityType === "merchantOrder" ? { merchantOrderId: destination.entityId } : {}),
     exploration: { view: search && term ? { kind: "search", query: term } : { kind: "home" }, searchOpen: search && !term, checkout: false } };
 }
 
 export function reimaginedNavigationHash(nav: ReimaginedNavigation): string {
-  const path = nav.savedOpen ? "wishlist" : nav.payments ? "payments" : nav.section === "orders" ? nav.orderId ? `v1-orders/${nav.orderId}` : "orders" : nav.section === "profile" ? "account" : nav.section === "settings" ? "settings" : nav.exploration.searchOpen || nav.exploration.view.kind === "search" ? "search" : "home";
+  const path = nav.savedOpen ? "wishlist" : nav.payments ? "payments" : nav.section === "orders" ? nav.merchantOrderId ? `orders/${nav.merchantOrderId}` : nav.orderId ? `v1-orders/${nav.orderId}` : "orders" : nav.section === "profile" ? "account" : nav.section === "settings" ? "settings" : nav.exploration.searchOpen || nav.exploration.view.kind === "search" ? "search" : "home";
   const params = new URLSearchParams();
   if (nav.service === "food") params.set("service", "food");
   if (path === "search" && !nav.exploration.searchOpen && nav.exploration.view.kind === "search") params.set("q", nav.exploration.view.query);

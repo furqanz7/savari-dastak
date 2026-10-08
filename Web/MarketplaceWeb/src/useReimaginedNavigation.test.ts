@@ -3,6 +3,17 @@ import { readReimaginedHistory, reimaginedLink, reimaginedNavigationHash } from 
 import { initialReimaginedState, reimaginedReducer } from "./reimaginedState";
 
 describe("Reimagined links and navigation-only history", () => {
+  it("preserves older merchant-order identity without converting it to a V1 order", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const navigation = reimaginedLink(`#/orders/${id}`);
+    expect(navigation.merchantOrderId).toBe(id); expect(navigation.orderId).toBeUndefined();
+    expect(reimaginedNavigationHash(navigation)).toBe(`#/orders/${id}`);
+    const entry = { version: 1, owner: "a", hash: `#/orders/${id}`, navigation };
+    expect(readReimaginedHistory({ dastakReimaginedNavigation: entry }, "a", entry.hash)).toEqual(navigation);
+    for (const invalid of [{ merchantOrderId: "bad" }, { orderId: id }]) {
+      expect(readReimaginedHistory({ dastakReimaginedNavigation: { ...entry, navigation: { ...navigation, ...invalid } } }, "a", entry.hash)).toBeUndefined();
+    }
+  });
   it("round-trips Food searches and handles blank/unknown links safely", () => {
     const search = reimaginedLink("#/search?service=food&q=tea+%26+coffee");
     expect(search.exploration.view).toEqual({ kind: "search", query: "tea & coffee" });

@@ -49,6 +49,7 @@ function AccountExperience(props: Props) {
   const [savedOpen, setSavedOpen] = useState(false);
   const [workspaceTitle, setWorkspaceTitle] = useState<string>();
   const [selectedOrderId, setSelectedOrderId] = useState<string>();
+  const [selectedMerchantOrderId, setSelectedMerchantOrderId] = useState<string>();
   const [reorder, setReorder] = useState<ReturnType<typeof prepareReimaginedReorder>>();
   const [reorderError, setReorderError] = useState<string>();
   const [mixedOrder, setMixedOrder] = useState<V1Order>();
@@ -58,16 +59,18 @@ function AccountExperience(props: Props) {
   const [profile, setProfile] = useState<AccountProfile>();
   const displayName = profile?.displayName ?? props.displayName;
   const phoneNumber = profile?.phoneNumber ?? props.phoneNumber;
-  const dispatch = useCallback((action: ReimaginedAction) => { setSavedOpen(false); setWorkspaceTitle(undefined); if (action.type === "navigate") setSelectedOrderId(undefined); cartDispatch(action); }, [cartDispatch]);
+  const dispatch = useCallback((action: ReimaginedAction) => { setSavedOpen(false); setWorkspaceTitle(undefined); if (action.type === "navigate") { setSelectedOrderId(undefined); setSelectedMerchantOrderId(undefined); } cartDispatch(action); }, [cartDispatch]);
   const updateWorkspaceTitle = useCallback((section: CustomerSection) => setWorkspaceTitle(section === "payments" ? "Payments" : undefined), []);
   const restoreNavigation = useCallback((navigation: ReimaginedNavigation) => {
     setSavedOpen(navigation.savedOpen); setWorkspaceTitle(navigation.payments ? "Payments" : undefined);
     setSelectedOrderId(navigation.orderId);
+    setSelectedMerchantOrderId(navigation.merchantOrderId);
     cartDispatch({ type: "restoreNavigation", navigation });
   }, [cartDispatch]);
   const exploration = state.exploration[state.service];
   useReimaginedNavigation(props.accountId, { service: state.service, section: state.section, savedOpen, payments: workspaceTitle === "Payments",
     ...(state.section === "orders" && selectedOrderId ? { orderId: selectedOrderId } : {}),
+    ...(state.section === "orders" && selectedMerchantOrderId ? { merchantOrderId: selectedMerchantOrderId } : {}),
     exploration: { view: exploration.view, searchOpen: exploration.searchOpen, checkout: exploration.checkout, ...(exploration.detailId ? { detailId: exploration.detailId } : {}) } }, restoreNavigation);
   const resource = useReimaginedCatalogue(props);
   const online = useCustomerOnline();
@@ -94,6 +97,7 @@ function AccountExperience(props: Props) {
   const addressPicker = <ReimaginedAddressPicker key={`location:${accessToken}`} resource={addresses} online={online} accountUrl={accountUrl} auth={props} onSessionExpired={onSessionExpired} />;
   const openWishlist = () => { dispatch({ type: "navigate", section: "home" }); setSavedOpen(true); };
   const openOrders = (id?: string) => { dispatch({ type: "navigate", section: "orders" }); setSelectedOrderId(id); };
+  const openMerchantOrder = (id: string) => { dispatch({ type: "navigate", section: "orders" }); setSelectedMerchantOrderId(id); };
   async function requestReorder(order: V1Order, selectedService?: "grocery" | "food") {
     if (reorderLock.current) return;
     setReorderError(undefined);
@@ -156,7 +160,7 @@ function AccountExperience(props: Props) {
           {mixedOrder ? <section aria-label="Rebuild mixed order"><h3>Rebuild this order as separate carts</h3><p>Choose which part to restore. The other cart is kept. Each service has its own checkout.</p><button type="button" disabled={!online || !canEditCart || reorderBusy} onClick={() => void requestReorder(mixedOrder, "grocery")}>Rebuild Grocery</button><button type="button" disabled={!online || !canEditCart || reorderBusy} onClick={() => void requestReorder(mixedOrder, "food")}>Rebuild Food</button><button type="button" disabled={reorderBusy} onClick={() => setMixedOrder(undefined)}>Keep current carts</button></section> : null}
           {reorderBusy ? <p role="status">Checking exact items and options…</p> : null}
           {reorder ? <section aria-label="Confirm cart replacement"><h3>Replace your current {reorder.service === "grocery" ? "Bucket" : "Food cart"}?</h3><p>The other service’s cart stays unchanged. Nothing is ordered until you complete checkout.</p><button type="button" onClick={() => setReorder(undefined)}>Keep current cart</button><button type="button" disabled={!online || !canEditCart} onClick={approveReorder}>Replace cart and review</button></section> : null}
-          <AccountWorkspace key={`${state.section}:${workspaceTitle ?? ""}:${selectedOrderId ?? ""}`} {...props} displayName={displayName} phoneNumber={phoneNumber} embedded accountPane={state.section === "profile" || state.section === "settings" ? state.section : undefined} onOpenProfile={() => dispatch({ type: "navigate", section: "profile" })} onOpenSettings={() => dispatch({ type: "navigate", section: "settings" })} onOpenOrders={openOrders} onOrderRecordClosed={() => setSelectedOrderId(undefined)} onViewChange={updateWorkspaceTitle} initialSection={workspaceTitle === "Payments" ? "payments" : state.section === "orders" ? "orders" : "account"} initialOrderId={state.section === "orders" ? selectedOrderId : undefined} onReturnToShopping={() => dispatch({ type: "navigate", section: "home" })} onOpenWishlist={openWishlist} onReorder={requestReorder} webPushController={webPush} onProfileChanged={setProfile} />
+          <AccountWorkspace key={`${state.section}:${workspaceTitle ?? ""}:${selectedOrderId ?? ""}:${selectedMerchantOrderId ?? ""}`} {...props} displayName={displayName} phoneNumber={phoneNumber} embedded accountPane={state.section === "profile" || state.section === "settings" ? state.section : undefined} onOpenProfile={() => dispatch({ type: "navigate", section: "profile" })} onOpenSettings={() => dispatch({ type: "navigate", section: "settings" })} onOpenOrders={openOrders} onOpenMerchantOrder={openMerchantOrder} onOrderRecordClosed={() => { setSelectedOrderId(undefined); setSelectedMerchantOrderId(undefined); }} onViewChange={updateWorkspaceTitle} initialSection={workspaceTitle === "Payments" ? "payments" : state.section === "orders" ? "orders" : "account"} initialOrderId={state.section === "orders" ? selectedOrderId : undefined} initialMerchantOrderId={state.section === "orders" ? selectedMerchantOrderId : undefined} onReturnToShopping={() => dispatch({ type: "navigate", section: "home" })} onOpenWishlist={openWishlist} onReorder={requestReorder} webPushController={webPush} onProfileChanged={setProfile} />
         </Suspense>,
       }}>
       {!online ? <p role="status">You’re offline. Your saved Bucket is retained; adding products is disabled until you reconnect.</p> : null}

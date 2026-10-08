@@ -16,10 +16,10 @@ vi.mock("./useReimaginedWishlist", () => ({ useReimaginedWishlist: () => ({ item
 vi.mock("./useDastakWebPush", () => ({ useDastakWebPush: () => ({ shouldPrompt: false }) }));
 import { submitV1Order, commitV1LaunchPayment, getV1Order, type V1Order } from "./dastakV1";
 vi.mock("./dastakV1", async importOriginal => ({ ...await importOriginal<typeof import("./dastakV1")>(), submitV1Order: vi.fn(), commitV1LaunchPayment: vi.fn(), getV1Order: vi.fn() }));
-vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: CustomerSection; initialOrderId?: string; embedded?: boolean; onViewChange?: (section: CustomerSection) => void; onReorder?: (order: V1Order) => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => {
+vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: CustomerSection; initialOrderId?: string; initialMerchantOrderId?: string; embedded?: boolean; onViewChange?: (section: CustomerSection) => void; onReorder?: (order: V1Order) => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => {
   const { initialSection, onViewChange } = props;
   useEffect(() => { if (initialSection) onViewChange?.(initialSection); }, [initialSection, onViewChange]);
-  return <section aria-label="Operational account workspace" data-order-id={props.initialOrderId}>{props.initialSection}<button type="button" onClick={() => props.onViewChange?.("payments")}>Fixture Payments</button><button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onReorder?.(mixedOrderFixture())}>Fixture mixed order</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button></section>;
+  return <section aria-label="Operational account workspace" data-order-id={props.initialOrderId} data-merchant-order-id={props.initialMerchantOrderId}>{props.initialSection}<button type="button" onClick={() => props.onViewChange?.("payments")}>Fixture Payments</button><button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onReorder?.(mixedOrderFixture())}>Fixture mixed order</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button></section>;
 } }));
 vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }));
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
@@ -49,7 +49,7 @@ beforeEach(() => {
 beforeEach(() => { vi.stubGlobal("localStorage", cartStorageFixture()); vi.mocked(useReimaginedCatalogue).mockReturnValue({ data: groceryFixture, status: "ready", error: undefined, retry: vi.fn() }); vi.mocked(useReimaginedAddresses).mockReturnValue({ addresses: [], selected: undefined, error: undefined, status: "ready", select: vi.fn(), retry: vi.fn() }); });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
-  it.each(["#/wishlist", "#/payments", "#/search", "#/account", "#/settings", `#/v1-orders/${fixtureId(20)}`])("restores %s without changing either cart or submitting an order", async hash => {
+  it.each(["#/wishlist", "#/payments", "#/search", "#/account", "#/settings", `#/v1-orders/${fixtureId(20)}`, `#/orders/${fixtureId(20)}`])("restores %s without changing either cart or submitting an order", async hash => {
     const shopping = { retail: { [fixtureId(6)]: 2 }, food: [{ branchId: "saved", itemId: "meal", optionIds: [], quantity: 3 }] };
     saveCustomerCart("a", shopping); window.history.replaceState(null, "", hash);
     await act(async () => mount());
@@ -58,7 +58,21 @@ describe("authenticated local customer integration", () => {
     if (hash === "#/search") expect(host.querySelector('input[type="search"]')).not.toBeNull();
     if (hash === "#/account" || hash === "#/settings") expect(host.querySelector('[aria-label="Operational account workspace"]')).not.toBeNull();
     if (hash.includes("v1-orders")) expect(host.querySelector('[data-order-id]')?.getAttribute("data-order-id")).toBe(fixtureId(20));
+    if (hash.startsWith("#/orders/")) { expect(host.querySelector('[data-merchant-order-id]')?.getAttribute("data-merchant-order-id")).toBe(fixtureId(20)); expect(host.querySelector('[data-order-id]')).toBeNull(); }
+    expect(window.location.hash).toBe(hash);
     expect(loadCustomerCart("a")).toEqual(shopping); expect(submitV1Order).not.toHaveBeenCalled(); expect(commitV1LaunchPayment).not.toHaveBeenCalled();
+  });
+  it("restores the older record on Back and clears its identity on Forward without touching carts", async () => {
+    const shopping = { retail: { [fixtureId(6)]: 2 }, food: [] };
+    saveCustomerCart("a", shopping); window.history.replaceState(null, "", `#/orders/${fixtureId(20)}`);
+    await act(async () => mount()); await act(async () => click("Orders"));
+    expect(window.location.hash).toBe("#/orders"); expect(host.querySelector('[data-merchant-order-id]')).toBeNull();
+    for (const direction of ["back", "forward"] as const) {
+      await act(async () => { await new Promise<void>(resolve => { window.addEventListener("popstate", () => resolve(), { once: true }); window.history[direction](); }); });
+      expect(host.querySelector('[data-merchant-order-id]')?.getAttribute("data-merchant-order-id")).toBe(direction === "back" ? fixtureId(20) : undefined);
+      expect(host.querySelector('[data-order-id]')).toBeNull(); expect(loadCustomerCart("a")).toEqual(shopping);
+    }
+    expect(submitV1Order).not.toHaveBeenCalled(); expect(commitV1LaunchPayment).not.toHaveBeenCalled();
   });
   it("restores Back/Forward across Wishlist, Payments and shopping while keeping current carts", async () => {
     saveCustomerCart("a", { retail: { [fixtureId(6)]: 2 }, food: [] }); await act(async () => mount());

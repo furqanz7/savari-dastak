@@ -26,6 +26,28 @@ async function mount(url: string) {
 }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("customer entry ownership", () => {
+  it.each([true, false])("opens an older record with its own controller (embedded=%s)", async embedded => {
+    const id = "11111111-1111-4111-8111-111111111111", onOrderRecordClosed = vi.fn();
+    window.history.replaceState(null, "", `/#/orders/${id}`); vi.stubGlobal("scrollTo", vi.fn());
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded={embedded} initialSection="orders" initialMerchantOrderId={id} onOrderRecordClosed={onOrderRecordClosed} />));
+    expect(DastakV1CustomerExperience).not.toHaveBeenCalled();
+    const controller = vi.mocked(CatalogueView).mock.calls.at(-1)![0];
+    expect(controller.section).toBe("orders"); expect(controller.selectedOrderId).toBe(id);
+    act(() => controller.onCloseOrder());
+    expect(onOrderRecordClosed).toHaveBeenCalledOnce();
+    expect(DastakV1CustomerExperience).toHaveBeenCalledWith(expect.objectContaining({ section: "orders", initialOrderId: undefined }), undefined);
+    expect(window.location.hash).toBe(embedded ? `#/orders/${id}` : "#/orders");
+  });
+  it("hands older account-record selections to the owning navigation", async () => {
+    window.history.replaceState(null, "", "/?reimagined=1#/account"); vi.stubGlobal("scrollTo", vi.fn());
+    host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    const onOpenMerchantOrder = vi.fn(), onOpenOrders = vi.fn(), id = "11111111-1111-4111-8111-111111111111";
+    await act(async () => root.render(<ExistingDastakCustomerView {...props} embedded initialSection="account" onOpenMerchantOrder={onOpenMerchantOrder} onOpenOrders={onOpenOrders} />));
+    act(() => vi.mocked(CatalogueView).mock.calls.at(-1)![0].onOpenOrder(id));
+    expect(onOpenMerchantOrder).toHaveBeenCalledWith(id); expect(onOpenOrders).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe("#/account");
+  });
   it("mounts only Reimagined when explicitly opted in locally", async () => {
     await mount("/?reimagined=1");
     expect(host.textContent).toContain("Authenticated Reimagined root");
