@@ -22,6 +22,7 @@ import {
 import { AdminPrivilegedActionDialog, type AdminPrivilegedActionIntent } from "./AdminPrivilegedActionDialog";
 import { AdminCatalogueAssets } from "./AdminCatalogueAssets";
 import { AdminRecordDialog } from "./AdminRecordDialog";
+import { catalogueProductType, validProductType, withCatalogueProductType, PRODUCT_TYPE_MAX_LENGTH } from "./catalogueProductType";
 import { runAdminPrivilegedMutation } from "./adminPrivilegedMutation";
 import {
   getV1AdminCatalogue, getV1AdminCataloguePage, importV1AdminCatalogue, updateV1AdminSku, deleteV1AdminSku,
@@ -521,9 +522,11 @@ function SkuSelectionCard({ sku, selected, onToggle, onOpen, supabaseUrl }: { sk
   </article>;
 }
 
-function SkuEditor({ auth, sku, taxonomy, supabaseUrl, disabled, onSave, onDelete, onCatalogueChanged }: { auth: DastakV1Auth; sku: V1AdminCataloguePageSku; taxonomy?: V1AdminSnapshot; supabaseUrl: string; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void>; onDelete: (sku: V1AdminCataloguePageSku) => Promise<void>; onCatalogueChanged: () => Promise<void> }) {
+export function SkuEditor({ auth, sku, taxonomy, supabaseUrl, disabled, onSave, onDelete, onCatalogueChanged }: { auth: DastakV1Auth; sku: V1AdminCataloguePageSku; taxonomy?: V1AdminSnapshot; supabaseUrl: string; disabled: boolean; onSave: (sku: V1AdminCataloguePageSku, patch: Record<string, unknown>) => Promise<void>; onDelete: (sku: V1AdminCataloguePageSku) => Promise<void>; onCatalogueChanged: () => Promise<void> }) {
   const [name, setName] = useState(sku.name);
   const [variant, setVariant] = useState(sku.variant ?? "");
+  const [productType, setProductType] = useState(catalogueProductType(sku.attributes) ?? "");
+  const productTypeChanged = productType.trim() !== (catalogueProductType(sku.attributes) ?? "");
   const [packSize, setPackSize] = useState(sku.packSize);
   const [description, setDescription] = useState(sku.description ?? "");
   const [subcategoryId, setSubcategoryId] = useState(sku.subcategoryId);
@@ -548,14 +551,14 @@ function SkuEditor({ auth, sku, taxonomy, supabaseUrl, disabled, onSave, onDelet
   const numericPackCount = optionalPositiveInteger(packCount);
   const numericShelfLife = optionalPositiveInteger(shelfLifeDays);
   const taxRateBps = priceInPaise(taxPercent);
-  const changed = listPricePaise !== sku.listPricePaise || sellingPricePaise !== sku.sellingPricePaise || status !== sku.status ||
+  const changed = productTypeChanged || listPricePaise !== sku.listPricePaise || sellingPricePaise !== sku.sellingPricePaise || status !== sku.status ||
     name.trim() !== sku.name || variant.trim() !== (sku.variant ?? "") || packSize.trim() !== sku.packSize ||
     description.trim() !== (sku.description ?? "") || subcategoryId !== sku.subcategoryId || brandId !== (sku.brandId ?? "") ||
     barcode.trim() !== (sku.barcode ?? "") || numericQuantity !== (sku.quantityValue ?? null) || quantityUnit !== (sku.quantityUnit ?? "") ||
     numericPackCount !== (sku.packCount ?? null) || manufacturerName.trim() !== (sku.manufacturerName ?? "") ||
     countryOfOriginCode.trim().toUpperCase() !== (sku.countryOfOriginCode ?? "") || hsnCode.trim() !== (sku.hsnCode ?? "") ||
     dietType !== sku.dietType || numericShelfLife !== (sku.shelfLifeDays ?? null) || taxRateBps !== sku.taxRateBps || qaStatus !== sku.qaStatus;
-  const valid = Boolean(name.trim() && packSize.trim() && subcategoryId) && listPricePaise !== undefined &&
+  const valid = validProductType(productType) && Boolean(name.trim() && packSize.trim() && subcategoryId) && listPricePaise !== undefined &&
     sellingPricePaise !== undefined && sellingPricePaise <= listPricePaise && taxRateBps !== undefined && taxRateBps <= 10000 &&
     !Number.isNaN(numericQuantity) && !Number.isNaN(numericPackCount) && !Number.isNaN(numericShelfLife);
   const activatingWithoutEvidence = status === "ACTIVE" && sku.status !== "ACTIVE" && !sku.activationReady;
@@ -564,7 +567,8 @@ function SkuEditor({ auth, sku, taxonomy, supabaseUrl, disabled, onSave, onDelet
     subcategoryId, brandId: brandId || null, barcode: barcode.trim() || null, quantityValue: numericQuantity,
     quantityUnit: quantityUnit || null, packCount: numericPackCount, manufacturerName: manufacturerName.trim() || null,
     countryOfOriginCode: countryOfOriginCode.trim().toUpperCase() || null, hsnCode: hsnCode.trim() || null,
-    dietType, shelfLifeDays: numericShelfLife, taxRateBps, qaStatus, listPricePaise, sellingPricePaise, status };
+    dietType, shelfLifeDays: numericShelfLife, taxRateBps, qaStatus, listPricePaise, sellingPricePaise, status,
+    ...(productTypeChanged && validProductType(productType) ? { attributes: withCatalogueProductType(sku.attributes, productType) } : {}) };
   return <form className="admin-sku-card" onSubmit={(event) => { event.preventDefault(); if (canSave) void onSave(sku, patch); }}>
     <div className="admin-sku-customer-preview">
       <SkuArtwork sku={sku} supabaseUrl={supabaseUrl} />
@@ -594,6 +598,7 @@ function SkuEditor({ auth, sku, taxonomy, supabaseUrl, disabled, onSave, onDelet
         <SkuFact icon={<Tags />} label="Department" value={sku.categoryTypeName ?? "Not classified"} />
         <SkuFact icon={<Tags />} label="Category" value={sku.categoryName} />
         <SkuFact icon={<Tags />} label="Subcategory" value={sku.subcategoryName} />
+        <SkuFact icon={<Tags />} label="Product Type" value={catalogueProductType(sku.attributes) ?? "Not recorded"} />
         <SkuFact icon={<Package />} label="Canonical pack" value={formatQuantity(sku)} />
         <SkuFact icon={<Factory />} label="Manufacturer" value={sku.manufacturerName ?? "Not recorded"} />
         <SkuFact icon={<Leaf />} label="Diet type" value={label(sku.dietType)} />
@@ -609,6 +614,7 @@ function SkuEditor({ auth, sku, taxonomy, supabaseUrl, disabled, onSave, onDelet
         <header><Package size={18} /><div><strong>Identity &amp; compliance</strong><small>These values become the shared customer, merchant and Admin product record.</small></div></header>
         <label><span>Product name</span><input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} /></label>
         <label><span>Variant</span><input value={variant} maxLength={160} onChange={(event) => setVariant(event.target.value)} /></label>
+        <label className="wide"><span>Product Type</span><input value={productType} maxLength={PRODUCT_TYPE_MAX_LENGTH} disabled={disabled} onChange={(event) => setProductType(event.target.value)} aria-describedby={`product-type-help-${sku.id}`} /><small id={`product-type-help-${sku.id}`}>Verified classification within this subcategory, e.g. Full Cream or Toned. Separate from flavour/variant. Use the same wording for every pack; leave blank if unverified. Shared with Customer and Merchant.</small></label>
         <label className="wide"><span>Description</span><textarea value={description} maxLength={1000} rows={3} onChange={(event) => setDescription(event.target.value)} /></label>
         <label><span>Subcategory</span><select value={subcategoryId} onChange={(event) => setSubcategoryId(event.target.value)}>{taxonomy?.subcategories.map((item) => <option key={item.id} value={item.id}>{taxonomy.categories.find((category) => category.id === item.categoryId)?.name ?? "Category"} · {item.name}</option>)}</select></label>
         <label><span>Brand</span><select value={brandId} onChange={(event) => setBrandId(event.target.value)}><option value="">No brand</option>{taxonomy?.brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>

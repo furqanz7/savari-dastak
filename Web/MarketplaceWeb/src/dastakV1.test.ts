@@ -271,7 +271,7 @@ describe("Dastak V1 web contract", () => {
     });
   });
 
-  it("keeps retail Merchant Web on canonical selection and audited branch controls", async () => {
+  it.each([undefined, { productType: "White" }])("keeps retail Merchant Web on canonical selection and audited branch controls with attributes %j", async attributes => {
     const branchId = "88888888-8888-4888-8888-888888888888";
     const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const catalogue = await getV1MerchantCanonicalCatalogue(auth, async () => Response.json({
@@ -284,7 +284,7 @@ describe("Dastak V1 web contract", () => {
       categories: [{ categoryId, name: "Grocery", slug: "grocery", sortOrder: 1 }],
       subcategories: [{ subcategoryId, categoryId, name: "Staples", slug: "staples", sortOrder: 1 }],
       skus: [{
-        skuId, categoryId, subcategoryId, brandName: null, name: "Rice", variant: null,
+        skuId, categoryId, subcategoryId, brandName: null, name: "Rice", variant: null, attributes,
         packSize: "1 kg", description: null, imageKey: null, listPricePaise: 10000,
         sellingPricePaise: 9500, currencyCode: "INR", catalogueStatus: "ACTIVE",
         selected: true, selectionState: "SELECTED", selectionVersion: 3, stockQuantity: 24, stockReservedQuantity: 3,
@@ -293,6 +293,7 @@ describe("Dastak V1 web contract", () => {
       truncated: false,
     }));
     expect(catalogue.skus[0]).toMatchObject({ selected: true, sellingPricePaise: 9500, stockQuantity: 24, stockReservedQuantity: 3 });
+    expect(catalogue.skus[0].attributes).toEqual(attributes ?? {});
 
     const calls: Record<string, unknown>[] = [];
     const command = async (_url: RequestInfo | URL, init?: RequestInit) => {

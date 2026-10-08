@@ -32,6 +32,8 @@ describe("Merchant Store correctness wiring", () => {
     expect(catalogue).toContain("visibleSkus.slice(0, visibleLimit)");
     expect(catalogue).toContain("Show more products");
     expect(catalogue).toContain("first 5,000 authorised catalogue products");
+    expect(catalogue).toContain('aria-label="Subcategory"');
+    expect(catalogue).not.toContain('aria-label="Product type"');
   });
 
   it("decodes preparation evidence before upload and preserves organization-level settlements", () => {

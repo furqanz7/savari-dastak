@@ -6,8 +6,8 @@ import { parseReimaginedCatalogueImport } from "./reimaginedCatalogueImport";
 const auth = { supabaseUrl: "https://example.supabase.co", publishableKey: "test-key", accessToken: "test-token" };
 const clients = () => ({ getV1CatalogueBrowseMap: vi.fn().mockResolvedValue(data.map), getV1Catalogue: vi.fn().mockResolvedValue(data.catalogue) });
 describe("Reimagined canonical Grocery projection", () => {
-  it("filters only explicit catalogue variants, keeps unclassified SKUs in All and ignores stale filters", () => {
-    const skus = [{ ...data.catalogue.skus[0], variant: " Full Cream " }, { ...data.catalogue.skus[1], variant: "Toned" }, { ...data.catalogue.skus[2], name: "Skimmed Milk" }];
+  it("filters dedicated Product Types, keeps unclassified SKUs in All and ignores stale filters", () => {
+    const skus = [{ ...data.catalogue.skus[0], variant: "Vanilla", attributes: { productType: " Full Cream " } }, { ...data.catalogue.skus[1], attributes: { productType: "Toned" } }, { ...data.catalogue.skus[2], name: "Skimmed Milk", variant: "Skimmed" }];
     const shelf = { key: "milk", label: "Milk", skus };
     expect(groceryProductTypes(skus)).toEqual(["Full Cream", "Toned"]);
     expect(filterGroceryShelf(shelf, "Full Cream").skus).toEqual([skus[0]]);
@@ -15,6 +15,11 @@ describe("Reimagined canonical Grocery projection", () => {
     expect(filterGroceryShelf(shelf)).toBe(shelf);
     expect(groceryProductTypes([skus[0], skus[0], skus[2]])).toEqual([]);
     expect(groceryProductTypes(data.catalogue.skus)).toEqual([]);
+  });
+  it("never merges packs across different recorded Product Types", () => {
+    const rice = { ...data.catalogue.skus[0], brand: { id: fixtureId(30), name: "Test", slug: "test" }, attributes: { productType: "White" } };
+    const brown = { ...rice, id: fixtureId(31), attributes: { productType: "Brown" } };
+    expect(groupGroceryProducts([rice, brown])).toHaveLength(2);
   });
   it("groups genuine branded packs without combining flavours, brands, unbranded or unrelated rails", () => {
     const rice = { ...data.catalogue.skus[0], brand: { id: fixtureId(30), name: "Test", slug: "test" } };

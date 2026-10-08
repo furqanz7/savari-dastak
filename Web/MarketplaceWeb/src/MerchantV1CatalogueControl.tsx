@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CirclePause, Leaf, PackageCheck, Search, ShieldCheck, Store } from "lucide-react";
 import { catalogueImageUrl, formatPrice } from "./catalogue";
+import { catalogueProductType } from "./catalogueProductType";
 import { catalogueDepartmentName, catalogueHomeTiles, catalogueNavigationGroups, curatedCatalogueRails, resolveCatalogueRail, riceRailExcludedSubcategoryIds } from "./cataloguePresentation";
 import { browseChildren, browseSkuIds, validateBrowseMap } from "./catalogueBrowse";
 import { referenceBrowseArtworkKey } from "./referenceBrowseArtwork";
@@ -232,7 +233,7 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
   const displayedRail = selectedHomeTile?.categoryId
     ? snapshot.subcategories.filter((item) => item.categoryId === selectedHomeTile.categoryId).map((item) => ({ label: item.name, categoryId: item.categoryId, subcategoryId: item.subcategoryId, imageKey: item.imageKey, previewImageKeys: item.previewImageKeys, slug: item.slug }))
     : curatedRail;
-  const productTypes = snapshot.subcategories.filter((item) => item.categoryId === categoryId);
+  const subcategoryChoices = snapshot.subcategories.filter((item) => item.categoryId === categoryId);
   const detailSku = snapshot.skus.find((sku) => sku.skuId === detailId);
   return <section className="merchant-v1-control">
     <header className="merchant-orders-heading">
@@ -281,7 +282,7 @@ export function MerchantV1CatalogueControl({ auth, branchId, onSessionExpired }:
         }) : railCategories.map((item) => <button key={item.categoryId} type="button" aria-pressed={categoryId === item.categoryId} className={categoryId === item.categoryId ? "selected" : ""} onClick={() => { setCategoryId(item.categoryId); setSubcategoryId(undefined); setSelectedRailLabel(undefined); }}><MerchantCategoryImage supabaseUrl={auth.supabaseUrl} imageKey={item.imageKey ?? artworkKeys.categories.get(item.categoryId)} previewImageKeys={item.previewImageKeys} slug={item.slug} /><strong>{item.name}</strong></button>)}
       </aside>
       <div className="merchant-v1-category-results" key={categoryId}><header><h2>{selectedRailLabel ?? (selectedHomeTile?.categoryId && selectedHomeTile.categoryId === categoryId ? selectedHomeTile.label : undefined) ?? snapshot.categories.find((item) => item.categoryId === categoryId)?.name ?? "Products"}</h2><span>{visibleSkus.length} products</span></header>
-        {productTypes.length ? <label className="merchant-v1-type-filter">Type<select aria-label="Product type" value={subcategoryId ?? ""} onChange={(event) => setSubcategoryId(event.target.value || undefined)}><option value="">All types</option>{productTypes.map((item) => <option key={item.subcategoryId} value={item.subcategoryId}>{item.name}</option>)}</select></label> : null}
+        {subcategoryChoices.length ? <label className="merchant-v1-type-filter">Subcategory<select aria-label="Subcategory" value={subcategoryId ?? ""} onChange={(event) => setSubcategoryId(event.target.value || undefined)}><option value="">All subcategories</option>{subcategoryChoices.map((item) => <option key={item.subcategoryId} value={item.subcategoryId}>{item.name}</option>)}</select></label> : null}
         <MerchantSkuGallery auth={auth} skus={visibleSkus.slice(0, visibleLimit)} total={visibleSkus.length} onLoadMore={() => setVisibleLimit((current) => current + cataloguePageSize)} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /></div>
     </section> : !browseMap && (selectedOnly || deferredQuery.trim()) ? <MerchantSkuGallery auth={auth} skus={visibleSkus.slice(0, visibleLimit)} total={visibleSkus.length} onLoadMore={() => setVisibleLimit((current) => current + cataloguePageSize)} subcategories={snapshot.subcategories} pendingSelections={pendingSelections} busy={busy} onSelection={setSelection} onDetail={setDetailId} /> : null}
     {Object.keys(pendingSelections).length ? <div className="merchant-v1-save-bar" role="status"><span><strong>{Object.keys(pendingSelections).length} unsaved {Object.keys(pendingSelections).length === 1 ? "change" : "changes"}</strong><small>Keep selecting, then save once.</small></span><button type="button" className="secondary-button" disabled={busy === "catalogue"} onClick={() => { setPendingSelections({}); selectionSaveKey.current = undefined; }}>Discard</button><button type="button" className="primary-button" disabled={busy === "catalogue"} onClick={() => void saveSelections()}>{busy === "catalogue" ? "Saving…" : "Save storefront"}</button></div> : null}
@@ -428,7 +429,7 @@ function isSessionError(error: unknown) {
 }
 
 function merchantDetail(sku: V1MerchantCanonicalCatalogue["skus"][number]): DetailProduct {
-  return { ...sku, id: sku.skuId, brand: sku.brandName, price: sku.sellingPricePaise, listPrice: sku.listPricePaise, facts: [["Diet", sku.dietType]] };
+  return { ...sku, id: sku.skuId, brand: sku.brandName, price: sku.sellingPricePaise, listPrice: sku.listPricePaise, facts: [["Product Type", catalogueProductType(sku.attributes)], ["Diet", sku.dietType]] };
 }
 
 type MerchantDetailSKU = V1MerchantCanonicalCatalogue["skus"][number];

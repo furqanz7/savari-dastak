@@ -28,9 +28,9 @@ afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); });
 describe("Reimagined Grocery interactions", () => {
   it("scopes Product Type to its rail and detail pager, retains both pack choices and never changes the cart", () => {
     mount();
-    const rice = { ...data.catalogue.skus[0], variant: "Plain", brand: { id: fixtureId(30), name: "Test", slug: "test" } };
+    const rice = { ...data.catalogue.skus[0], attributes: { productType: "Plain" }, brand: { id: fixtureId(30), name: "Test", slug: "test" } };
     const large = { ...rice, id: fixtureId(31), packSize: "5 kg" };
-    const brown = { ...rice, id: fixtureId(32), name: "Test Brown Rice", variant: "Brown" };
+    const brown = { ...rice, id: fixtureId(32), name: "Test Brown Rice", attributes: { productType: "Brown" } };
     const catalogue = { ...data, catalogue: { ...data.catalogue, skus: [rice, large, brown, data.catalogue.skus[1]] } };
     act(() => root.render(<Harness related={null} catalogue={catalogue} />));
     click("Take Bucket"); click("Add Test Plain Rice, 1 kg");
@@ -43,6 +43,7 @@ describe("Reimagined Grocery interactions", () => {
     expect(host.querySelector('[aria-label="View Test Basmati Rice, 1 kg details"]')).not.toBeNull();
     click("View Test Plain Rice, 1 kg details");
     expect(host.textContent).toContain("Product 1 of 2");
+    expect(host.querySelector('.reimagined-detail-identity')?.textContent).toContain("Product Type: Plain");
     expect(host.querySelectorAll('.reimagined-detail-packs button')).toHaveLength(2);
     click("Next product"); expect(host.querySelector('.reimagined-product-detail h2')?.textContent).toBe("Test Basmati Rice");
     expect(shopping()).toEqual(before);
@@ -61,7 +62,7 @@ describe("Reimagined Grocery interactions", () => {
   it("keeps unclassified products in All and does not apply rail filters to search", () => {
     mount();
     expect(host.querySelector('.reimagined-product-type')).toBeNull();
-    const skus = [{ ...data.catalogue.skus[0], variant: "Plain" }, { ...data.catalogue.skus[0], id: fixtureId(31), variant: "Brown" }, { ...data.catalogue.skus[0], id: fixtureId(32), name: "Unclassified Rice" }];
+    const skus = [{ ...data.catalogue.skus[0], attributes: { productType: "Plain" } }, { ...data.catalogue.skus[0], id: fixtureId(31), attributes: { productType: "Brown" } }, { ...data.catalogue.skus[0], id: fixtureId(32), name: "Unclassified Rice" }];
     const catalogue = { ...data, catalogue: { ...data.catalogue, skus } };
     act(() => root.render(<Harness catalogue={catalogue} />));
     expect(host.querySelectorAll('.reimagined-shelf-product')).toHaveLength(3);

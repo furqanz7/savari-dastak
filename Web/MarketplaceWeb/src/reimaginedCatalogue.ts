@@ -2,21 +2,21 @@ import { browseChildren, browseSkuIds, validateBrowseMap } from "./catalogueBrow
 import { getV1Catalogue, getV1CatalogueBrowseMap, type DastakV1Auth, type V1CatalogueBrowseMap, type V1CatalogueSku, type V1CatalogueSnapshot } from "./dastakV1";
 import type { ReimaginedState, ReimaginedView } from "./reimaginedState";
 import { productFamilyKey } from "./productDetail";
+import { catalogueProductType } from "./catalogueProductType";
 
 export type ReimaginedCatalogue = { map: V1CatalogueBrowseMap; catalogue: V1CatalogueSnapshot };
 export type GroceryShelf = { key: string; label: string; skus: V1CatalogueSku[] };
 export type GroceryQuickPick = { key: string; label: string; destinationKey: string };
 
-// The current catalogue supplies variants, not a separate product-type taxonomy.
-// Use those explicit values only: never classify a SKU by guessing from its name.
+// Dedicated shared metadata only: never infer types from names or variants.
 export function groceryProductTypes(skus: V1CatalogueSku[]): string[] {
-  const types = [...new Set(skus.map(sku => sku.variant?.trim()).filter((value): value is string => Boolean(value)))];
+  const types = [...new Set(skus.map(sku => catalogueProductType(sku.attributes)).filter((value): value is string => Boolean(value)))];
   return types.length > 1 ? types : [];
 }
 
 export function filterGroceryShelf(shelf: GroceryShelf, selectedType?: string): GroceryShelf {
   if (!selectedType || !groceryProductTypes(shelf.skus).includes(selectedType)) return shelf;
-  return { ...shelf, skus: shelf.skus.filter(sku => sku.variant?.trim() === selectedType) };
+  return { ...shelf, skus: shelf.skus.filter(sku => catalogueProductType(sku.attributes) === selectedType) };
 }
 
 // Presentation only: every member remains an exact purchasable SKU. Do not
@@ -24,7 +24,7 @@ export function filterGroceryShelf(shelf: GroceryShelf, selectedType?: string): 
 export function groupGroceryProducts(skus: V1CatalogueSku[]): V1CatalogueSku[][] {
   const groups = new Map<string, V1CatalogueSku[]>();
   for (const sku of skus) {
-    const key = sku.brand?.name ? JSON.stringify([sku.categoryId, sku.subcategoryId, sku.brand.name, sku.variant ?? "",
+    const key = sku.brand?.name ? JSON.stringify([sku.categoryId, sku.subcategoryId, sku.brand.name, sku.variant ?? "", catalogueProductType(sku.attributes) ?? "",
       productFamilyKey({ ...sku, brand: sku.brand.name, price: sku.sellingPricePaise, listPrice: sku.listPricePaise })]) : sku.id;
     const group = groups.get(key) ?? [];
     if (!group.some(member => member.id === sku.id)) group.push(sku);

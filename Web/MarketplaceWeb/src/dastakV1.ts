@@ -358,7 +358,7 @@ export type V1MerchantCanonicalCatalogue = {
     skuId: string; categoryTypeId?: string; categoryId: string; subcategoryId: string; brandName?: string;
     name: string; variant?: string; packSize: string; description?: string; imageKey?: string;
     galleryImageKeys: string[]; quantityValue?: number; quantityUnit?: string; packCount?: number;
-    dietType?: string; searchTerms: string[];
+    dietType?: string; searchTerms: string[]; attributes?: Record<string, unknown>;
     listPricePaise: number; sellingPricePaise: number; currencyCode: "INR";
     catalogueStatus: string; selected: boolean; selectionState?: string;
     selectionVersion: number; selectionUpdatedAt?: string; stockQuantity?: number; stockReservedQuantity?: number;
@@ -3088,6 +3088,7 @@ function parseMerchantCanonicalCatalogue(value: unknown): V1MerchantCanonicalCat
         dietType: optionalText(sku.dietType, 20),
         searchTerms: Array.isArray(sku.searchTerms)
           ? sku.searchTerms.map((item) => requiredText(item, 160)) : [],
+        attributes: sku.attributes === null || sku.attributes === undefined ? {} : requiredRecord(sku.attributes),
         listPricePaise: requiredInteger(sku.listPricePaise, 0),
         sellingPricePaise: requiredInteger(sku.sellingPricePaise, 0),
         currencyCode: currency(sku.currencyCode),

@@ -1,6 +1,7 @@
 import { useId, useMemo, useRef, useState, type Dispatch, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Minus, Package, Plus, ShoppingBasket, TrendingUp } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
+import { catalogueProductType } from "./catalogueProductType";
 import { formatV1Price, type V1CatalogueSku } from "./dastakV1";
 import { filterGroceryShelf, groceryProductTypes, groupGroceryProducts, groceryQuickPicks, groceryShelves, searchGrocery, type GroceryShelf, type ReimaginedCatalogue } from "./reimaginedCatalogue";
 import type { ReimaginedAction, ReimaginedState } from "./reimaginedState";
@@ -77,7 +78,7 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
     <div className="reimagined-detail-hero">
       <GroceryGallery key={selected.id} sku={selected} supabaseUrl={supabaseUrl} />
       <div className="reimagined-detail-identity"><p className="reimagined-kicker">{selected.brand?.name ?? "Dastak"}</p><h2>{selected.name}</h2>
-        <p>{[selected.variant, selected.packSize].filter(Boolean).join(" · ")}</p><GroceryPrice sku={selected} /><small>{productUnitPrice(detailProduct(selected))}</small><WishlistButton wishlist={wishlist} kind="RETAIL_SKU" id={selected.id} name={selected.name} online={online} /><GroceryShare sku={selected} /></div>
+        <p>{[selected.variant, selected.packSize].filter(Boolean).join(" · ")}</p>{catalogueProductType(selected.attributes) ? <p>Product Type: {catalogueProductType(selected.attributes)}</p> : null}<GroceryPrice sku={selected} /><small>{productUnitPrice(detailProduct(selected))}</small><WishlistButton wishlist={wishlist} kind="RETAIL_SKU" id={selected.id} name={selected.name} online={online} /><GroceryShare sku={selected} /></div>
     </div>
     {variants.length > 1 ? <section className="reimagined-detail-packs"><h3>Pack sizes & variants</h3><div className="reimagined-variants" role="group" aria-label="Related pack sizes and variants">{variants.map(sku => <button key={sku.id} type="button" aria-label={`${sku.name} · ${sku.packSize}`} aria-describedby={`${packChoicePrefix}-${sku.id}-price ${packChoicePrefix}-${sku.id}-unit`} aria-pressed={sku.id === selected.id} onClick={() => select(sku.id)}><span>{sku.name} · {sku.packSize}</span><strong id={`${packChoicePrefix}-${sku.id}-price`}>{formatV1Price(sku.sellingPricePaise)}</strong><small id={`${packChoicePrefix}-${sku.id}-unit`}>{productUnitPrice(detailProduct(sku))}</small></button>)}</div></section> : null}
     <div className="reimagined-detail-purchase"><p className="reimagined-availability">{eligibility(selected).reason ?? (eligibility(selected).canAdd ? "Purchase availability will be confirmed at checkout." : "Currently unavailable to add.")}</p>
