@@ -53,4 +53,22 @@ References: [Nominatim autocomplete prohibition](https://operations.osmfoundatio
 - Security advisor ERROR scan: no issues found. Lower-severity findings were not
   asserted clean. Existing 30 km availability, rider gates and fees are unchanged.
 
-Release status and final test totals are recorded after deployment below.
+## Production release
+
+- All 148 frontend test files / 1,040 tests passed; TypeScript, changed-component
+  ESLint and local production build passed. Existing 3D large-chunk warnings remain.
+- Only `20261009134004_repair_customer_rider_phone.sql` applied to linked Dastak.
+- Native contact projection harness passed before and after release.
+- Source release `1e2c92facd5df7047b5560f4cb2100cbc55b3b67`:
+  - Customer READY: `dpl_DfqK5CFWHcg2Hq1p6xHNPJZvcf3H` at https://dastak-customer.vercel.app/
+  - Merchant READY: `dpl_6o8p5b2heZR1m5htx6rZN63yNHXS` at https://dastak-merchant.vercel.app/
+  - Delivery READY: `dpl_8r9BcYzCTxp3vJeYt9j7FQn1yoaW` at https://dastak-delivery.vercel.app/
+- Production HTML verified each role's SHA, variant, production environment and
+  deployment identity. Customer/Merchant CSP allows map tiles and Photon requests;
+  overall no-referrer remains intact.
+- Error-level release-log scans had no entries; this is not a signed-in production
+  order/calling test, nor an assessment of monitoring/drains configuration.
+- Existing 30 km rule still present and unrelated catalogue activation remains
+  unapplied. Existing dirty documents/assets were preserved. No Git push performed.
+- Temporary local verification pages, test browser tabs and migration staging
+  copies removed; browser viewport reset. Screenshot retained in verification docs.
