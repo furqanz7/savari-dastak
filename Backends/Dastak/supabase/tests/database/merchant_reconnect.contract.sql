@@ -23,7 +23,7 @@ create temporary table reconnect_sku as select id from dastak_v1.skus where stat
 insert into dastak_v1.merchant_sku_selections(branch_id,sku_id,state,stock_quantity,selected_by)
 select f.branch,s.id,'SELECTED',99,f.actor from reconnect_fixture f cross join reconnect_sku s;
 create temporary table reconnect_orders as select label,gen_random_uuid() id,gen_random_uuid() attempt
-from unnest(array['open','cancelled','expired','closed-store','declined']) label;
+from unnest(array['open','cancelled','expired','closed-store','declined','wave2-open']) label;
 insert into dastak_v1.orders(id,display_order_number,customer_id,order_type,status,submitted_at,availability_policy_version)
 select o.id,'TEST-RECONNECT-'||o.id,f.actor,'RETAIL_ONLY',case when o.label='cancelled' then 'CANCELLED_PREPAYMENT'::dastak_v1.order_status else 'MATCHING'::dastak_v1.order_status end,
 now(),0 from reconnect_orders o cross join reconnect_fixture f;
@@ -33,8 +33,12 @@ jsonb_build_object('name','Fixture','phoneNumber','+919590009984'),decode(repeat
 from reconnect_orders o cross join public.service_zones z where z.id='4378540f-ff0c-40ea-b95b-862eba222087';
 insert into dastak_v1.order_lines(order_id,line_type,sku_id,product_name_snapshot,quantity,unit_price_paise)
 select o.id,'RETAIL_SKU',s.id,'Fixture SKU',1,100 from reconnect_orders o cross join reconnect_sku s;
+insert into dastak_v1.order_lines(order_id,line_type,sku_id,product_name_snapshot,quantity,unit_price_paise)
+select o.id,'RETAIL_SKU',s.id,'Uncovered fixture SKU',1,100 from reconnect_orders o
+cross join (select id from dastak_v1.skus where status='ACTIVE' and id not in(select id from reconnect_sku) order by id limit 1) s
+where o.label='wave2-open';
 insert into dastak_v1.matching_attempts(id,order_id,wave,status,started_at,expires_at)
-select attempt,id,'WAVE_1','OPEN',clock_timestamp()-interval '10 minutes',
+select attempt,id,case when label='wave2-open' then 'WAVE_2'::dastak_v1.matching_wave else 'WAVE_1'::dastak_v1.matching_wave end,'OPEN',clock_timestamp()-interval '10 minutes',
   case when label='expired' then clock_timestamp()-interval '1 second' else clock_timestamp()+interval '3 minutes' end from reconnect_orders;
 insert into dastak_v1.matching_candidate_evaluations(matching_attempt_id,order_id,organization_id,branch_id,eligible,eligibility_snapshot)
 select o.attempt,o.id,f.organization,f.branch,true,'{}'::jsonb from reconnect_orders o cross join reconnect_fixture f;
@@ -57,6 +61,8 @@ do $$declare f record; response jsonb; count_before integer; begin
   assert exists(select 1 from jsonb_array_elements(response->'opportunities') x where x->>'displayOrderNumber'='TEST-RECONNECT-'||(select id::text from reconnect_orders where label='open')),'reconnected merchant feed did not contain pending order';
   assert (select count(*)=1 from dastak_v1.merchant_opportunities where order_id=(select id from reconnect_orders where label='open')),'pending order not offered exactly once';
   assert (select count(*)=1 from dastak_v1.merchant_opportunity_lines l join dastak_v1.merchant_opportunities x on x.id=l.opportunity_id where x.order_id=(select id from reconnect_orders where label='open')),'offer lines missing';
+  assert (select count(*)=1 from dastak_v1.merchant_opportunities where order_id=(select id from reconnect_orders where label='wave2-open')),'Wave 2 reconnect offer missing';
+  assert (select count(*)=1 from dastak_v1.merchant_opportunity_lines l join dastak_v1.merchant_opportunities x on x.id=l.opportunity_id where x.order_id=(select id from reconnect_orders where label='wave2-open')),'Wave 2 included unavailable SKU lines';
   assert not exists(select 1 from dastak_v1.merchant_opportunities where order_id in(select id from reconnect_orders where label in ('cancelled','expired','closed-store'))),'cancelled or expired work revived';
   assert (select count(*)=1 from dastak_v1.domain_events_outbox where event_type='MERCHANT_OPPORTUNITY_OFFERED' and payload->>'orderId'=(select id::text from reconnect_orders where label='open')),'durable notification missing';
   assert not exists(select 1 from dastak_v1.merchant_opportunities x join dastak_v1.matching_attempts a on a.id=x.matching_attempt_id where x.order_id in(select id from reconnect_orders) and x.expires_at<>a.expires_at),'deadline was extended';

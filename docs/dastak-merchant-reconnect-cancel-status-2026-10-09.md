@@ -21,7 +21,8 @@ Reimagined bottom status bar had an independent minute-long polling cycle.
 - Private reconnect helper runs inside the existing authenticated heartbeat RPC.
   It locks at most 50 eligible parent orders with SKIP LOCKED, rechecks transport,
   exact inventory, capacity, branch permission and reachability, and creates only
-  previously unoffered Wave 1 opportunities within their original open window.
+  previously unoffered Wave 1 or Wave 2 opportunities within their original open
+  window. Wave 2 includes only the branch's currently covered exact SKU subset.
 - Existing reachability and emergency-pause triggers retain their final veto.
   No cancelled/expired/declined request is revived and no deadline is extended.
   Exact opportunity lines, audit entry and existing notification outbox event are
@@ -34,7 +35,7 @@ Reimagined bottom status bar had an independent minute-long polling cycle.
 ## Verification
 
 - Real linked-schema BEGIN/ROLLBACK harness: synthetic actor/permissions, branch,
-  stock, five order scenarios and matching attempts. Actual public Merchant feed
+  stock, six order scenarios and matching attempts. Actual public Merchant feed
   returns the recovered pending offer; exact lines/outbox/deadline verified.
   Repeated heartbeat creates no duplicate. Closed stores, cancelled/expired orders
   and previously declined opportunities are excluded. Private grants remain denied.

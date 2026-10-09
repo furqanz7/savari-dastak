@@ -1,4 +1,4 @@
--- Reconnect only unoffered work inside its original Wave 1 window. Never resend
+-- Reconnect only unoffered work inside its original matching window. Never resend
 -- cancelled/expired orders, revive declined requests, or extend deadlines.
 create function private.offer_reconnected_wave1(p_branches uuid[],p_actor uuid)
 returns integer language plpgsql security definer set search_path='' as $$
@@ -6,12 +6,12 @@ declare work record; branch uuid; offer uuid; snapshot jsonb; offered integer:=0
 begin
   if coalesce(cardinality(p_branches),0)=0 then return 0; end if;
   for work in
-    select o.id order_id,a.id attempt_id,a.expires_at
+    select o.id order_id,a.id attempt_id,a.wave,a.expires_at
     from dastak_v1.orders o join dastak_v1.matching_attempts a on a.order_id=o.id
     where o.status='MATCHING' and o.order_type in ('RETAIL_ONLY','MIXED')
-      and a.wave='WAVE_1' and a.status='OPEN' and a.expires_at>clock_timestamp()
+      and a.wave in ('WAVE_1','WAVE_2') and a.status='OPEN' and a.expires_at>clock_timestamp()
       and exists(select 1 from dastak_v1.matching_candidate_evaluations e
-        where e.matching_attempt_id=a.id and e.branch_id=any(p_branches)
+        where e.matching_attempt_id=a.id and e.branch_id=any(p_branches) and e.eligible
         and not exists(select 1 from dastak_v1.merchant_opportunities x
           where x.matching_attempt_id=a.id and x.branch_id=e.branch_id))
     order by o.id limit 50 for update of o skip locked
@@ -26,8 +26,9 @@ begin
         or exists(select 1 from dastak_v1.merchant_opportunities x
           where x.matching_attempt_id=work.attempt_id and x.branch_id=branch)
         or not exists(select 1 from dastak_v1.matching_candidate_evaluations e
-          where e.matching_attempt_id=work.attempt_id and e.branch_id=branch) then continue; end if;
-      snapshot:=dastak_v1_api.evaluate_wave1_candidate(work.order_id,branch);
+          where e.matching_attempt_id=work.attempt_id and e.branch_id=branch and e.eligible) then continue; end if;
+      snapshot:=case when work.wave='WAVE_1' then dastak_v1_api.evaluate_wave1_candidate(work.order_id,branch)
+        else dastak_v1_api.evaluate_wave2_candidate(work.order_id,branch) end;
       if not coalesce((snapshot->>'eligible')::boolean,false) then continue; end if;
       offer:=null;
       insert into dastak_v1.merchant_opportunities(matching_attempt_id,order_id,organization_id,branch_id,status,started_at,expires_at)
@@ -38,14 +39,18 @@ begin
       insert into dastak_v1.merchant_opportunity_lines(opportunity_id,order_line_id,sku_id,
         product_name_snapshot,variant_snapshot,pack_size_snapshot,requested_quantity)
       select offer,l.id,l.sku_id,l.product_name_snapshot,l.variant_snapshot,l.pack_size_snapshot,l.quantity
-      from dastak_v1.order_lines l where l.order_id=work.order_id and l.line_type='RETAIL_SKU';
+      from dastak_v1.order_lines l where l.order_id=work.order_id and l.line_type='RETAIL_SKU'
+        and (work.wave='WAVE_1' or exists(select 1 from dastak_v1.merchant_sku_selections s
+          where s.branch_id=branch and s.sku_id=l.sku_id and s.state='SELECTED'
+            and (s.stock_quantity>=l.quantity or (s.stock_quantity is null and exists(
+              select 1 from dastak_v1.orders legacy where legacy.id=work.order_id and legacy.availability_policy_version=0)))));
       insert into dastak_v1.domain_events_outbox(event_key,aggregate_type,aggregate_id,aggregate_version,event_type,actor_id,payload)
       values(offer::text||':MERCHANT_OPPORTUNITY_OFFERED:1','MERCHANT_OPPORTUNITY',offer,1,
         'MERCHANT_OPPORTUNITY_OFFERED',p_actor,jsonb_build_object('opportunityId',offer,'orderId',work.order_id,
           'organizationId',(select organization_id from dastak_v1.merchant_branches where id=branch),
           'branchId',branch,'expiresAt',work.expires_at));
       insert into dastak_v1.audit_events(actor_id,action,resource_type,resource_id,metadata)
-      values(p_actor,'WAVE_1_RECONNECTED_OPPORTUNITY','merchant_opportunity',offer,
+      values(p_actor,'MERCHANT_RECONNECTED_OPPORTUNITY','merchant_opportunity',offer,
         jsonb_build_object('orderId',work.order_id,'attemptId',work.attempt_id,'branchId',branch,'eligibility',snapshot));
       offered:=offered+1;
     end loop;
