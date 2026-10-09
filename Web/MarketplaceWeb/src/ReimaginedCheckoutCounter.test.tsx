@@ -95,6 +95,7 @@ describe("Grocery counter controls", () => {
     expect(api.submit).not.toHaveBeenCalled(); expect(api.commit).not.toHaveBeenCalled(); expect(dispatch).not.toHaveBeenCalled();
     api.submit.mockResolvedValue({ ...reserved, id: "33333333-3333-4333-8333-333333333333", displayOrderNumber: "TEST-NEW" });
     await act(async () => button("Reserve Grocery order").click());
+    await act(async () => { await vi.waitFor(() => expect(api.submit).toHaveBeenCalledOnce()); });
     expect(api.submit).toHaveBeenCalledOnce();
     expect(api.submit.mock.calls[0][0].idempotencyKey).not.toBe("old-submit");
     expect(api.submit.mock.calls[0][0].order.lines).toEqual([{ lineType: "RETAIL_SKU", skuId, quantity: 1 }]);

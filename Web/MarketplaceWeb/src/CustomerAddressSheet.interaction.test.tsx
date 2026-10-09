@@ -21,7 +21,7 @@ it("invalidates an old delivery pin when its search text is edited and saves onl
   render(); changePin("New area"); submit();
   expect(save).not.toHaveBeenCalled();
   expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
-  vi.mocked(searchLocations).mockResolvedValueOnce([{ id: "new", label: "New area confirmed", latitude: 13, longitude: 78 }]);
+  vi.mocked(searchLocations).mockResolvedValue([{ id: "new", label: "New area confirmed", latitude: 13, longitude: 78 }]);
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Search delivery pin"]')!.click());
   act(() => host.querySelector<HTMLButtonElement>('.place-search-results button')!.click());
   submit();

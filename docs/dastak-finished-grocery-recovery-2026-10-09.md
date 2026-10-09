@@ -35,4 +35,19 @@ old purchase against a newly refilled Bucket, removing matching new items.
 - Tests use mock clients. No real order submitted, cancelled, confirmed or paid.
 - Only Customer needs deployment. Unrelated dirty documents/assets remain untouched.
 
-Final test totals and production identity are recorded after release.
+## Release
+
+- Customer production READY at https://dastak-customer.vercel.app/.
+- Built source `f4e3766862f21a00732308d93ce2f99d2e7936e7`;
+  deployment `dpl_SX9L8a7uB3ahaeVa4fQEQu648gqb`.
+- Production HTML confirmed SHA, Customer variant, production environment and
+  deployment identity. Error-level deployment log scan returned no entries.
+- All 148 test files / 1,045 tests passed. TypeScript, changed-file ESLint and
+  production build passed. Existing 3D chunk-size warnings remain.
+- Stabilized test-only asynchronous fixtures: wait for request fingerprinting,
+  provide repeatable autocomplete results and target the actual directions link
+  rather than the first map anchor. No additional application code was changed.
+- No real new order was placed to prove merchant receipt. The full Customer-root
+  regression proves a fresh authenticated submission intent after explicit reset
+  and Reserve clicks; actual merchant delivery still uses existing server eligibility.
+- No database changes, merchant/delivery redeployment or Git push.

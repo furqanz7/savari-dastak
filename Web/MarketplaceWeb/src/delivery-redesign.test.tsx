@@ -190,7 +190,7 @@ describe("Delivery rider workspace interactions", () => {
     const fix: PositionFix = { latitude: 12.69, longitude: 78.63, accuracyMeters: 12, timestamp: Date.now(), recordedAt: date };
     await render(<DeliveryRouteContext destination={missionDestination(base, null)} gps="tracking" peekLocation={() => fix} />);
     expect(host.textContent).toContain("128 Market Street");
-    expect(host.querySelector('a')?.href).toContain("https://www.google.com/maps/dir/");
+    expect(host.querySelector<HTMLAnchorElement>('a[href^="https://www.google.com/maps/dir/"]')?.href).toContain("https://www.google.com/maps/dir/");
     const initialSource = host.querySelector('iframe')?.src;
     await act(async () => vi.advanceTimersByTime(5_000)); expect(host.querySelector('iframe')?.src).toBe(initialSource);
     await click(button("My position")); expect(host.textContent).toContain("Live GPS · foreground tracking");
