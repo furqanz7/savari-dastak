@@ -23,7 +23,7 @@ function channelsFixture() {
   return Channel;
 }
 beforeEach(() => { vi.stubGlobal("localStorage", cartStorageFixture()); vi.stubGlobal("navigator", { locks: checkoutLocksFixture() }); vi.stubGlobal("BroadcastChannel", channelsFixture()); });
-afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("single persisted Reimagined cart owner", () => {
   it("moves editing between mounted tabs, restores the latest cart, and blocks the previous owner", async () => {
     saveCustomerCart("a", { retail: { rice: 3 }, food: [] }); mount("a");
@@ -53,13 +53,41 @@ describe("single persisted Reimagined cart owner", () => {
     expect(current.canEditCart).toBe(true); expect(current.state.shopping.retail.rice).toBe(5);
     expect(current.cartIssue).toBeUndefined();
   });
+  it("releases a hidden tab's lock and restores the latest cart when visible again", async () => {
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    visibility.mockReturnValue("visible");
+    saveCustomerCart("a", { retail: { rice: 3 }, food: [] }); mount("a");
+    expect(current.canEditCart).toBe(true);
+    visibility.mockReturnValue("hidden");
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    expect(current.canEditCart).toBe(false);
+    act(() => current.dispatch({ type: "setGroceryQuantity", skuId: "rice", quantity: 99 }));
+    await navigator.locks.request("dastak:v1-cart:a:reimagined-editor", { ifAvailable: true }, lock => {
+      expect(lock).not.toBeNull();
+      saveCustomerCart("a", { retail: { rice: 5 }, food: [] });
+    });
+    visibility.mockReturnValue("visible");
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    expect(current.canEditCart).toBe(true); expect(current.state.shopping.retail.rice).toBe(5);
+    expect(current.cartIssue).toBeUndefined();
+  });
+  it("does not acquire or queue editing when mounted in a background tab", async () => {
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    visibility.mockReturnValue("hidden"); mount("a");
+    await act(async () => current.requestCartEditing());
+    expect(current.canEditCart).toBe(false);
+    await navigator.locks.request("dastak:v1-cart:a:reimagined-editor", { ifAvailable: true }, lock => expect(lock).not.toBeNull());
+    visibility.mockReturnValue("visible");
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    expect(current.canEditCart).toBe(true);
+  });
   it("explains an unresponsive older owner without stealing its lock or erasing the cart", async () => {
     vi.useFakeTimers();
     let release!: () => void;
     const held = navigator.locks.request("dastak:v1-cart:a:reimagined-editor", {}, async () => new Promise<void>(resolve => { release = resolve; }));
     saveCustomerCart("a", { retail: { rice: 3 }, food: [] }); mount("a");
     await act(async () => { current.requestCartEditing(); vi.advanceTimersByTime(1500); });
-    expect(current.canEditCart).toBe(false); expect(current.cartIssue).toContain("older tab");
+    expect(current.canEditCart).toBe(false); expect(current.cartIssue).toContain("older Dastak page");
     expect(loadCustomerCart("a").retail.rice).toBe(3);
     await act(async () => { release(); await held; });
     expect(current.canEditCart).toBe(true); expect(current.cartIssue).toBeUndefined();

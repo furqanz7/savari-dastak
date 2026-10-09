@@ -9,7 +9,7 @@ function restore(accountId: string, storage: StorageAdapter) {
   }) };
 }
 
-// Sole cart owner while Reimagined is mounted. Uses the existing v2 key
+// Sole cart owner while Reimagined is visible. Uses the existing v2 key
 // and serializer, so returning to the existing UI restores the same shopping.
 export function usePersistedReimaginedState(accountId: string, storage?: StorageAdapter) {
   const liveAccount = useRef<string | undefined>(accountId);
@@ -42,7 +42,7 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
       release?.(); release = undefined;
     };
     const acquire = (handoff = false) => {
-      if (closed || pageAway || editing.current || !navigator.locks) return;
+      if (closed || pageAway || document.visibilityState === "hidden" || editing.current || !navigator.locks) return;
       controller?.abort();
       clearTimeout(waitingTimer);
       const attempt = new AbortController();
@@ -50,11 +50,11 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
       setCartIssue(handoff ? "Moving cart editing to this tab…" : "Checking cart editing…");
       waitingTimer = setTimeout(() => {
         if (!closed && !attempt.signal.aborted && !editing.current) {
-          setCartIssue("Your cart is open in another tab. Choose Edit cart in this tab. If an older tab does not respond, refresh or close that tab.");
+          setCartIssue("Cart editing is waiting to become available. Choose Edit cart in this tab to try again. An older Dastak page may need refreshing, even if its cart is closed.");
         }
       }, 1500);
       void navigator.locks.request(`${key}:reimagined-editor`, { mode: "exclusive", signal: attempt.signal }, async lock => {
-        if (closed || pageAway || attempt.signal.aborted) return;
+        if (closed || pageAway || document.visibilityState === "hidden" || attempt.signal.aborted) return;
         if (!lock) throw new Error("Cart editing is unavailable. Try again.");
         clearTimeout(waitingTimer);
         // Never take ownership using this tab's stale snapshot of the cart.
@@ -102,13 +102,23 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
     window.addEventListener("storage", sync);
     const leave = () => { pageAway = true; relinquish(); };
     const resume = () => { pageAway = false; acquire(); };
+    // Background tabs may be suspended before receiving a handoff message.
+    // Release eagerly on visibility change, not only when the page closes.
+    const visibility = () => {
+      if (document.visibilityState === "hidden") {
+        relinquish();
+        setCartIssue(undefined);
+      } else if (!pageAway) acquire(true);
+    };
     window.addEventListener("pagehide", leave);
     window.addEventListener("pageshow", resume);
+    document.addEventListener("visibilitychange", visibility);
     return () => {
       closed = true; editing.current = false; claimEditing.current = undefined;
       clearTimeout(waitingTimer); controller?.abort(); release?.(); channel?.close();
       window.removeEventListener("storage", sync);
       window.removeEventListener("pagehide", leave); window.removeEventListener("pageshow", resume);
+      document.removeEventListener("visibilitychange", visibility);
     };
   }, [accountId, storage]);
   const dispatch = useCallback((action: ReimaginedAction) => {
