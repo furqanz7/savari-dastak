@@ -106,7 +106,7 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
             <legend>Doorstep details</legend>
             <small>Help the delivery partner find the right entrance without calling.</small>
             <div>
-              <label><span>House, flat or building</span><input value={building} maxLength={180} onChange={(event) => setBuilding(event.target.value)} placeholder="For example, 12 Mandi Street" required autoComplete="street-address" /></label>
+              <label><span>House, flat or building</span><input value={building} maxLength={180} onChange={(event) => setBuilding(event.target.value)} placeholder="For example, Flat 4B, Sunrise Apartments" required autoComplete="street-address" /></label>
               <label><span>Floor or unit <small>Optional</small></span><input value={floor} maxLength={80} onChange={(event) => setFloor(event.target.value)} placeholder="For example, second floor" /></label>
               <label><span>Nearby landmark <small>Optional</small></span><input value={landmark} maxLength={110} onChange={(event) => setLandmark(event.target.value)} placeholder="For example, opposite the post office" /></label>
               <label><span>Delivery instructions <small>Optional</small></span><textarea value={deliveryNotes} maxLength={240} onChange={(event) => setDeliveryNotes(event.target.value)} placeholder="Gate, bell, security or hand-off instructions" rows={3} /></label>
