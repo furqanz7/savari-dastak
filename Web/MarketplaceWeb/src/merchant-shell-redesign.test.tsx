@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MerchantOrdersView } from "./MerchantOrdersView";
 import { snapshotAccountProfile, updateAccountProfile } from "./accountProfile";
 import { discoverDefaultMerchantBranches, merchantBranchStorageKey } from "./merchantBranchContext";
+import { getV1MerchantOpportunities } from "./dastakV1";
+vi.mock("./dastakV1", async original => ({ ...await original<typeof import("./dastakV1")>(), getV1MerchantOpportunities: vi.fn() }));
 
 vi.mock("./merchantBranchContext", async (original) => ({ ...await original<typeof import("./merchantBranchContext")>(), discoverDefaultMerchantBranches: vi.fn() }));
 vi.mock("./accountProfile", async (original) => ({ ...await original<typeof import("./accountProfile")>(), snapshotAccountProfile: vi.fn(), updateAccountProfile: vi.fn() }));
@@ -27,10 +29,11 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() });
   vi.stubGlobal("scrollTo", vi.fn());
   vi.mocked(discoverDefaultMerchantBranches).mockResolvedValue({ branches, failures: [] });
+  vi.mocked(getV1MerchantOpportunities).mockResolvedValue([]);
   vi.mocked(snapshotAccountProfile).mockResolvedValue({ displayName: "Test Merchant", phoneNumber: "+919876543210" });
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); });
 async function mount(accountId = "merchant-one") {
   await act(async () => root.render(<MerchantOrdersView accessToken="test-token" accountId={accountId} client={{} as SupabaseClient} displayName="Test Merchant" email="test@example.com" supabaseUrl="https://example.supabase.co" publishableKey="public" webPushPublicKey="public-push" onSignOut={signOut} />));
 }
@@ -38,6 +41,21 @@ function nav(label: string) { return [...host.querySelectorAll<HTMLButtonElement
 async function click(element: HTMLElement) { await act(async () => element.click()); }
 
 describe("Merchant redesigned shell", () => {
+  it("keeps authenticated receiving heartbeats while hidden, pauses offline and reconnects promptly", async () => {
+    vi.useFakeTimers(); vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    await mount(); expect(getV1MerchantOpportunities).toHaveBeenCalledOnce();
+    await act(async () => vi.advanceTimersByTimeAsync(30_000)); expect(getV1MerchantOpportunities).toHaveBeenCalledTimes(2);
+    online.mockReturnValue(false);
+    await act(async () => vi.advanceTimersByTimeAsync(60_000)); expect(getV1MerchantOpportunities).toHaveBeenCalledTimes(2);
+    online.mockReturnValue(true);
+    await act(async () => window.dispatchEvent(new Event("online"))); expect(getV1MerchantOpportunities).toHaveBeenCalledTimes(3);
+  });
+  it("never overlaps slow heartbeat requests", async () => {
+    vi.useFakeTimers(); vi.mocked(getV1MerchantOpportunities).mockReturnValue(new Promise(() => {}));
+    await mount(); await act(async () => vi.advanceTimersByTimeAsync(120_000));
+    expect(getV1MerchantOpportunities).toHaveBeenCalledOnce();
+  });
   it("uses named operational navigation and unmounts inactive sections", async () => {
     await mount();
     expect([...host.querySelectorAll(".merchant-navigation button")].map((node) => node.textContent)).toEqual(["Orders", "Store", "Earnings", "Account"]);

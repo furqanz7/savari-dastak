@@ -19,10 +19,10 @@ vi.mock("./useReimaginedWishlist", () => ({ useReimaginedWishlist: () => ({ item
 vi.mock("./useDastakWebPush", () => ({ useDastakWebPush: () => ({ shouldPrompt: false }) }));
 import { submitV1Order, commitV1LaunchPayment, getV1Order, type V1Order } from "./dastakV1";
 vi.mock("./dastakV1", async importOriginal => ({ ...await importOriginal<typeof import("./dastakV1")>(), submitV1Order: vi.fn(), commitV1LaunchPayment: vi.fn(), getV1Order: vi.fn() }));
-vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: CustomerSection; initialOrderId?: string; initialMerchantOrderId?: string; embedded?: boolean; onViewChange?: (section: CustomerSection) => void; onReorder?: (order: V1Order) => void; onAddressesChanged?: () => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => {
+vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: CustomerSection; initialOrderId?: string; initialMerchantOrderId?: string; embedded?: boolean; onViewChange?: (section: CustomerSection) => void; onReorder?: (order: V1Order) => void; onOrderUpdated?: (order: V1Order) => void; onAddressesChanged?: () => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => {
   const { initialSection, onViewChange } = props;
   useEffect(() => { if (initialSection) onViewChange?.(initialSection); }, [initialSection, onViewChange]);
-  return <section aria-label="Operational account workspace" data-order-id={props.initialOrderId} data-merchant-order-id={props.initialMerchantOrderId}>{props.initialSection}<button type="button" onClick={() => props.onViewChange?.("payments")}>Fixture Payments</button><button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onReorder?.(mixedOrderFixture())}>Fixture mixed order</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button><button type="button" onClick={props.onAddressesChanged}>Fixture address update</button></section>;
+  return <section aria-label="Operational account workspace" data-order-id={props.initialOrderId} data-merchant-order-id={props.initialMerchantOrderId}><button type="button" onClick={() => props.onOrderUpdated?.({id: fixtureId(93),status: "CANCELLED_PREPAYMENT",version: 3} as V1Order)}>Fixture cancelled order</button>{props.initialSection}<button type="button" onClick={() => props.onViewChange?.("payments")}>Fixture Payments</button><button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onReorder?.(mixedOrderFixture())}>Fixture mixed order</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button><button type="button" onClick={props.onAddressesChanged}>Fixture address update</button></section>;
 } }));
 vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }));
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
@@ -64,6 +64,17 @@ beforeEach(() => {
 });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("removes cancelled finding-items feedback immediately without modifying shopping", async () => {
+    const retry = vi.fn();
+    vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: { id: fixtureId(93), service: "grocery" }, activeCount: 1, label: "Finding your items", error: undefined, storageIssue: undefined, retry });
+    const shopping = { retail: { [fixtureId(6)]: 1 }, food: [] }; saveCustomerCart("a", shopping);
+    mount(); expect(host.textContent).toContain("Finding your items");
+    await act(async () => click("Orders"));
+    click("Fixture cancelled order");
+    expect(host.textContent).not.toContain("Finding your items");
+    expect(retry).toHaveBeenCalledOnce(); expect(loadCustomerCart("a")).toEqual(shopping);
+    click("Fixture cancelled order"); expect(retry).toHaveBeenCalledOnce();
+  });
   it("refreshes the exact saved-cart restaurant after reload even when it is outside the discovery page", async () => {
     const menu = foodMenuFixture(fixtureId(999)); const item = menu.categories[0].items[0];
     const findRestaurant = vi.fn().mockResolvedValue(menu);

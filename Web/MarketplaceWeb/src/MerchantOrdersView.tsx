@@ -89,19 +89,27 @@ export function MerchantOrdersView({
   // the branch reachable while this authenticated merchant workspace is open.
   useEffect(() => {
     let active = true;
+    let running = false;
     const heartbeat = () => {
+      if (!active || running || navigator.onLine === false) return;
+      running = true;
       void getV1MerchantOpportunities({ ...auth, limit: 1 }).catch(() => {
         // Heartbeats are advisory; the existing workspace remains usable when
         // the order service is temporarily unavailable.
-      });
+      }).finally(() => { running = false; });
     };
     heartbeat();
     const timer = window.setInterval(() => {
-      if (active && document.visibilityState === "visible") heartbeat();
-    }, 60_000);
+      heartbeat();
+    }, 30_000);
+    const reconnect = () => { heartbeat(); };
+    window.addEventListener("online", reconnect);
+    document.addEventListener("visibilitychange", reconnect);
     return () => {
       active = false;
       window.clearInterval(timer);
+      window.removeEventListener("online", reconnect);
+      document.removeEventListener("visibilitychange", reconnect);
     };
   }, [auth]);
 

@@ -84,6 +84,7 @@ type Props = DastakV1Auth & {
   // mounting a second cart writer inside the Reimagined session.
   onOrderAgainInExisting?: () => void;
   onReorderInReimagined?: (order: V1Order) => void;
+  onOrderUpdated?: (order: V1Order) => void;
   presentation?: "reimagined";
 };
 
@@ -175,6 +176,8 @@ export function DastakV1CustomerExperience(props: Props) {
   const [showingAddressBook, setShowingAddressBook] = useState(false);
   const [editingAddress, setEditingAddress] = useState<CustomerDeliveryAddress | null>();
   const [selectedOrder, setSelectedOrder] = useState<V1Order>();
+  const onOrderUpdated = props.onOrderUpdated;
+  useEffect(() => { if (selectedOrder) onOrderUpdated?.(selectedOrder); }, [selectedOrder, onOrderUpdated]);
   const [pendingReorder, setPendingReorder] = useState<V1Order>();
   const submissionKeys = useRef(new Map<string, string>());
   const ordersRequestVersion = useRef(0);

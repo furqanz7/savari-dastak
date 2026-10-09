@@ -259,13 +259,17 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
       fallback = window.setInterval(requestReconciliation, merchantFallbackCadence(realtimeHealth));
     };
     start();
-    document.addEventListener("visibilitychange", start);
-    window.addEventListener("online", start);
+    const resume = () => {
+      start();
+      if (shouldRunMerchantFallback(document.visibilityState, navigator.onLine !== false)) requestReconciliation();
+    };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("online", resume);
     window.addEventListener("offline", stop);
     return () => {
       stop();
-      document.removeEventListener("visibilitychange", start);
-      window.removeEventListener("online", start);
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("online", resume);
       window.removeEventListener("offline", stop);
     };
   }, [realtimeHealth, requestReconciliation]);

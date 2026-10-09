@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getV1ActiveOrders, getV1Order, type DastakV1Auth, type V1Order, type V1ActiveOrderHint } from "./dastakV1";
 import type { ReimaginedState } from "./reimaginedState";
 
@@ -38,6 +38,7 @@ export function useReimaginedActiveOrder(session: Session, incoming: ReimaginedS
   const [hint, setHint] = useState<{ key: string; order?: Hint }>(() => ({ key, order: validHint(incoming) ? incoming : readHint(key) }));
   const [visible, setVisible] = useState(() => document.visibilityState !== "hidden");
   const [revision, setRevision] = useState(0);
+  const retry = useCallback(() => setRevision(value => value + 1), []);
   const [resource, setResource] = useState<{ context: string; order?: V1Order | V1ActiveOrderHint; hint?: Hint; count?: number; error?: unknown }>();
   const latest = useRef<{ owner: string; order: V1Order | V1ActiveOrderHint } | undefined>(undefined);
   const lastSaved = useRef<{ key: string; order: Hint } | undefined>(undefined);
@@ -123,6 +124,6 @@ export function useReimaginedActiveOrder(session: Session, incoming: ReimaginedS
       : (current?.count ?? 0) > 1 ? `${current!.count} active orders — view Orders` : order ? labels[order.status] ?? "View order status" : "Checking your order status…",
     error: current?.error,
     storageIssue: storageIssue?.key === key ? storageIssue.message : undefined,
-    retry: () => setRevision(value => value + 1),
+    retry,
   };
 }
