@@ -12,6 +12,10 @@ export type CheckoutClients = { submit: typeof submitV1Order; commit: typeof com
 const clients: CheckoutClients = { submit: submitV1Order, commit: commitV1LaunchPayment, read: getV1Order };
 const committedStatuses = new Set(["PAID", "PREPARING", "PICKUP_IN_PROGRESS", "OUT_FOR_DELIVERY", "DELIVERED"]);
 
+export function isFinishedGroceryOrder(order: V1Order): boolean {
+  return order.status === "DELIVERED" || order.status === "CANCELLED";
+}
+
 export function groceryOrderSubmission(draft: GroceryCheckoutDraft): V1OrderSubmission {
   const entries = Object.entries(draft.retail).sort(([left], [right]) => left.localeCompare(right));
   if (!entries.length || entries.some(([id, quantity]) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) || !Number.isInteger(quantity) || quantity < 1 || quantity > 99)) throw new Error("Review the Grocery quantities before checkout.");
@@ -160,12 +164,14 @@ export class ReimaginedGroceryCheckout {
     return this.exclusive(async () => {
       // A local timer, old quote or transient failure cannot prove an order is terminal.
       const order = await this.refreshInside();
-      if (!["PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(order.status)
+      if (!isFinishedGroceryOrder(order) && (!["PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(order.status)
         || order.launchPayment?.reservationState !== "EXPIRED"
-        || order.launchPayment.state !== "RESERVATION_EXPIRED") throw new Error("The server has not closed this unpaid reservation. Your Bucket and checkout attempt are retained.");
+        || order.launchPayment.state !== "RESERVATION_EXPIRED")) throw new Error("The server has not closed this reservation. Your Bucket and checkout attempt are retained.");
       this.journal?.clear();
       this.attempt = undefined; this.acknowledged = false;
-      // This only forgets a server-closed attempt. A new reservation requires a new explicit click.
+      // Forget only the server-closed checkout pointer, not current cart items.
+      // Finished-order recovery must not acknowledge an old purchase against a
+      // newly refilled Bucket. A new reservation requires a separate explicit click.
     });
   }
 }

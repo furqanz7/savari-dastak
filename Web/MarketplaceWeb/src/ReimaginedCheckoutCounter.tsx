@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "react";
 import { formatV1Price, type V1Order } from "./dastakV1";
 import { customerDataIssue } from "./customerDataState";
-import { canConfirmGroceryOrder, type GroceryCheckoutDraft, type ReimaginedGroceryCheckout } from "./reimaginedCheckout";
+import { canConfirmGroceryOrder, isFinishedGroceryOrder, type GroceryCheckoutDraft, type ReimaginedGroceryCheckout } from "./reimaginedCheckout";
 import type { ReimaginedAction } from "./reimaginedState";
 
 export function GroceryPaymentNotice() {
@@ -51,7 +51,7 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, ca
         setOrder(checkout.order);
       }
       // Reconcile a lost confirmation response using the authoritative refreshed order.
-      if (operation !== "confirm" && checkout.committed) {
+      if (operation !== "confirm" && checkout.committed && checkout.order && !isFinishedGroceryOrder(checkout.order)) {
         await checkout.confirm(acknowledge);
       }
     } catch (issue) {
@@ -65,10 +65,10 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, ca
   return <section className="reimagined-checkout-confirmation" aria-label="Grocery checkout confirmation">
     <h3>Payment & confirmation</h3>
     <GroceryPaymentNotice />
-    {(order ? deliveryIssue : submissionIssue ?? deliveryIssue) ? <p role="status">{order ? deliveryIssue : submissionIssue ?? deliveryIssue}</p> : null}
+    {(!order || !isFinishedGroceryOrder(order)) && (order ? deliveryIssue : submissionIssue ?? deliveryIssue) ? <p role="status">{order ? deliveryIssue : submissionIssue ?? deliveryIssue}</p> : null}
     {!enabled ? <><p>Order submission remains disabled until recovery and authenticated end-to-end verification are complete.</p><button type="button" disabled>Checkout integration pending</button></>
       : checkout.recoveryIssue ? <p role="alert">{checkout.recoveryIssue}</p>
-      : !order && checkout.recoverableOrderId ? <><p>A saved Grocery reservation needs a server status check. No new order will be created.</p><button type="button" disabled={blocked} onClick={() => void run("refresh")}>Recover Grocery reservation</button></>
+      : !order && checkout.recoverableOrderId ? <><p>Check your previously saved Grocery order before starting another. This does not send a new request to merchants.</p><button type="button" disabled={blocked} onClick={() => void run("refresh")}>Check saved Grocery order</button></>
       : !order ? <><p>{checkout.hasPendingAttempt ? "An earlier attempt is unresolved. Retry the same Bucket, recipient and address using its saved request key." : "Reserve this Grocery Bucket to obtain the server-calculated total. Food items are not included."}</p><button type="button" disabled={!draft || blocked || Boolean(submissionIssue && !checkout.hasPendingAttempt)} onClick={() => void run("reserve")}>{busy ? "Reserving Grocery order…" : "Reserve Grocery order"}</button></>
       : <><h4>{order.displayOrderNumber}</h4><ServerOrderDelivery order={order} /><dl className="reimagined-server-bill" aria-label="Server-confirmed Grocery bill">
         {([
@@ -78,7 +78,7 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, ca
         <div className="reimagined-server-total"><dt>Server order total: </dt><dd>{formatV1Price(order.price.totalPaise)}</dd></div>
       </dl><p className="reimagined-checkout-status">Status: {order.status.replaceAll("_", " ").toLowerCase()}</p>
         <button type="button" disabled={blocked} onClick={() => void run("refresh")}>Refresh order status</button>
-        <button type="button" disabled={blocked || Boolean(deliveryIssue && !checkout.committed) || !canConfirmGroceryOrder(order, now)} onClick={() => void run("confirm")}>Confirm Grocery order</button>
+        {isFinishedGroceryOrder(order) ? <><p role="status">This is a previous {order.status === "DELIVERED" ? "delivered" : "cancelled"} order, not a new merchant request. Return to your Bucket to place a new order.</p><button type="button" disabled={blocked} onClick={() => void run("restart")}>Return to Bucket for a new order</button></> : <button type="button" disabled={blocked || Boolean(deliveryIssue && !checkout.committed) || !canConfirmGroceryOrder(order, now)} onClick={() => void run("confirm")}>Confirm Grocery order</button>}
         {["PAYMENT_EXPIRED", "CANCELLED_PREPAYMENT"].includes(order.status) ? <><p>This unpaid reservation is closed. Your Bucket is retained.</p><button type="button" disabled={blocked} onClick={() => void run("restart")}>Recheck closed reservation and return to Bucket</button></> : null}
         {onOpenOrders ? <button type="button" onClick={() => onOpenOrders(order.id)}>Open Orders to review or manage this reservation</button> : <a href={ordersUrl}>Open Orders to review or manage this reservation</a>}</>}
     {error ? <p role="alert">{error}</p> : null}

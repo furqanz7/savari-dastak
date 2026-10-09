@@ -165,6 +165,14 @@ describe("durable Grocery checkout recovery", () => {
     expect(api.submit.mock.calls.map(([input]) => input.idempotencyKey)).toEqual(["key-1", "key-1"]);
     expect(api.submit.mock.calls[1][0].accessToken).toBe("renewed");
   });
+  it("does not discard a still-active order when asked to return to a new Bucket", async () => {
+    const journal = checkoutJournal("a", auth.supabaseUrl, cartStorageFixture());
+    const { api, checkout } = setup(journal); await checkout.reserve(draft);
+    api.read.mockResolvedValue(order());
+    await expect(checkout.restartAfterTerminalReservation()).rejects.toThrow("has not closed");
+    expect(journal.read()?.orderId).toBe(order().id);
+    expect(api.submit).toHaveBeenCalledOnce(); expect(api.commit).not.toHaveBeenCalled();
+  });
   it("recovers an existing reservation by order ID instead of submitting it again", async () => {
     const storage = cartStorageFixture(); const journal = checkoutJournal("a", auth.supabaseUrl, storage);
     const { api, checkout } = setup(journal); await checkout.reserve(draft);

@@ -54,14 +54,14 @@ describe("Grocery counter controls", () => {
     await act(async () => button("Refresh order status").click());
     expect(checkout.order).toBeUndefined();
     expect(host.textContent).toContain("does not match this Grocery Bucket");
-    expect(button("Recover Grocery reservation")).toBeTruthy();
+    expect(button("Check saved Grocery order")).toBeTruthy();
     expect(api.commit).not.toHaveBeenCalled(); expect(dispatch).not.toHaveBeenCalled();
   });
   it("recovers a saved reservation by reading its status without submitting another order", async () => {
     const journal = checkoutJournal("account", "https://example.supabase.co", cartStorageFixture());
     journal.write({ version: 1, fingerprint: "a".repeat(64), retail: { [skuId]: 1 }, submitKey: "submit", commitKey: "commit", orderId: reserved.id, orderVersion: reserved.version });
     const { api } = setup(true, true, journal);
-    await act(async () => button("Recover Grocery reservation").click());
+    await act(async () => button("Check saved Grocery order").click());
     expect(api.read).toHaveBeenCalledTimes(1);
     expect(api.submit).not.toHaveBeenCalled();
     expect(api.commit).not.toHaveBeenCalled();
@@ -78,5 +78,36 @@ describe("Grocery counter controls", () => {
     expect(button("Reserve Grocery order")).toBeTruthy();
     expect(api.read).toHaveBeenCalledTimes(2);
     expect(api.submit).toHaveBeenCalledOnce(); expect(api.commit).not.toHaveBeenCalled(); expect(dispatch).not.toHaveBeenCalled();
+  });
+  it.each(["DELIVERED", "CANCELLED"] as const)("releases a saved %s order without consuming the current Bucket or sending another request", async status => {
+    const journal = checkoutJournal("account", "https://example.supabase.co", cartStorageFixture());
+    journal.write({ version: 1, fingerprint: "a".repeat(64), retail: { [skuId]: 1 }, submitKey: "old-submit", commitKey: "old-commit", orderId: reserved.id, orderVersion: reserved.version });
+    const { api, dispatch, checkout } = setup(true, true, journal);
+    const finished = { ...reserved, status, version: 8, launchPayment: { ...reserved.launchPayment!, reservationState: "COMMITTED", state: "PAYMENT_COLLECTED", canCommit: false } } as V1Order;
+    api.read.mockResolvedValue(finished);
+    await act(async () => button("Check saved Grocery order").click());
+    expect(host.textContent).toContain(`previous ${status.toLowerCase()} order`);
+    expect(button("Confirm Grocery order")).toBeUndefined();
+    expect(api.submit).not.toHaveBeenCalled(); expect(api.commit).not.toHaveBeenCalled(); expect(dispatch).not.toHaveBeenCalled();
+    await act(async () => button("Return to Bucket for a new order").click());
+    expect(api.read).toHaveBeenCalledTimes(2); expect(journal.read()).toBeUndefined(); expect(checkout.hasPendingAttempt).toBe(false);
+    expect(button("Reserve Grocery order")).toBeTruthy();
+    expect(api.submit).not.toHaveBeenCalled(); expect(api.commit).not.toHaveBeenCalled(); expect(dispatch).not.toHaveBeenCalled();
+    api.submit.mockResolvedValue({ ...reserved, id: "33333333-3333-4333-8333-333333333333", displayOrderNumber: "TEST-NEW" });
+    await act(async () => button("Reserve Grocery order").click());
+    expect(api.submit).toHaveBeenCalledOnce();
+    expect(api.submit.mock.calls[0][0].idempotencyKey).not.toBe("old-submit");
+    expect(api.submit.mock.calls[0][0].order.lines).toEqual([{ lineType: "RETAIL_SKU", skuId, quantity: 1 }]);
+    expect(host.textContent).toContain("TEST-NEW");
+  });
+  it("retains a finished attempt if its recheck fails, without replacement submission", async () => {
+    const journal = checkoutJournal("account", "https://example.supabase.co", cartStorageFixture());
+    journal.write({ version: 1, fingerprint: "a".repeat(64), retail: { [skuId]: 1 }, submitKey: "old-submit", commitKey: "old-commit", orderId: reserved.id, orderVersion: reserved.version });
+    const { api, dispatch } = setup(true, true, journal);
+    api.read.mockResolvedValueOnce({ ...reserved, status: "DELIVERED", version: 8 }).mockRejectedValueOnce(new Error("Network unavailable"));
+    await act(async () => button("Check saved Grocery order").click());
+    await act(async () => button("Return to Bucket for a new order").click());
+    expect(journal.read()?.orderId).toBe(reserved.id); expect(host.textContent).toContain("Network unavailable");
+    expect(api.submit).not.toHaveBeenCalled(); expect(api.commit).not.toHaveBeenCalled(); expect(dispatch).not.toHaveBeenCalled();
   });
 });
