@@ -57,8 +57,12 @@ describe("checkout estimate lifecycle", () => {
       lines, restaurantBranchId: null, pricingVersion: 1, deliveryDistanceMeters: 1000, checkedAt: now })));
     act(() => root.render(<ReimaginedCheckoutEstimate auth={auth} location={home} lines={lines} online />));
     expect(host.textContent).toContain("Not confirmed"); expect(host.textContent).not.toContain("₹0.00");
+    expect(host.textContent).toContain("Platform fee"); expect(host.textContent).not.toContain("2%");
     await tick();
-    expect(host.textContent).toContain("Delivery₹15.00"); expect(host.textContent).toContain("Platform fee (2%)₹2.30");
+    expect(host.textContent).toContain("Delivery₹15.00"); expect(host.textContent).toContain("Platform fee₹2.30");
     expect(host.textContent).toContain("Estimated total₹117.30"); expect(host.textContent).toContain("No delivery partner");
+    expect(host.querySelector("p")?.textContent).toBe("Tax is included");
+    expect(host.textContent).not.toContain("2%"); expect(host.textContent).not.toContain("merchant pickup locations");
+    expect(host.textContent).not.toContain("secured order bill");
   });
 });
