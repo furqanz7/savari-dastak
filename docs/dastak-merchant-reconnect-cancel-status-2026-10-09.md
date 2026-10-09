@@ -48,4 +48,21 @@ Reimagined bottom status bar had an independent minute-long polling cycle.
   or offline app still expires real merchant reachability; no fake liveness added.
 - Unrelated dirty docs/assets and pending catalogue activation are excluded.
 
-Release identities and final verification are recorded after deployment.
+## Production release
+
+- Only migration `20261009182754_reconnect_pending_merchant_requests.sql` applied
+  to linked project `zmtsolkfxlrxepshnjdf`; unrelated catalogue activation excluded.
+- Native reconnect checks passed before and after application, including Wave 2
+  exact-SKU subset, actual Merchant RPC visibility, deadlines, events and no duplicates.
+- All 148 frontend test files / 1,048 tests passed; TypeScript, changed-file ESLint
+  and production build passed. Existing large 3D chunk warnings remain.
+- Built source `b64fc111e92723917e92dce26a7fca6bd7414cb8`:
+  - Customer READY: `dpl_Asef6GDs1P65LhaNGpJe2n2G31DX`, https://dastak-customer.vercel.app/
+  - Merchant READY: `dpl_6po2RXWtW2TUFQnG9yzaSEd1EBgy`, https://dastak-merchant.vercel.app/
+- Each production HTML provenance confirmed SHA, correct role, production environment
+  and deployment identity. Error-level deployment scans returned no entries; not
+  an assessment of drains or a signed-in end-to-end real-order test.
+- Production proof: order 93 still CANCELLED_PREPAYMENT with zero requests; zero
+  persisted synthetic accounts/orders. No real cancelled order manually resent.
+- No Edge, Admin or Delivery deployment and no Git push were needed/performed.
+- Exact temporary migration staging copies removed; user-authored files preserved.
