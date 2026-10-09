@@ -50,3 +50,17 @@ unchanged. Existing service-zone geometries and country onboarding are unchanged
 - Only Customer UI needs redeployment; shared database rule serves both interfaces.
 - Unrelated pending catalogue activation migration and existing dirty docs/assets
   are excluded from this change.
+
+## Production release
+
+- Only this migration applied to linked project `zmtsolkfxlrxepshnjdf`.
+- All 34 native checks passed again after application.
+- Customer production READY at https://dastak-customer.vercel.app/.
+- Deployment: `dpl_8JbXu16tB7BXL4v8Uf5Tk5sjpxRH`.
+- Built release: `8c503d195708b7e5302ed8a8fc98bb6fab04548f`; production HTML
+  provenance confirmed that SHA, Customer variant and production environment.
+- Confirmed zero persisted fixture accounts, merchants or orders. Original
+  Vaniyambadi zone boundary hash remains `744ca4ebf5b0b83fc1bb9b7aad6d6456`.
+- Unrelated catalogue activation remains unapplied; no Git push performed.
+- Exact temporary migration staging directory removed after release. It contained
+  only copied configuration/migrations, not user-authored source files.
