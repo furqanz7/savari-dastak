@@ -56,6 +56,7 @@ service. Wider traffic requires reviewing the existing provider's usage limits.
 - Rollback proof: zero fixture accounts; exactly one original production zone;
   original boundary hash unchanged; migration objects not persisted at preflight.
 - Existing merchant-handler and onboarding migration tests: 15 passed.
+- Full frontend suite: 147 files, 1,032 tests passed.
 - Edge function type-check passed; Merchant form lint passed; web build passed.
   Existing large 3D bundle warnings are unrelated and were not changed.
 
@@ -66,4 +67,36 @@ copy are in scope. The unrelated pending catalogue-map activation migration
 must remain excluded. Customer/Admin/Delivery sites do not need redeployment
 for this additive server change. No Git push or real order is part of this task.
 
-Production activation and verification will be recorded below after success.
+## Production release
+
+- Release commit: `25b5982e946fa38d49dbb4b0915d6175ec9e1531`.
+- Linked project: `zmtsolkfxlrxepshnjdf`.
+- Dry-run listed only `20261009122717_india_wide_local_onboarding.sql`; only
+  that migration was applied. The older catalogue-map activation remains unapplied.
+- Merchant Edge function deployed, ACTIVE version 22; existing JWT verification
+  remains enabled. An unauthenticated HTTP request returned 401.
+- A real service-role, read-only RPC probe executed the new wrapper successfully
+  and rejected a nonexistent account with `profile_required`.
+- Merchant site is READY at https://dastak-merchant.vercel.app/.
+  Deployment: `dpl_6iqGczS8EZVepQvj4R64BEFRwDtn`.
+  Production build completed in approximately two minutes.
+- Established release-script checks and an independent HTTP fetch confirmed
+  the release SHA, Merchant variant, production environment and deployment ID.
+- The same 50 native SQL/PostGIS checks passed against the installed code, again
+  inside a rolled-back transaction.
+- Post-test production proof: one original zone, zero test accounts, zero
+  persisted bootstrap audit events. Original Vaniyambadi boundary MD5 remains
+  `744ca4ebf5b0b83fc1bb9b7aad6d6456`.
+- Deployment-scoped Vercel error-log search found no entries. This static site's
+  logs are not a browser-error audit; no new monitoring/drains were configured.
+- No real applications, approvals, stock, partner availability, orders or
+  payments were created/changed. No Git push performed. Existing unrelated
+  files/edits and unused staff assets were left out of this release.
+
+## Remaining operational work
+
+Actual delivery outside the existing market requires real stores and partners.
+A genuine new-city onboarding through the signed-in browser, evidence upload,
+Admin review and eventual real order has not been performed. Database workflow
+coverage was exercised with synthetic, rolled-back fixtures rather than
+manufacturing a production merchant or customer order.
