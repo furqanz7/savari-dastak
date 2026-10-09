@@ -18,6 +18,8 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
   const editing = useRef(false);
   const [editorAccount, setEditorAccount] = useState<string>();
   const [cartIssue, setCartIssue] = useState<string>();
+  const claimEditing = useRef<(() => void) | undefined>(undefined);
+  const requestCartEditing = useCallback(() => claimEditing.current?.(), []);
   const snapshot = useRef(owned);
   if (owned.accountId !== accountId) setOwned(restore(accountId, storage));
   const current = owned.accountId === accountId ? owned.state : restore(accountId, storage).state;
@@ -25,23 +27,68 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
   useEffect(() => {
     let closed = false;
     let release: (() => void) | undefined;
-    const controller = new AbortController();
+    let controller: AbortController | undefined;
+    let waitingTimer: ReturnType<typeof setTimeout> | undefined;
+    let pageAway = false;
     editing.current = false;
     setEditorAccount(undefined);
-    setCartIssue("Cart editing is held by another tab or is being checked. This view is read-only until ownership is available.");
     const key = `dastak:v1-cart:${accountId}`;
-    if (typeof navigator === "undefined" || !navigator.locks) {
-      setCartIssue("This browser cannot safely coordinate cart tabs. Cart editing is disabled.");
-    } else {
-      void navigator.locks.request(`${key}:reimagined-editor`, { mode: "exclusive", signal: controller.signal }, async lock => {
-        if (closed) return;
-        if (!lock) { setCartIssue("Another Reimagined tab owns cart editing. Close that tab, then reopen this view to edit here."); return; }
+    let channel: BroadcastChannel | undefined;
+    const relinquish = () => {
+      editing.current = false;
+      setEditorAccount(undefined);
+      clearTimeout(waitingTimer);
+      controller?.abort();
+      release?.(); release = undefined;
+    };
+    const acquire = (handoff = false) => {
+      if (closed || pageAway || editing.current || !navigator.locks) return;
+      controller?.abort();
+      clearTimeout(waitingTimer);
+      const attempt = new AbortController();
+      controller = attempt;
+      setCartIssue(handoff ? "Moving cart editing to this tab…" : "Checking cart editing…");
+      waitingTimer = setTimeout(() => {
+        if (!closed && !attempt.signal.aborted && !editing.current) {
+          setCartIssue("Your cart is open in another tab. Choose Edit cart in this tab. If an older tab does not respond, refresh or close that tab.");
+        }
+      }, 1500);
+      void navigator.locks.request(`${key}:reimagined-editor`, { mode: "exclusive", signal: attempt.signal }, async lock => {
+        if (closed || pageAway || attempt.signal.aborted) return;
+        if (!lock) throw new Error("Cart editing is unavailable. Try again.");
+        clearTimeout(waitingTimer);
+        // Never take ownership using this tab's stale snapshot of the cart.
         const shopping = loadCustomerCartStrict(accountId, storage);
         const next = { accountId, state: { ...snapshot.current.state, shopping, bucketAcquired: snapshot.current.state.bucketAcquired || Object.keys(shopping.retail).length > 0 } };
         snapshot.current = next; setOwned(next);
         editing.current = true; setEditorAccount(accountId); setCartIssue(undefined);
         await new Promise<void>(resolve => { release = resolve; });
-      }).catch(() => { if (!closed) { editing.current = false; setCartIssue("Cart ownership is unavailable. Cart editing is disabled."); } });
+      }).catch((issue: unknown) => {
+        if (!closed && !attempt.signal.aborted && controller === attempt) {
+          clearTimeout(waitingTimer);
+          editing.current = false; setEditorAccount(undefined);
+          setCartIssue(issue instanceof Error ? issue.message : "Cart editing is unavailable. Try again.");
+        }
+      });
+      // Cooperative handoff: the current owner stops writes before releasing
+      // the exclusive Web Lock. Do not steal a lock from an in-flight editor.
+      if (handoff) channel?.postMessage("request-editing");
+    };
+    if (typeof navigator === "undefined" || !navigator.locks) {
+      setCartIssue("This browser cannot safely coordinate cart tabs. Cart editing is disabled.");
+    } else {
+      try {
+        if (typeof BroadcastChannel !== "undefined") {
+          channel = new BroadcastChannel(`${key}:editor-handoff`);
+          channel.onmessage = event => {
+            if (closed || event.data !== "request-editing") return;
+            relinquish();
+            setCartIssue("Cart editing moved to another tab. Choose Edit cart in this tab to move it back.");
+          };
+        }
+      } catch { /* Web Locks still protect the cart if messaging is unavailable. */ }
+      claimEditing.current = () => acquire(true);
+      acquire();
     }
     const sync = (event: StorageEvent) => {
       if (event.key !== key && event.key !== null) return;
@@ -53,7 +100,16 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
       snapshot.current = next; setOwned(next);
     };
     window.addEventListener("storage", sync);
-    return () => { closed = true; editing.current = false; controller.abort(); release?.(); window.removeEventListener("storage", sync); };
+    const leave = () => { pageAway = true; relinquish(); };
+    const resume = () => { pageAway = false; acquire(); };
+    window.addEventListener("pagehide", leave);
+    window.addEventListener("pageshow", resume);
+    return () => {
+      closed = true; editing.current = false; claimEditing.current = undefined;
+      clearTimeout(waitingTimer); controller?.abort(); release?.(); channel?.close();
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("pagehide", leave); window.removeEventListener("pageshow", resume);
+    };
   }, [accountId, storage]);
   const dispatch = useCallback((action: ReimaginedAction) => {
     if (liveAccount.current !== accountId) return;
@@ -99,6 +155,7 @@ export function usePersistedReimaginedState(accountId: string, storage?: Storage
     }
     const next = { accountId, state };
     snapshot.current = next; setOwned(next);
+    if (changesCart) setCartIssue(undefined);
   }, [accountId, storage]);
-  return { state: current, dispatch, cartIssue, canEditCart: editorAccount === accountId };
+  return { state: current, dispatch, cartIssue, canEditCart: editorAccount === accountId, requestCartEditing };
 }

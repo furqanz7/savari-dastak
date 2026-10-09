@@ -12,9 +12,83 @@ function Harness({ accountId }: { accountId: string }) {
   return <output>{JSON.stringify(current.state)}</output>;
 }
 function mount(accountId: string) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness accountId={accountId} />)); }
-beforeEach(() => { vi.stubGlobal("localStorage", cartStorageFixture()); vi.stubGlobal("navigator", { locks: checkoutLocksFixture() }); });
-afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.unstubAllGlobals(); });
+function channelsFixture() {
+  const channels = new Set<Channel>();
+  class Channel {
+    onmessage?: (event: { data: unknown }) => void;
+    constructor(readonly name: string) { channels.add(this); }
+    postMessage(data: unknown) { for (const peer of channels) if (peer !== this && peer.name === this.name) peer.onmessage?.({ data }); }
+    close() { channels.delete(this); }
+  }
+  return Channel;
+}
+beforeEach(() => { vi.stubGlobal("localStorage", cartStorageFixture()); vi.stubGlobal("navigator", { locks: checkoutLocksFixture() }); vi.stubGlobal("BroadcastChannel", channelsFixture()); });
+afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe("single persisted Reimagined cart owner", () => {
+  it("moves editing between mounted tabs, restores the latest cart, and blocks the previous owner", async () => {
+    saveCustomerCart("a", { retail: { rice: 3 }, food: [] }); mount("a");
+    let second!: ReturnType<typeof usePersistedReimaginedState>;
+    function Other() { second = usePersistedReimaginedState("a"); return null; }
+    const otherRoot = createRoot(document.createElement("div"));
+    try {
+      await act(async () => otherRoot.render(<Other />));
+      act(() => current.dispatch({ type: "setGroceryQuantity", skuId: "rice", quantity: 4 }));
+      await act(async () => { second.requestCartEditing(); second.requestCartEditing(); });
+      expect(second.canEditCart).toBe(true); expect(second.cartIssue).toBeUndefined();
+      expect(current.canEditCart).toBe(false); expect(second.state.shopping.retail.rice).toBe(4);
+      act(() => current.dispatch({ type: "setGroceryQuantity", skuId: "rice", quantity: 99 }));
+      expect(loadCustomerCart("a").retail.rice).toBe(4);
+      act(() => second.dispatch({ type: "setGroceryQuantity", skuId: "rice", quantity: 5 }));
+      await act(async () => current.requestCartEditing());
+      expect(current.canEditCart).toBe(true); expect(second.canEditCart).toBe(false);
+      expect(current.state.shopping.retail.rice).toBe(5);
+    } finally { await act(async () => otherRoot.unmount()); }
+  });
+  it("releases on pagehide and safely restores editing after a back/forward-cache return", async () => {
+    saveCustomerCart("a", { retail: { rice: 3 }, food: [] }); mount("a");
+    await act(async () => window.dispatchEvent(new Event("pagehide")));
+    expect(current.canEditCart).toBe(false);
+    saveCustomerCart("a", { retail: { rice: 5 }, food: [] });
+    await act(async () => window.dispatchEvent(new Event("pageshow")));
+    expect(current.canEditCart).toBe(true); expect(current.state.shopping.retail.rice).toBe(5);
+    expect(current.cartIssue).toBeUndefined();
+  });
+  it("explains an unresponsive older owner without stealing its lock or erasing the cart", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const held = navigator.locks.request("dastak:v1-cart:a:reimagined-editor", {}, async () => new Promise<void>(resolve => { release = resolve; }));
+    saveCustomerCart("a", { retail: { rice: 3 }, food: [] }); mount("a");
+    await act(async () => { current.requestCartEditing(); vi.advanceTimersByTime(1500); });
+    expect(current.canEditCart).toBe(false); expect(current.cartIssue).toContain("older tab");
+    expect(loadCustomerCart("a").retail.rice).toBe(3);
+    await act(async () => { release(); await held; });
+    expect(current.canEditCart).toBe(true); expect(current.cartIssue).toBeUndefined();
+  });
+  it("does not hand off carts belonging to a different account", async () => {
+    mount("a");
+    let second!: ReturnType<typeof usePersistedReimaginedState>;
+    function Other() { second = usePersistedReimaginedState("b"); return null; }
+    const otherRoot = createRoot(document.createElement("div"));
+    try {
+      await act(async () => otherRoot.render(<Other />));
+      act(() => second.requestCartEditing());
+      expect(current.canEditCart).toBe(true); expect(second.canEditCart).toBe(true);
+    } finally { await act(async () => otherRoot.unmount()); }
+  });
+  it("refuses editing after handoff if the saved cart is corrupt", async () => {
+    mount("a");
+    let second!: ReturnType<typeof usePersistedReimaginedState>;
+    function Other() { second = usePersistedReimaginedState("a"); return null; }
+    const otherRoot = createRoot(document.createElement("div"));
+    try {
+      await act(async () => otherRoot.render(<Other />));
+      localStorage.setItem("dastak:v1-cart:a", '{"version":99}');
+      await act(async () => second.requestCartEditing());
+      expect(second.canEditCart).toBe(false); expect(current.canEditCart).toBe(false);
+      expect(second.cartIssue).toBeTruthy();
+      expect(localStorage.getItem("dastak:v1-cart:a")).toBe('{"version":99}');
+    } finally { await act(async () => otherRoot.unmount()); }
+  });
   it("acknowledges Food once across remounts without removing Grocery or other options", async () => {
     const line = { branchId: "branch", itemId: "meal", optionIds: ["large"], quantity: 4 };
     saveCustomerCart("a", { retail: { rice: 3 }, food: [line, { ...line, optionIds: ["small"], quantity: 1 }] }); mount("a");

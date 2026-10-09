@@ -52,7 +52,7 @@ export function ReimaginedCustomerRoot(props: Props) {
 
 function AccountExperience(props: Props) {
   const greeting = useReimaginedGreeting();
-  const { state, dispatch: cartDispatch, cartIssue, canEditCart } = usePersistedReimaginedState(props.accountId);
+  const { state, dispatch: cartDispatch, cartIssue, canEditCart, requestCartEditing } = usePersistedReimaginedState(props.accountId);
   const [savedOpen, setSavedOpen] = useState(false);
   const [workspaceTitle, setWorkspaceTitle] = useState<string>();
   const [selectedOrderId, setSelectedOrderId] = useState<string>();
@@ -223,7 +223,7 @@ function AccountExperience(props: Props) {
     <aside className="reimagined-local-notice" aria-label="Dastak interface recovery"><a href={homeUrl}>Use the existing Dastak interface</a></aside>
     <ReimaginedShell state={{ ...state, activeOrder: visibleActiveOrder }} dispatch={dispatch} activeOrderLabel={tracking.label}
       noticeContent={(state.section === "home" && cartIssue) || tracking.storageIssue || (tracking.error && online) ? <div className="reimagined-status-stack">
-        {state.section === "home" && cartIssue ? <p role="status">{cartIssue}</p> : null}
+        {state.section === "home" && cartIssue ? <div><p role="status">{cartIssue}</p>{!canEditCart && typeof navigator !== "undefined" && navigator.locks ? <button type="button" onClick={requestCartEditing}>Edit cart in this tab</button> : null}</div> : null}
         {tracking.storageIssue ? <p role="status">{tracking.storageIssue}</p> : null}
         {tracking.error && online ? <button type="button" onClick={tracking.retry}>Retry order status</button> : null}
       </div> : null}

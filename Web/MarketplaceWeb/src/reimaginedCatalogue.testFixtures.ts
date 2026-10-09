@@ -17,9 +17,19 @@ export function checkoutLocksFixture() {
   const held = new Set<string>();
   const waiting = new Map<string, Array<() => void>>();
   return {
-    async request<T>(name: string, options: { ifAvailable?: boolean }, callback: (lock: object | null) => Promise<T>) {
+    async request<T>(name: string, options: { ifAvailable?: boolean; signal?: AbortSignal }, callback: (lock: object | null) => Promise<T>) {
       if (held.has(name) && options.ifAvailable) return callback(null);
-      while (held.has(name)) await new Promise<void>(resolve => { waiting.set(name, [...(waiting.get(name) ?? []), resolve]); });
+      while (held.has(name)) await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          waiting.set(name, (waiting.get(name) ?? []).filter(entry => entry !== resume));
+          reject(new DOMException("Aborted", "AbortError"));
+        };
+        const resume = () => { options.signal?.removeEventListener("abort", abort); resolve(); };
+        if (options.signal?.aborted) { abort(); return; }
+        options.signal?.addEventListener("abort", abort, { once: true });
+        waiting.set(name, [...(waiting.get(name) ?? []), resume]);
+      });
+      if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
       held.add(name);
       try { return await callback({ name }); } finally { held.delete(name); waiting.get(name)?.shift()?.(); }
     },

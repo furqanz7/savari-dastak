@@ -64,6 +64,16 @@ beforeEach(() => {
 });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("shows a working cart-editing recovery control while another tab owns the cart", async () => {
+    let release!: () => void;
+    const owner = navigator.locks.request("dastak:v1-cart:a:reimagined-editor", {}, async () => new Promise<void>(resolve => { release = resolve; }));
+    mount();
+    expect(host.textContent).toContain("Edit cart in this tab");
+    await act(async () => click("Edit cart in this tab"));
+    expect(host.textContent).toContain("Moving cart editing to this tab");
+    await act(async () => { release(); await owner; });
+    expect(host.textContent).not.toContain("Edit cart in this tab");
+  });
   it("removes cancelled finding-items feedback immediately without modifying shopping", async () => {
     const retry = vi.fn();
     vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: { id: fixtureId(93), service: "grocery" }, activeCount: 1, label: "Finding your items", error: undefined, storageIssue: undefined, retry });
