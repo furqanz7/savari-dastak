@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { LocateFixed, MapPin, Search } from "lucide-react";
 import { reverseGeocodeLocation, searchLocations, type LocationSearchResult } from "./location-search";
 import { userFacingError } from "./userFacingError";
@@ -12,6 +12,7 @@ export function LocationSearchField({ label, value, onChange, onSelectionCleared
   onSelectionCleared?: () => void;
   disabled?: boolean;
 }) {
+  const inputId = useId();
   const [query, setQuery] = useState(value?.address ?? "");
   const [results, setResults] = useState<LocationSearchResult[]>([]);
   const [busy, setBusy] = useState(false);
@@ -70,10 +71,10 @@ export function LocationSearchField({ label, value, onChange, onSelectionCleared
 
   return (
     <div className="place-search-field">
-      <label>{label}</label>
+      <label htmlFor={inputId}>{label}</label>
       <div className="place-search-input">
         <MapPin size={18} />
-        <input value={query} disabled={disabled || busy} placeholder={`Search ${label.toLowerCase()}`} onKeyDown={searchOnEnter} onChange={(event) => {
+        <input id={inputId} value={query} disabled={disabled || busy} placeholder={`Search ${label.toLowerCase()}`} onKeyDown={searchOnEnter} onChange={(event) => {
           const nextQuery = event.target.value;
           setQuery(nextQuery);
           setResults([]);

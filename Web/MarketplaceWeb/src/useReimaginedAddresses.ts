@@ -11,6 +11,8 @@ type Loader = (input: DastakV1Auth & { signal?: AbortSignal }) => Promise<Custom
 export function useReimaginedAddresses(session: Session, enabled: boolean, loader: Loader = getCustomerAddresses) {
   const { accountId, accessToken, supabaseUrl, publishableKey } = session;
   const owner = JSON.stringify([accountId, accessToken, supabaseUrl, publishableKey]);
+  // Renewing credentials must reload data, not silently move delivery to Home.
+  const selectionOwner = JSON.stringify([accountId, supabaseUrl, publishableKey]);
   const [revision, setRevision] = useState(0);
   const [resource, setResource] = useState<Resource>();
   const [selection, setSelection] = useState<{ owner: string; id: string }>();
@@ -26,12 +28,12 @@ export function useReimaginedAddresses(session: Session, enabled: boolean, loade
   }, [enabled, accessToken, supabaseUrl, publishableKey, owner, revision, loader]);
   const current = resource?.owner === owner && resource.revision === revision ? resource : undefined;
   const addresses = current?.data?.addresses ?? [];
-  const selected = addresses.find(address => selection?.owner === owner && address.addressId === selection.id)
+  const selected = addresses.find(address => selection?.owner === selectionOwner && address.addressId === selection.id)
     ?? addresses.find(address => address.isDefault);
   return {
     addresses, selected, error: current?.error,
     status: current?.data ? "ready" as const : current?.error ? "unavailable" as const : enabled ? "loading" as const : "idle" as const,
-    select: (id: string) => { if (addresses.some(address => address.addressId === id)) setSelection({ owner, id }); },
+    select: (id: string) => { if (addresses.some(address => address.addressId === id)) setSelection({ owner: selectionOwner, id }); },
     retry: () => setRevision(value => value + 1),
   };
 }

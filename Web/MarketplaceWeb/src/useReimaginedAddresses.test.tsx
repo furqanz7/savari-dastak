@@ -16,6 +16,14 @@ function Harness({ account = "a", token = "token", enabled = true, loader }: { a
 function mount(loader: Loader, enabled = true) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness loader={loader} enabled={enabled} />)); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); });
 describe("Reimagined saved address boundary", () => {
+  it("retains a selected non-default address across token refresh but not an account switch", async () => {
+    const loader = vi.fn().mockResolvedValue(collection); mount(loader); await act(async () => {});
+    act(() => host.querySelector("button")!.click());
+    await act(async () => root.render(<Harness loader={loader} token="rotated" />));
+    expect(host.textContent).toContain('"selected":"work"');
+    await act(async () => root.render(<Harness loader={loader} token="rotated" account="b" />));
+    expect(host.textContent).toContain('"selected":"home"');
+  });
   it("does not request addresses before the picker opens", async () => {
     const loader = vi.fn().mockResolvedValue(collection); mount(loader, false); expect(loader).not.toHaveBeenCalled();
     await act(async () => root.render(<Harness loader={loader} />)); expect(loader).toHaveBeenCalledOnce();

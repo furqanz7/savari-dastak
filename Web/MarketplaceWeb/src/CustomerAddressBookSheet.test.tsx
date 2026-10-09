@@ -21,6 +21,12 @@ function confirmationButton(label: string) {
 }
 
 describe("saved-address deletion confirmation", () => {
+  it("marks only the saved default in account management, not the local delivery selection", () => {
+    const work = { ...home, addressId: "work", label: "Work", isDefault: false };
+    act(() => root.render(<CustomerAddressBookSheet addresses={[home, work]} selectedAddressId="work" busy={false} context="account" onDismiss={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onSelect={async () => {}} onDelete={async () => true} />));
+    const badges = [...host.querySelectorAll('.customer-address-selected')].map(element => element.textContent?.trim());
+    expect(badges).toEqual(["Default", "Set default"]);
+  });
   it("focuses the safe action and contains keyboard focus above the address book", () => {
     mount();
     const keep = confirmationButton("Keep address"), remove = confirmationButton("Delete");

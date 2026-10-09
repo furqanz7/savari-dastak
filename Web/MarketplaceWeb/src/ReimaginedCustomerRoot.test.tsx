@@ -17,10 +17,10 @@ vi.mock("./useReimaginedWishlist", () => ({ useReimaginedWishlist: () => ({ item
 vi.mock("./useDastakWebPush", () => ({ useDastakWebPush: () => ({ shouldPrompt: false }) }));
 import { submitV1Order, commitV1LaunchPayment, getV1Order, type V1Order } from "./dastakV1";
 vi.mock("./dastakV1", async importOriginal => ({ ...await importOriginal<typeof import("./dastakV1")>(), submitV1Order: vi.fn(), commitV1LaunchPayment: vi.fn(), getV1Order: vi.fn() }));
-vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: CustomerSection; initialOrderId?: string; initialMerchantOrderId?: string; embedded?: boolean; onViewChange?: (section: CustomerSection) => void; onReorder?: (order: V1Order) => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => {
+vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { onSignOut: () => void; initialSection?: CustomerSection; initialOrderId?: string; initialMerchantOrderId?: string; embedded?: boolean; onViewChange?: (section: CustomerSection) => void; onReorder?: (order: V1Order) => void; onAddressesChanged?: () => void; onProfileChanged?: (profile: { displayName: string; phoneNumber: string }) => void }) => {
   const { initialSection, onViewChange } = props;
   useEffect(() => { if (initialSection) onViewChange?.(initialSection); }, [initialSection, onViewChange]);
-  return <section aria-label="Operational account workspace" data-order-id={props.initialOrderId} data-merchant-order-id={props.initialMerchantOrderId}>{props.initialSection}<button type="button" onClick={() => props.onViewChange?.("payments")}>Fixture Payments</button><button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onReorder?.(mixedOrderFixture())}>Fixture mixed order</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button></section>;
+  return <section aria-label="Operational account workspace" data-order-id={props.initialOrderId} data-merchant-order-id={props.initialMerchantOrderId}>{props.initialSection}<button type="button" onClick={() => props.onViewChange?.("payments")}>Fixture Payments</button><button type="button" onClick={props.onSignOut}>Sign out</button><button type="button" onClick={() => props.onReorder?.({ lines: [{ lineType: "RETAIL_SKU", skuId: "00000000-0000-4000-8000-000000000006", quantity: 2 }] } as V1Order)}>Fixture Order again</button><button type="button" onClick={() => props.onReorder?.(mixedOrderFixture())}>Fixture mixed order</button><button type="button" onClick={() => props.onProfileChanged?.({ displayName: "Updated recipient", phoneNumber: "+919876543210" })}>Fixture profile update</button><button type="button" onClick={props.onAddressesChanged}>Fixture address update</button></section>;
 } }));
 vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }));
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
@@ -60,6 +60,19 @@ beforeEach(() => {
 });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("refreshes the shared address resource after a Profile mutation and keys both services to its new version", async () => {
+    mount(); click("Profile"); await act(async () => {});
+    const resource = vi.mocked(useReimaginedAddresses).mock.results.at(-1)!.value;
+    click("Fixture address update"); expect(resource.retry).toHaveBeenCalledOnce();
+    const selected = { ...localAddress, updatedAt: "2026-10-09T00:00:00Z", location: { latitude: 1, longitude: 1 } };
+    vi.mocked(useReimaginedAddresses).mockReturnValue({ ...resource, addresses: [selected], selected });
+    act(() => root.render(<ReimaginedCustomerRoot {...props} />));
+    click("Home"); click("Food");
+    const location = { addressId: selected.addressId, updatedAt: selected.updatedAt };
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.anything(), true, true, undefined, "", location);
+    expect(useReimaginedAvailability).toHaveBeenLastCalledWith(expect.anything(), location, true);
+    expect(submitV1Order).not.toHaveBeenCalled();
+  });
   it("contains storage and recovery notices inside the panel rather than shifting the shell", () => {
     vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: undefined, activeCount: 0, error: new Error("Synthetic tracking failure"), storageIssue: "Synthetic tracking storage issue", label: "", retry: vi.fn() });
     mount();

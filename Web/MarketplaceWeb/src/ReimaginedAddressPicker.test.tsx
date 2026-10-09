@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { ReimaginedAddressPicker } from "./ReimaginedAddressPicker";
-import { deleteCustomerAddress, setDefaultCustomerAddress } from "./customerAddresses";
+import { deleteCustomerAddress, saveCustomerAddress, setDefaultCustomerAddress } from "./customerAddresses";
 vi.mock("./customerAddresses", () => ({ setDefaultCustomerAddress: vi.fn(), saveCustomerAddress: vi.fn(), deleteCustomerAddress: vi.fn() }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let host: HTMLDivElement; let root: Root;
@@ -13,6 +13,17 @@ const auth = { accessToken: "test", supabaseUrl: "https://test.supabase.co", pub
 beforeEach(() => { vi.clearAllMocks(); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 function button(text: string) { return [...host.querySelectorAll("button")].find(value => value.textContent?.includes(text))!; }
+it("edits a non-default address without making it default or promising an order review", async () => {
+  const work = { ...home, addressId: "work", label: "Work", isDefault: false };
+  act(() => root.render(<ReimaginedAddressPicker resource={{ ...resource, addresses: [home, work], selected: work }} auth={auth} online accountUrl="/#account" />));
+  act(() => button("Add or manage delivery addresses").click());
+  act(() => document.querySelector<HTMLButtonElement>('[aria-label="Edit Work"]')!.click());
+  expect(document.querySelector('.customer-address-footer')?.textContent).toContain("Save address");
+  vi.mocked(saveCustomerAddress).mockResolvedValueOnce({ addresses: [home, work] });
+  await act(async () => document.querySelector('form.customer-address-sheet')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  expect(saveCustomerAddress).toHaveBeenCalledWith(expect.objectContaining({ addressId: "work", makeDefault: false }));
+  expect(resource.retry).toHaveBeenCalledOnce();
+});
 it("opens native address management and reuses an ambiguous request key", async () => {
   act(() => root.render(<ReimaginedAddressPicker resource={resource} auth={auth} online accountUrl="/#account" />));
   expect(setDefaultCustomerAddress).not.toHaveBeenCalled(); act(() => button("Add or manage delivery addresses").click());

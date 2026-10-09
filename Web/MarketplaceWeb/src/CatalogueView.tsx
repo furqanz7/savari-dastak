@@ -136,6 +136,7 @@ type Props = {
   onOpenParcel: () => void;
   onSignOut: () => void;
   onProfileChanged?: (profile: AccountProfile) => void;
+  onAddressesChanged?: () => void;
   accountPane?: "profile" | "settings";
   overlayPresentation?: "reimagined";
   onOpenProfile?: () => void;
@@ -269,6 +270,7 @@ export function CatalogueView({
   deliveryPartnerUrl,
   merchantUrl,
   onProfileChanged,
+  onAddressesChanged,
   accountPane,
   overlayPresentation,
   onOpenProfile,
@@ -325,12 +327,20 @@ export function CatalogueView({
   const orderCreationRequest = useRef<{ quoteId: string; idempotencyKey: string } | undefined>(undefined);
   const restoredDiscovery = useRef(false);
   const ordersRefreshQueue = useRef(new RefreshQueue());
-  const addressSaveRequest = useRef<string | undefined>(undefined);
+  const addressSaveRequest = useRef<{ fingerprint: string; key: string } | undefined>(undefined);
+  const addressLifetime = useRef({ active: false, busy: false });
   const accountDeletionKey = useRef(accountDeletionIdempotencyKey());
   const exportLifetime = useRef({ active: false, busy: false });
   const exportSignOut = useRef(onSignOut);
 
   useEffect(() => { exportSignOut.current = onSignOut; }, [onSignOut]);
+  useEffect(() => {
+    if (addressLifetime.current.busy) setOrderBusy(false);
+    const lifetime = { active: true, busy: false };
+    addressLifetime.current = lifetime;
+    addressSaveRequest.current = undefined;
+    return () => { lifetime.active = false; };
+  }, [accountId, auth, section, accountPane]);
   useEffect(() => {
     const lifetime = { active: true, busy: false };
     exportLifetime.current = lifetime;
@@ -705,10 +715,15 @@ export function CatalogueView({
   };
 
   const saveAddress = async (draft: CustomerAddressDraft) => {
+    const lifetime = addressLifetime.current;
+    if (!lifetime.active || lifetime.busy) return;
+    lifetime.busy = true;
     setOrderBusy(true);
     setAddressError(undefined);
     try {
-      addressSaveRequest.current ??= crypto.randomUUID();
+      const makeDefault = reviewAfterAddress || !editingAddress || editingAddress.isDefault;
+      const fingerprint = JSON.stringify([draft, makeDefault]);
+      if (addressSaveRequest.current?.fingerprint !== fingerprint) addressSaveRequest.current = { fingerprint, key: crypto.randomUUID() };
       const snapshot = await saveCustomerAddress({
         ...auth,
         addressId: draft.addressId,
@@ -719,13 +734,15 @@ export function CatalogueView({
         landmark: draft.landmark,
         deliveryNotes: draft.deliveryNotes,
         location: { latitude: draft.place.latitude, longitude: draft.place.longitude },
-        makeDefault: true,
-        idempotencyKey: addressSaveRequest.current,
+        makeDefault,
+        idempotencyKey: addressSaveRequest.current.key,
       });
+      if (!lifetime.active) return;
       const saved = snapshot.addresses.find((address) => address.isDefault) ?? snapshot.addresses[0];
       if (!saved) throw new Error("The saved delivery address was not returned.");
       addressSaveRequest.current = undefined;
       setSavedAddresses(snapshot.addresses);
+      onAddressesChanged?.();
       setDeliveryAddress(saved);
       const location = { label: saved.displayAddress, coordinates: saved.location };
       setAddressEditorOpen(false);
@@ -738,17 +755,21 @@ export function CatalogueView({
         setAddressBookOpen(true);
       }
     } catch (error) {
+      if (!lifetime.active) return;
       if (error instanceof CustomerAddressRequestError && error.status === 401) {
         onSignOut();
         return;
       }
       setAddressError(orderMessage(error));
     } finally {
-      setOrderBusy(false);
+      if (lifetime.active) { lifetime.busy = false; setOrderBusy(false); }
     }
   };
 
   const selectAddress = async (address: CustomerDeliveryAddress) => {
+    const lifetime = addressLifetime.current;
+    if (!lifetime.active || lifetime.busy) return;
+    lifetime.busy = true;
     setOrderBusy(true);
     setAddressError(undefined);
     try {
@@ -757,8 +778,10 @@ export function CatalogueView({
         addressId: address.addressId,
         idempotencyKey: crypto.randomUUID(),
       });
+      if (!lifetime.active) return;
       const selected = snapshot.addresses.find((item) => item.addressId === address.addressId) ?? address;
       setSavedAddresses(snapshot.addresses);
+      onAddressesChanged?.();
       setDeliveryAddress({ ...selected, isDefault: true });
       setAddressBookOpen(false);
       if (reviewAfterAddress) {
@@ -766,14 +789,18 @@ export function CatalogueView({
         await requestOrderQuote({ label: selected.displayAddress, coordinates: selected.location });
       }
     } catch (error) {
+      if (!lifetime.active) return;
       if (error instanceof CustomerAddressRequestError && error.status === 401) return onSignOut();
       setAddressError(orderMessage(error));
     } finally {
-      setOrderBusy(false);
+      if (lifetime.active) { lifetime.busy = false; setOrderBusy(false); }
     }
   };
 
   const removeAddress = async (address: CustomerDeliveryAddress) => {
+    const lifetime = addressLifetime.current;
+    if (!lifetime.active || lifetime.busy) return false;
+    lifetime.busy = true;
     setOrderBusy(true);
     setAddressError(undefined);
     try {
@@ -782,16 +809,19 @@ export function CatalogueView({
         addressId: address.addressId,
         idempotencyKey: crypto.randomUUID(),
       });
+      if (!lifetime.active) return false;
       const selected = snapshot.addresses.find((item) => item.isDefault) ?? snapshot.addresses[0];
       setSavedAddresses(snapshot.addresses);
+      onAddressesChanged?.();
       setDeliveryAddress(selected);
       return true;
     } catch (error) {
+      if (!lifetime.active) return false;
       if (error instanceof CustomerAddressRequestError && error.status === 401) { onSignOut(); return false; }
       setAddressError(orderMessage(error));
       return false;
     } finally {
-      setOrderBusy(false);
+      if (lifetime.active) { lifetime.busy = false; setOrderBusy(false); }
     }
   };
 

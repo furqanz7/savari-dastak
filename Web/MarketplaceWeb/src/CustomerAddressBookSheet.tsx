@@ -50,13 +50,13 @@ export function CustomerAddressBookSheet({
         {addresses.length === 0 ? <div className="customer-address-book-empty">
           <MapPinned size={28} /><strong>No saved addresses</strong><span>Add a precise pin and doorstep instructions.</span>
         </div> : addresses.map((address) => {
-          const selected = address.addressId === selectedAddressId || address.isDefault;
+          const selected = context === "account" || !selectedAddressId ? address.isDefault : address.addressId === selectedAddressId;
           const Icon = address.label === "Home" ? House : address.label === "Work" ? BriefcaseBusiness : MapPin;
           return <article className={`customer-address-book-row ${selected ? "selected" : ""}`} key={address.addressId}>
             <button type="button" className="customer-address-book-select" disabled={busy} onClick={() => void onSelect(address)}>
               <span className="customer-account-icon"><Icon size={19} /></span>
               <span><strong>{address.label}</strong><small>{address.displayAddress}</small>{address.deliveryNotes && <small className="instructions">“{address.deliveryNotes}”</small>}</span>
-              <span className="customer-address-selected">{selected ? <><Check size={15} /> Default</> : context === "checkout" ? "Use" : "Set default"}</span>
+              <span className="customer-address-selected">{selected ? <><Check size={15} /> {context === "account" ? "Default" : "Selected"}</> : context === "checkout" ? "Use" : "Set default"}</span>
             </button>
             <div className="customer-address-book-actions">
               <button type="button" onClick={() => onEdit(address)} disabled={busy} aria-label={`Edit ${address.label}`} title="Edit"><Pencil size={17} /></button>

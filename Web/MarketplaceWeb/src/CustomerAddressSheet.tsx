@@ -49,7 +49,7 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (place && building.trim() && resolvedLabel) {
+    if (!busy && place && building.trim() && resolvedLabel) {
       void onSave({
         addressId: address?.addressId,
         label: resolvedLabel,
@@ -90,8 +90,8 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
             <span className={building.trim() ? "complete" : ""}>{building.trim() ? <Check size={14} /> : "2"} Doorstep</span>
           </div>}
           <AddressMapPreview place={place} />
-          <LocationSearchField label="Delivery pin" value={place} onChange={setPlace} disabled={busy} />
-          <fieldset className="address-type-picker">
+          <LocationSearchField label="Delivery pin" value={place} onChange={setPlace} onSelectionCleared={() => setPlace(undefined)} disabled={busy} />
+          <fieldset className="address-type-picker" disabled={busy}>
             <legend>Save as</legend>
             <div>{addressKinds.map(({ value, icon: Icon }) => (
               <button className={kind === value ? "selected" : ""} type="button" key={value} onClick={() => setKind(value)} aria-pressed={kind === value}>
@@ -101,9 +101,9 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
           </fieldset>
           {kind === "Other" && <label className="customer-address-label">
             <span>Address label</span>
-            <input value={customLabel} maxLength={40} onChange={(event) => setCustomLabel(event.target.value)} placeholder="For example, Parents' home" required />
+            <input value={customLabel} disabled={busy} maxLength={40} onChange={(event) => setCustomLabel(event.target.value)} placeholder="For example, Parents' home" required />
           </label>}
-          <fieldset className="customer-address-details">
+          <fieldset className="customer-address-details" disabled={busy}>
             <legend>Doorstep details</legend>
             <small>Help the delivery partner find the right entrance without calling.</small>
             <div>

@@ -29,7 +29,7 @@ export function ReimaginedAddressPicker({ resource, online, accountUrl, compact 
     finally { if (epoch === session.current) { writing.current = false; setBusy(false); } }
   }
   async function save(draft: CustomerAddressDraft) {
-    await change(JSON.stringify(["save", draft]), key => saveCustomerAddress({ ...auth!, ...draft, address: draft.place.address, location: { latitude: draft.place.latitude, longitude: draft.place.longitude }, makeDefault: true, idempotencyKey: key }));
+    await change(JSON.stringify(["save", draft]), key => saveCustomerAddress({ ...auth!, ...draft, address: draft.place.address, location: { latitude: draft.place.latitude, longitude: draft.place.longitude }, makeDefault: editor?.address ? editor.address.isDefault : true, idempotencyKey: key }));
   }
   const selected = online && resource.status === "ready" ? resource.addresses.find(address => address.addressId === resource.selected?.addressId) : undefined;
   const choices = online && resource.status === "ready" && resource.addresses.length > 0 ? <fieldset>
@@ -52,7 +52,7 @@ export function ReimaginedAddressPicker({ resource, online, accountUrl, compact 
     {/* Backdrop-filter panels create containing blocks for fixed-position sheets. */}
     {(book || editor) && auth ? <ReimaginedModalLayer>
       {book ? <CustomerAddressBookSheet addresses={resource.addresses} selectedAddressId={selected?.addressId} busy={busy} error={error} context="account" onDismiss={() => setBook(false)} onAdd={() => { setBook(false); setEditor({}); }} onEdit={address => { setBook(false); setEditor({ address }); }} onSelect={async address => { await change(`default:${address.addressId}`, key => setDefaultCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key })); }} onDelete={address => change(`delete:${address.addressId}`, key => deleteCustomerAddress({ ...auth, addressId: address.addressId, idempotencyKey: key }))} /> : null}
-      {editor ? <CustomerAddressSheet address={editor.address} busy={busy} error={error} context="checkout" onDismiss={() => { if (!busy) setEditor(undefined); }} onSave={save} /> : null}
+      {editor ? <CustomerAddressSheet address={editor.address} busy={busy} error={error} context="account" onDismiss={() => { if (!busy) setEditor(undefined); }} onSave={save} /> : null}
     </ReimaginedModalLayer> : null}
   </section>;
 }
