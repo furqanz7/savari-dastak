@@ -57,7 +57,7 @@ export function AccountProfileSheet({ profile, busy, error, contactMessage, pres
         </div>
         <footer className="customer-profile-editor-actions">
           <button className="secondary-button" type="button" onClick={onDismiss} disabled={busy}>Cancel</button>
-          <button className="primary-button" type="submit" disabled={busy}>{busy ? <LoaderCircle className="customer-profile-saving" size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}<span role="status">{busy ? "Saving changes…" : "Save changes"}</span></button>
+          <button className="primary-button" type="submit" disabled={busy} aria-label={busy ? "Saving changes…" : "Save changes"}>{busy ? <LoaderCircle className="customer-profile-saving" size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}<span role="status">{busy ? "Saving changes…" : "Save changes"}</span></button>
         </footer>
       </form>
     </div>

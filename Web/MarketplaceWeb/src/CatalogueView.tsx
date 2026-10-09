@@ -327,6 +327,17 @@ export function CatalogueView({
   const ordersRefreshQueue = useRef(new RefreshQueue());
   const addressSaveRequest = useRef<string | undefined>(undefined);
   const accountDeletionKey = useRef(accountDeletionIdempotencyKey());
+  const exportLifetime = useRef({ active: false, busy: false });
+  const exportSignOut = useRef(onSignOut);
+
+  useEffect(() => { exportSignOut.current = onSignOut; }, [onSignOut]);
+  useEffect(() => {
+    const lifetime = { active: true, busy: false };
+    exportLifetime.current = lifetime;
+    setExportBusy(false);
+    setExportMessage(undefined);
+    return () => { lifetime.active = false; };
+  }, [accountId, auth, section, accountPane]);
 
   useEffect(() => {
     saveCustomerDiscovery(selectedLocation, discoveryRadiusKm);
@@ -459,10 +470,14 @@ export function CatalogueView({
   };
 
   const downloadAccountData = async () => {
+    const lifetime = exportLifetime.current;
+    if (!lifetime.active || lifetime.busy || section !== "account" || accountPane === "profile") return;
+    lifetime.busy = true;
     setExportBusy(true);
     setExportMessage(undefined);
     try {
       const exported = await exportAccountData(auth);
+      if (!lifetime.active) return;
       const url = URL.createObjectURL(new Blob(
         [JSON.stringify(exported.data, null, 2)],
         { type: "application/json" },
@@ -476,10 +491,12 @@ export function CatalogueView({
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
       setExportMessage("Your Dastak data export was downloaded.");
     } catch (error) {
-      if (error instanceof AccountProfileRequestError && error.status === 401) return onSignOut();
+      if (!lifetime.active) return;
+      if (error instanceof AccountProfileRequestError && error.status === 401) return exportSignOut.current();
       setExportMessage(orderMessage(error));
     } finally {
-      setExportBusy(false);
+      lifetime.busy = false;
+      if (lifetime.active) setExportBusy(false);
     }
   };
 

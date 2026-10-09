@@ -16,6 +16,12 @@ function render(busy = false, name = profile.displayName, error?: string) {
 }
 function submit() { act(() => host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))); }
 describe("profile editor interaction boundaries", () => {
+  it("gives Save an explicit accessible name in both idle and busy states", () => {
+    render();
+    expect(host.querySelector('button[type="submit"]')?.getAttribute('aria-label')).toBe("Save changes");
+    render(true);
+    expect(host.querySelector('button[type="submit"]')?.getAttribute('aria-label')).toBe("Saving changes…");
+  });
   it("does not submit again while a save is already in progress", () => {
     const { save } = render(true); submit(); expect(save).not.toHaveBeenCalled();
   });
