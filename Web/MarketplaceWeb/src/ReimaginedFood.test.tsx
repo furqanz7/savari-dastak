@@ -25,6 +25,15 @@ function mount(resource = ready, online = true, empty = false) { host = document
 function click(label: string) { const button = [...host.querySelectorAll("button")].find(value => (value.getAttribute("aria-label") ?? value.textContent) === label); if (!button) throw new Error(`Missing ${label}`); act(() => button.click()); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("Food discovery and menus", () => {
+  it("places pagination after discovery and never inside a menu or dish", () => {
+    const loadMore = vi.fn(async () => {}); mount({ ...ready, hasMore: true, loadMore });
+    const shelf = host.querySelector('[aria-label="Restaurant shelf"]')!;
+    const paging = [...host.querySelectorAll('button')].find(button => button.textContent === "Load more restaurants")!;
+    expect(shelf.compareDocumentPosition(paging) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    click("Load more restaurants"); expect(loadMore).toHaveBeenCalledOnce();
+    click("Open Test Café menu"); expect(host.textContent).not.toContain("Load more restaurants");
+    click("View Test Paneer Rice details"); expect(host.textContent).not.toContain("Load more restaurants");
+  });
   it("uses one shell-owned title for restaurants and dish details", () => {
     mount(ready, true, true); click("Open Test Café menu");
     expect([...host.querySelectorAll("h1, h2")].filter(heading => heading.textContent === "Test Café")).toHaveLength(1);
@@ -157,7 +166,7 @@ describe("Food discovery and menus", () => {
   it("opens canonical branch/menu/dish details without changing either cart", () => {
     mount(); const shopping = host.querySelector("output")!.textContent;
     click("Open Test Café menu"); expect(host.textContent).toContain("Meals"); click("View Test Paneer Rice details");
-    expect(host.textContent).toContain("₹150.00"); expect(host.textContent).toContain("Large · +₹30.00");
+    expect(host.textContent).toContain("₹150.00"); expect(host.querySelector('.reimagined-food-choices label')?.textContent).toContain("Large+₹30.00");
     expect(host.querySelector('[aria-label="Test Paneer Rice dish details"]')).not.toBeNull();
     expect([...host.querySelectorAll("button")].find(button => button.textContent?.startsWith("Add to Food cart"))?.disabled).toBe(true);
     click("Back to menu"); click("Back to restaurants"); expect(host.querySelector("output")!.textContent).toBe(shopping);
@@ -178,7 +187,7 @@ describe("Food discovery and menus", () => {
   it("shows failures, retry, empty catalogue and offline states honestly", () => {
     const retry = vi.fn(); mount({ status: "unavailable", error: new Error("network"), data: undefined, retry });
     click("Retry Food menus"); expect(retry).toHaveBeenCalledOnce();
-    act(() => root.render(<Harness resource={{ ...ready, data: [] }} />)); expect(host.textContent).toContain("No restaurants returned");
+    act(() => root.render(<Harness resource={{ ...ready, data: [] }} />)); expect(host.textContent).toContain("Food delivery isn’t available in your area yet");
     act(() => root.render(<Harness resource={{ ...ready, data: undefined }} online={false} />)); expect(host.textContent).toContain("Reconnect to load Food menus");
   });
   it("keeps missing menu/dish identities explicit instead of selecting a replacement", () => {

@@ -1,4 +1,17 @@
 .reimagined-food, .reimagined-food-cart { min-width: 0; color: var(--ink, #282c26); }
+.reimagined-food { display: grid; gap: 18px; }
+.reimagined-food-state { display: grid; justify-items: center; gap: 12px; padding: 32px 18px; border: 1px solid #35604726; border-radius: 20px; background: #fff5; text-align: center; }
+.reimagined-food-state-icon { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 18px; background: #e0e9dc; color: #315c41; }
+.reimagined-food-state h2 { margin: 0; max-width: 34ch; font-size: 21px; line-height: 1.35; overflow-wrap: anywhere; }
+.reimagined-food-state p { margin: 0; max-width: 48ch; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.reimagined-food-state button, .reimagined-food-pagination button { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px solid #35604740; border-radius: 12px; color: #315c41; background: #eef2e9; font-size: 13px; }
+.reimagined-food-state button:focus-visible { outline: 3px solid #315c41; outline-offset: 3px; }
+.reimagined-food-pagination { display: flex; justify-content: center; padding: 4px 0 12px; }
+.reimagined-food-notice { display: flex; align-items: flex-start; gap: 8px; padding: 12px; margin: 0; border-radius: 12px; background: #e9e7db; font-size: 13px; line-height: 1.5; }
+.reimagined-food-notice svg { flex-shrink: 0; margin-top: 2px; }
+.reimagined-food-spinner { animation: reimagined-food-spin 1.2s linear infinite; }
+@keyframes reimagined-food-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .reimagined-food-spinner { animation: none; } }
 .reimagined-food :is(p, small, strong, h2, h3), .reimagined-food-cart :is(p, small, strong) { overflow-wrap: anywhere; }
 .reimagined-food-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .reimagined-food-toolbar p { margin: 0; font-size: 13px; color: var(--muted); }
@@ -29,9 +42,12 @@
 .reimagined-food-status::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: middle; }
 .reimagined-food-card-action { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid #35604720; padding-top: 10px; color: #315c41; font-size: 13px; font-weight: 650; }
 .reimagined-restaurant-card[data-closed="true"] > button { cursor: not-allowed; opacity: .72; }
-.reimagined-food-restaurant-intro { display: grid; gap: 8px; border-bottom: 1px solid #35604726; padding: 0 0 16px; }
+.reimagined-food-restaurant-intro { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 16px; align-items: center; border-bottom: 1px solid #35604726; padding: 0 0 16px; }
+.reimagined-food-restaurant-intro > .reimagined-sku-image { width: 88px; height: 88px; border-radius: 16px; background: #e9eadd; }
+.reimagined-food-restaurant-intro > .reimagined-sku-image .reimagined-sku-image-fallback small { display: none; }
+.reimagined-food-restaurant-intro > div:last-child { display: grid; gap: 8px; min-width: 0; }
 .reimagined-food-restaurant-intro p { margin: 0; line-height: 1.55; }
-.reimagined-food-restaurant-intro > small { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+.reimagined-food-restaurant-intro small { display: flex; align-items: center; gap: 5px; color: var(--muted); }
 .reimagined-menu-shortcuts { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; }
 .reimagined-menu-shortcuts button { min-height: 44px; flex-shrink: 0; border: 1px solid #35604726; border-radius: 12px; padding: 10px 14px; font-size: 13px; }
 .reimagined-food-menu-section > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
@@ -56,9 +72,10 @@
 .reimagined-food-choices fieldset { margin: 0; padding: 12px; border-color: #35604730; background: #fff5; }
 .reimagined-food-choices legend { padding: 0 6px; font-size: 15px; font-weight: 650; }
 .reimagined-food-choices fieldset p { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
-.reimagined-food .reimagined-food-choices label { min-height: 48px; padding: 12px 8px; border-radius: 10px; font-size: 14px; line-height: 1.5; }
+.reimagined-food .reimagined-food-choices label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 48px; padding: 12px 8px; border-radius: 10px; font-size: 14px; line-height: 1.5; }
+.reimagined-food-choices label small { color: var(--muted); font-size: 12px; }
 .reimagined-food-choices label:has(input:checked) { background: #dce8da; }
-.reimagined-food-choices label input { margin: 0 8px 0 0; vertical-align: middle; }
+.reimagined-food-choices label input { margin: 0; width: 18px; height: 18px; accent-color: #315c41; }
 .reimagined-food .reimagined-food-choices > button { margin: 0; min-height: 48px; font-weight: 650; }
 .reimagined-food .reimagined-food-choices > button:first-of-type { color: #fff; background: #315c41; border-color: #315c41; }
 .reimagined-food-selection-price { margin: 0; font-size: 13px; }
@@ -93,4 +110,9 @@
   .reimagined-dish-card > .reimagined-product-open { grid-template-columns: 64px minmax(0, 1fr); }
   .reimagined-dish-card .reimagined-sku-image { width: 64px; height: 64px; }
   .reimagined-food-toolbar { align-items: flex-start; }
+  .reimagined-food-restaurant-intro { grid-template-columns: 64px minmax(0, 1fr); gap: 12px; }
+  .reimagined-food-restaurant-intro > .reimagined-sku-image { width: 64px; height: 64px; }
+  .reimagined-food-state { padding: 24px 12px; }
+  .reimagined-food .reimagined-wooden-shelf > header { align-items: flex-start; }
+  .reimagined-food .reimagined-wooden-shelf > header small { flex-shrink: 0; padding-top: 4px; }
 }

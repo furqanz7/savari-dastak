@@ -27,39 +27,67 @@ export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey,
   const [revokingSessionId, setRevokingSessionId] = useState<string>();
   const [error, setError] = useState<string>();
   const closeButton = useRef<HTMLButtonElement>(null);
+  const expired = useRef(onSessionExpired);
+  expired.current = onSessionExpired;
+  const generation = useRef(0);
+  const pending = useRef<AbortController | undefined>(undefined);
+  const operationLock = useRef(false);
   const operationBusy = busy || !!revokingSessionId;
   const dialog = useModalDialog<HTMLElement>({ busy: operationBusy, onDismiss, initialFocus: closeButton });
 
   const load = useCallback(async () => {
+    if (operationLock.current) return;
+    operationLock.current = true;
+    const epoch = ++generation.current;
+    const controller = new AbortController(); pending.current = controller;
     setLoading(true); setError(undefined);
     try {
-      setSessions((await getAccountSessions({ ...auth, ...metadata })).sessions);
+      const snapshot = await getAccountSessions({ ...auth, ...metadata, signal: controller.signal });
+      if (epoch === generation.current) setSessions(snapshot.sessions);
     } catch (loadError) {
-      if (loadError instanceof AccountSessionRequestError && loadError.status === 401) return onSessionExpired();
+      if (epoch !== generation.current || controller.signal.aborted) return;
+      if (loadError instanceof AccountSessionRequestError && loadError.status === 401) return expired.current();
       setError(userFacingError(loadError, "Devices could not be loaded."));
-    } finally { setLoading(false); }
-  }, [auth, metadata, onSessionExpired]);
+    } finally { if (epoch === generation.current) { operationLock.current = false; pending.current = undefined; setLoading(false); } }
+  }, [auth, metadata]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const lifetime = generation;
+    setSessions([]); setBusy(false); setRevokingSessionId(undefined);
+    void load();
+    return () => { lifetime.current++; pending.current?.abort(); pending.current = undefined; operationLock.current = false; };
+  }, [load]);
 
   const signOutOthers = async () => {
+    if (operationLock.current || sessions.every(session => session.isCurrent)) return;
+    operationLock.current = true;
+    const epoch = ++generation.current;
+    const controller = new AbortController(); pending.current = controller;
     setBusy(true); setError(undefined);
     try {
-      setSessions((await signOutOtherSessions({ ...auth, ...metadata })).sessions);
+      const snapshot = await signOutOtherSessions({ ...auth, ...metadata, signal: controller.signal });
+      if (epoch === generation.current) setSessions(snapshot.sessions);
     } catch (signOutError) {
-      if (signOutError instanceof AccountSessionRequestError && signOutError.status === 401) return onSessionExpired();
+      if (epoch !== generation.current || controller.signal.aborted) return;
+      if (signOutError instanceof AccountSessionRequestError && signOutError.status === 401) return expired.current();
       setError(userFacingError(signOutError, "Other devices could not be signed out."));
-    } finally { setBusy(false); }
+    } finally { if (epoch === generation.current) { operationLock.current = false; pending.current = undefined; setBusy(false); } }
   };
 
   const removeSession = async (sessionId: string) => {
+    if (operationLock.current || !sessions.some(session => session.sessionId === sessionId && !session.isCurrent)) return;
+    operationLock.current = true;
+    const epoch = ++generation.current;
+    const controller = new AbortController(); pending.current = controller;
     setRevokingSessionId(sessionId); setError(undefined);
     try {
-      setSessions((await revokeAccountSession({ ...auth, sessionId })).sessions);
+      const snapshot = await revokeAccountSession({ ...auth, sessionId, signal: controller.signal });
+      if (epoch === generation.current) setSessions(snapshot.sessions);
     } catch (removeError) {
-      if (removeError instanceof AccountSessionRequestError && removeError.status === 401) return onSessionExpired();
+      if (epoch !== generation.current || controller.signal.aborted) return;
+      if (removeError instanceof AccountSessionRequestError && removeError.status === 401) return expired.current();
       setError(userFacingError(removeError, "That device could not be signed out."));
-    } finally { setRevokingSessionId(undefined); }
+    } finally { if (epoch === generation.current) { operationLock.current = false; pending.current = undefined; setRevokingSessionId(undefined); } }
   };
 
   const dismissFromBackdrop = (event: MouseEvent<HTMLDivElement>) => {
@@ -70,11 +98,12 @@ export function AccountSessionsSheet({ accessToken, supabaseUrl, publishableKey,
   return <div className="customer-sheet-backdrop" role="presentation" onMouseDown={dismissFromBackdrop}>
     <section ref={dialog} className="customer-sheet account-sessions-sheet" role="dialog" aria-modal="true" aria-labelledby="sessions-title" tabIndex={-1}>
       <header className="account-sheet-heading"><span className="account-dialog-mark" aria-hidden="true"><ShieldCheck size={21} /></span><div><p className="eyebrow">Security</p><h2 id="sessions-title">Devices and sessions</h2><p>Review where your Dastak account is signed in.</p></div><button ref={closeButton} className="icon-button" type="button" onClick={onDismiss} disabled={operationBusy} aria-label="Close sessions" title="Close"><X size={19} /></button></header>
-      {loading ? <div className="account-sessions-loading" role="status"><RefreshCw size={18} /> Checking devices…</div> : <div className="account-session-list">
-        {sessions.map((session) => <SessionRow key={session.sessionId} session={session} busy={revokingSessionId === session.sessionId} disabled={operationBusy} onRemove={() => void removeSession(session.sessionId)} />)}
-        {sessions.length === 0 && !error && <p className="account-sessions-empty">No active sessions were returned.</p>}
-      </div>}
-      {error && <div className="account-sessions-error" role="alert"><span>{error}</span><button type="button" onClick={() => void load()}>Try again</button></div>}
+      {loading ? <div className="account-sessions-loading" role="status"><RefreshCw size={18} /> Checking devices…</div> : null}
+      <div className="account-session-list" aria-busy={loading}>
+        {sessions.map((session) => <SessionRow key={session.sessionId} session={session} busy={revokingSessionId === session.sessionId} disabled={operationBusy || loading} onRemove={() => void removeSession(session.sessionId)} />)}
+        {sessions.length === 0 && !error && !loading && <p className="account-sessions-empty">No active sessions were returned.</p>}
+      </div>
+      {error && <div className="account-sessions-error" role="alert"><span>{error}</span><button type="button" disabled={operationBusy || loading} onClick={() => void load()}>Try again</button></div>}
       <div className="account-sessions-note"><CheckCircle2 size={18} /><p><strong>This device stays signed in.</strong><span>Removed devices are blocked from Dastak requests and cannot refresh their sessions.</span></p></div>
       <button className="secondary-button account-sessions-action" type="button" onClick={() => void signOutOthers()} disabled={operationBusy || loading || otherCount === 0}><LogOut size={18} /> {busy ? "Signing out…" : otherCount === 0 ? "No other devices" : `Sign out ${otherCount} other ${otherCount === 1 ? "device" : "devices"}`}</button>
     </section>

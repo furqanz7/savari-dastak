@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState, type Dispatch, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, MapPin, Minus, Plus, RefreshCw, Trash2, Utensils } from "lucide-react";
+import { ArrowLeft, ArrowRight, MapPin, Minus, Plus, RefreshCw, Trash2, Utensils, WifiOff } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
 import { formatV1Price, type V1RestaurantMenu, type V1RestaurantMenuItem } from "./dastakV1";
 import { foodAcceptingOrders, foodAvailability, foodCategoryControls, foodCategoryRestaurants, foodDistance, foodRestaurantName, searchFood } from "./reimaginedFoodCatalogue";
@@ -42,36 +42,44 @@ export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online,
     })}</ul>}
     {state.shopping.food.length ? checkoutContent ?? <button type="button" disabled>Food checkout integration pending</button> : null}</section>;
   if (availabilityNotice) return <>{availabilityNotice}</>;
-  if (!resource.data) return <section role="status"><p>{!online ? "You’re offline. Reconnect to load Food menus." : resource.status === "unavailable" ? "Couldn’t load Food menus. Your saved carts are unchanged." : "Opening restaurants and menus…"}</p>
-    {online && resource.status === "unavailable" ? <button type="button" onClick={resource.retry}>Retry Food menus</button> : null}</section>;
+  if (!resource.data) return <FoodPanelMessage title={!online ? "You’re offline" : resource.status === "unavailable" ? "Menus couldn’t load" : "Opening restaurants and menus…"} detail={!online ? "Reconnect to load Food menus. Your saved carts are unchanged." : resource.status === "unavailable" ? "Couldn’t load Food menus. Your saved carts are unchanged." : "Finding the latest menus and store availability."} loading={online && resource.status !== "unavailable"} offline={!online}>
+    {online && resource.status === "unavailable" ? <button type="button" onClick={resource.retry}>Retry Food menus<RefreshCw size={16} aria-hidden="true" /></button> : null}</FoodPanelMessage>;
   const branchId = exploration.view.kind === "restaurant" ? exploration.view.branchId : undefined;
   const menu = resource.data.find(value => value.restaurant.branchId === branchId);
-  if (menu && !foodAcceptingOrders(menu)) return <section className="reimagined-food-empty" role="status">{!headingOwnedByShell ? <h2>{foodRestaurantName(menu)}</h2> : null}<p>Store closed</p><button type="button" onClick={() => dispatch({ type: "navigate", section: "home" })}>Back to restaurants</button></section>;
+  if (menu && !foodAcceptingOrders(menu)) return <FoodPanelMessage title="Store closed" detail={`${foodRestaurantName(menu)} isn’t accepting orders right now. Your saved Food cart is unchanged.`}><button type="button" onClick={() => dispatch({ type: "navigate", section: "home" })}><ArrowLeft size={16} aria-hidden="true" />Back to restaurants</button></FoodPanelMessage>;
   const item = menu?.categories.flatMap(category => category.items).find(value => value.id === exploration.detailId);
   return <div className="reimagined-food">
     <div className="reimagined-food-toolbar">{exploration.detailId ? <button type="button" className="reimagined-detail-close" onClick={() => dispatch({ type: "closeDetail" })}><ArrowLeft size={16} aria-hidden="true" />Back to menu</button> : menu ? <button type="button" className="reimagined-food-back" onClick={() => dispatch({ type: "navigate", section: "home" })}><ArrowLeft size={16} aria-hidden="true" />Back to restaurants</button> : <p>Restaurants and cafés near you</p>}<button type="button" disabled={!online || resource.status === "loading"} onClick={resource.retry} aria-label="Refresh Food menus"><RefreshCw size={16} aria-hidden="true" /><span>Refresh</span></button></div>
     {resource.status === "loading" ? <p role="status">Searching Dastak’s restaurant catalogue…</p> : null}
+    {!online ? <p className="reimagined-food-notice" role="status"><WifiOff size={16} aria-hidden="true" />Offline: showing saved menus. Reconnect to add dishes or refresh availability.</p> : null}
     {resource.error && resource.data ? <p role="alert">More Food results could not load. The menus already loaded are retained.</p> : null}
-    {resource.hasMore && resource.loadMore ? <button type="button" disabled={!online || resource.loadingMore} onClick={() => void resource.loadMore?.()}>{resource.loadingMore ? "Loading more Food results…" : exploration.view.kind === "search" ? "Load more Food search results" : "Load more restaurants"}</button> : null}
     {exploration.detailId ? item && menu ? <section className="reimagined-product-detail" aria-label={`${item.name} dish details`}>
       <FoodImage name={item.name} imageKey={item.imageKey} supabaseUrl={supabaseUrl} />
       {!headingOwnedByShell ? <h2>{item.name}</h2> : null}<p className="reimagined-food-detail-restaurant">{foodRestaurantName(menu)}</p>{item.description ? <p>{item.description}</p> : null}<p className="reimagined-food-base-price">Base price: {formatV1Price(item.basePricePaise)}</p><p className="reimagined-food-status" data-open={foodAcceptingOrders(menu)}>{foodAvailability(menu)}</p>
       <WishlistButton wishlist={wishlist} kind="MENU_ITEM" id={item.id} name={item.name} online={online} />
       <FoodChoices key={JSON.stringify([menu.restaurant.branchId, item])} item={item} menu={menu} state={state} dispatch={dispatch} online={online} canEdit={canEdit} />
     </section> : <p role="status">This dish is no longer in the loaded menu. <button type="button" onClick={() => dispatch({ type: "closeDetail" })}>Back to menu</button></p>
-      : exploration.view.kind === "restaurant" ? menu ? <><section className="reimagined-food-restaurant-intro" aria-label="Restaurant information">{!headingOwnedByShell ? <h2>{foodRestaurantName(menu)}</h2> : null}{menu.restaurant.description ? <p>{menu.restaurant.description}</p> : null}<p className="reimagined-food-status" data-open={foodAcceptingOrders(menu)}>Accepting orders</p>{resource.nearest ? <small><MapPin size={14} aria-hidden="true" />{foodDistance(menu)} · straight-line distance</small> : null}</section>
+      : exploration.view.kind === "restaurant" ? menu ? <><section className="reimagined-food-restaurant-intro" aria-label="Restaurant information"><FoodImage name={foodRestaurantName(menu)} imageKey={menu.restaurant.imageKey} supabaseUrl={supabaseUrl} /><div>{!headingOwnedByShell ? <h2>{foodRestaurantName(menu)}</h2> : null}{menu.restaurant.description ? <p>{menu.restaurant.description}</p> : null}<p className="reimagined-food-status" data-open={foodAcceptingOrders(menu)}>Accepting orders</p>{resource.nearest ? <small><MapPin size={14} aria-hidden="true" />{foodDistance(menu)} · straight-line distance</small> : null}</div></section>
         <RestaurantMenu key={menu.restaurant.branchId} menu={menu} supabaseUrl={supabaseUrl} dispatch={dispatch} wishlist={wishlist} online={online} /></>
         : <p role="status">This restaurant is not in the loaded catalogue. <button type="button" onClick={() => dispatch({ type: "navigate", section: "home" })}>Back to restaurants</button></p>
       : exploration.view.kind === "search" ? resource.status === "loading" ? null : resource.error && !resource.searchData ? <p role="status">The server search did not complete. Refresh Food menus to retry; your saved carts are unchanged.</p> : <><p className="reimagined-commerce-note">{online ? "Search results come from Dastak’s restaurant catalogue. Load more if further matches are available." : "Offline: showing only menus already loaded on this device."}</p><FoodResults menus={resource.searchData ?? resource.data} query={exploration.view.query} dispatch={dispatch} nearest={resource.nearest} /></>
       : <><details className="reimagined-food-distance"><summary>{resource.nearest ? online ? "Nearest first" : "Offline: saved distance order" : "Choose a saved delivery location"}</summary><p>{resource.nearest ? "A straight-line distance from your selected address is not a delivery time. Restaurants without a location appear last." : "Choose a saved delivery location for nearest-first restaurants. Showing catalogue order."}</p></details><nav className="reimagined-food-categories" aria-label="Food menu categories">
         <button type="button" aria-pressed={!exploration.foodCategoryFilter} onClick={() => dispatch({ type: "selectFoodCategory" })}>All restaurants</button>
         {categoryControls.map(filter => <button key={filter.label} type="button" aria-label={`Browse Food category ${filter.label}`} aria-pressed={exploration.foodCategoryFilter?.label === filter.label} onClick={() => dispatch({ type: "selectFoodCategory", filter })}>{filter.label}</button>)}
-      </nav><section className="reimagined-wooden-shelf" aria-label="Restaurants"><header><h2>{exploration.foodCategoryFilter ? `Restaurants offering ${exploration.foodCategoryFilter.label}` : "Restaurants"}</h2></header>
+      </nav><section className="reimagined-wooden-shelf" aria-label="Restaurants"><header><h2>{exploration.foodCategoryFilter ? `Restaurants offering ${exploration.foodCategoryFilter.label}` : "Restaurants"}</h2><small>{restaurants.length} {resource.hasMore ? "loaded" : restaurants.length === 1 ? "restaurant" : "restaurants"}</small></header>
         {restaurants.length ? <div className="reimagined-restaurant-grid" aria-label="Restaurant shelf">{restaurants.map(value => <article className="reimagined-restaurant-card" key={value.restaurant.branchId} data-closed={!foodAcceptingOrders(value)}>
           <button type="button" className="reimagined-product-open" disabled={!foodAcceptingOrders(value)} aria-label={`Open ${foodRestaurantName(value)} menu`} onClick={() => dispatch({ type: "openRestaurant", branchId: value.restaurant.branchId })}>
             <FoodImage name={foodRestaurantName(value)} imageKey={value.restaurant.imageKey} supabaseUrl={supabaseUrl} /><span className="reimagined-restaurant-card-body"><strong>{foodRestaurantName(value)}</strong>{value.restaurant.description ? <small>{value.restaurant.description}</small> : null}<span className="reimagined-food-status" data-open={foodAcceptingOrders(value)}>{foodAcceptingOrders(value) ? "Accepting orders" : "Store closed"}</span>{resource.nearest ? <small><MapPin size={14} aria-hidden="true" />{foodDistance(value)}</small> : null}<span className="reimagined-food-card-action">{foodAcceptingOrders(value) ? "View menu" : "Not accepting orders"}<ArrowRight size={16} aria-hidden="true" /></span></span></button>
-        </article>)}</div> : <p>{exploration.foodCategoryFilter ? "No restaurants in the loaded menus currently match this category. Choose All restaurants or refresh the menus." : "No restaurants returned by Dastak yet."}</p>}</section></>}
+        </article>)}</div> : <FoodPanelMessage title={exploration.foodCategoryFilter ? "No matches in this category" : "Food delivery isn’t available in your area yet"} detail={exploration.foodCategoryFilter ? "No restaurants in the loaded menus currently match this category. Choose All restaurants or refresh the menus." : "Try another delivery location or check back later. Your saved Food cart is unchanged."}>{exploration.foodCategoryFilter ? <button type="button" onClick={() => dispatch({ type: "selectFoodCategory" })}>Show all restaurants<ArrowRight size={16} aria-hidden="true" /></button> : null}</FoodPanelMessage>}</section></>}
+    {!exploration.detailId && exploration.view.kind !== "restaurant" && resource.hasMore && resource.loadMore ? <div className="reimagined-food-pagination"><button type="button" disabled={!online || resource.loadingMore || resource.status === "loading"} onClick={() => void resource.loadMore?.()}>{resource.loadingMore ? "Loading more Food results…" : exploration.view.kind === "search" ? "Load more Food search results" : "Load more restaurants"}<ArrowRight size={16} aria-hidden="true" /></button></div> : null}
   </div>;
+}
+
+function FoodPanelMessage({ title, detail, loading = false, offline = false, children }: { title: string; detail: string; loading?: boolean; offline?: boolean; children?: ReactNode }) {
+  return <section className="reimagined-food-state" role="status" aria-busy={loading}>
+    <span className="reimagined-food-state-icon" aria-hidden="true">{loading ? <RefreshCw className="reimagined-food-spinner" size={25} /> : offline ? <WifiOff size={25} /> : <Utensils size={25} />}</span>
+    <h2>{title}</h2><p>{detail}</p>{children}
+  </section>;
 }
 
 export function ReimaginedFoodSuggestions({ menus, query, dispatch }: { menus?: V1RestaurantMenu[]; query: string; dispatch: Dispatch<ReimaginedAction> }) {
@@ -128,13 +136,13 @@ function FoodChoices({ item, menu, state, dispatch, online, canEdit }: { item: V
   const canAdd = canEdit && online && available && selection.valid && !otherRestaurant && (line?.quantity ?? 0) < 99;
   return <div className="reimagined-food-choices">
     {item.optionGroups.map(group => <fieldset key={group.id}><legend>{group.name}</legend><p>{group.minimumSelections}–{group.maximumSelections} choices · {group.selectionType === "SINGLE" ? "Single choice" : "Multiple choices"}</p>
-      {group.options.map(option => <label key={option.id} style={{ display: "block" }}><input type={group.selectionType === "SINGLE" ? "radio" : "checkbox"} name={group.id} checked={optionIds.includes(option.id)} onChange={event => {
+      {group.options.map(option => <label key={option.id}><input type={group.selectionType === "SINGLE" ? "radio" : "checkbox"} name={group.id} checked={optionIds.includes(option.id)} onChange={event => {
         const checked = event.currentTarget.checked;
         setOptionIds(previous => {
           const remaining = previous.filter(id => id !== option.id && (group.selectionType !== "SINGLE" || !group.options.some(value => value.id === id)));
           return checked ? [...remaining, option.id] : remaining;
         });
-      }} /> {option.name} · +{formatV1Price(option.priceDeltaPaise)}</label>)}
+      }} /><span>{option.name}</span><small>+{formatV1Price(option.priceDeltaPaise)}</small></label>)}
       {group.selectionType === "SINGLE" && group.minimumSelections === 0 ? <button type="button" onClick={() => setOptionIds(previous => previous.filter(id => !group.options.some(option => option.id === id)))}>Clear {group.name}</button> : null}
     </fieldset>)}
     <p className="reimagined-food-selection-price"><strong>{formatV1Price(selection.pricePaise)}</strong> estimated per dish · In cart: {line?.quantity ?? 0}</p>
