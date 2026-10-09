@@ -175,8 +175,8 @@ describe("authenticated local customer integration", () => {
   });
   it("shows the requested area-specific messages, rather than a globally empty catalogue", () => {
     vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, groceryServiceable: false, foodServiceable: false }, status: "ready", error: undefined, retry: vi.fn() });
-    mount(); expect(host.textContent).toContain("Grocery delivery isn’t available in your area yet.");
-    click("Food"); expect(host.textContent).toContain("Food delivery isn’t available in your area yet");
+    mount(); expect(host.textContent).toContain("This area is not serviceable yet.");
+    click("Food"); expect(host.textContent).toContain("This area is not serviceable yet.");
     expect(host.querySelector('button[aria-label="Open Test Café menu"]')).toBeNull();
   });
   it("applies a freshly paused restaurant to already-loaded menus without hiding the card", () => {

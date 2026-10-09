@@ -21,7 +21,7 @@ describe("local availability contract", () => {
     expect(localGroceryEligibility(fixtureId(6), areaFixture, true, false, true).canAdd).toBe(false);
   });
   it("blocks unsupported Grocery and saved quantities that exceed local stock without removing them", () => {
-    expect(localGroceryEligibility(fixtureId(6), { ...areaFixture, groceryServiceable: false }, true, true, true).reason).toBe("Grocery delivery isn’t available in your area yet.");
+    expect(localGroceryEligibility(fixtureId(6), { ...areaFixture, groceryServiceable: false }, true, true, true).reason).toBe("This area is not serviceable yet.");
     const cart = { [fixtureId(6)]: 4 };
     expect(areaCheckoutIssue(areaFixture, true, cart)).toContain("out of stock"); expect(cart[fixtureId(6)]).toBe(4);
     expect(areaCheckoutIssue(areaFixture, true, { [fixtureId(6)]: 3 })).toBeUndefined();

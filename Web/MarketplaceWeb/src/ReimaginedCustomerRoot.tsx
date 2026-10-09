@@ -120,8 +120,8 @@ function AccountExperience(props: Props) {
   const groceryEligibility = (sku: { id: string }) => localGroceryEligibility(sku.id, availability.data, online, canEditCart, Boolean(foodLocation));
   const deliveryIssue = areaCheckoutIssue(availability.data, Boolean(foodLocation));
   const groceryIssue = areaCheckoutIssue(availability.data, Boolean(foodLocation), state.shopping.retail);
-  const areaNotice = (service: "grocery" | "food") => <section role="status">
-    <p>{!foodLocation ? "Choose your delivery location to see what’s available nearby." : availability.status === "unavailable" ? "Couldn’t check availability in your area. Your carts are saved." : availability.status !== "ready" ? "Checking availability in your area…" : service === "grocery" ? "Grocery delivery isn’t available in your area yet." : "Food delivery isn’t available in your area yet"}</p>
+  const areaNotice = () => <section role="status">
+    <p>{!foodLocation ? "Choose your delivery location to see what’s available nearby." : availability.status === "unavailable" ? "Couldn’t check availability in your area. Your carts are saved." : availability.status !== "ready" ? "Checking availability in your area…" : "This area is not serviceable yet."}</p>
     <button type="button" onClick={() => dispatch({ type: "openLocation" })}>Change location</button>
     {foodLocation ? <button type="button" disabled={!online} onClick={availability.retry}>Check availability again</button> : null}
   </section>;
@@ -252,11 +252,11 @@ function AccountExperience(props: Props) {
         if (skuId || itemId) dispatch({ type: "openDetail", id: (skuId ?? itemId)! });
       }} /> : state.service === "grocery" ? <ReimaginedGrocery state={state} dispatch={dispatch} data={groceryExploration.view.kind === "search" || groceryExploration.detailId ? groceryData : resource.data} status={resource.status} wishlist={wishlist} online={online}
         searchResults={grocerySearch.results} searchLoading={grocerySearch.resultsLoading} searchError={grocerySearch.resultsError} onRetrySearch={() => { dispatch({ type: "closeSearch" }); grocerySearch.retry(groceryQuery); }}
-        availabilityNotice={!availability.data?.groceryServiceable ? areaNotice("grocery") : undefined}
+        availabilityNotice={!availability.data?.groceryServiceable ? areaNotice() : undefined}
         onRetry={resource.retry} supabaseUrl={props.supabaseUrl}
         eligibility={groceryEligibility}
         checkoutContent={review} /> : <ReimaginedFood state={state} dispatch={dispatch} resource={food} supabaseUrl={props.supabaseUrl} online={online} legacyUrl={homeUrl} canEdit={canEditCart} wishlist={wishlist} headingOwnedByShell
-          availabilityNotice={!availability.data?.foodServiceable ? areaNotice("food") : undefined}
+          availabilityNotice={!availability.data?.foodServiceable ? areaNotice() : undefined}
           checkoutContent={<><button type="button" onClick={() => dispatch({ type: "navigate", section: "profile" })}>Edit delivery recipient in Profile</button><ReimaginedFoodCheckout auth={props} addressPicker={addressPicker} input={foodInput} counter={onReservationChange => <ReimaginedFoodCounter key={accessToken} onReservationChange={onReservationChange} checkout={foodCheckout} input={foodInput} enabled deliveryIssue={deliveryIssue} dispatch={dispatch} onSessionExpired={onSessionExpired} ordersUrl={ordersUrl} onOpenOrders={openOrders} />} /></>} />}
     </ReimaginedShell>
     {webPush.shouldPrompt ? <WebNotificationOnboarding busy={webPush.status === "enabling"} onEnable={() => void webPush.enable()} onDismiss={webPush.dismiss} /> : null}

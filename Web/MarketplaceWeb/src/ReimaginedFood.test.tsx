@@ -187,7 +187,7 @@ describe("Food discovery and menus", () => {
   it("shows failures, retry, empty catalogue and offline states honestly", () => {
     const retry = vi.fn(); mount({ status: "unavailable", error: new Error("network"), data: undefined, retry });
     click("Retry Food menus"); expect(retry).toHaveBeenCalledOnce();
-    act(() => root.render(<Harness resource={{ ...ready, data: [] }} />)); expect(host.textContent).toContain("Food delivery isn’t available in your area yet");
+    act(() => root.render(<Harness resource={{ ...ready, data: [] }} />)); expect(host.textContent).toContain("This area is not serviceable yet.");
     act(() => root.render(<Harness resource={{ ...ready, data: undefined }} online={false} />)); expect(host.textContent).toContain("Reconnect to load Food menus");
   });
   it("keeps missing menu/dish identities explicit instead of selecting a replacement", () => {
