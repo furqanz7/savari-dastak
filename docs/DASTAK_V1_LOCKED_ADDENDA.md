@@ -83,3 +83,26 @@ This section is the newest authority for the launch customer-payment path and ov
 - The immutable paid snapshot and `paid_at` truth begin only at successful doorstep collection. Dastak's 2% platform fee is posted exactly once then through balanced append-only accounting; merchant commission remains 0 bps. Merchant Royalty at verified Merchant → Rider handoff and Rider Royalty at verified delivery are unchanged.
 - Customer cancellation is no longer normally available after commitment starts preparation. Merchant copy says order confirmed/preparing and that the rider collects at delivery; customer copy says payment due/collected at delivery.
 - Online payment integration is deferred and must stay dormant, not deleted. RazorpayX is not activated by this launch-payment override, and no live payment or payout operation is authorized here.
+
+## New customer checkout pricing authority — 9 October 2026
+
+User approval: “Charge 2%, and use the Food delivery rule for both”. This overrides
+the earlier no-customer-surcharge wording for NEW orders, not historical orders.
+
+- Grocery and Food delivery: ₹15 through 1,000 metres, ₹20 through 2,000 metres,
+  then ₹5 for each further started kilometre. The existing server geodesic
+  pickup-route authority remains in use; it is not a road-distance/ETA claim.
+- A separate customer platform surcharge is 2% of items plus delivery, rounded
+  half-up to integer paise. Tax-inclusive unit prices remain unchanged.
+- Pre-reservation estimates use current exact SKUs/Food options and the owned,
+  versioned saved address. Grocery merchant coverage is an estimate, not a
+  reservation or promise of a particular matching outcome.
+- FULLY_SECURED prices use actual reserved fulfilment branches. Confirmation
+  commits that secured amount; PAID copies it without recalculating against
+  later locations, tariffs, stock or prices. Existing orders retain version 0.
+- Existing internal 2% platform revenue posting, 0 bps merchant commission,
+  royalties, custody and refund/compensating accounting are NOT changed. Internal
+  revenue and the new customer surcharge are separate authorities, not additive
+  customer charges. Only the surcharge appears as the checkout platform fee.
+- No production migration, deployment or real collection was performed as part
+  of the local implementation. Release requires explicit scoped authorization.

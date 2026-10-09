@@ -6,6 +6,28 @@ import {
   type V1CatalogueDependencies,
 } from "../../dastak-v1-catalogue/handler.ts";
 
+Deno.test("Checkout quote is authenticated, batched and read-only with no actor/price override", async () => {
+  let recorded: unknown;
+  const lines = [{ lineType: "RETAIL_SKU", skuId, quantity: 2 }];
+  const response = await handleV1Catalogue(request({ operation: "customerCheckoutQuote", addressId: skuId,
+    addressVersion: "2026-10-09T00:00:00Z", lines, accountId: otherAccountId, totalPaise: 0, latitude: 50 }),
+    dependencies({ customerCheckoutQuote: input => { recorded = input; return Promise.resolve({}); } }));
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accessToken: actor.accessToken, addressId: skuId, addressVersion: "2026-10-09T00:00:00Z", lines, restaurantBranchId: null });
+});
+Deno.test("Checkout quote rejects malformed quantities, identities, options and oversized baskets", async () => {
+  let calls = 0;
+  const deps = dependencies({ customerCheckoutQuote: () => { calls++; return Promise.resolve({}); } });
+  const line = { lineType: "RETAIL_SKU", skuId, quantity: 1 };
+  for (const lines of [[], Array(81).fill(line), [{ ...line, quantity: 0 }], [{ ...line, quantity: 1.5 }],
+    [{ ...line, skuId: "bad" }], [{ lineType: "FOOD_MENU_ITEM", menuItemId: skuId, quantity: 1, optionIds: ["bad"] }]]) {
+    const response = await handleV1Catalogue(request({ operation: "customerCheckoutQuote", addressId: skuId,
+      addressVersion: "2026-10-09T00:00:00Z", lines }), deps);
+    assertEquals(response.status, 400);
+  }
+  assertEquals(calls, 0);
+});
+
 Deno.test("Customer area reads bind to the bearer actor and an owned-address version, not client coordinates", async () => {
   let recorded: unknown;
   const response = await handleV1Catalogue(request({ operation: "customerAreaAvailability", addressId: skuId,
@@ -850,6 +872,7 @@ function dependencies(
     customerRestaurantPage: overrides.customerRestaurantPage ?? (() => Promise.resolve({ restaurants: [], nextCursor: null })),
     customerRestaurantNearestPage: overrides.customerRestaurantNearestPage,
     customerAreaAvailability: overrides.customerAreaAvailability,
+    customerCheckoutQuote: overrides.customerCheckoutQuote,
     customerRestaurantAreaPage: overrides.customerRestaurantAreaPage,
     adminSnapshot: overrides.adminSnapshot ?? (() => Promise.resolve(snapshot)),
     adminTaxonomy: overrides.adminTaxonomy ??

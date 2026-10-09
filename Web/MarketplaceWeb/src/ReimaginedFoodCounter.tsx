@@ -7,17 +7,19 @@ import type { ReimaginedFoodRecovery } from "./reimaginedFoodRecovery";
 import type { ReimaginedAction } from "./reimaginedState";
 import { ServerOrderDelivery } from "./ReimaginedCheckoutCounter";
 
-export function ReimaginedFoodCounter({ checkout, input, enabled = false, dispatch, onSessionExpired, ordersUrl, onOpenOrders, deliveryIssue }: {
+export function ReimaginedFoodCounter({ checkout, input, enabled = false, dispatch, onSessionExpired, ordersUrl, onOpenOrders, deliveryIssue, onReservationChange }: {
   checkout: ReimaginedFoodRecovery; input: Parameters<typeof prepareFoodCheckout>[0]; enabled?: boolean;
   dispatch: Dispatch<ReimaginedAction>; onSessionExpired: () => void; ordersUrl: string;
   onOpenOrders?: (id?: string) => void;
   deliveryIssue?: string;
+  onReservationChange?: (reserved: boolean) => void;
 }) {
   const [order, setOrder] = useState(checkout.order);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [now, setNow] = useState(Date.now);
   const session = useRef(0);
+  useEffect(() => { onReservationChange?.(Boolean(order)); }, [order, onReservationChange]);
   useEffect(() => () => { session.current++; checkout.cancelRequests(); }, [checkout]);
   useEffect(() => {
     if (!enabled || !input.online || !input.canEdit) checkout.cancelRequests();

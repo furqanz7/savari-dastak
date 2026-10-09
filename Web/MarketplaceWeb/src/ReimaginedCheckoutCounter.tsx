@@ -10,11 +10,12 @@ export function GroceryPaymentNotice() {
 }
 
 // Writes require explicit activation, an online session and exclusive cart ownership.
-export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, canEdit = true, online, dispatch, onSessionExpired, ordersUrl, onOpenOrders, submissionIssue, deliveryIssue }: {
+export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, canEdit = true, online, dispatch, onSessionExpired, ordersUrl, onOpenOrders, submissionIssue, deliveryIssue, onReservationChange }: {
   checkout: ReimaginedGroceryCheckout; draft?: GroceryCheckoutDraft; enabled?: boolean; canEdit?: boolean; online: boolean;
   dispatch: Dispatch<ReimaginedAction>; onSessionExpired: () => void; ordersUrl: string;
   onOpenOrders?: (id?: string) => void;
   submissionIssue?: string; deliveryIssue?: string;
+  onReservationChange?: (reserved: boolean) => void;
 }) {
   const [order, setOrder] = useState<V1Order>();
   const [busy, setBusy] = useState(false);
@@ -22,6 +23,7 @@ export function ReimaginedCheckoutCounter({ checkout, draft, enabled = false, ca
   const [now, setNow] = useState(() => Date.now());
   const session = useRef(0);
   const blocked = !enabled || !online || !canEdit || busy;
+  useEffect(() => { onReservationChange?.(Boolean(order)); }, [order, onReservationChange]);
   useEffect(() => () => { session.current++; checkout.cancelRequests(); }, [checkout]);
   useEffect(() => {
     if (!enabled || !online || !canEdit) checkout.cancelRequests();

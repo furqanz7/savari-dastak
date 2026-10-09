@@ -3,6 +3,7 @@ import { V1RequestError } from "../_shared/v1-rpc.ts";
 
 export type V1Actor = { accountId: string; accessToken: string };
 export type V1CatalogueDependencies = {
+  customerCheckoutQuote?: (input: { accessToken: string; addressId: string; addressVersion: string; lines: unknown[]; restaurantBranchId: string | null }) => Promise<unknown>;
   customerAreaAvailability?: (input: { accessToken: string; addressId: string; addressVersion: string }) => Promise<unknown>;
   customerRestaurantAreaPage?: (input: { accessToken: string; addressId: string; addressVersion: string; query: string | null; limit: number; afterName: string | null; afterBranchId: string | null; afterDistanceMeters: number | null; branchId: string | null }) => Promise<unknown>;
   adminCatalogueSkuDelete?: (input: { accessToken: string; skuId: string; idempotencyKey: string }) => Promise<unknown>;
@@ -206,6 +207,22 @@ export async function handleV1Catalogue(
 
   try {
     switch (body.operation) {
+      case "customerCheckoutQuote": {
+        const addressId = requiredUUID(body.addressId);
+        const addressVersion = typeof body.addressVersion === "string" && body.addressVersion.length <= 40
+          && /^\d{4}-\d{2}-\d{2}T/.test(body.addressVersion) && Number.isFinite(Date.parse(body.addressVersion)) ? body.addressVersion : null;
+        const restaurantBranchId = optionalUUID(body.restaurantBranchId);
+        if (!addressId || !addressVersion || restaurantBranchId === undefined || !Array.isArray(body.lines)
+          || body.lines.length < 1 || body.lines.length > 80 || body.lines.some(value => {
+            const line = record(value);
+            return !line || !Number.isInteger(line.quantity) || Number(line.quantity) < 1 || Number(line.quantity) > 99
+              || (line.lineType === "RETAIL_SKU" ? !requiredUUID(line.skuId)
+                : line.lineType === "FOOD_MENU_ITEM" ? !requiredUUID(line.menuItemId) || !Array.isArray(line.optionIds)
+                  || line.optionIds.length > 80 || line.optionIds.some(id => !requiredUUID(id)) : true);
+          })) return validationError();
+        if (!dependencies.customerCheckoutQuote) throw new V1RequestError(503, "unavailable", "Checkout pricing is unavailable.");
+        return json(await dependencies.customerCheckoutQuote({ accessToken: actor.accessToken, addressId, addressVersion, lines: body.lines, restaurantBranchId }));
+      }
       case "customerAreaAvailability":
       case "customerRestaurantAreaPage": {
         const addressId = requiredUUID(body.addressId);

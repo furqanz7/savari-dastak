@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, MapPin, ReceiptText } from "lucide-react";
 import { ReimaginedAddressPicker } from "./ReimaginedAddressPicker";
-import { formatV1Price } from "./dastakV1";
+import { formatV1Price, type DastakV1Auth } from "./dastakV1";
+import { ReimaginedCheckoutEstimate } from "./ReimaginedCheckoutEstimate";
 import { groceryOrderSubmission } from "./reimaginedCheckout";
 import type { useReimaginedAddresses } from "./useReimaginedAddresses";
 
-export function ReimaginedGroceryBilling({ items, retail, subtotal, addresses, recipient, online, canEdit, accountUrl, counter, addressManager, onEditRecipient }: {
+export function ReimaginedGroceryBilling({ items, retail, subtotal, addresses, recipient, online, canEdit, accountUrl, counter, addressManager, onEditRecipient, auth }: {
   items: ReactNode; retail: Record<string, number>; subtotal?: number;
   addresses: ReturnType<typeof useReimaginedAddresses>; recipient: { name?: string; phoneNumber?: string };
-  online: boolean; canEdit: boolean; accountUrl: string; counter: ReactNode; addressManager?: ReactNode; onEditRecipient?: () => void;
+  online: boolean; canEdit: boolean; accountUrl: string; counter: ReactNode | ((onReservationChange: (reserved: boolean) => void) => ReactNode); addressManager?: ReactNode; onEditRecipient?: () => void; auth?: DastakV1Auth;
 }) {
+  const [reserved, setReserved] = useState(false);
   const [step, setStep] = useState<"items" | "billing">("items");
   const container = useRef<HTMLElement>(null);
   const previousStep = useRef(step);
@@ -53,12 +55,14 @@ export function ReimaginedGroceryBilling({ items, retail, subtotal, addresses, r
         <dl><div><dt>Name</dt><dd>{recipient.name?.trim() || "Not provided"}</dd></div><div><dt>Phone</dt><dd>{recipient.phoneNumber?.trim() || "Not provided"}</dd></div></dl>
         {onEditRecipient ? <button type="button" onClick={onEditRecipient}>Edit recipient in Profile</button> : <a href={accountUrl}>Edit recipient in Account</a>}
       </section>
-      <section className="reimagined-billing-estimate" aria-label="Billing estimate"><h3><ReceiptText size={18} aria-hidden="true" />Price review</h3>
+      {reserved ? <p role="status">Review the server-confirmed bill for your reservation below. Later cart or address edits do not change that bill.</p> : auth ? <ReimaginedCheckoutEstimate auth={auth} online={online} subtotalEstimate={subtotal} enabled={step === "billing" && subtotal !== undefined}
+        location={selected ? { addressId: selected.addressId, updatedAt: selected.updatedAt } : undefined}
+        lines={Object.entries(retail).sort(([a], [b]) => a.localeCompare(b)).map(([skuId, quantity]) => ({ lineType: "RETAIL_SKU", skuId, quantity }))} /> : <section className="reimagined-billing-estimate" aria-label="Billing estimate"><h3><ReceiptText size={18} aria-hidden="true" />Price review</h3>
         <dl><div><dt>Estimated items</dt><dd>{subtotal === undefined ? "Unavailable" : formatV1Price(subtotal)}</dd></div><div><dt>Delivery, fees & taxes</dt><dd>Awaiting checkout</dd></div><div><dt>Final payable amount</dt><dd>Not confirmed</dd></div></dl>
         <p>The item estimate is not a final bill. Stock, delivery eligibility and the payable amount are confirmed by the server.</p>
-      </section>
+      </section>}
       {issues.length ? <section className="reimagined-billing-checks" aria-label="Grocery checkout checks"><h3>Before checkout</h3><ul>{issues.map(issue => <li key={issue}>{issue}</li>)}</ul></section> : <p className="reimagined-billing-checks" role="status">Your saved address, recipient and Bucket pass local checks. Delivery and stock are not yet confirmed.</p>}
-      {counter}
+      {typeof counter === "function" ? counter(setReserved) : counter}
     </div>
   </section>;
 }

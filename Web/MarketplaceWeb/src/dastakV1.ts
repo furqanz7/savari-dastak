@@ -1097,6 +1097,43 @@ export async function getV1Restaurants(
 }
 
 export type V1RestaurantLocation = { addressId: string; updatedAt: string };
+export type V1CheckoutQuote = {
+  kind: "ESTIMATE"; currencyCode: "INR"; checkedAt: string; validUntil: string;
+  subtotalPaise: number; deliveryFeePaise: number; platformFeePaise: number;
+  taxPaise: number; discountPaise: number; totalPaise: number; deliveryAvailable: boolean;
+};
+export async function getV1CheckoutQuote(input: DastakV1Auth & {
+  location: V1RestaurantLocation; lines: V1OrderSubmission["lines"]; restaurantBranchId?: string; signal?: AbortSignal;
+}, fetcher: Fetcher = fetch): Promise<V1CheckoutQuote> {
+  const source = requiredRecord(await invoke(input, "dastak-v1-catalogue", {
+    operation: "customerCheckoutQuote", addressId: requiredUuid(input.location.addressId),
+    addressVersion: requiredTimestamp(input.location.updatedAt), lines: input.lines,
+    restaurantBranchId: input.restaurantBranchId ?? null,
+  }, undefined, fetcher));
+  if (source.kind !== "ESTIMATE" || source.currencyCode !== "INR" || source.pricingVersion !== 1
+    || source.addressId !== input.location.addressId
+    || Date.parse(requiredTimestamp(source.addressVersion)) !== Date.parse(input.location.updatedAt)
+    || source.restaurantBranchId !== (input.restaurantBranchId ?? null)
+    || JSON.stringify(requiredArray(source.lines).map(value => {
+      const line = requiredRecord(value);
+      return line.lineType === "RETAIL_SKU" ? [line.lineType, line.skuId, line.quantity]
+        : [line.lineType, line.menuItemId, line.optionIds, line.quantity];
+    })) !== JSON.stringify(input.lines.map(line => line.lineType === "RETAIL_SKU" ? [line.lineType, line.skuId, line.quantity]
+      : [line.lineType, line.menuItemId, line.optionIds, line.quantity]))
+    || typeof source.deliveryAvailable !== "boolean") invalid("checkout pricing context");
+  const subtotalPaise = requiredInteger(source.subtotalPaise, 0), deliveryFeePaise = requiredInteger(source.deliveryFeePaise, 1500);
+  const platformFeePaise = requiredInteger(source.platformFeePaise, 0), taxPaise = requiredInteger(source.taxPaise, 0);
+  const discountPaise = requiredInteger(source.discountPaise, 0), totalPaise = requiredInteger(source.totalPaise, 0);
+  const distance = requiredInteger(source.deliveryDistanceMeters, 0);
+  const delivery = distance <= 1000 ? 1500 : distance <= 2000 ? 2000 : 2000 + 500 * Math.ceil((distance - 2000) / 1000);
+  const base = BigInt(subtotalPaise) + BigInt(deliveryFeePaise);
+  const checkedAt = requiredTimestamp(source.checkedAt), validUntil = requiredTimestamp(source.validUntil);
+  if (deliveryFeePaise !== delivery || BigInt(platformFeePaise) !== (base * 200n + 5000n) / 10000n
+    || BigInt(totalPaise) !== base + BigInt(platformFeePaise) + BigInt(taxPaise) - BigInt(discountPaise)
+    || Date.parse(validUntil) <= Date.parse(checkedAt) || Date.parse(validUntil) - Date.parse(checkedAt) > 45000) invalid("checkout fee calculation");
+  return { kind: "ESTIMATE", currencyCode: "INR", checkedAt, validUntil, subtotalPaise, deliveryFeePaise,
+    platformFeePaise, taxPaise, discountPaise, totalPaise, deliveryAvailable: source.deliveryAvailable as boolean };
+}
 export type V1AreaAvailability = {
   addressId: string; addressVersion: string; checkedAt: string;
   groceryServiceable: boolean; foodServiceable: boolean; deliveryAvailable: boolean;
