@@ -69,11 +69,12 @@
 .reimagined-food-detail-restaurant { color: var(--muted); font-size: 13px; }
 .reimagined-food-base-price { font-weight: 650; }
 .reimagined-food .reimagined-food-choices { padding-bottom: 16px; display: grid; gap: 12px; }
-.reimagined-food-choices fieldset { margin: 0; padding: 12px; border-color: #35604730; background: #fff5; }
-.reimagined-food-choices legend { padding: 0 6px; font-size: 15px; font-weight: 650; }
+.reimagined-food-choices fieldset { min-inline-size: 0; max-width: 100%; margin: 0; padding: 12px; border-color: #35604730; background: #fff5; }
+.reimagined-food-choices legend { max-width: 100%; overflow-wrap: anywhere; padding: 0 6px; font-size: 15px; font-weight: 650; }
 .reimagined-food-choices fieldset p { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
 .reimagined-food .reimagined-food-choices label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 48px; padding: 12px 8px; border-radius: 10px; font-size: 14px; line-height: 1.5; }
 .reimagined-food-choices label small { color: var(--muted); font-size: 12px; }
+.reimagined-food-choices label > span { min-width: 0; overflow-wrap: anywhere; }
 .reimagined-food-choices label:has(input:checked) { background: #dce8da; }
 .reimagined-food-choices label input { margin: 0; width: 18px; height: 18px; accent-color: #315c41; }
 .reimagined-food .reimagined-food-choices > button { margin: 0; min-height: 48px; font-weight: 650; }

@@ -603,7 +603,7 @@
 .reimagined .customer-account[data-account-pane] .customer-account-section-heading { flex-wrap: wrap; gap: 8px; }
 .reimagined .customer-account[data-account-pane] .customer-identity-actions { flex-wrap: wrap; }
 @media (min-width: 721px) and (max-width: 1100px) {
-  .reimagined-wordmark { left: 20px; font-size: 28px; max-width: 132px; }
+  .reimagined-wordmark { left: 20px; max-width: 132px; }
   .reimagined-wordmark .dastak-wordmark { white-space: nowrap; }
 }
 .reimagined [data-presentation="reimagined"] .v1-feature-header { padding: 0 0 18px; min-width: 0; flex-wrap: wrap; gap: 12px; }
@@ -637,6 +637,11 @@ body:has(.reimagined) { min-width: 0; }
 .content.dastak-customer-auth-content:has(> .reimagined[data-authenticated="false"]) { display: block; max-width: none; height: auto; min-height: 100dvh; width: 100%; padding: 0; overflow: visible; }
 /* Existing Dastak brand, not the prototype's generic bold wordmark. */
 .reimagined-wordmark { font-size: 34px; font-weight: 400; letter-spacing: 0; }
+@media (min-width: 721px) and (max-width: 1100px) {
+  /* Keep this after the restored brand size: the tablet location starts at
+     150px and must never overlap the actual bilingual wordmark text. */
+  .reimagined-wordmark { font-size: 28px; }
+}
 .reimagined-auth h1 { font-size: clamp(44px, 8vw, 64px); font-weight: 400; letter-spacing: 0; margin: 14px 0; }
 .reimagined-auth .dastak-wordmark bdi { color: var(--muted); }
 .reimagined-auth-actions button { display: flex; justify-content: center; align-items: center; gap: 12px; min-height: 50px; padding: 12px 16px; }

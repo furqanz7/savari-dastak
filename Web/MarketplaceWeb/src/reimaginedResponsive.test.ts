@@ -2,9 +2,21 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("./design/reimagined.css", import.meta.url), "utf8");
+const foodCss = readFileSync(new URL("./design/reimaginedFood.css", import.meta.url), "utf8");
 const phone = css.slice(css.indexOf("/* Preserve the brief's spatial model on phones"));
 
 describe("Reimagined responsive layout safeguards", () => {
+  it("applies the compact tablet wordmark after the restored desktop brand size", () => {
+    const brand = css.indexOf("/* Existing Dastak brand");
+    const tablet = css.indexOf("@media (min-width: 721px) and (max-width: 1100px)", brand);
+    expect(tablet).toBeGreaterThan(brand);
+    expect(css.slice(tablet)).toMatch(/\.reimagined-wordmark \{ font-size: 28px; \}/);
+  });
+  it("lets long Food group and option names shrink within the phone panel", () => {
+    expect(foodCss).toMatch(/\.reimagined-food-choices fieldset \{[^}]*min-inline-size: 0;[^}]*max-width: 100%/);
+    expect(foodCss).toMatch(/\.reimagined-food-choices legend \{[^}]*max-width: 100%;[^}]*overflow-wrap: anywhere/);
+    expect(foodCss).toMatch(/\.reimagined-food-choices label > span \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere/);
+  });
   it("replaces the legacy two-column account grid with a panel-sized single column", () => {
     expect(css).toMatch(/\.reimagined \.customer-account\[data-account-pane\] \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*container: reimagined-account \/ inline-size/);
     expect(css).toContain("@container reimagined-account (max-width: 360px)");

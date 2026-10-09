@@ -14,7 +14,16 @@ import { ReimaginedFoodCounter } from "./ReimaginedFoodCounter";
 import { foodRecoveryJournal, ReimaginedFoodRecovery } from "./reimaginedFoodRecovery";
 import type { getV1RestaurantPage } from "./dastakV1";
 
+const scenario = new URLSearchParams(window.location.search).get("state");
 const menu = foodMenuFixture();
+if (scenario === "long") {
+  menu.restaurant.branchName = "Test Neighbourhood Kitchen and Café with a very long branch name";
+  menu.categories[0].name = "Freshly prepared meals with customisable accompaniments";
+  menu.categories[0].items[0].name = "Test slow-cooked paneer and fragrant rice with seasonal accompaniments";
+  const group = menu.categories[0].items[0].optionGroups[0];
+  group.name = "ChooseYourPreferredMealSizeAndAccompaniments";
+  group.options[0].name = "LargeMealWithExtraSeasonalAccompaniments";
+}
 menu.categories.push({ ...menu.categories[0], id: "00000000-0000-4000-8000-000000000040", name: "Drinks", sortOrder: 2, items: [{ ...menu.categories[0].items[0], id: "00000000-0000-4000-8000-000000000041", name: "Test Mango Drink", basePricePaise: 6000, optionGroups: [] }] });
 menu.restaurant.distanceMeters = 350;
 menu.restaurant.description = "Synthetic local menu: meals, drinks and customisable dishes.";
@@ -23,7 +32,6 @@ far.restaurant.branchName = "Test Far Café"; far.restaurant.distanceMeters = 25
 const unknown = foodMenuFixture("00000000-0000-4000-8000-000000000051"); unknown.restaurant.branchName = "Test Unmapped Café";
 const closed = foodMenuFixture("00000000-0000-4000-8000-000000000052"); closed.restaurant.branchName = "Test Closed Café"; closed.restaurant.acceptingOrders = false;
 const menus = nearestFoodMenus(prepareFoodMenus([far, unknown, menu, closed]));
-const scenario = new URLSearchParams(window.location.search).get("state");
 const remote = foodMenuFixture("00000000-0000-4000-8000-000000000099");
 remote.restaurant.branchName = "Test Regional Café"; remote.restaurant.distanceMeters = 700;
 remote.categories[0].items[0].name = "Regional Paneer Rice";
