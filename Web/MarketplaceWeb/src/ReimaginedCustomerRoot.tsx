@@ -18,6 +18,7 @@ import { useCustomerOnline } from "./useCustomerOnline";
 import { useReimaginedAddresses } from "./useReimaginedAddresses";
 import { useReimaginedActiveOrder } from "./useReimaginedActiveOrder";
 import { useReimaginedFood } from "./useReimaginedFood";
+import { useReimaginedFoodSearch } from "./useReimaginedFoodSearch";
 import { ReimaginedFood, ReimaginedFoodSuggestions } from "./ReimaginedFood";
 import { foodPanelTitle } from "./reimaginedFoodPanel";
 import { ReimaginedFoodCheckout } from "./ReimaginedFoodCheckout";
@@ -105,6 +106,9 @@ function AccountExperience(props: Props) {
   const availability = useReimaginedAvailability(props, foodLocation, online);
   reorderContext.current = JSON.stringify([props.accountId, props.accessToken, state.section, state.shopping, online, canEditCart, foodLocation, availability.data?.checkedAt]);
   const foodResource = useReimaginedFood(props, foodEnabled && Boolean(foodLocation), online, undefined, foodQuery, foodLocation);
+  const foodSearchEnabled = state.service === "food" && state.section === "home" && state.exploration.food.searchOpen
+    && !state.exploration.food.checkout && Boolean(availability.data?.foodServiceable);
+  const foodSearch = useReimaginedFoodSearch(props, state.exploration.food.searchDraft, foodSearchEnabled, online, foodLocation);
   const localMenu = (menu: NonNullable<typeof foodResource.data>[number]) => {
     const accepting = availability.data?.restaurants[menu.restaurant.branchId] === true;
     return { ...menu, restaurant: { ...menu.restaurant, acceptingOrders: accepting,
@@ -124,9 +128,28 @@ function AccountExperience(props: Props) {
   const pushAuth = useMemo(() => ({ accountId, accessToken, supabaseUrl, publishableKey, publicKey: props.webPushPublicKey }), [accountId, accessToken, supabaseUrl, publishableKey, props.webPushPublicKey]);
   const webPush = useDastakWebPush(pushAuth);
   const onSessionExpired = useCustomerSessionRecovery(props.client, accessToken);
+  const missingFoodBranches = [...new Set(state.shopping.food.map(line => line.branchId))]
+    .filter(id => !foodResource.data?.some(menu => menu.restaurant.branchId === id));
+  const cartMenuLookupKey = JSON.stringify([accountId, accessToken, supabaseUrl, publishableKey, foodLocation,
+    foodEnabled, online, foodResource.status, missingFoodBranches]);
+  const [cartMenuIssue, setCartMenuIssue] = useState<{ key: string; error: unknown }>();
   useEffect(() => {
-    if ([resource.error, grocerySearch.error, addresses.error, tracking.error, food.error, wishlist.error, availability.error].some(error => error && customerDataIssue(error).action === "sign_in")) onSessionExpired();
-  }, [resource.error, grocerySearch.error, addresses.error, tracking.error, food.error, wishlist.error, availability.error, onSessionExpired]);
+    if (!foodEnabled || !online || !foodLocation || foodResource.status !== "ready" || !missingFoodBranches.length) return;
+    let cancelled = false;
+    for (const id of missingFoodBranches) void foodResource.findRestaurant?.(id).catch(error => {
+      if (!cancelled) {
+        if (customerDataIssue(error).action === "sign_in") onSessionExpired();
+        else setCartMenuIssue({ key: cartMenuLookupKey, error });
+      }
+    });
+    return () => { cancelled = true; };
+    // Exact cart branches, session, region and loading state are represented by
+    // this primitive key. Unrelated renders must not restart menu lookups.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartMenuLookupKey]);
+  useEffect(() => {
+    if ([resource.error, grocerySearch.error, foodSearch.error, addresses.error, tracking.error, food.error, wishlist.error, availability.error].some(error => error && customerDataIssue(error).action === "sign_in")) onSessionExpired();
+  }, [resource.error, grocerySearch.error, foodSearch.error, addresses.error, tracking.error, food.error, wishlist.error, availability.error, onSessionExpired]);
   const homeUrl = existingCustomerUrl("home", window.location.href);
   const accountUrl = existingCustomerUrl("account", window.location.href);
   const ordersUrl = existingCustomerUrl("orders", window.location.href);
@@ -202,7 +225,11 @@ function AccountExperience(props: Props) {
         else openOrders(id);
       }}
       shoppingTotalLabel={state.service === "grocery" && subtotal !== undefined ? `${formatV1Price(subtotal)} estimated` : undefined}
-      searchSuggestions={state.service === "grocery" ? <><ReimaginedGrocerySuggestions data={groceryData} results={grocerySearch.suggestions} query={groceryExploration.searchDraft} dispatch={dispatch} />{grocerySearch.loading ? <p role="status">Searching the catalogue…</p> : null}{grocerySearch.error ? <p role="alert">Couldn’t check catalogue search. <button type="button" disabled={!online} onClick={() => grocerySearch.retry()}>Retry search</button></p> : null}</> : <ReimaginedFoodSuggestions menus={food.data} query={state.exploration.food.searchDraft} dispatch={dispatch} />}
+      searchSuggestions={state.service === "grocery" ? <><ReimaginedGrocerySuggestions data={groceryData} results={grocerySearch.suggestions} query={groceryExploration.searchDraft} dispatch={dispatch} />{grocerySearch.loading ? <p role="status">Searching the catalogue…</p> : null}{grocerySearch.error ? <p role="alert">Couldn’t check catalogue search. <button type="button" disabled={!online} onClick={() => grocerySearch.retry()}>Retry search</button></p> : null}</> : <>
+        {!foodSearchEnabled ? <p>Choose a serviceable delivery location to search Food.</p> : !online ? <p role="status">Reconnect to search restaurants and dishes in your area.</p> : <ReimaginedFoodSuggestions canonical menus={foodSearch.menus?.filter(locallyListed).map(localMenu)} query={state.exploration.food.searchDraft} dispatch={dispatch} more={foodSearch.more} onSelect={menu => foodResource.rememberRestaurant?.(menu) === true} />}
+        {foodSearch.loading ? <p role="status">Searching restaurants and dishes in your area…</p> : null}
+        {foodSearch.error ? <p role="alert">Couldn’t search Food in your area. <button type="button" disabled={!online} onClick={foodSearch.retry}>Retry Food search</button></p> : null}
+      </>}
       sectionContent={{
         [state.section]: state.section === "home" ? null : <Suspense fallback={<p role="status">Opening your {state.section}…</p>}>
           {reorderError ? <p role="alert">{reorderError}</p> : null}
@@ -216,6 +243,7 @@ function AccountExperience(props: Props) {
       <p className="reimagined-commerce-note">Catalogue prices are estimates. Stock, delivery and final totals must be confirmed at checkout.</p>
       {resource.data && resource.error ? <p role="alert">Couldn’t refresh the catalogue. Your previous shelves and cart are retained. <button type="button" disabled={!online || resource.refreshing} onClick={resource.retry}>Retry catalogue refresh</button></p> : null}
       {availability.data && !availability.data.deliveryAvailable ? <p role="status">No delivery partners are available in your area right now. You can keep adding available items to your cart and order later.</p> : null}
+      {state.service === "food" && cartMenuIssue?.key === cartMenuLookupKey ? <p role="alert">Couldn’t refresh a restaurant in your saved Food cart. <button type="button" disabled={!online} onClick={foodResource.retry}>Retry Food menus</button></p> : null}
       {wishlist.error ? <p role="alert">Your Wishlist couldn’t update. <button type="button" onClick={wishlist.retry}>Retry Wishlist</button></p> : null}
       {savedOpen ? <ReimaginedWishlist headingOwnedByShell wishlist={wishlist} data={resource.data} menus={food.data} online={online} supabaseUrl={supabaseUrl} onClose={() => setSavedOpen(false)} onOpen={(skuId, branchId, itemId) => {
         if (branchId && !food.data?.some(menu => menu.restaurant.branchId === branchId && foodAcceptingOrders(menu))) return;

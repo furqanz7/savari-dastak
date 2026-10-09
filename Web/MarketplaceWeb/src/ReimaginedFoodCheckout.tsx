@@ -4,7 +4,7 @@ import { prepareFoodCheckout } from "./reimaginedFoodCheckoutPreparation";
 
 export function ReimaginedFoodCheckout({ input, addressPicker, counter }: { input: Parameters<typeof prepareFoodCheckout>[0]; addressPicker: ReactNode; counter?: ReactNode }) {
   const preparation = prepareFoodCheckout(input);
-  return <section aria-label="Food checkout preparation">
+  return <section className="reimagined-food-checkout-preparation" aria-label="Food checkout preparation">
     <h3>Prepare Food checkout</h3>
     {addressPicker}
     <p>{preparation.estimatedSubtotalPaise === undefined ? "A complete item estimate is unavailable until every saved selection is valid." : `Estimated Food item subtotal: ${formatV1Price(preparation.estimatedSubtotalPaise)}`}</p>

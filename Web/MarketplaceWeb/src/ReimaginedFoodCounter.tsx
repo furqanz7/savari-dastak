@@ -52,7 +52,7 @@ export function ReimaginedFoodCounter({ checkout, input, enabled = false, dispat
       if (epoch === session.current) { setOrder(checkout.order); setNow(Date.now()); setBusy(false); }
     }
   }
-  return <section aria-label="Food checkout confirmation">
+  return <section className="reimagined-food-checkout-confirmation" aria-label="Food checkout confirmation">
     {deliveryIssue ? <p role="status">{deliveryIssue}</p> : null}
     {!enabled ? <><p>Food order submission remains disabled pending authenticated verification.</p><button type="button" disabled>Food checkout integration pending</button></>
       : checkout.recoveryIssue ? <p role="alert">{checkout.recoveryIssue}</p>

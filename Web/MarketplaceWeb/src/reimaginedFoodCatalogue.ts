@@ -76,14 +76,16 @@ export function prepareFoodMenus(menus: V1RestaurantMenu[]): V1RestaurantMenu[] 
   });
 }
 
-export function searchFood(menus: V1RestaurantMenu[], query: string) {
+export function searchFood(menus: V1RestaurantMenu[], query: string, canonical = false) {
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
   return menus.flatMap(menu => {
-    const name = foodRestaurantName(menu);
+    const name = `${foodRestaurantName(menu)} ${menu.restaurant.name}`;
     const dishes = menu.categories.flatMap(category => category.items.map(item => ({ item, category: category.name })))
       .filter(({ item, category }) => terms.every(term => `${name} ${category} ${item.name}`.toLocaleLowerCase().includes(term)));
     const restaurantMatches = terms.every(term => name.toLocaleLowerCase().includes(term));
-    return restaurantMatches || dishes.length ? [{ menu, dishes }] : [];
+    // Regional server matches can include organisation aliases not displayed
+    // as the branch name. Never discard an authoritative returned restaurant.
+    return canonical || restaurantMatches || dishes.length ? [{ menu, dishes }] : [];
   });
 }

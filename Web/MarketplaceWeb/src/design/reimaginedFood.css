@@ -96,6 +96,14 @@
 .reimagined-food-empty { display: grid; justify-items: center; gap: 12px; text-align: center; padding: 36px 16px; }
 .reimagined-food-empty h2 { font-size: 21px; margin: 0; }
 .reimagined-food-empty button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px solid #35604740; }
+.reimagined-food-cart .reimagined-food-checkout-preparation { display: grid; gap: 12px; min-width: 0; }
+.reimagined-food-cart .reimagined-food-checkout-preparation > :is(h3, p, ul) { margin: 0; line-height: 1.6; }
+.reimagined-food-cart .reimagined-food-checkout-preparation > p { font-size: 13px; }
+.reimagined-food-cart .reimagined-food-checkout-confirmation { display: grid; gap: 12px; padding: 16px; border: 1px solid #35604730; border-radius: 16px; background: #fff6; min-width: 0; }
+.reimagined-food-cart .reimagined-food-checkout-confirmation > p { margin: 0; font-size: 13px; line-height: 1.6; }
+.reimagined-food-cart .reimagined-food-checkout-confirmation > :is(button, a) { display: flex; justify-content: center; align-items: center; min-height: 48px; padding: 10px 14px; border: 1px solid #35604740; border-radius: 12px; color: #315c41; background: #e1ebdf; font-size: 14px; font-weight: 650; text-decoration: none; text-align: center; overflow-wrap: anywhere; }
+.reimagined-food-cart .reimagined-food-checkout-confirmation > button:disabled { opacity: .55; cursor: not-allowed; }
+.reimagined-food-cart .reimagined-food-checkout-confirmation > :is(button, a):focus-visible { outline: 3px solid #315c41; outline-offset: 3px; }
 .reimagined-food :is(button, input):focus-visible, .reimagined-food-cart button:focus-visible { outline: 3px solid #315c41; outline-offset: 3px; }
 @media (max-width: 1000px) {
   .reimagined-restaurant-grid, .reimagined-dish-grid { grid-template-columns: minmax(0, 1fr); }

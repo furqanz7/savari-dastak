@@ -62,7 +62,7 @@ export function ReimaginedFood({ state, dispatch, resource, supabaseUrl, online,
       : exploration.view.kind === "restaurant" ? menu ? <><section className="reimagined-food-restaurant-intro" aria-label="Restaurant information"><FoodImage name={foodRestaurantName(menu)} imageKey={menu.restaurant.imageKey} supabaseUrl={supabaseUrl} /><div>{!headingOwnedByShell ? <h2>{foodRestaurantName(menu)}</h2> : null}{menu.restaurant.description ? <p>{menu.restaurant.description}</p> : null}<p className="reimagined-food-status" data-open={foodAcceptingOrders(menu)}>Accepting orders</p>{resource.nearest ? <small><MapPin size={14} aria-hidden="true" />{foodDistance(menu)} · straight-line distance</small> : null}</div></section>
         <RestaurantMenu key={menu.restaurant.branchId} menu={menu} supabaseUrl={supabaseUrl} dispatch={dispatch} wishlist={wishlist} online={online} /></>
         : <p role="status">This restaurant is not in the loaded catalogue. <button type="button" onClick={() => dispatch({ type: "navigate", section: "home" })}>Back to restaurants</button></p>
-      : exploration.view.kind === "search" ? resource.status === "loading" ? null : resource.error && !resource.searchData ? <p role="status">The server search did not complete. Refresh Food menus to retry; your saved carts are unchanged.</p> : <><p className="reimagined-commerce-note">{online ? "Search results come from Dastak’s restaurant catalogue. Load more if further matches are available." : "Offline: showing only menus already loaded on this device."}</p><FoodResults menus={resource.searchData ?? resource.data} query={exploration.view.query} dispatch={dispatch} nearest={resource.nearest} /></>
+      : exploration.view.kind === "search" ? resource.status === "loading" ? null : resource.error && !resource.searchData ? <p role="status">The server search did not complete. Refresh Food menus to retry; your saved carts are unchanged.</p> : <><p className="reimagined-commerce-note">{online ? "Search results come from Dastak’s restaurant catalogue. Load more if further matches are available." : "Offline: showing only menus already loaded on this device."}</p><FoodResults menus={resource.searchData ?? resource.data} query={exploration.view.query} dispatch={dispatch} nearest={resource.nearest} canonical={Boolean(resource.searchData)} /></>
       : <><details className="reimagined-food-distance"><summary>{resource.nearest ? online ? "Nearest first" : "Offline: saved distance order" : "Choose a saved delivery location"}</summary><p>{resource.nearest ? "A straight-line distance from your selected address is not a delivery time. Restaurants without a location appear last." : "Choose a saved delivery location for nearest-first restaurants. Showing catalogue order."}</p></details><nav className="reimagined-food-categories" aria-label="Food menu categories">
         <button type="button" aria-pressed={!exploration.foodCategoryFilter} onClick={() => dispatch({ type: "selectFoodCategory" })}>All restaurants</button>
         {categoryControls.map(filter => <button key={filter.label} type="button" aria-label={`Browse Food category ${filter.label}`} aria-pressed={exploration.foodCategoryFilter?.label === filter.label} onClick={() => dispatch({ type: "selectFoodCategory", filter })}>{filter.label}</button>)}
@@ -82,21 +82,22 @@ function FoodPanelMessage({ title, detail, loading = false, offline = false, chi
   </section>;
 }
 
-export function ReimaginedFoodSuggestions({ menus, query, dispatch }: { menus?: V1RestaurantMenu[]; query: string; dispatch: Dispatch<ReimaginedAction> }) {
-  if (!query.trim()) return <p>Search restaurants or dishes in the loaded Food menus.</p>;
-  if (!menus) return <p role="status">Load Food menus to see suggestions.</p>;
-  return <FoodResults menus={menus} query={query} dispatch={dispatch} suggestions />;
+export function ReimaginedFoodSuggestions({ menus, query, dispatch, canonical = false, onSelect, more = false }: { menus?: V1RestaurantMenu[]; query: string; dispatch: Dispatch<ReimaginedAction>; canonical?: boolean; onSelect?: (menu: V1RestaurantMenu) => boolean; more?: boolean }) {
+  if (!query.trim()) return <p>Search restaurants or dishes near your delivery location.</p>;
+  if (!menus) return null;
+  return <><FoodResults menus={menus} query={query} dispatch={dispatch} suggestions canonical={canonical} onSelect={onSelect} /><p>Showing suggestions near your delivery location. {more ? "More restaurants may match. " : ""}Submit Search to browse full results.</p></>;
 }
 
-function FoodResults({ menus, query, dispatch, suggestions = false, nearest = false }: { menus: V1RestaurantMenu[]; query: string; dispatch: Dispatch<ReimaginedAction>; suggestions?: boolean; nearest?: boolean }) {
-  const results = searchFood(menus, query);
+function FoodResults({ menus, query, dispatch, suggestions = false, nearest = false, canonical = false, onSelect }: { menus: V1RestaurantMenu[]; query: string; dispatch: Dispatch<ReimaginedAction>; suggestions?: boolean; nearest?: boolean; canonical?: boolean; onSelect?: (menu: V1RestaurantMenu) => boolean }) {
+  const results = searchFood(menus, query, canonical);
   const open = (menu: V1RestaurantMenu, itemId?: string) => {
     if (!foodAcceptingOrders(menu)) return;
+    if (onSelect && !onSelect(menu)) return;
     dispatch({ type: "closeSearch" }); dispatch({ type: "openRestaurant", branchId: menu.restaurant.branchId });
     if (itemId) dispatch({ type: "openDetail", id: itemId });
   };
   return <div className="reimagined-grocery-suggestions" aria-label={suggestions ? "Food suggestions" : "Food search results"}>
-    {!results.length ? <p>No matches in the loaded Food menus.</p> : (suggestions ? results.slice(0, 8) : results).map(({ menu, dishes }) => <section key={menu.restaurant.branchId}>
+    {!results.length ? <p>{canonical ? "No matching restaurants or dishes in your area." : "No matches in the loaded Food menus."}</p> : (suggestions ? results.slice(0, 8) : results).map(({ menu, dishes }) => <section key={menu.restaurant.branchId}>
       <button type="button" disabled={!foodAcceptingOrders(menu)} onClick={() => open(menu)}>{foodRestaurantName(menu)}<small>{!foodAcceptingOrders(menu) ? "Store closed" : nearest ? `${foodDistance(menu)} · View menu` : "View menu"}</small></button>
       {(suggestions ? dishes.slice(0, 3) : dishes).map(({ item }) => <button type="button" key={item.id} disabled={!foodAcceptingOrders(menu)} onClick={() => open(menu, item.id)}>{item.name}<small>{!foodAcceptingOrders(menu) ? "Store closed" : `${formatV1Price(item.basePricePaise)} base`}</small></button>)}
     </section>)}

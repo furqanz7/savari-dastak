@@ -10,6 +10,7 @@ export type ReimaginedFoodResource = {
   data?: V1RestaurantMenu[]; error?: unknown; status: "ready" | "unavailable" | "loading" | "idle"; retry: () => void;
   searchData?: V1RestaurantMenu[]; hasMore?: boolean; loadingMore?: boolean; loadMore?: () => Promise<void>;
   findRestaurant?: (branchId: string) => Promise<V1RestaurantMenu | undefined>;
+  rememberRestaurant?: (menu: V1RestaurantMenu) => boolean;
   nearest?: boolean;
 };
 
@@ -88,6 +89,14 @@ export function useReimaginedFood(session: Session, enabled: boolean, online: bo
     hasMore: Boolean(scoped?.cursor), loadingMore: scoped?.loadingMore,
     loadMore: async () => { if (online && enabled && scoped?.cursor && cache.current && !request.current) await fetchPage(cache.current, scoped.cursor); },
     findRestaurant, retry: () => setRevision(value => value + 1),
+    rememberRestaurant: menu => {
+      const store = cache.current;
+      if (!enabled || !online || !store || store.owner !== owner || store.revision !== revision) return false;
+      const prepared = prepareFoodMenus([menu])[0];
+      store.menus.set(prepared.restaurant.branchId, prepared);
+      publish(store, store.pages.get(query) ?? { ids: [], seen: new Set() });
+      return true;
+    },
     nearest: Boolean(location && current?.data),
   };
 }

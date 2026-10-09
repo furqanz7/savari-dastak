@@ -9,6 +9,7 @@ import { useReimaginedCatalogue } from "./useReimaginedCatalogue";
 import { useReimaginedAddresses } from "./useReimaginedAddresses";
 import { useReimaginedActiveOrder } from "./useReimaginedActiveOrder";
 import { useReimaginedFood } from "./useReimaginedFood";
+import { useReimaginedFoodSearch } from "./useReimaginedFoodSearch";
 import { useReimaginedAvailability } from "./useReimaginedAvailability";
 import { foodMenuFixture } from "./reimaginedFood.testFixtures";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -25,6 +26,7 @@ vi.mock("./DastakCustomerView", () => ({ ExistingDastakCustomerView: (props: { o
 vi.mock("./useReimaginedCatalogue", () => ({ useReimaginedCatalogue: vi.fn() }));
 vi.mock("./useReimaginedAddresses", () => ({ useReimaginedAddresses: vi.fn() }));
 vi.mock("./useReimaginedFood", () => ({ useReimaginedFood: vi.fn() }));
+vi.mock("./useReimaginedFoodSearch", () => ({ useReimaginedFoodSearch: vi.fn() }));
 vi.mock("./useReimaginedAvailability", () => ({ useReimaginedAvailability: vi.fn() }));
 vi.mock("./useReimaginedActiveOrder", () => ({ useReimaginedActiveOrder: vi.fn(() => ({ activeOrder: undefined, activeCount: 0, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() })) }));
 vi.mock("./useReimaginedGrocerySearch", () => ({ useReimaginedGrocerySearch: () => ({ suggestions: undefined, results: undefined, error: undefined, resultsError: undefined, resultsLoading: false, loading: false, retry: vi.fn() }) }));
@@ -47,6 +49,7 @@ beforeEach(() => {
   window.history.replaceState(null, "", "#/home");
   vi.stubGlobal("navigator", { locks: checkoutLocksFixture() });
   vi.mocked(useReimaginedFood).mockReturnValue({ data: [], error: undefined, status: "ready", retry: vi.fn() });
+  vi.mocked(useReimaginedFoodSearch).mockReturnValue({ menus: undefined, more: false, error: undefined, loading: false, retry: vi.fn() });
   vi.mocked(useReimaginedActiveOrder).mockReturnValue({ activeOrder: undefined, activeCount: 0, error: undefined, storageIssue: undefined, label: "", retry: vi.fn() });
 });
 const localAddress = { addressId: fixtureId(70), updatedAt: "2026-10-08T00:00:00Z", label: "Home", address: "Local test address", building: "1", details: "", displayAddress: "Local test address", location: { latitude: 12, longitude: 77 }, isDefault: true };
@@ -60,6 +63,52 @@ beforeEach(() => {
 });
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); localStorage.clear(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated local customer integration", () => {
+  it("refreshes the exact saved-cart restaurant after reload even when it is outside the discovery page", async () => {
+    const menu = foodMenuFixture(fixtureId(999)); const item = menu.categories[0].items[0];
+    const findRestaurant = vi.fn().mockResolvedValue(menu);
+    vi.mocked(useReimaginedFood).mockReturnValue({ data: [], status: "ready", retry: vi.fn(), findRestaurant });
+    vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, restaurants: { [menu.restaurant.branchId]: true } }, status: "ready", retry: vi.fn(), error: undefined });
+    const shopping = { retail: { [fixtureId(6)]: 2 }, food: [{ branchId: menu.restaurant.branchId, itemId: item.id, optionIds: [fixtureId(35)], quantity: 2 }] };
+    saveCustomerCart("a", shopping); mount(); expect(findRestaurant).not.toHaveBeenCalled();
+    await act(async () => click("Food")); expect(findRestaurant).toHaveBeenCalledOnce(); expect(findRestaurant).toHaveBeenCalledWith(menu.restaurant.branchId);
+    act(() => root.render(<ReimaginedCustomerRoot {...props} displayName="Renamed" />)); expect(findRestaurant).toHaveBeenCalledOnce();
+    vi.mocked(useReimaginedFood).mockReturnValue({ data: [menu], status: "ready", retry: vi.fn(), findRestaurant });
+    act(() => root.render(<ReimaginedCustomerRoot {...props} />)); click("Review Food cart");
+    expect(host.textContent).toContain("₹360.00"); expect(loadCustomerCart("a")).toEqual(shopping); expect(submitV1Order).not.toHaveBeenCalled();
+  });
+  it("keeps a closed regional suggestion disabled and removes an Admin-unlisted one", () => {
+    const menu = foodMenuFixture(fixtureId(999)); const rememberRestaurant = vi.fn();
+    vi.mocked(useReimaginedFood).mockReturnValue({ data: [], status: "ready", retry: vi.fn(), rememberRestaurant });
+    vi.mocked(useReimaginedFoodSearch).mockReturnValue({ menus: [menu], more: false, error: undefined, loading: false, retry: vi.fn() });
+    vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, restaurants: { [menu.restaurant.branchId]: false } }, status: "ready", retry: vi.fn(), error: undefined });
+    mount(); click("Food"); click("Open search"); const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "rice"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+    const button = [...host.querySelectorAll("button")].find(button => button.textContent === "Test CaféStore closed")!;
+    expect(button.disabled).toBe(true); act(() => button.click()); expect(rememberRestaurant).not.toHaveBeenCalled();
+    vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, restaurants: {} }, status: "ready", retry: vi.fn(), error: undefined });
+    act(() => root.render(<ReimaginedCustomerRoot {...props} />)); expect(host.textContent).not.toContain("Test Café");
+  });
+  it("opens a regional suggestion outside the loaded page without replacing the panel while typing, then blocks checkout without a partner", () => {
+    const menu = foodMenuFixture(fixtureId(999)); menu.restaurant.branchName = "Remote Café";
+    let menus = [foodMenuFixture()];
+    const rememberRestaurant = vi.fn(value => { menus = [...menus, value]; return true; });
+    vi.mocked(useReimaginedFood).mockImplementation(() => ({ data: menus, status: "ready", retry: vi.fn(), rememberRestaurant }));
+    vi.mocked(useReimaginedFoodSearch).mockReturnValue({ menus: [menu], more: true, error: undefined, loading: false, retry: vi.fn() });
+    vi.mocked(useReimaginedAvailability).mockReturnValue({ data: { ...localAvailability, deliveryAvailable: false, restaurants: { ...localAvailability.restaurants, [menu.restaurant.branchId]: true } }, status: "ready", retry: vi.fn(), error: undefined });
+    saveCustomerCart("a", { retail: { [fixtureId(6)]: 2 }, food: [] }); mount(); click("Food"); click("Open search");
+    const input = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "rice"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+    expect(host.querySelector('.reimagined-panel-heading')?.textContent ?? host.querySelector('h1')?.textContent).not.toContain("rice");
+    expect(rememberRestaurant).not.toHaveBeenCalled();
+    expect(useReimaginedFood).toHaveBeenLastCalledWith(expect.anything(), true, true, undefined, "", { addressId: localAddress.addressId, updatedAt: localAddress.updatedAt });
+    click("Test Paneer Rice₹150.00 base"); expect(rememberRestaurant).toHaveBeenCalledWith(expect.objectContaining({ restaurant: expect.objectContaining({ branchId: menu.restaurant.branchId }) }));
+    expect(host.querySelector('[aria-label="Test Paneer Rice dish details"]')).not.toBeNull();
+    const option = host.querySelector<HTMLInputElement>('input[type="radio"]')!; act(() => option.click()); click("Add to Food cart"); click("Review Food cart");
+    expect(host.textContent).toContain("Remote Café"); expect(host.textContent).toContain("₹180.00");
+    expect([...host.querySelectorAll("button")].find(button => button.textContent === "Reserve Food order")?.disabled).toBe(true);
+    expect(loadCustomerCart("a").food[0]).toMatchObject({ branchId: menu.restaurant.branchId, optionIds: [fixtureId(35)], quantity: 1 });
+    expect(loadCustomerCart("a").retail).toEqual({ [fixtureId(6)]: 2 }); expect(submitV1Order).not.toHaveBeenCalled();
+  });
   it("refreshes the shared address resource after a Profile mutation and keys both services to its new version", async () => {
     mount(); click("Profile"); await act(async () => {});
     const resource = vi.mocked(useReimaginedAddresses).mock.results.at(-1)!.value;

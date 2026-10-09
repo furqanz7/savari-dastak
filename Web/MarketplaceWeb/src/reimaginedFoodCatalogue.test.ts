@@ -50,6 +50,8 @@ describe("read-only Food projection", () => {
     expect(searchFood(menus, "test café")[0].menu.restaurant.branchId).toBe(menu.restaurant.branchId);
     expect(searchFood(menus, "paneer meals")[0].dishes[0].item.id).toBe(menu.categories[0].items[0].id);
     expect(searchFood(menus, "xyz")).toEqual([]); expect(searchFood(menus, " ")).toEqual([]);
+    expect(searchFood(menus, "xyz", true)[0]).toMatchObject({ menu, dishes: [] });
+    expect(searchFood(menus, "Internal Kitchen")).toHaveLength(1);
     const second = foodMenuFixture(fixtureId(40));
     expect(searchFood(prepareFoodMenus([menu, second]), "paneer")).toHaveLength(2);
   });

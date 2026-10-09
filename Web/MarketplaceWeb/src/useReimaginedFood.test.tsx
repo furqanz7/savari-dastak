@@ -12,11 +12,18 @@ let root: Root; let host: HTMLDivElement;
 const page = (restaurants: V1RestaurantMenu[], nextCursor?: V1RestaurantPage["nextCursor"]) => ({ restaurants, nextCursor });
 function Harness({ loader, enabled = true, online = true, token = "token", account = "a", query = "", location }: { loader: Loader; enabled?: boolean; online?: boolean; token?: string; account?: string; query?: string; location?: V1RestaurantLocation }) {
   const result = useReimaginedFood({ accountId: account, accessToken: token, supabaseUrl: "https://example.supabase.co", publishableKey: "test" }, enabled, online, loader, query, location);
-  return <><output>{JSON.stringify({ status: result.status, count: result.data?.length, more: result.hasMore, matches: result.searchData?.length })}</output><button onClick={result.retry}>Retry</button><button onClick={() => void result.loadMore?.()}>More</button></>;
+  return <><output>{JSON.stringify({ status: result.status, count: result.data?.length, more: result.hasMore, matches: result.searchData?.length })}</output><button onClick={result.retry}>Retry</button><button onClick={() => void result.loadMore?.()}>More</button><button onClick={() => result.rememberRestaurant?.(foodMenuFixture(fixtureId(999)))}>Remember</button></>;
 }
 function mount(loader: Loader, enabled = true, online = true) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness loader={loader} enabled={enabled} online={online} />)); }
 afterEach(() => { if (root) act(() => root.unmount()); host?.remove(); });
 describe("Food session resource", () => {
+  it("retains a selected server menu for details and cart without changing the current page or fetching again", async () => {
+    const loader = vi.fn().mockResolvedValue(page([foodMenuFixture()])); mount(loader); await act(async () => {});
+    act(() => host.querySelectorAll('button')[2].click());
+    expect(host.textContent).toContain('"count":2'); expect(host.textContent).toContain('"matches":1'); expect(loader).toHaveBeenCalledOnce();
+    act(() => root.render(<Harness loader={loader} token="other" enabled={false} />));
+    act(() => host.querySelectorAll('button')[2].click()); expect(host.textContent).not.toContain('"count":2');
+  });
   it("scopes distance reads and cursors to the selected address, rejecting late old-location replies", async () => {
     const home = { addressId: fixtureId(70), updatedAt: "2026-10-08T00:00:00Z" };
     const office = { ...home, addressId: fixtureId(71) };
