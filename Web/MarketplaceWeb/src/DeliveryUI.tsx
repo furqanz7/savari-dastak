@@ -4,6 +4,7 @@ import { ArrowRight, Check, CircleAlert, Crosshair, History, MapPin, Navigation,
 import type { V1DeliveryMission, V1ReturnMission, V1PickupStop } from "./delivery";
 import { classifyPositionFix, type DeliveryGeolocationStatus, type PositionFix } from "./deliveryGeolocation";
 import type { OrderRealtimeHealth } from "./orderRealtime";
+import { DastakMap } from "./DastakMap";
 
 export type DeliverySection = "deliveries" | "history" | "royalty" | "account";
 const sections: Array<{ key: DeliverySection; label: string; icon: ReactNode }> = [
@@ -128,9 +129,7 @@ export function DeliveryRouteContext({ destination, peekLocation, gps, children 
 }
 
 const RiderMap = memo(function RiderMap({ latitude, longitude, label }: { latitude: number; longitude: number; label: string }) {
-  const bbox = [longitude - .006, latitude - .004, longitude + .006, latitude + .004].join(",");
-  const source = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${latitude}%2C${longitude}`;
-  return <div className="rider-map"><iframe title={`Map: ${label}`} src={source} loading="lazy" referrerPolicy="no-referrer" /><small>Map context · open directions for navigation</small></div>;
+  return <div className="rider-map"><DastakMap points={[{ latitude, longitude, label }]} label={`Map: ${label}`} /><small>Map context · open directions for navigation</small></div>;
 });
 
 export function directionsURL(location: { latitude: number; longitude: number }) {

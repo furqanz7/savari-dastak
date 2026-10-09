@@ -270,8 +270,8 @@ export function ParcelCustomerView({ accessToken, displayName, email, phoneNumbe
       <form className="parcel-form" onSubmit={requestQuote}>
         <header><Package size={21} /><div><h2>Delivery details</h2><p>Pickup and drop-off must be in the same service area.</p></div></header>
         <div className="parcel-locations">
-          <LocationSearchField label="Pickup" value={pickup} disabled={busy} onChange={(place) => { setPickup(place); setQuote(undefined); }} />
-          <LocationSearchField label="Drop-off" value={dropoff} disabled={busy} onChange={(place) => { setDropoff(place); setQuote(undefined); }} />
+          <LocationSearchField label="Pickup" value={pickup} disabled={busy} onSelectionCleared={() => { setPickup(undefined); setQuote(undefined); }} onChange={(place) => { setPickup(place); setQuote(undefined); }} />
+          <LocationSearchField label="Drop-off" value={dropoff} disabled={busy} onSelectionCleared={() => { setDropoff(undefined); setQuote(undefined); }} onChange={(place) => { setDropoff(place); setQuote(undefined); }} />
         </div>
         <div className="editor-grid">
           <label>Recipient name<input value={recipientName} maxLength={80} onChange={(event) => setRecipientName(event.target.value)} required /></label>

@@ -69,9 +69,20 @@ describe("Customer tracking parity with iOS", () => {
   it("keeps the map marker in the map renderer instead of drawing a false road route", () => {
     const html = renderToStaticMarkup(<CustomerLiveDelivery order={{ ...order, tracking }} />);
     expect(html).toContain('title="Delivery map"');
-    expect(html).toContain("marker=12.68%2C78.62");
+    expect(html).toContain('class="dastak-map-canvas"');
     expect(html).toContain("Collecting your order");
     expect(html).not.toContain("customer-map-markers");
     expect(html).not.toContain("polyline");
+  });
+  it("offers one call action after assignment even without a GPS fix", () => {
+    const assigned = parseCustomerDeliveryTracking({ ...tracking, location: null, riderPhoneNumber: "+919876543210" });
+    const html = renderToStaticMarkup(<CustomerLiveDelivery order={{ ...order, tracking: assigned }} />);
+    expect(html).toContain('href="tel:+919876543210"');
+    expect(html.match(/Call delivery partner/g)).toHaveLength(1);
+    expect(html).toContain("first location");
+    for (const status of ["DELIVERED", "CANCELLED", "UNAVAILABLE"] as const) {
+      expect(renderToStaticMarkup(<CustomerLiveDelivery order={{ ...order, status, tracking: assigned }} />)).not.toContain("tel:");
+    }
+    expect(parseCustomerDeliveryTracking({ ...tracking, riderPhoneNumber: "javascript:alert(1)" })?.riderPhoneNumber).toBeUndefined();
   });
 });

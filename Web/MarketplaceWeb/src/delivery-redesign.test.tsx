@@ -195,7 +195,7 @@ describe("Delivery rider workspace interactions", () => {
     await act(async () => vi.advanceTimersByTime(5_000)); expect(host.querySelector('iframe')?.src).toBe(initialSource);
     await click(button("My position")); expect(host.textContent).toContain("Live GPS · foreground tracking");
     await act(async () => vi.advanceTimersByTime(25_000)); expect(host.textContent).toContain("Last-known GPS · not live");
-    expect(host.querySelector('iframe')?.title).toBe("Map: Your last GPS position");
+    expect(host.querySelector('.dastak-map-canvas')?.getAttribute("title")).toBe("Map: Your last GPS position");
   });
 
   it("offers explicit availability renewal near expiry without automatically extending it", async () => {

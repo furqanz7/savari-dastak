@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ExternalLink, MapPin, Navigation } from "lucide-react";
 import type { CustomerOrderSupportCase, CustomerOrderSupportCategory } from "./orders";
+import { DastakMap } from "./DastakMap";
 
 export type CustomerMapPoint = {
   label: string;
@@ -14,32 +15,13 @@ export function CustomerRouteMap({ points, routeOverlay = true }: { points: Cust
   const available = points.filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude));
   if (available.length === 0) return null;
   const focus = available.find((point) => point.kind === "courier") ?? available.find((point) => point.kind === "dropoff") ?? available[0];
-  const latitudes = available.map((point) => point.latitude);
-  const longitudes = available.map((point) => point.longitude);
-  const padding = Math.max(.008, Math.max(Math.max(...latitudes) - Math.min(...latitudes), Math.max(...longitudes) - Math.min(...longitudes)) * .3);
-  const minimumLongitude = Math.min(...longitudes) - padding;
-  const minimumLatitude = Math.min(...latitudes) - padding;
-  const maximumLongitude = Math.max(...longitudes) + padding;
-  const maximumLatitude = Math.max(...latitudes) + padding;
-  const bbox = [minimumLongitude, minimumLatitude, maximumLongitude, maximumLatitude].join(",");
-  const projected = available.map((point) => ({
-    ...point,
-    left: ((point.longitude - minimumLongitude) / (maximumLongitude - minimumLongitude)) * 100,
-    top: (1 - ((point.latitude - minimumLatitude) / (maximumLatitude - minimumLatitude))) * 100,
-  }));
-  const routePoints = [
-    ...projected.filter((point) => point.kind === "pickup"),
-    ...projected.filter((point) => point.kind === "courier"),
-    ...projected.filter((point) => point.kind === "dropoff"),
-  ];
-  const routePath = routePoints.map((point) => `${point.left},${point.top}`).join(" ");
-  const source = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${focus.latitude}%2C${focus.longitude}`;
+  const routePoints = [...available.filter(p => p.kind === "pickup"), ...available.filter(p => p.kind === "courier"), ...available.filter(p => p.kind === "dropoff")];
   const destination = available.find((point) => point.kind === "dropoff") ?? focus;
   const directions = `https://maps.apple.com/?daddr=${destination.latitude},${destination.longitude}`;
 
   return (
     <section className="customer-route-panel" aria-label="Delivery route">
-      <div className="customer-map-frame"><iframe title="Delivery map" src={source} loading="lazy" referrerPolicy="no-referrer" />{routeOverlay ? <div className="customer-map-markers" aria-hidden="true">{routePoints.length > 1 ? <svg className="customer-map-route-line" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={routePath} /></svg> : null}{projected.map((point) => <span key={`marker-${point.kind}-${point.latitude}-${point.longitude}`} className={`customer-map-marker ${point.kind}`} style={{ left: `${point.left}%`, top: `${point.top}%` }}><MapPin size={16} /></span>)}</div> : null}</div>
+      <DastakMap points={routePoints} route={routeOverlay} />
       <div className="customer-route-points">{available.map((point) => (
         <div key={`${point.kind}-${point.latitude}-${point.longitude}`}>
           <span className={`route-dot ${point.kind}`}><MapPin size={15} /></span>

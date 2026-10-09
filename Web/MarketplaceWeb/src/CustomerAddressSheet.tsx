@@ -89,7 +89,6 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
             <i />
             <span className={building.trim() ? "complete" : ""}>{building.trim() ? <Check size={14} /> : "2"} Doorstep</span>
           </div>}
-          <AddressMapPreview place={place} />
           <LocationSearchField label="Delivery pin" value={place} onChange={setPlace} onSelectionCleared={() => setPlace(undefined)} disabled={busy} />
           <fieldset className="address-type-picker" disabled={busy}>
             <legend>Save as</legend>
@@ -122,41 +121,6 @@ export function CustomerAddressSheet({ address, initialPlace, busy, error, conte
           </button>
         </footer>
       </form>
-    </div>
-  );
-}
-
-function AddressMapPreview({ place }: { place?: SelectedPlace }) {
-  if (!place) {
-    return (
-      <div className="address-map-stage empty" aria-label="No delivery pin selected">
-        <MapPinned size={30} />
-        <strong>Choose a delivery pin</strong>
-        <span>Search below or use your current location.</span>
-      </div>
-    );
-  }
-
-  const padding = 0.006;
-  const parameters = new URLSearchParams({
-    bbox: [
-      place.longitude - padding,
-      place.latitude - padding,
-      place.longitude + padding,
-      place.latitude + padding,
-    ].join(","),
-    layer: "mapnik",
-    marker: `${place.latitude},${place.longitude}`,
-  });
-
-  return (
-    <div className="address-map-stage selected">
-      <iframe
-        title="Selected delivery pin"
-        loading="lazy"
-        src={`https://www.openstreetmap.org/export/embed.html?${parameters.toString()}`}
-      />
-      <span className="address-map-caption"><MapPin size={16} /> Pin confirmed</span>
     </div>
   );
 }

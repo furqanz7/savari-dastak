@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowLeft, ArrowRight, Ban, Check, ChevronRight, CircleAlert, ClockAlert, Copy, Download,
   Heart, Leaf, LockKeyhole, MapPin, Minus, PackageCheck, PackageX, Plus, Printer,
-  Phone, ReceiptText, RefreshCw, RotateCcw, Search, ShieldCheck, ShoppingBag,
+  ReceiptText, RefreshCw, RotateCcw, Search, ShieldCheck, ShoppingBag,
   UserRound, UtensilsCrossed, X,
 } from "lucide-react";
 import { catalogueImageUrl } from "./catalogue";
@@ -1862,7 +1862,6 @@ export function MatchingSheet({
     </div> : null}
 
     {order.tracking || order.status === "OUT_FOR_DELIVERY" ? <CustomerLiveDelivery order={order} delayed={Boolean(liveError)} /> : null}
-    {order.tracking?.riderPhoneNumber && order.status !== "DELIVERED" && order.status !== "CANCELLED" ? <section className="customer-contact-card"><span className="order-icon"><UserRound size={20} /></span><div><strong>{order.tracking.riderName}</strong><small>Your delivery partner</small><a className="customer-call-link" href={`tel:${order.tracking.riderPhoneNumber}`}><Phone size={16} /> Call delivery partner</a></div></section> : null}
 
     <section className="v1-order-contents" aria-label="Order items"><header><div><p>ITEMS IN THIS ORDER</p><h3>{orderItemCount(order)} {orderItemCount(order) === 1 ? "item" : "items"}</h3>{order.restaurant ? <small>{order.restaurant.branchName}</small> : null}</div></header><div className="v1-matching-lines">{order.lines.map((line) => <div key={line.id}><ProductImage src={imageUrlForLine(line)} alt="" /><span><b>{line.name}</b>{orderLineDetail(line) ? <small>{orderLineDetail(line)}</small> : null}<small>{line.quantity} × {formatV1Price(line.unitPricePaise)}</small></span><strong>{formatV1Price(line.lineTotalPaise)}</strong></div>)}</div></section>
 

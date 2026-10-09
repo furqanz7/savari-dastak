@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { UserRound } from "lucide-react";
+import { Phone, UserRound } from "lucide-react";
 import type { V1Order } from "./dastakV1";
 import { CustomerRouteMap, type CustomerMapPoint } from "./CustomerDeliveryDetails";
 import { customerTrackingPresentation } from "./customerDeliveryPresentation";
@@ -28,6 +28,7 @@ export function CustomerLiveDelivery({ order, delayed = false }: { order: V1Orde
   const age = ageSeconds < 60 ? "just now" : `${Math.floor(ageSeconds / 60)} min ago`;
   return <section className={`v1-live-delivery${tracking.live ? "" : " delayed"}`} aria-label="Delivery tracking">
     <header><span className="customer-rider-avatar"><UserRound size={24} /></span><div><h3>{tracking.riderName}</h3><span>{tracking.phase}</span></div><p className="customer-tracking-badge"><i />{tracking.live ? "Live" : "Delayed"}</p></header>
+    {order.tracking?.riderPhoneNumber ? <a className="customer-rider-call" href={`tel:${order.tracking.riderPhoneNumber}`}><Phone size={18} />Call delivery partner</a> : <p className="customer-rider-contact-unavailable">Your delivery partner’s phone number is not available yet.</p>}
     {points.length ? <TrackingMap points={points} routeOverlay={false} /> : null}
     <div className="customer-tracking-freshness"><strong>{!online ? "You’re offline · last-known information" : tracking.freshness}</strong>{!tracking.live ? <p>{!online ? "Updates will resume when you reconnect." : "We’ll update the map when a fresh, precise location arrives."}</p> : null}{Number.isFinite(timestamp) ? <small>Location updated {age}</small> : null}</div>
   </section>;
