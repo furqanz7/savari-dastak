@@ -34,7 +34,7 @@ async function isActiveOwner(accountId: string) {
 }
 
 async function submitMerchantApplication(input: SubmitMerchantApplicationInput) {
-  const { data, error } = await serviceClient.rpc("submit_merchant_application_v2", {
+  const { data, error } = await serviceClient.rpc("submit_merchant_application_v3", {
     p_account_id: input.accountId,
     p_merchant_type: input.merchantType,
     p_legal_name: input.legalName,
@@ -47,7 +47,7 @@ async function submitMerchantApplication(input: SubmitMerchantApplicationInput) 
     p_request_digest: input.requestDigest,
   });
   if (error) throw error;
-  return rpcResponse(data, "submit_merchant_application_v2");
+  return rpcResponse(data, "submit_merchant_application_v3");
 }
 
 async function getMerchantApplicationSnapshot(accountId: string) {

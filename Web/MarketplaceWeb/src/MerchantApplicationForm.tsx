@@ -311,7 +311,7 @@ export function MerchantApplicationForm({
       <section className="application-section" aria-labelledby="merchant-location-title">
         <header>
           <span className="application-section-icon"><MapPin size={18} /></span>
-          <div><h2 id="merchant-location-title">Exact store location</h2><p>Required to connect this branch to the correct Dastak service area.</p></div>
+          <div><h2 id="merchant-location-title">Exact store location</h2><p>Apply from anywhere in India. Admin approval, store inventory and local delivery availability are required before customers can order.</p></div>
         </header>
         <LocationSearchField label="Store location" value={storeLocation} disabled={busy} onSelectionCleared={() => {
           setStoreLocation(undefined);
