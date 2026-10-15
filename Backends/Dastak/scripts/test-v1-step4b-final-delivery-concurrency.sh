@@ -376,15 +376,17 @@ fi
 cash_start="$(call_final "$wrong_rider_id" "$mission_missing" START_FINAL_DELIVERY '' '' "cash-start-$run_token" cash-start)"
 cash_arrive="$(call_final "$wrong_rider_id" "$mission_missing" ARRIVE_CUSTOMER '' '' "cash-arrive-$run_token" cash-arrive)"
 [[ "$cash_start $cash_arrive" == "200|OK 200|OK" ]] || { printf 'cash mission setup failed: %s %s\n' "$cash_start" "$cash_arrive" >&2; exit 1; }
-cash_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.delivery_missions where id='$mission_missing'::uuid")"
-cash_failure="$(record_collection "$wrong_rider_id" "$mission_missing" FAILED CASH '' \
-  'Customer requested another collection attempt.' "$cash_version" "cash-failed-$run_token")"
-[[ "$cash_failure" == "200|OK" ]] || { printf 'retryable CASH failure was not recorded: %s\n' "$cash_failure" >&2; exit 1; }
 cash_code="$("${psql_base[@]}" -Atc "select private.dastak_v1_handoff_code(id,handoff_type,code_version) from dastak_v1.verification_handoffs where order_id='$order_missing'::uuid and handoff_type='RIDER_TO_CUSTOMER'")"
+cash_pin="$(call_final "$wrong_rider_id" "$mission_missing" VERIFY_CUSTOMER_PIN '' "$cash_code" "cash-pin-$run_token" cash-pin)"
+[[ "$cash_pin" == "200|OK" ]] || { printf 'CASH customer PIN was not verified: %s\n' "$cash_pin" >&2; exit 1; }
 cash_path="rider-delivery/$wrong_rider_id/99500000-0000-4000-8000-000000000403.jpg"
 "${psql_base[@]}" -c "insert into storage.objects(bucket_id,name,owner,owner_id,metadata) values('dastak-evidence','$cash_path','$wrong_rider_id'::uuid,'$wrong_rider_id','{\"mimetype\":\"image/jpeg\",\"size\":2048}')" >/dev/null
 cash_photo="$(call_final "$wrong_rider_id" "$mission_missing" ADD_DELIVERY_EVIDENCE "$cash_path" '' "cash-photo-$run_token" cash-photo)"
 [[ "$cash_photo" == "200|OK" ]] || { printf 'cash delivery evidence failed: %s\n' "$cash_photo" >&2; exit 1; }
+cash_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.delivery_missions where id='$mission_missing'::uuid")"
+cash_failure="$(record_collection "$wrong_rider_id" "$mission_missing" FAILED CASH '' \
+  'Customer requested another collection attempt.' "$cash_version" "cash-failed-$run_token")"
+[[ "$cash_failure" == "200|OK" ]] || { printf 'retryable CASH failure was not recorded: %s\n' "$cash_failure" >&2; exit 1; }
 set +e
 call_final "$wrong_rider_id" "$mission_missing" VERIFY_DELIVERY '' "$cash_code" \
   "cash-before-collection-$run_token" cash-before-collection \
@@ -447,6 +449,10 @@ wrong_rider="$(call_final "$wrong_rider_id" "$mission_normal" ARRIVE_CUSTOMER ''
 [[ "$wrong_rider" == "404|mission_not_found" ]] || { printf 'wrong rider was not rejected: %s\n' "$wrong_rider" >&2; exit 1; }
 arrive_result="$(call_final "$rider_id" "$mission_normal" ARRIVE_CUSTOMER '' '' "arrive-normal-$run_token" arrive-normal)"
 [[ "$arrive_result" == "200|OK" ]] || { printf 'customer arrival failed: %s\n' "$arrive_result" >&2; exit 1; }
+wrong_code="$(call_final "$rider_id" "$mission_normal" VERIFY_CUSTOMER_PIN '' 000000 "wrong-normal-$run_token" wrong-normal)"
+[[ "$wrong_code" == "409|delivery_code_invalid" ]] || { printf 'wrong delivery code was not rejected: %s\n' "$wrong_code" >&2; exit 1; }
+normal_pin="$(call_final "$rider_id" "$mission_normal" VERIFY_CUSTOMER_PIN '' "$normal_code" "pin-normal-$run_token" pin-normal)"
+[[ "$normal_pin" == "200|OK" ]] || { printf 'normal customer PIN was not verified: %s\n' "$normal_pin" >&2; exit 1; }
 missing_photo="$(call_final "$rider_id" "$mission_normal" VERIFY_DELIVERY '' "$normal_code" "photo-required-$run_token" photo-required)"
 [[ "$missing_photo" == "409|delivery_evidence_required" ]] || { printf 'delivery succeeded without rider photo: %s\n' "$missing_photo" >&2; exit 1; }
 
@@ -454,8 +460,6 @@ normal_path="rider-delivery/$rider_id/99500000-0000-4000-8000-000000000401.jpg"
 "${psql_base[@]}" -c "insert into storage.objects(bucket_id,name,owner,owner_id,metadata) values('dastak-evidence','$normal_path','$rider_id'::uuid,'$rider_id','{\"mimetype\":\"image/jpeg\",\"size\":2048}')" >/dev/null
 photo_result="$(call_final "$rider_id" "$mission_normal" ADD_DELIVERY_EVIDENCE "$normal_path" '' "photo-normal-$run_token" photo-normal)"
 [[ "$photo_result" == "200|OK" ]] || { printf 'rider evidence capture failed: %s\n' "$photo_result" >&2; exit 1; }
-wrong_code="$(call_final "$rider_id" "$mission_normal" VERIFY_DELIVERY '' 000000 "wrong-normal-$run_token" wrong-normal)"
-[[ "$wrong_code" == "409|delivery_code_invalid" ]] || { printf 'wrong delivery code was not rejected: %s\n' "$wrong_code" >&2; exit 1; }
 
 verify_sql_a="select response_status from public.dastak_v1_advance_final_delivery('$rider_id'::uuid,'$mission_normal'::uuid,'VERIFY_DELIVERY',null,'$normal_code','verify-normal-a-$run_token','verify-normal-a')"
 verify_sql_b="select response_status from public.dastak_v1_advance_final_delivery('$rider_id'::uuid,'$mission_normal'::uuid,'VERIFY_DELIVERY',null,'$normal_code','verify-normal-b-$run_token','verify-normal-b')"
@@ -488,21 +492,45 @@ recipient_account_count="$("${psql_base[@]}" -Atc "select count(*) from public.a
 start_override="$(call_final "$override_rider_id" "$mission_override" START_FINAL_DELIVERY '' '' "start-override-$run_token" start-override)"
 arrive_override="$(call_final "$override_rider_id" "$mission_override" ARRIVE_CUSTOMER '' '' "arrive-override-$run_token" arrive-override)"
 [[ "$start_override $arrive_override" == "200|OK 200|OK" ]] || { printf 'override mission setup failed: %s %s\n' "$start_override" "$arrive_override" >&2; exit 1; }
-upi_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.delivery_missions where id='$mission_override'::uuid")"
-upi_collection="$(record_collection "$override_rider_id" "$mission_override" COLLECTED UPI \
-  'upi-doorstep-confirmed' '' "$upi_version" "upi-success-$run_token")"
-[[ "$upi_collection" == "200|OK" ]] || { printf 'UPI doorstep collection failed: %s\n' "$upi_collection" >&2; exit 1; }
+override_code="$("${psql_base[@]}" -Atc "select private.dastak_v1_handoff_code(id,handoff_type,code_version) from dastak_v1.verification_handoffs where order_id='$order_override'::uuid and handoff_type='RIDER_TO_CUSTOMER'")"
+# Exercise the actual current PIN attempt limit, then roll back just that
+# negative scenario. Keep the authorized override's PIN/photo/payment sequence
+# valid; never bypass its structural triggers or synthesize verified PIN truth.
+"${psql_base[@]}" <<SQL
+begin;
+do \$\$
+declare reply record; attempt integer;
+begin
+  for attempt in 1..3 loop
+    select * into reply from public.dastak_v1_advance_final_delivery(
+      '$override_rider_id'::uuid,'$mission_override'::uuid,'VERIFY_CUSTOMER_PIN',null,
+      case when '$override_code'='999999' then '000000' else '999999' end,
+      'blocked-pin-$run_token-'||attempt,'blocked-pin-'||attempt);
+    if reply.response_status<>409 then raise exception 'invalid PIN accepted'; end if;
+  end loop;
+  if reply.response_body->'error'->>'code'<>'delivery_code_blocked' then
+    raise exception 'invalid-attempt threshold did not block';
+  end if;
+  select * into reply from public.dastak_v1_advance_final_delivery(
+    '$override_rider_id'::uuid,'$mission_override'::uuid,'VERIFY_CUSTOMER_PIN',null,
+    '$override_code','blocked-valid-$run_token','blocked-valid');
+  if reply.response_status<>409 or reply.response_body->'error'->>'code'<>'delivery_code_blocked' then
+    raise exception 'blocked PIN accepted a later valid attempt';
+  end if;
+end;
+\$\$;
+rollback;
+SQL
+override_pin="$(call_final "$override_rider_id" "$mission_override" VERIFY_CUSTOMER_PIN '' "$override_code" "pin-override-$run_token" pin-override)"
+[[ "$override_pin" == "200|OK" ]] || { printf 'override customer PIN was not verified: %s\n' "$override_pin" >&2; exit 1; }
 override_path="rider-delivery/$override_rider_id/99500000-0000-4000-8000-000000000402.jpg"
 "${psql_base[@]}" -c "insert into storage.objects(bucket_id,name,owner,owner_id,metadata) values('dastak-evidence','$override_path','$override_rider_id'::uuid,'$override_rider_id','{\"mimetype\":\"image/jpeg\",\"size\":2048}')" >/dev/null
 override_photo="$(call_final "$override_rider_id" "$mission_override" ADD_DELIVERY_EVIDENCE "$override_path" '' "photo-override-$run_token" photo-override)"
 [[ "$override_photo" == "200|OK" ]] || { printf 'override evidence capture failed: %s\n' "$override_photo" >&2; exit 1; }
-for attempt in 1 2 3; do
-  blocked_result="$(call_final "$override_rider_id" "$mission_override" VERIFY_DELIVERY '' 999999 "block-$attempt-$run_token" "block-$attempt")"
-done
-[[ "$blocked_result" == "409|delivery_code_blocked" ]] || { printf 'invalid-attempt threshold did not block: %s\n' "$blocked_result" >&2; exit 1; }
-override_code="$("${psql_base[@]}" -Atc "select private.dastak_v1_handoff_code(id,handoff_type,code_version) from dastak_v1.verification_handoffs where order_id='$order_override'::uuid and handoff_type='RIDER_TO_CUSTOMER'")"
-blocked_valid="$(call_final "$override_rider_id" "$mission_override" VERIFY_DELIVERY '' "$override_code" "blocked-valid-$run_token" blocked-valid)"
-[[ "$blocked_valid" == "409|delivery_code_blocked" ]] || { printf 'blocked code accepted a later valid attempt: %s\n' "$blocked_valid" >&2; exit 1; }
+upi_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.delivery_missions where id='$mission_override'::uuid")"
+upi_collection="$(record_collection "$override_rider_id" "$mission_override" COLLECTED UPI \
+  'upi-doorstep-confirmed' '' "$upi_version" "upi-success-$run_token")"
+[[ "$upi_collection" == "200|OK" ]] || { printf 'UPI doorstep collection failed: %s\n' "$upi_collection" >&2; exit 1; }
 override_evidence_id="$("${psql_base[@]}" -Atc "select id from dastak_v1.delivery_evidence where mission_id='$mission_override'::uuid")"
 override_version="$("${psql_base[@]}" -Atc "select version from dastak_v1.delivery_missions where id='$mission_override'::uuid")"
 if actor_override "$unauthorized_id" "$mission_override" "$override_evidence_id" 'Unauthorized actor attempted exceptional handoff.' "$override_version" "unauthorized-$run_token" >"$work_dir/unauthorized.out" 2>&1; then
