@@ -163,7 +163,14 @@ verified=false
 for _attempt in {1..20}; do
   html_file="$audit_root/release.html"
   headers_file="$audit_root/release.headers"
-  if curl --fail --silent --show-error --location --dump-header "$headers_file" "$verification_url" -o "$html_file"; then
+  if [[ "$mode" == "--production" ]]; then
+    fetch_args=(curl --fail --silent --show-error --location --max-time 20 --dump-header "$headers_file" "$verification_url" -o "$html_file")
+  else
+    # Preview and unpromoted production URLs may be protected. Authenticate the
+    # read with the CLI instead of following a sign-in page or weakening protection.
+    fetch_args=(vercel curl / --deployment "$deployment_url" -- --fail --silent --show-error --location --max-time 20 --dump-header "$headers_file" -o "$html_file")
+  fi
+  if VERCEL_ORG_ID="$org_id" VERCEL_PROJECT_ID="$project_id" "${fetch_args[@]}"; then
     actual_sha="$(sed -n 's/.*name="dastak:git-sha" content="\([^"]*\)".*/\1/p' "$html_file" | head -1)"
     actual_variant="$(sed -n 's/.*name="dastak:variant" content="\([^"]*\)".*/\1/p' "$html_file" | head -1)"
     actual_environment="$(sed -n 's/.*name="dastak:environment" content="\([^"]*\)".*/\1/p' "$html_file" | head -1)"

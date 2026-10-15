@@ -167,7 +167,7 @@ set is_open=true,accepting_orders=true,updated_by=excluded.updated_by,
     version=dastak_v1.branch_operational_states.version+1;
 
 insert into dastak_v1.orders (
-  customer_availability_version,checkout_pricing_version,id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,version
+  availability_policy_version,checkout_pricing_version,id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,version
 ) values
 -- Historical fixed-price custody fixtures, not fresh checkout submissions.
 (0,0,'99400000-0000-4000-8000-000000000100','DV1-STEP4-A','99400000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',now()-interval '20 minutes',now()-interval '10 minutes',1),
@@ -268,7 +268,7 @@ configure_setting 'matching.wave2_hold_seconds' '180' '99400000-0000-4000-8000-0
 configure_setting 'payment.reservation_seconds' '300' '99400000-0000-4000-8000-000000000202'
 configure_setting 'matching.wave2_max_pickup_route_meters' '50000' '99400000-0000-4000-8000-000000000203'
 configure_setting 'delivery.default_sku_logistics' '{"weightGrams":1000,"volumeCubicMillimetres":4000000,"longestSideMillimetres":300}' '99400000-0000-4000-8000-000000000204'
-configure_setting 'delivery.transport_load_profiles' '[{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]' '99400000-0000-4000-8000-000000000205'
+configure_setting 'delivery.transport_load_profiles' '[{"transportType":"WALKING","maxWeightGrams":5000,"maxVolumeCubicMillimetres":20000000,"maxPackageCount":2,"maxLongestSideMillimetres":400},{"transportType":"BICYCLE","maxWeightGrams":10000,"maxVolumeCubicMillimetres":35000000,"maxPackageCount":3,"maxLongestSideMillimetres":500},{"transportType":"MOTORBIKE","maxWeightGrams":20000,"maxVolumeCubicMillimetres":60000000,"maxPackageCount":4,"maxLongestSideMillimetres":600},{"transportType":"SCOOTER","maxWeightGrams":25000,"maxVolumeCubicMillimetres":75000000,"maxPackageCount":5,"maxLongestSideMillimetres":650},{"transportType":"AUTO","maxWeightGrams":80000,"maxVolumeCubicMillimetres":250000000,"maxPackageCount":12,"maxLongestSideMillimetres":1000},{"transportType":"CAR","maxWeightGrams":150000,"maxVolumeCubicMillimetres":500000000,"maxPackageCount":20,"maxLongestSideMillimetres":1200}]' '99400000-0000-4000-8000-000000000205'
 configure_setting 'delivery.rider_initial_pool_size' '2' '99400000-0000-4000-8000-000000000206'
 configure_setting 'delivery.rider_offer_timeout_seconds' '30' '99400000-0000-4000-8000-000000000207'
 configure_setting 'delivery.rider_pool_expansion' '{"initialRadiusMeters":1000,"radiusStepMeters":5000,"additionalRidersPerRound":2,"maximumRounds":4}' '99400000-0000-4000-8000-000000000208'
@@ -399,7 +399,7 @@ fulfilment_c='99400000-0000-4000-8000-000000000113'
 "${psql_base[@]}" <<'SQL'
 begin;
 insert into dastak_v1.orders (
-  customer_availability_version,checkout_pricing_version,id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,version
+  availability_policy_version,checkout_pricing_version,id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,version
 ) values (
   0,0,
   '99400000-0000-4000-8000-000000000102','DV1-STEP4-C',

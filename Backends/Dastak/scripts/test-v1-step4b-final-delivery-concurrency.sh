@@ -163,7 +163,7 @@ update dastak_v1.skus set status='ACTIVE',updated_at=now(),version=version+1
 where id='99500000-0000-4000-8000-000000000014' and status <> 'ACTIVE';
 
 insert into dastak_v1.orders (
-  customer_availability_version, checkout_pricing_version, id, display_order_number, customer_id, order_type, status,
+  availability_policy_version, checkout_pricing_version, id, display_order_number, customer_id, order_type, status,
   submitted_at, fully_secured_at, payment_expires_at, paid_at, version
 ) values
 -- Fixed-price historical handoff fixtures; current submission tests remain v1.

@@ -227,7 +227,7 @@ from (values
 where not exists (select 1 from dastak_v1.platform_settings existing where existing.setting_key=setting.key and existing.scope_type='GLOBAL' and existing.scope_id is null);
 
 insert into dastak_v1.orders (
-  customer_availability_version,checkout_pricing_version,id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,delivered_at,version
+  availability_policy_version,checkout_pricing_version,id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,delivered_at,version
 ) values
 -- Historic paid-order recovery, not current checkout admission/pricing.
 (0,0,'99600000-0000-4000-8000-000000000100','DV1-STEP5-RECOVERY','99600000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',now()-interval '30 minutes',now()-interval '20 minutes',null,4),
