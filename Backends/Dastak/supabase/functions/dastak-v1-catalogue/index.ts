@@ -19,17 +19,29 @@ async function callServiceRPC(functionName: string, parameters: Record<string, u
 
 Deno.serve((request) =>
   handleV1Catalogue(request, {
-    customerCheckoutQuote: input => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_checkout_quote", {
-      p_address_id: input.addressId, p_address_version: input.addressVersion,
-      p_lines: input.lines, p_restaurant_branch_id: input.restaurantBranchId,
-    }),
-    customerAreaAvailability: input => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_area_availability", {
-      p_address_id: input.addressId, p_address_version: input.addressVersion,
-    }),
-    customerRestaurantAreaPage: input => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_restaurants_area_page", {
-      p_address_id: input.addressId, p_address_version: input.addressVersion, p_query: input.query, p_limit: input.limit,
-      p_after_name: input.afterName, p_after_branch_id: input.afterBranchId, p_after_distance_meters: input.afterDistanceMeters, p_branch_id: input.branchId,
-    }),
+    customerCheckoutQuote: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_checkout_quote", {
+        p_address_id: input.addressId,
+        p_address_version: input.addressVersion,
+        p_lines: input.lines,
+        p_restaurant_branch_id: input.restaurantBranchId,
+      }),
+    customerAreaAvailability: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_area_availability", {
+        p_address_id: input.addressId,
+        p_address_version: input.addressVersion,
+      }),
+    customerRestaurantAreaPage: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_restaurants_area_page", {
+        p_address_id: input.addressId,
+        p_address_version: input.addressVersion,
+        p_query: input.query,
+        p_limit: input.limit,
+        p_after_name: input.afterName,
+        p_after_branch_id: input.afterBranchId,
+        p_after_distance_meters: input.afterDistanceMeters,
+        p_branch_id: input.branchId,
+      }),
     adminCatalogueSkuDelete: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_catalogue_sku_delete", {
         p_sku_id: input.skuId,
@@ -66,15 +78,24 @@ Deno.serve((request) =>
           p_limit: input.limit,
         },
       ),
-    customerRestaurantPage: (input) => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_restaurants_page", {
-      p_query: input.query, p_limit: input.limit, p_after_name: input.afterName,
-      p_after_branch_id: input.afterBranchId, p_branch_id: input.branchId,
-    }),
-    customerRestaurantNearestPage: (input) => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_restaurants_nearest_page", {
-      p_address_id: input.addressId, p_address_version: input.addressVersion,
-      p_query: input.query, p_limit: input.limit, p_after_name: input.afterName,
-      p_after_branch_id: input.afterBranchId, p_after_distance_meters: input.afterDistanceMeters,
-    }),
+    customerRestaurantPage: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_restaurants_page", {
+        p_query: input.query,
+        p_limit: input.limit,
+        p_after_name: input.afterName,
+        p_after_branch_id: input.afterBranchId,
+        p_branch_id: input.branchId,
+      }),
+    customerRestaurantNearestPage: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_restaurants_nearest_page", {
+        p_address_id: input.addressId,
+        p_address_version: input.addressVersion,
+        p_query: input.query,
+        p_limit: input.limit,
+        p_after_name: input.afterName,
+        p_after_branch_id: input.afterBranchId,
+        p_after_distance_meters: input.afterDistanceMeters,
+      }),
     adminSnapshot: (input) =>
       callAuthenticatedRPC(
         input.accessToken,
@@ -199,19 +220,33 @@ Deno.serve((request) =>
         );
       }
     },
-    prepareGovernedMedia: (input) => callServiceRPC("dastak_v1_prepare_governed_media", {
-      p_actor_id: input.actorId, p_entity_type: input.entityType, p_entity_id: input.entityId,
-      p_expected_media_version: input.expectedMediaVersion, p_mime_type: input.mimeType,
-      p_byte_size: input.byteSize, p_source_reference: input.sourceReference,
-      p_reason: input.reason, p_idempotency_key: input.idempotencyKey,
-    }),
-    finalizeGovernedMedia: (input) => callServiceRPC("dastak_v1_finalize_governed_media", {
-      p_actor_id: input.actorId, p_entity_type: input.entityType, p_entity_id: input.entityId,
-      p_asset_id: input.assetId, p_expected_media_version: input.expectedMediaVersion,
-      p_checksum_sha256: input.checksumSha256, p_mime_type: input.mimeType,
-      p_byte_size: input.byteSize, p_width_pixels: input.widthPixels, p_height_pixels: input.heightPixels,
-      p_reason: input.reason, p_idempotency_key: input.idempotencyKey,
-    }),
+    prepareGovernedMedia: (input) =>
+      callServiceRPC("dastak_v1_prepare_governed_media", {
+        p_actor_id: input.actorId,
+        p_entity_type: input.entityType,
+        p_entity_id: input.entityId,
+        p_expected_media_version: input.expectedMediaVersion,
+        p_mime_type: input.mimeType,
+        p_byte_size: input.byteSize,
+        p_source_reference: input.sourceReference,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+      }),
+    finalizeGovernedMedia: (input) =>
+      callServiceRPC("dastak_v1_finalize_governed_media", {
+        p_actor_id: input.actorId,
+        p_entity_type: input.entityType,
+        p_entity_id: input.entityId,
+        p_asset_id: input.assetId,
+        p_expected_media_version: input.expectedMediaVersion,
+        p_checksum_sha256: input.checksumSha256,
+        p_mime_type: input.mimeType,
+        p_byte_size: input.byteSize,
+        p_width_pixels: input.widthPixels,
+        p_height_pixels: input.heightPixels,
+        p_reason: input.reason,
+        p_idempotency_key: input.idempotencyKey,
+      }),
     merchantSnapshot: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

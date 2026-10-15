@@ -26,12 +26,36 @@ public struct DastakV1RiderOffer: Codable, Equatable, Identifiable, Sendable {
     public let respondBy: String
     public let secondsRemaining: Int
     public let pickupCount: Int
+    public var orderLoad: DastakV1DeliveryLoad? = nil
+    public var pickupStops: [DastakV1OfferStop]? = nil
 
     private enum CodingKeys: String, CodingKey {
         case id, displayOrderNumber, transportType, distanceMeters, respondBy
         case secondsRemaining, pickupCount
+        case orderLoad, pickupStops
         case missionID = "missionId"
     }
+}
+
+/// Offers intentionally omit custody/arrival state until they are accepted.
+public struct DastakV1OfferStop: Codable, Equatable, Identifiable, Sendable {
+    public struct Branch: Codable, Equatable, Sendable {
+        public let displayName: String
+        public let address: DastakV1ReturnMission.Address
+    }
+    public let id: UUID
+    public let sequence: Int
+    public let ready: Bool
+    public let packageCount: Int?
+    public let branch: Branch
+}
+
+public struct DastakV1DeliveryLoad: Codable, Equatable, Sendable {
+    public let totalWeightGrams: Int
+    public let totalVolumeCubicMillimetres: Int
+    public let longestSideMillimetres: Int
+    public let containsBulky: Bool
+    public let eligibleTransportTypes: [String]
 }
 
 public struct DastakV1MissionAddress: Codable, Equatable, Sendable {
@@ -145,11 +169,50 @@ public struct DastakV1DeliveryMissionSnapshot: Codable, Equatable, Identifiable,
     public var customerArrival: DastakArrivalEligibility?
     public var canVerifyCustomerPIN: Bool?
     public var canCompleteDelivery: Bool?
+
+    /// PIN, photo and collection can commit without changing mission.version.
+    /// Late GPS/read responses must not undo those confirmed handoff steps.
+    public func retainingConfirmedProgress(from previous: Self?) -> Self {
+        guard let previous, previous.id == id else { return self }
+        if version < previous.version { return previous }
+        if version == previous.version {
+            if previous.finalVerification?.pinVerified == true && finalVerification?.pinVerified != true { return previous }
+            if previous.finalVerification?.evidencePresent == true && finalVerification?.evidencePresent != true { return previous }
+            if previous.launchCollection?.state == .collected && launchCollection?.state != .collected { return previous }
+        }
+        return self
+    }
 }
 
 public struct DastakV1DeliveryDispatchSnapshot: Codable, Equatable, Sendable {
-    public let offer: DastakV1RiderOffer?
-    public let currentMission: DastakV1DeliveryMissionSnapshot?
+    public var offer: DastakV1RiderOffer?
+    public var currentMission: DastakV1DeliveryMissionSnapshot?
+    public var returnMission: DastakV1ReturnMission?
+    public var completedMission: DastakV1CompletedMission?
+    public var reassignmentStarted: Bool?
+    public var deliveryLaneCurrent = true
+    public var returnLaneCurrent = false
+    public var completedLaneCurrent = false
+    private enum CodingKeys: String, CodingKey { case offer, currentMission, returnMission, completedMission, reassignmentStarted }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        reassignmentStarted = try values.decodeIfPresent(Bool.self, forKey: .reassignmentStarted)
+        do {
+            guard values.contains(.offer), values.contains(.currentMission) else { throw DecodingError.keyNotFound(CodingKeys.offer, .init(codingPath: [], debugDescription: "Delivery lane missing")) }
+            offer = try values.decodeIfPresent(DastakV1RiderOffer.self, forKey: .offer)
+            currentMission = try values.decodeIfPresent(DastakV1DeliveryMissionSnapshot.self, forKey: .currentMission)
+        } catch { deliveryLaneCurrent = false; offer = nil; currentMission = nil }
+        do {
+            returnMission = try values.decodeIfPresent(DastakV1ReturnMission.self, forKey: .returnMission)
+            returnLaneCurrent = values.contains(.returnMission) && (returnMission?.isValid ?? true)
+            if !returnLaneCurrent { returnMission = nil }
+        } catch { returnLaneCurrent = false; returnMission = nil }
+        do {
+            completedMission = try values.decodeIfPresent(DastakV1CompletedMission.self, forKey: .completedMission)
+            completedLaneCurrent = values.contains(.completedMission)
+        } catch { completedLaneCurrent = false; completedMission = nil }
+    }
 }
 
 public protocol DastakV1DeliveryClient: Sendable {
@@ -178,7 +241,7 @@ public protocol DastakV1DeliveryClient: Sendable {
 }
 
 public struct SupabaseDastakV1DeliveryClient: DastakV1DeliveryClient {
-    private struct Request: Encodable, Sendable {
+    private struct Request: Encodable, Sendable, SingleAttemptFunctionRequest {
         let operation: String
         let offerId: UUID?
         let missionId: UUID?

@@ -359,10 +359,15 @@ function ownerWholeBillResponse(value: unknown): unknown {
     const item = record(order.itemSubtotal);
     const delivery = record(order.deliveryFee);
     const total = record(order.total);
-    if (typeof item?.paise !== "number" || typeof delivery?.paise !== "number" || typeof total?.paise !== "number") return order;
+    if (
+      typeof item?.paise !== "number" || typeof delivery?.paise !== "number" ||
+      typeof total?.paise !== "number"
+    ) return order;
     return { ...order, platformFee: { paise: total.paise - item.paise - delivery.paise } };
   };
-  return Array.isArray(source.orders) ? { ...source, orders: source.orders.map(mapOrder) } : mapOrder(source);
+  return Array.isArray(source.orders)
+    ? { ...source, orders: source.orders.map(mapOrder) }
+    : mapOrder(source);
 }
 
 async function ownerResolveSupportMutation(
@@ -716,8 +721,10 @@ function validCursor(
   const timestamp = cursor[timestampKey];
   const rawId = cursor[idKey];
   const id = uuidId ? validUUID(rawId) : normalizeRequiredText(rawId, 200);
-  if (typeof timestamp !== "string" || timestamp.length > 50 ||
-    !Number.isFinite(Date.parse(timestamp)) || !id) return undefined;
+  if (
+    typeof timestamp !== "string" || timestamp.length > 50 ||
+    !Number.isFinite(Date.parse(timestamp)) || !id
+  ) return undefined;
   return { timestamp, id };
 }
 

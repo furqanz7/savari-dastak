@@ -4,6 +4,23 @@ import XCTest
 @testable import MarketplaceInfrastructure
 
 final class AuthenticatedServicesTests: XCTestCase {
+    func testStalledSharedTokenReadExpiresAndNextRequestCanLoadFreshToken() async throws {
+        let loader = StalledAccessTokenLoader()
+        let broker = MarketplaceAccessTokenBroker(timeout: .milliseconds(40)) { await loader.load() }
+        let first = Task { try await broker.accessToken() }
+        await loader.waitUntilStarted()
+        let joined = Task { try await broker.accessToken() }
+        for request in [first, joined] {
+            do { _ = try await request.value; XCTFail("A stalled token read must not poison every later request") }
+            catch { XCTAssertEqual((error as? URLError)?.code, .timedOut) }
+        }
+        let next = try await broker.accessToken()
+        XCTAssertEqual(next, "new-token")
+        await loader.releaseOldRead()
+        let afterLateReply = try await broker.accessToken()
+        XCTAssertEqual(afterLateReply, "new-token", "A late worker cannot return an obsolete token to a newer caller")
+    }
+
     func testAccessTokenBrokerCoalescesConcurrentSessionReads() async throws {
         let loader = AccessTokenLoader()
         let broker = MarketplaceAccessTokenBroker {
@@ -129,6 +146,24 @@ final class AuthenticatedServicesTests: XCTestCase {
 
 private enum AccessTokenLoaderError: Error, Equatable {
     case unavailable
+}
+
+private actor StalledAccessTokenLoader {
+    private var oldRead: CheckedContinuation<String?, Never>?
+    private var started: CheckedContinuation<Void, Never>?
+    private var calls = 0
+    func load() async -> String? {
+        calls += 1
+        if calls > 1 { return "new-token" }
+        return await withCheckedContinuation {
+            oldRead = $0; started?.resume(); started = nil
+        }
+    }
+    func waitUntilStarted() async {
+        if oldRead != nil { return }
+        await withCheckedContinuation { started = $0 }
+    }
+    func releaseOldRead() { oldRead?.resume(returning: "old-token"); oldRead = nil }
 }
 
 private actor AccessTokenLoader {

@@ -17,6 +17,7 @@ struct DastakV1MatchingView: View {
     let isPresentedModally: Bool
     let openCart: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.marketplaceImmersiveEnvironment) private var immersiveEnvironment
     @State private var isReportingIssue = false
     @State private var issueCategory = DastakV1CustomerIssueCategory.wrongSKU
     @State private var issueLineID: UUID?
@@ -46,7 +47,7 @@ struct DastakV1MatchingView: View {
                     content
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { dismiss() }
+                                MarketplaceFeedbackButton("Done") { dismiss() }
                             }
                         }
                 }
@@ -55,7 +56,13 @@ struct DastakV1MatchingView: View {
             }
         }
         .marketplacePage()
-        .task { await pollWhileActive() }
+        .environment(\.marketplaceImmersiveEnvironment, isPresentedModally ? false : immersiveEnvironment)
+        .task {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-DastakCheckoutAppearancePreview") { return }
+            #endif
+            await pollWhileActive()
+        }
         .confirmationDialog(
             "Cancel this order?",
             isPresented: $showingCancellationConfirmation,
@@ -92,7 +99,9 @@ struct DastakV1MatchingView: View {
                 ScrollView {
                     VStack(spacing: MarketplaceSpacing.large) {
                         statusCard(order)
-                        if [.paid, .preparing].contains(order.status) {
+                        if [.paid, .preparing].contains(order.status),
+                           !DastakV1OrderPresentation.isAssigningRider(order.status, trackingPhase: order.tracking?.phase,
+                                                                      fulfilmentState: order.fulfilmentProgress?.state) {
                             preparationETACard(order)
                         }
                         if order.status == .outForDelivery,
@@ -100,10 +109,11 @@ struct DastakV1MatchingView: View {
                            delivery.pinVerified != true {
                             deliveryCard(delivery)
                         }
-                        if let tracking = order.tracking {
+                        if [.paid, .preparing, .pickupInProgress, .outForDelivery].contains(order.status),
+                           let tracking = order.tracking {
                             DastakDeliveryTrackingView(tracking: tracking, destination: order.deliveryAddress.map {
                                 CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-                            })
+                            }, customerOrderStatus: order.status.rawValue)
                         }
                         if order.status == .outForDelivery,
                            order.delivery != nil {
@@ -146,6 +156,7 @@ struct DastakV1MatchingView: View {
                 )
             }
         }
+        .marketplacePage()
         .navigationTitle("Order status")
         .dastakInlineNavigationTitle()
         .dastakOpaqueNavigationBar()
@@ -158,6 +169,7 @@ struct DastakV1MatchingView: View {
         [
             order.id.uuidString,
             order.status.rawValue,
+            order.fulfilmentProgress?.state ?? "no-fulfilment",
             order.tracking?.phase ?? "no-tracking",
             order.delivery?.state ?? "no-delivery",
             String(order.delivery?.pinVerified == true),
@@ -177,7 +189,8 @@ struct DastakV1MatchingView: View {
                     } else {
                         Image(systemName: DastakV1OrderPresentation.symbol(
                             order.status,
-                            trackingPhase: order.tracking?.phase
+                            trackingPhase: order.tracking?.phase,
+                            fulfilmentState: order.fulfilmentProgress?.state
                         ))
                             .font(.system(size: 21, weight: .bold))
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -187,12 +200,14 @@ struct DastakV1MatchingView: View {
                     Text(DastakV1OrderPresentation.deliveredDuration(order) ??
                          DastakV1OrderPresentation.title(
                             order.status,
-                            trackingPhase: order.tracking?.phase
+                            trackingPhase: order.tracking?.phase,
+                            fulfilmentState: order.fulfilmentProgress?.state
                          ))
                         .font(.title2.bold())
                     Text(DastakV1OrderPresentation.message(
                         order.status,
-                        trackingPhase: order.tracking?.phase
+                        trackingPhase: order.tracking?.phase,
+                        fulfilmentState: order.fulfilmentProgress?.state
                     ))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -218,7 +233,8 @@ struct DastakV1MatchingView: View {
             if DastakV1OrderPresentation.isActive(order.status) {
                 DastakV1JourneyProgress(
                     status: order.status,
-                    deliveryPhase: order.tracking?.phase
+                    deliveryPhase: order.tracking?.phase,
+                    fulfilmentState: order.fulfilmentProgress?.state
                 )
             }
 
@@ -325,12 +341,13 @@ struct DastakV1MatchingView: View {
                 }
                 Text(launchCollectionMessage(launch))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(MarketplaceSpacing.medium)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(MarketplaceColors.dastakAccentSoft.color)
+            .foregroundStyle(MarketplaceColors.primaryActionForeground.color)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .accessibilityElement(children: .combine)
         }
@@ -349,7 +366,7 @@ struct DastakV1MatchingView: View {
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
                         Text(paymentTimeRemaining(launchPayment, at: context.date))
                             .font(.subheadline.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
                     }
                     Spacer()
                     Text(DastakFormatting.money(launchPayment.amount ?? order.price.total))
@@ -359,21 +376,22 @@ struct DastakV1MatchingView: View {
 
             Label("Confirm now; pay the delivery partner by UPI or cash at the doorstep. No charge now.", systemImage: "hand.raised.fill")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
         }
         .padding(MarketplaceSpacing.medium)
         .background(MarketplaceColors.dastakAccentSoft.color)
+        .foregroundStyle(MarketplaceColors.primaryActionForeground.color)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 
     private func payButton(_ order: DastakV1OrderSnapshot) -> some View {
-        Button {
+        MarketplaceFeedbackButton {
             showingLaunchPayment = true
         } label: {
             HStack {
                 if model.isCheckingOut { ProgressView().tint(.white) }
-                Text("Confirm Pay via UPI/Cash on Delivery")
+                Text(model.pendingConfirmations[order.id] != nil ? "Recover confirmation" : "Review & confirm")
                 Image(systemName: "arrow.right")
             }
             .frame(maxWidth: .infinity)
@@ -381,7 +399,7 @@ struct DastakV1MatchingView: View {
         .buttonStyle(.borderedProminent)
         .tint(MarketplaceColors.dastakAccent.color)
         .controlSize(.large)
-        .disabled(model.isCheckingOut || order.launchPayment?.canCommit != true)
+        .disabled(model.isCheckingOut || (model.pendingConfirmations[order.id] == nil && order.launchPayment?.canCommit != true))
     }
 
     private func orderSummary(_ order: DastakV1OrderSnapshot) -> some View {
@@ -397,11 +415,10 @@ struct DastakV1MatchingView: View {
                 Spacer()
                 if let restaurant = order.restaurant {
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(restaurant.name)
+                        Text(DastakRestaurantPresentation.customerFacingName(
+                            name: restaurant.name, branchName: restaurant.branchName
+                        ))
                             .font(.subheadline.weight(.semibold))
-                        Text(restaurant.branchName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                     .multilineTextAlignment(.trailing)
                 }
@@ -560,7 +577,7 @@ struct DastakV1MatchingView: View {
                         .minimumScaleFactor(0.72)
                 }
                 Spacer(minLength: MarketplaceSpacing.small)
-                Button {
+                MarketplaceFeedbackButton {
                     copyToPasteboard(order.displayOrderNumber)
                     model.ordersActionMessage = "Order number copied."
                 } label: {
@@ -619,7 +636,8 @@ struct DastakV1MatchingView: View {
                     }
                 }
             }
-            if let current = currentTimelineEntry(order.status) {
+            if let current = currentTimelineEntry(order.status, trackingPhase: order.tracking?.phase,
+                                                  fulfilmentState: order.fulfilmentProgress?.state) {
                 HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.compact) {
                     Circle()
                         .strokeBorder(MarketplaceColors.dastakAccent.color, lineWidth: 2)
@@ -682,12 +700,13 @@ struct DastakV1MatchingView: View {
                                     .tracking(4)
                                 Text("Share only after the assigned rider photographs and accounts for every return package.")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
                                     .multilineTextAlignment(.center)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(MarketplaceSpacing.compact)
                             .background(MarketplaceColors.dastakAccentSoft.color)
+                            .foregroundStyle(MarketplaceColors.primaryActionForeground.color)
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
                     }
@@ -705,7 +724,7 @@ struct DastakV1MatchingView: View {
                 if isReportingIssue {
                     issueForm(order: order)
                 } else if support.canReportIssue {
-                    Button {
+                    MarketplaceFeedbackButton {
                         resetIssueForm()
                         isReportingIssue = true
                     } label: {
@@ -730,6 +749,7 @@ struct DastakV1MatchingView: View {
                 }
             }
             .pickerStyle(.menu)
+            .marketplaceSelectionFeedback(issueCategory)
 
             Picker("Product", selection: $issueLineID) {
                 Text("Whole order").tag(Optional<UUID>.none)
@@ -738,6 +758,7 @@ struct DastakV1MatchingView: View {
                 }
             }
             .pickerStyle(.menu)
+            .marketplaceSelectionFeedback(issueLineID)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("Details").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -774,9 +795,9 @@ struct DastakV1MatchingView: View {
             }
 
             HStack {
-                Button("Back") { resetIssueForm() }
+                MarketplaceFeedbackButton("Back") { resetIssueForm() }
                     .buttonStyle(.bordered)
-                Button {
+                MarketplaceFeedbackButton {
                     Task {
                         if await model.reportV1Issue(
                             category: issueCategory,
@@ -841,7 +862,7 @@ struct DastakV1MatchingView: View {
     }
 
     private var cancelButton: some View {
-        Button(role: .destructive) {
+        MarketplaceFeedbackButton(role: .destructive) {
             showingCancellationConfirmation = true
         } label: {
             Label("Cancel order", systemImage: "xmark.circle")
@@ -875,22 +896,25 @@ struct DastakV1MatchingView: View {
     }
 
     private func reorderButton(_ order: DastakV1OrderSnapshot) -> some View {
-        Button {
+        MarketplaceFeedbackButton {
             if model.cart.isEmpty { reorderCurrentOrder() }
             else { showingReorderConfirmation = true }
         } label: {
-            Label("Order again", systemImage: "arrow.clockwise")
+            Label(model.isResolvingSavedItems ? "Checking items…" : "Order again", systemImage: "arrow.clockwise")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(MarketplacePrimaryButtonStyle())
+        .disabled(model.isResolvingSavedItems)
         .accessibilityHint("Rebuilds this order using products currently available")
     }
 
     private func reorderCurrentOrder() {
         guard let order = model.activeV1Order else { return }
-        if model.reorder(order).openedBasket {
-            if isPresentedModally { dismiss() }
-            openCart()
+        Task {
+            if await model.reorderWithCurrentCatalogue(order).openedBasket {
+                if isPresentedModally { dismiss() }
+                openCart()
+            }
         }
     }
 
@@ -1037,9 +1061,14 @@ struct DastakV1MatchingView: View {
     }
 
     private func currentTimelineEntry(
-        _ status: DastakV1OrderStatus
+        _ status: DastakV1OrderStatus,
+        trackingPhase: String? = nil,
+        fulfilmentState: String? = nil
     ) -> (label: String, status: String)? {
-        switch status {
+        if DastakV1OrderPresentation.isAssigningRider(status, trackingPhase: trackingPhase, fulfilmentState: fulfilmentState) {
+            return ("Assigning your rider", "In progress")
+        }
+        return switch status {
         case .created, .matching: ("Finding every item", "In progress")
         case .fullySecured: ("Ready to confirm", "Secured")
         case .awaitingPayment: ("Ready to confirm", "Action needed")
@@ -1091,7 +1120,7 @@ private struct DastakLaunchPaymentView: View {
 
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("AUTHORITATIVE TOTAL")
+                            Text("ORDER TOTAL")
                                 .font(.caption2.bold())
                                 .tracking(1)
                                 .foregroundStyle(.white.opacity(0.68))
@@ -1138,12 +1167,13 @@ private struct DastakLaunchPaymentView: View {
                                 .font(.headline)
                             Text("Pay the delivery partner at your doorstep by UPI or cash. No charge now.")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .padding(MarketplaceSpacing.large)
                     .background(MarketplaceColors.dastakAccentSoft.color)
+                    .foregroundStyle(MarketplaceColors.primaryActionForeground.color)
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -1168,23 +1198,23 @@ private struct DastakLaunchPaymentView: View {
                             .marketplaceFlatSurface()
                     }
 
-                    Button {
+                    MarketplaceFeedbackButton {
                         Task {
                             if await model.retryPayment(for: order) { dismiss() }
                         }
                     } label: {
                         HStack {
                             if model.isCheckingOut { ProgressView().tint(.white) }
-                            Text(model.isCheckingOut ? "Confirming order…" : "Confirm order")
+                            Text(model.isCheckingOut ? "Checking confirmation…" : model.pendingConfirmations[order.id] != nil ? "Recover confirmation" : "Confirm order")
                             Image(systemName: "arrow.right")
                         }
                         .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(MarketplacePrimaryButtonStyle())
-                    .disabled(model.isCheckingOut || order.launchPayment?.canCommit != true || isExpired)
+                    .disabled(model.isCheckingOut || (model.pendingConfirmations[order.id] == nil && (order.launchPayment?.canCommit != true || isExpired)))
 
                     if isExpired {
-                        Button("Reservation expired — refresh order") { dismiss() }
+                        MarketplaceFeedbackButton("Reservation expired — refresh order") { dismiss() }
                             .buttonStyle(MarketplaceSecondaryButtonStyle())
                     }
                 }
@@ -1195,14 +1225,16 @@ private struct DastakLaunchPaymentView: View {
             .marketplacePage()
             .navigationTitle("Payment option")
             .dastakInlineNavigationTitle()
+            .dastakOpaqueNavigationBar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    MarketplaceFeedbackButton("Close") { dismiss() }
                         .disabled(model.isCheckingOut)
                 }
             }
             .interactiveDismissDisabled(model.isCheckingOut)
         }
+        .environment(\.marketplaceImmersiveEnvironment, false)
     }
 
     private var reservationCard: some View {
@@ -1242,6 +1274,51 @@ private struct DastakLaunchPaymentView: View {
         return String(format: "%d:%02d remaining to confirm", seconds / 60, seconds % 60)
     }
 }
+
+#if DEBUG
+/// Renders the actual checkout screens with an unsaved synthetic reservation.
+/// The preview client cannot submit or confirm a production order.
+@MainActor
+public struct DastakCheckoutAppearancePreview: View {
+    @StateObject private var model: DastakCustomerModel
+    private let order: DastakV1OrderSnapshot
+    public init() {
+        let now = ISO8601DateFormatter().string(from: .now)
+        let expiry = ISO8601DateFormatter().string(from: .now.addingTimeInterval(1200))
+        let sample = """
+        {
+          "id":"00000000-0000-4000-8000-000000000031",
+          "displayOrderNumber":"SAMPLE-CHECKOUT","orderType":"RETAIL_ONLY",
+          "status":"AWAITING_PAYMENT","version":1,
+          "createdAt":"\(now)","updatedAt":"\(now)","submittedAt":"\(now)","fullySecuredAt":"\(now)",
+          "price":{"snapshotKind":"FINAL_PAYABLE","subtotalPaise":3000,"deliveryFeePaise":1500,
+            "platformFeePaise":90,"taxPaise":0,"discountPaise":0,"totalPaise":4590,"currencyCode":"INR"},
+          "launchPayment":{"optionLabel":"Pay via UPI/Cash on Delivery","state":"READY_TO_CONFIRM",
+            "amountPaise":4590,"currencyCode":"INR","reservationExpiresAt":"\(expiry)",
+            "reservationSecondsRemaining":1200,"reservationState":"ACTIVE","canCommit":true,
+            "noChargeNow":true,"payAtDoorstep":true},
+          "deliveryAddress":{"label":"Home","line1":"12 Sample Road","line2":"First floor",
+            "city":"Bengaluru","state":"Karnataka","postalCode":"560001",
+            "latitude":12.97,"longitude":77.59},
+          "lines":[{"id":"00000000-0000-4000-8000-000000000032","lineType":"RETAIL_SKU",
+            "skuId":"00000000-0000-4000-8000-000000000033","name":"Sample milk","packSize":"500 ml",
+            "quantity":1,"unitPricePaise":3000,"lineTotalPaise":3000,"status":"RESERVED"}]
+        }
+        """
+        order = try! JSONDecoder().decode(DastakV1OrderSnapshot.self, from: Data(sample.utf8))
+        let previewModel = DastakCustomerModel.preview(shoppingFixtures: true)
+        previewModel.focusV1Order(order)
+        _model = StateObject(wrappedValue: previewModel)
+    }
+    public var body: some View {
+        if ProcessInfo.processInfo.arguments.contains("-DastakPaymentOptionPreview") {
+            DastakLaunchPaymentView(model: model, order: order)
+        } else {
+            DastakV1MatchingView(model: model)
+        }
+    }
+}
+#endif
 
 private enum DastakIssuePhotoError: Error {
     case invalid

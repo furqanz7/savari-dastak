@@ -1,0 +1,175 @@
+{
+  "date": "2026-10-16",
+  "approvedScope": "Apply only the two reviewed forward migrations after drift/security preflight",
+  "projectRef": "zmtsolkfxlrxepshnjdf",
+  "head": "94f531d679e6dcca1bd588ab63c5000b1eb2c620",
+  "method": "supabase db push --linked --workdir Backends/Dastak --yes; no seed/include-all/roles flags",
+  "migrations": [
+    {
+      "name": "20261015214234_harden_governed_entity_media.sql",
+      "sha256": "7097121c3837817095b7eef25a4f9a090752abed7124d872406f47f2fcc21130"
+    },
+    {
+      "name": "20261015214450_legacy_order_platform_fee_ledger.sql",
+      "sha256": "06820b75032e81b556718e2ba01ce9e5defd3258ef622c1c158cdd2cba9b1faf"
+    }
+  ],
+  "before": {
+    "accountCodeConstraint": "CHECK ((account_code = ANY (ARRAY['provider_clearing'::text, 'customer_funds_held'::text, 'refund_payable'::text, 'merchant_payable'::text, 'courier_payable'::text, 'platform_merchant_commission'::text, 'platform_delivery_margin'::text])))",
+    "clientDmlGrants": 0,
+    "directClientMediaRead": false,
+    "domainClientUsage": false,
+    "history": {
+      "count": 287,
+      "orderedReceiptSha256": "a9217ce590a327e8677d0c346d86ae2db1071d6e89734e935996df9a486bdb5b",
+      "lastTwo": [
+        {
+          "name": "delivery_notification_offer_expiry",
+          "sqlMd5": "22e28bf50c4847589507a77dbb35d857",
+          "version": "20261015154016"
+        },
+        {
+          "name": "reconcile_catalogue_browse_activation",
+          "sqlMd5": "b51e2dba06e4f1887395e7ae9e8aa45c",
+          "version": "20261015203400"
+        }
+      ]
+    },
+    "ledger": {
+      "bytes": 32768,
+      "entries": 0,
+      "invalidTransactions": 0,
+      "transactions": 0
+    },
+    "ledgerGuards": [
+      {
+        "definition": "CREATE TRIGGER merchant_order_ledger_entries_immutable BEFORE DELETE OR UPDATE ON private.merchant_order_ledger_entries FOR EACH ROW EXECUTE FUNCTION private.reject_merchant_order_ledger_mutation()",
+        "enabled": "O",
+        "name": "merchant_order_ledger_entries_immutable"
+      },
+      {
+        "definition": "CREATE TRIGGER merchant_order_ledger_transactions_immutable BEFORE DELETE OR UPDATE ON private.merchant_order_ledger_transactions FOR EACH ROW EXECUTE FUNCTION private.reject_merchant_order_ledger_mutation()",
+        "enabled": "O",
+        "name": "merchant_order_ledger_transactions_immutable"
+      }
+    ],
+    "media": {
+      "acl": "{postgres=arwdDxtm/postgres}",
+      "bytes": 114688,
+      "indexes": [
+        "CREATE UNIQUE INDEX governed_entity_media_active_uidx ON dastak_v1.governed_entity_media USING btree (entity_type, entity_id) WHERE (status = 'ACTIVE'::text)",
+        "CREATE INDEX governed_entity_media_entity_idx ON dastak_v1.governed_entity_media USING btree (entity_type, entity_id, created_at DESC)",
+        "CREATE UNIQUE INDEX governed_entity_media_image_key_key ON dastak_v1.governed_entity_media USING btree (image_key)",
+        "CREATE UNIQUE INDEX governed_entity_media_pkey ON dastak_v1.governed_entity_media USING btree (id)"
+      ],
+      "owner": "postgres",
+      "policies": 0,
+      "rls": false,
+      "rows": 9
+    },
+    "settlement": {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "body": "\ndeclare\n  v_transaction_id uuid;\nbegin\n  insert into private.merchant_order_ledger_transactions (\n    order_id, kind, source_event_id\n  ) values (\n    (order_row).id, 'order_settlement', p_source_event_id\n  )\n  on conflict (order_id, kind) do nothing\n  returning id into v_transaction_id;\n\n  if v_transaction_id is null then\n    return;\n  end if;\n\n  insert into private.merchant_order_ledger_entries (\n    transaction_id, order_id, account_code, side, amount_paise\n  ) values (\n    v_transaction_id,\n    (order_row).id,\n    'customer_funds_held',\n    'debit',\n    (order_row).total_paise\n  );\n\n  insert into private.merchant_order_ledger_entries (\n    transaction_id, order_id, account_code, side, amount_paise\n  )\n  select v_transaction_id, (order_row).id, allocation.account_code,\n    'credit', allocation.amount_paise\n  from (\n    values\n      ('merchant_payable'::text, (order_row).merchant_payable_paise),\n      ('courier_payable'::text, (order_row).courier_payout_paise::bigint),\n      ('platform_merchant_commission'::text, (order_row).merchant_commission_paise),\n      ('platform_delivery_margin'::text, (order_row).platform_delivery_margin_paise::bigint)\n  ) as allocation(account_code, amount_paise)\n  where allocation.amount_paise > 0;\n\n  perform private.assert_merchant_order_transaction_balanced(v_transaction_id);\nend;\n",
+      "config": [
+        "search_path=\"\""
+      ],
+      "owner": "postgres",
+      "securityDefiner": false,
+      "volatility": "v"
+    }
+  },
+  "after": {
+    "accountCodeConstraint": "CHECK ((account_code = ANY (ARRAY['provider_clearing'::text, 'customer_funds_held'::text, 'refund_payable'::text, 'merchant_payable'::text, 'courier_payable'::text, 'platform_merchant_commission'::text, 'platform_delivery_margin'::text, 'platform_fee'::text])))",
+    "clientDmlGrants": 0,
+    "directClientMediaRead": false,
+    "domainClientUsage": false,
+    "history": {
+      "count": 289,
+      "orderedReceiptSha256": "4cbc571f349ce856ee226935846acf05b49f2a441db15b4738f412ed428aeb48",
+      "lastTwo": [
+        {
+          "name": "harden_governed_entity_media",
+          "sqlMd5": "bc98653b4b230f1e3dd9a1613318fd7f",
+          "version": "20261015214234"
+        },
+        {
+          "name": "legacy_order_platform_fee_ledger",
+          "sqlMd5": "e54535bdc5e6ad8fed12c348aaeaadb2",
+          "version": "20261015214450"
+        }
+      ]
+    },
+    "ledger": {
+      "bytes": 32768,
+      "entries": 0,
+      "invalidTransactions": 0,
+      "transactions": 0
+    },
+    "ledgerGuards": [
+      {
+        "definition": "CREATE TRIGGER merchant_order_ledger_entries_immutable BEFORE DELETE OR UPDATE ON private.merchant_order_ledger_entries FOR EACH ROW EXECUTE FUNCTION private.reject_merchant_order_ledger_mutation()",
+        "enabled": "O",
+        "name": "merchant_order_ledger_entries_immutable"
+      },
+      {
+        "definition": "CREATE TRIGGER merchant_order_ledger_transactions_immutable BEFORE DELETE OR UPDATE ON private.merchant_order_ledger_transactions FOR EACH ROW EXECUTE FUNCTION private.reject_merchant_order_ledger_mutation()",
+        "enabled": "O",
+        "name": "merchant_order_ledger_transactions_immutable"
+      }
+    ],
+    "media": {
+      "acl": "{postgres=arwdDxtm/postgres}",
+      "bytes": 131072,
+      "indexes": [
+        "CREATE UNIQUE INDEX governed_entity_media_active_uidx ON dastak_v1.governed_entity_media USING btree (entity_type, entity_id) WHERE (status = 'ACTIVE'::text)",
+        "CREATE INDEX governed_entity_media_created_by_idx ON dastak_v1.governed_entity_media USING btree (created_by)",
+        "CREATE INDEX governed_entity_media_entity_idx ON dastak_v1.governed_entity_media USING btree (entity_type, entity_id, created_at DESC)",
+        "CREATE UNIQUE INDEX governed_entity_media_image_key_key ON dastak_v1.governed_entity_media USING btree (image_key)",
+        "CREATE UNIQUE INDEX governed_entity_media_pkey ON dastak_v1.governed_entity_media USING btree (id)"
+      ],
+      "owner": "postgres",
+      "policies": 0,
+      "rls": true,
+      "rows": 9
+    },
+    "settlement": {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "body": "\ndeclare v_transaction_id uuid;\nbegin\n  insert into private.merchant_order_ledger_transactions(order_id,kind,source_event_id)\n  values ((order_row).id,'order_settlement',p_source_event_id)\n  on conflict (order_id,kind) do nothing returning id into v_transaction_id;\n  if v_transaction_id is null then return; end if;\n  insert into private.merchant_order_ledger_entries\n    (transaction_id,order_id,account_code,side,amount_paise)\n  values (v_transaction_id,(order_row).id,'customer_funds_held','debit',(order_row).total_paise);\n  insert into private.merchant_order_ledger_entries\n    (transaction_id,order_id,account_code,side,amount_paise)\n  select v_transaction_id,(order_row).id,allocation.account_code,'credit',allocation.amount_paise\n  from (values\n    ('merchant_payable'::text,(order_row).merchant_payable_paise),\n    ('courier_payable'::text,(order_row).courier_payout_paise::bigint),\n    ('platform_merchant_commission'::text,(order_row).merchant_commission_paise),\n    ('platform_delivery_margin'::text,(order_row).platform_delivery_margin_paise::bigint),\n    ('platform_fee'::text,(order_row).platform_fee_paise)\n  ) allocation(account_code,amount_paise) where allocation.amount_paise>0;\n  perform private.assert_merchant_order_transaction_balanced(v_transaction_id);\nend;\n",
+      "config": [
+        "search_path=\"\""
+      ],
+      "owner": "postgres",
+      "securityDefiner": false,
+      "volatility": "v"
+    }
+  },
+  "historicalHistoryUnchanged": true,
+  "structuralChecks": {
+    "storedSqlMatchesBothReviewedFiles": true,
+    "index": {
+      "definition": "CREATE INDEX governed_entity_media_created_by_idx ON dastak_v1.governed_entity_media USING btree (created_by)",
+      "ready": true,
+      "valid": true
+    },
+    "constraintValid": true
+  },
+  "securityBefore": {
+    "scope": "security error-level",
+    "result": "No issues found"
+  },
+  "securityAfter": {
+    "scope": "security error-level",
+    "result": "No issues found"
+  },
+  "localTests": {
+    "databaseFiles": 76,
+    "databaseAssertions": 2081,
+    "staticTests": 166,
+    "runtimePinTests": 5,
+    "failed": 0
+  },
+  "warnings": [
+    "Installed CLI emitted SET LOCAL outside transaction-block warnings; migration timeout SET LOCAL settings were therefore not enforced by this release path. Both migrations completed and were independently verified; no claim of two-migration atomic commit or effective release timeout is made."
+  ],
+  "outOfScopeActionsPerformed": []
+}

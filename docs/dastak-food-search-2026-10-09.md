@@ -43,6 +43,28 @@ No paid model calls or subagents. Live verification is read-only.
 
 ## Release
 
-Customer production release and signed-in read-only verification pending.
-An empty/unserviceable live Food region cannot prove populated production
-menu choices; local fixture and integration evidence are separate from that.
+- Commit `1ce1569350d0473e1dc001110dedc2b9072e2218` pushed to
+  `codex/dastak-v1-launch` and deployed to Customer production.
+- Deployment `dpl_zSGURVGbrRK5wvhHkdKn1STbbX3s` is READY and aliased to
+  `https://dastak-customer.vercel.app/`. Normal-address HTML and signed-in
+  browser both confirm the exact commit SHA, Customer variant and production
+  environment. Build passed; CLI final status polling hit ETIMEDOUT, so the
+  deployment was inspected directly instead of creating another build.
+- Normal address returns HTTP 200, CSP frame-ancestors none,
+  X-Content-Type-Options nosniff and X-Frame-Options DENY.
+- Signed-in 390 × 844 production verification: typing Craft returns the
+  restaurant, Cappuccino and Espresso suggestions without replacing the main
+  discovery panel. Catalogue requests returned HTTP 200. Selecting Cappuccino
+  opens the correct dish details; Back to menu restores Craft's menu.
+- Live area displays the no-delivery-partner notice. No real cart, order,
+  reservation, payment, profile or saved-address changes were made. The live
+  dish had no required options; option-price and cart/checkout mutation checks
+  remain local synthetic evidence, not production transaction verification.
+- Production document width is 390 px with no horizontal overflow; temporary
+  viewport override cleared afterwards. Captured browser errors: zero. The
+  bounded Vercel error-log query returned no entries; this is not a complete
+  backend or Supabase log audit.
+- Live proof: `verification/dastak-food-search-2026-10-09/phone-live-regional-suggestions.png`.
+- Four exact-commit automatic non-production preview builds were cancelled
+  to avoid duplicate build costs. No Admin, Merchant or Delivery production
+  release was made. Post-release report/evidence updates are local only.

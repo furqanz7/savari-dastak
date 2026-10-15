@@ -148,11 +148,18 @@ Deno.test("walking and bicycle applications need identity evidence only", async 
   for (const deliveryMethod of ["walking", "bicycle"]) {
     let recorded: Record<string, unknown> | undefined;
     const response = await handleDeliveryPartners(
-      request({ body: { operation: "submit", deliveryMethod, identityEvidenceObjectPath: evidencePath } }),
-      dependencies({ submitApplication: (input) => {
-        recorded = { ...input };
-        return Promise.resolve({ responseBody: { applicationId, status: "pending", deliveryMethod }, responseStatus: 200 });
-      } }),
+      request({
+        body: { operation: "submit", deliveryMethod, identityEvidenceObjectPath: evidencePath },
+      }),
+      dependencies({
+        submitApplication: (input) => {
+          recorded = { ...input };
+          return Promise.resolve({
+            responseBody: { applicationId, status: "pending", deliveryMethod },
+            responseStatus: 200,
+          });
+        },
+      }),
     );
     assertEquals(response.status, 200);
     assertEquals(recorded?.deliveryMethod, deliveryMethod);
@@ -341,8 +348,16 @@ Deno.test("availability rejects missing online location and offline location pay
 
 Deno.test("suspended availability failure remains structured and SQL-safe", async () => {
   const response = await handleDeliveryPartners(
-    request({ body: { operation: "setAvailability", online: true, location: { latitude: 12.68, longitude: 78.62 } } }),
-    dependencies({ setAvailability: () => Promise.reject(new Error("RIDER_GOVERNANCE_SUSPENDED")) }),
+    request({
+      body: {
+        operation: "setAvailability",
+        online: true,
+        location: { latitude: 12.68, longitude: 78.62 },
+      },
+    }),
+    dependencies({
+      setAvailability: () => Promise.reject(new Error("RIDER_GOVERNANCE_SUSPENDED")),
+    }),
   );
   await assertError(response, 409, "rider_governance_suspended");
 });

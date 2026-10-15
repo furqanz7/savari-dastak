@@ -268,6 +268,10 @@ insert into dastak_v1.platform_settings (
 ('98000000-0000-4000-8000-000000000059', 'merchant.reachability_stale_seconds', 'GLOBAL',
  '300', '98000000-0000-4000-8000-000000000002', 'Step Two merchant heartbeat threshold.');
 
+\ir fixtures/customer-area.sql.inc
+select pg_temp.available_rider('98000000-0000-4000-8000-000000000010','98000000-0000-4000-8000-000000000002');
+update dastak_v1.merchant_sku_selections set stock_quantity=20,version=version+1 where stock_quantity is null;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '98000000-0000-4000-8000-000000000001', true);
 create temp table tap_step2_order on commit drop as
@@ -501,7 +505,7 @@ select public.dastak_v1_attach_razorpay_order(
   '98000000-0000-4000-8000-000000000001',
   (select (body ->> 'attemptId')::uuid from tap_step2_attempt_one),
   'order_step2one',
-  8000,
+  (select amount_paise from dastak_v1.payments where order_id=(select (body->>'id')::uuid from tap_step2_order)),
   'INR'
 ) body;
 reset role;
@@ -547,13 +551,13 @@ select public.dastak_v1_attach_razorpay_order(
   '98000000-0000-4000-8000-000000000001',
   (select (body ->> 'attemptId')::uuid from tap_step2_attempt_two),
   'order_step2two',
-  8000,
+  (select amount_paise from dastak_v1.payments where order_id=(select (body->>'id')::uuid from tap_step2_order)),
   'INR'
 );
 create temp table tap_step2_capture on commit drop as
 select * from public.dastak_v1_record_razorpay_event(
   'event_step2_capture', 'payment_captured', 'order_step2two', 'pay_step2two',
-  null, 8000, now(), repeat('a', 64)
+  null, (select amount_paise from dastak_v1.payments where order_id=(select (body->>'id')::uuid from tap_step2_order)), now(), repeat('a', 64)
 );
 reset role;
 
@@ -583,11 +587,11 @@ select is(
 set local role service_role;
 select * from public.dastak_v1_record_razorpay_event(
   'event_step2_capture', 'payment_captured', 'order_step2two', 'pay_step2two',
-  null, 8000, now(), repeat('a', 64)
+  null, (select amount_paise from dastak_v1.payments where order_id=(select (body->>'id')::uuid from tap_step2_order)), now(), repeat('a', 64)
 );
 select * from public.dastak_v1_record_razorpay_event(
   'event_step2_capture_retry', 'payment_captured', 'order_step2two', 'pay_step2two',
-  null, 8000, now(), repeat('b', 64)
+  null, (select amount_paise from dastak_v1.payments where order_id=(select (body->>'id')::uuid from tap_step2_order)), now(), repeat('b', 64)
 );
 reset role;
 
@@ -646,7 +650,7 @@ select public.dastak_v1_prepare_razorpay_checkout(
 select public.dastak_v1_attach_razorpay_order(
   '98000000-0000-4000-8000-000000000001',
   (select (body ->> 'attemptId')::uuid from tap_step2_late_attempt),
-  'order_step2late', 3000, 'INR'
+  'order_step2late', (select amount_paise from dastak_v1.payments where order_id=(select (body->>'id')::uuid from tap_step2_expiry_order)), 'INR'
 );
 reset role;
 
@@ -667,7 +671,7 @@ select ok(
 create temp table tap_step2_late_capture on commit drop as
 select * from public.dastak_v1_record_razorpay_event(
   'event_step2_late', 'payment_captured', 'order_step2late', 'pay_step2late',
-  null, 3000, now(), repeat('c', 64)
+  null, (select amount_paise from dastak_v1.payments where order_id=(select (body->>'id')::uuid from tap_step2_expiry_order)), now(), repeat('c', 64)
 );
 reset role;
 
@@ -727,6 +731,7 @@ select is((select sum(stock_reserved_quantity) from dastak_v1.merchant_sku_selec
 -- Transition/custody and royalty guards are bypassed to seed a pickup outcome;
 -- the production inventory trigger remains enabled throughout.
 savepoint stock_pickup_test;
+set constraints all immediate;
 alter table dastak_v1.fulfilments disable trigger fulfilments_guard;
 alter table dastak_v1.fulfilments disable trigger fulfilments_credit_merchant_royalty;
 update dastak_v1.fulfilments set status = 'PICKED_UP', version = version + 1

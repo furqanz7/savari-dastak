@@ -212,8 +212,10 @@ Deno.test("customer and merchant snapshots use only the authenticated account", 
   assertEquals(customerResponse.status, 200);
   assertEquals(merchantResponse.status, 200);
   assertEquals(requested, [`customer:${accountId}`, `merchant:${accountId}`]);
-  const customerOrder = ((await jsonBody(customerResponse)).orders as Array<Record<string, unknown>>)[0];
-  const merchantOrder = ((await jsonBody(merchantResponse)).orders as Array<Record<string, unknown>>)[0];
+  const customerOrder =
+    ((await jsonBody(customerResponse)).orders as Array<Record<string, unknown>>)[0];
+  const merchantOrder =
+    ((await jsonBody(merchantResponse)).orders as Array<Record<string, unknown>>)[0];
   assertEquals("total" in customerOrder, true);
   assertEquals("deliveryFee" in customerOrder, true);
   assertEquals("total" in merchantOrder, false);
@@ -320,17 +322,33 @@ Deno.test("owner snapshot uses only the authenticated owner and a bounded limit"
 Deno.test("owner history page forwards authenticated search and opaque cursor", async () => {
   let requested: unknown;
   const response = await handleMerchantOrders(
-    request({ operation: "ownerHistoryPage", query: " Town Store ", limit: 25, cursor: {
-      createdAt: "2026-09-12T10:00:00Z", orderId,
-    } }, "Bearer owner"),
-    dependencies({ getOwnerOrdersPage: (input) => {
-      requested = input;
-      return Promise.resolve({ responseBody: { orders: [], hasMore: false, nextCursor: null }, responseStatus: 200 });
-    } }),
+    request({
+      operation: "ownerHistoryPage",
+      query: " Town Store ",
+      limit: 25,
+      cursor: {
+        createdAt: "2026-09-12T10:00:00Z",
+        orderId,
+      },
+    }, "Bearer owner"),
+    dependencies({
+      getOwnerOrdersPage: (input) => {
+        requested = input;
+        return Promise.resolve({
+          responseBody: { orders: [], hasMore: false, nextCursor: null },
+          responseStatus: 200,
+        });
+      },
+    }),
   );
   assertEquals(response.status, 200);
-  assertEquals(requested, { accountId, query: "Town Store", limit: 25,
-    afterCreatedAt: "2026-09-12T10:00:00Z", afterOrderId: orderId });
+  assertEquals(requested, {
+    accountId,
+    query: "Town Store",
+    limit: 25,
+    afterCreatedAt: "2026-09-12T10:00:00Z",
+    afterOrderId: orderId,
+  });
 });
 
 Deno.test("merchant accept forwards an authenticated transition intent", async () => {
@@ -569,20 +587,40 @@ Deno.test("owner operations use the authenticated owner and bounded limit", asyn
 Deno.test("owner exception page forwards only a complete validated cursor", async () => {
   let requested: unknown;
   const response = await handleMerchantOrders(
-    request({ operation: "ownerExceptionsPage", limit: 40, cursor: {
-      occurredAt: "2026-09-12T10:00:00Z", exceptionId: `support:${orderId}`,
-    } }, "Bearer owner"),
-    dependencies({ getOwnerExceptionsPage: (input) => {
-      requested = input;
-      return Promise.resolve({ responseBody: { exceptions: [], hasMore: false, nextCursor: null }, responseStatus: 200 });
-    } }),
+    request({
+      operation: "ownerExceptionsPage",
+      limit: 40,
+      cursor: {
+        occurredAt: "2026-09-12T10:00:00Z",
+        exceptionId: `support:${orderId}`,
+      },
+    }, "Bearer owner"),
+    dependencies({
+      getOwnerExceptionsPage: (input) => {
+        requested = input;
+        return Promise.resolve({
+          responseBody: { exceptions: [], hasMore: false, nextCursor: null },
+          responseStatus: 200,
+        });
+      },
+    }),
   );
   assertEquals(response.status, 200);
-  assertEquals(requested, { accountId, limit: 40, afterOccurredAt: "2026-09-12T10:00:00Z",
-    afterExceptionId: `support:${orderId}` });
-  const invalid = await handleMerchantOrders(request({ operation: "ownerExceptionsPage", cursor: {
-    occurredAt: "2026-09-12T10:00:00Z",
-  } }, "Bearer owner"), dependencies());
+  assertEquals(requested, {
+    accountId,
+    limit: 40,
+    afterOccurredAt: "2026-09-12T10:00:00Z",
+    afterExceptionId: `support:${orderId}`,
+  });
+  const invalid = await handleMerchantOrders(
+    request({
+      operation: "ownerExceptionsPage",
+      cursor: {
+        occurredAt: "2026-09-12T10:00:00Z",
+      },
+    }, "Bearer owner"),
+    dependencies(),
+  );
   assertEquals(invalid.status, 400);
 });
 
@@ -781,11 +819,19 @@ function dependencies(
     getOwnerOrders: overrides.getOwnerOrders ??
       (() => Promise.resolve({ responseBody: snapshot, responseStatus: 200 })),
     getOwnerOrdersPage: overrides.getOwnerOrdersPage ??
-      (() => Promise.resolve({ responseBody: { ...snapshot, hasMore: false, nextCursor: null }, responseStatus: 200 })),
+      (() =>
+        Promise.resolve({
+          responseBody: { ...snapshot, hasMore: false, nextCursor: null },
+          responseStatus: 200,
+        })),
     getOwnerOperations: overrides.getOwnerOperations ??
       (() => Promise.resolve({ responseBody: { exceptions: [] }, responseStatus: 200 })),
     getOwnerExceptionsPage: overrides.getOwnerExceptionsPage ??
-      (() => Promise.resolve({ responseBody: { exceptions: [], hasMore: false, nextCursor: null }, responseStatus: 200 })),
+      (() =>
+        Promise.resolve({
+          responseBody: { exceptions: [], hasMore: false, nextCursor: null },
+          responseStatus: 200,
+        })),
     merchantAccept: overrides.merchantAccept ??
       (() => Promise.resolve({ responseBody: acceptedOrder, responseStatus: 200 })),
     merchantReject: overrides.merchantReject ??

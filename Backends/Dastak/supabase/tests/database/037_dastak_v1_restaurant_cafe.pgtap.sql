@@ -250,6 +250,11 @@ select ok(
 );
 
 select set_config('request.jwt.claim.sub','99700000-0000-4000-8000-000000000001',true);
+\ir fixtures/customer-area.sql.inc
+select pg_temp.available_rider('99700000-0000-4000-8000-000000000010','99700000-0000-4000-8000-000000000002');
+insert into private.customer_delivery_addresses(account_id,label,address,details,building,location,is_default)
+values('99700000-0000-4000-8000-000000000001','Home','1 Cafe Road','1 Cafe Road','1',extensions.st_setsrid(extensions.st_makepoint(78.63,12.68),4326),true);
+update dastak_v1.merchant_sku_selections set stock_quantity=20,version=version+1 where stock_quantity is null;
 select is(jsonb_array_length(public.dastak_v1_customer_restaurants(null,50)->'restaurants'),
   1, 'customer sees active Restaurant/Cafe discovery');
 select ok(public.dastak_v1_customer_restaurants(null,50)::text ~ 'V1 Cafe'

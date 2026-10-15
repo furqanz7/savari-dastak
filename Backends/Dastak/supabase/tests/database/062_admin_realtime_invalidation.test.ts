@@ -16,22 +16,26 @@ Deno.test("Admin Realtime is private, role-bound, and carries invalidations only
 });
 
 Deno.test("approvals and live orders emit targeted Admin invalidations", () => {
-  for (const table of [
-    "private.merchant_applications",
-    "private.delivery_partner_applications",
-    "dastak_v1.orders",
-    "dastak_v1.fulfilments",
-    "dastak_v1.delivery_missions",
-  ]) {
+  for (
+    const table of [
+      "private.merchant_applications",
+      "private.delivery_partner_applications",
+      "dastak_v1.orders",
+      "dastak_v1.fulfilments",
+      "dastak_v1.delivery_missions",
+    ]
+  ) {
     assert(migration.includes(`on ${table}`), `missing trigger for ${table}`);
   }
-  for (const workspace of [
-    "merchantApprovals",
-    "deliveryApprovals",
-    "operations",
-    "liveOrders",
-    "commandCenter",
-  ]) {
+  for (
+    const workspace of [
+      "merchantApprovals",
+      "deliveryApprovals",
+      "operations",
+      "liveOrders",
+      "commandCenter",
+    ]
+  ) {
     assert(migration.includes(`'${workspace}'`), `missing ${workspace}`);
   }
 });

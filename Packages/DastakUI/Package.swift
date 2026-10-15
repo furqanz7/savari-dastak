@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "DastakLaunchUI", targets: ["DastakLaunchUI"])
     ],
     dependencies: [
+        .package(path: "../DastakLiveTracking"),
         .package(path: "../DastakDomain"),
         .package(path: "../MarketplaceDesignSystem"),
         .package(path: "../MarketplaceFoundation"),
@@ -25,6 +26,7 @@ let package = Package(
         .target(
             name: "DastakUI",
             dependencies: [
+                "DastakLiveTracking",
                 "DastakDomain",
                 "MarketplaceDesignSystem",
                 "MarketplaceFoundation",
@@ -34,7 +36,8 @@ let package = Package(
                     package: "razorpay-customui-pod",
                     condition: .when(platforms: [.iOS])
                 )
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "DastakUITests",

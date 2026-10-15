@@ -68,10 +68,29 @@ public struct DastakV1AdminLaunchPayment: Codable, Equatable, Sendable {
     public let platformFee: DastakV1AdminPlatformFee?
 }
 
-public struct DastakV1AdminExecutionTrace: Codable, Equatable, Sendable {
+public struct DastakV1AdminExecutionTrace: Decodable, Equatable, Sendable {
     public let order: DastakV1AdminOrder
     public let launchPayment: DastakV1AdminLaunchPayment?
     public let cancellation: DastakV1AdminCancellation?
+    public let failureAndFinance: DastakAdminFailureFinance?
+    public let financeCurrent: Bool
+    public let delivery: DastakAdminTraceRecord?
+    public let deliveryCurrent: Bool
+    public let root: DastakAdminTraceRecord
+    public init(from decoder: Decoder) throws {
+        root = try DastakAdminTraceRecord(from: decoder)
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        order = try values.decode(DastakV1AdminOrder.self, forKey: .order)
+        launchPayment = try? values.decodeIfPresent(DastakV1AdminLaunchPayment.self, forKey: .launchPayment)
+        cancellation = try? values.decodeIfPresent(DastakV1AdminCancellation.self, forKey: .cancellation)
+        failureAndFinance = try? values.decode(DastakAdminFailureFinance.self, forKey: .failureAndFinance)
+        financeCurrent = failureAndFinance != nil
+        let deliveryRecord = root.record("delivery")
+        delivery = deliveryRecord
+        deliveryCurrent = deliveryRecord?.flag("canAuthorizeExceptionalHandoff") != nil &&
+            ["offers", "pickupStops", "verification", "custody", "problems", "deliveryEvidence", "exceptionalHandoffs"].allSatisfy { deliveryRecord?.rows($0) != nil }
+    }
+    private enum CodingKeys: String, CodingKey { case order, launchPayment, cancellation, failureAndFinance }
 }
 
 public struct DastakV1AdminCancellation: Codable, Equatable, Sendable {
@@ -657,7 +676,7 @@ public struct DastakAdminRoyaltyPayout: Codable, Equatable, Identifiable, Sendab
     }
 }
 
-public protocol DastakV1AdminClient: Sendable {
+public protocol DastakV1AdminClient: DastakAdminMerchantGovernanceClient, DastakAdminDeliveryGovernanceClient, DastakAdminAuditHistoryClient {
     func catalogueBrowseMap(idempotencyKey: IdempotencyKey) async throws -> DastakV1CatalogueBrowseMap?
     func orders(limit: Int, idempotencyKey: IdempotencyKey) async throws -> [DastakV1AdminOrder]
     func trace(orderID: UUID, idempotencyKey: IdempotencyKey) async throws -> DastakV1AdminExecutionTrace
@@ -819,7 +838,7 @@ public struct SupabaseDastakV1AdminClient: DastakV1AdminClient {
         let orders: [DastakV1AdminOrder]
     }
 
-    private let functions: any FunctionClient
+    let functions: any FunctionClient
 
     public init(functions: any FunctionClient) {
         self.functions = functions

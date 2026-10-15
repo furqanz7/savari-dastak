@@ -288,6 +288,50 @@ type AuthenticatedInput = {
   signal?: AbortSignal;
 };
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+export type DeliveryOrderDetail = {
+  kind: DeliveryWorkHistoryItem["kind"]; workId: string; missionStatus: string; terminal: boolean;
+  order: {
+    id: string; displayOrderNumber: string; orderType: string; status: string; createdAt: string; updatedAt: string; deliveredAt?: string;
+    lines: Array<{ id: string; name: string; quantity: number; packSize?: string; variant?: string; lineTotalPaise: number; foodSelection?: { options: Array<{ name: string }> } }>;
+    price: { subtotalPaise: number; deliveryFeePaise: number; platformFeePaise: number; discountPaise: number; taxPaise: number; totalPaise: number; currencyCode: string };
+    deliveryAddress?: { line1: string; line2?: string; landmark?: string; instructions?: string } | null;
+    recipient?: { name: string; phoneNumber: string } | null;
+  };
+  pickupStops: Array<{ id: string; sequence: number; status?: string; packageCount?: number; name?: string; address?: string | Record<string, unknown>; branch?: { displayName: string; address: string | Record<string, unknown> } }>;
+  collection?: { state: string; amountPaise?: number; lastMethod?: string } | null;
+};
+
+export async function getDeliveryOrderDetail(input: AuthenticatedInput & { kind: DeliveryWorkHistoryItem["kind"]; workId: string }, fetcher: Fetcher = fetch): Promise<DeliveryOrderDetail> {
+  const result = record(await call("courier-dispatch", input, { operation: "partnerOrderDetail", kind: input.kind, workId: input.workId }, undefined, fetcher));
+  const order = record(result?.order);
+  const price = record(order?.price);
+  const lines = Array.isArray(order?.lines) ? order.lines : [];
+  if (result?.kind !== input.kind || result?.workId !== input.workId || typeof result?.terminal !== "boolean" ||
+      typeof result?.missionStatus !== "string" || typeof order?.id !== "string" || typeof order?.orderType !== "string" ||
+      typeof order?.displayOrderNumber !== "string" || typeof order?.createdAt !== "string" || typeof order?.updatedAt !== "string" ||
+      !price || price.currencyCode !== "INR" || !lines.length ||
+      !["subtotalPaise", "deliveryFeePaise", "platformFeePaise", "discountPaise", "taxPaise", "totalPaise"].every((key) => Number.isSafeInteger(price[key]) && Number(price[key]) >= 0) ||
+      !lines.every((line) => {
+        const row = record(line); const food = record(row?.foodSelection);
+        return typeof row?.id === "string" && typeof row?.name === "string" && Number.isSafeInteger(row?.quantity) && Number(row?.quantity) > 0 &&
+          Number.isSafeInteger(row?.lineTotalPaise) && Number(row?.lineTotalPaise) >= 0 &&
+          (row?.foodSelection == null || (food && Array.isArray(food.options) && food.options.every((option) => typeof record(option)?.name === "string")));
+      }) ||
+      !Array.isArray(result?.pickupStops) || !result.pickupStops.every((value) => {
+        const stop = record(value); const branch = record(stop?.branch);
+        return typeof stop?.id === "string" && Number.isSafeInteger(stop.sequence) && Number(stop.sequence) > 0 &&
+          (typeof stop.name === "string" || typeof branch?.displayName === "string") &&
+          (stop.address == null || typeof stop.address === "string" || record(stop.address)) &&
+          (stop.packageCount == null || (Number.isSafeInteger(stop.packageCount) && Number(stop.packageCount) >= 0));
+      }) ||
+      (result.terminal && (order.deliveryAddress != null || order.recipient != null)) ||
+      (order?.deliveryAddress != null && (typeof record(order.deliveryAddress)?.line1 !== "string" ||
+        (record(order.deliveryAddress)?.instructions != null && typeof record(order.deliveryAddress)?.instructions !== "string"))) ||
+      (order?.recipient != null && (typeof record(order.recipient)?.name !== "string" || typeof record(order.recipient)?.phoneNumber !== "string")) ||
+      (result.collection != null && typeof record(result.collection)?.state !== "string"))
+    throw new DeliveryRequestError("invalid_response", "The full order could not be verified. Please refresh.", 0);
+  return result as unknown as DeliveryOrderDetail;
+}
 type EvidenceFile = { type: string; size: number };
 
 export class DeliveryRequestError extends Error {

@@ -211,13 +211,16 @@ public struct DastakV1RestaurantIdentity: Codable, Equatable, Sendable {
     public let serviceZoneID: UUID?
     public let acceptingOrders: Bool
     public let isOpen: Bool
+    // Merchant responses include this; Customer menu responses may omit it.
+    // Missing versions must not authorize a Merchant operating-state mutation.
+    public let operationalVersion: Int?
     public let branchStatus: String
     public let merchantType: String
     public let softActiveOrderThreshold: Int
     public let activeOrderCount: Int
 
     private enum CodingKeys: String, CodingKey {
-        case name, branchName, imageKey, mediaVersion, description, acceptingOrders, isOpen
+        case name, branchName, imageKey, mediaVersion, description, acceptingOrders, isOpen, operationalVersion
         case branchStatus, merchantType, softActiveOrderThreshold, activeOrderCount
         case organizationID = "organizationId"
         case branchID = "branchId"
@@ -692,6 +695,9 @@ public struct DastakV1OrderCollection: Codable, Equatable, Sendable {
 }
 
 public protocol DastakV1CustomerClient: Sendable {
+    func areaAvailability(context: DastakV1AreaContext, idempotencyKey: IdempotencyKey) async throws -> DastakV1AreaAvailability
+    func checkoutQuote(context: DastakV1AreaContext, lines: [DastakV1OrderLineInput], branchID: UUID?, idempotencyKey: IdempotencyKey) async throws -> DastakV1CheckoutQuote
+    func restaurantAreaPage(context: DastakV1AreaContext, cursor: DastakV1RestaurantAreaCursor?, idempotencyKey: IdempotencyKey) async throws -> DastakV1RestaurantAreaPage
     func catalogueBrowseMap(idempotencyKey: IdempotencyKey) async throws -> DastakV1CatalogueBrowseMap?
     func catalogue(
         query: String?,
@@ -799,6 +805,30 @@ public struct SupabaseDastakV1CustomerClient: DastakV1CustomerClient {
             request: DastakV1CatalogueBrowseRequest(),
             idempotencyKey: idempotencyKey
         )
+    }
+
+    public func areaAvailability(context: DastakV1AreaContext, idempotencyKey: IdempotencyKey) async throws -> DastakV1AreaAvailability {
+        let value: DastakV1AreaAvailability = try await functions.invoke("dastak-v1-catalogue",
+            request: DastakV1AreaRequest(operation: "customerAreaAvailability", addressId: context.addressId, addressVersion: context.addressVersion), idempotencyKey: idempotencyKey)
+        try value.validate(context: context)
+        return value
+    }
+
+    public func checkoutQuote(context: DastakV1AreaContext, lines: [DastakV1OrderLineInput], branchID: UUID?, idempotencyKey: IdempotencyKey) async throws -> DastakV1CheckoutQuote {
+        let value: DastakV1CheckoutQuote = try await functions.invoke("dastak-v1-catalogue",
+            request: DastakV1AreaRequest(operation: "customerCheckoutQuote", addressId: context.addressId, addressVersion: context.addressVersion, lines: lines, restaurantBranchId: branchID), idempotencyKey: idempotencyKey)
+        try value.validate(context: context, lines: lines, branchID: branchID)
+        return value
+    }
+
+    public func restaurantAreaPage(context: DastakV1AreaContext, cursor: DastakV1RestaurantAreaCursor?, idempotencyKey: IdempotencyKey) async throws -> DastakV1RestaurantAreaPage {
+        let value: DastakV1RestaurantAreaPage = try await functions.invoke("dastak-v1-catalogue",
+            request: DastakV1AreaRequest(operation: "customerRestaurantAreaPage", addressId: context.addressId, addressVersion: context.addressVersion, limit: 100, cursor: cursor), idempotencyKey: idempotencyKey)
+        guard value.ordering == "NEAREST", context.matches(.init(addressID: value.addressId, addressVersion: value.addressVersion)),
+              value.nextCursor.map({ context.matches(.init(addressID: $0.addressId, addressVersion: $0.addressVersion)) && !$0.name.isEmpty && $0.name.count <= 160 && ($0.distanceMeters.map { (0...41_000_000).contains($0) } ?? true) }) ?? true else {
+            throw FunctionClientError.invalidResponse
+        }
+        return value
     }
 
     public func catalogue(

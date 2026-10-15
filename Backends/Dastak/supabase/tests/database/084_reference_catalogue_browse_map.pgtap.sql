@@ -11,7 +11,7 @@ select is((select count(*)::integer from dastak_v1.catalogue_browse_nodes
 select is((select count(*)::integer from dastak_v1.catalogue_browse_nodes
   where version = 1 and kind = 'DESTINATION'), 36, 'all reference home destinations');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_nodes
-  where version = 1 and kind = 'RAIL'), 71, 'confirmed reference rails are explicit');
+  where version = 1 and kind = 'RAIL'), 80, 'confirmed reference rails include prayer essentials');
 select is((select count(*)::integer from dastak_v1.catalogue_browse_sources
   where version = 1 and node_key = 'dairy-alternatives'
     and type_slug = 'dairy-bread-eggs' and category_slug = 'dairy-alternatives'),

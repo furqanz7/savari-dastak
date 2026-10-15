@@ -41,11 +41,13 @@ struct DastakDeliveryAddressEditor: View {
     let requiresCompletion: Bool
     let initialLocation: DastakDeliveryLocation?
     let currentLocation: DastakDeliveryLocation?
+    let currentLocationError: String?
     let requestCurrentLocation: () -> Void
     let save: (DastakDeliveryLocation) async -> Bool
     let onSaved: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedLocation: DastakDeliveryLocation?
     @State private var addressKind: AddressKind
     @State private var customLabel: String
@@ -70,6 +72,7 @@ struct DastakDeliveryAddressEditor: View {
         requiresCompletion: Bool,
         initialLocation: DastakDeliveryLocation?,
         currentLocation: DastakDeliveryLocation?,
+        currentLocationError: String? = nil,
         requestCurrentLocation: @escaping () -> Void,
         save: @escaping (DastakDeliveryLocation) async -> Bool,
         onSaved: (() -> Void)? = nil
@@ -77,6 +80,7 @@ struct DastakDeliveryAddressEditor: View {
         self.requiresCompletion = requiresCompletion
         self.initialLocation = initialLocation
         self.currentLocation = currentLocation
+        self.currentLocationError = currentLocationError
         self.requestCurrentLocation = requestCurrentLocation
         self.save = save
         self.onSaved = onSaved
@@ -109,38 +113,47 @@ struct DastakDeliveryAddressEditor: View {
                 .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
                 .padding(.horizontal, MarketplaceSpacing.medium)
                 .padding(.top, MarketplaceSpacing.medium)
-                .padding(.bottom, 104)
+                .padding(.bottom, MarketplaceSpacing.medium)
             }
             .scrollIndicators(.hidden)
 #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
 #endif
             .marketplacePage()
+            .navigationTitle(initialLocation == nil ? "Add address" : "Edit address")
+            .dastakInlineNavigationTitle()
             .safeAreaInset(edge: .bottom) {
-                saveButton
-                    .padding(MarketplaceSpacing.medium)
-                    .background(.bar)
+                // Finish typing with the navigation bar's Done action. Do not
+                // stack a save footer or floating toolbar over the form/keyboard.
+                if focusedField == nil {
+                    saveButton
+                        .padding(MarketplaceSpacing.medium)
+                        .background(.bar)
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
+                    MarketplaceFeedbackButton { dismiss() } label: {
                         Image(systemName: "xmark")
                     }
                     .accessibilityLabel("Close")
                 }
 #if os(iOS)
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { dismissKeyboard() }
+                ToolbarItem(placement: .confirmationAction) {
+                    if focusedField != nil {
+                        MarketplaceFeedbackButton("Done") { dismissKeyboard() }
+                            .accessibilityLabel("Done editing address")
+                    }
                 }
 #endif
             }
         }
-        .onTapGesture { dismissKeyboard() }
         .sheet(isPresented: $showingLocationPicker) {
             DastakLocationPicker(
                 title: "Choose location",
-                currentLocation: selectedLocation ?? currentLocation,
+                initialLocation: selectedLocation,
+                currentLocation: currentLocation,
+                currentLocationError: currentLocationError,
                 useLocation: { location in
                     selectedLocation = location
                 },
@@ -156,7 +169,7 @@ struct DastakDeliveryAddressEditor: View {
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
 
             Text(requiresCompletion ? "Where should we bring it?" : "Your delivery address")
-                .font(MarketplaceTypography.instrumentSerif(fixedSize: 40))
+                .font(.title2.bold())
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(requiresCompletion
@@ -211,7 +224,7 @@ struct DastakDeliveryAddressEditor: View {
                     .allowsHitTesting(false)
                     .id("\(selectedLocation.point.latitude)-\(selectedLocation.point.longitude)")
 
-                    Button {
+                    MarketplaceFeedbackButton {
                         showingLocationPicker = true
                     } label: {
                         HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
@@ -240,7 +253,7 @@ struct DastakDeliveryAddressEditor: View {
                 }
                 .marketplaceFlatSurface()
             } else {
-                Button {
+                MarketplaceFeedbackButton {
                     showingLocationPicker = true
                 } label: {
                     HStack(spacing: MarketplaceSpacing.compact) {
@@ -280,7 +293,7 @@ struct DastakDeliveryAddressEditor: View {
 
             HStack(spacing: MarketplaceSpacing.small) {
                 ForEach(AddressKind.allCases) { kind in
-                    Button {
+                    MarketplaceFeedbackButton {
                         addressKind = kind
                     } label: {
                         VStack(spacing: 6) {
@@ -288,12 +301,12 @@ struct DastakDeliveryAddressEditor: View {
                             Text(kind.title)
                                 .font(.caption.weight(.semibold))
                         }
-                        .foregroundStyle(addressKind == kind ? MarketplaceColors.dastakAccent.color : .secondary)
+                        .foregroundStyle(addressKind == kind ? MarketplaceColors.primaryActionForeground.color : MarketplaceColors.primaryText(for: colorScheme))
                         .frame(maxWidth: .infinity, minHeight: 54)
                         .background(
                             addressKind == kind
                                 ? MarketplaceColors.dastakAccentSoft.color
-                                : MarketplaceColors.dastakSurface.color,
+                                : MarketplaceColors.surface(for: colorScheme),
                             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
                         )
                         .overlay {
@@ -362,6 +375,7 @@ struct DastakDeliveryAddressEditor: View {
                     .lineLimit(2 ... 4)
                     .focused($focusedField, equals: .deliveryNotes)
                     .submitLabel(.done)
+                    .onSubmit { dismissKeyboard() }
                     .padding(MarketplaceSpacing.medium)
             }
                 .textFieldStyle(.plain)
@@ -370,7 +384,7 @@ struct DastakDeliveryAddressEditor: View {
     }
 
     private var saveButton: some View {
-        Button {
+        MarketplaceFeedbackButton {
             Task { await saveAddress() }
         } label: {
             if isSaving {
@@ -403,7 +417,8 @@ struct DastakDeliveryAddressEditor: View {
     }
 
     private func saveAddress() async {
-        guard let selectedLocation, canSave else { return }
+        guard let selectedLocation, canSave, !isSaving else { return }
+        dismissKeyboard()
         isSaving = true
         let didSave = await save(
             DastakDeliveryLocation(
@@ -472,3 +487,23 @@ struct DastakDeliveryAddressEditor: View {
         )
     }
 }
+
+#if DEBUG
+/// Isolated keyboard/layout acceptance; never saves an address or calls a backend.
+public struct DastakAddressEditorPreview: View {
+    @State private var didSave = false
+    public init() {}
+    public var body: some View {
+        Group {
+            if didSave {
+                ContentUnavailableView("Preview address saved", systemImage: "checkmark.circle",
+                                       description: Text("Local sample only. No address was saved to an account."))
+            } else {
+                DastakDeliveryAddressEditor(requiresCompletion: false,
+                    initialLocation: .init(address: "Sample Road", point: .init(latitude: 12.68, longitude: 78.62), label: "Home"),
+                    currentLocation: nil, requestCurrentLocation: {}, save: { _ in true }, onSaved: { didSave = true })
+            }
+        }.preferredColorScheme(.dark)
+    }
+}
+#endif

@@ -2,7 +2,7 @@ import Foundation
 import MarketplaceFoundation
 import MarketplaceInfrastructure
 
-public struct DastakCartEntry: Identifiable, Equatable, Sendable {
+public struct DastakCartEntry: Codable, Identifiable, Equatable, Sendable {
     public let product: DastakV1CatalogueSKU
     public var quantity: Int
 
@@ -17,7 +17,7 @@ public enum DastakCartAddResult: Equatable, Sendable {
     case quantityLimit
 }
 
-public struct DastakFoodCartEntry: Identifiable, Equatable, Sendable {
+public struct DastakFoodCartEntry: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let restaurantBranchID: UUID
     public let restaurantName: String
@@ -43,7 +43,30 @@ struct DastakReorderResult: Equatable, Sendable {
     var openedBasket: Bool { addedUnits > 0 }
 }
 
-public struct DastakCart: Equatable, Sendable {
+/// Captured before replacement consent, not after the user approves it.
+struct DastakReorderReview: Identifiable, Sendable {
+    let id = UUID()
+    let order: DastakV1OrderSnapshot
+    let service: DastakBasketService
+    let baskets: DastakCustomerBaskets
+    let activeService: DastakBasketService
+    let accountID: UUID?
+    let areaKey: String
+    let contextRevision: UUID
+    var requiresReplacement: Bool { !baskets[service].isEmpty }
+
+    static func services(for order: DastakV1OrderSnapshot) -> [DastakBasketService] {
+        guard !order.lines.isEmpty, order.lines.allSatisfy({ line in
+            (line.lineType == "RETAIL_SKU" && line.skuID != nil && line.menuItemID == nil)
+                || (line.lineType == "FOOD_MENU_ITEM" && line.menuItemID != nil && line.skuID == nil)
+        }) else { return [] }
+        return DastakBasketService.allCases.filter { service in
+            order.lines.contains { $0.lineType == (service == .grocery ? "RETAIL_SKU" : "FOOD_MENU_ITEM") }
+        }
+    }
+}
+
+public struct DastakCart: Codable, Equatable, Sendable {
     public static let maximumQuantity = 99
     public private(set) var entries: [DastakCartEntry] = []
     public private(set) var foodEntries: [DastakFoodCartEntry] = []
@@ -117,7 +140,9 @@ public struct DastakCart: Equatable, Sendable {
             foodEntries.append(DastakFoodCartEntry(
                 id: key,
                 restaurantBranchID: restaurant.branchID,
-                restaurantName: restaurant.name,
+                restaurantName: DastakRestaurantPresentation.customerFacingName(
+                    name: restaurant.name, branchName: restaurant.branchName
+                ),
                 item: item,
                 optionIDs: normalized,
                 optionNames: options.map(\.name),
@@ -144,5 +169,88 @@ public struct DastakCart: Equatable, Sendable {
     public mutating func removeAll() {
         entries.removeAll()
         foodEntries.removeAll()
+    }
+
+    func only(_ service: DastakBasketService) -> Self {
+        var result = self
+        if service == .grocery { result.foodEntries.removeAll() }
+        else { result.entries.removeAll() }
+        return result
+    }
+}
+
+enum DastakBasketService: String, Codable, CaseIterable, Identifiable, Sendable {
+    case grocery, food
+    var id: String { rawValue }
+    var title: String { self == .grocery ? "Grocery" : "Food" }
+}
+
+struct DastakCustomerBaskets: Codable, Equatable, Sendable {
+    private var grocery = DastakCart()
+    private var food = DastakCart()
+
+    subscript(_ service: DastakBasketService) -> DastakCart {
+        get { service == .grocery ? grocery : food }
+        set {
+            // Keep even legacy mixed reorders out of a combined checkout.
+            if service == .grocery { grocery = newValue.only(.grocery) }
+            else { food = newValue.only(.food) }
+        }
+    }
+
+    var isValid: Bool {
+        guard grocery.foodEntries.isEmpty, food.entries.isEmpty,
+              grocery.entries.count <= 500, food.foodEntries.count <= 500,
+              Set(grocery.entries.map(\.id)).count == grocery.entries.count,
+              Set(food.foodEntries.map(\.id)).count == food.foodEntries.count,
+              Set(food.foodEntries.map(\.restaurantBranchID)).count <= 1 else { return false }
+        // Bound cached values before any subtotal arithmetic. Prices are estimates;
+        // only IDs, options and quantities are sent to the authoritative server.
+        let safePrice = Int.max / DastakCart.maximumQuantity / 1_000
+        return grocery.entries.allSatisfy {
+            (1...DastakCart.maximumQuantity).contains($0.quantity)
+                && (0...safePrice).contains($0.product.sellingPricePaise)
+        } && food.foodEntries.allSatisfy {
+            (1...DastakCart.maximumQuantity).contains($0.quantity)
+                && (0...safePrice).contains($0.unitPricePaise)
+                && $0.id == $0.item.id.uuidString + ":" + $0.optionIDs.map(\.uuidString).joined(separator: ",")
+        }
+    }
+}
+
+/// Local, versioned basket cache. No shared/anonymous account fallback and no
+/// recipient, address, access token or payment details are stored here.
+@MainActor
+struct DastakBasketStore {
+    let defaults: UserDefaults
+
+    private struct Envelope: Codable {
+        let version: Int
+        let accountID: UUID
+        let baskets: DastakCustomerBaskets
+    }
+
+    func load(accountID: UUID) -> DastakCustomerBaskets {
+        guard let data = defaults.data(forKey: key(accountID)), data.count <= 2_000_000,
+              let saved = try? JSONDecoder().decode(Envelope.self, from: data),
+              saved.version == 1, saved.accountID == accountID, saved.baskets.isValid else {
+            return DastakCustomerBaskets()
+        }
+        return saved.baskets
+    }
+
+    func save(_ baskets: DastakCustomerBaskets, accountID: UUID) {
+        guard baskets.isValid,
+              let data = try? JSONEncoder().encode(Envelope(version: 1, accountID: accountID, baskets: baskets)),
+              data.count <= 2_000_000 else { return }
+        defaults.set(data, forKey: key(accountID))
+    }
+
+    func remove(accountID: UUID) {
+        defaults.removeObject(forKey: key(accountID))
+    }
+
+    private func key(_ accountID: UUID) -> String {
+        "dastak.customer.\(accountID.uuidString.lowercased()).baskets.v1"
     }
 }

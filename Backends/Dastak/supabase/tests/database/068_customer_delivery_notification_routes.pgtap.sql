@@ -4,8 +4,12 @@ set local search_path = public, extensions;
 select no_plan();
 
 select is((select count(*) from dastak_v1.notification_routes
- where audience='CUSTOMER' and enabled and platform in ('ios','all')),25::bigint,
+ where audience='CUSTOMER' and enabled and platform in ('ios','all')),26::bigint,
  'Customer lifecycle routes and cancellation are present after migrations');
+select ok(exists(select 1 from dastak_v1.notification_routes
+ where event_type='RIDER_ASSIGNMENT_PENDING' and notification_type='customer.assigning_rider'
+ and audience='CUSTOMER' and enabled
+ and platform in ('ios','all')), 'assigning a rider has its Customer lifecycle route');
 select is((select count(*) from dastak_v1.notification_routes
  where audience='RIDER' and enabled and platform in ('ios','all')),5::bigint,
  'Delivery offers, assignment, readiness, returns and cancellation have routes');

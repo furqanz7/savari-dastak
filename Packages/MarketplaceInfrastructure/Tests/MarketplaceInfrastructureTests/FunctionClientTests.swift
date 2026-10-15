@@ -122,6 +122,75 @@ final class FunctionClientTests: XCTestCase {
         XCTAssertEqual(transportCallCount, 1)
     }
 
+    func testSessionReadUncertaintyNeverBecomesAuthenticationRequired() async throws {
+        for outcomes: [Result<String?, Error>] in [
+            [.failure(URLError(.timedOut)), .failure(URLError(.timedOut))],
+            [.failure(URLError(.timedOut)), .success(nil)],
+            [.success(nil), .failure(URLError(.timedOut))]
+        ] {
+            let tokens = SequencedAccessTokens(outcomes)
+            let transport = RecordingTransport(statusCode: 200, responseBody: Data())
+            let client = SupabaseFunctionClient(
+                configuration: makeConfiguration(),
+                accessTokenProvider: { try await tokens.load() }, transport: transport.send
+            )
+            do {
+                let _: TestResponse = try await client.invoke(
+                    "perform-action", request: TestRequest(value: 2),
+                    idempotencyKey: IdempotencyKey(rawValue: "uncertain-session")!
+                )
+                XCTFail("Expected the original refresh/transport failure")
+            } catch let error as URLError {
+                XCTAssertEqual(error.code, .timedOut)
+            }
+            let calls = await transport.recordedCallCount()
+            XCTAssertEqual(calls, 0)
+        }
+    }
+
+    func testCancelledSessionReadIsNotRetriedOrConvertedToSignOut() async throws {
+        for error: Error in [CancellationError(), URLError(.cancelled)] {
+            let tokens = SequencedAccessTokens([.failure(error), .success("must-not-be-used")])
+            let transport = RecordingTransport(statusCode: 200, responseBody: Data())
+            let client = SupabaseFunctionClient(
+                configuration: makeConfiguration(),
+                accessTokenProvider: { try await tokens.load() }, transport: transport.send
+            )
+            do {
+                let _: TestResponse = try await client.invoke(
+                    "perform-action", request: TestRequest(value: 2),
+                    idempotencyKey: IdempotencyKey(rawValue: "cancelled-session")!
+                )
+                XCTFail("Expected cancellation")
+            } catch {
+                XCTAssertTrue(error is CancellationError || (error as? URLError)?.code == .cancelled)
+            }
+            let tokenCalls = await tokens.callCount()
+            let transportCalls = await transport.recordedCallCount()
+            XCTAssertEqual(tokenCalls, 1)
+            XCTAssertEqual(transportCalls, 0)
+        }
+    }
+
+    func testEmptyTokensAreConfirmedMissingWithoutSendingRequest() async throws {
+        let transport = RecordingTransport(statusCode: 200, responseBody: Data())
+        let client = SupabaseFunctionClient(
+            configuration: makeConfiguration(), accessTokenProvider: { " \n" },
+            transport: transport.send
+        )
+        do {
+            let _: TestResponse = try await client.invoke(
+                "perform-action", request: TestRequest(value: 2),
+                idempotencyKey: IdempotencyKey(rawValue: "empty-session")!
+            )
+            XCTFail("Expected missing session")
+        } catch let error as FunctionClientError {
+            XCTAssertEqual(error, .authenticationRequired)
+        }
+        let calls = await transport.recordedCallCount()
+        XCTAssertEqual(calls, 0)
+    }
+
     func testInvokeMapsMalformedErrorEnvelopePredictably() async throws {
         let transport = RecordingTransport(
             statusCode: 500,
@@ -394,4 +463,15 @@ private actor TransientAccessTokenProvider {
 
 private enum TransientAccessTokenError: Error {
     case unavailable
+}
+
+private actor SequencedAccessTokens {
+    private var outcomes: [Result<String?, Error>]
+    private var calls = 0
+    init(_ outcomes: [Result<String?, Error>]) { self.outcomes = outcomes }
+    func load() throws -> String? {
+        calls += 1
+        return try outcomes.removeFirst().get()
+    }
+    func callCount() -> Int { calls }
 }

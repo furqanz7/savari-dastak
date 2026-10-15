@@ -203,9 +203,11 @@ export async function handleEarnings(request: Request, dependencies: EarningsDep
           uuidPattern.test(cursor.withdrawalId)
         ? cursor.withdrawalId
         : null;
-      if (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+      if (
+        typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
         (body?.cursor !== null && body?.cursor !== undefined && !cursor) ||
-        (cursor !== undefined && (!afterRequestedAt || !afterWithdrawalId))) {
+        (cursor !== undefined && (!afterRequestedAt || !afterWithdrawalId))
+      ) {
         return json({ error: { code: "invalid_limit", message: "Invalid payout limit." } }, 400);
       }
       return snapshotResponse(

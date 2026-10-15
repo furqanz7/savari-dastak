@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "sourceSHA256": "adf9f73504acff6a6747901fb804d3157c92bc37544bb3843af25e5cb838151f",
+  "license": "CC0-1.0",
+  "meshes": [
+    {
+      "name": "base.001",
+      "count": 11072,
+      "indicesCount": 60084,
+      "material": 0,
+      "positions": 0,
+      "normals": 132864,
+      "uv": 265728,
+      "indices": 354304,
+      "closed": 594640
+    },
+    {
+      "name": "eyebrow001",
+      "count": 124,
+      "indicesCount": 576,
+      "material": 1,
+      "positions": 727504,
+      "normals": 728992,
+      "uv": 730480,
+      "indices": 731472,
+      "closed": 733776
+    },
+    {
+      "name": "eyelashes01",
+      "count": 250,
+      "indicesCount": 1104,
+      "material": 2,
+      "positions": 735264,
+      "normals": 738264,
+      "uv": 741264,
+      "indices": 743264,
+      "closed": 747680
+    },
+    {
+      "name": "low-poly",
+      "count": 96,
+      "indicesCount": 516,
+      "material": 3,
+      "positions": 750680,
+      "normals": 751832,
+      "uv": 752984,
+      "indices": 753752
+    },
+    {
+      "name": "male_casualsuit01",
+      "count": 8864,
+      "indicesCount": 50016,
+      "material": 4,
+      "positions": 755816,
+      "normals": 862184,
+      "uv": 968552,
+      "indices": 1039464
+    },
+    {
+      "name": "short02",
+      "count": 1794,
+      "indicesCount": 10032,
+      "material": 5,
+      "positions": 1239528,
+      "normals": 1261056,
+      "uv": 1282584,
+      "indices": 1296936
+    }
+  ],
+  "materials": [
+    {
+      "texture": "native-staff-0.png",
+      "roughness": 0.6200000047683716,
+      "masked": false,
+      "doubleSided": false
+    },
+    {
+      "texture": "native-staff-1.png",
+      "roughness": 0.8799999952316284,
+      "masked": true,
+      "doubleSided": true
+    },
+    {
+      "texture": "native-staff-2.png",
+      "roughness": 0.8799999952316284,
+      "masked": true,
+      "doubleSided": true
+    },
+    {
+      "texture": "native-staff-3.png",
+      "roughness": 0.8799999952316284,
+      "masked": false,
+      "doubleSided": false
+    },
+    {
+      "texture": "native-staff-4.png",
+      "roughness": 0.8799999952316284,
+      "masked": false,
+      "doubleSided": false,
+      "normal": "native-staff-normal-4.png"
+    },
+    {
+      "texture": "native-staff-5.png",
+      "roughness": 0.8799999952316284,
+      "masked": true,
+      "doubleSided": true
+    }
+  ],
+  "hands": [
+    [
+      0.2030180437893419,
+      0.8352861805788305,
+      -0.0060665586486627005
+    ],
+    [
+      -0.2030180437893419,
+      0.8352861805788305,
+      -0.0060665586486627005
+    ]
+  ]
+}

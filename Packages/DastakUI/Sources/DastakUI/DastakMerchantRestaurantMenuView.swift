@@ -11,6 +11,12 @@ struct DastakMerchantRestaurantMenuView: View {
     @State private var itemName = ""
     @State private var itemPrice = ""
     @State private var itemCategoryID: UUID?
+    @State private var operatingAction: OperatingAction?
+
+    private enum OperatingAction: String, Identifiable {
+        case open = "Open restaurant", close = "Close restaurant", pause = "Pause new orders", resume = "Accept new orders"
+        var id: String { rawValue }
+    }
 
     var body: some View {
         NavigationStack {
@@ -22,14 +28,18 @@ struct DastakMerchantRestaurantMenuView: View {
                             Text(menu.restaurant.name).font(MarketplaceTypography.instrumentSerif(fixedSize: 38))
                             Text("Your menu, made easy to manage.").font(.subheadline).foregroundStyle(.secondary)
                         }
+                        restaurantStatus(menu)
+                        operatingControls(menu)
                         restaurantBanner(menu)
                         addMenuContent(menu)
+                            .disabled(model.restaurantChangesDisabled)
                         if menu.categories.isEmpty {
                             DastakEmptyState(symbol: "fork.knife", title: "Make this menu yours", message: "Add your first category and dish above.")
                                 .frame(minHeight: 260)
                         } else {
                             ForEach(menu.categories) { category in
                                 categorySection(category)
+                                    .disabled(model.restaurantChangesDisabled)
                             }
                         }
                     }
@@ -42,7 +52,81 @@ struct DastakMerchantRestaurantMenuView: View {
             .refreshable { await model.refreshRestaurantMenu() }
             .navigationTitle("Restaurant menu")
             .dastakInlineNavigationTitle()
+            .onChange(of: model.restaurantMenu?.restaurant.operationalVersion) { _, _ in operatingAction = nil }
+            .onChange(of: model.restaurantMenu?.restaurant.branchID) { _, _ in operatingAction = nil }
+            .onChange(of: model.restaurantMenu?.restaurant.branchStatus) { _, _ in operatingAction = nil }
+            .confirmationDialog(operatingAction?.rawValue ?? "Restaurant operating state",
+                isPresented: Binding(get: { operatingAction != nil }, set: { if !$0 { operatingAction = nil } }),
+                titleVisibility: .visible) {
+                if let action = operatingAction {
+                    Button(action.rawValue, role: action == .close ? .destructive : nil) {
+                        operatingAction = nil
+                        Task {
+                            await model.setRestaurantOperatingState(isOpen: action != .close,
+                                acceptingOrders: action == .resume)
+                        }
+                    }
+                    .disabled(!model.canChangeRestaurantOperatingState)
+                }
+                Button("Cancel", role: .cancel) { operatingAction = nil }
+            } message: {
+                Text("Existing confirmed orders continue. Opening keeps new orders paused until you choose Accept new orders.")
+            }
         }
+    }
+
+    private func restaurantStatus(_ menu: DastakV1RestaurantMenu) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+            if let notice = model.notice { Text(notice).font(.subheadline).accessibilityIdentifier("merchant.restaurant.notice") }
+            if let pending = model.pendingRestaurantCommand {
+                Label("Pending: \(pending.description)", systemImage: "exclamationmark.circle")
+                    .font(.headline)
+                Text("The result is uncertain. Other restaurant changes are paused. Retry checks this same action and original details; do not submit it again as a new change.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Button("Check pending restaurant change") { Task { await model.retryRestaurantCommand() } }
+                    .buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.busyIdentity != nil || !model.merchantJournalRestored)
+                    .accessibilityIdentifier("merchant.restaurant.retryPending")
+            }
+            if let failure = model.restaurantRefreshFailure {
+                Text(failure).font(.subheadline).foregroundStyle(.secondary)
+            }
+            if model.isRefreshingRestaurant {
+                ProgressView("Refreshing restaurant details")
+            } else if model.needsRestaurantRefresh {
+                Button("Refresh restaurant details") { Task { await model.refreshRestaurantMenu(reportFailure: false) } }
+                    .buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.isBusy || model.isRefreshingRestaurant)
+            }
+            if menu.restaurant.operationalVersion == nil {
+                Text("Operating controls are unavailable until Dastak provides the current restaurant version. Refresh or contact support.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityIdentifier("merchant.restaurant.status")
+    }
+
+    private func operatingControls(_ menu: DastakV1RestaurantMenu) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                Label(menu.restaurant.isOpen ? "Restaurant open" : "Restaurant closed", systemImage: "storefront")
+                Button(menu.restaurant.isOpen ? "Close" : "Open") {
+                    operatingAction = menu.restaurant.isOpen ? .close : .open
+                }
+                .disabled(!model.canChangeRestaurantOperatingState)
+                .accessibilityIdentifier("merchant.restaurant.open")
+            }
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                Label(menu.restaurant.acceptingOrders ? "Accepting food orders" : "New food orders paused", systemImage: "pause.circle")
+                Button(menu.restaurant.acceptingOrders ? "Pause" : "Accept new orders") {
+                    operatingAction = menu.restaurant.acceptingOrders ? .pause : .resume
+                }
+                .disabled(!model.canChangeRestaurantOperatingState)
+                .accessibilityIdentifier("merchant.restaurant.accepting")
+            }
+            Text("\(menu.restaurant.activeOrderCount) active orders · Changes apply to new requests, not confirmed orders.")
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+        .buttonStyle(MarketplaceSecondaryButtonStyle())
+        .padding(MarketplaceSpacing.medium).marketplaceFlatSurface()
     }
 
     private func restaurantBanner(_ menu: DastakV1RestaurantMenu) -> some View {
@@ -50,7 +134,7 @@ struct DastakMerchantRestaurantMenuView: View {
             title: "Restaurant banner",
             message: "Shown at the top of your restaurant and menu. Use a clear landscape photo without text.",
             imageKey: menu.restaurant.imageKey,
-            busy: model.isBusy
+            busy: model.restaurantChangesDisabled
         ) { media in
             await model.uploadRestaurantMedia(
                 entityType: "RESTAURANT_BRANCH_BANNER", entityID: menu.restaurant.branchID,
@@ -111,6 +195,9 @@ struct DastakMerchantRestaurantMenuView: View {
             }
             ForEach(category.items) { item in
                 DastakMerchantDishEditor(model: model, categoryID: category.id, item: item)
+                    // Refreshing a newer entity must also refresh its editable fields.
+                    // Do not pair old @State text with the new server version.
+                    .id("\(item.id)-\(item.version)-\(item.mediaVersion ?? 1)")
             }
         }.padding(MarketplaceSpacing.medium).marketplaceFlatSurface()
     }
@@ -134,7 +221,7 @@ private struct DastakMerchantDishEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-            DastakMerchantMediaPicker(title: "Dish photo", message: "Optional. A clear photo helps customers recognise this dish.", imageKey: item.imageKey, compact: true, busy: model.isBusy) { media in
+            DastakMerchantMediaPicker(title: "Dish photo", message: "Optional. A clear photo helps customers recognise this dish.", imageKey: item.imageKey, compact: true, busy: model.restaurantChangesDisabled) { media in
                 await model.uploadRestaurantMedia(entityType: "RESTAURANT_MENU_ITEM", entityID: item.id, expectedMediaVersion: item.mediaVersion ?? 1, data: media.data, contentType: media.contentType, fileName: media.fileName)
             }
             TextField("Dish name", text: $name).textFieldStyle(.roundedBorder)

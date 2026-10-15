@@ -3,6 +3,22 @@ import MarketplaceInfrastructure
 
 /// Presentation only; server capability flags remain authoritative for actions.
 enum DastakDeliveryPresentation {
+    /// Liveness heartbeats increment `version` without changing the handoff.
+    /// Do not erase a PIN or payment reference while the rider is typing it.
+    static func handoffRevision(_ mission: DastakV1DeliveryMissionSnapshot) -> String {
+        ([mission.id.uuidString, mission.status.rawValue,
+          "pin:\(mission.finalVerification?.pinVerified == true)",
+          "photo:\(mission.finalVerification?.evidencePresent == true)",
+          "collection:\(mission.launchCollection?.state.rawValue ?? "none")"] +
+         mission.pickupStops.map { "\($0.id):\($0.status?.rawValue ?? "unknown")" }).joined(separator: "|")
+    }
+    static func callURL(_ number: String) -> URL? {
+        let value = number.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.hasPrefix("+"), (8...15).contains(value.dropFirst().count),
+              value.dropFirst().first.map({ ("1"..."9").contains(String($0)) }) == true,
+              value.dropFirst().allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return URL(string: "tel:\(value)")
+    }
     static func title(_ status: DastakV1MissionStatus) -> String {
         switch status {
         case .assigned: "Ready for pickup"
@@ -45,5 +61,54 @@ enum DastakDeliveryPresentation {
 
     static func code(_ value: String, length: Int) -> String {
         String(value.filter { $0.isASCII && $0.isNumber }.prefix(length))
+    }
+}
+
+/// Labels only: history never estimates earnings or substitutes for the ledger.
+enum DastakDeliveryHistoryPresentation {
+    enum Tone { case success, cancelled, neutral }
+
+    static func kind(_ value: String) -> String {
+        switch value {
+        case "V1_DELIVERY", "LEGACY_DELIVERY": "Delivery"
+        case "RETURN": "Return"
+        case "PARCEL": "Parcel"
+        default: DastakMerchantReceiptPresentation.label(value)
+        }
+    }
+
+    static func symbol(_ value: String) -> String {
+        switch value {
+        case "RETURN": "arrow.uturn.backward"
+        case "PARCEL": "shippingbox"
+        default: "bag"
+        }
+    }
+
+    static func outcome(_ value: String) -> String {
+        switch value {
+        case "COMPLETED", "DELIVERED": "Completed"
+        case "CANCELLED", "CANCELED": "Cancelled"
+        case "RETURNED": "Returned"
+        default: DastakMerchantReceiptPresentation.label(value)
+        }
+    }
+
+    static func tone(_ value: String) -> Tone {
+        switch value {
+        case "COMPLETED", "DELIVERED", "RETURNED": .success
+        case "CANCELLED", "CANCELED": .cancelled
+        default: .neutral
+        }
+    }
+
+    static func packages(_ count: Int?) -> String? {
+        guard let count, count >= 0 else { return nil }
+        return "\(count) \(count == 1 ? "package" : "packages")"
+    }
+
+    static func payout(_ paise: Int?) -> String? {
+        guard let paise, paise >= 0 else { return nil }
+        return "Recorded payout · \(DastakFormatting.money(.init(paise: paise)))"
     }
 }

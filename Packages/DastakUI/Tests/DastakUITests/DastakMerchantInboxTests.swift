@@ -110,10 +110,11 @@ final class DastakMerchantInboxTests: XCTestCase {
     }
 
     private func model(_ functions: MerchantInboxFunctions) -> DastakMerchantModel {
-        DastakMerchantModel(services: MarketplaceAuthenticatedServices(
-            functions: functions, accountIDProvider: { UUID() },
+        let accountID = UUID()
+        return DastakMerchantModel(services: MarketplaceAuthenticatedServices(
+            functions: functions, accountIDProvider: { accountID },
             objectUploader: { _, _, _, _, _ in }
-        ))
+        ), journalStorage: DastakMerchantMemoryJournal())
     }
 }
 
@@ -148,7 +149,7 @@ private actor MerchantInboxFunctions: FunctionClient {
         switch operation {
         case "merchantOpportunities": json = "{\"opportunities\":[\(opportunityFixture)]}"
         case "restaurantRequests": json = "{\"requests\":[\(restaurantFixture)]}"
-        case "merchantFulfilments": json = "{\"fulfilments\":[\(fulfilmentFixture)]}"
+        case "merchantFulfilments": json = "{\"fulfilments\":[\(fulfilmentFixture)],\"recoveryOpportunities\":[],\"returnReceipts\":[],\"settlements\":[]}"
         default: throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode(Response.self, from: Data(json.utf8))

@@ -321,3 +321,10 @@
 .delivery-call-button, .customer-call-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 700; }
 .delivery-call-button.enabled, .customer-call-link { color: var(--dastak-accent); }
 .delivery-call-button.locked { color: var(--text-secondary); opacity: .55; cursor: not-allowed; pointer-events: none; }
+.delivery-full-order { width: 100%; grid-column: 1 / -1; }
+.delivery-full-order-content { margin-top: 12px; padding: clamp(16px, 3vw, 28px); border: 1px solid var(--divider); border-radius: 22px; background: var(--surface-raised); color: var(--text-primary); overflow-wrap: anywhere; }
+.delivery-full-order-content h4 { margin: 24px 0 12px; }
+.delivery-detail-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; padding: 10px 0; border-bottom: 1px solid var(--divider); }
+.delivery-detail-line small { flex-basis: 100%; }
+.delivery-detail-line dd { margin: 0; }
+.delivery-detail-stop { padding: 12px 0; }

@@ -1,7 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { createApnsSender } from "./apns.ts";
+import { createLiveActivityWorker } from "./live-activities.ts";
 import { createWebPushSender } from "./web-push.ts";
+import { guardedNotificationSender } from "./notification-policy.ts";
 import {
   type CustomerAccountDeletionJob,
   handleV1OutboxWorker,
@@ -23,11 +25,24 @@ const sendApns = createApnsSender({
   privateKey: requiredEnv("APNS_PRIVATE_KEY"),
 });
 let sendWebPush: ReturnType<typeof createWebPushSender> | undefined;
+const processLiveActivities = createLiveActivityWorker({
+  environment: Deno.env.get("APNS_ENVIRONMENT") === "production" ? "production" : "sandbox",
+  teamId: requiredEnv("APNS_TEAM_ID"),
+  keyId: requiredEnv("APNS_KEY_ID"),
+  bundleId: "com.dastak.app",
+  privateKey: requiredEnv("APNS_PRIVATE_KEY"),
+}, rpc);
+const deliverNotification = guardedNotificationSender(
+  rpc,
+  workerId,
+  (job) => job.platform === "ios" ? sendApns(job) : webPushSender()(job),
+);
 
 Deno.serve((request) =>
   handleV1OutboxWorker(request, {
     expectedSecret: requiredEnv("DASTAK_NOTIFICATION_SECRET"),
     workerId,
+    processLiveActivities,
     fanout: async () =>
       record(
         await rpc("dastak_v1_fanout_outbox", {
@@ -42,8 +57,20 @@ Deno.serve((request) =>
           p_limit: 100,
         }),
       ),
-    deliver: (job) => job.platform === "ios" ? sendApns(job) : webPushSender()(job),
+    deliver: deliverNotification,
     complete: async (job: V1NotificationJob, result: V1ProviderDelivery) => {
+      if (result.suppressed) {
+        // Provider-side expiry may happen after preflight (for example while
+        // signing). Persist suppression through the same claim-checked guard.
+        const gate = record(
+          await rpc("dastak_v1_prepare_notification_delivery", {
+            p_delivery_id: job.deliveryId,
+            p_worker_id: workerId,
+          }),
+        );
+        if (gate.deliver !== false) throw new Error("notification suppression not confirmed");
+        return;
+      }
       await rpc("dastak_v1_complete_notification_delivery", {
         p_delivery_id: job.deliveryId,
         p_worker_id: workerId,

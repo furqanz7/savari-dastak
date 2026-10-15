@@ -131,6 +131,7 @@ export type CourierDispatchDependencies = {
   advanceJob: (input: CourierJobMutationInput) => Promise<RpcResult>;
   getV1PartnerSnapshot: (accountId: string) => Promise<RpcResult>;
   getPartnerHistory: (accountId: string, limit: number) => Promise<unknown>;
+  getPartnerOrderDetail: (accountId: string, kind: string, workId: string) => Promise<unknown>;
   acceptV1Offer: (input: V1RiderOfferMutationInput) => Promise<RpcResult>;
   declineV1Offer: (input: V1RiderOfferDeclineInput) => Promise<RpcResult>;
   heartbeatV1Mission: (input: V1RiderHeartbeatInput) => Promise<unknown>;
@@ -177,6 +178,14 @@ export async function handleCourierDispatch(
         const limit = body.limit === undefined ? 30 : validPositiveInteger(body.limit);
         if (!limit || limit > 50) return validationError();
         return json(await dependencies.getPartnerHistory(actor.accountId, limit));
+      }
+      case "partnerOrderDetail": {
+        const workId = validUUID(body.workId);
+        const kind = typeof body.kind === "string" ? body.kind : "";
+        if (!workId || !["V1_DELIVERY", "RETURN", "LEGACY_DELIVERY", "PARCEL"].includes(kind)) {
+          return validationError();
+        }
+        return json(await dependencies.getPartnerOrderDetail(actor.accountId, kind, workId));
       }
       case "v1Heartbeat": {
         const missionId = validUUID(body.missionId);
@@ -416,6 +425,17 @@ export async function handleCourierDispatch(
         return validationError();
     }
   } catch (error) {
+    if (body.operation === "partnerOrderDetail") {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code === "P0002" || code === "42501") {
+        return json({
+          error: {
+            code: "delivery_detail_unavailable",
+            message: "This delivery detail is not available to your account.",
+          },
+        }, code === "42501" ? 403 : 404);
+      }
+    }
     // Only expose allowlisted domain errors, never raw SQL/internal details.
     const message = error && typeof error === "object" && "message" in error
       ? String(error.message)

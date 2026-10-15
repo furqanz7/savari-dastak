@@ -112,6 +112,15 @@ insert into dastak_v1.branch_operational_states (
   'ce000000-0000-4000-8000-000000000001'
 );
 
+-- Current approval and online coverage are required before order admission.
+update private.account_memberships set approved_at=now()
+where account_id='ce000000-0000-4000-8000-000000000003' and role='dastak_partner';
+\ir fixtures/customer-area.sql.inc
+select pg_temp.available_rider('ce200000-0000-4000-8000-000000000001','ce000000-0000-4000-8000-000000000001');
+-- These hand-built historical projection fixtures predate admission/fee v1.
+-- Real current admission is covered separately; never turn its triggers off.
+alter table dastak_v1.orders alter column availability_policy_version set default 0;
+alter table dastak_v1.orders alter column checkout_pricing_version set default 0;
 insert into dastak_v1.orders (
   id, display_order_number, customer_id, order_type, status,
   submitted_at, fully_secured_at, paid_at

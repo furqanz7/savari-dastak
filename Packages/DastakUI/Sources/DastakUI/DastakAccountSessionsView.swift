@@ -15,6 +15,7 @@ private final class DastakAccountSessionsModel: ObservableObject {
     @Published private(set) var revokingSessionID: UUID?
     @Published private(set) var sessionExpired = false
     @Published var errorMessage: String?
+    var hapticFeedback: (MarketplaceHapticEvent) -> Void = { _ in }
 
     private let client: any AccountSessionClient
     private let device: AccountSessionDevice
@@ -62,10 +63,12 @@ private final class DastakAccountSessionsModel: ObservableObject {
                 idempotencyKey: key()
             ).sessions
             errorMessage = nil
+            hapticFeedback(.success)
         } catch where isAuthenticationFailure(error) {
             sessionExpired = true
         } catch {
             errorMessage = "Other devices could not be signed out."
+            hapticFeedback(.error)
         }
     }
 
@@ -79,10 +82,12 @@ private final class DastakAccountSessionsModel: ObservableObject {
                 idempotencyKey: key()
             ).sessions
             errorMessage = nil
+            hapticFeedback(.success)
         } catch where isAuthenticationFailure(error) {
             sessionExpired = true
         } catch {
             errorMessage = "That device could not be signed out."
+            hapticFeedback(.error)
         }
     }
 
@@ -114,6 +119,7 @@ func dastakAccountSessionDevice(applicationName: String) -> AccountSessionDevice
 struct DastakAccountSessionsView: View {
     @StateObject private var model: DastakAccountSessionsModel
     @Environment(\.marketplaceSignOut) private var signOut
+    @Environment(\.marketplaceHapticScope) private var haptics
 
     init(client: any AccountSessionClient, applicationName: String) {
         _model = StateObject(
@@ -144,6 +150,7 @@ struct DastakAccountSessionsView: View {
 #endif
         .refreshable { await model.load() }
         .task { await model.load() }
+        .onAppear { model.hapticFeedback = { [weak haptics] event in haptics?.play(event) } }
         .onChange(of: model.sessionExpired) { _, expired in
             guard expired else { return }
             Task { await signOut() }
@@ -185,7 +192,7 @@ struct DastakAccountSessionsView: View {
                 Text(model.errorMessage ?? "Pull down to check your signed-in devices again.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Button("Try again") { Task { await model.load() } }
+                MarketplaceFeedbackButton("Try again") { Task { await model.load() } }
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
             }
@@ -241,7 +248,7 @@ struct DastakAccountSessionsView: View {
                     .padding(.vertical, 5)
                     .background(MarketplaceColors.success.color.opacity(0.12), in: Capsule())
             } else {
-                Button {
+                MarketplaceFeedbackButton {
                     Task { await model.revoke(session) }
                 } label: {
                     if model.revokingSessionID == session.sessionID {
@@ -282,7 +289,7 @@ struct DastakAccountSessionsView: View {
     }
 
     private var signOutOthersButton: some View {
-        Button {
+        MarketplaceFeedbackButton {
             Task { await model.signOutOthers() }
         } label: {
             HStack {

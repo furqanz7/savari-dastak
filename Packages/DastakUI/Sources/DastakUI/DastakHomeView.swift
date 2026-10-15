@@ -26,35 +26,68 @@ struct DastakHomeView: View {
     let chooseLocation: () -> Void
     let openCart: () -> Void
     let sendParcel: () -> Void
+    var shellService: DastakCustomerService? = nil
+    var homeRevision = 0
+    var startsWithSearch = false
+    var directoryKey: String? = nil
+    var directoryRevision = 0
+    var isActive = true
+    var onBrowseDestinationChanged: (String?) -> Void = { _ in }
     @State private var selectedRestaurant: DastakV1RestaurantMenu?
+    @State private var cartAfterDetails: DastakBasketService?
+    @Environment(\.dastakOpenCart) private var requestCart
+    @Environment(\.marketplaceHapticScope) private var haptics
     @State private var selectedProduct: CustomerProductSelection?
     @State private var selectedCategoryTypeID: UUID?
     @State private var selectedCategoryID: UUID?
     @State private var selectedSubcategoryID: UUID?
     @State private var selectedBrowseDestinationKey: String?
     @State private var selectedBrowseRailKey: String?
-    @State private var homeMode: DastakHomeMode = .grocery
+    @State private var legacyHomeMode: DastakHomeMode = .grocery
+    private var homeMode: DastakHomeMode { shellService.map { $0 == .food ? .food : .grocery } ?? legacyHomeMode }
+    private var selectedBrowseNodeKey: String? {
+        guard let map = model.v1BrowseMap,
+              let destination = map.nodes.first(where: { $0.key == selectedBrowseDestinationKey && $0.kind == "DESTINATION" }) else { return nil }
+        return map.children(of: destination.key).first(where: { $0.key == selectedBrowseRailKey })?.key ?? destination.key
+    }
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSearchPresented = false
     @FocusState private var isSearchFieldFocused: Bool
 
     var body: some View {
-        GeometryReader { _ in
+        VStack(spacing: 0) {
+            if shellService != nil {
+                header
+                    .padding(.horizontal, MarketplaceSpacing.medium)
+                    .padding(.bottom, MarketplaceSpacing.small)
+            }
+        GeometryReader { geometry in
             ZStack(alignment: .top) {
                 if let map = model.v1BrowseMap, homeMode == .grocery {
                     referenceCatalogue(map)
+                        .opacity(isSearchPresented ? 0 : 1)
                         .allowsHitTesting(!isSearchPresented)
+                        .accessibilityHidden(isSearchPresented)
                 } else if let selectedCategoryType {
                     selectedDepartmentBrowser(selectedCategoryType)
+                        .opacity(isSearchPresented ? 0 : 1)
                         .allowsHitTesting(!isSearchPresented)
+                        .accessibilityHidden(isSearchPresented)
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                            header
-                            commerceNavigation
+                            panelIntroduction
+                            if shellService == nil { commerceNavigation }
                             switch homeMode {
                             case .grocery:
-                                categoryRail
-                                if selectedCategoryTypeID == nil { catalogueContent }
+                                if shellService != nil {
+                                    groceryDiscovery(map: model.v1BrowseMap)
+                                } else {
+                                    categoryRail
+                                    if selectedCategoryTypeID == nil { catalogueContent }
+                                }
                             case .food:
                                 foodHero
                                 restaurantRail
@@ -63,59 +96,135 @@ struct DastakHomeView: View {
                             }
                         }
                         .padding(.horizontal, MarketplaceSpacing.medium)
-                        .padding(.bottom, 148)
+                        .padding(.bottom, shellService == nil ? 148 : 24)
                     }
                     .scrollIndicators(.hidden)
-                    .refreshable { await model.refreshV1Catalogue() }
+                    .refreshable {
+                        if homeMode == .food { await model.refreshFood() }
+                        else { await model.refreshV1Catalogue() }
+                    }
+                    .opacity(isSearchPresented ? 0 : 1)
                     .allowsHitTesting(!isSearchPresented)
+                    .accessibilityHidden(isSearchPresented)
                 }
 
                 if isSearchPresented {
                     Color.black.opacity(0.2)
                         .ignoresSafeArea()
                         .contentShape(Rectangle())
-                        .onTapGesture(perform: closeSearch)
+                        // Background interaction is inert; use the explicit search Close control.
 
                     searchOverlay
+                        .frame(maxHeight: max(0, geometry.size.height - MarketplaceSpacing.small), alignment: .top)
                         .padding(.horizontal, MarketplaceSpacing.medium)
                         .padding(.top, MarketplaceSpacing.small)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
         }
-        .animation(.snappy(duration: 0.28), value: isSearchPresented)
+        }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: isSearchPresented)
         .overlay(alignment: .bottom) {
-            if !model.cart.isEmpty, !isSearchPresented {
+            if shellService == nil, model.showsBasketDock(model.cartService), !model.cart.isEmpty, !isSearchPresented {
                 floatingCartButton
                     .padding(.horizontal, MarketplaceSpacing.medium)
                     .padding(.bottom, MarketplaceSpacing.small)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.snappy(duration: 0.28), value: model.cart.itemCount)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: model.cart.itemCount)
+        .onChange(of: model.cartService) { _, service in
+            if shellService == nil { legacyHomeMode = service == .food ? .food : .grocery }
+        }
+        .onChange(of: homeRevision) { _, _ in resetExploration() }
+        .task {
+            // An explicit Search shortcut opens the existing search UI once on
+            // this Home revision. Foregrounding does not recreate exploration.
+            guard startsWithSearch, isActive else { return }
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+            guard !Task.isCancelled, isActive else { return }
+            presentSearch()
+        }
+        .onChange(of: selectedBrowseDestinationKey) { _, key in onBrowseDestinationChanged(key) }
+        .onChange(of: directoryRevision) { _, _ in
+            guard shellService == .grocery,
+                  let key = directoryKey,
+                  model.v1BrowseMap?.nodes.contains(where: { $0.key == key && $0.kind == "DESTINATION" }) == true else { return }
+            resetExploration()
+            selectedBrowseDestinationKey = key
+        }
+        .onChange(of: isActive) { _, active in
+            if !active { isSearchFieldFocused = false; isSearchPresented = false }
+        }
         .marketplacePage()
         .dastakNavigationBarHidden()
+        .task(id: "\(model.availabilityRefreshKey)|\(isActive)") {
+            guard isActive else { return }
+            repeat {
+                await model.refreshAreaAvailability(force: true)
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            } while !Task.isCancelled
+        }
         .task(id: priorityArtworkKeys) {
+            guard isActive else { return }
             await DastakProductArtwork.prefetch(imageKeys: priorityArtworkKeys)
         }
-        .task(id: selectedCategoryID) {
-            if let selectedCategoryID { await model.loadV1Category(selectedCategoryID) }
+        .task(id: "\(selectedCategoryID?.uuidString ?? "")|\(model.catalogueRevision)|\(isActive)") {
+            if isActive, let selectedCategoryID { await model.loadV1Category(selectedCategoryID) }
         }
-        .sheet(item: $selectedRestaurant) { restaurant in
-            DastakRestaurantMenuView(model: model, restaurant: restaurant)
+        .task(id: "\(selectedBrowseNodeKey ?? "")|\(model.catalogueRevision)|\(isActive)|\(homeMode.rawValue)") {
+            guard isActive, homeMode == .grocery,
+                  let key = selectedBrowseNodeKey else { return }
+            await model.loadV1BrowseNode(key)
+        }
+        .task(id: "\(homeMode.rawValue)|\(isActive)") {
+            guard isActive, homeMode == .food, !model.requiresAreaChecks else { return }
+            await model.refreshV1Restaurants()
+        }
+        .sheet(item: $selectedRestaurant, onDismiss: finishDetailCartRequest) { restaurant in
+            DastakRestaurantMenuView(model: model, restaurant: restaurant, openCart: {
+                cartAfterDetails = .food
+                selectedRestaurant = nil
+            })
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .dastakProductOverlay(item: $selectedProduct) { selection in
-            DastakCustomerProductDetailView(model: model, initial: selection.product, products: selection.products, close: { selectedProduct = nil })
+        .dastakProductOverlay(item: $selectedProduct, onDismiss: finishDetailCartRequest) { selection in
+            DastakCustomerProductDetailView(model: model, initial: selection.product, products: selection.products, close: { selectedProduct = nil }, openCart: {
+                cartAfterDetails = .grocery
+                selectedProduct = nil
+            })
+        }
+    }
+
+    private func finishDetailCartRequest() {
+        guard let service = cartAfterDetails else { return }
+        cartAfterDetails = nil
+        requestCart(service)
+    }
+
+    @ViewBuilder
+    private var panelIntroduction: some View {
+        if shellService == nil { header }
+        if let message = model.browsingAreaMessage {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(message).font(.footnote)
+                MarketplaceFeedbackButton("Refresh availability") { Task { await model.refreshAreaAvailability(force: true) } }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(MarketplaceSpacing.compact)
+            .background((colorScheme == .light ? Color.white.opacity(DastakPanelReadability.lightNoticeOpacity)
+                         : Color.black.opacity(0.16)), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 
     private var commerceNavigation: some View {
         HStack(spacing: 4) {
             ForEach(DastakHomeMode.allCases) { mode in
-                Button {
-                    homeMode = mode
+                MarketplaceFeedbackButton {
+                    legacyHomeMode = mode
+                    if mode == .food { model.cartService = .food }
+                    if mode == .grocery { model.cartService = .grocery }
                     selectedCategoryTypeID = nil
                     selectedCategoryID = nil
                     selectedSubcategoryID = nil
@@ -140,6 +249,7 @@ struct DastakHomeView: View {
                     .background(homeMode == mode ? MarketplaceColors.dastakAccent.color : .clear, in: Capsule())
                 }
                 .buttonStyle(.plain)
+                .disabled(mode.isComingSoon)
                 .accessibilityAddTraits(homeMode == mode ? .isSelected : [])
             }
         }
@@ -155,14 +265,16 @@ struct DastakHomeView: View {
             Text("FOOD, MADE NEARBY")
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
-            Text("Your table is closer\nthan you think.")
-                .font(MarketplaceTypography.instrumentSerif(fixedSize: 38))
-            Text("Choose a restaurant or café. Your kitchen confirms every detail before delivery.")
+            Text("Find your next favourite.")
+                .font(.title2.bold())
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Browse nearby restaurants and cafés. Choose a menu to get started.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.85))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(MarketplaceSpacing.large)
+        .padding(MarketplaceSpacing.medium)
         .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 
@@ -192,6 +304,15 @@ struct DastakHomeView: View {
 
     @ViewBuilder
     private var restaurantRail: some View {
+        if model.isLoadingV1Restaurants {
+            ProgressView("Loading restaurants near you")
+                .frame(maxWidth: .infinity, minHeight: 60)
+        }
+        if let failure = model.v1RestaurantsRefreshFailure {
+            DastakEmptyState(symbol: failure.symbol, title: failure.title,
+                             message: failure.message, actionTitle: "Retry restaurants",
+                             action: { Task { await model.retryV1Restaurants() } })
+        }
         if !model.v1Restaurants.isEmpty {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
                 HStack(alignment: .firstTextBaseline) {
@@ -199,60 +320,103 @@ struct DastakHomeView: View {
                         Text("RESTAURANTS & CAFES")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                        Text("Food, in the same Dastak")
-                            .font(MarketplaceTypography.sectionTitle)
+                        Text("Restaurants near you")
+                            .font(.title2.bold())
                     }
                     Spacer()
-                    Text("Choose one")
+                    Text("\(model.v1Restaurants.count) loaded")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                ScrollView(.horizontal) {
-                    HStack(spacing: MarketplaceSpacing.compact) {
+                    LazyVStack(spacing: MarketplaceSpacing.compact) {
                         ForEach(model.v1Restaurants) { restaurant in
-                            Button { selectedRestaurant = restaurant } label: {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    DastakProductArtwork(
-                                        imageKey: restaurant.restaurant.imageKey,
-                                        fallbackSymbol: "fork.knife"
-                                    )
-                                    .frame(maxWidth: .infinity, minHeight: 96)
-                                    Text(restaurant.restaurant.name)
-                                        .font(.headline)
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    Text(restaurant.restaurant.branchName)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                    Text("\(restaurant.categories.flatMap(\.items).count) items")
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                            MarketplaceFeedbackButton { selectedRestaurant = restaurant } label: {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    DastakRestaurantBanner(imageKey: restaurant.restaurant.imageKey)
+                                        .frame(height: 136)
+                                        .frame(maxWidth: .infinity)
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(DastakRestaurantPresentation.customerFacingName(
+                                            name: restaurant.restaurant.name, branchName: restaurant.restaurant.branchName
+                                        ))
+                                            .font(.headline)
+                                            .foregroundStyle(.primary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                        Label(model.restaurantIssue(restaurant) ?? "Accepting orders",
+                                              systemImage: model.restaurantIssue(restaurant) == nil ? "checkmark.circle" : "clock")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(model.restaurantIssue(restaurant) == nil ? MarketplaceColors.dastakAccent.color : Color.secondary)
+                                        HStack {
+                                            let dishCount = restaurant.categories.flatMap(\.items).count
+                                            Text("\(dishCount) \(dishCount == 1 ? "dish" : "dishes")")
+                                            Spacer()
+                                            Label(model.restaurantIssue(restaurant) == nil ? "View menu" : "Not accepting orders", systemImage: "arrow.right")
+                                        }.font(.caption)
+                                    }
+                                    .padding(MarketplaceSpacing.small)
                                 }
-                                .padding(MarketplaceSpacing.small)
-                                .frame(width: 190, alignment: .leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .marketplaceFlatSurface()
                             }
                             .buttonStyle(.plain)
-                            .accessibilityHint("Open menu")
+                            .disabled(model.restaurantIssue(restaurant) != nil)
+                            .accessibilityLabel(DastakRestaurantPresentation.accessibilityLabel(
+                                name: restaurant.restaurant.name,
+                                branchName: restaurant.restaurant.branchName,
+                                status: model.restaurantIssue(restaurant) ?? "Accepting orders"
+                            ))
+                            .accessibilityHint(model.restaurantIssue(restaurant) == nil ? "Open menu" : "This restaurant cannot accept an order right now")
                         }
                     }
-                }
-                .scrollIndicators(.hidden)
             }
+        } else if !model.isLoadingV1Restaurants, model.v1RestaurantsRefreshFailure == nil {
+            DastakEmptyState(symbol: "fork.knife", title: "No restaurants to show",
+                             message: model.browsingAreaMessage ?? "Choose a delivery location or refresh to check restaurants in your area.")
+                .frame(maxWidth: .infinity, minHeight: 180)
+            MarketplaceFeedbackButton("Refresh restaurants") { Task { await model.refreshFood() } }
+                .buttonStyle(.bordered).frame(minHeight: 44)
+        }
+        if model.hasMoreV1Restaurants {
+            MarketplaceFeedbackButton("Load more restaurants") { Task { await model.refreshV1Restaurants(loadMore: true) } }
+                .buttonStyle(.bordered).frame(minHeight: 44)
+                .disabled(model.isLoadingV1Restaurants)
         }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-            HStack {
-                DastakWordmark(size: 31)
-                Spacer()
-                searchIconButton
-                cartButton
+            if shellService != nil {
+                VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                    if dynamicTypeSize >= .xxxLarge {
+                        headerActions.frame(maxWidth: .infinity, alignment: .trailing)
+                        headerGreeting
+                    } else {
+                        HStack(alignment: .top, spacing: MarketplaceSpacing.small) {
+                            headerGreeting.frame(maxWidth: .infinity, alignment: .leading)
+                            headerActions.fixedSize(horizontal: true, vertical: false)
+                        }
+                    }
+                    if homeMode == .food || selectedBrowseDestinationKey != nil {
+                        HStack(alignment: .top, spacing: MarketplaceSpacing.small) {
+                            panelHeading.frame(maxWidth: .infinity, alignment: .leading)
+                            if homeMode == .grocery { categoryHomeButton }
+                        }
+                    }
+                }
+            } else if dynamicTypeSize >= .xxxLarge {
+                headerTitle
+                headerActions.frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack { headerTitle; Spacer(); headerActions }
+                    VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                        headerTitle
+                        headerActions.frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
             }
 
-            Button(action: chooseLocation) {
+            if shellService == nil { MarketplaceFeedbackButton(action: chooseLocation) {
                 HStack(spacing: MarketplaceSpacing.small) {
                     Image(systemName: "location.fill")
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -271,9 +435,69 @@ struct DastakHomeView: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain) }
         }
         .padding(.top, MarketplaceSpacing.medium)
+    }
+
+    @ViewBuilder
+    private var headerTitle: some View {
+        if shellService == nil { DastakWordmark(size: 31) }
+        else {
+            VStack(alignment: .leading, spacing: 5) {
+                headerGreeting
+                panelHeading
+            }
+        }
+    }
+
+    private var headerGreeting: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            Text(DastakGroceryHomePresentation.greeting(
+                hour: Calendar.current.component(.hour, from: context.date),
+                displayName: model.checkoutCustomer?.displayName).uppercased())
+                .font(.caption2.weight(.semibold)).tracking(1)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var panelHeading: some View {
+        let heading = homeMode == .food ? "Food" : model.v1BrowseMap?.nodes.first(where: {
+            $0.key == selectedBrowseDestinationKey && $0.kind == "DESTINATION"
+        })?.label
+        if let heading {
+            Text(heading)
+                .font(.title2.bold())
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    private var headerActions: some View {
+        HStack {
+            if shellService != nil {
+                MarketplaceFeedbackNavigationLink { DastakWishlistView(model: model) } label: {
+                    Image(systemName: "bookmark").frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Saved items")
+            }
+            searchIconButton
+            cartButton
+        }
+    }
+
+    private var categoryHomeButton: some View {
+        MarketplaceFeedbackButton(action: resetExploration) {
+            Image(systemName: "house")
+                .frame(width: MarketplaceMetrics.minimumTouchTarget,
+                       height: MarketplaceMetrics.minimumTouchTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Grocery Home")
+        .accessibilityIdentifier("dastak.category.home")
     }
 
     private var promise: some View {
@@ -308,7 +532,7 @@ struct DastakHomeView: View {
                     }
                     Spacer()
                     if selectedCategoryTypeID != nil {
-                        Button("All departments") {
+                        MarketplaceFeedbackButton("All departments") {
                             selectedCategoryTypeID = nil
                             selectedCategoryID = nil
                             selectedSubcategoryID = nil
@@ -327,7 +551,7 @@ struct DastakHomeView: View {
                                 spacing: MarketplaceSpacing.medium
                             ) {
                                 ForEach(section.types) { type in
-                                    Button {
+                                    MarketplaceFeedbackButton {
                                         selectedCategoryTypeID = type.id
                                         let children = categories(in: type.id)
                                         selectedCategoryID = (children.first { $0.status == "ACTIVE" } ?? children.first)?.id
@@ -348,91 +572,72 @@ struct DastakHomeView: View {
     private func referenceCatalogue(_ map: DastakV1CatalogueBrowseMap) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                header
-                commerceNavigation
+                panelIntroduction
+                if let failure = model.v1CatalogueRefreshFailure {
+                    DastakEmptyState(symbol: failure.symbol, title: failure.title,
+                                     message: failure.message, actionTitle: "Retry catalogue",
+                                     action: { Task { await model.refreshV1Catalogue() } })
+                }
+                if shellService == nil { commerceNavigation }
                 if let destination = map.nodes.first(where: { $0.key == selectedBrowseDestinationKey && $0.kind == "DESTINATION" }) {
-                    HStack {
-                        Text(destination.label).font(.title2.bold())
-                        Spacer()
-                        Button("All categories") {
-                            selectedBrowseDestinationKey = nil
-                            selectedBrowseRailKey = nil
-                        }
+                    if shellService == nil {
+                        categoryHomeButton.frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     let rails = map.children(of: destination.key)
-                    if !rails.isEmpty {
-                        ScrollView(.horizontal) {
-                            HStack {
-                                Button("All \(destination.label)") { selectedBrowseRailKey = nil }
-                                    .buttonStyle(.bordered)
-                                ForEach(rails) { rail in
-                                    Button(rail.label) { selectedBrowseRailKey = rail.key }
-                                        .buttonStyle(.bordered)
-                                }
-                            }
-                        }
-                    }
                     let selectedNode = rails.first(where: { $0.key == selectedBrowseRailKey }) ?? destination
-                    let products = referenceProducts(for: selectedNode.key, map: map)
+                    let products = model.products(forBrowseNode: selectedNode.key)
+                    let categories = model.categories(forBrowseNode: selectedNode.key)
+                    let incomplete = categories.contains { model.v1CategoryProducts[$0] == nil }
+                    let failed = categories.contains { model.failedV1CategoryIDs.contains($0) }
+                    let loading = categories.contains { model.loadingV1CategoryIDs.contains($0) }
                     HStack {
-                        Text(selectedNode.label).font(.title3.bold())
+                        if selectedNode.key != destination.key { Text(selectedNode.label).font(.headline) }
                         Spacer()
-                        Text("\(products.count) products").foregroundStyle(.secondary)
+                        Text("\(DastakGroceryPresentation.families(products).count) products\(incomplete ? " loaded" : "")").font(.caption).foregroundStyle(.secondary)
                     }
-                    if products.isEmpty {
+                    if loading || (incomplete && !failed) {
+                        ProgressView("Loading category products")
+                            .frame(maxWidth: .infinity, minHeight: 60)
+                    }
+                    if failed {
+                        Text("Some products could not be loaded. Your cart is saved.").font(.footnote)
+                        MarketplaceFeedbackButton("Retry category") { Task { await model.loadV1BrowseNode(selectedNode.key, force: true) } }
+                            .buttonStyle(.bordered).frame(minHeight: 44)
+                        MarketplaceFeedbackButton("Refresh catalogue") { Task { await model.refreshV1Catalogue() } }
+                            .buttonStyle(.bordered).frame(minHeight: 44)
+                    }
+                    if products.isEmpty, !incomplete, !loading, !failed {
                         DastakEmptyState(
                             symbol: "shippingbox",
                             title: "No products here yet",
                             message: "Choose another category."
                         )
                         .frame(minHeight: 280)
-                    } else {
-                        productGrid(products)
-                    }
-                } else {
-                    ForEach(map.children(of: nil)) { section in
-                        VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                            Text(section.label).font(.title3.bold())
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())]) {
-                                ForEach(map.children(of: section.key)) { destination in
-                                    Button {
-                                        selectedBrowseDestinationKey = destination.key
-                                        selectedBrowseRailKey = nil
-                                    } label: {
-                                        Text(destination.label)
-                                            .font(.headline)
-                                            .frame(maxWidth: .infinity, minHeight: 76)
-                                            .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 16))
+                    } else if !products.isEmpty {
+                        if selectedBrowseRailKey == nil, !rails.isEmpty {
+                            ForEach(rails) { rail in
+                                let railProducts = model.products(forBrowseNode: rail.key)
+                                if !railProducts.isEmpty {
+                                    VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                                        Text(rail.label).font(.headline)
+                                        Text("\(DastakGroceryPresentation.families(railProducts).count) products")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                        productRail(railProducts)
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
+                        } else {
+                            productRail(products)
                         }
                     }
+                } else {
+                    groceryDiscovery(map: map)
                 }
             }
             .padding(.horizontal, MarketplaceSpacing.medium)
-            .padding(.bottom, 148)
+            .padding(.bottom, shellService == nil ? 148 : 24)
         }
         .refreshable { await model.refreshV1Catalogue() }
-    }
-
-    private func referenceProducts(for nodeKey: String, map: DastakV1CatalogueBrowseMap) -> [DastakV1CatalogueSKU] {
-        guard let catalogue = model.v1Catalogue, let types = catalogue.categoryTypes else { return [] }
-        let taxonomy = DastakV1CatalogueBrowseMap.Taxonomy(
-            typeSlugs: Dictionary(types.map { ($0.id, $0.slug) }, uniquingKeysWith: { first, _ in first }),
-            categories: catalogue.categories.compactMap { category in
-                category.categoryTypeID.map {
-                    DastakV1CatalogueBrowseMap.Taxonomy.Category(id: category.id, typeID: $0, slug: category.slug)
-                }
-            },
-            subcategories: catalogue.subcategories.map {
-                DastakV1CatalogueBrowseMap.Taxonomy.Subcategory(id: $0.id, categoryID: $0.categoryID, slug: $0.slug)
-            }
-        )
-        return model.v1BrowseProducts.filter {
-            map.matches(nodeKey: nodeKey, categoryID: $0.categoryID, subcategoryID: $0.subcategoryID, taxonomy: taxonomy)
-        }
     }
 
     @ViewBuilder
@@ -471,7 +676,7 @@ struct DastakHomeView: View {
 
     private func selectedDepartmentBrowser(_ type: DastakV1CatalogueCategory) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-            header
+            panelIntroduction
                 .padding(.horizontal, MarketplaceSpacing.medium)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -481,7 +686,7 @@ struct DastakHomeView: View {
                         .tracking(1.1)
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
                     Spacer()
-                    Button("All categories") {
+                    MarketplaceFeedbackButton("All categories") {
                         selectedCategoryTypeID = nil
                         selectedCategoryID = nil
                         selectedSubcategoryID = nil
@@ -512,6 +717,7 @@ struct DastakHomeView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                .marketplaceSelectionFeedback(selectedSubcategoryID)
                 .tint(MarketplaceColors.dastakAccent.color)
                 .padding(.horizontal, MarketplaceSpacing.medium)
             }
@@ -567,11 +773,11 @@ struct DastakHomeView: View {
     private var subcategoryRail: some View {
         LazyVStack(spacing: MarketplaceSpacing.compact) {
             ForEach(selectedCategoryType.map { categories(in: $0.id) } ?? []) { category in
-                Button {
+                MarketplaceFeedbackButton {
                     selectedCategoryID = category.id
                     selectedSubcategoryID = nil
                 } label: {
-                    DastakCategoryTile(category: category)
+                    DastakCategoryTile(category: category, selected: selectedCategoryID == category.id)
                         .padding(4)
                         .background(selectedCategoryID == category.id ? MarketplaceColors.dastakAccentSoft.color : .clear, in: RoundedRectangle(cornerRadius: 15))
                 }
@@ -600,27 +806,138 @@ struct DastakHomeView: View {
         return keys.filter { seen.insert($0).inserted }.prefix(32).map { $0 }
     }
 
+    private func groceryDiscovery(map: DastakV1CatalogueBrowseMap?) -> some View {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+                Text("Quick picks").font(.title3.bold()).accessibilityAddTraits(.isHeader)
+                if let map, let catalogue = model.v1Catalogue {
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                    let picks = DastakGroceryHomePresentation.quickPicks(map: map, catalogue: catalogue,
+                        products: model.v1BrowseProducts, date: context.date)
+                    if !picks.isEmpty {
+                        ScrollView(.horizontal) {
+                            HStack(alignment: .top, spacing: MarketplaceSpacing.medium) {
+                                ForEach(picks) { pick in
+                                    MarketplaceFeedbackButton {
+                                        selectedBrowseDestinationKey = pick.destinationKey
+                                        selectedBrowseRailKey = pick.id
+                                    } label: {
+                                        VStack(spacing: MarketplaceSpacing.small) {
+                                            DastakQuickPickArtwork(imageKeys: pick.imageKeys)
+                                            Text(pick.label).font(.caption.weight(.medium))
+                                                .multilineTextAlignment(.center)
+                                                .foregroundStyle(.primary)
+                                        }
+                                        .frame(width: dynamicTypeSize.isAccessibilitySize ? 128 : 84)
+                                        .padding(.vertical, MarketplaceSpacing.small)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Browse \(pick.label)")
+                                }
+                            }
+                        }
+                        .scrollIndicators(.visible)
+                    } else {
+                        Text("Quick picks will appear as products become available. Browse categories from the Grocery button.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    }
+                } else {
+                    Text("Quick picks will appear when the catalogue is ready.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
+                Text("Trending in your city").font(.title3.bold()).accessibilityAddTraits(.isHeader)
+                if let products = model.localTrendingProducts, !products.isEmpty {
+                    #if DEBUG
+                    if !model.requiresAreaChecks {
+                        Text("Preview ranking · sample products").font(.caption).foregroundStyle(.secondary)
+                    }
+                    #endif
+                    productRail(products)
+                } else {
+                HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(model.localTrendingProducts == nil ? "Local favourites are unavailable." : "No local favourites yet.").font(.headline)
+                        Text(model.localTrendingProducts == nil ? "Choose your delivery location and check again." : "Popular products will appear here as orders are delivered nearby.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        if model.localTrendingProducts == nil, model.deliveryAddress != nil {
+                            MarketplaceFeedbackButton("Retry") { Task { await model.refreshAreaAvailability(force: true) } }
+                                .frame(minHeight: 44)
+                        }
+                    }
+                }
+                .padding(MarketplaceSpacing.medium)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .marketplaceFlatSurface()
+                }
+            }
+        }
+    }
+
+    private func productRail(_ products: [DastakV1CatalogueSKU]) -> some View {
+        let families = DastakGroceryPresentation.families(products)
+        return ScrollView(.horizontal) {
+            // Measure every card at its final width before sizing this nested
+            // horizontal scroller. Lazy estimates can clip taller size buttons.
+            HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
+                ForEach(families) { family in
+                    productTile(family, products: products)
+                        .containerRelativeFrame(.horizontal,
+                            count: dynamicTypeSize >= .xxxLarge ? 1 : 2,
+                            spacing: MarketplaceSpacing.compact)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .scrollTargetLayout()
+            .padding(.vertical, 1)
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollIndicators(.hidden)
+    }
+
     private func productGrid(_ products: [DastakV1CatalogueSKU]) -> some View {
-        LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: MarketplaceSpacing.compact),
-                    GridItem(.flexible(), spacing: MarketplaceSpacing.compact)
-                ],
+        let families = DastakGroceryPresentation.families(products)
+        return LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: MarketplaceSpacing.compact, alignment: .top), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2),
                 spacing: MarketplaceSpacing.compact
         ) {
-                ForEach(products) { product in
-                    DastakV1ProductTile(
+                ForEach(families) { family in
+                    productTile(family, products: products)
+                }
+        }
+    }
+
+    private func productTile(_ family: DastakGroceryPresentation.Family,
+                             products: [DastakV1CatalogueSKU]) -> some View {
+        let basket = DastakGroceryPresentation.shelfBasketSelection(family, cart: model.baskets[.grocery])
+        let product = basket.product
+        return DastakV1ProductTile(
                         product: product,
                         isWishlisted: model.isWishlisted(kind: .retailSKU, itemID: product.id),
-                        isUpdatingWishlist: model.wishlistUpdatingIDs.contains(product.id),
-                        add: { model.addToCart(product) },
+                        isUpdatingWishlist: model.wishlistChangeDisabled(product.id),
+                        add: {
+                            if family.packs.count > 1 && (basket.quantity == 0 || basket.hasMultipleSizes) { selectedProduct = CustomerProductSelection(product: product, products: products) }
+                            else { model.addShoppingProduct(product) }
+                        },
                         toggleWishlist: {
                             Task { await model.toggleWishlist(kind: .retailSKU, itemID: product.id) }
                         },
-                        openDetail: { selectedProduct = CustomerProductSelection(product: product, products: products) }
+                        openDetail: { selectedProduct = CustomerProductSelection(product: product, products: products) },
+                        addIssue: basket.quantity > 0 && !basket.hasMultipleSizes ? model.groceryAddIssue(product.id) : family.packs.contains(where: { model.groceryAddIssue($0.id) == nil }) ? nil : model.groceryAddIssue(product.id),
+                        packCount: family.packs.count,
+                        isOutOfStock: family.packs.count == 1 && model.groceryStockQuantity(product.id) == 0,
+                        quantity: basket.quantity,
+                        remove: {
+                            if basket.hasMultipleSizes { selectedProduct = CustomerProductSelection(product: product, products: products) }
+                            else { model.decrementCartItem(product.id) }
+                        },
+                        selectedPack: family.packs.count > 1 && basket.quantity > 0 && !basket.hasMultipleSizes ? product.packSize : nil,
+                        quantityLimitReached: !basket.hasMultipleSizes && basket.quantity >= DastakCart.maximumQuantity
                     )
-                }
-        }
     }
 
     private var selectedCategory: DastakV1CatalogueCategory? {
@@ -666,7 +983,7 @@ struct DastakHomeView: View {
     }
 
     private var parcelBand: some View {
-        Button(action: sendParcel) {
+        MarketplaceFeedbackButton(action: sendParcel) {
             HStack(spacing: MarketplaceSpacing.medium) {
                 Image(systemName: "shippingbox.fill")
                     .font(.title2)
@@ -695,26 +1012,12 @@ struct DastakHomeView: View {
     }
 
     private var cartButton: some View {
-        Button(action: openCart) {
-            Image(systemName: "bag")
-                .overlay(alignment: .topTrailing) {
-                    if model.cart.itemCount > 0 {
-                        Text(model.cart.itemCount.formatted())
-                            .font(.caption2.bold())
-                            .foregroundStyle(.white)
-                            .padding(4)
-                            .background(MarketplaceColors.dastakAccent.color, in: Circle())
-                            .offset(x: 8, y: -8)
-                    }
-                }
-        }
-        .buttonStyle(MarketplaceIconButtonStyle())
-        .accessibilityLabel("Basket, \(model.cart.itemCount) items")
+        DastakBasketPickupButton(model: model, service: homeMode == .food ? .food : .grocery)
     }
 
     @ViewBuilder
     private var floatingCartButton: some View {
-        let button = Button(action: openCart) {
+        let button = MarketplaceFeedbackButton(action: openCart) {
             HStack(spacing: MarketplaceSpacing.compact) {
                 Image(systemName: "bag.fill")
                     .font(.body.weight(.semibold))
@@ -764,11 +1067,14 @@ struct DastakHomeView: View {
     }
 
     private var searchIconButton: some View {
-        Button(action: presentSearch) {
+        MarketplaceFeedbackButton(action: presentSearch) {
             Image(systemName: "magnifyingglass")
                 .font(.body.weight(.semibold))
+                .frame(width: MarketplaceMetrics.minimumTouchTarget,
+                       height: MarketplaceMetrics.minimumTouchTarget)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(MarketplaceIconButtonStyle())
+        .buttonStyle(.plain)
         .accessibilityLabel("Search Dastak")
         .accessibilityHint("Opens product search")
     }
@@ -786,7 +1092,10 @@ struct DastakHomeView: View {
             }
         }
         .task(id: model.searchText) {
-            guard !trimmedSearchText.isEmpty else { return }
+            guard !trimmedSearchText.isEmpty else {
+                await model.searchV1Catalogue()
+                return
+            }
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             await model.searchV1Catalogue()
@@ -799,6 +1108,7 @@ struct DastakHomeView: View {
             Image(systemName: "magnifyingglass")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                .accessibilityHidden(true)
 
             TextField("Search products and essentials", text: $model.searchText)
 #if os(iOS)
@@ -807,7 +1117,11 @@ struct DastakHomeView: View {
                 .submitLabel(.search)
 #endif
                 .focused($isSearchFieldFocused)
+                .accessibilityLabel("Search products and essentials")
+                .accessibilityIdentifier("dastak.search.field")
                 .onSubmit {
+                    haptics?.play(.tap)
+                    isSearchFieldFocused = false
                     Task { await model.searchV1Catalogue() }
                 }
         }
@@ -823,7 +1137,7 @@ struct DastakHomeView: View {
 
     @ViewBuilder
     private var searchCloseButton: some View {
-        let button = Button(action: closeSearch) {
+        let button = MarketplaceFeedbackButton(action: closeSearch) {
             Image(systemName: "xmark")
                 .font(.body.weight(.semibold))
                 .frame(
@@ -832,6 +1146,7 @@ struct DastakHomeView: View {
                 )
         }
         .accessibilityLabel("Close search")
+        .accessibilityIdentifier("dastak.search.close")
 
         if #available(iOS 26.0, macOS 26.0, *) {
             button
@@ -842,13 +1157,16 @@ struct DastakHomeView: View {
         }
     }
 
-    @ViewBuilder
     private var searchResults: some View {
-        if model.isSearchingV1Catalogue, model.activeProducts.isEmpty {
-            DastakLoadingOverlay(title: "Searching Dastak")
-        } else {
-            ScrollView {
-                LazyVStack(spacing: MarketplaceSpacing.small) {
+        ScrollView {
+            LazyVStack(spacing: MarketplaceSpacing.small) {
+                if model.isSearchingV1Catalogue, model.activeProducts.isEmpty {
+                    DastakLoadingOverlay(title: "Searching Dastak")
+                } else if let failure = model.v1SearchRefreshFailure {
+                    DastakEmptyState(symbol: failure.symbol, title: failure.title,
+                                     message: failure.message, actionTitle: "Retry search",
+                                     action: { Task { await model.searchV1Catalogue() } })
+                } else {
                     if model.activeProducts.isEmpty {
                         ContentUnavailableView.search(text: trimmedSearchText)
                             .padding(.vertical, MarketplaceSpacing.large)
@@ -858,18 +1176,20 @@ struct DastakHomeView: View {
                         }
                     }
                 }
-                .padding(MarketplaceSpacing.small)
             }
-            .scrollIndicators(.hidden)
-            .frame(maxHeight: 520)
-            .marketplaceGlass(cornerRadius: MarketplaceMetrics.sheetCornerRadius)
+            .padding(MarketplaceSpacing.small)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .frame(maxHeight: 520)
+        .marketplaceGlass(cornerRadius: MarketplaceMetrics.sheetCornerRadius)
     }
 
     private func searchResultRow(_ product: DastakV1CatalogueSKU) -> some View {
-        HStack(spacing: MarketplaceSpacing.compact) {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+          HStack(spacing: MarketplaceSpacing.compact) {
             DastakProductArtwork(imageKey: product.imageKey, fallbackSymbol: artworkSymbol(for: product))
                 .frame(width: 66, height: 66)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 if let brand = product.brand?.name {
@@ -880,28 +1200,43 @@ struct DastakHomeView: View {
                 }
                 Text(product.name)
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !DastakGroceryPresentation.searchPackDescription(product).isEmpty {
+                    Text(DastakGroceryPresentation.searchPackDescription(product))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(DastakFormatting.money(product.price))
                     .font(.subheadline.bold().monospacedDigit())
             }
+            .accessibilityElement(children: .combine)
 
-            Spacer(minLength: 4)
-
-            Button {
+          }
+          HStack {
+            Spacer(minLength: 0)
+            MarketplaceFeedbackButton {
                 Task { await model.toggleWishlist(kind: .retailSKU, itemID: product.id) }
             } label: {
                 Image(systemName: model.isWishlisted(kind: .retailSKU, itemID: product.id) ? "heart.fill" : "heart")
-                    .frame(width: 40, height: 40)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .foregroundStyle(MarketplaceColors.dastakAccent.color)
             .disabled(model.wishlistUpdatingIDs.contains(product.id))
-            .accessibilityLabel(model.isWishlisted(kind: .retailSKU, itemID: product.id) ? "Remove \(product.name) from Wishlist" : "Save \(product.name) to Wishlist")
+            .accessibilityLabel(model.isWishlisted(kind: .retailSKU, itemID: product.id)
+                ? "Remove \(DastakGroceryPresentation.searchAccessibilityIdentity(product)) from Wishlist"
+                : "Save \(DastakGroceryPresentation.searchAccessibilityIdentity(product)) to Wishlist")
 
-            Button { model.addToCart(product) } label: {
-                Image(systemName: "plus")
-                    .font(.subheadline.bold())
-                    .frame(width: 40, height: 40)
+            MarketplaceFeedbackButton { model.addShoppingProduct(product) } label: {
+                Group {
+                    if model.groceryStockQuantity(product.id) == 0 {
+                        Text("Out of stock").font(.caption.weight(.semibold)).padding(.horizontal, 10)
+                    } else {
+                        Image(systemName: "plus").font(.subheadline.bold())
+                    }
+                }
+                    .frame(minWidth: 44, minHeight: 44)
                     .foregroundStyle(.white)
                     .background(
                         MarketplaceColors.primaryAction.color,
@@ -909,7 +1244,12 @@ struct DastakHomeView: View {
                     )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add \(product.name)")
+            .accessibilityLabel(model.groceryStockQuantity(product.id) == 0
+                ? "\(DastakGroceryPresentation.searchAccessibilityIdentity(product)), Out of stock"
+                : "Add \(DastakGroceryPresentation.searchAccessibilityIdentity(product))")
+            .disabled(model.groceryStockQuantity(product.id) == 0 || model.groceryAddIssue(product.id) != nil)
+            .dastakBasketAnchor(DastakBasketService.grocery.itemAnchor(product.id))
+          }
         }
         .padding(MarketplaceSpacing.small)
         .marketplaceFlatSurface()
@@ -931,6 +1271,20 @@ struct DastakHomeView: View {
         isSearchFieldFocused = false
         model.searchText = ""
         isSearchPresented = false
+    }
+
+    private func resetExploration() {
+        selectedRestaurant = nil
+        selectedProduct = nil
+        selectedCategoryTypeID = nil
+        selectedCategoryID = nil
+        selectedSubcategoryID = nil
+        selectedBrowseDestinationKey = nil
+        selectedBrowseRailKey = nil
+        isSearchPresented = false
+        isSearchFieldFocused = false
+        // Search is exploration, not a shopping/recovery record.
+        model.searchText = ""
     }
 
     private func artworkSymbol(for product: DastakV1CatalogueSKU) -> String {
@@ -985,6 +1339,7 @@ private struct DastakDepartmentTile: View {
 
 private struct DastakCategoryTile: View {
     let category: DastakV1CatalogueCategory
+    var selected = false
 
     var body: some View {
         VStack(spacing: 7) {
@@ -996,7 +1351,7 @@ private struct DastakCategoryTile: View {
             .aspectRatio(1, contentMode: .fit)
             Text(category.name)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(selected ? MarketplaceColors.primaryActionForeground.color : Color.primary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 31, alignment: .top)
@@ -1024,7 +1379,7 @@ private struct DastakSubcategoryTile: View {
             .frame(width: 64, height: 58)
             Text(subcategory.name)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(selected ? MarketplaceColors.primaryActionForeground.color : Color.primary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(width: 68)
@@ -1038,36 +1393,59 @@ private struct DastakSubcategoryTile: View {
 struct DastakRestaurantMenuView: View {
     @ObservedObject var model: DastakCustomerModel
     let restaurant: DastakV1RestaurantMenu
+    var initialItemID: UUID? = nil
+    let openCart: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.marketplaceHapticScope) private var haptics
+    private func categoryNavigation(_ proxy: ScrollViewProxy) -> some View {
+        Menu {
+            Button("Top of menu") {
+                haptics?.play(.selection)
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    proxy.scrollTo("restaurant-menu-top", anchor: .top)
+                }
+            }
+            ForEach(restaurant.categories) { category in
+                Button(category.name) {
+                    guard let target = DastakRestaurantPresentation.menuCategoryScrollTarget(
+                        restaurant.categories, categoryID: category.id
+                    ) else { return }
+                    haptics?.play(.selection)
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        proxy.scrollTo(target, anchor: .top)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal.decrease")
+                .font(.title3)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .tint(MarketplaceColors.dastakAccent.color)
+        .accessibilityLabel("Jump to menu category")
+        .accessibilityHint("Scrolls to a category without hiding any dishes")
+        .accessibilityIdentifier("dastak.restaurant.category-filter")
+    }
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                    DastakProductArtwork(
-                        imageKey: restaurant.restaurant.imageKey,
-                        fallbackSymbol: "fork.knife"
-                    )
+                    DastakRestaurantBanner(imageKey: restaurant.restaurant.imageKey)
+                    .frame(height: 144)
                     .frame(maxWidth: .infinity)
-
-                    Label {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Exact restaurant confirmation")
-                                .font(.subheadline.weight(.semibold))
-                            Text("Dastak never silently reroutes your food. Confirm only after the whole basket is secured, then pay the rider at delivery.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "checkmark.shield.fill")
-                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    }
-                    .padding(MarketplaceSpacing.compact)
-                    .marketplaceFlatSurface()
+                    .id("restaurant-menu-top")
 
                     ForEach(restaurant.categories) { category in
                         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                            Text(category.name).font(MarketplaceTypography.sectionTitle)
+                            HStack(alignment: .center) {
+                                Text(category.name).font(.title2.bold())
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: MarketplaceSpacing.small)
+                                categoryNavigation(proxy)
+                            }
                             if let description = category.description {
                                 Text(description).font(.footnote).foregroundStyle(.secondary)
                             }
@@ -1075,9 +1453,9 @@ struct DastakRestaurantMenuView: View {
                                 DastakRestaurantItemCard(
                                     item: item,
                                     isWishlisted: model.isWishlisted(kind: .menuItem, itemID: item.id),
-                                    isUpdatingWishlist: model.wishlistUpdatingIDs.contains(item.id),
+                                    isUpdatingWishlist: model.wishlistChangeDisabled(item.id),
                                     add: { item, optionIDs in
-                                        model.addFoodToCart(
+                                        model.addShoppingFood(
                                             restaurant: restaurant,
                                             item: item,
                                             optionIDs: optionIDs
@@ -1087,17 +1465,38 @@ struct DastakRestaurantMenuView: View {
                                         Task { await model.toggleWishlist(kind: .menuItem, itemID: item.id) }
                                     }
                                 )
+                                .disabled(model.restaurantIssue(restaurant) != nil)
+                                .dastakBasketAnchor(DastakBasketService.food.itemAnchor(item.id))
+                                .id(item.id)
                             }
                         }
+                        .padding(.horizontal, MarketplaceSpacing.medium)
+                        .id(category.id)
                     }
                 }
-                .padding(MarketplaceSpacing.medium)
+                .padding(.bottom, MarketplaceSpacing.medium)
             }
-            .navigationTitle(restaurant.restaurant.name)
+            .task(id: initialItemID) {
+                guard let id = initialItemID, restaurant.categories.flatMap(\.items).contains(where: { $0.id == id }) else { return }
+                await Task.yield()
+                proxy.scrollTo(id, anchor: .top)
+            }
+            }
+            .navigationTitle(DastakRestaurantPresentation.customerFacingName(
+                name: restaurant.restaurant.name, branchName: restaurant.restaurant.branchName
+            ))
             .dastakInlineNavigationTitle()
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { MarketplaceFeedbackButton("Close") { dismiss() } }
+                ToolbarItem(placement: .primaryAction) {
+                    if !model.hasBasket(.food) {
+                        DastakBasketPickupButton(model: model, service: .food)
+                    }
+                }
+            }
         }
         .marketplacePage()
+        .dastakBasketExperience(model: model, service: .food, openCart: openCart)
     }
 }
 
@@ -1153,7 +1552,7 @@ private struct DastakRestaurantItemCard: View {
                     Text(item.name).font(.headline)
                 }
                 Spacer(minLength: 8)
-                Button(action: toggleWishlist) {
+                MarketplaceFeedbackButton(action: toggleWishlist) {
                     Image(systemName: isWishlisted ? "heart.fill" : "heart")
                         .font(.headline)
                         .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -1180,7 +1579,7 @@ private struct DastakRestaurantItemCard: View {
                             .foregroundStyle(.secondary)
                     }
                     ForEach(group.options) { option in
-                        Button { toggle(option.id, in: group) } label: {
+                        MarketplaceFeedbackButton(haptic: .selection) { toggle(option.id, in: group) } label: {
                             HStack {
                                 Image(systemName: (selections[group.id] ?? []).contains(option.id) ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -1196,7 +1595,7 @@ private struct DastakRestaurantItemCard: View {
                 .padding(MarketplaceSpacing.small)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            Button { add(item, selectedIDs) } label: {
+            MarketplaceFeedbackButton { add(item, selectedIDs) } label: {
                 HStack { Text("Add to basket"); Spacer(); Text(DastakFormatting.money(total)) }
             }
             .buttonStyle(MarketplacePrimaryButtonStyle())
@@ -1216,53 +1615,72 @@ private struct DastakRestaurantItemCard: View {
 }
 
 struct DastakV1ProductTile: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.marketplaceHapticScope) private var haptics
     let product: DastakV1CatalogueSKU
     let isWishlisted: Bool
     let isUpdatingWishlist: Bool
     let add: () -> Void
     let toggleWishlist: () -> Void
     var openDetail: (() -> Void)? = nil
+    var addIssue: String? = nil
+    var packCount = 1
+    var isOutOfStock = false
+    var quantity = 0
+    var remove: (() -> Void)? = nil
+    var selectedPack: String? = nil
+    var quantityLimitReached = false
+
+    private var stacksPurchaseControls: Bool { quantity > 0 || packCount > 1 || isOutOfStock || dynamicTypeSize >= .xxxLarge }
+    private var purchaseLayout: AnyLayout {
+        if stacksPurchaseControls { AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) }
+        else { AnyLayout(HStackLayout(alignment: .center)) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            DastakProductArtwork(imageKey: product.imageKey, fallbackSymbol: artworkSymbol)
-                .aspectRatio(1.04, contentMode: .fit)
-                .onTapGesture { openDetail?() }
+            HStack(spacing: 4) {
+                if let brand = product.brand?.name {
+                    Text(brand.uppercased())
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                MarketplaceFeedbackButton(action: toggleWishlist) {
+                    Image(systemName: isWishlisted ? "heart.fill" : "heart")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isUpdatingWishlist)
+                .accessibilityLabel(isWishlisted ? "Remove \(product.name) from Wishlist" : "Save \(product.name) to Wishlist")
+            }
+            GeometryReader { bounds in
+                DastakProductArtwork(imageKey: product.imageKey, fallbackSymbol: artworkSymbol)
+                    .frame(width: bounds.size.width, height: bounds.size.height)
+            }
+                .frame(height: dynamicTypeSize.isAccessibilitySize ? 140 : 104)
+                .dastakBasketAnchor(DastakBasketService.grocery.itemAnchor(product.id))
+                .onTapGesture { if let openDetail { openDetail(); haptics?.play(.tap) } }
                 .accessibilityHidden(false)
                 .accessibilityLabel("View \(product.name) details")
                 .accessibilityAddTraits(.isButton)
-                .accessibilityAction { openDetail?() }
-                .overlay(alignment: .topTrailing) {
-                    Button(action: toggleWishlist) {
-                        Image(systemName: isWishlisted ? "heart.fill" : "heart")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                            .frame(width: 36, height: 36)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isUpdatingWishlist)
-                    .padding(6)
-                    .accessibilityLabel(isWishlisted ? "Remove \(product.name) from Wishlist" : "Save \(product.name) to Wishlist")
-                }
-
-            if let brand = product.brand?.name {
-                Text(brand.uppercased())
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                    .lineLimit(1)
-            }
+                .accessibilityAction { if let openDetail { openDetail(); haptics?.play(.tap) } }
             Text(product.name)
                 .font(.subheadline.bold())
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
-                .onTapGesture { openDetail?() }
-            Text([product.variant, product.packSize].compactMap { $0 }.joined(separator: " · "))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, minHeight: dynamicTypeSize.isAccessibilitySize ? 0 : 42, alignment: .topLeading)
+                .onTapGesture { if let openDetail { openDetail(); haptics?.play(.tap) } }
+            Text(selectedPack.map { "\($0) · \(packCount) sizes" } ?? (packCount > 1 ? "\(packCount) pack sizes" : DastakGroceryPresentation.searchPackDescription(product)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
-            HStack(alignment: .center) {
+            purchaseLayout {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(DastakFormatting.money(product.price))
                         .font(.subheadline.bold().monospacedDigit())
@@ -1275,19 +1693,57 @@ struct DastakV1ProductTile: View {
                             .strikethrough()
                     }
                 }
-                Spacer(minLength: 4)
-                Button(action: add) {
-                    Image(systemName: "plus")
-                        .font(.headline)
-                            .frame(width: 36, height: 36)
+                if !stacksPurchaseControls { Spacer(minLength: 4) }
+                if quantity > 0, let remove {
+                    HStack(spacing: 0) {
+                        MarketplaceFeedbackButton(action: remove) {
+                            Image(systemName: "minus").font(.subheadline.bold())
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Remove one \(product.name)")
+                        .accessibilityIdentifier("grocery.shelf.minus.\(product.id)")
+                        Text("\(quantity)")
+                            .font(.subheadline.bold().monospacedDigit())
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .accessibilityLabel("\(quantity) in basket")
+                        MarketplaceFeedbackButton(action: add) {
+                            Image(systemName: "plus").font(.subheadline.bold())
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .disabled(isOutOfStock || addIssue != nil || quantityLimitReached)
+                        .accessibilityLabel("Add one \(product.name)")
+                        .accessibilityIdentifier("grocery.shelf.plus.\(product.id)")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .background(MarketplaceColors.primaryAction.color, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                } else {
+                MarketplaceFeedbackButton(action: add) {
+                    Group {
+                        if packCount > 1 || isOutOfStock {
+                            Text(DastakGroceryPresentation.purchaseTitle(stockQuantity: isOutOfStock ? 0 : nil,
+                                chooseSize: packCount > 1)).font(.caption.weight(.semibold))
+                        }
+                        else { Image(systemName: "plus").font(.headline) }
+                    }
+                        .frame(minWidth: 44, maxWidth: stacksPurchaseControls ? .infinity : nil, minHeight: 44)
+                        .padding(.horizontal, packCount > 1 ? 6 : 0)
                         .foregroundStyle(.white)
                         .background(
-                            MarketplaceColors.primaryAction.color,
+                            isOutOfStock ? Color.secondary.opacity(0.25) : MarketplaceColors.primaryAction.color,
                             in: RoundedRectangle(cornerRadius: 11, style: .continuous)
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Add \(product.name)")
+                .accessibilityLabel(isOutOfStock ? "\(product.name), Out of stock" : packCount > 1 ? "Choose pack size for \(product.name)" : "Add \(product.name)")
+                .disabled(isOutOfStock || (packCount == 1 && addIssue != nil))
+                }
+            }
+            if let addIssue, addIssue != "Out of stock" {
+                Text(addIssue).font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(8)

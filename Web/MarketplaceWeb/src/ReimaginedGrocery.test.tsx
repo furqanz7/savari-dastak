@@ -7,7 +7,7 @@ import { initialReimaginedState, reimaginedReducer } from "./reimaginedState";
 import { fixtureId, groceryFixture as data } from "./reimaginedCatalogue.testFixtures";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root; let host: HTMLDivElement;
-function Harness({ unavailable = false, home = false, preview = false, catalogue = data, related = [fixtureId(6), fixtureId(7)], searchQuery }: { unavailable?: boolean; home?: boolean; preview?: boolean; catalogue?: typeof data; related?: string[] | null; searchQuery?: string }) {
+function Harness({ unavailable = false, home = false, preview = false, catalogue = data, related = [fixtureId(6), fixtureId(7)], searchQuery, rankedIds, trendingStatus }: { unavailable?: boolean; home?: boolean; preview?: boolean; catalogue?: typeof data; related?: string[] | null; searchQuery?: string; rankedIds?: string[]; trendingStatus?: "loading" | "ready" | "unavailable" | "location_required" }) {
   const [state, dispatch] = useReducer(reimaginedReducer, undefined, () => {
     const initial = reimaginedReducer(initialReimaginedState(), { type: "signedIn", accountId: "test" });
     if (searchQuery) return reimaginedReducer(reimaginedReducer(initial, { type: "typeSearch", query: searchQuery }), { type: "submitSearch" });
@@ -18,7 +18,7 @@ function Harness({ unavailable = false, home = false, preview = false, catalogue
     <button onClick={() => dispatch({ type: "reviewShopping" })}>Review Bucket</button>
     <button onClick={() => dispatch({ type: "continueShopping" })}>Continue Shopping</button>
     <output data-testid="state">{JSON.stringify(state)}</output>
-    <ReimaginedGrocery state={state} dispatch={dispatch} data={catalogue} status="ready" onRetry={() => undefined} supabaseUrl="https://example.supabase.co" trending={preview ? { city: "Preview city", skuIds: [fixtureId(7), "unknown", fixtureId(7), fixtureId(6)], preview: true } : undefined} eligibility={sku => ({ canAdd: !(unavailable && sku.id === fixtureId(7)), maximumQuantity: 2, reason: unavailable && sku.id === fixtureId(7) ? "Temporarily unavailable" : undefined })} relatedSkuIds={related ? () => related : undefined} checkoutContent="Checkout slot" />
+    <ReimaginedGrocery state={state} dispatch={dispatch} data={catalogue} status="ready" onRetry={() => undefined} supabaseUrl="https://example.supabase.co" trending={rankedIds ? { city: "your city", skuIds: rankedIds } : preview ? { city: "Preview city", skuIds: [fixtureId(7), "unknown", fixtureId(7), fixtureId(6)], preview: true } : undefined} trendingStatus={trendingStatus} eligibility={sku => ({ canAdd: !(unavailable && sku.id === fixtureId(7)), maximumQuantity: 2, reason: unavailable && sku.id === fixtureId(7) ? "Temporarily unavailable" : undefined })} relatedSkuIds={related ? () => related : undefined} checkoutContent="Checkout slot" />
     {state.exploration.grocery.searchOpen ? <ReimaginedGrocerySuggestions data={data} query="basmati" dispatch={dispatch} /> : null}</>;
 }
 function mount(unavailable = false, home = false, preview = false) { host = document.createElement("div"); document.body.append(host); root = createRoot(host); act(() => root.render(<Harness unavailable={unavailable} home={home} preview={preview} />)); }
@@ -205,6 +205,25 @@ describe("Reimagined Grocery interactions", () => {
     expect(host.querySelector(".reimagined-product-detail h2")?.textContent).toBe("Test Plain Rice");
     click("Close product details");
     expect(host.querySelector(".reimagined-grocery-home")).not.toBeNull();
+  });
+  it("keeps every ranked size inside one live product card, including beyond the twelfth pack", () => {
+    mount(false, true);
+    const skus = Array.from({ length: 14 }, (_, index) => ({ ...data.catalogue.skus[0],
+      id: fixtureId(100 + index), packSize: `${index + 1} kg`, brand: { id: fixtureId(30), name: "Test brand", slug: "test-brand" } }));
+    act(() => root.render(<Harness home rankedIds={skus.map(sku => sku.id)} related={null}
+      catalogue={{ ...data, catalogue: { ...data.catalogue, skus } }} />));
+    expect(host.querySelectorAll(".reimagined-shelf-product")).toHaveLength(1);
+    expect(host.querySelectorAll(".reimagined-shelf-packs option")).toHaveLength(14);
+    expect(host.textContent).not.toContain("Preview ranking");
+  });
+  it("distinguishes loaded empty history from a loading or missing-location feed", () => {
+    mount(false, true);
+    act(() => root.render(<Harness home rankedIds={[]} trendingStatus="ready" />));
+    expect(host.textContent).toContain("No local favourites yet.");
+    act(() => root.render(<Harness home trendingStatus="loading" />));
+    expect(host.textContent).toContain("Finding local favourites");
+    act(() => root.render(<Harness home trendingStatus="location_required" />));
+    expect(host.textContent).toContain("Choose your delivery location.");
   });
   it("renders horizontal shelves with exact SKU add and capped quantity controls", () => {
     mount(); expect(host.querySelectorAll(".reimagined-shelf-track")).toHaveLength(3);

@@ -1139,6 +1139,7 @@ export type V1AreaAvailability = {
   groceryServiceable: boolean; foodServiceable: boolean; deliveryAvailable: boolean;
   stock: Record<string, number>;
   restaurants: Record<string, boolean>;
+  trendingSkus?: V1CatalogueSku[];
 };
 export async function getV1AreaAvailability(input: DastakV1Auth & { location: V1RestaurantLocation; signal?: AbortSignal }, fetcher: Fetcher = fetch): Promise<V1AreaAvailability> {
   const source = requiredRecord(await invoke(input, "dastak-v1-catalogue", {
@@ -1156,8 +1157,15 @@ export async function getV1AreaAvailability(input: DastakV1Auth & { location: V1
     const quantity = requiredInteger(value, 1); if (quantity > 1000000) invalid("area stock");
     stock[requiredUuid(id)] = quantity;
   }
+  let trendingSkus: V1CatalogueSku[] | undefined;
+  if (source.trendingSkus !== undefined && source.trendingSkus !== null) {
+    if (!Array.isArray(source.trendingSkus) || source.trendingSkus.length > 250) invalid("local trending products");
+    trendingSkus = (source.trendingSkus as unknown[]).map(parseSku);
+    if (new Set(trendingSkus.map(sku => sku.id)).size !== trendingSkus.length) invalid("duplicate trending products");
+  }
   return { addressId: input.location.addressId, addressVersion: source.addressVersion as string, checkedAt: requiredTimestamp(source.checkedAt),
-    groceryServiceable: source.groceryServiceable as boolean, foodServiceable: source.foodServiceable as boolean, deliveryAvailable: source.deliveryAvailable as boolean, stock, restaurants };
+    groceryServiceable: source.groceryServiceable as boolean, foodServiceable: source.foodServiceable as boolean, deliveryAvailable: source.deliveryAvailable as boolean, stock, restaurants,
+    ...(trendingSkus !== undefined ? { trendingSkus } : {}) };
 }
 export type V1RestaurantCursor = { name: string; branchId: string; distanceMeters?: number | null; addressId?: string; addressVersion?: string };
 export type V1RestaurantPage = { restaurants: V1RestaurantMenu[]; nextCursor?: V1RestaurantCursor; ordering?: "NEAREST" };

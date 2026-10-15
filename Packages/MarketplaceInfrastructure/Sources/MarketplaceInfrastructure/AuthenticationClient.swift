@@ -160,7 +160,7 @@ protocol SupabaseAuthenticationOperations: Sendable {
     func signInWithGoogle(idToken: String) async throws
     func signInWithGoogle(redirectTo: URL) async throws
     func suggestedDisplayName() async -> String?
-    func currentAccountID() async -> UUID?
+    func currentAccountID() async throws -> UUID?
     func accountProfileID(for accountID: UUID) async throws -> UUID?
     func resolveAppAccess(for requiredAccess: MarketplaceApplicationAccess) async throws -> AccountRoute
     func bootstrapAccount(
@@ -221,7 +221,7 @@ public struct SupabaseAuthenticationClient: AuthenticationClient {
     }
 
     public func restoreAccount() async throws -> AccountRoute {
-        guard let accountID = await operations.currentAccountID() else {
+        guard let accountID = try await operations.currentAccountID() else {
             return .signedOut
         }
         guard let profileAccountID = try await operations.accountProfileID(for: accountID) else {
@@ -317,7 +317,8 @@ extension SupabaseAuthenticationClient {
                 supabaseURL: configuration.supabaseURL,
                 supabaseKey: configuration.publishableKey,
                 options: SupabaseClientOptions(
-                    auth: .init(emitLocalSessionAsInitialSession: true)
+                    auth: .init(emitLocalSessionAsInitialSession: true),
+                    global: .init(session: Self.foregroundSession)
                 )
             )
         }
@@ -410,21 +411,39 @@ extension SupabaseAuthenticationClient {
             }
         }
 
-        func currentAccountID() async -> UUID? {
-            do {
-                return try await supabaseClient.auth.session.user.id
-            } catch AuthError.sessionMissing {
-                return nil
-            } catch {
-                return nil
-            }
+        func currentAccountID() async throws -> UUID? {
+            // Local identity scopes recovery records; it does not authorize a
+            // request. Repeated journal checks must not join a network token
+            // refresh. Every server call still obtains a valid access token.
+            supabaseClient.auth.currentSession?.user.id
         }
+
+        private static let foregroundSession: URLSession = {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.waitsForConnectivity = false
+            configuration.timeoutIntervalForRequest = 12
+            configuration.timeoutIntervalForResource = 20
+            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+            return URLSession(configuration: configuration)
+        }()
 
         func currentAccessToken() async throws -> String? {
             do {
                 return try await supabaseClient.auth.session.accessToken
-            } catch AuthError.sessionMissing {
+            } catch where SupabaseSessionFailure.isConfirmedSessionLoss(error) {
                 return nil
+            }
+        }
+
+        func refreshCurrentSession() async throws {
+            do {
+                let accountID = try await supabaseClient.auth.session.user.id
+                let refreshed = try await supabaseClient.auth.refreshSession()
+                guard refreshed.user.id == accountID else {
+                    throw MarketplaceAuthenticatedServicesError.identityMismatch
+                }
+            } catch where SupabaseSessionFailure.isConfirmedSessionLoss(error) {
+                throw FunctionClientError.authenticationRequired
             }
         }
 

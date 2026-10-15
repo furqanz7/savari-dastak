@@ -4,72 +4,64 @@ import MarketplaceInfrastructure
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
+import ImageIO
 
 struct DastakDeliveryPartnerWorkspaceView: View {
-    @StateObject private var model: DastakDeliveryPartnerModel
+    @ObservedObject private var model: DastakDeliveryPartnerModel
+    @ObservedObject private var operations: DastakDeliveryOperations
     @StateObject private var locationManager = DastakLocationManager()
     @State private var handoffCode = ""
     @State private var pendingOnlineRequest = false
-    @State private var showingEarnings = false
+    @State private var orderTarget: DastakDeliveryOrderTarget?
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var activeTracker: DastakActiveDeliveryTracker
     @Environment(\.colorScheme) private var colorScheme
     private let services: MarketplaceAuthenticatedServices
     private let refreshToken: Int
 
-    init(services: MarketplaceAuthenticatedServices, refreshToken: Int = 0) {
+    init(services: MarketplaceAuthenticatedServices, model: DastakDeliveryPartnerModel, operations: DastakDeliveryOperations, refreshToken: Int = 0) {
         self.services = services
         self.refreshToken = refreshToken
-        _model = StateObject(wrappedValue: DastakDeliveryPartnerModel(functions: services.functions))
+        self.operations = operations
+        self.model = model
     }
 
     var body: some View {
         deliveryWorkspace
+        .sheet(item: $orderTarget) { target in
+            DastakDeliveryOrderDetailView(target: target, client: .init(functions: DastakDeliveryFunctionClient(base: services.functions)))
+        }
         .marketplacePage()
-        .background {
-            DastakDeliveryTrackerBridge(
-                mission: model.v1Dispatch?.currentMission,
-                isAuthoritative: !model.isLoading
-            )
-        }
-        .task {
-            await model.bootstrap()
-        }
-        .task {
-            await observeOrderChanges()
-        }
         .task(id: refreshToken) {
             guard refreshToken > 0 else { return }
-            await model.refresh()
-        }
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
-                guard !Task.isCancelled else { return }
-                guard scenePhase == .active else { continue }
-                await model.refresh()
-            }
+            await model.recoverDesk()
         }
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(15))
-                guard !Task.isCancelled, model.isOnline, scenePhase == .active,
-                      model.v1Dispatch?.currentMission == nil else { continue }
+                guard !Task.isCancelled, model.isOnline, scenePhase == .active else { continue }
                 locationManager.requestLocation()
             }
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase != .active { handoffCode = "" }
             guard phase == .active else { return }
-            Task { await model.refresh() }
+            Task { await model.recoverDesk(force: false) }
         }
         .onReceive(locationManager.$location) { location in
             guard let location else { return }
             if pendingOnlineRequest {
                 pendingOnlineRequest = false
                 Task { await model.setAvailability(online: true, location: location) }
-            } else if model.isOnline, model.v1Dispatch?.currentMission == nil {
+            } else if model.isOnline {
                 Task { await model.publishLocation(location) }
             }
         }
+        .onReceive(activeTracker.$returnMission) { operations.adoptTracked($0) }
+        .onReceive(activeTracker.$mission) { model.adoptTrackedMission($0) }
+        .onReceive(operations.$confirmedSnapshot) { model.applyConfirmedAction($0) }
+        .onReceive(operations.$busy) { activeTracker.actionInFlight = $0 }
+        .onDisappear { activeTracker.actionInFlight = false }
         .onReceive(locationManager.$errorMessage) { error in
             if error != nil { pendingOnlineRequest = false }
         }
@@ -89,23 +81,6 @@ struct DastakDeliveryPartnerWorkspaceView: View {
         }
     }
 
-    private func observeOrderChanges() async {
-        while !Task.isCancelled {
-            do {
-                let accountID = try await services.accountID()
-                for try await event in services.orderEvents.events(accountID: accountID) {
-                    guard !Task.isCancelled else { return }
-                    await model.refreshOrderChange(event.entityKind)
-                }
-            } catch is CancellationError {
-                return
-            } catch {
-                // The fallback poll keeps assignments current while realtime reconnects.
-            }
-            try? await Task.sleep(for: .seconds(3))
-        }
-    }
-
     private var deliveryWorkspace: some View {
         NavigationStack {
             ScrollView {
@@ -118,44 +93,11 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 .padding(.bottom, MarketplaceSpacing.xxLarge)
                 .frame(maxWidth: .infinity)
             }
-            .id(deliveryLayoutRevision)
-            .refreshable { await model.refresh() }
+            .refreshable { await model.recoverDesk() }
             .navigationTitle("Deliveries")
             .dastakInlineNavigationTitle()
             .scrollDismissesKeyboard(.interactively)
         }
-    }
-
-    /// Rebuild the scroll container only when its content hierarchy changes.
-    /// This clamps a retained deep scroll offset after a completed mission or
-    /// expired offer disappears, without disrupting frequent rider GPS updates.
-    private var deliveryLayoutRevision: String {
-        var parts = [
-            "loading:\(model.isLoading)",
-            "online:\(model.isOnline)",
-            "failure:\(model.refreshFailure != nil)"
-        ]
-        if let mission = model.v1Dispatch?.currentMission {
-            parts.append("mission:\(mission.id.uuidString):\(mission.status.rawValue)")
-            parts.append(contentsOf: mission.pickupStops.map {
-                "stop:\($0.id.uuidString):\($0.status?.rawValue ?? "unknown")"
-            })
-            parts.append("pin:\(mission.finalVerification?.pinVerified == true)")
-            parts.append("evidence:\(mission.finalVerification?.evidencePresent == true)")
-            parts.append("collection:\(mission.launchCollection?.state.rawValue ?? "none")")
-        } else {
-            parts.append("mission:none")
-        }
-        if let offer = model.v1Dispatch?.offer {
-            parts.append("v1-offer:\(offer.id.uuidString)")
-        }
-        if let assignment = model.courierDispatch?.currentJob ?? model.courierDispatch?.offer {
-            parts.append("courier:\(assignment.assignmentID.uuidString):\(assignment.orderStatus.rawValue)")
-        }
-        if let assignment = model.parcelDispatch?.currentJob ?? model.parcelDispatch?.offer {
-            parts.append("parcel:\(assignment.assignmentID.uuidString):\(assignment.parcel.status.rawValue)")
-        }
-        return parts.joined(separator: "|")
     }
 
     @ViewBuilder
@@ -178,11 +120,22 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             }
             availability
             DastakAppNotificationStatus()
-            if let mission = model.v1Dispatch?.currentMission {
+            DastakDeliveryRecoveryPanel(operations: operations, refresh: { await model.actionFinished() })
+            if let destination = model.nextDestination {
+                DastakDeliveryDestinationMap(destination: destination, current: model.refreshFailure == nil && model.v1Current)
+            }
+            if let mission = operations.returnMission {
+                fullOrderButton(kind: "RETURN", id: mission.id)
+                DastakReturnMissionCard(operations: operations, mission: mission, refresh: { await model.refresh() })
+                    .id(mission.id)
+            }
+            if let mission = model.v1Dispatch?.currentMission, model.v1Dispatch?.returnMission == nil, operations.returnMission == nil {
+                fullOrderButton(kind: "V1_DELIVERY", id: mission.id)
                 DastakDeliveryTrackingNotice(missionID: mission.id)
                 DastakV1MissionCard(
                     mission: mission,
                     busy: model.isBusy,
+                    submitting: operations.busy || model.busyOperation != nil,
                     advance: { operation, stopID, packageCount, code, reason in
                         Task {
                             await model.advanceV1Mission(
@@ -211,40 +164,49 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                     }
                 )
                 .id(mission.id)
+                DastakDeliveryProblemPanel(operations: operations, mission: mission,
+                    current: model.v1Dispatch?.currentMission, fresh: model.v1Current,
+                    refresh: { await model.refresh() })
             }
-            if let currentJob = model.courierDispatch?.currentJob { courierJob(currentJob) }
-            if let currentJob = model.parcelDispatch?.currentJob { parcelJob(currentJob) }
-            if let offer = model.courierDispatch?.offer { courierOffer(offer) }
-            if let offer = model.parcelDispatch?.offer { parcelOffer(offer) }
-            if let offer = model.v1Dispatch?.offer, model.v1Dispatch?.currentMission == nil {
+            if let currentJob = model.courierDispatch?.currentJob {
+                fullOrderButton(kind: "LEGACY_DELIVERY", id: currentJob.assignmentID)
+                courierJob(currentJob)
+            }
+            if let currentJob = model.parcelDispatch?.currentJob {
+                fullOrderButton(kind: "PARCEL", id: currentJob.assignmentID)
+                parcelJob(currentJob)
+            }
+            if let offer = model.courierDispatch?.offer, !model.hasActiveJob { courierOffer(offer) }
+            if let offer = model.parcelDispatch?.offer, !model.hasActiveJob { parcelOffer(offer) }
+            if let offer = model.v1Dispatch?.offer, !model.hasActiveJob {
                 v1Offer(offer)
             }
             if hasNoAssignment {
+                if let completed = model.v1Dispatch?.completedMission, model.v1Dispatch?.completedLaneCurrent == true {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Delivery completed", systemImage: "checkmark.seal.fill").font(.headline)
+                        Text("\(completed.packageCount) packages handed over securely")
+                        Text(DastakMerchantReceiptPresentation.date(completed.deliveredAt)).font(.caption).foregroundStyle(.secondary)
+                        fullOrderButton(kind: "V1_DELIVERY", id: completed.id)
+                    }.padding(16).marketplaceFlatSurface()
+                }
                 DastakEmptyState(
                     symbol: model.isOnline ? "dot.radiowaves.left.and.right" : "power",
                     title: model.isOnline ? "Ready for your next delivery" : "Your next delivery starts here",
                     message: model.isOnline
                         ? "Nearby offers appear automatically. Keep location and delivery alerts on."
-                        : "Go online when you’re ready. You’ll see the pickup and available earnings before you accept."
+                        : "Go online when you’re ready. Review the pickup and load details before accepting."
                 )
                 .frame(minHeight: 260)
             }
-            if let earnings = model.earnings {
-                DisclosureGroup(isExpanded: $showingEarnings) {
-                    DastakEarningsCard(earnings: earnings, title: "Earnings breakdown")
-                        .padding(.top, 12)
-                } label: {
-                    HStack {
-                        Label("This week", systemImage: "indianrupeesign.circle")
-                        Spacer()
-                        Text(DastakFormatting.money(.init(paise: earnings.thisWeekPaise)))
-                            .monospacedDigit()
-                    }.font(.subheadline.weight(.semibold))
-                }
-                .padding(16)
-                .marketplaceFlatSurface()
-            }
         }
+    }
+
+    private func fullOrderButton(kind: String, id: UUID) -> some View {
+        Button { orderTarget = .init(kind: kind, workID: id) } label: {
+            Label("View full order", systemImage: "list.bullet.rectangle")
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }.padding(16).marketplaceFlatSurface()
     }
 
     private var partnerHeader: some View {
@@ -265,7 +227,13 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                     .frame(width: 6, height: 6)
                 Text(model.refreshFailure == nil ? "Updates automatically" : "Reconnecting")
                 Spacer()
-                if model.isRefreshing {
+                Button { Task { await model.recoverDesk() } } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("Refresh delivery and recover saved action")
+                .accessibilityIdentifier("delivery.refresh")
+                if model.hasActiveJob ? model.criticalReadRunning : model.isRefreshing {
                     HStack(spacing: 5) {
                         ProgressView().controlSize(.mini)
                         Text("Syncing")
@@ -292,7 +260,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                     .frame(width: 36)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(pendingOnlineRequest ? "Finding your location…" : model.isOnline ? "You’re online" : "You’re offline")
+                    Text(pendingOnlineRequest ? "Finding your location…" : model.hasActiveJob ? "Delivery in progress" : model.isOnline ? "You’re online" : "You’re offline")
                         .font(MarketplaceTypography.itemTitle)
                     Text(availabilityMessage)
                         .font(.caption)
@@ -315,7 +283,9 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             }
 
             if model.hasActiveJob {
-                Label("Finish your current delivery before going offline.", systemImage: "lock.fill")
+                Label("Your current delivery stays available even when new assignments are paused.", systemImage: "shippingbox")
+                    .font(.caption).foregroundStyle(.secondary)
+                Label("The screen stays awake during active work. You can still lock it manually.", systemImage: "iphone")
                     .font(.caption).foregroundStyle(.secondary)
             } else if model.isOnline {
                 Label(
@@ -324,8 +294,10 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                Button("Renew online availability") { changeAvailability(true) }
+                    .disabled(model.isBusy || pendingOnlineRequest)
             } else if let locationError = locationManager.errorMessage {
-                Text(locationError)
+                Text(locationError.replacingOccurrences(of: "Search for a delivery address instead.", with: "Allow location access in iOS Settings to receive nearby delivery offers."))
                     .font(.caption)
                     .foregroundStyle(MarketplaceColors.destructive.color)
             }
@@ -335,6 +307,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     }
 
     private var availabilityMessage: String {
+        if model.hasActiveJob { return model.isOnline ? "Online · Completing your delivery" : "New assignments paused · Continue this delivery" }
         if model.isOnline, let availableUntil = model.partner?.availability?.availableUntil {
             return "Available until \(DastakPartnerFormatting.time(availableUntil))"
         }
@@ -342,12 +315,13 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     }
 
     private var hasNoAssignment: Bool {
-        model.courierDispatch?.offer == nil
+        model.canShowEmptyDesk && model.courierDispatch?.offer == nil
             && model.courierDispatch?.currentJob == nil
             && model.parcelDispatch?.offer == nil
             && model.parcelDispatch?.currentJob == nil
             && model.v1Dispatch?.offer == nil
             && model.v1Dispatch?.currentMission == nil
+            && model.v1Dispatch?.returnMission == nil
     }
 
     private func changeAvailability(_ online: Bool) {
@@ -400,6 +374,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     }
 
     private func v1Offer(_ offer: DastakV1RiderOffer) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
         DastakPartnerOfferCard(
             title: "Dastak · \(offer.pickupCount) pickup\(offer.pickupCount == 1 ? "" : "s")",
             subtitle: offer.displayOrderNumber,
@@ -408,10 +383,27 @@ struct DastakDeliveryPartnerWorkspaceView: View {
             distanceMeters: offer.distanceMeters,
             respondBy: offer.respondBy,
             itemSummary: "\(offer.transportType.replacingOccurrences(of: "_", with: " ").capitalized) · Verify every package at pickup, then deliver to the customer.",
-            busy: model.isBusy,
+            busy: model.isBusy || offer.orderLoad == nil || offer.pickupStops?.count != offer.pickupCount,
             accept: { Task { await model.respondToV1Offer(offer, accept: true) } },
             decline: { Task { await model.respondToV1Offer(offer, accept: false) } }
         )
+            if offer.orderLoad == nil || offer.pickupStops?.count != offer.pickupCount {
+                Text("Pickup or load details are unavailable. Refresh before responding to this offer.").font(.footnote).foregroundStyle(.secondary)
+            }
+            if let load = offer.orderLoad {
+                Label("\(Double(load.totalWeightGrams) / 1000, specifier: "%.1f") kg · \(load.containsBulky ? "Bulky items" : "Standard load")", systemImage: "shippingbox")
+                    .font(.subheadline)
+                Text("Longest side: \(Double(load.longestSideMillimetres) / 10, specifier: "%.0f") cm")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach((offer.pickupStops ?? []).sorted { $0.sequence < $1.sequence }) { stop in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(stop.sequence). \(stop.branch.displayName)").font(.headline)
+                    Text(stop.branch.address.display).font(.caption).foregroundStyle(.secondary)
+                    if let count = stop.packageCount { Text("\(count) packages").font(.caption) }
+                }
+            }
+        }
     }
 
     private func captureV1Evidence(
@@ -420,28 +412,15 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     ) async {
         do {
             guard let data = try await item.loadTransferable(type: Data.self),
-                  !data.isEmpty, data.count <= 10 * 1_024 * 1_024
+                  !data.isEmpty, data.count <= 10 * 1_024 * 1_024,
+                  let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0,
+                  let typeID = CGImageSourceGetType(source), let type = UTType(typeID as String),
+                  let mime = type.preferredMIMEType, ["image/jpeg", "image/png", "image/heic"].contains(mime)
             else {
                 model.errorMessage = "Choose a clear package photo up to 10 MB."
                 return
             }
-            let supported = item.supportedContentTypes
-            let type: UTType = supported.contains(.png) ? .png :
-                supported.contains(.heic) ? .heic : .jpeg
-            let ext = type == .png ? "png" : type == .heic ? "heic" : "jpg"
-            let accountID = try await services.accountID()
-            let path = "rider-delivery/\(accountID.uuidString.lowercased())/\(UUID().uuidString.lowercased()).\(ext)"
-            try await services.uploadObject(
-                bucket: "dastak-evidence",
-                path: path,
-                data: data,
-                contentType: type.preferredMIMEType ?? "image/jpeg"
-            )
-            await model.advanceV1Mission(
-                "v1AddDeliveryEvidence",
-                mission: mission,
-                objectPath: path
-            )
+            await model.submitV1Evidence(mission: mission, data: data, contentType: mime)
         } catch {
             model.errorMessage = "The package photo could not be secured. Try again before handoff."
         }
@@ -477,6 +456,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
 private struct DastakV1MissionCard: View {
     let mission: DastakV1DeliveryMissionSnapshot
     let busy: Bool
+    let submitting: Bool
     let advance: (String, UUID?, Int?, String?, String?) -> Void
     let recordCollection: (
         DastakV1CollectionOutcome,
@@ -495,6 +475,7 @@ private struct DastakV1MissionCard: View {
     @State private var confirmRelease = false
     @State private var confirmCollection = false
     @State private var showingCollectionFailure = false
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -525,10 +506,17 @@ private struct DastakV1MissionCard: View {
             Text(DastakDeliveryPresentation.instruction(mission.status))
                 .font(.subheadline).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if submitting {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Updating delivery…").font(.footnote.weight(.medium))
+                }
+                .accessibilityElement(children: .combine)
+            }
             Divider()
 
             if mission.status == .assigned {
-                Button("Start pickups") {
+                MarketplaceFeedbackButton("Start pickups") {
                     advance("v1StartPickups", nil, nil, nil, nil)
                 }
                 .buttonStyle(MarketplacePrimaryButtonStyle())
@@ -555,9 +543,13 @@ private struct DastakV1MissionCard: View {
                     ),
                     label: "Open customer route"
                 )
+                if let number = destination.recipient?.phoneNumber,
+                   let url = DastakDeliveryPresentation.callURL(number) {
+                    Link(destination: url) { Label("Call customer", systemImage: "phone.fill") }
+                }
 
                 if mission.canStartFinalDelivery {
-                    Button("Start final delivery") {
+                    MarketplaceFeedbackButton("Start final delivery") {
                         advance("v1StartFinalDelivery", nil, nil, nil, nil)
                     }
                     .buttonStyle(MarketplacePrimaryButtonStyle())
@@ -580,7 +572,7 @@ private struct DastakV1MissionCard: View {
                 }
                 if mission.canVerifyCustomerPIN == true {
                     DastakHandoffCodeField(title: "Customer delivery PIN", length: 6, code: $deliveryCode)
-                    Button("Verify customer PIN") {
+                    MarketplaceFeedbackButton("Verify customer PIN") {
                         advance("v1VerifyCustomerPIN", nil, nil, deliveryCode, nil)
                     }
                     .buttonStyle(MarketplacePrimaryButtonStyle())
@@ -614,7 +606,7 @@ private struct DastakV1MissionCard: View {
                     collectionCard(collection)
                 }
                 if mission.status == .arrived {
-                    Button("Complete delivery") {
+                    MarketplaceFeedbackButton("Complete delivery") {
                         advance("v1CompleteDelivery", nil, nil, nil, nil)
                     }
                     .buttonStyle(MarketplacePrimaryButtonStyle())
@@ -656,18 +648,20 @@ private struct DastakV1MissionCard: View {
         } message: {
             Text("Confirm you actually received the full amount by \(collectionMethod == .cash ? "cash" : "UPI"). Do not confirm a pending payment.")
         }
-        .onChange(of: mission.status) { _, _ in
-            deliveryCode = ""
-            collectionReference = ""
-            failureReason = ""
-            showingCollectionFailure = false
-        }
+        .onChange(of: DastakDeliveryPresentation.handoffRevision(mission)) { _, _ in clearHandoffInputs() }
+        .onChange(of: mission.status) { _, _ in clearHandoffInputs() }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { clearHandoffInputs() } }
         .accessibilityElement(children: .contain)
     }
 
     private var finalStage: Bool {
         [.allPackagesPickedUp, .outForDelivery, .arrived, .deliveryRecovery]
             .contains(mission.status)
+    }
+
+    private func clearHandoffInputs() {
+        pickupCodes = [:]; packageCounts = [:]; deliveryCode = ""; collectionReference = ""
+        failureReason = ""; showingCollectionFailure = false; confirmCollection = false; confirmRelease = false
     }
 
     @ViewBuilder
@@ -720,7 +714,7 @@ private struct DastakV1MissionCard: View {
                         set: { pickupCodes[stop.id] = $0 }
                     )
                 )
-                Button("Verify pickup") {
+                MarketplaceFeedbackButton("Verify pickup") {
                     advance(
                         "v1VerifyPickup",
                         stop.id,
@@ -824,13 +818,15 @@ private struct DastakV1MissionCard: View {
 
 /// Synchronizes workspace state into the process-owned background tracker
 /// without making the entire delivery screen observe every GPS response.
-private struct DastakDeliveryTrackerBridge: View {
+struct DastakDeliveryTrackerBridge: View {
     @EnvironmentObject private var tracker: DastakActiveDeliveryTracker
-    let mission: DastakV1DeliveryMissionSnapshot?
+    let dispatch: DastakV1DeliveryDispatchSnapshot?
     let isAuthoritative: Bool
 
     private var revision: String {
         guard isAuthoritative else { return "loading" }
+        if let returned = dispatch?.returnMission { return "return:\(returned.id):\(returned.version):\(returned.status)" }
+        let mission = dispatch?.currentMission
         guard let mission else { return "none" }
         return "\(mission.id.uuidString):\(mission.version):\(mission.status.rawValue)"
     }
@@ -840,7 +836,7 @@ private struct DastakDeliveryTrackerBridge: View {
             .frame(width: 0, height: 0)
             .task(id: revision) {
                 guard isAuthoritative else { return }
-                tracker.adopt(mission)
+                if let dispatch { tracker.adopt(dispatch) }
             }
             .accessibilityHidden(true)
     }
@@ -851,10 +847,13 @@ private struct DastakDeliveryTrackingNotice: View {
     let missionID: UUID
 
     var body: some View {
-        if tracker.mission?.id == missionID, let message = tracker.statusMessage {
-            Label(message, systemImage: "location.circle")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        if tracker.mission?.id == missionID {
+            if let message = tracker.statusMessage {
+                Label(message, systemImage: "location.circle").font(.footnote).foregroundStyle(.secondary)
+            }
+            if let failure = tracker.heartbeatFailure {
+                Label(failure, systemImage: "wifi.exclamationmark").font(.footnote).foregroundStyle(.orange)
+            }
         }
     }
 }
@@ -1257,7 +1256,7 @@ private struct DastakMapRouteButton: View {
     }
 }
 
-private struct DastakHandoffCodeField: View {
+struct DastakHandoffCodeField: View {
     let title: String
     let length: Int
     @Binding var code: String

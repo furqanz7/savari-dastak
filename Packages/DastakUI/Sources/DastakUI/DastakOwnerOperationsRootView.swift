@@ -137,6 +137,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
     @Published var notice: String?
 
     private let operationsClient: any OwnerOrderOperationsClient
+    private let authenticatedServices: MarketplaceAuthenticatedServices
     private let merchantClient: any MerchantOrderClient
     private let checkoutClient: any DastakCheckoutClient
     private let v1Client: any DastakV1AdminClient
@@ -148,6 +149,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
     private var pendingRefreshWorkspaces: Set<DastakAdminWorkspace> = []
 
     init(services: MarketplaceAuthenticatedServices) {
+        authenticatedServices = services
         operationsClient = SupabaseOwnerOrderOperationsClient(functions: services.functions)
         merchantClient = SupabaseMerchantOrderClient(functions: services.functions)
         checkoutClient = SupabaseDastakCheckoutClient(functions: services.functions)
@@ -156,7 +158,13 @@ final class DastakOwnerOperationsModel: ObservableObject {
         deliveryApplicationClient = SupabaseDeliveryPartnerClient(functions: services.functions)
     }
 
-    var isBusy: Bool { busyIdentity != nil }
+    var isBusy: Bool { busyIdentity != nil || executionModel.busy || executionModel.pending != nil || !customerRecoveryModel.restored || customerRecoveryModel.busy || customerRecoveryModel.pending != nil }
+    lazy var executionModel = DastakAdminExecutionModel(services: authenticatedServices)
+    lazy var customerRecoveryModel = DastakAdminCustomerRecoveryModel(services: authenticatedServices)
+    lazy var restaurantListingsModel = DastakAdminRestaurantListingsModel(client: v1Client)
+    lazy var merchantGovernanceModel = DastakAdminMerchantGovernanceModel(client: v1Client)
+    lazy var deliveryGovernanceModel = DastakAdminDeliveryGovernanceModel(client: v1Client)
+    lazy var auditHistoryModel = DastakAdminAuditHistoryModel(client: v1Client)
     var isRefreshing: Bool { !refreshingWorkspaces.isEmpty }
     var workspaceIssues: [DastakAdminWorkspaceIssue] {
         workspaceState.issues.values
@@ -174,6 +182,7 @@ final class DastakOwnerOperationsModel: ObservableObject {
     }
 
     func bootstrap() async {
+        await customerRecoveryModel.restore()
         await refresh(.commandCenter)
         isLoading = false
         await refresh(Self.primaryWorkspaces.subtracting([.commandCenter]))
@@ -645,27 +654,9 @@ final class DastakOwnerOperationsModel: ObservableObject {
     }
 
     private func retryLiveOrders() async {
-        let client = v1Client
-        let ordersKey = key()
-        let orderResult = await loadAdminWorkspace(
-            .liveOrders,
-            fallback: "Live order and collection trace could not be refreshed."
-        ) { try await client.orders(limit: 50, idempotencyKey: ordersKey) }
-        guard let orders = resolve(orderResult, workspace: .liveOrders) else { return }
-        v1Orders = orders
-        let selectedID = v1Trace.map(\.order.id).flatMap { current in
-            orders.contains(where: { $0.id == current }) ? current : nil
-        } ?? orders.first?.id
-        guard let selectedID else {
-            v1Trace = nil
-            return
-        }
-        let traceKey = key()
-        let traceResult = await loadAdminWorkspace(
-            .liveOrders,
-            fallback: "The selected order trace could not be refreshed."
-        ) { try await client.trace(orderID: selectedID, idempotencyKey: traceKey) }
-        if let value = resolve(traceResult, workspace: .liveOrders) { v1Trace = value }
+        await executionModel.refreshPage()
+        if executionModel.listCurrent { recordSuccess(.liveOrders) }
+        else { recordFailure(.liveOrders, message: executionModel.message ?? "Current-generation orders could not be refreshed.") }
     }
 
     private func perform(
@@ -1191,11 +1182,11 @@ struct DastakOwnerOperationsView: View {
                             .frame(maxWidth: .infinity, minHeight: 240)
                     } else if let snapshot = model.snapshot {
                         summary(snapshot.summary)
-                        launchPaymentTrace
                         exceptions(snapshot.exceptions)
                     } else {
                         unavailable
                     }
+                    DastakAdminExecutionWorkspace(model: model.executionModel)
                 }
                 .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
                 .padding(MarketplaceSpacing.large)

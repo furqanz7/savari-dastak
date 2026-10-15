@@ -25,6 +25,15 @@ struct DastakMerchantStoreAndCatalogueView: View {
             DastakMerchantCanonicalCatalogueView(model: model)
         } else {
             VStack(spacing: 0) {
+                if model.restaurantRefreshFailure != nil {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Current Store details could not be loaded. Any older details below may be outdated.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        Button("Retry Store loading") { Task { await model.refreshAll() } }
+                            .disabled(model.isRefreshing)
+                    }
+                    .padding(MarketplaceSpacing.medium)
+                }
                 Picker("Store workspace", selection: $legacySection) {
                     ForEach(LegacySection.allCases) { section in
                         Text(section.rawValue).tag(section)

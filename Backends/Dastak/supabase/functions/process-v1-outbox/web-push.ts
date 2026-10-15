@@ -1,6 +1,7 @@
 // @deno-types="npm:@types/web-push@3.6.4"
 import webPush from "npm:web-push@3.6.7";
 import type { V1NotificationJob, V1ProviderDelivery } from "./handler.ts";
+import { offerExpiration, suppressedOffer } from "./notification-policy.ts";
 
 export type WebPushConfiguration = {
   subject: string;
@@ -13,6 +14,7 @@ type WebPushProvider = Pick<typeof webPush, "setVapidDetails" | "sendNotificatio
 export function createWebPushSender(
   configuration: WebPushConfiguration,
   provider: WebPushProvider = webPush,
+  now: () => number = Date.now,
 ) {
   if (
     !configuration.subject.startsWith("mailto:") && !configuration.subject.startsWith("https://")
@@ -26,6 +28,8 @@ export function createWebPushSender(
   );
 
   return async (job: V1NotificationJob): Promise<V1ProviderDelivery> => {
+    const expiration = offerExpiration(job, now());
+    if (expiration === 0) return suppressedOffer();
     let subscription: webPush.PushSubscription;
     try {
       subscription = parseSubscription(job.deviceToken);
@@ -46,9 +50,11 @@ export function createWebPushSender(
           },
         }),
         {
-          TTL: 300,
+          TTL: expiration === undefined
+            ? 300
+            : Math.max(0, Math.min(300, expiration - Math.ceil(now() / 1_000))),
           urgency: "high",
-          topic: job.eventId.replaceAll("-", "").slice(0, 32),
+          topic: job.deliveryId.replaceAll("-", "").slice(0, 32),
         },
       );
       return {

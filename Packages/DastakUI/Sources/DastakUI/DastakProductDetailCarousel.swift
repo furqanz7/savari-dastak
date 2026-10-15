@@ -1,3 +1,4 @@
+import MarketplaceDesignSystem
 import SwiftUI
 
 /// A full-screen product browser, not a card nested inside a system bottom sheet.
@@ -9,6 +10,7 @@ struct DastakProductDetailCarousel<Page: View>: View {
     var navigationDisabled = false
     @ViewBuilder let page: (UUID, @escaping (UUID) -> Void) -> Page
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.marketplaceHapticScope) private var haptics
     @State private var pageID: UUID?
     @State private var progress: Double
     @State private var pickerDrag: CGFloat = 0
@@ -56,7 +58,8 @@ struct DastakProductDetailCarousel<Page: View>: View {
                 .onChange(of: pageID) { _, id in
                     if let id, !navigationDisabled { selectedID = id }
                 }
-                .onChange(of: selectedID) { _, id in
+                .onChange(of: selectedID) { old, id in
+                    if old != id { haptics?.play(.selection) }
                     if pageID != id { select(id) }
                 }
                 .accessibilityIdentifier("product-card-pager")
@@ -97,7 +100,7 @@ struct DastakProductDetailCarousel<Page: View>: View {
             ForEach(Array(products.enumerated()).filter { abs(Double($0.offset) - position) < 3.4 }, id: \.element.id) { index, product in
                 let distance = Double(index) - position
                 let pose = DastakProductDetailInteraction.pickerPose(distance: distance)
-                Button { select(product.id) } label: {
+                MarketplaceFeedbackButton { select(product.id) } label: {
                     DastakProductArtwork(imageKey: product.imageKey, detail: true)
                         .padding(7)
                         .frame(width: 64, height: 64)
@@ -151,16 +154,19 @@ private struct ProductPagePositionKey: PreferenceKey {
 
 extension View {
     @ViewBuilder
-    func dastakProductOverlay<Item: Identifiable, Content: View>(item: Binding<Item?>,
+    func dastakProductOverlay<Item: Identifiable, Content: View>(item: Binding<Item?>, onDismiss: (() -> Void)? = nil,
         @ViewBuilder content: @escaping (Item) -> Content) -> some View {
 #if os(iOS)
-        fullScreenCover(item: item) { value in
+        fullScreenCover(item: item, onDismiss: onDismiss) { value in
             content(value).presentationBackground(.clear)
         }
 #else
         // Desktop gets a window-filling overlay too, never a nested sheet.
         overlay {
             if let value = item.wrappedValue { content(value) }
+        }
+        .onChange(of: item.wrappedValue?.id) { old, new in
+            if old != nil, new == nil { onDismiss?() }
         }
 #endif
     }

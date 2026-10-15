@@ -309,6 +309,13 @@ select is(
   'canonical search excludes unrelated products'
 );
 
+reset role;
+\ir fixtures/customer-area.sql.inc
+insert into public.service_zones(id,name,boundary) values
+('97000000-0000-4000-8000-000000000090','Catalogue fixture zone',extensions.st_geomfromtext('POLYGON((78 12,79 12,79 13,78 13,78 12))',4326));
+select pg_temp.available_rider('97000000-0000-4000-8000-000000000090','97000000-0000-4000-8000-000000000001');
+select pg_temp.stocked_store('97000000-0000-4000-8000-000000000090','97000000-0000-4000-8000-000000000001',(select id from dastak_v1.skus where slug='whole-milk-1-litre'),20);
+set local role authenticated;
 create temp table tap_v1_catalogue_order on commit drop as
 select public.dastak_v1_submit_order(
   'tap-catalogue-order-1',
@@ -338,7 +345,7 @@ select public.dastak_v1_submit_order(
 ) as body;
 
 select is(
-  (select body #>> '{price,totalPaise}' from tap_v1_catalogue_order),
+  (select body #>> '{price,subtotalPaise}' from tap_v1_catalogue_order),
   '13800',
   'V1 order submission consumes canonical SKU identity and authoritative price'
 );
@@ -386,10 +393,13 @@ select set_config(
 select is(
   public.dastak_v1_get_order(
     (select (body ->> 'id')::uuid from tap_v1_catalogue_order)
-  ) #>> '{price,totalPaise}',
+  ) #>> '{price,subtotalPaise}',
   '13800',
   'catalogue price changes never rewrite historical order price snapshots'
 );
+select is(public.dastak_v1_get_order((select (body->>'id')::uuid from tap_v1_catalogue_order)) #>> '{price,totalPaise}',
+ (select body #>> '{price,totalPaise}' from tap_v1_catalogue_order),
+ 'catalogue edits preserve the entire originally quoted bill including fees');
 
 select set_config(
   'request.jwt.claim.sub',

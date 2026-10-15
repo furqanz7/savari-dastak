@@ -23,3 +23,12 @@ No API endpoint, database, authentication, checkout, SKU or environment configur
 ## Release
 
 Customer-only production deployment pending at commit time. Final release evidence will be appended after provenance and signed-in browser verification; it is not a claim that the entire Dastak audit is complete.
+
+### Verified release (local evidence appended after deployment)
+
+- Committed and pushed `f3ed17f650a8289d6911ec31b8aaf8dcddb2da4a`.
+- Customer production READY: `dpl_6o1Ddu8sAuReiTgccFN12iQdWnqj`, Vite build 96 seconds, unique URL `https://dastak-l5mxsrjnk-liquiflows-projects.vercel.app`.
+- Normal address `https://dastak-customer.vercel.app` serves matching commit, Customer variant, production environment and deployment ID. CSP frame-ancestors and nosniff checks passed.
+- Signed-in browser reload loaded the new SHA and Wishlist. Profile saved-address manager opens and closes with restored opener focus; profile editor opens and Cancel returns to Profile with body unlocked. Payments loads with one main heading; no captured console errors.
+- No live account edits, address writes or payment transactions performed. Failure/retry and form-submit paths were verified with local tests, not a real production mutation.
+- All four automatic non-production builds for this exact push were cancelled while queued/building to avoid redundant builds. No other role production deployment changed. Production error-rate monitoring/log drains were not audited in this targeted pass.

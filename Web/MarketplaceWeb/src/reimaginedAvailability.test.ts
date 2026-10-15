@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { getV1AreaAvailability, type V1AreaAvailability } from "./dastakV1";
 import { areaCheckoutIssue, localGroceryEligibility } from "./reimaginedAvailability";
-import { fixtureId } from "./reimaginedCatalogue.testFixtures";
+import { fixtureId, groceryFixture } from "./reimaginedCatalogue.testFixtures";
 const location = { addressId: fixtureId(70), updatedAt: "2026-10-08T00:00:00Z" };
 export const areaFixture: V1AreaAvailability = { addressId: location.addressId, addressVersion: location.updatedAt,
   checkedAt: location.updatedAt, groceryServiceable: true, foodServiceable: true, deliveryAvailable: true,
@@ -31,6 +31,15 @@ describe("local availability contract", () => {
     expect(await getV1AreaAvailability({ ...auth, location }, fetcher)).toEqual(areaFixture);
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ operation: "customerAreaAvailability", addressId: location.addressId, addressVersion: location.updatedAt });
     expect(fetcher.mock.calls[0][1].headers.authorization).toBe("Bearer test");
+  });
+  it("decodes server ranking in order, distinguishes empty history, and rejects duplicate packs", async () => {
+    const trendingSkus = groceryFixture.catalogue.skus.slice(0, 2).reverse();
+    const load = (payload: unknown) => getV1AreaAvailability({ ...auth, location }, async () => Response.json(payload));
+    expect((await load({ ...areaFixture, trendingSkus })).trendingSkus?.map(sku => sku.id)).toEqual(trendingSkus.map(sku => sku.id));
+    expect((await load({ ...areaFixture, trendingSkus: [] })).trendingSkus).toEqual([]);
+    expect((await load(areaFixture)).trendingSkus).toBeUndefined();
+    await expect(load({ ...areaFixture, trendingSkus: [trendingSkus[0], trendingSkus[0]] })).rejects.toThrow();
+    await expect(load({ ...areaFixture, trendingSkus: "invalid" })).rejects.toThrow();
   });
   it.each([
     { ...areaFixture, addressId: fixtureId(71) }, { ...areaFixture, addressVersion: "2026-10-09T00:00:00Z" },

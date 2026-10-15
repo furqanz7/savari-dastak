@@ -83,7 +83,10 @@ Deno.test("walking and bicycle parcel methods reach server routing and pricing",
         },
         quoteParcel: (input) => {
           quotedMethod = input.deliveryMethod;
-          return Promise.resolve({ responseBody: { ...quote(), deliveryMethod }, responseStatus: 200 });
+          return Promise.resolve({
+            responseBody: { ...quote(), deliveryMethod },
+            responseStatus: 200,
+          });
         },
       }),
     );
@@ -219,7 +222,9 @@ Deno.test("assignment and lifecycle operations map to server-owned actions", asy
 Deno.test("suspended parcel acceptance remains structured and SQL-safe", async () => {
   const response = await handleParcelDeliveries(
     request({ body: { operation: "acknowledgeAssignment", assignmentId } }),
-    dependencies({ acknowledgeAssignment: () => Promise.reject(new Error("RIDER_GOVERNANCE_SUSPENDED")) }),
+    dependencies({
+      acknowledgeAssignment: () => Promise.reject(new Error("RIDER_GOVERNANCE_SUSPENDED")),
+    }),
   );
   await assertError(response, 409, "rider_governance_suspended");
 });

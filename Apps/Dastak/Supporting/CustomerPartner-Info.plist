@@ -2,6 +2,31 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key><string>com.dastak.app.quick.search</string>
+			<key>UIApplicationShortcutItemTitle</key><string>Search</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key><string>magnifyingglass</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key><string>com.dastak.app.quick.grocery</string>
+			<key>UIApplicationShortcutItemTitle</key><string>Grocery</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key><string>basket</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key><string>com.dastak.app.quick.food</string>
+			<key>UIApplicationShortcutItemTitle</key><string>Food</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key><string>fork.knife</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key><string>com.dastak.app.quick.tracking</string>
+			<key>UIApplicationShortcutItemTitle</key><string>Track Order</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key><string>scooter</string>
+		</dict>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -82,7 +107,7 @@
 	<key>MarketplaceTermsURL</key>
 	<string>$(MARKETPLACE_TERMS_URL)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Dastak uses your location for delivery addresses. During an assigned delivery, your precise location is shared with that order’s customer and merchants, including while using another app, until the delivery ends.</string>
+	<string>Dastak uses your location for delivery addresses. With your permission, approximate location also connects the sign-in scenery to local weather. During an assigned delivery, your precise location is shared with that order’s customer and merchants, including while using another app, until the delivery ends.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

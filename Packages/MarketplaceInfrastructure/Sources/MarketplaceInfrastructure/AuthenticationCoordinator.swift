@@ -84,23 +84,48 @@ public final class AuthenticationCoordinator: ObservableObject {
 
     private let client: any AuthenticationClient
     private var pendingProfileSubmission: PendingProfileSubmission?
+    private var restorationGeneration = 0
 
     public init(client: any AuthenticationClient) {
         self.client = client
     }
 
     public func restore() async {
+        restorationGeneration += 1
+        let generation = restorationGeneration
         isRestoring = true
         restorationFailed = false
-        defer { isRestoring = false }
+        defer {
+            if generation == restorationGeneration { isRestoring = false }
+        }
         do {
-            route = try await client.restoreAccount()
+            let restoredRoute = try await client.restoreAccount()
+            guard generation == restorationGeneration, !Task.isCancelled else { return }
+            route = restoredRoute
         } catch {
+            guard generation == restorationGeneration, !Task.isCancelled else { return }
+            restorationFailed = true
+        }
+    }
+
+    /// A generic registry rejection may mean an outage, expired JWT or revoked
+    /// Dastak session. Block app access until verified; do not erase credentials.
+    func sessionVerificationFailed(_ error: Error) {
+        restorationGeneration += 1
+        isRestoring = false
+        if case FunctionClientError.authenticationRequired = error {
+            restorationFailed = false
+            pendingProfileSubmission = nil
+            profileSubmissionError = nil
+            route = .signedOut
+        } else {
             restorationFailed = true
         }
     }
 
     public func signInWithApple(identityToken: String, nonce: String) async throws {
+        restorationGeneration += 1
+        isRestoring = false
         route = .signedOut
         restorationFailed = false
         try await client.signInWithApple(identityToken: identityToken, nonce: nonce)
@@ -115,6 +140,8 @@ public final class AuthenticationCoordinator: ObservableObject {
     public func signInWithGoogle(
         configuration: OAuthCallbackConfiguration = OAuthCallbackConfiguration(bundle: .main)
     ) async throws -> String? {
+        restorationGeneration += 1
+        isRestoring = false
         route = .signedOut
         restorationFailed = false
         let callbackURL = try configuration.callbackURL()
@@ -190,6 +217,8 @@ public final class AuthenticationCoordinator: ObservableObject {
     }
 
     public func signOut() async throws {
+        restorationGeneration += 1
+        isRestoring = false
         try await client.signOut()
         pendingProfileSubmission = nil
         profileSubmissionError = nil

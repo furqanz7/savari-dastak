@@ -1,5 +1,6 @@
 import { importPKCS8, SignJWT } from "npm:jose@5";
 import type { V1NotificationJob, V1ProviderDelivery } from "./handler.ts";
+import { offerExpiration, suppressedOffer } from "./notification-policy.ts";
 
 export type ApnsConfiguration = {
   environment: "sandbox" | "production";
@@ -26,6 +27,10 @@ export function createApnsSender(
     return cachedToken.value;
   };
   return async (job: V1NotificationJob): Promise<V1ProviderDelivery> => {
+    if (offerExpiration(job, now()) === 0) return suppressedOffer();
+    const authorization = `bearer ${await providerToken()}`;
+    const expiration = offerExpiration(job, now());
+    if (expiration === 0) return suppressedOffer();
     const environment = job.apnsEnvironment ?? configuration.environment;
     const topic = job.applicationId ?? configuration.bundleId;
     const endpoint = environment === "production"
@@ -35,12 +40,15 @@ export function createApnsSender(
       method: "POST",
       signal: AbortSignal.timeout(8_000),
       headers: {
-        authorization: `bearer ${await providerToken()}`,
+        authorization,
         "apns-topic": topic,
         "apns-push-type": "alert",
         "apns-priority": "10",
         "apns-id": job.deliveryId,
-        "apns-collapse-id": job.eventId,
+        // Stable across retries of this alert, distinct across Customer/Rider
+        // alerts originating from the same domain event on the same device.
+        "apns-collapse-id": job.deliveryId,
+        ...(expiration === undefined ? {} : { "apns-expiration": String(expiration) }),
         "content-type": "application/json",
       },
       body: JSON.stringify({

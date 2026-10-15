@@ -53,6 +53,7 @@ import {
   type ParcelPartnerSnapshot,
 } from "./parcels";
 import { RoleAccountView } from "./RoleAccountView";
+import { DeliveryOrderDetailPanel } from "./DeliveryOrderDetail";
 import { RoyaltyPanel } from "./RoyaltyPanel";
 import { RefreshCoalescer, RefreshQueue, useOrderRealtime, type OrderRealtimeHealth } from "./orderRealtime";
 import {
@@ -891,6 +892,9 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
       <div className="rider-desk">
       <div className="rider-mission-column" aria-label="Current delivery work">
           {v1Dispatch.returnMission && (
+            <DeliveryOrderDetailPanel auth={auth} kind="RETURN" workId={v1Dispatch.returnMission.id} />
+          )}
+          {v1Dispatch.returnMission && (
             <CurrentV1ReturnMission
               mission={v1Dispatch.returnMission}
               busy={Boolean(busy)}
@@ -901,6 +905,9 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
             />
           )}
 
+          {v1Dispatch.currentMission && !v1Dispatch.returnMission && (
+            <DeliveryOrderDetailPanel auth={auth} kind="V1_DELIVERY" workId={v1Dispatch.currentMission.id} />
+          )}
           {v1Dispatch.currentMission && !v1Dispatch.returnMission && (
             <CurrentV1Mission
               mission={v1Dispatch.currentMission}
@@ -940,6 +947,8 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
           )}
 
           {!v1Dispatch.currentMission && !v1Dispatch.returnMission && dispatch.currentJob && (
+            <>
+            <DeliveryOrderDetailPanel auth={auth} kind="LEGACY_DELIVERY" workId={dispatch.currentJob.assignmentId} />
             <CurrentDelivery
               assignment={dispatch.currentJob}
               busy={Boolean(busy)}
@@ -947,9 +956,12 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
               onVerificationCode={setVerificationCode}
               onAction={(action, code) => void runDispatchAction(dispatch.currentJob!, action, code)}
             />
+            </>
           )}
 
           {!v1Dispatch.currentMission && !v1Dispatch.returnMission && parcelDispatch.currentJob && (
+            <>
+            <DeliveryOrderDetailPanel auth={auth} kind="PARCEL" workId={parcelDispatch.currentJob.assignmentId} />
             <CurrentParcel
               assignment={parcelDispatch.currentJob}
               busy={Boolean(busy)}
@@ -957,6 +969,7 @@ export function DeliveryPartnerView({ accessToken, accountId, client, displayNam
               onVerificationCode={setVerificationCode}
               onAction={(operation, code) => void runParcelAction(parcelDispatch.currentJob!, operation, code)}
             />
+            </>
           )}
 
           {!v1Dispatch.offer && !v1Dispatch.currentMission && !v1Dispatch.returnMission && dispatch.offer && (
@@ -1072,6 +1085,7 @@ export function DeliveryHistoryPanel({ auth, onOpenEarnings, onSessionExpired }:
           <small>{humanizeDeliveryStatus(item.status)}</small>
           {item.payoutPaise !== null ? <span>{formatPrice(item.payoutPaise)}</span> : null}
         </div>
+        <DeliveryOrderDetailPanel auth={auth} kind={item.kind} workId={item.workId} />
       </article>)}
     </div> : null}
     <button className="delivery-history-earnings" type="button" onClick={onOpenEarnings}><WalletCards size={18} /> Open earnings ledger</button>

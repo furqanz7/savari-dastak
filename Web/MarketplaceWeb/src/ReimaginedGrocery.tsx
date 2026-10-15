@@ -21,12 +21,14 @@ type Props = {
   checkoutContent: ReactNode;
   availabilityNotice?: ReactNode;
   trending?: GroceryTrending;
+  trendingStatus?: "loading" | "ready" | "unavailable" | "location_required";
+  onRetryTrending?: () => void;
   searchResults?: V1CatalogueSku[]; searchLoading?: boolean; searchError?: unknown; onRetrySearch?: () => void;
   wishlist?: ReturnType<typeof useReimaginedWishlist>;
   online?: boolean;
 };
 
-export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supabaseUrl, eligibility, relatedSkuIds, checkoutContent, availabilityNotice, trending, wishlist, online = true, searchResults, searchLoading, searchError, onRetrySearch }: Props) {
+export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supabaseUrl, eligibility, relatedSkuIds, checkoutContent, availabilityNotice, trending, trendingStatus, onRetryTrending, wishlist, online = true, searchResults, searchLoading, searchError, onRetrySearch }: Props) {
   const packChoicePrefix = useId();
   const exploration = state.exploration.grocery;
   const sourceShelves = useMemo(() => exploration.view.kind === "search" && searchResults !== undefined
@@ -38,7 +40,7 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
   const trendingSkus = useMemo(() => {
     if (!data || !trending?.city.trim()) return [];
     const byId = new Map(data.catalogue.skus.map(sku => [sku.id, sku]));
-    return [...new Set(trending.skuIds)].slice(0, 12).flatMap(id => {
+    return [...new Set(trending.skuIds)].slice(0, 250).flatMap(id => {
       const sku = byId.get(id); return sku ? [sku] : [];
     });
   }, [data, trending]);
@@ -97,7 +99,11 @@ export function ReimaginedGrocery({ state, dispatch, data, status, onRetry, supa
       {trending?.preview ? <p className="reimagined-discovery-note">Preview ranking · sample products, not local order statistics.</p> : null}
       {trendingSkus.length ? <WoodenShelf shelf={{ key: "city-trending", label: trending?.preview ? "Trending in your city" : `Trending in ${trending!.city}`, skus: trendingSkus }} state={state} dispatch={dispatch} supabaseUrl={supabaseUrl} eligibility={eligibility} onQuantity={quantity} wishlist={wishlist} online={online} /> : <>
         <h2>Trending in your city</h2>
-        <div className="reimagined-trending-empty"><TrendingUp size={24} aria-hidden="true" /><div><strong>Local favourites are on their way.</strong><p>Explore the quick picks or store directory while city favourites are unavailable.</p></div></div>
+        <div className="reimagined-trending-empty"><TrendingUp size={24} aria-hidden="true" /><div>
+          <strong>{trendingStatus === "loading" ? "Finding local favourites…" : trendingStatus === "location_required" ? "Choose your delivery location." : trendingStatus === "ready" ? "No local favourites yet." : "Local favourites are on their way."}</strong>
+          <p>{trendingStatus === "ready" ? "Popular products will appear here as orders are delivered nearby." : "Explore the quick picks or store directory while city favourites are unavailable."}</p>
+          {trendingStatus === "unavailable" && onRetryTrending ? <button type="button" onClick={onRetryTrending} disabled={!online}>Retry local favourites</button> : null}
+        </div></div>
       </>}
     </section>
   </div> : <div className="reimagined-grocery-shelves">

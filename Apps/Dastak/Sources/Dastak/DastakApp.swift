@@ -1,12 +1,15 @@
 import DastakDomain
+import AppIntents
 import DastakLaunchUI
 import DastakUI
 import Foundation
 import MarketplaceFoundation
+import MarketplaceDesignSystem
 import MarketplaceInfrastructure
 import SwiftUI
 import UIKit
 import UserNotifications
+import WidgetKit
 
 @main
 struct DastakApp: App {
@@ -16,14 +19,44 @@ struct DastakApp: App {
         WindowGroup {
             DastakLaunchView(variant: .customerAndPartner) {
                 #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("-DastakUIPreview") {
-                    DastakCustomerRootView(preview: true)
+                if ProcessInfo.processInfo.arguments.contains("-DastakDeliveryHistoryPreview") {
+                    DastakDeliveryHistoryPreview()
+                        .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewLight") ? .light : .dark)
+                        .dynamicTypeSize(ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewLargeText") ? .accessibility3 : .large)
+                } else if ProcessInfo.processInfo.arguments.contains("-DastakAddressEditorPreview") {
+                    DastakAddressEditorPreview()
+                } else if ProcessInfo.processInfo.arguments.contains("-DastakHomeWidgetPreview") {
+                    DastakHomeWidgetPreview()
+                } else if ProcessInfo.processInfo.arguments.contains("-DastakCheckoutAppearancePreview") {
+                    DastakCheckoutAppearancePreview()
+                        .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewLight") ? .light : .dark)
+                } else if ProcessInfo.processInfo.arguments.contains("-DastakLiveTrackingPreview") {
+                    DastakLiveTrackingPreview()
+                } else if ProcessInfo.processInfo.arguments.contains("-DastakEnvironmentPreview") {
+                    DastakEnvironmentPreview()
+                } else if ProcessInfo.processInfo.arguments.contains("-DastakUIPreview") {
+                    DastakCustomerRootView(preview: true, shoppingFixtures: ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewShopping"))
+                        .transformEnvironment(\.dynamicTypeSize) { size in
+                            if ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewLargeText") {
+                                size = .accessibility3
+                            }
+                        }
+                        .transformEnvironment(\.colorScheme) { scheme in
+                            // Local-only visual check without changing simulator preferences.
+                            if ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewLight") {
+                                scheme = .light
+                            }
+                        }
+                        .frame(maxWidth: ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewNarrow") ? 320 : .infinity)
                 } else {
                     authenticatedRoot
                 }
                 #else
                 authenticatedRoot
                 #endif
+            }
+            .onOpenURL { url in
+                if let action = DastakAppAction(url: url) { DastakAppActionInbox().request(action) }
             }
         }
     }
@@ -40,6 +73,20 @@ struct DastakApp: App {
             },
             restrictedContent: { _, _ in EmptyView() }
         )
+        .onOpenURL { url in
+            guard url.scheme == "com.dastak.app", url.host == "order",
+                  let id = url.pathComponents.last, UUID(uuidString: id) != nil else { return }
+            if URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: {
+                $0.name == "action" && $0.value == "call-rider"
+            }) == true {
+                UserDefaults.standard.set(id, forKey: "dastak.liveActivity.pendingCallOrder")
+            }
+            DastakNotificationRoute.open(type: "dastakV1Order", id: id)
+        }
+        .environment(\.marketplaceAuthenticationBackdrop, {
+            AnyView(DastakNativeEnvironment(place: .outside).dastakFirstLaunchWeather())
+        })
+        .marketplaceHaptics()
     }
 }
 
@@ -51,6 +98,18 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        DastakAppShortcuts.updateAppShortcutParameters()
+        if #available(iOS 18.0, *) {
+            let key = "dastak.controls.lastReloadedBuild"
+            if let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+               UserDefaults.standard.string(forKey: key) != build {
+                // Refresh existing control content once per installed build;
+                // retain the user's Control Centre/Lock Screen placements.
+                ControlCenter.shared.reloadAllControls()
+                WidgetCenter.shared.reloadAllTimelines()
+                UserDefaults.standard.set(build, forKey: key)
+            }
+        }
         notificationInbox.clear()
         UserDefaults.standard.removeObject(forKey: "dastak.apns.deviceToken")
         #if DEBUG
@@ -63,6 +122,13 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         notificationInbox.clear()
+    }
+
+    func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: session.role)
+        configuration.delegateClass = DastakQuickActionSceneDelegate.self
+        return configuration
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
@@ -102,6 +168,31 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
             from: response.notification.request.content.userInfo
         ) else { return }
         DastakNotificationRoute.open(type: route.type, id: route.id)
+    }
+}
+
+final class DastakQuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        // Re-advertise after the foreground scene is connected, not only during
+        // early process launch. This also refreshes registration after an update
+        // when the app is resumed rather than launched from scratch.
+        DastakAppShortcuts.updateAppShortcutParameters()
+    }
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        if let item = connectionOptions.shortcutItem { _ = open(item) }
+    }
+
+    func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        completionHandler(open(shortcutItem))
+    }
+
+    private func open(_ item: UIApplicationShortcutItem) -> Bool {
+        guard let action = DastakAppAction(shortcutType: item.type) else { return false }
+        DastakAppActionInbox().request(action)
+        return true
     }
 }
 
@@ -314,12 +405,20 @@ private struct DastakCustomerPartnerRoot: View {
                     // Active GPS uploads already return the authoritative
                     // mission snapshot. Poll quickly only while waiting for an
                     // assignment; use a quiet reconciliation while tracking.
-                    let interval = deliveryTracker.mission == nil ? 15.0 : 45.0
+                    let interval = deliveryTracker.mission == nil && deliveryTracker.returnMission == nil ? 15.0 : 45.0
                     try? await Task.sleep(for: .seconds(interval))
+                }
+            }
+            .task(id: model.rootState.deliveryPartnerAccess) {
+                guard model.rootState.deliveryPartnerAccess == .approved else { return }
+                while !Task.isCancelled {
+                    if scenePhase == .active { await deliveryTracker.heartbeat() }
+                    try? await Task.sleep(for: .seconds(30))
                 }
             }
             .onDisappear { deliveryTracker.stop() }
             .task {
+                if DastakAppActionInbox().peek() != nil { model.select(.customer) }
                 guard !model.hasLoadedPartnerAccess else { return }
                 await model.refreshPartnerAccess()
             }
@@ -330,6 +429,11 @@ private struct DastakCustomerPartnerRoot: View {
             .onReceive(NotificationCenter.default.publisher(for: DastakNotificationRoute.orderOpened)) { event in
                 guard event.userInfo?["entityType"] as? String == "delivery" else { return }
                 Task { await openPendingDeliveryNotification() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: DastakAppActionInbox.opened)) { _ in
+                guard DastakAppActionInbox().peek() != nil else { return }
+                showingMerchantApplication = false
+                model.select(.customer)
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
@@ -425,6 +529,7 @@ private struct DastakCustomerPartnerRoot: View {
                     )
                 }
             }
+            .environment(\.marketplaceHapticScope, nil)
         case .merchant, .admin:
             EmptyView()
         }

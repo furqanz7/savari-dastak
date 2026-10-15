@@ -263,6 +263,12 @@ insert into dastak_v1.merchant_users (
   '98000000-0000-4000-8000-000000000003'
 );
 
+\ir fixtures/customer-area.sql.inc
+insert into public.service_zones(id,name,boundary) values
+('98000000-0000-4000-8000-000000000090','Batch fixture zone',extensions.st_geomfromtext('POLYGON((78 12,79 12,79 13,78 13,78 12))',4326));
+select pg_temp.available_rider('98000000-0000-4000-8000-000000000090','98000000-0000-4000-8000-000000000003');
+select pg_temp.stocked_store('98000000-0000-4000-8000-000000000090','98000000-0000-4000-8000-000000000003','98000000-0000-4000-8000-000000000012',20);
+
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
@@ -278,7 +284,7 @@ select public.dastak_v1_submit_order(
     'deliveryAddress', pg_catalog.jsonb_build_object(
       'line1', '1 Batch One Road',
       'city', 'Vaniyambadi',
-      'countryCode', 'IN'
+      'countryCode', 'IN', 'latitude',12.68,'longitude',78.62
     ),
     'recipient', pg_catalog.jsonb_build_object(
       'name', 'V1 Customer One',
@@ -323,7 +329,7 @@ select is(
         'deliveryAddress', pg_catalog.jsonb_build_object(
           'line1', '1 Batch One Road',
           'city', 'Vaniyambadi',
-          'countryCode', 'IN'
+          'countryCode', 'IN', 'latitude',12.68,'longitude',78.62
         ),
         'recipient', pg_catalog.jsonb_build_object(
           'name', 'V1 Customer One',
@@ -364,7 +370,7 @@ select throws_ok(
 );
 
 select is(
-  (select body #>> '{price,totalPaise}' from tap_v1_submit),
+  (select body #>> '{price,subtotalPaise}' from tap_v1_submit),
   '1800',
   'submitOrder snapshots the authoritative canonical SKU price'
 );

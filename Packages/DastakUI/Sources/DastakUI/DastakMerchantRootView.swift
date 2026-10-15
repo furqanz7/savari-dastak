@@ -39,6 +39,7 @@ public struct DastakMerchantRootView: View {
         }
         .tint(MarketplaceColors.dastakAccent.color)
         .marketplacePage()
+        .safeAreaInset(edge: .top) { DastakMerchantJournalBanner(model: model) }
         .onChange(of: section) { _, selectedSection in
             Task {
                 switch selectedSection {
@@ -46,7 +47,7 @@ public struct DastakMerchantRootView: View {
                     await model.refreshOrders()
                 case .store:
                     async let retail: Void = model.refreshCanonicalCatalogue(reportFailure: false)
-                    async let restaurant: Void = model.refreshRestaurantMenu(reportFailure: false)
+                    async let restaurant = model.refreshRestaurantMenu(reportFailure: false)
                     _ = await (retail, restaurant)
                 case .account:
                     await model.notifications.refresh()

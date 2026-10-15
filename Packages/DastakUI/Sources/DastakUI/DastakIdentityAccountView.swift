@@ -219,7 +219,7 @@ public struct DastakIdentityAccountView: View {
     }
 
     private var identity: some View {
-        Button { showsProfileEditor = true } label: {
+        MarketplaceFeedbackButton { showsProfileEditor = true } label: {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
                 HStack(spacing: MarketplaceSpacing.medium) {
                     Text(profileInitials)
@@ -384,7 +384,7 @@ public struct DastakIdentityAccountView: View {
             Text("Preferences").font(MarketplaceTypography.sectionTitle)
             VStack(spacing: 0) {
                 if roleName != "Delivery Partner" {
-                    NavigationLink {
+                    MarketplaceFeedbackNavigationLink {
                         DastakRoleAccessView(roleName: roleName, accessLabel: accessLabel)
                     } label: {
                         row(
@@ -397,7 +397,7 @@ public struct DastakIdentityAccountView: View {
                     .buttonStyle(.plain)
                     Divider()
                 }
-                NavigationLink {
+                MarketplaceFeedbackNavigationLink {
                     DastakNotificationSettingsView(
                         roleName: roleName,
                         status: $notificationStatus
@@ -412,7 +412,7 @@ public struct DastakIdentityAccountView: View {
                 }
                 .buttonStyle(.plain)
                 Divider()
-                NavigationLink {
+                MarketplaceFeedbackNavigationLink {
                     DastakPrivacyAndDataView(roleName: roleName)
                 } label: {
                     row(
@@ -432,7 +432,7 @@ public struct DastakIdentityAccountView: View {
     private var merchantWorkspace: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             Text("Store workspace").font(MarketplaceTypography.sectionTitle)
-            Button(action: openWorkspace) {
+            MarketplaceFeedbackButton(action: openWorkspace) {
                 row(
                     title: "Manage your store",
                     value: "Catalogue, availability and store details",
@@ -450,7 +450,7 @@ public struct DastakIdentityAccountView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             Text("Support and safety").font(MarketplaceTypography.sectionTitle)
             VStack(spacing: 0) {
-                Button(action: openWorkspace) {
+                MarketplaceFeedbackButton(action: openWorkspace) {
                     row(
                         title: "Delivery workspace",
                         value: "Open your current assignment",
@@ -525,7 +525,7 @@ public struct DastakIdentityAccountView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             Text("Account controls").font(MarketplaceTypography.sectionTitle)
             VStack(spacing: 0) {
-                NavigationLink {
+                MarketplaceFeedbackNavigationLink {
                     DastakAccountSessionsView(
                         client: accountSessionClient,
                         applicationName: sessionApplicationName
@@ -540,7 +540,7 @@ public struct DastakIdentityAccountView: View {
                 }
                 .buttonStyle(.plain)
                 Divider().padding(.leading, 56)
-                Button { accountAlert = .signOut } label: {
+                MarketplaceFeedbackButton { accountAlert = .signOut } label: {
                     row(
                         title: "Sign out",
                         value: "End this session on this device",
@@ -550,7 +550,7 @@ public struct DastakIdentityAccountView: View {
                 }
                 if allowsAccountDeletion {
                     Divider().padding(.leading, 56)
-                    Button(role: .destructive) { accountAlert = .deleteAccount } label: {
+                    MarketplaceFeedbackButton(role: .destructive) { accountAlert = .deleteAccount } label: {
                         row(
                             title: model.isDeleting ? "Deleting \(roleName)..." : "Delete \(roleName)",
                             value: "Remove only this \(roleName.lowercased()) profile and access",
@@ -998,7 +998,7 @@ private struct DastakNotificationSettingsView: View {
                     .marketplaceFlatSurface()
                 }
 
-                Button(action: managePermission) {
+                MarketplaceFeedbackButton(action: managePermission) {
                     HStack {
                         if isRequesting { ProgressView().tint(.black) }
                         Text(primaryActionTitle)

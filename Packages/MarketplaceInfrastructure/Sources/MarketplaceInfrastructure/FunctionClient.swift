@@ -16,7 +16,13 @@ public protocol FunctionClient: Sendable {
         file: FunctionUpload,
         idempotencyKey: IdempotencyKey
     ) async throws -> Response
+    func invokeMultipartSingleAttempt<Response: Decodable & Sendable>(_ name: String, fields: [String: String], file: FunctionUpload, idempotencyKey: IdempotencyKey) async throws -> Response
 }
+
+/// Privileged recovery mutations keep retries in their durable, explicitly reviewed workflow.
+/// The marker is local only and adds no field or privilege to the HTTP request.
+public protocol SingleAttemptFunctionRequest: Encodable, Sendable { var allowsAutomaticRetries: Bool { get } }
+public extension SingleAttemptFunctionRequest { var allowsAutomaticRetries: Bool { false } }
 
 public struct FunctionUpload: Equatable, Sendable {
     public let fieldName: String
@@ -33,6 +39,9 @@ public struct FunctionUpload: Equatable, Sendable {
 }
 
 public extension FunctionClient {
+    func invokeMultipartSingleAttempt<Response: Decodable & Sendable>(_ name: String, fields: [String: String], file: FunctionUpload, idempotencyKey: IdempotencyKey) async throws -> Response {
+        try await invokeMultipart(name, fields: fields, file: file, idempotencyKey: idempotencyKey)
+    }
     func invokeMultipart<Response: Decodable & Sendable>(
         _ name: String,
         fields: [String: String],
@@ -110,7 +119,8 @@ public struct SupabaseFunctionClient: FunctionClient {
 
         let (data, response) = try await sendWithTransientRecovery(
             urlRequest,
-            endpoint: name
+            endpoint: name,
+            allowRetries: (request as? any SingleAttemptFunctionRequest)?.allowsAutomaticRetries ?? true
         )
         guard (200..<300).contains(response.statusCode) else {
             guard let payload = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data) else {
@@ -142,6 +152,12 @@ public struct SupabaseFunctionClient: FunctionClient {
         file: FunctionUpload,
         idempotencyKey: IdempotencyKey
     ) async throws -> Response {
+        try await multipart(name, fields: fields, file: file, idempotencyKey: idempotencyKey, allowRetries: true)
+    }
+    public func invokeMultipartSingleAttempt<Response: Decodable & Sendable>(_ name: String, fields: [String: String], file: FunctionUpload, idempotencyKey: IdempotencyKey) async throws -> Response {
+        try await multipart(name, fields: fields, file: file, idempotencyKey: idempotencyKey, allowRetries: false)
+    }
+    private func multipart<Response: Decodable & Sendable>(_ name: String, fields: [String: String], file: FunctionUpload, idempotencyKey: IdempotencyKey, allowRetries: Bool) async throws -> Response {
         let accessToken = try await authenticatedAccessToken()
         let boundary = "DastakBoundary-\(UUID().uuidString)"
         var body = Data()
@@ -162,7 +178,7 @@ public struct SupabaseFunctionClient: FunctionClient {
         request.setValue(configuration.publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(idempotencyKey.rawValue, forHTTPHeaderField: "X-Idempotency-Key")
-        let (data, response) = try await sendWithTransientRecovery(request, endpoint: name)
+        let (data, response) = try await sendWithTransientRecovery(request, endpoint: name, allowRetries: allowRetries)
         guard (200..<300).contains(response.statusCode) else {
             guard let payload = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data) else {
                 throw FunctionClientError.malformedErrorResponse(statusCode: response.statusCode)
@@ -177,9 +193,10 @@ public struct SupabaseFunctionClient: FunctionClient {
 
     private func sendWithTransientRecovery(
         _ request: URLRequest,
-        endpoint: String
+        endpoint: String,
+        allowRetries: Bool = true
     ) async throws -> (Data, HTTPURLResponse) {
-        let delays: [Duration] = [.milliseconds(120), .milliseconds(320)]
+        let delays: [Duration] = allowRetries ? [.milliseconds(120), .milliseconds(320)] : []
 
         for attempt in 0...delays.count {
             do {
@@ -220,7 +237,9 @@ public struct SupabaseFunctionClient: FunctionClient {
     }
 
     private func authenticatedAccessToken() async throws -> String {
+        var sessionReadError: Error?
         for attempt in 0..<2 {
+            try Task.checkCancellation()
             do {
                 if let token = try await accessTokenProvider()?
                     .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -228,13 +247,20 @@ public struct SupabaseFunctionClient: FunctionClient {
                 {
                     return token
                 }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as URLError where error.code == .cancelled {
+                throw error
             } catch {
                 // A restored mobile session can briefly be unavailable while
                 // the auth client publishes its initial local session. Make
-                // one bounded second read; a real missing session still fails.
+                // one bounded second read. Uncertainty must never be converted
+                // into a missing session (and consequently a forced sign-out).
+                sessionReadError = error
             }
             if attempt == 0 { await Task.yield() }
         }
+        if let sessionReadError { throw sessionReadError }
         throw FunctionClientError.authenticationRequired
     }
 
@@ -264,7 +290,9 @@ public struct SupabaseFunctionClient: FunctionClient {
 
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.waitsForConnectivity = true
+        // Foreground actions need an immediate offline result so their owning
+        // screen can reconcile/retry, not an invisible connectivity wait.
+        configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 30
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData

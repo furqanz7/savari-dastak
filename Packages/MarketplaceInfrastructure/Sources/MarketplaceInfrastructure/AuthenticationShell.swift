@@ -133,7 +133,7 @@ private final class AuthenticationShellModel: ObservableObject {
                 }
             ),
             accountIDProvider: {
-                guard let accountID = await operations.currentAccountID() else {
+                guard let accountID = try await operations.currentAccountID() else {
                     throw MarketplaceAuthenticatedServicesError.authenticationRequired
                 }
                 return accountID
@@ -164,6 +164,9 @@ private final class AuthenticationShellModel: ObservableObject {
                     provider: provider,
                     redirectTo: try OAuthCallbackConfiguration(bundle: bundle).callbackURL()
                 )
+            },
+            sessionRefresher: {
+                try await operations.refreshCurrentSession()
             }
         )
     }
@@ -282,13 +285,15 @@ public struct MarketplaceAuthenticationShell: View {
                     showsPersistentSignOut: showsPersistentSignOut,
                     activeContent: sessionRegistered(
                         activeContent(services),
-                        services: services
+                        services: services,
+                        coordinator: coordinator
                     ),
                     restrictedContent: restrictedContent.map { content in
                         { route in
                             sessionRegistered(
                                 content(route, services),
-                                services: services
+                                services: services,
+                                coordinator: coordinator
                             )
                         }
                     }
@@ -301,14 +306,17 @@ public struct MarketplaceAuthenticationShell: View {
 
     private func sessionRegistered(
         _ content: AnyView,
-        services: MarketplaceAuthenticatedServices
+        services: MarketplaceAuthenticatedServices,
+        coordinator: AuthenticationCoordinator
     ) -> AnyView {
         guard product == .dastak else { return content }
         return AnyView(
             content.modifier(
                 DastakSessionRegistrationModifier(
                     client: SupabaseAccountSessionClient(functions: services.functions),
-                    applicationName: applicationName
+                    applicationName: applicationName,
+                    coordinator: coordinator,
+                    refreshSession: { try await services.refreshSession() }
                 )
             )
         )
@@ -318,17 +326,34 @@ public struct MarketplaceAuthenticationShell: View {
 private struct DastakSessionRegistrationModifier: ViewModifier {
     let client: any AccountSessionClient
     let applicationName: String
+    let coordinator: AuthenticationCoordinator
+    let refreshSession: @Sendable () async throws -> Void
 
     @State private var hasRegistered = false
 
     func body(content: Content) -> some View {
-        content.task {
+        Group {
+            if hasRegistered {
+                content
+            } else {
+                ProgressView("Checking your sign-in")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
             guard !hasRegistered else { return }
-            hasRegistered = true
-            _ = try? await client.snapshot(
-                device: currentDevice,
-                idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
-            )
+            do {
+                try await DastakSessionVerifier.verify(
+                    client: client,
+                    device: currentDevice,
+                    refreshSession: refreshSession
+                )
+                try Task.checkCancellation()
+                hasRegistered = true
+            } catch {
+                guard !Task.isCancelled else { return }
+                coordinator.sessionVerificationFailed(error)
+            }
         }
     }
 
@@ -360,6 +385,9 @@ private struct DefaultMarketplaceActiveView: View {
 }
 
 private struct AuthenticationRouteView: View {
+    @Environment(\.marketplaceAuthenticationBackdrop) private var authenticationBackdrop
+    @Environment(\.marketplaceHapticScope) private var haptics
+    @ScaledMetric(relativeTo: .title2) private var customerWelcomeSize: CGFloat = 24
     private enum SignInProvider: String {
         case apple = "Apple"
         case google = "Google"
@@ -409,6 +437,9 @@ private struct AuthenticationRouteView: View {
             if product == .dastak, route == .needsProfile, phoneNumber.isEmpty {
                 phoneNumber = "+91"
             }
+        }
+        .onChange(of: errorMessage) { message in
+            if message != nil { haptics?.play(identityRecoveryComplete ? .warning : .error) }
         }
         .task(id: coordinator.route) {
             guard requiredAccess == .dastakAdmin, coordinator.route == .accessDenied else {
@@ -469,12 +500,12 @@ private struct AuthenticationRouteView: View {
                 Text("Unable to check your account")
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
-                Text("Check your connection and try again. Your saved sign-in has not been removed.")
+                Text("We couldn't verify your sign-in. Check your connection and try again, or sign out to sign in again. Your saved sign-in has not been removed.")
                     .font(.subheadline)
                     .foregroundStyle(product == .dastak ? dastakSecondaryText : Color.white.opacity(0.72))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 330)
-                Button("Try again") {
+                MarketplaceFeedbackButton("Try again") {
                     errorMessage = nil
                     Task { await coordinator.restore() }
                 }
@@ -485,7 +516,7 @@ private struct AuthenticationRouteView: View {
                 .background(product == .dastak ? dastakAccent : .white)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .buttonStyle(.plain)
-                Button("Sign out") { showsSignOutConfirmation = true }
+                MarketplaceFeedbackButton("Sign out") { showsSignOutConfirmation = true }
                     .foregroundStyle(.secondary)
                 if let errorMessage {
                     Text(errorMessage)
@@ -585,7 +616,8 @@ private struct AuthenticationRouteView: View {
         ZStack {
             Group {
                 if requiredAccess == .dastakCustomer {
-                    DastakMatteBackground(style: .dark)
+                    if let authenticationBackdrop { authenticationBackdrop() }
+                    else { DastakMatteBackground(style: .dark) }
                 } else {
                     dastakCanvas
                 }
@@ -641,7 +673,7 @@ private struct AuthenticationRouteView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") { dismissKeyboard() }
+                MarketplaceFeedbackButton("Done") { dismissKeyboard() }
             }
         }
 #endif
@@ -665,7 +697,7 @@ private struct AuthenticationRouteView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") { dismissKeyboard() }
+                MarketplaceFeedbackButton("Done") { dismissKeyboard() }
             }
         }
 #endif
@@ -684,72 +716,18 @@ private struct AuthenticationRouteView: View {
         GeometryReader { proxy in
             let compact = proxy.size.height < 900
             VStack(alignment: .leading, spacing: 0) {
-                    dastakCustomerBrandHeader(compact: compact)
-
-                    VStack(alignment: .leading, spacing: compact ? 8 : 14) {
-                        Text("WELCOME TO DASTAK")
-                            .font(.caption2.weight(.bold))
-                            .tracking(1.7)
-                            .foregroundStyle(dastakAccent)
-
-                        Text("Everything you need,\nthoughtfully delivered.")
-                            .font(MarketplaceTypography.instrumentSerif(size: compact ? 36 : 44))
-                            .foregroundStyle(.white)
-                            .lineSpacing(-2)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Text("Food and everyday essentials in one basket. We secure every item before you pay.")
-                            .font(.system(size: compact ? 14 : 16, weight: .regular))
-                            .foregroundStyle(dastakSecondaryText)
-                            .lineSpacing(compact ? 1 : 3)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, compact ? 18 : 40)
-
-                    if !compact {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 18) {
-                                dastakCustomerPromises
-                            }
-
-                            VStack(alignment: .leading, spacing: 12) {
-                                dastakCustomerPromises
-                            }
-                        }
-                        .padding(.top, 20)
-                    }
+                    dastakCustomerBrandHeader(compact: compact, showsCustomerBadge: false)
 
                     Spacer(minLength: compact ? 10 : 30)
 
                     VStack(alignment: .leading, spacing: compact ? 10 : 16) {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Continue securely")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                            if !compact {
-                                Text("Use Apple or Google to create or return to your Dastak account.")
-                                    .font(.footnote)
-                                    .foregroundStyle(dastakSecondaryText)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-
+                        Text("Welcome to Dastak")
+                            .font(.system(size: customerWelcomeSize, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .accessibilityAddTraits(.isHeader)
                         dastakSignedOutView
                         signInProgressView
                         dastakErrorView
-
-                        Divider()
-                            .overlay(Color.white.opacity(0.10))
-
-                        Label(
-                            compact
-                                ? "Phone is added later for delivery—not sign-in."
-                                : "Your phone number is added later for delivery contact—not for sign-in.",
-                            systemImage: "lock.fill"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(dastakSecondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(compact ? 14 : 18)
                     .background(dastakSurface.opacity(0.94))
@@ -760,8 +738,11 @@ private struct AuthenticationRouteView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                     .shadow(color: Color.black.opacity(0.28), radius: 28, y: 18)
 
+                    // Keep the legal footer anchored at the safe-area bottom,
+                    // Leave the entrance carpet unobscured above the panel while
+                    // retaining the legal footer at the safe-area bottom.
+                    Spacer().frame(height: compact ? 110 : 134)
                     dastakLegalLinks
-                    Spacer(minLength: compact ? 4 : 12)
                 }
                 .frame(maxWidth: 430, alignment: .topLeading)
                 .padding(.horizontal, compact ? 20 : 24)
@@ -799,11 +780,12 @@ private struct AuthenticationRouteView: View {
         }
     }
 
-    private func dastakCustomerBrandHeader(compact: Bool = false) -> some View {
+    private func dastakCustomerBrandHeader(compact: Bool = false, showsCustomerBadge: Bool = true) -> some View {
         HStack(alignment: .center, spacing: 16) {
             DastakAuthWordmark(size: compact ? 32 : 38)
             Spacer(minLength: 10)
-            Text("Customer")
+            if showsCustomerBadge {
+                Text("Customer")
                 .font(.caption2.weight(.bold))
                 .textCase(.uppercase)
                 .tracking(1.25)
@@ -816,6 +798,7 @@ private struct AuthenticationRouteView: View {
                         .stroke(dastakAccent.opacity(0.28), lineWidth: 1)
                 }
                 .clipShape(Capsule())
+            }
         }
         .padding(.top, compact ? 4 : 12)
     }
@@ -945,7 +928,7 @@ private struct AuthenticationRouteView: View {
             .signInWithAppleButtonStyle(.black)
             .frame(height: 50)
 
-            Button {
+            MarketplaceFeedbackButton {
                 Task { await signInWithGoogle() }
             } label: {
                 HStack(spacing: 10) {
@@ -961,6 +944,7 @@ private struct AuthenticationRouteView: View {
         VStack(spacing: 12) {
             SignInWithAppleButton(.continue) { request in
                 guard signingInProvider == nil else { return }
+                haptics?.play(.tap)
                 do {
                     signingInProvider = .apple
                     let nonce = try AppleSignInNonce.make()
@@ -979,7 +963,7 @@ private struct AuthenticationRouteView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .disabled(signingInProvider != nil)
 
-            Button {
+            MarketplaceFeedbackButton {
                 Task { await signInWithGoogle() }
             } label: {
                 DastakGoogleSignInLabel(title: "Continue with Google")
@@ -1054,7 +1038,7 @@ private struct AuthenticationRouteView: View {
             Text("Required profile contact. No SMS verification is used, and it is not used for payments.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button(coordinator.isProfileSubmissionInFlight ? "Completing profile" : "Complete profile") {
+            MarketplaceFeedbackButton(coordinator.isProfileSubmissionInFlight ? "Completing profile" : "Complete profile") {
                 Task { await completeProfile() }
             }
             .buttonStyle(.borderedProminent)
@@ -1124,7 +1108,7 @@ private struct AuthenticationRouteView: View {
                 }
             }
 
-            Button {
+            MarketplaceFeedbackButton {
                 dismissKeyboard()
                 Task {
                     if identityRecoveryComplete { await signOut() }
@@ -1151,7 +1135,7 @@ private struct AuthenticationRouteView: View {
             .buttonStyle(DastakPrimaryButtonStyle())
             .disabled(!profileInputIsValid || coordinator.isProfileSubmissionInFlight)
 
-            Button("Use a different account") {
+            MarketplaceFeedbackButton("Use a different account") {
                 dismissKeyboard()
                 showsSignOutConfirmation = true
             }
@@ -1210,7 +1194,7 @@ private struct AuthenticationRouteView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button(coordinator.isProfileSubmissionInFlight
+            MarketplaceFeedbackButton(coordinator.isProfileSubmissionInFlight
                 ? "Completing profile"
                 : identityRecoveryComplete
                     ? "Continue to sign in"
@@ -1226,7 +1210,7 @@ private struct AuthenticationRouteView: View {
                 !profileInputIsValid || coordinator.isProfileSubmissionInFlight
             )
 
-            Button("Use a different account") {
+            MarketplaceFeedbackButton("Use a different account") {
                 dismissKeyboard()
                 showsSignOutConfirmation = true
             }
@@ -1279,7 +1263,7 @@ private struct AuthenticationRouteView: View {
             Divider()
             HStack {
                 Spacer()
-                Button("Sign out") {
+                MarketplaceFeedbackButton("Sign out") {
                     Task { await signOut() }
                 }
                 .buttonStyle(.bordered)
@@ -1295,7 +1279,7 @@ private struct AuthenticationRouteView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Sign out") {
+            MarketplaceFeedbackButton("Sign out") {
                 Task { await signOut() }
             }
             .buttonStyle(.bordered)
@@ -1334,11 +1318,11 @@ private struct AuthenticationRouteView: View {
             } else {
                 VStack(spacing: 16) {
                     restrictedContent(route)
-                    Button("Check status") {
+                    MarketplaceFeedbackButton("Check status") {
                         Task { await coordinator.restore() }
                     }
                     .buttonStyle(.borderedProminent)
-                    Button("Sign out") {
+                    MarketplaceFeedbackButton("Sign out") {
                         showsSignOutConfirmation = true
                     }
                     .buttonStyle(.bordered)
@@ -1351,11 +1335,11 @@ private struct AuthenticationRouteView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button("Check status") {
+                MarketplaceFeedbackButton("Check status") {
                     Task { await coordinator.restore() }
                 }
                 .buttonStyle(.borderedProminent)
-                Button("Sign out") {
+                MarketplaceFeedbackButton("Sign out") {
                     showsSignOutConfirmation = true
                 }
                 .buttonStyle(.bordered)
@@ -1405,6 +1389,7 @@ private struct AuthenticationRouteView: View {
             do {
                 errorMessage = nil
                 try await coordinator.signInWithApple(identityToken: identityToken, nonce: nonce)
+                haptics?.play(.success)
             } catch {
                 errorMessage = "Apple sign-in could not be completed."
             }
@@ -1419,6 +1404,7 @@ private struct AuthenticationRouteView: View {
         do {
             errorMessage = nil
             let suggestion = try await coordinator.signInWithGoogle()
+            haptics?.play(.success)
             if displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                let suggestion {
                 displayName = suggestion
@@ -1438,6 +1424,7 @@ private struct AuthenticationRouteView: View {
                 displayName: displayName,
                 phoneNumber: phoneNumber
             )
+            haptics?.play(.success)
         } catch {
             if coordinator.profileSubmissionError?.requiresIdentityReauthentication == true {
                 identityRecoveryComplete = true

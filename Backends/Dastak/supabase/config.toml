@@ -583,3 +583,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/process-v1-outbox/index.ts"
+
+[functions.register-order-live-activity]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/register-order-live-activity/index.ts"

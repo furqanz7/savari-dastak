@@ -6,7 +6,8 @@ import { handleV1Orders } from "./handler.ts";
 Deno.serve((request) =>
   handleV1Orders(request, {
     authenticateBearer: verifyBearerSession,
-    customerActiveOrders: input => callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_active_orders", {}),
+    customerActiveOrders: (input) =>
+      callAuthenticatedRPC(input.accessToken, "dastak_v1_customer_active_orders", {}),
     submitOrder: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_submit_order", {
         p_idempotency_key: input.idempotencyKey,
@@ -280,10 +281,18 @@ Deno.serve((request) =>
         p_reason: input.reason,
         p_idempotency_key: input.idempotencyKey,
       }),
-    setAdminRestaurantCustomerVisibility: input => callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_set_restaurant_customer_visibility", {
-      p_branch_id: input.branchId, p_visible: input.visible, p_expected_version: input.expectedVersion,
-      p_reason: input.reason, p_idempotency_key: input.idempotencyKey,
-    }),
+    setAdminRestaurantCustomerVisibility: (input) =>
+      callAuthenticatedRPC(
+        input.accessToken,
+        "dastak_v1_admin_set_restaurant_customer_visibility",
+        {
+          p_branch_id: input.branchId,
+          p_visible: input.visible,
+          p_expected_version: input.expectedVersion,
+          p_reason: input.reason,
+          p_idempotency_key: input.idempotencyKey,
+        },
+      ),
     correctAdminMerchantBranchDetails: (input) =>
       callAuthenticatedRPC(input.accessToken, "dastak_v1_admin_correct_merchant_branch_details", {
         p_branch_id: input.branchId,

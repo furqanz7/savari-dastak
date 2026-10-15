@@ -52,5 +52,26 @@ address writes and checkout/fulfilment/payment remain unverified. Existing
 signed-in production session is not cleared to test signed-out presentation.
 
 TypeScript build, scoped ESLint and full suite passed: 1,003 tests in 145
-files. Customer-only release checks pending final completion. Only reproduced
-issues are changed; this does not certify every Dastak UI/UX path.
+files. Only reproduced issues are changed; this does not certify every Dastak
+UI/UX path.
+
+## Production release
+
+- Commit `34ee886d9e01cbdf857e7493f1d8e418548d5a56` pushed to
+  `codex/dastak-v1-launch`.
+- One Customer production deployment completed READY:
+  `dpl_rUkBW2x8ytUKGG4vvJhKuSMfydkj`.
+- Normal `https://dastak-customer.vercel.app/` returns HTTP 200 and matches
+  the exact SHA, Customer variant, production environment and deployment ID.
+  CSP, nosniff and DENY frame headers remain present.
+- Signed-in live browser reload stayed signed in. At 881px, the actual
+  wordmark/location gap is 14.21px and document width is exactly 881px.
+- At 390px, Craft menu → Cappuccino details → Back to menu works read-only;
+  document width is exactly 390px. No live cart/account/address writes.
+- Live proofs: `tablet-live-header.png` and `phone-live-food.png` in the
+  verification folder. Temporary responsive viewport overrides restored.
+- Exact-SHA queued Delivery preview canceled. Merchant preview had already
+  finished READY by cancellation time; Customer/Admin previews were already
+  READY. These preview builds did not replace their production deployments.
+- Release notes updated locally after deployment to avoid another push
+  triggering redundant preview builds.

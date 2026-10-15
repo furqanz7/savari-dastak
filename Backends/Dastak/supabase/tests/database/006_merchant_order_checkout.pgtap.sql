@@ -663,7 +663,7 @@ select is(
     from public.confirm_merchant_order_payment(
       (select value from checkout_test_state where key = 'order-main'),
       'provider-main',
-      24000,
+      24480,
       'payment-main',
       'digest-payment-main'
     )
@@ -868,7 +868,7 @@ select is(
     select response_status
     from public.confirm_merchant_order_payment(
       (select value from checkout_test_state where key = 'order-paid-cancel'),
-      'provider-paid-cancel', 14000,
+      'provider-paid-cancel', 14280,
       'payment-paid-cancel', 'digest-payment-paid-cancel'
     )
   ),
@@ -927,7 +927,7 @@ select is(
     select response_status
     from public.confirm_merchant_order_payment(
       (select value from checkout_test_state where key = 'order-reject'),
-      'provider-reject-order', 14000,
+      'provider-reject-order', 14280,
       'payment-reject-order', 'digest-payment-reject-order'
     )
   ),

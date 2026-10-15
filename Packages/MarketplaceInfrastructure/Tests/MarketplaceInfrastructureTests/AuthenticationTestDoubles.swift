@@ -53,6 +53,7 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
     private let accountAccessRoute: AccountRoute
     private let bootstrapResult: AccountBootstrapResult
     private let bootstrapError: BootstrapError?
+    private let sessionReadError: URLError?
     private var appleCredentials: AppleCredentials?
     private var googleIDToken: String?
     private var googleRedirectURL: URL?
@@ -69,13 +70,15 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
             accountID: UUID(),
             phoneRecorded: true
         ),
-        bootstrapError: BootstrapError? = nil
+        bootstrapError: BootstrapError? = nil,
+        sessionReadError: URLError? = nil
     ) {
         self.currentAccountID = currentAccountID
         self.profileAccountID = profileAccountID
         self.accountAccessRoute = accountAccessRoute
         self.bootstrapResult = bootstrapResult
         self.bootstrapError = bootstrapError
+        self.sessionReadError = sessionReadError
     }
 
     func signInWithApple(identityToken: String, nonce: String) async throws {
@@ -90,8 +93,9 @@ actor RecordingAuthenticationOperations: SupabaseAuthenticationOperations {
         googleRedirectURL = redirectTo
     }
 
-    func currentAccountID() async -> UUID? {
-        currentAccountID
+    func currentAccountID() async throws -> UUID? {
+        if let sessionReadError { throw sessionReadError }
+        return currentAccountID
     }
 
     func accountProfileID(for accountID: UUID) async throws -> UUID? {

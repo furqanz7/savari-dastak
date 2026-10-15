@@ -2,54 +2,127 @@ import { assertEquals } from "jsr:@std/assert";
 import { V1RequestError } from "../../_shared/v1-rpc.ts";
 import { handleV1Orders, type V1OrderDependencies } from "../../dastak-v1-orders/handler.ts";
 
-Deno.test("Customer active-order discovery forwards only the verified bearer, never an actor or order override", async()=>{
- let recorded:unknown;
- const response=await handleV1Orders(request({operation:"customerActiveOrders",actorId:"forged",orderId,limit:999}),dependencies({customerActiveOrders:input=>{recorded=input;return Promise.resolve({orders:[],totalCount:0});}}));
- assertEquals(response.status,200);assertEquals(recorded,{accessToken:actor.accessToken});
+Deno.test("Customer active-order discovery forwards only the verified bearer, never an actor or order override", async () => {
+  let recorded: unknown;
+  const response = await handleV1Orders(
+    request({ operation: "customerActiveOrders", actorId: "forged", orderId, limit: 999 }),
+    dependencies({
+      customerActiveOrders: (input) => {
+        recorded = input;
+        return Promise.resolve({ orders: [], totalCount: 0 });
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accessToken: actor.accessToken });
 });
 
 Deno.test("Admin Customer removal binds bearer identity and preserves reason/version/retry key", async () => {
   let recorded: unknown;
-  const response = await handleV1Orders(request({operation:"setAdminRestaurantCustomerVisibility",branchId:skuId,visible:false,expectedVersion:3,reason:" Reviewed removal ",actorId:"forged"},"visibility-once"), dependencies({
-    setAdminRestaurantCustomerVisibility: input => { recorded=input; return Promise.resolve({}); },
-  }));
-  assertEquals(response.status,200);
-  assertEquals(recorded,{accessToken:actor.accessToken,branchId:skuId,visible:false,expectedVersion:3,reason:"Reviewed removal",idempotencyKey:"visibility-once"});
+  const response = await handleV1Orders(
+    request({
+      operation: "setAdminRestaurantCustomerVisibility",
+      branchId: skuId,
+      visible: false,
+      expectedVersion: 3,
+      reason: " Reviewed removal ",
+      actorId: "forged",
+    }, "visibility-once"),
+    dependencies({
+      setAdminRestaurantCustomerVisibility: (input) => {
+        recorded = input;
+        return Promise.resolve({});
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    branchId: skuId,
+    visible: false,
+    expectedVersion: 3,
+    reason: "Reviewed removal",
+    idempotencyKey: "visibility-once",
+  });
 });
 Deno.test("Admin Customer removal rejects invalid booleans, versions, reasons and missing keys", async () => {
-  let calls=0;
-  const deps=dependencies({setAdminRestaurantCustomerVisibility:()=>{calls++;return Promise.resolve({});}});
-  const valid={operation:"setAdminRestaurantCustomerVisibility",branchId:skuId,visible:false,expectedVersion:3,reason:"Reviewed"};
-  for(const body of [{...valid,visible:"false"},{...valid,expectedVersion:0},{...valid,branchId:"bad"},{...valid,reason:""}]) assertEquals((await handleV1Orders(request(body,"once"),deps)).status,400);
-  assertEquals((await handleV1Orders(request(valid),deps)).status,400);
-  assertEquals(calls,0);
+  let calls = 0;
+  const deps = dependencies({
+    setAdminRestaurantCustomerVisibility: () => {
+      calls++;
+      return Promise.resolve({});
+    },
+  });
+  const valid = {
+    operation: "setAdminRestaurantCustomerVisibility",
+    branchId: skuId,
+    visible: false,
+    expectedVersion: 3,
+    reason: "Reviewed",
+  };
+  for (
+    const body of [{ ...valid, visible: "false" }, { ...valid, expectedVersion: 0 }, {
+      ...valid,
+      branchId: "bad",
+    }, { ...valid, reason: "" }]
+  ) assertEquals((await handleV1Orders(request(body, "once"), deps)).status, 400);
+  assertEquals((await handleV1Orders(request(valid), deps)).status, 400);
+  assertEquals(calls, 0);
 });
 
 Deno.test("admin cancellation binds authenticated identity and forwards audited intent", async () => {
   let recorded: unknown;
-  const response = await handleV1Orders(request({
-    operation: "adminCancelOrder", orderId, reason: "  Owner requested cancellation  ",
-    expectedVersion: 5, actorId: "untrusted", status: "DELIVERED", stockQuantity: 999,
-  }, "admin-cancel-once"), dependencies({
-    adminCancelOrder: (input) => {
-      recorded = input;
-      return Promise.resolve({ orderId, status: "CANCELLED", version: 6 });
-    },
-  }));
+  const response = await handleV1Orders(
+    request({
+      operation: "adminCancelOrder",
+      orderId,
+      reason: "  Owner requested cancellation  ",
+      expectedVersion: 5,
+      actorId: "untrusted",
+      status: "DELIVERED",
+      stockQuantity: 999,
+    }, "admin-cancel-once"),
+    dependencies({
+      adminCancelOrder: (input) => {
+        recorded = input;
+        return Promise.resolve({ orderId, status: "CANCELLED", version: 6 });
+      },
+    }),
+  );
   assertEquals(response.status, 200);
-  assertEquals(recorded, { accessToken: actor.accessToken, orderId,
-    reason: "Owner requested cancellation", expectedVersion: 5, idempotencyKey: "admin-cancel-once" });
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    orderId,
+    reason: "Owner requested cancellation",
+    expectedVersion: 5,
+    idempotencyKey: "admin-cancel-once",
+  });
 });
 
 Deno.test("admin cancellation rejects invalid identity reason version and missing retry key", async () => {
   let calls = 0;
-  const deps = dependencies({ adminCancelOrder: () => { calls += 1; return Promise.resolve({}); } });
-  const valid = { operation: "adminCancelOrder", orderId, reason: "Owner requested cancellation", expectedVersion: 5 };
-  for (const body of [
-    { ...valid, orderId: "bad" }, { ...valid, reason: "short" },
-    { ...valid, reason: "x".repeat(501) }, { ...valid, expectedVersion: 0 },
-    { ...valid, expectedVersion: 1.5 }, { ...valid, expectedVersion: null },
-  ]) {
+  const deps = dependencies({
+    adminCancelOrder: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+  });
+  const valid = {
+    operation: "adminCancelOrder",
+    orderId,
+    reason: "Owner requested cancellation",
+    expectedVersion: 5,
+  };
+  for (
+    const body of [
+      { ...valid, orderId: "bad" },
+      { ...valid, reason: "short" },
+      { ...valid, reason: "x".repeat(501) },
+      { ...valid, expectedVersion: 0 },
+      { ...valid, expectedVersion: 1.5 },
+      { ...valid, expectedVersion: null },
+    ]
+  ) {
     assertEquals((await handleV1Orders(request(body, "cancel-key"), deps)).status, 400);
   }
   assertEquals((await handleV1Orders(request(valid), deps)).status, 400);
@@ -57,11 +130,22 @@ Deno.test("admin cancellation rejects invalid identity reason version and missin
 });
 
 Deno.test("legacy customer builds can read cancelled orders without changing canonical data", async () => {
-  const cancelled = { id: orderId, status: "CANCELLED", version: 6, launchPayment: { state: "NOT_APPLICABLE" } };
-  const deps = dependencies({ getOrder: () => Promise.resolve(cancelled),
-    listOrders: () => Promise.resolve({ orders: [cancelled, orderSnapshot], nextCursor: null }) });
+  const cancelled = {
+    id: orderId,
+    status: "CANCELLED",
+    version: 6,
+    launchPayment: { state: "NOT_APPLICABLE" },
+  };
+  const deps = dependencies({
+    getOrder: () => Promise.resolve(cancelled),
+    listOrders: () => Promise.resolve({ orders: [cancelled, orderSnapshot], nextCursor: null }),
+  });
   const single = await body(await handleV1Orders(request({ operation: "get", orderId }), deps));
-  assertEquals(single, { ...cancelled, status: "CANCELLED_PREPAYMENT", canonicalStatus: "CANCELLED" });
+  assertEquals(single, {
+    ...cancelled,
+    status: "CANCELLED_PREPAYMENT",
+    canonicalStatus: "CANCELLED",
+  });
   const list = await body(await handleV1Orders(request({ operation: "list" }), deps));
   assertEquals(list, { orders: [single, orderSnapshot], nextCursor: null });
   assertEquals(cancelled.status, "CANCELLED");
@@ -69,11 +153,28 @@ Deno.test("legacy customer builds can read cancelled orders without changing can
 
 Deno.test("updated customer builds receive canonical cancellation status", async () => {
   const cancelled = { id: orderId, status: "CANCELLED", version: 6 };
-  const deps = dependencies({ getOrder: () => Promise.resolve(cancelled),
-    listOrders: () => Promise.resolve({ orders: [cancelled], nextCursor: null }) });
-  assertEquals(await body(await handleV1Orders(request({ operation: "get", orderId, supportsConfirmedCancellation: true }), deps)), cancelled);
-  assertEquals(await body(await handleV1Orders(request({ operation: "list", supportsConfirmedCancellation: true }), deps)),
-    { orders: [cancelled], nextCursor: null });
+  const deps = dependencies({
+    getOrder: () => Promise.resolve(cancelled),
+    listOrders: () => Promise.resolve({ orders: [cancelled], nextCursor: null }),
+  });
+  assertEquals(
+    await body(
+      await handleV1Orders(
+        request({ operation: "get", orderId, supportsConfirmedCancellation: true }),
+        deps,
+      ),
+    ),
+    cancelled,
+  );
+  assertEquals(
+    await body(
+      await handleV1Orders(
+        request({ operation: "list", supportsConfirmedCancellation: true }),
+        deps,
+      ),
+    ),
+    { orders: [cancelled], nextCursor: null },
+  );
 });
 
 Deno.test("V1 orders serves CORS preflight before authentication", async () => {
@@ -461,22 +562,25 @@ Deno.test("V1 Admin Audit History binds reviewed filters and opaque cursor", asy
       return Promise.resolve({ events: [], hasMore: false, nextCursor: null });
     },
   });
-  const response = await handleV1Orders(request({
-    operation: "adminAuditHistory",
-    fromOccurredAt: "2026-09-01T00:00:00.000Z",
-    toOccurredAt: "2026-09-13T23:59:59.000Z",
-    actorQuery: "  Furqan  ",
-    action: "  order.cancelled  ",
-    resourceType: "  order  ",
-    resourceId: orderId,
-    orderId,
-    branchId: skuId,
-    accountId: actor.accountId,
-    eventId,
-    limit: 40,
-    cursor: { occurredAt: "2026-09-10T12:34:56.000Z", eventId: "v1:901" },
-    rawMetadata: { accessToken: "must-not-forward" },
-  }), deps);
+  const response = await handleV1Orders(
+    request({
+      operation: "adminAuditHistory",
+      fromOccurredAt: "2026-09-01T00:00:00.000Z",
+      toOccurredAt: "2026-09-13T23:59:59.000Z",
+      actorQuery: "  Furqan  ",
+      action: "  order.cancelled  ",
+      resourceType: "  order  ",
+      resourceId: orderId,
+      orderId,
+      branchId: skuId,
+      accountId: actor.accountId,
+      eventId,
+      limit: 40,
+      cursor: { occurredAt: "2026-09-10T12:34:56.000Z", eventId: "v1:901" },
+      rawMetadata: { accessToken: "must-not-forward" },
+    }),
+    deps,
+  );
 
   assertEquals(response.status, 200);
   assertEquals(recorded.audit, {
@@ -542,35 +646,59 @@ Deno.test("V1 Admin Merchant governance binds reviewed paging and command contra
     },
   });
 
-  assertEquals((await handleV1Orders(request({
-    operation: "adminMerchantGovernancePage",
-    query: "  Craft  ",
-    organizationId,
-    branchId,
-    limit: 40,
-    cursor: { updatedAt: "2026-09-12T12:34:56.000Z", rowId: branchId },
-  }), deps)).status, 200);
-  assertEquals((await handleV1Orders(request({
-    operation: "setAdminMerchantOrganizationStatus",
-    organizationId,
-    status: "SUSPENDED",
-    expectedVersion: 3,
-    reason: "  Reviewed compliance intervention  ",
-  }, "org-key"), deps)).status, 200);
-  assertEquals((await handleV1Orders(request({
-    operation: "setAdminMerchantBranchStatus",
-    branchId,
-    status: "SUSPENDED",
-    expectedVersion: 6,
-    reason: "  Reviewed branch intervention  ",
-  }, "branch-key"), deps)).status, 200);
-  assertEquals((await handleV1Orders(request({
-    operation: "correctAdminMerchantBranchDetails",
-    branchId,
-    changes: { displayName: "Craft Central", capacityLimit: 12 },
-    expectedVersion: 7,
-    reason: "  Verified branch record  ",
-  }, "correction-key"), deps)).status, 200);
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "adminMerchantGovernancePage",
+        query: "  Craft  ",
+        organizationId,
+        branchId,
+        limit: 40,
+        cursor: { updatedAt: "2026-09-12T12:34:56.000Z", rowId: branchId },
+      }),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "setAdminMerchantOrganizationStatus",
+        organizationId,
+        status: "SUSPENDED",
+        expectedVersion: 3,
+        reason: "  Reviewed compliance intervention  ",
+      }, "org-key"),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "setAdminMerchantBranchStatus",
+        branchId,
+        status: "SUSPENDED",
+        expectedVersion: 6,
+        reason: "  Reviewed branch intervention  ",
+      }, "branch-key"),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "correctAdminMerchantBranchDetails",
+        branchId,
+        changes: { displayName: "Craft Central", capacityLimit: 12 },
+        expectedVersion: 7,
+        reason: "  Verified branch record  ",
+      }, "correction-key"),
+      deps,
+    )).status,
+    200,
+  );
 
   assertEquals(recorded.page, {
     accessToken: actor.accessToken,
@@ -610,18 +738,71 @@ Deno.test("V1 Admin Merchant governance binds reviewed paging and command contra
 Deno.test("V1 Admin Merchant governance rejects unreviewed inputs before RPC", async () => {
   let calls = 0;
   const deps = dependencies({
-    getAdminMerchantGovernancePage: () => { calls += 1; return Promise.resolve({}); },
-    setAdminMerchantOrganizationStatus: () => { calls += 1; return Promise.resolve({}); },
-    setAdminMerchantBranchStatus: () => { calls += 1; return Promise.resolve({}); },
-    correctAdminMerchantBranchDetails: () => { calls += 1; return Promise.resolve({}); },
+    getAdminMerchantGovernancePage: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    setAdminMerchantOrganizationStatus: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    setAdminMerchantBranchStatus: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    correctAdminMerchantBranchDetails: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
   });
   const bodies: Array<{ body: Record<string, unknown>; key?: string }> = [
     { body: { operation: "adminMerchantGovernancePage", limit: 101 } },
-    { body: { operation: "adminMerchantGovernancePage", cursor: { updatedAt: "bad", rowId: skuId } } },
-    { body: { operation: "setAdminMerchantOrganizationStatus", organizationId: skuId, status: "CLOSED", expectedVersion: 1, reason: "Reviewed" }, key: "key" },
-    { body: { operation: "setAdminMerchantBranchStatus", branchId: skuId, status: "SUSPENDED", expectedVersion: 0, reason: "Reviewed" }, key: "key" },
-    { body: { operation: "correctAdminMerchantBranchDetails", branchId: skuId, changes: { merchantType: "RETAIL" }, expectedVersion: 1, reason: "Reviewed" }, key: "key" },
-    { body: { operation: "correctAdminMerchantBranchDetails", branchId: skuId, changes: {}, expectedVersion: 1, reason: "Reviewed" }, key: "key" },
+    {
+      body: {
+        operation: "adminMerchantGovernancePage",
+        cursor: { updatedAt: "bad", rowId: skuId },
+      },
+    },
+    {
+      body: {
+        operation: "setAdminMerchantOrganizationStatus",
+        organizationId: skuId,
+        status: "CLOSED",
+        expectedVersion: 1,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
+    {
+      body: {
+        operation: "setAdminMerchantBranchStatus",
+        branchId: skuId,
+        status: "SUSPENDED",
+        expectedVersion: 0,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
+    {
+      body: {
+        operation: "correctAdminMerchantBranchDetails",
+        branchId: skuId,
+        changes: { merchantType: "RETAIL" },
+        expectedVersion: 1,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
+    {
+      body: {
+        operation: "correctAdminMerchantBranchDetails",
+        branchId: skuId,
+        changes: {},
+        expectedVersion: 1,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
   ];
   for (const candidate of bodies) {
     assertEquals((await handleV1Orders(request(candidate.body, candidate.key), deps)).status, 400);
@@ -642,21 +823,33 @@ Deno.test("V1 Admin Delivery Partner governance binds paging and versioned comma
       return Promise.resolve({ riderId, status: "SUSPENDED", governanceVersion: 3 });
     },
   });
-  assertEquals((await handleV1Orders(request({
-    operation: "adminDeliveryPartnerGovernancePage",
-    query: "  Furqan  ",
-    riderId,
-    status: "ACTIVE",
-    limit: 40,
-    cursor: { updatedAt: "2026-09-12T12:34:56.000Z", riderId },
-  }), deps)).status, 200);
-  assertEquals((await handleV1Orders(request({
-    operation: "setAdminDeliveryPartnerStatus",
-    riderId,
-    status: "SUSPENDED",
-    expectedGovernanceVersion: 2,
-    reason: "  Safety review — verified incident  ",
-  }, "rider-governance-key"), deps)).status, 200);
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "adminDeliveryPartnerGovernancePage",
+        query: "  Furqan  ",
+        riderId,
+        status: "ACTIVE",
+        limit: 40,
+        cursor: { updatedAt: "2026-09-12T12:34:56.000Z", riderId },
+      }),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "setAdminDeliveryPartnerStatus",
+        riderId,
+        status: "SUSPENDED",
+        expectedGovernanceVersion: 2,
+        reason: "  Safety review — verified incident  ",
+      }, "rider-governance-key"),
+      deps,
+    )).status,
+    200,
+  );
   assertEquals(recorded.page, {
     accessToken: actor.accessToken,
     query: "Furqan",
@@ -679,16 +872,53 @@ Deno.test("V1 Admin Delivery Partner governance binds paging and versioned comma
 Deno.test("V1 Admin Delivery Partner governance rejects invalid status, cursor and command inputs", async () => {
   let calls = 0;
   const deps = dependencies({
-    getAdminDeliveryPartnerGovernancePage: () => { calls += 1; return Promise.resolve({}); },
-    setAdminDeliveryPartnerStatus: () => { calls += 1; return Promise.resolve({}); },
+    getAdminDeliveryPartnerGovernancePage: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    setAdminDeliveryPartnerStatus: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
   });
   const riderId = "66666666-6666-4666-8666-666666666666";
   const candidates: Array<{ body: Record<string, unknown>; key?: string }> = [
     { body: { operation: "adminDeliveryPartnerGovernancePage", status: "PAUSED" } },
-    { body: { operation: "adminDeliveryPartnerGovernancePage", cursor: { updatedAt: "bad", riderId } } },
-    { body: { operation: "setAdminDeliveryPartnerStatus", riderId, status: "OFFLINE", expectedGovernanceVersion: 1, reason: "Reviewed" }, key: "key" },
-    { body: { operation: "setAdminDeliveryPartnerStatus", riderId, status: "SUSPENDED", expectedGovernanceVersion: 0, reason: "Reviewed" }, key: "key" },
-    { body: { operation: "setAdminDeliveryPartnerStatus", riderId, status: "SUSPENDED", expectedGovernanceVersion: 1, reason: "No key" } },
+    {
+      body: {
+        operation: "adminDeliveryPartnerGovernancePage",
+        cursor: { updatedAt: "bad", riderId },
+      },
+    },
+    {
+      body: {
+        operation: "setAdminDeliveryPartnerStatus",
+        riderId,
+        status: "OFFLINE",
+        expectedGovernanceVersion: 1,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
+    {
+      body: {
+        operation: "setAdminDeliveryPartnerStatus",
+        riderId,
+        status: "SUSPENDED",
+        expectedGovernanceVersion: 0,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
+    {
+      body: {
+        operation: "setAdminDeliveryPartnerStatus",
+        riderId,
+        status: "SUSPENDED",
+        expectedGovernanceVersion: 1,
+        reason: "No key",
+      },
+    },
   ];
   for (const candidate of candidates) {
     assertEquals((await handleV1Orders(request(candidate.body, candidate.key), deps)).status, 400);
@@ -714,28 +944,46 @@ Deno.test("V1 Admin Customer recovery binds paging, reviewed session and phone c
       return Promise.resolve({ accountId, phoneClaimVersion: 4 });
     },
   });
-  assertEquals((await handleV1Orders(request({
-    operation: "adminCustomerRecoveryPage",
-    query: "  Furqan  ",
-    accountId,
-    limit: 40,
-    cursor: { updatedAt: "2026-09-12T12:34:56.000Z", accountId },
-  }), deps)).status, 200);
-  assertEquals((await handleV1Orders(request({
-    operation: "revokeAdminCustomerSessions",
-    accountId,
-    scope: "SINGLE",
-    sessionId,
-    reason: "  Customer-reported lost device  ",
-  }, "revoke-session-key"), deps)).status, 200);
-  assertEquals((await handleV1Orders(request({
-    operation: "correctAdminCustomerPhone",
-    accountId,
-    reviewedCurrentPhone: "+919876543210",
-    replacementPhone: "+919876543211",
-    expectedPhoneClaimVersion: 3,
-    reason: "  Customer request — reviewed correction  ",
-  }, "phone-correction-key"), deps)).status, 200);
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "adminCustomerRecoveryPage",
+        query: "  Furqan  ",
+        accountId,
+        limit: 40,
+        cursor: { updatedAt: "2026-09-12T12:34:56.000Z", accountId },
+      }),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "revokeAdminCustomerSessions",
+        accountId,
+        scope: "SINGLE",
+        sessionId,
+        reason: "  Customer-reported lost device  ",
+      }, "revoke-session-key"),
+      deps,
+    )).status,
+    200,
+  );
+  assertEquals(
+    (await handleV1Orders(
+      request({
+        operation: "correctAdminCustomerPhone",
+        accountId,
+        reviewedCurrentPhone: "+919876543210",
+        replacementPhone: "+919876543211",
+        expectedPhoneClaimVersion: 3,
+        reason: "  Customer request — reviewed correction  ",
+      }, "phone-correction-key"),
+      deps,
+    )).status,
+    200,
+  );
 
   assertEquals(recorded.page, {
     accessToken: actor.accessToken,
@@ -769,19 +1017,83 @@ Deno.test("V1 Admin Customer recovery rejects unreviewed session and phone input
   const accountId = "77777777-7777-4777-8777-777777777777";
   const sessionId = "88888888-8888-4888-8888-888888888888";
   const deps = dependencies({
-    getAdminCustomerRecoveryPage: () => { calls += 1; return Promise.resolve({}); },
-    revokeAdminCustomerSessions: () => { calls += 1; return Promise.resolve({}); },
-    correctAdminCustomerPhone: () => { calls += 1; return Promise.resolve({}); },
+    getAdminCustomerRecoveryPage: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    revokeAdminCustomerSessions: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
+    correctAdminCustomerPhone: () => {
+      calls += 1;
+      return Promise.resolve({});
+    },
   });
   const candidates: Array<{ body: Record<string, unknown>; key?: string }> = [
     { body: { operation: "adminCustomerRecoveryPage", limit: 101 } },
     { body: { operation: "adminCustomerRecoveryPage", cursor: { updatedAt: "bad", accountId } } },
-    { body: { operation: "revokeAdminCustomerSessions", accountId, scope: "SINGLE", reason: "Reviewed" }, key: "key" },
-    { body: { operation: "revokeAdminCustomerSessions", accountId, scope: "ALL", sessionId, reason: "Reviewed" }, key: "key" },
-    { body: { operation: "revokeAdminCustomerSessions", accountId, scope: "SINGLE", sessionId, reason: "No key" } },
-    { body: { operation: "correctAdminCustomerPhone", accountId, reviewedCurrentPhone: "9876", replacementPhone: "+919876543211", expectedPhoneClaimVersion: 1, reason: "Reviewed" }, key: "key" },
-    { body: { operation: "correctAdminCustomerPhone", accountId, reviewedCurrentPhone: "+919876543210", replacementPhone: "+919876543210", expectedPhoneClaimVersion: 1, reason: "Reviewed" }, key: "key" },
-    { body: { operation: "correctAdminCustomerPhone", accountId, reviewedCurrentPhone: "+919876543210", replacementPhone: "+919876543211", expectedPhoneClaimVersion: 0, reason: "Reviewed" }, key: "key" },
+    {
+      body: {
+        operation: "revokeAdminCustomerSessions",
+        accountId,
+        scope: "SINGLE",
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
+    {
+      body: {
+        operation: "revokeAdminCustomerSessions",
+        accountId,
+        scope: "ALL",
+        sessionId,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
+    {
+      body: {
+        operation: "revokeAdminCustomerSessions",
+        accountId,
+        scope: "SINGLE",
+        sessionId,
+        reason: "No key",
+      },
+    },
+    {
+      body: {
+        operation: "correctAdminCustomerPhone",
+        accountId,
+        reviewedCurrentPhone: "9876",
+        replacementPhone: "+919876543211",
+        expectedPhoneClaimVersion: 1,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
+    {
+      body: {
+        operation: "correctAdminCustomerPhone",
+        accountId,
+        reviewedCurrentPhone: "+919876543210",
+        replacementPhone: "+919876543210",
+        expectedPhoneClaimVersion: 1,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
+    {
+      body: {
+        operation: "correctAdminCustomerPhone",
+        accountId,
+        reviewedCurrentPhone: "+919876543210",
+        replacementPhone: "+919876543211",
+        expectedPhoneClaimVersion: 0,
+        reason: "Reviewed",
+      },
+      key: "key",
+    },
   ];
   for (const candidate of candidates) {
     assertEquals((await handleV1Orders(request(candidate.body, candidate.key), deps)).status, 400);
@@ -1499,7 +1811,8 @@ function dependencies(
     getAdminAuditHistory: overrides.getAdminAuditHistory ??
       (() => Promise.resolve({})),
     getAdminMerchantGovernancePage: overrides.getAdminMerchantGovernancePage ??
-      (() => Promise.resolve({ merchants: [], serviceZones: [], hasMore: false, nextCursor: null })),
+      (() =>
+        Promise.resolve({ merchants: [], serviceZones: [], hasMore: false, nextCursor: null })),
     getAdminDeliveryPartnerGovernancePage: overrides.getAdminDeliveryPartnerGovernancePage ??
       (() => Promise.resolve({ deliveryPartners: [], hasMore: false, nextCursor: null })),
     getAdminCustomerRecoveryPage: overrides.getAdminCustomerRecoveryPage ??

@@ -104,7 +104,7 @@ struct DastakNotificationOnboardingView: View {
                         Spacer(minLength: 34)
 
                         VStack(spacing: MarketplaceSpacing.compact) {
-                            Button {
+                            MarketplaceFeedbackButton {
                                 isRequesting = true
                                 Task {
                                     await enableNotifications()
@@ -125,7 +125,7 @@ struct DastakNotificationOnboardingView: View {
                             .buttonStyle(MarketplacePrimaryButtonStyle())
                             .disabled(isRequesting)
 
-                            Button("Not now", action: continueWithoutNotifications)
+                            MarketplaceFeedbackButton("Not now", action: continueWithoutNotifications)
                                 .buttonStyle(MarketplaceSecondaryButtonStyle())
                                 .disabled(isRequesting)
                         }

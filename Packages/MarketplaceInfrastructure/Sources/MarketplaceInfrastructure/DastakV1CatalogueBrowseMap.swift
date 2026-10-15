@@ -89,6 +89,27 @@ public struct DastakV1CatalogueBrowseMap: Decodable, Equatable, Sendable {
             !source.excludedSubcategorySlugs.contains(subcategory.slug)
         }
     }
+
+    /// Resolve a browse destination once, rather than revalidating the whole map
+    /// for every category/subcategory pair and every displayed SKU.
+    public func matchingSubcategories(nodeKey: String, taxonomy: Taxonomy) -> [UUID: UUID] {
+        guard isValid, let node = nodes.first(where: { $0.key == nodeKey }) else { return [:] }
+        var result: [UUID: UUID] = [:]
+        for subcategory in taxonomy.subcategories.values {
+            guard let category = taxonomy.categories[subcategory.categoryID],
+                  let typeSlug = taxonomy.typeSlugs[category.typeID] else { continue }
+            if node.sources.contains(where: { source in
+                source.typeSlug == typeSlug &&
+                (source.categorySlug == nil || source.categorySlug == category.slug) &&
+                (source.subcategorySlug == nil || source.subcategorySlug == subcategory.slug) &&
+                !source.excludedCategorySlugs.contains(category.slug) &&
+                !source.excludedSubcategorySlugs.contains(subcategory.slug)
+            }) {
+                result[subcategory.id] = category.id
+            }
+        }
+        return result
+    }
 }
 
 struct DastakV1CatalogueBrowseRequest: Encodable, Sendable {

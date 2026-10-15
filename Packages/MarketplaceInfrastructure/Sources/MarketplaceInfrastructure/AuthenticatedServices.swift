@@ -4,28 +4,24 @@ actor MarketplaceAccessTokenBroker {
     typealias Loader = @Sendable () async throws -> String?
 
     private let loader: Loader
-    private var inFlight: Task<String?, Error>?
+    private let timeout: Duration
+    private var inFlight: (id: UUID, task: Task<String?, Error>)?
 
-    init(loader: @escaping Loader) {
+    init(timeout: Duration = .seconds(8), loader: @escaping Loader) {
         self.loader = loader
+        self.timeout = timeout
     }
 
     func accessToken() async throws -> String? {
         if let inFlight {
-            return try await inFlight.value
+            return try await inFlight.task.value
         }
 
-        let loader = loader
-        let task = Task { try await loader() }
-        inFlight = task
-        do {
-            let token = try await task.value
-            inFlight = nil
-            return token
-        } catch {
-            inFlight = nil
-            throw error
-        }
+        let loader = loader, timeout = timeout, id = UUID()
+        let task = Task { try await MarketplaceRequestDeadline.run(after: timeout, operation: loader) }
+        inFlight = (id, task)
+        defer { if inFlight?.id == id { inFlight = nil } }
+        return try await task.value
     }
 }
 
@@ -64,6 +60,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
     private let appAccessProvider: @Sendable (MarketplaceApplicationAccess) async throws -> AccountRoute
     private let oauthIdentityLinker: @Sendable (MarketplaceOAuthProvider) async throws -> Void
     private let oauthReauthenticator: @Sendable (MarketplaceOAuthProvider) async throws -> Void
+    private let sessionRefresher: @Sendable () async throws -> Void
 
     init(
         functions: any FunctionClient,
@@ -86,7 +83,8 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         },
         oauthReauthenticator: @escaping @Sendable (MarketplaceOAuthProvider) async throws -> Void = { _ in
             throw MarketplaceAuthenticatedServicesError.authenticationRequired
-        }
+        },
+        sessionRefresher: @escaping @Sendable () async throws -> Void = {}
     ) {
         self.functions = functions
         self.orderEvents = orderEvents
@@ -97,10 +95,15 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         self.appAccessProvider = appAccessProvider
         self.oauthIdentityLinker = oauthIdentityLinker
         self.oauthReauthenticator = oauthReauthenticator
+        self.sessionRefresher = sessionRefresher
     }
 
     public func accountID() async throws -> UUID {
         try await accountIDProvider()
+    }
+
+    public func refreshSession() async throws {
+        try await sessionRefresher()
     }
 
     public func checkoutCustomer() async throws -> MarketplaceCheckoutCustomer? {

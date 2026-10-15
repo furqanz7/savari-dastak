@@ -216,7 +216,7 @@ struct DastakEmptyState: View {
             Text(message)
         } actions: {
             if let actionTitle, let action {
-                Button(actionTitle, action: action)
+                MarketplaceFeedbackButton(actionTitle, action: action)
                     .buttonStyle(MarketplacePrimaryButtonStyle())
                     .frame(maxWidth: 320)
             }
@@ -251,6 +251,83 @@ struct DastakRefreshNotice: View {
         }
         .padding(MarketplaceSpacing.compact)
         .marketplaceFlatSurface()
+    }
+}
+
+/// Restaurant photography fills a card header; product pack shots keep their
+/// separate contain layout so labels and packaging are never cropped.
+struct DastakRestaurantBanner: View {
+    let imageKey: String?
+    @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var loader = DastakArtworkViewModel()
+
+    var body: some View {
+        GeometryReader { bounds in
+            ZStack {
+                LinearGradient(
+                    colors: [MarketplaceColors.accent(for: colorScheme).opacity(0.22),
+                             Color.primary.opacity(0.06)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                if let image = loader.image {
+                    image.resizable().scaledToFill()
+                        .frame(width: bounds.size.width, height: bounds.size.height)
+                } else {
+                    Image(systemName: "fork.knife")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(MarketplaceColors.accent(for: colorScheme))
+                }
+            }
+            .frame(width: bounds.size.width, height: bounds.size.height)
+            .clipped()
+        }
+        .accessibilityHidden(true)
+        .task(id: artworkRequest) { await loader.load(artworkRequest) }
+    }
+
+    private var artworkRequest: DastakArtworkRequest? {
+        DastakArtworkURLFactory.request(for: imageKey,
+            baseURLString: Bundle.main.object(forInfoDictionaryKey: "MarketplaceSupabaseURL") as? String,
+            pixelSize: 1024)
+    }
+}
+
+/// A category photograph with relevant alternate photos, never a generic icon.
+struct DastakQuickPickArtwork: View {
+    let imageKeys: [String]
+    @StateObject private var loader = DastakArtworkViewModel()
+    @State private var finished = false
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.96, green: 0.95, blue: 0.90)
+            if let image = loader.image {
+                image.resizable().scaledToFit().padding(5).transition(.opacity)
+            } else if finished {
+                Text("Photo unavailable").font(.system(size: 9)).multilineTextAlignment(.center)
+                    .foregroundStyle(.black.opacity(0.55)).padding(8)
+            } else {
+                ProgressView().controlSize(.mini).tint(.gray)
+            }
+        }
+        .frame(width: 72, height: 72)
+        .clipShape(Circle())
+        .overlay(Circle().strokeBorder(.white.opacity(0.55), lineWidth: 1))
+        .accessibilityHidden(true)
+        .task(id: imageKeys) {
+            finished = false
+            for key in imageKeys {
+                guard !Task.isCancelled else { return }
+                let request = DastakArtworkURLFactory.request(for: key,
+                    baseURLString: Bundle.main.object(forInfoDictionaryKey: "MarketplaceSupabaseURL") as? String,
+                    pixelSize: 256)
+                await loader.load(request)
+                guard !Task.isCancelled else { return }
+                if loader.image != nil { break }
+            }
+            finished = true
+        }
+        .animation(.easeOut(duration: 0.18), value: loader.image != nil)
     }
 }
 
@@ -474,22 +551,30 @@ struct DastakQuantityControl: View {
     let quantity: Int
     let decrement: () -> Void
     let increment: () -> Void
+    var itemName: String = ""
 
     var body: some View {
         HStack(spacing: 0) {
-            Button(action: decrement) {
+            MarketplaceFeedbackButton(action: decrement) {
                 Image(systemName: "minus")
+                    .frame(width: MarketplaceMetrics.minimumTouchTarget, height: MarketplaceMetrics.minimumTouchTarget)
+                    // The entire padded label must receive taps, not just the
+                    // thin SF Symbol inside a plain-style button.
+                    .contentShape(Rectangle())
             }
-            .accessibilityLabel("Remove one")
+            .accessibilityLabel(itemName.isEmpty ? "Remove one" : "Remove one \(itemName)")
 
             Text(quantity.formatted())
                 .font(.subheadline.monospacedDigit().bold())
                 .frame(minWidth: 32)
+                .accessibilityLabel(itemName.isEmpty ? "Quantity \(quantity)" : "\(itemName), quantity \(quantity)")
 
-            Button(action: increment) {
+            MarketplaceFeedbackButton(action: increment) {
                 Image(systemName: "plus")
+                    .frame(width: MarketplaceMetrics.minimumTouchTarget, height: MarketplaceMetrics.minimumTouchTarget)
+                    .contentShape(Rectangle())
             }
-            .accessibilityLabel("Add one")
+            .accessibilityLabel(itemName.isEmpty ? "Add one" : "Add one \(itemName)")
         }
         .buttonStyle(.plain)
         .frame(minHeight: MarketplaceMetrics.minimumTouchTarget)

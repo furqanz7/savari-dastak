@@ -222,10 +222,13 @@ export async function handleParcelDeliveries(
       ? String(error.message)
       : "";
     if (message === "RIDER_GOVERNANCE_SUSPENDED") {
-      return json({ error: {
-        code: "rider_governance_suspended",
-        message: "Your Delivery Partner access is suspended. Contact Dastak support before accepting work.",
-      } }, 409);
+      return json({
+        error: {
+          code: "rider_governance_suspended",
+          message:
+            "Your Delivery Partner access is suspended. Contact Dastak support before accepting work.",
+        },
+      }, 409);
     }
     return internalError();
   }

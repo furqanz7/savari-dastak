@@ -21,4 +21,15 @@ The prior release did not resolve the user's account-screen complaint. Reproduct
 - Ordinary scrolling reached the final Settings action; returning to Profile reset inner scroll to zero. Phone Profile editor fits inside the viewport, uses 16px inputs, closes cleanly and restores its opening button's focus.
 - Regression tests cover embedded versus standalone skip links, route-preserving skip activation, absence of document scrolling in embedded navigation, account grid rules and exclusion of the generic loading class.
 
-Release and final live verification are recorded after the test/build gates. This is a targeted correction, not a certification of all account saves or every Customer workflow. SKU, background/staff, database and other-app production changes are out of scope.
+## Release and final live verification
+
+- Commit `d2cb3146345a2862cd6e9c504f3b8b827bafbfd8` pushed to `codex/dastak-v1-launch`.
+- Full suite: 138 test files, 936 tests passed. TypeScript, targeted ESLint and diff checks passed.
+- Customer production deployment `dpl_APE2QBRcYVh86xXBNnJUY7TzQBxY` reached READY. Release script verified the commit, Customer variant, production environment and normal alias `https://dastak-customer.vercel.app`.
+- Reloaded the signed-in normal address: Settings now has one 452px column and full-width 426px actions at 881px viewport. Merchant/Delivery card spans have no animation. No embedded legacy skip link remains.
+- Live Profile editor and session dialog opened and closed without account writes; focus returned to their opening buttons. Switching screens reset inner scroll without moving the page.
+- With 390px device metrics, live Profile and Settings used a 330px column, page width remained 390px and account descendants had no horizontal overflow. Profile editor fit x=8..382, bottom=836 within 844px, with 16px inputs. Emulation was restored. Screenshot capture did not reflect device emulation reliably, so the proof is labelled desktop, not phone.
+- Keyboard skip activation preserved `#/settings`, focused MAIN, and hid the shortcut afterward. No browser console errors were captured during final checks.
+- Desktop proof: `verification/dastak-account-layout-2026-10-09/settings-live-881.jpg`.
+
+This is a targeted correction, not a certification of all account saves or every Customer workflow. Profile saves, identity linking, session revocation and account deletion were not executed. SKU, background/staff, database and other-app production changes are out of scope. Final release evidence is a local report update, not an additional deployment-triggering commit.

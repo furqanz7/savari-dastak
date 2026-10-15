@@ -285,6 +285,25 @@ struct DastakAdminMoreView: View {
         NavigationStack {
             List {
                 Section("Marketplace control") {
+                    NavigationLink { DastakAdminCustomerRecoveryView(model: model.customerRecoveryModel) } label: {
+                        MoreRow(title: "Customer recovery", detail: "Reviewed account sessions and contact-phone claims", symbol: "person.badge.key")
+                    }
+                    NavigationLink { DastakAdminDeliveryGovernanceView(model: model.deliveryGovernanceModel) } label: {
+                        MoreRow(title: "Delivery Partner governance", detail: "Eligibility with active-work and custody safeguards", symbol: "bicycle")
+                    }
+                    NavigationLink { DastakAdminAuditHistoryView(model: model.auditHistoryModel) } label: {
+                        MoreRow(title: "Audit history", detail: "Read-only reviewed events from current and legacy systems", symbol: "clock.arrow.circlepath")
+                    }
+                    NavigationLink {
+                        DastakAdminMerchantGovernanceView(model: model.merchantGovernanceModel)
+                    } label: {
+                        MoreRow(title: "Merchant governance", detail: "Eligibility, branch records and routing safeguards", symbol: "storefront")
+                    }
+                    NavigationLink {
+                        DastakAdminRestaurantListingsView(model: model.restaurantListingsModel)
+                    } label: {
+                        MoreRow(title: "Restaurant listings", detail: "Remove or restore Customer visibility without deleting records", symbol: "fork.knife")
+                    }
                     NavigationLink { DastakAdminCatalogueView(model: model) } label: { MoreRow(title: "Master catalogue", detail: "Exact SKUs, QA, pricing and visibility", symbol: "square.grid.3x3") }
                     NavigationLink { DastakAdminGovernanceView(model: model) } label: { MoreRow(title: "Safety & system health", detail: "Pauses, escalations and invariant signals", symbol: "checkmark.shield") }
                     NavigationLink { DastakAdminFinanceView(model: model) } label: { MoreRow(title: "Finance & Royalty", detail: "Collection, fee and journal truth", symbol: "indianrupeesign.circle") }

@@ -47,6 +47,9 @@ public struct DastakV1MerchantFulfilment: Codable, Equatable, Identifiable, Send
     /// Immutable subtotal for this merchant's fulfilled products only.
     public let productSubtotalPaise: Int?
     public let lines: [DastakV1MerchantLine]
+    public let canReportExactSkuFailure: Bool?
+    public let recoveryCases: [DastakV1MerchantRecoveryCase]?
+    public let problemReports: [DastakV1MerchantProblemReport]?
     public let delivery: DastakV1MerchantDelivery?
     public var tracking: DastakDeliveryTracking?
 
@@ -55,6 +58,7 @@ public struct DastakV1MerchantFulfilment: Codable, Equatable, Identifiable, Send
         case promisedPrepMinutes, prepStartedAt, estimatedReadyAt, actualReadyAt
         case secondsRemaining, runningLate, packageCount, evidence
         case canDeclarePackages, canAddEvidence, canMarkReady, productSubtotalPaise, lines, delivery, tracking
+        case canReportExactSkuFailure, recoveryCases, problemReports
         case orderID = "orderId"
     }
 }
@@ -277,7 +281,7 @@ public struct DastakV1MerchantBranchStateMutation: Codable, Equatable, Sendable 
     }
 }
 
-public enum DastakV1RestaurantMenuPayload: Encodable, Sendable {
+public enum DastakV1RestaurantMenuPayload: Codable, Equatable, Sendable {
     case category(name: String, description: String, sortOrder: Int, status: String)
     case item(categoryID: UUID, name: String, description: String, imageKey: String, basePricePaise: Int, taxRateBps: Int, logisticsAttributes: DastakV1SKULogistics, status: String)
     case optionGroup(menuItemID: UUID, name: String, selectionType: String, minimumSelections: Int, maximumSelections: Int, sortOrder: Int, status: String)
@@ -285,6 +289,27 @@ public enum DastakV1RestaurantMenuPayload: Encodable, Sendable {
 
     public var entityType: String {
         switch self { case .category: "CATEGORY"; case .item: "ITEM"; case .optionGroup: "OPTION_GROUP"; case .option: "OPTION" }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let name = try values.decode(String.self, forKey: .name)
+        let status = try values.decode(String.self, forKey: .status)
+        if values.contains(.categoryId) {
+            self = .item(categoryID: try values.decode(UUID.self, forKey: .categoryId), name: name,
+                description: try values.decode(String.self, forKey: .description), imageKey: try values.decode(String.self, forKey: .imageKey),
+                basePricePaise: try values.decode(Int.self, forKey: .basePricePaise), taxRateBps: try values.decode(Int.self, forKey: .taxRateBps),
+                logisticsAttributes: try values.decode(DastakV1SKULogistics.self, forKey: .logisticsAttributes), status: status)
+        } else if values.contains(.menuItemId) {
+            self = .optionGroup(menuItemID: try values.decode(UUID.self, forKey: .menuItemId), name: name,
+                selectionType: try values.decode(String.self, forKey: .selectionType), minimumSelections: try values.decode(Int.self, forKey: .minimumSelections),
+                maximumSelections: try values.decode(Int.self, forKey: .maximumSelections), sortOrder: try values.decode(Int.self, forKey: .sortOrder), status: status)
+        } else if values.contains(.optionGroupId) {
+            self = .option(optionGroupID: try values.decode(UUID.self, forKey: .optionGroupId), name: name,
+                priceDeltaPaise: try values.decode(Int.self, forKey: .priceDeltaPaise), sortOrder: try values.decode(Int.self, forKey: .sortOrder), status: status)
+        } else {
+            self = .category(name: name, description: try values.decode(String.self, forKey: .description), sortOrder: try values.decode(Int.self, forKey: .sortOrder), status: status)
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -387,8 +412,9 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
             idempotencyKey: idempotencyKey
         )
     }
-    private struct Request: Encodable, Sendable {
+    private struct Request: SingleAttemptFunctionRequest {
         let operation: String
+        var allowsAutomaticRetries: Bool { operation != "updateBranchOperationalState" }
         let limit: Int?
         let fulfilmentId: UUID?
         let packageCount: Int?
@@ -412,7 +438,7 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
         let acceptingOrders: Bool?
     }
 
-    private struct RestaurantMenuRequest: Encodable, Sendable {
+    private struct RestaurantMenuRequest: SingleAttemptFunctionRequest {
         let operation: String
         let branchId: UUID
         let entityType: String
@@ -602,7 +628,7 @@ public struct SupabaseDastakV1MerchantClient: DastakV1MerchantClient {
 
     public func uploadGovernedRestaurantMedia(entityType: String, entityID: UUID, expectedMediaVersion: Int, data: Data, contentType: String, fileName: String, sourceReference: String, reason: String, idempotencyKey: IdempotencyKey) async throws -> DastakV1GovernedMediaMutation {
         precondition(["RESTAURANT_BRANCH_BANNER", "RESTAURANT_MENU_ITEM"].contains(entityType))
-        return try await functions.invokeMultipart("dastak-v1-catalogue", fields: [
+        return try await functions.invokeMultipartSingleAttempt("dastak-v1-catalogue", fields: [
             "operation": "uploadGovernedMedia", "entityType": entityType, "entityId": entityID.uuidString.lowercased(),
             "expectedMediaVersion": String(expectedMediaVersion), "sourceReference": sourceReference, "reason": reason,
         ], file: FunctionUpload(fileName: fileName, contentType: contentType, data: data), idempotencyKey: idempotencyKey)

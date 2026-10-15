@@ -219,7 +219,16 @@ export type V1OrderDependencies = {
     reason: string;
     idempotencyKey: string;
   }) => Promise<unknown>;
-  setAdminRestaurantCustomerVisibility?: (input: { accessToken: string; branchId: string; visible: boolean; expectedVersion: number; reason: string; idempotencyKey: string }) => Promise<unknown>;
+  setAdminRestaurantCustomerVisibility?: (
+    input: {
+      accessToken: string;
+      branchId: string;
+      visible: boolean;
+      expectedVersion: number;
+      reason: string;
+      idempotencyKey: string;
+    },
+  ) => Promise<unknown>;
   correctAdminMerchantBranchDetails: (input: {
     accessToken: string;
     branchId: string;
@@ -417,12 +426,16 @@ export async function handleV1Orders(
           beforeOrderId,
         });
         const collection = record(result);
-        return json(body.supportsConfirmedCancellation === true || !Array.isArray(collection?.orders)
-          ? result
-          : { ...collection, orders: collection.orders.map(legacyCancellationSnapshot) });
+        return json(
+          body.supportsConfirmedCancellation === true || !Array.isArray(collection?.orders)
+            ? result
+            : { ...collection, orders: collection.orders.map(legacyCancellationSnapshot) },
+        );
       }
       case "customerActiveOrders": {
-        if (!dependencies.customerActiveOrders) throw new V1RequestError(503, "unavailable", "Active order discovery is unavailable.");
+        if (!dependencies.customerActiveOrders) {
+          throw new V1RequestError(503, "unavailable", "Active order discovery is unavailable.");
+        }
         return json(await dependencies.customerActiveOrders({ accessToken: actor.accessToken }));
       }
       case "get": {
@@ -432,7 +445,9 @@ export async function handleV1Orders(
           accessToken: actor.accessToken,
           orderId,
         });
-        return json(body.supportsConfirmedCancellation === true ? result : legacyCancellationSnapshot(result));
+        return json(
+          body.supportsConfirmedCancellation === true ? result : legacyCancellationSnapshot(result),
+        );
       }
       case "cancel": {
         const orderId = requiredUUID(body.orderId);
@@ -722,7 +737,8 @@ export async function handleV1Orders(
         const afterOrderId = cursor ? requiredUUID(cursor.orderId) ?? null : null;
         if (
           body.limit !== null && body.limit !== undefined &&
-          integer(body.limit, 1, 100) === undefined || !scope ||
+            integer(body.limit, 1, 100) === undefined ||
+          !scope ||
           (body.query !== null && body.query !== undefined && !query) ||
           (body.cursor !== null && body.cursor !== undefined && !cursor) ||
           (cursor !== undefined && (!afterUpdatedAt || !afterOrderId))
@@ -755,11 +771,19 @@ export async function handleV1Orders(
         const reason = requiredText(body.reason, 500);
         const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
         const idempotencyKey = requiredIdempotencyKey(request);
-        if (!orderId || !reason || reason.trim().length < 10 ||
-          expectedVersion === undefined || !idempotencyKey) return validationError();
-        return json(await dependencies.adminCancelOrder({
-          accessToken: actor.accessToken, orderId, reason, expectedVersion, idempotencyKey,
-        }));
+        if (
+          !orderId || !reason || reason.trim().length < 10 ||
+          expectedVersion === undefined || !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.adminCancelOrder({
+            accessToken: actor.accessToken,
+            orderId,
+            reason,
+            expectedVersion,
+            idempotencyKey,
+          }),
+        );
       }
       case "adminAccess":
         return json(
@@ -840,22 +864,24 @@ export async function handleV1Orders(
           parsedAfterEventId === undefined ||
           (cursor !== undefined && (!afterOccurredAt || !parsedAfterEventId))
         ) return validationError();
-        return json(await dependencies.getAdminAuditHistory({
-          accessToken: actor.accessToken,
-          fromOccurredAt,
-          toOccurredAt,
-          actorQuery,
-          action,
-          resourceType,
-          resourceId,
-          orderId,
-          branchId,
-          accountId,
-          eventId,
-          limit: parsedLimit ?? 50,
-          afterOccurredAt,
+        return json(
+          await dependencies.getAdminAuditHistory({
+            accessToken: actor.accessToken,
+            fromOccurredAt,
+            toOccurredAt,
+            actorQuery,
+            action,
+            resourceType,
+            resourceId,
+            orderId,
+            branchId,
+            accountId,
+            eventId,
+            limit: parsedLimit ?? 50,
+            afterOccurredAt,
             afterEventId: parsedAfterEventId ?? null,
-        }));
+          }),
+        );
       }
       case "adminMerchantGovernancePage": {
         const query = nullableText(body.query, 100);
@@ -873,15 +899,17 @@ export async function handleV1Orders(
           (body.cursor !== null && body.cursor !== undefined && cursor === undefined) ||
           (cursor !== undefined && (!afterUpdatedAt || !afterRowId))
         ) return validationError();
-        return json(await dependencies.getAdminMerchantGovernancePage({
-          accessToken: actor.accessToken,
-          query,
-          organizationId,
-          branchId,
-          limit: parsedLimit ?? 50,
-          afterUpdatedAt,
-          afterRowId,
-        }));
+        return json(
+          await dependencies.getAdminMerchantGovernancePage({
+            accessToken: actor.accessToken,
+            query,
+            organizationId,
+            branchId,
+            limit: parsedLimit ?? 50,
+            afterUpdatedAt,
+            afterRowId,
+          }),
+        );
       }
       case "adminDeliveryPartnerGovernancePage": {
         const query = nullableText(body.query, 100);
@@ -903,15 +931,17 @@ export async function handleV1Orders(
           (body.cursor !== null && body.cursor !== undefined && cursor === undefined) ||
           (cursor !== undefined && (!afterUpdatedAt || !afterRiderId))
         ) return validationError();
-        return json(await dependencies.getAdminDeliveryPartnerGovernancePage({
-          accessToken: actor.accessToken,
-          query,
-          riderId,
-          status,
-          limit: parsedLimit ?? 50,
-          afterUpdatedAt,
-          afterRiderId,
-        }));
+        return json(
+          await dependencies.getAdminDeliveryPartnerGovernancePage({
+            accessToken: actor.accessToken,
+            query,
+            riderId,
+            status,
+            limit: parsedLimit ?? 50,
+            afterUpdatedAt,
+            afterRiderId,
+          }),
+        );
       }
       case "adminCustomerRecoveryPage": {
         const query = nullableText(body.query, 100);
@@ -928,37 +958,41 @@ export async function handleV1Orders(
           (body.cursor !== null && body.cursor !== undefined && cursor === undefined) ||
           (cursor !== undefined && (!afterUpdatedAt || !afterAccountId))
         ) return validationError();
-        return json(await dependencies.getAdminCustomerRecoveryPage({
-          accessToken: actor.accessToken,
-          query,
-          accountId,
-          limit: parsedLimit ?? 50,
-          afterUpdatedAt,
-          afterAccountId,
-        }));
+        return json(
+          await dependencies.getAdminCustomerRecoveryPage({
+            accessToken: actor.accessToken,
+            query,
+            accountId,
+            limit: parsedLimit ?? 50,
+            afterUpdatedAt,
+            afterAccountId,
+          }),
+        );
       }
       case "revokeAdminCustomerSessions": {
         const idempotencyKey = requiredIdempotencyKey(request);
         const accountId = requiredUUID(body.accountId);
-        const scope = body.scope === "SINGLE" || body.scope === "ALL"
-          ? body.scope
-          : undefined;
+        const scope = body.scope === "SINGLE" || body.scope === "ALL" ? body.scope : undefined;
         const sessionId = body.sessionId === null || body.sessionId === undefined
           ? null
           : requiredUUID(body.sessionId);
         const reason = requiredText(body.reason, 200);
-        if (!accountId || !scope || !reason || reason.length < 3 || !idempotencyKey ||
-          (scope === "SINGLE" && !sessionId) || (scope === "ALL" && sessionId !== null)) {
+        if (
+          !accountId || !scope || !reason || reason.length < 3 || !idempotencyKey ||
+          (scope === "SINGLE" && !sessionId) || (scope === "ALL" && sessionId !== null)
+        ) {
           return validationError();
         }
-        return json(await dependencies.revokeAdminCustomerSessions({
-          accessToken: actor.accessToken,
-          accountId,
-          scope,
-          sessionId: sessionId ?? null,
-          reason,
-          idempotencyKey,
-        }));
+        return json(
+          await dependencies.revokeAdminCustomerSessions({
+            accessToken: actor.accessToken,
+            accountId,
+            scope,
+            sessionId: sessionId ?? null,
+            reason,
+            idempotencyKey,
+          }),
+        );
       }
       case "correctAdminCustomerPhone": {
         const idempotencyKey = requiredIdempotencyKey(request);
@@ -971,18 +1005,22 @@ export async function handleV1Orders(
           Number.MAX_SAFE_INTEGER,
         );
         const reason = requiredText(body.reason, 500);
-        if (!accountId || !reviewedCurrentPhone || !replacementPhone ||
+        if (
+          !accountId || !reviewedCurrentPhone || !replacementPhone ||
           reviewedCurrentPhone === replacementPhone || !expectedPhoneClaimVersion ||
-          !reason || reason.length < 3 || !idempotencyKey) return validationError();
-        return json(await dependencies.correctAdminCustomerPhone({
-          accessToken: actor.accessToken,
-          accountId,
-          reviewedCurrentPhone,
-          replacementPhone,
-          expectedPhoneClaimVersion,
-          reason,
-          idempotencyKey,
-        }));
+          !reason || reason.length < 3 || !idempotencyKey
+        ) return validationError();
+        return json(
+          await dependencies.correctAdminCustomerPhone({
+            accessToken: actor.accessToken,
+            accountId,
+            reviewedCurrentPhone,
+            replacementPhone,
+            expectedPhoneClaimVersion,
+            reason,
+            idempotencyKey,
+          }),
+        );
       }
       case "setAdminDeliveryPartnerStatus": {
         const idempotencyKey = requiredIdempotencyKey(request);
@@ -996,17 +1034,22 @@ export async function handleV1Orders(
           Number.MAX_SAFE_INTEGER,
         );
         const reason = requiredText(body.reason, 500);
-        if (!riderId || !status || !expectedGovernanceVersion || !reason || reason.length < 3 || !idempotencyKey) {
+        if (
+          !riderId || !status || !expectedGovernanceVersion || !reason || reason.length < 3 ||
+          !idempotencyKey
+        ) {
           return validationError();
         }
-        return json(await dependencies.setAdminDeliveryPartnerStatus({
-          accessToken: actor.accessToken,
-          riderId,
-          status,
-          expectedGovernanceVersion,
-          reason,
-          idempotencyKey,
-        }));
+        return json(
+          await dependencies.setAdminDeliveryPartnerStatus({
+            accessToken: actor.accessToken,
+            riderId,
+            status,
+            expectedGovernanceVersion,
+            reason,
+            idempotencyKey,
+          }),
+        );
       }
       case "setAdminMerchantOrganizationStatus": {
         const idempotencyKey = requiredIdempotencyKey(request);
@@ -1016,17 +1059,22 @@ export async function handleV1Orders(
           : undefined;
         const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
         const reason = requiredText(body.reason, 500);
-        if (!organizationId || !status || !expectedVersion || !reason || reason.length < 3 || !idempotencyKey) {
+        if (
+          !organizationId || !status || !expectedVersion || !reason || reason.length < 3 ||
+          !idempotencyKey
+        ) {
           return validationError();
         }
-        return json(await dependencies.setAdminMerchantOrganizationStatus({
-          accessToken: actor.accessToken,
-          organizationId,
-          status,
-          expectedVersion,
-          reason,
-          idempotencyKey,
-        }));
+        return json(
+          await dependencies.setAdminMerchantOrganizationStatus({
+            accessToken: actor.accessToken,
+            organizationId,
+            status,
+            expectedVersion,
+            reason,
+            idempotencyKey,
+          }),
+        );
       }
       case "setAdminMerchantBranchStatus": {
         const idempotencyKey = requiredIdempotencyKey(request);
@@ -1036,26 +1084,49 @@ export async function handleV1Orders(
           : undefined;
         const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
         const reason = requiredText(body.reason, 500);
-        if (!branchId || !status || !expectedVersion || !reason || reason.length < 3 || !idempotencyKey) {
+        if (
+          !branchId || !status || !expectedVersion || !reason || reason.length < 3 ||
+          !idempotencyKey
+        ) {
           return validationError();
         }
-        return json(await dependencies.setAdminMerchantBranchStatus({
-          accessToken: actor.accessToken,
-          branchId,
-          status,
-          expectedVersion,
-          reason,
-          idempotencyKey,
-        }));
+        return json(
+          await dependencies.setAdminMerchantBranchStatus({
+            accessToken: actor.accessToken,
+            branchId,
+            status,
+            expectedVersion,
+            reason,
+            idempotencyKey,
+          }),
+        );
       }
       case "setAdminRestaurantCustomerVisibility": {
         const idempotencyKey = requiredIdempotencyKey(request);
         const branchId = requiredUUID(body.branchId);
         const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
         const reason = requiredText(body.reason, 500);
-        if (!branchId || typeof body.visible !== "boolean" || !expectedVersion || !reason || reason.length < 3 || !idempotencyKey) return validationError();
-        if (!dependencies.setAdminRestaurantCustomerVisibility) throw new V1RequestError(503, "unavailable", "Restaurant visibility control is unavailable.");
-        return json(await dependencies.setAdminRestaurantCustomerVisibility({ accessToken: actor.accessToken, branchId, visible: body.visible, expectedVersion, reason, idempotencyKey }));
+        if (
+          !branchId || typeof body.visible !== "boolean" || !expectedVersion || !reason ||
+          reason.length < 3 || !idempotencyKey
+        ) return validationError();
+        if (!dependencies.setAdminRestaurantCustomerVisibility) {
+          throw new V1RequestError(
+            503,
+            "unavailable",
+            "Restaurant visibility control is unavailable.",
+          );
+        }
+        return json(
+          await dependencies.setAdminRestaurantCustomerVisibility({
+            accessToken: actor.accessToken,
+            branchId,
+            visible: body.visible,
+            expectedVersion,
+            reason,
+            idempotencyKey,
+          }),
+        );
       }
       case "correctAdminMerchantBranchDetails": {
         const idempotencyKey = requiredIdempotencyKey(request);
@@ -1063,20 +1134,31 @@ export async function handleV1Orders(
         const changes = record(body.changes);
         const expectedVersion = integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER);
         const reason = requiredText(body.reason, 500);
-        if (!branchId || !changes || Object.keys(changes).length === 0 ||
-          Object.keys(changes).some((key) => ![
-            "displayName", "address", "latitude", "longitude", "serviceZoneId", "capacityLimit",
-          ].includes(key)) || !expectedVersion || !reason || reason.length < 3 || !idempotencyKey) {
+        if (
+          !branchId || !changes || Object.keys(changes).length === 0 ||
+          Object.keys(changes).some((key) =>
+            ![
+              "displayName",
+              "address",
+              "latitude",
+              "longitude",
+              "serviceZoneId",
+              "capacityLimit",
+            ].includes(key)
+          ) || !expectedVersion || !reason || reason.length < 3 || !idempotencyKey
+        ) {
           return validationError();
         }
-        return json(await dependencies.correctAdminMerchantBranchDetails({
-          accessToken: actor.accessToken,
-          branchId,
-          changes,
-          expectedVersion,
-          reason,
-          idempotencyKey,
-        }));
+        return json(
+          await dependencies.correctAdminMerchantBranchDetails({
+            accessToken: actor.accessToken,
+            branchId,
+            changes,
+            expectedVersion,
+            reason,
+            idempotencyKey,
+          }),
+        );
       }
       case "setExecutiveAdmin": {
         const slot = body.slot === 1 || body.slot === 2 ? body.slot : undefined;

@@ -122,13 +122,16 @@ private struct DastakMatteRandom {
 
 public struct MarketplacePageBackground: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.marketplaceImmersiveEnvironment) private var immersive
 
     public init() {}
 
     public func body(content: Content) -> some View {
         content
             .foregroundStyle(MarketplaceColors.primaryText(for: colorScheme))
-            .background(DastakMatteBackground().ignoresSafeArea())
+            .background {
+                if !immersive { DastakMatteBackground().ignoresSafeArea() }
+            }
     }
 }
 

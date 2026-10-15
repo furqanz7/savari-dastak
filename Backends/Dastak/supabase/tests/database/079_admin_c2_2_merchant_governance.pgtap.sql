@@ -127,7 +127,19 @@ insert into private.merchant_applications (
 );
 create temporary table onboarding_before as select * from private.merchant_applications where id = 'c2250000-0000-4000-8000-000000000001';
 
-set local session_replication_role = replica;
+-- Seed only this rollback fixture; keep foreign-key checks and avoid superuser-only replication settings.
+set constraints all immediate;
+alter table dastak_v1.orders disable trigger user;
+alter table dastak_v1.matching_attempts disable trigger user;
+alter table dastak_v1.merchant_opportunities disable trigger user;
+alter table dastak_v1.fulfilments disable trigger user;
+alter table dastak_v1.delivery_missions disable trigger user;
+alter table dastak_v1.delivery_stops disable trigger user;
+alter table dastak_v1.customer_issues disable trigger user;
+alter table dastak_v1.returns disable trigger user;
+alter table dastak_v1.return_packages disable trigger user;
+alter table dastak_v1.return_missions disable trigger user;
+alter table dastak_v1.return_stops disable trigger user;
 insert into dastak_v1.orders (id, display_order_number, customer_id, order_type, status, submitted_at) values
   ('c2260000-0000-4000-8000-000000000001', 'DSK-C22-0001', 'c2200000-0000-4000-8000-000000000010', 'RETAIL_ONLY', 'MATCHING', now());
 insert into dastak_v1.matching_attempts (id, order_id, wave, status, started_at, expires_at) values
@@ -182,7 +194,19 @@ insert into dastak_v1.return_stops (
   'c22d0000-0000-4000-8000-000000000001',
   'c2240000-0000-4000-8000-000000000003', 1, 'PENDING', 1
 );
-set local session_replication_role = origin;
+
+set constraints all immediate;
+alter table dastak_v1.orders enable trigger user;
+alter table dastak_v1.matching_attempts enable trigger user;
+alter table dastak_v1.merchant_opportunities enable trigger user;
+alter table dastak_v1.fulfilments enable trigger user;
+alter table dastak_v1.delivery_missions enable trigger user;
+alter table dastak_v1.delivery_stops enable trigger user;
+alter table dastak_v1.customer_issues enable trigger user;
+alter table dastak_v1.returns enable trigger user;
+alter table dastak_v1.return_packages enable trigger user;
+alter table dastak_v1.return_missions enable trigger user;
+alter table dastak_v1.return_stops enable trigger user;
 
 select set_config('request.jwt.claim.sub', 'c2200000-0000-4000-8000-000000000001', true);
 set local role authenticated;
@@ -253,10 +277,18 @@ reset role;
 
 -- Resolve fixture work through normal terminal states, then prove suspension
 -- leaves the append-only onboarding record and branch operations untouched.
-set local session_replication_role = replica;
+-- Seed only this rollback fixture; keep foreign-key checks and avoid superuser-only replication settings.
+set constraints all immediate;
+alter table dastak_v1.delivery_stops disable trigger user;
+alter table dastak_v1.fulfilments disable trigger user;
+
 update dastak_v1.delivery_stops set status = 'COMPLETED', arrived_at = now(), completed_at = now(), version = version + 1 where id = 'c22b0000-0000-4000-8000-000000000001';
 update dastak_v1.fulfilments set status = 'RELEASED', released_at = now(), release_reason = 'Rollback fixture resolved', version = version + 1 where id = 'c2290000-0000-4000-8000-000000000001';
-set local session_replication_role = origin;
+
+set constraints all immediate;
+alter table dastak_v1.delivery_stops enable trigger user;
+alter table dastak_v1.fulfilments enable trigger user;
+
 select set_config('request.jwt.claim.sub', 'c2200000-0000-4000-8000-000000000001', true);
 set local role authenticated;
 select lives_ok($$select public.dastak_v1_admin_set_merchant_organization_status('c2230000-0000-4000-8000-000000000001','SUSPENDED',1,'Active work resolved','historical-org-suspend')$$, 'organization can suspend after active work resolves');
@@ -267,11 +299,19 @@ select is((select is_open::text || ':' || accepting_orders::text from dastak_v1.
 
 -- Existing active work may finish under suspension, but a new commitment is
 -- rejected by the serialized governance guard.
-set local session_replication_role = replica;
+-- Seed only this rollback fixture; keep foreign-key checks and avoid superuser-only replication settings.
+set constraints all immediate;
+alter table dastak_v1.orders disable trigger user;
+alter table dastak_v1.matching_attempts disable trigger user;
+alter table dastak_v1.merchant_opportunities disable trigger user;
 insert into dastak_v1.orders (id, display_order_number, customer_id, order_type, status, submitted_at) values ('c2260000-0000-4000-8000-000000000002', 'DSK-C22-0002', 'c2200000-0000-4000-8000-000000000010', 'RETAIL_ONLY', 'MATCHING', now());
 insert into dastak_v1.matching_attempts (id, order_id, wave, status, started_at, expires_at) values ('c2270000-0000-4000-8000-000000000002', 'c2260000-0000-4000-8000-000000000002', 'WAVE_1', 'OPEN', now(), now() + interval '15 minutes');
 insert into dastak_v1.merchant_opportunities (id, matching_attempt_id, order_id, organization_id, branch_id, status, started_at, expires_at, promised_prep_minutes, responded_by, responded_at, wave) values ('c2280000-0000-4000-8000-000000000002', 'c2270000-0000-4000-8000-000000000002', 'c2260000-0000-4000-8000-000000000002', 'c2230000-0000-4000-8000-000000000001', 'c2240000-0000-4000-8000-000000000001', 'SELECTED', now(), now() + interval '15 minutes', 10, 'c2200000-0000-4000-8000-000000000008', now(), 'WAVE_1');
-set local session_replication_role = origin;
+
+set constraints all immediate;
+alter table dastak_v1.orders enable trigger user;
+alter table dastak_v1.matching_attempts enable trigger user;
+alter table dastak_v1.merchant_opportunities enable trigger user;
 select throws_ok(
   $$insert into dastak_v1.fulfilments (id, order_id, organization_id, branch_id, source_opportunity_id, fulfilment_type, status, promised_prep_minutes, committed_at, prep_started_at) values ('c2290000-0000-4000-8000-000000000002','c2260000-0000-4000-8000-000000000002','c2230000-0000-4000-8000-000000000001','c2240000-0000-4000-8000-000000000001','c2280000-0000-4000-8000-000000000002','RETAIL','PREPARING',10,now(),now())$$,
   '55000', 'merchant governance status does not permit new fulfilments', 'suspended organization cannot acquire new fulfilment work'

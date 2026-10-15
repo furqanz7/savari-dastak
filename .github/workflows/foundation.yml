@@ -23,6 +23,8 @@ jobs:
       - run: swift test --package-path Packages/MarketplaceDesignSystem
       - run: swift test --package-path Packages/MarketplaceInfrastructure
       - run: swift test --package-path Packages/DastakDomain
+      - name: Native Dastak UI and model regression tests
+        run: swift test --package-path Packages/DastakUI --jobs 1
       - run: swift package dump-package --package-path Packages/SavariDomain >/dev/null
       - run: |
           if grep -R -n -E 'DastakDomain' Packages/SavariDomain \
@@ -78,6 +80,8 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.8.2
+      - name: Pin the tested PostgreSQL runtime with the permission-denial fix
+        run: node scripts/pin-local-test-postgres.mjs
       - run: supabase start
       - run: supabase db reset --local
       - run: ../../scripts/test-backend-security.sh Dastak --local

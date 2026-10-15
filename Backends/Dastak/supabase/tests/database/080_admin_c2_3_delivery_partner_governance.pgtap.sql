@@ -126,7 +126,10 @@ insert into private.delivery_partner_availability (account_id, status, location,
   ('c2300000-0000-4000-8000-000000000010', 'online', extensions.st_setsrid(extensions.st_makepoint(78.5,12.5),4326), 'c2320000-0000-4000-8000-000000000001', now(), now() + interval '15 minutes');
 
 -- One real V1 assignment proves the command consults active custody at runtime.
-set local session_replication_role = replica;
+-- Seed only this rollback fixture; keep foreign-key checks and avoid superuser-only replication settings.
+set constraints all immediate;
+alter table dastak_v1.orders disable trigger user;
+alter table dastak_v1.delivery_missions disable trigger user;
 insert into dastak_v1.orders (id, display_order_number, customer_id, order_type, status, submitted_at) values
   ('c2340000-0000-4000-8000-000000000001', 'DSK-C23-0001', 'c2300000-0000-4000-8000-000000000009', 'RETAIL_ONLY', 'MATCHING', now());
 insert into dastak_v1.delivery_missions (
@@ -137,7 +140,10 @@ insert into dastak_v1.delivery_missions (
   'c2350000-0000-4000-8000-000000000001', 'c2340000-0000-4000-8000-000000000001',
   'ASSIGNED', 'c2300000-0000-4000-8000-000000000010', 'BICYCLE', now(), '{}', 1, 100, 1000, '{}'
 );
-set local session_replication_role = origin;
+
+set constraints all immediate;
+alter table dastak_v1.orders enable trigger user;
+alter table dastak_v1.delivery_missions enable trigger user;
 
 select set_config('request.jwt.claim.sub', 'c2300000-0000-4000-8000-000000000001', true);
 set local role authenticated;

@@ -21,6 +21,33 @@ const job: V1NotificationJob = {
   attempt: 1,
 };
 
+Deno.test("suppressed expired alerts are completed but counted as neither sent nor retrying", async () => {
+  let completed = false;
+  const response = await handleV1OutboxWorker(
+    request("secret"),
+    dependencies({
+      claim: () => Promise.resolve([job]),
+      deliver: () =>
+        Promise.resolve({
+          succeeded: false,
+          suppressed: true,
+          permanentTokenFailure: false,
+          providerStatus: null,
+          providerResponse: "expired",
+        }),
+      complete: () => {
+        completed = true;
+        return Promise.resolve();
+      },
+    }),
+  );
+  const body = await response.json();
+  assertEquals(completed, true);
+  assertEquals(body.sent, 0);
+  assertEquals(body.suppressed, 1);
+  assertEquals(body.retriedOrDeadLettered, 0);
+});
+
 Deno.test("V1 outbox worker rejects a missing internal secret before privileged work", async () => {
   const calls: string[] = [];
   const response = await handleV1OutboxWorker(
@@ -29,6 +56,10 @@ Deno.test("V1 outbox worker rejects a missing internal secret before privileged 
       body: "{}",
     }),
     dependencies({
+      processLiveActivities: () => {
+        calls.push("live");
+        return Promise.resolve();
+      },
       fanout: () => {
         calls.push("fanout");
         return Promise.resolve({});
@@ -42,6 +73,31 @@ Deno.test("V1 outbox worker rejects a missing internal secret before privileged 
 Deno.test("V1 outbox worker rejects an incorrect internal secret", async () => {
   const response = await handleV1OutboxWorker(request("wrong"), dependencies());
   assertEquals(response.status, 403);
+});
+
+Deno.test("ActivityKit failure cannot stop ordinary order alerts", async () => {
+  const calls: string[] = [];
+  const response = await handleV1OutboxWorker(
+    request("secret"),
+    dependencies({
+      claim: () => Promise.resolve([job]),
+      deliver: () => {
+        calls.push("alert");
+        return Promise.resolve({
+          succeeded: true,
+          permanentTokenFailure: false,
+          providerStatus: 200,
+          providerResponse: "",
+        });
+      },
+      processLiveActivities: () => {
+        calls.push("live");
+        return Promise.reject(new Error("offline"));
+      },
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(calls, ["alert", "live"]);
 });
 
 Deno.test("V1 outbox worker fans out, claims, completes and monitors", async () => {

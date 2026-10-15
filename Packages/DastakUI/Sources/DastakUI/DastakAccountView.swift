@@ -46,45 +46,56 @@ struct DastakAccountView: View {
     let deleteAccount: () async throws -> Void
     let reauthenticate: (MarketplaceOAuthProvider) async throws -> Void
     let exportAccount: () async throws -> MarketplaceAccountExport
+    var panel: DastakCustomerAccountPanel = .combined
+    var isActive = true
 
     @Environment(\.marketplaceSignOut) private var signOut
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showingProfileEditor = false
     @State private var showingDeleteAccount = false
     @State private var accountExport: DastakAccountExportFile?
     @State private var accountAlert: AccountAlert?
     @State private var isExporting = false
     @State private var notificationStatus: DastakNotificationPermissionState = .notRequested
+    @AppStorage(MarketplaceHapticScope.preferenceKey) private var hapticsEnabled = true
+    @Environment(\.marketplaceHapticScope) private var haptics
     private let legalLinks = MarketplaceLegalLinks(bundle: .main)
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 30) {
-                profileSection
+            VStack(alignment: .leading, spacing: 22) {
+                if panel == .settings { settingsHeader; DastakSceneWeatherControls() }
                 if let refreshFailure {
                     DastakRefreshNotice(failure: refreshFailure, action: retryAccount)
                 }
-                deliverySection
-                commerceSection
-                preferencesSection
-                identitySection
-                accountActions
-                supportSection
-                partnerOpportunity
+                ForEach(panel.sections, id: \.self) { section in
+                    switch section {
+                    case .details: profileSection
+                    case .addresses: deliverySection
+                    case .shopping: commerceSection
+                    case .preferences: preferencesSection
+                    case .identity: identitySection
+                    case .actions: accountActions
+                    case .support: supportSection
+                    case .partners: partnerOpportunity
+                    }
+                }
             }
             .frame(maxWidth: MarketplaceMetrics.contentMaxWidth, alignment: .leading)
             .padding(.horizontal, MarketplaceSpacing.medium)
             .padding(.top, MarketplaceSpacing.medium)
-            .padding(.bottom, MarketplaceSpacing.xxLarge * 2)
+            .padding(.bottom, 24)
         }
         .scrollIndicators(.hidden)
         .marketplacePage()
-        .navigationTitle("Account")
+        .navigationTitle(panel.title)
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
         .sheet(isPresented: $showingProfileEditor) {
             DastakProfileEditor(customer: customer, updateProfile: updateProfile)
-                .presentationDetents([.medium, .large])
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingDeleteAccount) {
@@ -103,30 +114,41 @@ struct DastakAccountView: View {
                 .presentationDragIndicator(.visible)
         }
         .alert(item: $accountAlert, content: makeAccountAlert)
-        .task {
-            notificationStatus = await DastakNotificationPreferences.status()
-            refreshIdentities()
+        .task(id: isActive) {
+            guard isActive else { return }
+            if panel != .profile {
+                notificationStatus = await DastakNotificationPreferences.status()
+                refreshIdentities()
+            }
+        }
+    }
+
+    private var settingsHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Make it yours.").font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
+            Text("Notifications, account security, help and your Dastak workspaces.")
+                .font(MarketplaceTypography.supporting).foregroundStyle(.secondary)
         }
     }
 
     private var profileSection: some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("ACCOUNT")
+                Text(panel == .profile ? "PROFILE" : "ACCOUNT")
                     .font(.caption.weight(.bold))
                     .tracking(1.6)
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 Text("Your Dastak")
-                    .font(MarketplaceTypography.instrumentSerif(size: 44, relativeTo: .largeTitle))
-                Text("Your details, saved places and account controls—kept together and protected.")
+                    .font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
+                Text(panel == .profile ? "Your details and saved delivery addresses." : "Your details, saved places and account controls—kept together and protected.")
                     .font(MarketplaceTypography.supporting)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button { showingProfileEditor = true } label: {
+            MarketplaceFeedbackButton { showingProfileEditor = true } label: {
                 VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-                    HStack(spacing: MarketplaceSpacing.medium) {
+                    profileIdentityLayout {
                         ZStack {
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .fill(.white.opacity(0.09))
@@ -142,20 +164,20 @@ struct DastakAccountView: View {
                             Text(customer?.displayName ?? "Your account")
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(MarketplaceColors.textPrimaryDark.color)
-                                .lineLimit(1)
+                                .fixedSize(horizontal: false, vertical: true)
                             Text(customer?.phoneNumber ?? "Add a contact number")
                                 .font(.subheadline)
                                 .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
-                                .lineLimit(1)
+                                .lineLimit(dynamicTypeSize >= .xxxLarge ? nil : 1)
                             if let email = customer?.email, !email.isEmpty {
                                 Text(email)
                                     .font(.caption)
                                     .foregroundStyle(MarketplaceColors.textSecondaryDark.color)
-                                    .lineLimit(1)
+                                    .lineLimit(dynamicTypeSize >= .xxxLarge ? nil : 1)
                             }
                         }
 
-                        Spacer(minLength: 0)
+                        if dynamicTypeSize < .xxxLarge { Spacer(minLength: 0) }
 
                         ViewThatFits(in: .horizontal) {
                             Label("Edit", systemImage: "pencil")
@@ -217,6 +239,14 @@ struct DastakAccountView: View {
         )
     }
 
+    private var profileIdentityLayout: AnyLayout {
+        if dynamicTypeSize >= .xxxLarge {
+            AnyLayout(VStackLayout(alignment: .leading, spacing: MarketplaceSpacing.medium))
+        } else {
+            AnyLayout(HStackLayout(spacing: MarketplaceSpacing.medium))
+        }
+    }
+
     private var profilePlacesBadge: some View {
         profileBadge(
             savedAddressCount == 1 ? "1 saved place" : "\(savedAddressCount) saved places",
@@ -232,7 +262,7 @@ struct DastakAccountView: View {
                 trailing: "\(savedAddressCount)/10"
             )
 
-            Button(action: chooseLocation) {
+            MarketplaceFeedbackButton(action: chooseLocation) {
                 HStack(alignment: .center, spacing: MarketplaceSpacing.medium) {
                     accountIcon("location.fill")
                     VStack(alignment: .leading, spacing: 5) {
@@ -276,7 +306,7 @@ struct DastakAccountView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             accountSectionHeader("Shopping", detail: "Saved items, payments and order history")
             VStack(spacing: 0) {
-                NavigationLink {
+                MarketplaceFeedbackNavigationLink {
                     DastakWishlistView(model: customerModel)
                 } label: {
                     accountRow(
@@ -288,17 +318,17 @@ struct DastakAccountView: View {
                     )
                 }
                 Divider().padding(.leading, 64)
-                NavigationLink {
+                MarketplaceFeedbackNavigationLink {
                     DastakPaymentSettingsView(model: customerModel)
                 } label: {
                     accountRow(
                         title: "Payments",
-                        value: "Secure methods and confirmed payment history",
+                        value: "UPI/Cash on Delivery and recorded payment activity",
                         symbol: "creditcard"
                     )
                 }
                 Divider().padding(.leading, 64)
-                Button(action: openOrders) {
+                MarketplaceFeedbackButton(action: openOrders) {
                     accountRow(
                         title: "Orders and receipts",
                         value: "Track, reorder, download receipts and get help",
@@ -316,7 +346,7 @@ struct DastakAccountView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             accountSectionHeader("Help and safety", detail: "Support, policies and emergency help")
             VStack(spacing: 0) {
-                Button(action: openOrders) {
+                MarketplaceFeedbackButton(action: openOrders) {
                     accountRow(
                         title: "Help with an order",
                         value: "Get support for a current or past order",
@@ -374,7 +404,13 @@ struct DastakAccountView: View {
             accountSectionHeader("Preferences", detail: "How Dastak works on this device")
 
             VStack(spacing: 0) {
-                Button { Task { await manageNotifications() } } label: {
+                Toggle(isOn: $hapticsEnabled) {
+                    accountRow(title: "Haptics", value: "Tactile feedback for actions", symbol: "hand.tap")
+                }
+                .onChange(of: hapticsEnabled) { _, _ in haptics?.play(.selection) }
+                .accessibilityIdentifier("dastak.settings.haptics")
+                Divider().padding(.leading, 64)
+                MarketplaceFeedbackButton { Task { await manageNotifications() } } label: {
                     accountRow(
                         title: "Notifications",
                         value: notificationStatus.title,
@@ -383,7 +419,7 @@ struct DastakAccountView: View {
                 }
                 .buttonStyle(.plain)
                 Divider().padding(.leading, 64)
-                NavigationLink {
+                MarketplaceFeedbackNavigationLink {
                     DastakPrivacyAndDataView()
                 } label: {
                     accountRow(title: "Privacy and data", value: nil, symbol: "hand.raised")
@@ -423,9 +459,10 @@ struct DastakAccountView: View {
                                 .foregroundStyle(MarketplaceColors.success.color)
                                 .labelStyle(.titleAndIcon)
                         } else {
-                            Button("Add") { linkIdentity(provider) }
+                            MarketplaceFeedbackButton("Add") { linkIdentity(provider) }
                                 .buttonStyle(.bordered)
                                 .disabled(isLinkingIdentity)
+                                .accessibilityLabel(provider == .apple ? "Add Apple sign-in" : "Add Google sign-in")
                         }
                     }
                     .frame(minHeight: 76)
@@ -560,7 +597,7 @@ struct DastakAccountView: View {
                     detail: merchantSectionDetail,
                     trailing: merchantStatusLabel
                 )
-                Button(action: becomeMerchant) {
+                MarketplaceFeedbackButton(action: becomeMerchant) {
                     HStack(spacing: MarketplaceSpacing.compact) {
                         accountIcon("storefront.fill")
                         VStack(alignment: .leading, spacing: 4) {
@@ -617,7 +654,7 @@ struct DastakAccountView: View {
                 }
             }
 
-            Button(action: becomeDeliveryPartner) {
+            MarketplaceFeedbackButton(action: becomeDeliveryPartner) {
                 HStack(spacing: MarketplaceSpacing.compact) {
                     accountIcon("shippingbox.fill")
                     VStack(alignment: .leading, spacing: 4) {
@@ -778,7 +815,7 @@ struct DastakAccountView: View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
             accountSectionHeader("Account and data", detail: "Sessions, export and account access")
             VStack(spacing: 0) {
-                NavigationLink {
+                MarketplaceFeedbackNavigationLink {
                     DastakAccountSessionsView(
                         client: accountSessionClient,
                         applicationName: "Dastak"
@@ -791,7 +828,7 @@ struct DastakAccountView: View {
                     )
                 }
                 Divider().padding(.leading, 64)
-                Button { Task { await prepareAccountExport() } } label: {
+                MarketplaceFeedbackButton { Task { await prepareAccountExport() } } label: {
                     accountRow(
                         title: isExporting ? "Preparing your data..." : "Download your data",
                         value: "Profile, places, sessions, orders and issues",
@@ -800,7 +837,7 @@ struct DastakAccountView: View {
                 }
                 .disabled(isExporting)
                 Divider().padding(.leading, 64)
-                Button { accountAlert = .signOut } label: {
+                MarketplaceFeedbackButton { accountAlert = .signOut } label: {
                     accountRow(
                         title: "Sign out",
                         value: "End this session on this device",
@@ -808,7 +845,7 @@ struct DastakAccountView: View {
                     )
                 }
                 Divider().padding(.leading, 64)
-                Button(role: .destructive) { showingDeleteAccount = true } label: {
+                MarketplaceFeedbackButton(role: .destructive) { showingDeleteAccount = true } label: {
                     accountRow(
                         title: "Delete Customer",
                         value: "Remove only your Customer profile and access",
@@ -972,7 +1009,7 @@ private struct DastakAccountExportSheet: View {
             .navigationTitle("Data export")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    MarketplaceFeedbackButton("Done") { dismiss() }
                 }
             }
         }
@@ -1026,7 +1063,7 @@ private struct DastakDeleteAccountSheet: View {
                                 .accessibilityLabel("Type DELETE to confirm Customer profile deletion")
                         }
 
-                        Button(role: .destructive) {
+                        MarketplaceFeedbackButton(role: .destructive) {
                             Task { await requestDeletion() }
                         } label: {
                             ZStack {
@@ -1069,7 +1106,7 @@ private struct DastakDeleteAccountSheet: View {
             .navigationTitle("Delete Customer")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Keep Customer") { dismiss() }.disabled(isBusy)
+                    MarketplaceFeedbackButton("Keep Customer") { dismiss() }.disabled(isBusy)
                 }
             }
         }
@@ -1088,7 +1125,7 @@ private struct DastakDeleteAccountSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(linkedIdentities, id: \.provider) { identity in
-                Button {
+                MarketplaceFeedbackButton {
                     Task { await verifyAndDelete(identity.provider) }
                 } label: {
                     HStack(spacing: MarketplaceSpacing.compact) {
@@ -1116,6 +1153,8 @@ private struct DastakDeleteAccountSheet: View {
         defer { isBusy = false }
         do {
             try await deleteAccount()
+        } catch let error as DastakCustomerDeletionError {
+            errorMessage = error.localizedDescription
         } catch let error as FunctionClientError {
             if case let .api(_, code, message) = error {
                 if code == "reauthentication_required" {
@@ -1142,6 +1181,8 @@ private struct DastakDeleteAccountSheet: View {
         do {
             try await reauthenticate(provider)
             try await deleteAccount()
+        } catch let error as DastakCustomerDeletionError {
+            errorMessage = error.localizedDescription
         } catch MarketplaceAuthenticatedServicesError.identityMismatch {
             errorMessage = "A different Dastak account signed in. Deletion was cancelled."
         } catch let error as FunctionClientError {
@@ -1319,6 +1360,7 @@ struct DastakPrivacyAndDataView: View {
                                 MarketplaceColors.dastakAccent.color.opacity(0.10),
                                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                             )
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.title).font(.headline)
                             Text(item.detail)
@@ -1380,6 +1422,7 @@ struct DastakProfileEditor: View {
     let updateProfile: (String, String) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.marketplaceHapticScope) private var haptics
     @State private var displayName: String
     private let phoneNumber: String
     @State private var isSaving = false
@@ -1414,6 +1457,7 @@ struct DastakProfileEditor: View {
                                 MarketplaceColors.dastakAccent.color.opacity(0.10),
                                 in: RoundedRectangle(cornerRadius: 15, style: .continuous)
                             )
+                            .accessibilityHidden(true)
                         Text("Personal details")
                             .font(MarketplaceTypography.instrumentSerif(size: 40, relativeTo: .largeTitle))
                         Text(subtitle)
@@ -1431,6 +1475,10 @@ struct DastakProfileEditor: View {
                             .autocorrectionDisabled()
 #endif
                             .focused($focusedField, equals: .name)
+                            .submitLabel(.done)
+                            .onSubmit { dismissKeyboard() }
+                            .accessibilityLabel("Full name")
+                            .accessibilityIdentifier("dastak.profile.name")
                             .padding(.horizontal, MarketplaceSpacing.compact)
                             .frame(minHeight: 56)
                             .dastakAccountSurface()
@@ -1448,6 +1496,7 @@ struct DastakProfileEditor: View {
                         HStack(spacing: MarketplaceSpacing.small) {
                             Image(systemName: "phone.fill")
                                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
+                                .accessibilityHidden(true)
                             Text(phoneNumber)
                                 .font(.body.monospacedDigit())
                                 .textSelection(.enabled)
@@ -1456,6 +1505,7 @@ struct DastakProfileEditor: View {
                         .padding(.horizontal, MarketplaceSpacing.compact)
                         .frame(minHeight: 56)
                         .dastakAccountSurface()
+                        .accessibilityElement(children: .ignore)
                         .accessibilityLabel("Phone number \(phoneNumber)")
                         Label(
                             contactMessage,
@@ -1488,10 +1538,10 @@ struct DastakProfileEditor: View {
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }.disabled(isSaving)
+                    MarketplaceFeedbackButton("Cancel") { dismiss() }.disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isSaving ? "Saving..." : "Save") {
+                    MarketplaceFeedbackButton(isSaving ? "Saving..." : "Save") {
                         dismissKeyboard()
                         Task { await save() }
                     }
@@ -1500,12 +1550,12 @@ struct DastakProfileEditor: View {
 #if os(iOS)
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("Done") { dismissKeyboard() }
+                    MarketplaceFeedbackButton("Done") { dismissKeyboard() }
                 }
 #endif
             }
         }
-        .onTapGesture { dismissKeyboard() }
+        .interactiveDismissDisabled(isSaving)
     }
 
     private var isValid: Bool {
@@ -1535,18 +1585,21 @@ struct DastakProfileEditor: View {
     @MainActor
     private func save() async {
         didAttemptSave = true
-        guard isValid else { return }
+        guard isValid else { haptics?.play(.warning); return }
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
         do {
             try await updateProfile(displayName, phoneNumber)
+            haptics?.play(.success)
             dismiss()
         } catch let error as FunctionClientError {
+            haptics?.play(.error)
             if case let .api(_, _, message) = error { errorMessage = message }
             else { errorMessage = "Your profile could not be updated." }
         } catch {
             errorMessage = "Your profile could not be updated."
+            haptics?.play(.error)
         }
     }
 }

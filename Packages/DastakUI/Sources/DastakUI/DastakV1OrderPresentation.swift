@@ -1,7 +1,12 @@
 import Foundation
+import DastakLiveTracking
 import MarketplaceInfrastructure
 
 enum DastakV1OrderPresentation {
+    static func isAssigningRider(_ status: DastakV1OrderStatus, trackingPhase: String?, fulfilmentState: String? = nil) -> Bool {
+        DastakOrderActivity.presentationStatus(orderStatus: status.rawValue, trackingPhase: trackingPhase,
+                                              fulfilmentState: fulfilmentState) == "ASSIGNING_RIDER"
+    }
     static let journeySteps = [
         "Finding items",
         "Ready to confirm",
@@ -17,8 +22,10 @@ enum DastakV1OrderPresentation {
 
     static func title(
         _ status: DastakV1OrderStatus,
-        trackingPhase: String? = nil
+        trackingPhase: String? = nil,
+        fulfilmentState: String? = nil
     ) -> String {
+        if isAssigningRider(status, trackingPhase: trackingPhase, fulfilmentState: fulfilmentState) { return "Assigning your rider" }
         if status == .outForDelivery, trackingPhase == "ARRIVED" {
             return "Rider arrived"
         }
@@ -38,8 +45,12 @@ enum DastakV1OrderPresentation {
 
     static func message(
         _ status: DastakV1OrderStatus,
-        trackingPhase: String? = nil
+        trackingPhase: String? = nil,
+        fulfilmentState: String? = nil
     ) -> String {
+        if isAssigningRider(status, trackingPhase: trackingPhase, fulfilmentState: fulfilmentState) {
+            return "Your order is ready. We’re finding a delivery partner to collect it."
+        }
         if status == .outForDelivery, trackingPhase == "ARRIVED" {
             return "Your delivery partner is at the delivery destination. Share the PIN only when you have every package."
         }
@@ -84,8 +95,10 @@ enum DastakV1OrderPresentation {
 
     static func symbol(
         _ status: DastakV1OrderStatus,
-        trackingPhase: String? = nil
+        trackingPhase: String? = nil,
+        fulfilmentState: String? = nil
     ) -> String {
+        if isAssigningRider(status, trackingPhase: trackingPhase, fulfilmentState: fulfilmentState) { return "person.badge.clock" }
         if status == .outForDelivery, trackingPhase == "ARRIVED" {
             return "mappin.and.ellipse"
         }
@@ -116,8 +129,10 @@ enum DastakV1OrderPresentation {
 
     static func journeyLabel(
         _ status: DastakV1OrderStatus,
-        trackingPhase: String? = nil
+        trackingPhase: String? = nil,
+        fulfilmentState: String? = nil
     ) -> String? {
+        if isAssigningRider(status, trackingPhase: trackingPhase, fulfilmentState: fulfilmentState) { return "Assigning your rider" }
         if status == .outForDelivery, trackingPhase == "ARRIVED" {
             return "Rider arrived"
         }

@@ -19,4 +19,13 @@ Scope: Profile, Settings and Food phone interaction only. No SKU, background, ba
 - Temporary browser viewport overrides restored after checking.
 - Full suite: 971 tests / 142 files passed. TypeScript build, scoped ESLint and `git diff --check` passed. Browser identifies the corrected Save button by name.
 
-Release verification will be recorded after deployment. Do not interpret this bounded pass as proof that every app interaction has been audited.
+## Production release
+
+- Pushed commit `9eac731a4cdd8a3a798b036ecf539c45fd164618`.
+- Customer deployment `dpl_CWNeKdcgZhoeEQf1N4uXzvre5VXV`: READY, production, normal alias `https://dastak-customer.vercel.app/`; immutable URL `https://dastak-60dxuk5d4-liquiflows-projects.vercel.app/`.
+- Release metadata matches the commit; Customer variant and security headers passed the deployment script checks.
+- Live refresh retained sign-in. Profile editor exposes Save changes by name, Cancel returns safely, Settings opens with export available, no lingering dialogs or body scroll lock.
+- Browser warning/error capture empty for the checked interaction; deployment-specific error-log query returned no entries. This does not verify all Supabase/backend logs or monitoring configuration.
+- Three redundant non-production previews from this push were cancelled; no production deployment was cancelled.
+
+Do not interpret this bounded pass as proof that every app interaction has been audited. Physical phone keyboard behaviour, actual browser notification permissions, real data export and order placement were not exercised against the live account.

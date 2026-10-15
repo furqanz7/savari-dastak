@@ -336,7 +336,9 @@ public struct DastakMerchantAccessView: View {
         .sheet(isPresented: $showsLocationPicker) {
             DastakLocationPicker(
                 title: "Store location",
-                currentLocation: model.selectedLocation ?? locationManager.location,
+                initialLocation: model.selectedLocation,
+                currentLocation: locationManager.location,
+                currentLocationError: locationManager.errorMessage,
                 useLocation: model.selectLocation,
                 requestCurrentLocation: locationManager.requestLocation
             )

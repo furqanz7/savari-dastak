@@ -3,6 +3,92 @@ import { exportPKCS8, generateKeyPair } from "npm:jose@5";
 import { createApnsSender } from "../../process-v1-outbox/apns.ts";
 import type { V1NotificationJob } from "../../process-v1-outbox/handler.ts";
 
+Deno.test("separate Customer and Rider alerts never share a collapse id; retries do", async () => {
+  const { privateKey } = await generateKeyPair("ES256", { extractable: true });
+  const ids: string[] = [];
+  const sender = createApnsSender({
+    environment: "sandbox",
+    teamId: "TEAM",
+    keyId: "KEY",
+    bundleId: "com.dastak.app",
+    privateKey: await exportPKCS8(privateKey),
+  }, (input, init) => {
+    ids.push(new Request(input, init).headers.get("apns-collapse-id")!);
+    return Promise.resolve(new Response("", { status: 200 }));
+  });
+  const customer = job();
+  const rider = {
+    ...customer,
+    deliveryId: "94000000-0000-4000-8000-000000000005",
+    notificationType: "rider.assigned",
+  };
+  await sender(customer);
+  await sender(rider);
+  await sender({ ...rider, attempt: 2 });
+  assertEquals(ids, [customer.deliveryId, rider.deliveryId, rider.deliveryId]);
+});
+
+Deno.test("expired and undated rider offers never reach APNs or disable a token", async () => {
+  let requests = 0;
+  const sender = createApnsSender({
+    environment: "sandbox",
+    teamId: "TEAM",
+    keyId: "KEY",
+    bundleId: "com.dastak.app",
+    privateKey: "unused",
+  }, () => {
+    requests += 1;
+    return Promise.resolve(new Response("", { status: 200 }));
+  }, () => 1_800_000_000_000);
+  for (const expiresAt of [undefined, "invalid", new Date(1_800_000_000_000).toISOString()]) {
+    const result = await sender({
+      ...job(),
+      notificationType: "rider.mission_offer",
+      expiresAt,
+      attempt: 2,
+    });
+    assertEquals(result.suppressed, true);
+    assertEquals(result.permanentTokenFailure, false);
+  }
+  assertEquals(requests, 0);
+});
+
+Deno.test("valid rider offer carries its exact APNs expiration and is rechecked after signing", async () => {
+  const { privateKey } = await generateKeyPair("ES256", { extractable: true });
+  let currentTime = 1_800_000_000_000;
+  let request: Request | undefined;
+  const sender = createApnsSender({
+    environment: "sandbox",
+    teamId: "TEAM",
+    keyId: "KEY",
+    bundleId: "com.dastak.app",
+    privateKey: await exportPKCS8(privateKey),
+  }, (input, init) => {
+    request = new Request(input, init);
+    return Promise.resolve(new Response("", { status: 200 }));
+  }, () => currentTime);
+  const offer = {
+    ...job(),
+    notificationType: "rider.mission_offer",
+    expiresAt: new Date(currentTime + 60_000).toISOString(),
+  };
+  assertEquals((await sender(offer)).succeeded, true);
+  assertEquals(request?.headers.get("apns-expiration"), "1800000060");
+  currentTime += 60_000;
+  assertEquals((await sender(offer)).suppressed, true);
+  let clockReads = 0;
+  const duringSigning = createApnsSender({
+    environment: "sandbox",
+    teamId: "TEAM",
+    keyId: "KEY",
+    bundleId: "com.dastak.app",
+    privateKey: await exportPKCS8(privateKey),
+  }, () => {
+    throw new Error("Offer expired while preparing its signature");
+  }, () => ++clockReads >= 3 ? currentTime : currentTime - 60_000);
+  assertEquals((await duringSigning(offer)).suppressed, true);
+});
+
 Deno.test("APNs request carries only the safe V1 order route and deterministic delivery id", async () => {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const pem = await exportPKCS8(privateKey);

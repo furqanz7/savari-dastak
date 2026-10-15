@@ -11,6 +11,8 @@ enum DastakMerchantQueue: String, CaseIterable {
     case incoming = "New"
     case preparing = "Preparing"
     case ready = "Ready"
+    case returns = "Returns"
+    case settlements = "Settlements"
     case history = "History"
 
     static func isHistory(_ order: DastakV1MerchantFulfilment) -> Bool {
@@ -48,7 +50,7 @@ struct DastakMerchantOrdersView: View {
     private var foodRequests: [DastakV1RestaurantRequest] {
         model.restaurantRequests.filter { $0.status == "OFFERED" }
     }
-    private var incomingCount: Int { newOpportunities.count + foodRequests.count }
+    private var incomingCount: Int { newOpportunities.count + foodRequests.count + model.recoveryOpportunities.filter { $0.status == "OFFERED" }.count }
     private var visibleFulfilments: [DastakV1MerchantFulfilment] {
         model.v1Fulfilments.filter { queue.includes($0) }
     }
@@ -66,6 +68,11 @@ struct DastakMerchantOrdersView: View {
                         connectionStatus
                         summary
                         filters
+                        if queue == .history {
+                            Text("Recent order window: up to 100 fulfilments and 10 earlier orders. This is not your complete order history.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        DastakMerchantRecoveryStatus(model: model)
                         if let notice = model.notice {
                             HStack(alignment: .top) {
                                 Label(notice, systemImage: "checkmark.circle.fill")
@@ -77,11 +84,19 @@ struct DastakMerchantOrdersView: View {
                             .padding(14).marketplaceFlatSurface()
                         }
                         if showsIncoming { incomingSection }
+                        if showsIncoming || queue == .history {
+                            DastakMerchantRecoveryLane(model: model, history: queue == .history)
+                        }
+                        if queue == .returns || queue == .all || queue == .history {
+                            DastakMerchantReturnsView(model: model, history: queue == .history,
+                                showAll: queue == .returns)
+                        }
+                        if queue == .settlements { DastakMerchantSettlementsView(model: model) }
                         if !visibleFulfilments.isEmpty {
                             sectionTitle(queue == .history ? "Order history" : "Your orders", count: visibleFulfilments.count)
                             ForEach(visibleFulfilments) { fulfilment in
                                 DastakV1MerchantFulfilmentCard(
-                                    fulfilment: fulfilment, busy: model.isBusy,
+                                    fulfilment: fulfilment, busy: model.isBusy || !model.fulfilmentsCurrent || model.recoveryBlocks(fulfilment),
                                     declarePackages: { count in Task { await model.declareV1Packages(fulfilment, count: count) } },
                                     captureEvidence: { data, contentType, fileExtension in
                                         Task { await model.addV1ReadyEvidence(fulfilment, data: data, contentType: contentType, fileExtension: fileExtension) }
@@ -89,13 +104,16 @@ struct DastakMerchantOrdersView: View {
                                     markReady: { Task { await model.markV1Ready(fulfilment) } },
                                     reportError: { model.errorMessage = $0 }
                                 )
+                                DastakMerchantProblemView(model: model, fulfilment: fulfilment)
+                                    .id("problem:\(fulfilment.id):\(fulfilment.version)")
                             }
                         }
                         if queue == .all || queue == .history { legacyOrders }
                         if isEmpty {
                             DastakEmptyState(
                                 symbol: queue == .history ? "clock.arrow.circlepath" : "tray",
-                                title: queue == .history ? "No completed orders yet" : "You're all caught up",
+                                title: !model.orderRefreshFailures.isEmpty ? "Order connection needs attention"
+                                    : queue == .history ? "No completed orders in this window" : "You're all caught up",
                                 message: model.orderRefreshFailures.isEmpty
                                     ? "New requests appear here automatically. Keep this workspace open while accepting orders."
                                     : "Some orders could not be refreshed. Retry before assuming the queue is empty."
@@ -135,6 +153,7 @@ struct DastakMerchantOrdersView: View {
         parts.append(contentsOf: model.restaurantRequests.map {
             "restaurant:\($0.id.uuidString):\($0.status)"
         })
+        parts.append(contentsOf: model.recoveryOpportunities.map { "recovery:\($0.id):\($0.status):\($0.version)" })
         parts.append(contentsOf: model.v1Fulfilments.map {
             "fulfilment:\($0.id.uuidString):\($0.status):\($0.orderStatus):" +
                 "\($0.delivery?.stopStatus ?? "no-stop"):\($0.tracking?.phase ?? "no-tracking")"
@@ -219,8 +238,8 @@ struct DastakMerchantOrdersView: View {
     }
 
     @ViewBuilder private var incomingSection: some View {
-        if incomingCount > 0 {
-            sectionTitle("Needs your response", count: incomingCount)
+        if newOpportunities.count + foodRequests.count > 0 {
+            sectionTitle("Needs your response", count: newOpportunities.count + foodRequests.count)
             ForEach(newOpportunities) { opportunity in
                 DastakMerchantIncomingCard(
                     number: opportunity.displayOrderNumber, branch: opportunity.branch.displayName,
@@ -280,10 +299,13 @@ struct DastakMerchantOrdersView: View {
     }
 
     private var isEmpty: Bool {
-        visibleFulfilments.isEmpty &&
+        queue != .returns && queue != .settlements && visibleFulfilments.isEmpty &&
         (!showsIncoming || (incomingCount == 0 && heldOpportunities.isEmpty)) &&
         (queue != .all || model.activeOrders.isEmpty) &&
         (queue != .history || model.recentOrders.isEmpty)
+        && (queue != .history || model.recoveryOpportunities.allSatisfy { $0.status == "OFFERED" })
+        && (queue != .history || model.returnReceipts.allSatisfy { $0.status != "COMPLETED" })
+        && (queue != .all || model.returnReceipts.allSatisfy { $0.status == "COMPLETED" })
     }
 
     private func sectionTitle(_ title: String, count: Int) -> some View {

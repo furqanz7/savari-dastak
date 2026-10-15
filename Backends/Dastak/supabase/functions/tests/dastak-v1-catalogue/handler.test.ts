@@ -9,20 +9,60 @@ import {
 Deno.test("Checkout quote is authenticated, batched and read-only with no actor/price override", async () => {
   let recorded: unknown;
   const lines = [{ lineType: "RETAIL_SKU", skuId, quantity: 2 }];
-  const response = await handleV1Catalogue(request({ operation: "customerCheckoutQuote", addressId: skuId,
-    addressVersion: "2026-10-09T00:00:00Z", lines, accountId: otherAccountId, totalPaise: 0, latitude: 50 }),
-    dependencies({ customerCheckoutQuote: input => { recorded = input; return Promise.resolve({}); } }));
+  const response = await handleV1Catalogue(
+    request({
+      operation: "customerCheckoutQuote",
+      addressId: skuId,
+      addressVersion: "2026-10-09T00:00:00Z",
+      lines,
+      accountId: otherAccountId,
+      totalPaise: 0,
+      latitude: 50,
+    }),
+    dependencies({
+      customerCheckoutQuote: (input) => {
+        recorded = input;
+        return Promise.resolve({});
+      },
+    }),
+  );
   assertEquals(response.status, 200);
-  assertEquals(recorded, { accessToken: actor.accessToken, addressId: skuId, addressVersion: "2026-10-09T00:00:00Z", lines, restaurantBranchId: null });
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    addressId: skuId,
+    addressVersion: "2026-10-09T00:00:00Z",
+    lines,
+    restaurantBranchId: null,
+  });
 });
 Deno.test("Checkout quote rejects malformed quantities, identities, options and oversized baskets", async () => {
   let calls = 0;
-  const deps = dependencies({ customerCheckoutQuote: () => { calls++; return Promise.resolve({}); } });
+  const deps = dependencies({
+    customerCheckoutQuote: () => {
+      calls++;
+      return Promise.resolve({});
+    },
+  });
   const line = { lineType: "RETAIL_SKU", skuId, quantity: 1 };
-  for (const lines of [[], Array(81).fill(line), [{ ...line, quantity: 0 }], [{ ...line, quantity: 1.5 }],
-    [{ ...line, skuId: "bad" }], [{ lineType: "FOOD_MENU_ITEM", menuItemId: skuId, quantity: 1, optionIds: ["bad"] }]]) {
-    const response = await handleV1Catalogue(request({ operation: "customerCheckoutQuote", addressId: skuId,
-      addressVersion: "2026-10-09T00:00:00Z", lines }), deps);
+  for (
+    const lines of [
+      [],
+      Array(81).fill(line),
+      [{ ...line, quantity: 0 }],
+      [{ ...line, quantity: 1.5 }],
+      [{ ...line, skuId: "bad" }],
+      [{ lineType: "FOOD_MENU_ITEM", menuItemId: skuId, quantity: 1, optionIds: ["bad"] }],
+    ]
+  ) {
+    const response = await handleV1Catalogue(
+      request({
+        operation: "customerCheckoutQuote",
+        addressId: skuId,
+        addressVersion: "2026-10-09T00:00:00Z",
+        lines,
+      }),
+      deps,
+    );
     assertEquals(response.status, 400);
   }
   assertEquals(calls, 0);
@@ -30,30 +70,95 @@ Deno.test("Checkout quote rejects malformed quantities, identities, options and 
 
 Deno.test("Customer area reads bind to the bearer actor and an owned-address version, not client coordinates", async () => {
   let recorded: unknown;
-  const response = await handleV1Catalogue(request({ operation: "customerAreaAvailability", addressId: skuId,
-    addressVersion: "2026-10-08T00:00:00Z", accountId: otherAccountId, latitude: 50, longitude: 50 }),
-    dependencies({ customerAreaAvailability: input => { recorded = input; return Promise.resolve({ stock: {} }); } }));
+  const response = await handleV1Catalogue(
+    request({
+      operation: "customerAreaAvailability",
+      addressId: skuId,
+      addressVersion: "2026-10-08T00:00:00Z",
+      accountId: otherAccountId,
+      latitude: 50,
+      longitude: 50,
+    }),
+    dependencies({
+      customerAreaAvailability: (input) => {
+        recorded = input;
+        return Promise.resolve({ stock: {} });
+      },
+    }),
+  );
   assertEquals(response.status, 200);
-  assertEquals(recorded, { accessToken: actor.accessToken, addressId: skuId, addressVersion: "2026-10-08T00:00:00Z" });
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    addressId: skuId,
+    addressVersion: "2026-10-08T00:00:00Z",
+  });
 });
 Deno.test("Customer area reads reject invalid IDs and stale-location cursors before invoking SQL", async () => {
   let calls = 0;
-  const deps = dependencies({ customerAreaAvailability: () => { calls++; return Promise.resolve({}); }, customerRestaurantAreaPage: () => { calls++; return Promise.resolve({}); } });
-  for (const payload of [
-    { operation: "customerAreaAvailability", addressId: "bad", addressVersion: "2026-10-08T00:00:00Z" },
-    { operation: "customerAreaAvailability", addressId: skuId, addressVersion: "bad" },
-    { operation: "customerRestaurantAreaPage", addressId: skuId, addressVersion: "2026-10-08T00:00:00Z", cursor: { name: "Cafe", branchId: categoryId, distanceMeters: 2, addressId: otherAccountId, addressVersion: "2026-10-08T00:00:00Z" } },
-  ]) assertEquals((await handleV1Catalogue(request(payload), deps)).status, 400);
+  const deps = dependencies({
+    customerAreaAvailability: () => {
+      calls++;
+      return Promise.resolve({});
+    },
+    customerRestaurantAreaPage: () => {
+      calls++;
+      return Promise.resolve({});
+    },
+  });
+  for (
+    const payload of [
+      {
+        operation: "customerAreaAvailability",
+        addressId: "bad",
+        addressVersion: "2026-10-08T00:00:00Z",
+      },
+      { operation: "customerAreaAvailability", addressId: skuId, addressVersion: "bad" },
+      {
+        operation: "customerRestaurantAreaPage",
+        addressId: skuId,
+        addressVersion: "2026-10-08T00:00:00Z",
+        cursor: {
+          name: "Cafe",
+          branchId: categoryId,
+          distanceMeters: 2,
+          addressId: otherAccountId,
+          addressVersion: "2026-10-08T00:00:00Z",
+        },
+      },
+    ]
+  ) assertEquals((await handleV1Catalogue(request(payload), deps)).status, 400);
   assertEquals(calls, 0);
 });
 Deno.test("Area Food exact lookups remain location-scoped and never receive an actor override", async () => {
   let recorded: unknown;
-  const response = await handleV1Catalogue(request({ operation: "customerRestaurantAreaPage", addressId: skuId,
-    addressVersion: "2026-10-08T00:00:00Z", branchId: categoryId, limit: 1, accountId: otherAccountId }),
-    dependencies({ customerRestaurantAreaPage: input => { recorded = input; return Promise.resolve({ restaurants: [], nextCursor: null }); } }));
+  const response = await handleV1Catalogue(
+    request({
+      operation: "customerRestaurantAreaPage",
+      addressId: skuId,
+      addressVersion: "2026-10-08T00:00:00Z",
+      branchId: categoryId,
+      limit: 1,
+      accountId: otherAccountId,
+    }),
+    dependencies({
+      customerRestaurantAreaPage: (input) => {
+        recorded = input;
+        return Promise.resolve({ restaurants: [], nextCursor: null });
+      },
+    }),
+  );
   assertEquals(response.status, 200);
-  assertEquals(recorded, { accessToken: actor.accessToken, addressId: skuId, addressVersion: "2026-10-08T00:00:00Z",
-    branchId: categoryId, query: null, limit: 1, afterName: null, afterBranchId: null, afterDistanceMeters: null });
+  assertEquals(recorded, {
+    accessToken: actor.accessToken,
+    addressId: skuId,
+    addressVersion: "2026-10-08T00:00:00Z",
+    branchId: categoryId,
+    query: null,
+    limit: 1,
+    afterName: null,
+    afterBranchId: null,
+    afterDistanceMeters: null,
+  });
 });
 
 Deno.test("V1 catalogue serves CORS preflight before authentication", async () => {
@@ -129,9 +234,13 @@ Deno.test("V1 browse map is read-only and bound to the authenticated actor", asy
   });
   const map = await handleV1Catalogue(request({ operation: "catalogueBrowseMap" }), deps);
   const skus = await handleV1Catalogue(
-    request({ operation: "catalogueBrowseSkuIds", nodeKey: "ready-masala" }), deps);
+    request({ operation: "catalogueBrowseSkuIds", nodeKey: "ready-masala" }),
+    deps,
+  );
   const invalid = await handleV1Catalogue(
-    request({ operation: "catalogueBrowseSkuIds", nodeKey: "../ready-masala" }), deps);
+    request({ operation: "catalogueBrowseSkuIds", nodeKey: "../ready-masala" }),
+    deps,
+  );
   assertEquals(map.status, 200);
   assertEquals(await body(map), { version: 1, nodes: [] });
   assertEquals(mapToken, actor.accessToken);
@@ -218,12 +327,39 @@ Deno.test("V1 Restaurant discovery and merchant menu commands preserve authentic
 
 Deno.test("Food pages preserve authenticated cursors and reject malformed or oversized requests", async () => {
   const calls: unknown[] = [];
-  const deps = dependencies({ customerRestaurantPage: input => { calls.push(input); return Promise.resolve({ restaurants: [], nextCursor: null }); } });
-  const response = await handleV1Catalogue(request({ operation: "customerRestaurantPage", query: " Cafe ", limit: 100, cursor: { name: " Exact name ", branchId: skuId } }), deps);
+  const deps = dependencies({
+    customerRestaurantPage: (input) => {
+      calls.push(input);
+      return Promise.resolve({ restaurants: [], nextCursor: null });
+    },
+  });
+  const response = await handleV1Catalogue(
+    request({
+      operation: "customerRestaurantPage",
+      query: " Cafe ",
+      limit: 100,
+      cursor: { name: " Exact name ", branchId: skuId },
+    }),
+    deps,
+  );
   assertEquals(response.status, 200);
-  assertEquals(calls, [{ accessToken: actor.accessToken, query: "Cafe", limit: 100, afterName: " Exact name ", afterBranchId: skuId, branchId: null }]);
-  for (const payload of [{ limit: 101 }, { cursor: { name: "Cafe" } }, { cursor: "bad" }, { branchId: "bad" }, { branchId: skuId, cursor: { name: "Cafe", branchId: skuId } }]) {
-    const bad = await handleV1Catalogue(request({ operation: "customerRestaurantPage", ...payload }), deps);
+  assertEquals(calls, [{
+    accessToken: actor.accessToken,
+    query: "Cafe",
+    limit: 100,
+    afterName: " Exact name ",
+    afterBranchId: skuId,
+    branchId: null,
+  }]);
+  for (
+    const payload of [{ limit: 101 }, { cursor: { name: "Cafe" } }, { cursor: "bad" }, {
+      branchId: "bad",
+    }, { branchId: skuId, cursor: { name: "Cafe", branchId: skuId } }]
+  ) {
+    const bad = await handleV1Catalogue(
+      request({ operation: "customerRestaurantPage", ...payload }),
+      deps,
+    );
     assertEquals(bad.status, 400);
   }
   assertEquals(calls.length, 1);
@@ -231,22 +367,84 @@ Deno.test("Food pages preserve authenticated cursors and reject malformed or ove
 
 Deno.test("Nearest Food pages bind saved address and cursor to authenticated RPC, never caller actor or GPS", async () => {
   const calls: unknown[] = [];
-  const deps = dependencies({ customerRestaurantNearestPage: input => { calls.push(input); return Promise.resolve({ restaurants: [], nextCursor: null }); } });
+  const deps = dependencies({
+    customerRestaurantNearestPage: (input) => {
+      calls.push(input);
+      return Promise.resolve({ restaurants: [], nextCursor: null });
+    },
+  });
   const addressVersion = "2026-10-08T00:00:00Z";
-  const cursor = { name: " Exact name ", branchId: skuId, distanceMeters: 1234, addressId: categoryId, addressVersion };
-  const response = await handleV1Catalogue(request({ operation: "customerRestaurantNearestPage", addressId: categoryId, addressVersion,
-    cursor, query: " dish ", accountId: otherAccountId, latitude: 1, longitude: 2 }), deps);
+  const cursor = {
+    name: " Exact name ",
+    branchId: skuId,
+    distanceMeters: 1234,
+    addressId: categoryId,
+    addressVersion,
+  };
+  const response = await handleV1Catalogue(
+    request({
+      operation: "customerRestaurantNearestPage",
+      addressId: categoryId,
+      addressVersion,
+      cursor,
+      query: " dish ",
+      accountId: otherAccountId,
+      latitude: 1,
+      longitude: 2,
+    }),
+    deps,
+  );
   assertEquals(response.status, 200);
-  assertEquals(calls, [{ accessToken: actor.accessToken, addressId: categoryId, addressVersion, query: "dish", limit: 100,
-    afterName: " Exact name ", afterBranchId: skuId, afterDistanceMeters: 1234 }]);
-  for (const payload of [{ addressId: "bad" }, { addressVersion: "bad" }, { limit: 101 }, { cursor: { ...cursor, addressId: otherAccountId } },
-    { cursor: { ...cursor, addressVersion: "2026-10-09T00:00:00Z" } }, { cursor: { ...cursor, distanceMeters: -1 } },
-    { cursor: { ...cursor, distanceMeters: 41000001 } }, { cursor: { name: "x", branchId: skuId } }, { cursor: "bad" }, { branchId: skuId }]) {
-    assertEquals((await handleV1Catalogue(request({ operation: "customerRestaurantNearestPage", addressId: categoryId, addressVersion, ...payload }), deps)).status,400);
+  assertEquals(calls, [{
+    accessToken: actor.accessToken,
+    addressId: categoryId,
+    addressVersion,
+    query: "dish",
+    limit: 100,
+    afterName: " Exact name ",
+    afterBranchId: skuId,
+    afterDistanceMeters: 1234,
+  }]);
+  for (
+    const payload of [
+      { addressId: "bad" },
+      { addressVersion: "bad" },
+      { limit: 101 },
+      { cursor: { ...cursor, addressId: otherAccountId } },
+      { cursor: { ...cursor, addressVersion: "2026-10-09T00:00:00Z" } },
+      { cursor: { ...cursor, distanceMeters: -1 } },
+      { cursor: { ...cursor, distanceMeters: 41000001 } },
+      { cursor: { name: "x", branchId: skuId } },
+      { cursor: "bad" },
+      { branchId: skuId },
+    ]
+  ) {
+    assertEquals(
+      (await handleV1Catalogue(
+        request({
+          operation: "customerRestaurantNearestPage",
+          addressId: categoryId,
+          addressVersion,
+          ...payload,
+        }),
+        deps,
+      )).status,
+      400,
+    );
   }
   assertEquals(calls.length, 1);
-  assertEquals((await handleV1Catalogue(request({ operation: "customerRestaurantNearestPage", addressId: categoryId, addressVersion,
-    cursor: { ...cursor, distanceMeters: null } }), deps)).status,200);
+  assertEquals(
+    (await handleV1Catalogue(
+      request({
+        operation: "customerRestaurantNearestPage",
+        addressId: categoryId,
+        addressVersion,
+        cursor: { ...cursor, distanceMeters: null },
+      }),
+      deps,
+    )).status,
+    200,
+  );
 });
 
 Deno.test("V1 Restaurant menu mutation rejects unsupported entities without calling RPC", async () => {
@@ -733,19 +931,35 @@ Deno.test("governed media upload verifies bytes and preserves exact entity scope
   form.set("reason", "Publish reviewed restaurant presentation media");
   form.set("file", new File([png], "banner.png", { type: "image/png" }));
   const assetId = "66666666-6666-4666-8666-666666666666";
-  const response = await handleV1Catalogue(multipartRequest(form, "restaurant-banner-once"), dependencies({
-    prepareGovernedMedia: (input) => {
-      calls.push({ step: "prepare", ...input });
-      return Promise.resolve({ assetId, imageKey: `canonical/restaurant/restaurant_branch_banner/${categoryId}/${assetId}.png`, mediaVersion: 3 });
-    },
-    storeAdminCatalogueAsset: (input) => { calls.push({ step: "store", objectPath: input.objectPath }); return Promise.resolve(); },
-    finalizeGovernedMedia: (input) => { calls.push({ step: "finalize", ...input }); return Promise.resolve({ assetId, mediaVersion: 4 }); },
-  }));
+  const response = await handleV1Catalogue(
+    multipartRequest(form, "restaurant-banner-once"),
+    dependencies({
+      prepareGovernedMedia: (input) => {
+        calls.push({ step: "prepare", ...input });
+        return Promise.resolve({
+          assetId,
+          imageKey: `canonical/restaurant/restaurant_branch_banner/${categoryId}/${assetId}.png`,
+          mediaVersion: 3,
+        });
+      },
+      storeAdminCatalogueAsset: (input) => {
+        calls.push({ step: "store", objectPath: input.objectPath });
+        return Promise.resolve();
+      },
+      finalizeGovernedMedia: (input) => {
+        calls.push({ step: "finalize", ...input });
+        return Promise.resolve({ assetId, mediaVersion: 4 });
+      },
+    }),
+  );
   assertEquals(response.status, 200);
   assertEquals(calls[0].entityType, "RESTAURANT_BRANCH_BANNER");
   assertEquals(calls[0].entityId, categoryId);
   assertEquals(calls[0].idempotencyKey, "restaurant-banner-once:prepare");
-  assertEquals(calls[1].objectPath, `canonical/restaurant/restaurant_branch_banner/${categoryId}/${assetId}.png`);
+  assertEquals(
+    calls[1].objectPath,
+    `canonical/restaurant/restaurant_branch_banner/${categoryId}/${assetId}.png`,
+  );
   assertEquals(calls[2].widthPixels, 1440);
   assertEquals(calls[2].heightPixels, 720);
   assertEquals(calls[2].idempotencyKey, "restaurant-banner-once:finalize");
@@ -760,9 +974,17 @@ Deno.test("governed media refuses a server path outside its exact entity", async
   form.set("sourceReference", "Reviewed taxonomy artwork");
   form.set("reason", "Set one-time category art");
   form.set("file", new File([minimalPng(400, 400)], "category.png", { type: "image/png" }));
-  const response = await handleV1Catalogue(multipartRequest(form, "taxonomy-path-check"), dependencies({
-    prepareGovernedMedia: () => Promise.resolve({ assetId: skuId, imageKey: `canonical/taxonomy/category/${otherAccountId}/${skuId}.png`, mediaVersion: 1 }),
-  }));
+  const response = await handleV1Catalogue(
+    multipartRequest(form, "taxonomy-path-check"),
+    dependencies({
+      prepareGovernedMedia: () =>
+        Promise.resolve({
+          assetId: skuId,
+          imageKey: `canonical/taxonomy/category/${otherAccountId}/${skuId}.png`,
+          mediaVersion: 1,
+        }),
+    }),
+  );
   assertEquals(response.status, 500);
   assertEquals((await body(response)).error.code, "invalid_asset_contract");
 });
@@ -869,7 +1091,8 @@ function dependencies(
     catalogueBrowseSkuIds: overrides.catalogueBrowseSkuIds ?? (() => Promise.resolve([])),
     customerRestaurants: overrides.customerRestaurants ??
       (() => Promise.resolve({ restaurants: [] })),
-    customerRestaurantPage: overrides.customerRestaurantPage ?? (() => Promise.resolve({ restaurants: [], nextCursor: null })),
+    customerRestaurantPage: overrides.customerRestaurantPage ??
+      (() => Promise.resolve({ restaurants: [], nextCursor: null })),
     customerRestaurantNearestPage: overrides.customerRestaurantNearestPage,
     customerAreaAvailability: overrides.customerAreaAvailability,
     customerCheckoutQuote: overrides.customerCheckoutQuote,

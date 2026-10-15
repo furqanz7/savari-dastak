@@ -12,15 +12,13 @@ private let dastakPendingEntityIDKey = "dastak.notification.pendingEntityID"
 private let dastakLegacyPendingOrderIDKey = "dastak.notification.pendingOrderID"
 
 public struct DastakCustomerRootView: View {
-    private enum Tab: Hashable {
-        case home
-        case orders
-        case account
-    }
-
     @StateObject private var model: DastakCustomerModel
     @StateObject private var locationManager = DastakLocationManager()
-    @State private var selectedTab: Tab = .home
+    @StateObject private var haptics = MarketplaceHapticScope()
+    @State private var navigation = DastakCustomerNavigation(service:
+        DastakCustomerService(rawValue: UserDefaults.standard.string(forKey: "dastak.customer.lastService") ?? "") ?? .grocery)
+    @State private var isReadyForAppAction = false
+    @State private var appActionTask: Task<Void, Never>?
     @State private var ordersPath: [DastakCustomerDestination] = []
     @State private var showingDeliveryAddressEditor = false
     @State private var showingDiscoveryLocationPicker = false
@@ -30,8 +28,13 @@ public struct DastakCustomerRootView: View {
     @State private var showingParcel = false
     @State private var showingCheckout = false
     @State private var isConfirmingPayment = false
+    @State private var riderCallURL: URL?
+    @State private var showingRiderCall = false
+    @Environment(\.openURL) private var openURL
     @Environment(\.marketplaceSignOut) private var signOut
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
     private let isPreview: Bool
     private let merchantOnboardingState: MerchantOnboardingState?
     private let isMerchantAccessLoading: Bool
@@ -82,8 +85,8 @@ public struct DastakCustomerRootView: View {
     }
 
     #if DEBUG
-    public init(preview: Bool) {
-        _model = StateObject(wrappedValue: DastakCustomerModel.preview())
+    public init(preview: Bool, shoppingFixtures: Bool = false) {
+        _model = StateObject(wrappedValue: DastakCustomerModel.preview(panelFixtures: true, shoppingFixtures: shoppingFixtures))
         isPreview = preview
         merchantOnboardingState = .notApplied
         isMerchantAccessLoading = false
@@ -99,85 +102,89 @@ public struct DastakCustomerRootView: View {
     #endif
 
     public var body: some View {
-        TabView(selection: $selectedTab) {
-            NavigationStack {
-                DastakHomeView(
-                    model: model,
-                    chooseLocation: { showingDiscoveryLocationPicker = true },
-                    openCart: { showingCart = true },
-                    sendParcel: { showingParcel = true }
-                )
-            }
-            .tag(Tab.home)
-            .tabItem { Label("Home", systemImage: "house") }
+        GeometryReader { geometry in
+            let layout = DastakCustomerLayout(width: geometry.size.width, height: geometry.size.height,
+                                              largerText: dynamicTypeSize >= .xxxLarge)
+            VStack(spacing: 10) {
+                Group {
+                    if layout.usesCompactControls {
+                        customerChrome(width: geometry.size.width, compact: true)
+                    } else {
+                        ScrollView { customerChrome(width: geometry.size.width, compact: false) }
+                            .scrollIndicators(.hidden)
+                            .frame(height: layout.inlineChromeHeight)
+                    }
+                }
+                .opacity(showingCart ? 0 : 1)
+                .allowsHitTesting(!showingCart)
+                .accessibilityHidden(showingCart)
 
-            NavigationStack(path: $ordersPath) {
-                DastakOrdersView(
-                    model: model,
-                    openCart: { showingCart = true },
-                    openDestination: { ordersPath.append($0) }
-                )
+                ZStack {
+                    // Retain exploration and scroll state independently for each service.
+                    homePanel(.grocery)
+                        .customerSectionVisible(navigation.section == .home && navigation.service == .grocery)
+                    homePanel(.food)
+                        .customerSectionVisible(navigation.section == .home && navigation.service == .food)
+                    NavigationStack(path: $ordersPath) {
+                        DastakOrdersView(model: model, openCart: { showingCart = true },
+                                         openDestination: { ordersPath.append($0) })
+                    }
+                    .customerSectionVisible(navigation.section == .orders)
+                    NavigationStack { accountPanel(.profile) }
+                        .customerSectionVisible(navigation.section == .profile)
+                    NavigationStack { accountPanel(.settings) }
+                        .customerSectionVisible(navigation.section == .settings)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .modifier(DastakMainPanelLiquidGlass())
+                .padding(.horizontal, layout.panelHorizontalInset)
+                .padding(.top, layout.panelDownshift)
+                .opacity(showingCart ? 0 : 1)
+                .allowsHitTesting(!showingCart)
+                .accessibilityHidden(showingCart)
+                contextualBars
+                    .opacity(showingCart ? 0 : 1)
+                    .allowsHitTesting(!showingCart)
+                    .accessibilityHidden(showingCart)
             }
-            .tag(Tab.orders)
-            .tabItem { Label("Orders", systemImage: "clock") }
-
-            NavigationStack {
-                DastakAccountView(
-                    customerModel: model,
-                    customer: model.checkoutCustomer,
-                    location: model.deliveryAddress,
-                    savedAddressCount: model.savedAddresses.count,
-                    accountSessionClient: accountSessionClient,
-                    linkedIdentities: model.linkedIdentities,
-                    isLinkingIdentity: model.isLinkingIdentity,
-                    identityMessage: model.identityMessage,
-                    identityMessageIsSuccess: model.identityMessageIsSuccess,
-                    hasActiveOrders: model.hasActiveOrders,
-                    refreshFailure: model.accountRefreshFailure,
-                    merchantOnboardingState: merchantOnboardingState,
-                    isMerchantAccessLoading: isMerchantAccessLoading,
-                    deliveryPartnerAccess: deliveryPartnerAccess,
-                    isDeliveryPartnerAccessLoading: isDeliveryPartnerAccessLoading,
-                    chooseLocation: { showingDeliveryAddressEditor = true },
-                    openOrders: { selectedTab = .orders },
-                    becomeMerchant: becomeMerchant,
-                    becomeDeliveryPartner: becomeDeliveryPartner,
-                    retryAccount: { Task { await model.refreshCheckoutCustomer() } },
-                    refreshIdentities: { Task { await model.refreshCustomerIdentities() } },
-                    linkIdentity: { provider in Task { await model.linkIdentity(provider) } },
-                    updateProfile: { displayName, phoneNumber in
-                        try await model.updateAccountProfile(
-                            displayName: displayName,
-                            phoneNumber: phoneNumber
-                        )
-                    },
-                    deleteAccount: {
-                        try await model.deleteAccount()
-                        await signOut()
-                    },
-                    reauthenticate: { provider in
-                        guard let oauthReauthenticator else {
-                            throw MarketplaceAuthenticatedServicesError.authenticationRequired
-                        }
-                        try await oauthReauthenticator(provider)
-                    },
-                    exportAccount: { try await model.exportAccount() }
-                )
-            }
-            .tag(Tab.account)
-            .tabItem { Label("Account", systemImage: "person") }
         }
-        .tint(MarketplaceColors.dastakAccent.color)
-        .marketplacePage()
-        .onChange(of: selectedTab) { _, tab in
+        .dastakBasketExperience(model: model, service: navigation.service.basketService, showsDock: false,
+                               openCart: { openCart(navigation.service.basketService) })
+        .allowsHitTesting(!showingCart)
+        .accessibilityHidden(showingCart)
+        .tint(MarketplaceColors.accent(for: colorScheme))
+        .onAppear {
+            haptics.isActive = scenePhase == .active
+            model.hapticFeedback = { [weak haptics] event in haptics?.play(event) }
+        }
+        .onChange(of: scenePhase) { _, phase in haptics.isActive = phase == .active }
+        .onChange(of: model.v1Orders) { _, _ in
+            guard !isPreview else { return }
+            Task { await model.syncOrderLiveTracking() }
+        }
+        .onChange(of: model.activeV1Order) { _, _ in
+            guard !isPreview else { return }
+            Task { await model.syncOrderLiveTracking() }
+        }
+        .environment(\.dastakOpenCart, DastakOpenCartAction { service in openCart(service) })
+        .background {
+            DastakNativeEnvironment(place: .customer(service:navigation.service,
+                cartPresented:showingCart, basketService:model.cartService))
+        }
+        .environment(\.marketplaceImmersiveEnvironment, true)
+        .onChange(of: model.cartService) { _, service in
+            let destination: DastakCustomerService = service == .food ? .food : .grocery
+            if navigation.service != destination { navigation.selectService(destination) }
+        }
+        .onChange(of: navigation.section) { _, section in
             guard !isPreview else { return }
             Task {
-                switch tab {
+                switch section {
                 case .home:
                     await model.refreshV1Catalogue()
                 case .orders:
                     await model.refreshOrdersAndParcels()
-                case .account:
+                case .profile, .settings:
                     async let customer: Void = model.refreshCheckoutCustomer()
                     async let identities: Bool = model.refreshCustomerIdentities()
                     _ = await (customer, identities)
@@ -194,21 +201,12 @@ public struct DastakCustomerRootView: View {
             }
         }
         .task {
-            guard !isPreview else { return }
-            do {
-                _ = try await accountSessionClient.snapshot(
-                    device: dastakAccountSessionDevice(applicationName: "Dastak"),
-                    idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!
-                )
-            } catch FunctionClientError.authenticationRequired {
-                await signOut()
+            guard !isPreview else {
+                isReadyForAppAction = true
+                consumeAppAction()
                 return
-            } catch let FunctionClientError.api(statusCode, _, _) where statusCode == 401 {
-                await signOut()
-                return
-            } catch {
-                // Account content can still load during a temporary session-registry outage.
             }
+            // The shared auth shell verifies the session before mounting this view.
             await model.bootstrap()
             let notificationState = await DastakNotificationPreferences.status()
             if notificationState != .notRequested {
@@ -218,7 +216,10 @@ public struct DastakCustomerRootView: View {
                 hasCompleted: model.hasCompletedOnboarding,
                 notificationState: notificationState
             )
-            if let destination = consumePendingDestination() {
+            isReadyForAppAction = true
+            if DastakAppActionInbox().peek() != nil {
+                consumeAppAction()
+            } else if let destination = consumePendingDestination() {
                 open(destination)
             } else {
                 showingV1Order = model.activeV1Order != nil
@@ -228,14 +229,101 @@ public struct DastakCustomerRootView: View {
             guard !isPreview else { return }
             await observeOrderChanges()
         }
+        #if DEBUG
+        .task {
+            // Explicit opt-in, synthetic integration checks when simulator taps
+            // are unavailable. Never mounted by the authenticated Release root.
+            let args = ProcessInfo.processInfo.arguments
+            guard isPreview, args.contains("-DastakUIPreviewShopping"),
+                  let index = args.firstIndex(of: "-DastakUIPreviewEnvironmentStep"),
+                  args.indices.contains(index + 1) else { return }
+            let step = args[index + 1]
+            guard ["grocery-cart", "food-home", "food-added", "food-cart", "billing-switch", "cycle", "reorder-review", "notice-review"].contains(step) else { return }
+            if step == "billing-switch" {
+                navigation.selectService(.food)
+                openCart(.food)
+                // Finite, local-only renderer regression check; no commerce action.
+                do {
+                    try await Task.sleep(for: .seconds(6))
+                    for service: DastakBasketService in [.grocery,.food,.grocery,.food] {
+                        model.cartService = service
+                        try await Task.sleep(for: .seconds(3))
+                    }
+                } catch { return }
+                return
+            }
+            if step == "notice-review" {
+                if let milk = model.knownCatalogueProducts.first(where: { $0.packSize == "1 litre" }) {
+                    model.addToCart(milk)
+                }
+                navigation.navigate(.orders)
+                model.ordersActionMessage = "Added 1 item to your Grocery basket. Review prices and availability before placing your order."
+                return
+            }
+            if step == "reorder-review" {
+                // Nonempty independent baskets make replacement consent and
+                // cancellation visible. Only the synthetic shopping root runs this.
+                if let milk = model.knownCatalogueProducts.first(where: { $0.packSize == "1 litre" }) {
+                    model.addToCart(milk)
+                    model.addToCart(milk)
+                }
+                if let restaurant = model.v1Restaurants.first,
+                   let item = restaurant.categories.first?.items.first {
+                    model.addFoodToCart(restaurant: restaurant, item: item, optionIDs: [])
+                    model.addFoodToCart(restaurant: restaurant, item: item, optionIDs: [])
+                }
+                model.cartService = .grocery
+                navigation.navigate(.orders)
+                return
+            }
+            if step == "grocery-cart" || step == "cycle" {
+                if let product = model.v1Catalogue?.skus.first { model.addToCart(product) }
+                showingCart = true
+            } else {
+                navigation.selectService(.food)
+                if step != "food-home", let restaurant = model.v1Restaurants.first,
+                   let item = restaurant.categories.first?.items.first {
+                    model.addFoodToCart(restaurant: restaurant, item: item, optionIDs: [])
+                }
+                showingCart = step == "food-cart"
+            }
+            guard step == "cycle" else { return }
+            // Exercise sheet dismissal and service changes within one mounted
+            // Customer root. Finite and cancellable; no order/account writes.
+            do {
+                try await Task.sleep(for: .seconds(12))
+                showingCart = false
+                navigation.selectService(.food)
+                model.cartService = .food
+                try await Task.sleep(for: .seconds(12))
+                if let restaurant = model.v1Restaurants.first,
+                   let item = restaurant.categories.first?.items.first {
+                    model.addFoodToCart(restaurant: restaurant, item: item, optionIDs: [])
+                }
+                showingCart = true
+                try await Task.sleep(for: .seconds(12))
+                showingCart = false
+                model.clearCart()
+            } catch { return }
+        }
+        #endif
         .task {
             guard !isPreview else { return }
             await pollOrderChanges()
         }
+        .task(id: scenePhase) {
+            guard !isPreview, scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await model.refreshAreaAvailability(force: true)
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             guard !isPreview, phase == .active else { return }
             Task {
+                await model.refreshAreaAvailability(force: true)
                 await model.refreshOrdersAndParcels()
+                await model.syncOrderLiveTracking()
                 await model.refreshCustomerIdentities()
             }
         }
@@ -245,12 +333,20 @@ public struct DastakCustomerRootView: View {
             ) else { return }
             open(destination)
         }
+        .onReceive(NotificationCenter.default.publisher(for: DastakAppActionInbox.opened)) { _ in
+            consumeAppAction()
+        }
+        .onChange(of: navigation.service) { _, service in
+            UserDefaults.standard.set(service.rawValue, forKey: "dastak.customer.lastService")
+        }
+        .onDisappear { appActionTask?.cancel() }
         .sheet(isPresented: $showingDeliveryAddressEditor) {
             DastakAddressBookView(
                 model: model,
                 requiresCompletion: false,
                 currentLocation: locationManager.location,
-                requestCurrentLocation: locationManager.requestLocation
+                requestCurrentLocation: locationManager.requestLocation,
+                currentLocationError: locationManager.errorMessage
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -258,7 +354,9 @@ public struct DastakCustomerRootView: View {
         .sheet(isPresented: $showingDiscoveryLocationPicker) {
             DastakLocationPicker(
                 title: "Browse near",
+                initialLocation: model.selectedLocation,
                 currentLocation: locationManager.location,
+                currentLocationError: locationManager.errorMessage,
                 useLocation: { location in
                     Task { await model.selectDiscoveryLocation(location) }
                 },
@@ -286,8 +384,17 @@ public struct DastakCustomerRootView: View {
                 model: model,
                 currentLocation: locationManager.location,
                 requestCurrentLocation: locationManager.requestLocation,
-                orderSubmitted: { showingV1Order = true }
+                orderSubmitted: { showingV1Order = true },
+                currentLocationError: locationManager.errorMessage
             )
+            .environment(\.dynamicTypeSize, dynamicTypeSize)
+            .environment(\.marketplaceImmersiveEnvironment, true)
+            .presentationDetents(dynamicTypeSize >= .xxxLarge ? [.large] : [.fraction(0.75), .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(.regularMaterial)
+            // Keep both checkouts visible without changing scrims during a basket switch.
+            // Shopping chrome/panels remain non-interactive while showingCart is true.
+            .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.75)))
         }
         .dastakFullScreenCover(isPresented: $showingV1Order) {
             DastakV1MatchingView(model: model)
@@ -324,7 +431,7 @@ public struct DastakCustomerRootView: View {
                                 } catch {
                                     model.clearCheckoutSession()
                                     showingCheckout = false
-                                    selectedTab = .orders
+                                    navigation.navigate(.orders)
                                     model.v1OrderErrorMessage = "We're still checking your payment. No second charge will be attempted."
                                     showingV1Order = true
                                     return
@@ -333,7 +440,7 @@ public struct DastakCustomerRootView: View {
 
                             model.clearCheckoutSession()
                             showingCheckout = false
-                            selectedTab = .orders
+                            navigation.navigate(.orders)
                             isConfirmingPayment = true
                             let confirmed = await model.waitForPaymentConfirmation(session: session)
                             isConfirmingPayment = false
@@ -349,7 +456,7 @@ public struct DastakCustomerRootView: View {
                     case let .failed(message):
                         model.clearCheckoutSession()
                         showingCheckout = false
-                        selectedTab = .orders
+                        navigation.navigate(.orders)
                         if session.entityType == .dastakV1Order {
                             Task {
                                 await model.reportV1CheckoutFailure(
@@ -369,7 +476,7 @@ public struct DastakCustomerRootView: View {
                     case .dismissed:
                         model.clearCheckoutSession()
                         showingCheckout = false
-                        selectedTab = .orders
+                        navigation.navigate(.orders)
                         if session.entityType == .dastakV1Order {
                             Task {
                                 await model.reportV1CheckoutFailure(
@@ -386,6 +493,14 @@ public struct DastakCustomerRootView: View {
                 }
             }
         }
+        .alert(riderCallURL == nil ? "Calling unavailable" : "Call your delivery partner?", isPresented: $showingRiderCall) {
+            if let url = riderCallURL {
+                Button("Call") { openURL(url) }
+            }
+            Button("Cancel", role: .cancel) { riderCallURL = nil }
+        } message: {
+            Text(riderCallURL == nil ? "We couldn’t confirm an available delivery partner. Check the order and try again." : "This will open the phone app to call the partner currently assigned to this order.")
+        }
         .onChange(of: model.checkoutSession) { _, session in
             showingCheckout = session != nil
         }
@@ -401,14 +516,52 @@ public struct DastakCustomerRootView: View {
                 }
             }
         }
+        // Outside all presentation modifiers so sheets/covers inherit the same
+        // action scope. Full-screen details must not disable their own feedback.
+        .environment(\.marketplaceHapticScope, haptics)
+    }
+
+    private func consumeAppAction() {
+        guard isReadyForAppAction, let action = DastakAppActionInbox().consume() else { return }
+        appActionTask?.cancel()
+        showingCart = false
+        showingV1Order = false
+        showingParcel = false
+        showingCheckout = false
+        showingDeliveryAddressEditor = false
+        showingDiscoveryLocationPicker = false
+        ordersPath = []
+        let presentation = navigation.apply(action,
+            basketHasItems: model.baskets[navigation.service.basketService].itemCount > 0)
+        model.cartService = navigation.service.basketService
+        if action == .grocery || action == .food || action == .search { model.searchText = "" }
+        // Allow an existing sheet to dismiss before presenting the new destination.
+        appActionTask = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+            guard !Task.isCancelled else { return }
+            switch presentation {
+            case .home: break
+            case .basket: openCart(navigation.service.basketService)
+            case .emptyBasket: model.errorMessage = "Your basket is empty. Add an item before opening your cart."
+            case .tracking: showingV1Order = model.activeV1Order != nil
+            }
+        }
     }
 
     private func open(_ destination: DastakCustomerDestination) {
-        selectedTab = .orders
+        navigation.navigate(.orders)
         switch destination {
         case let .dastakV1Order(orderID):
             ordersPath = []
+            let callKey = "dastak.liveActivity.pendingCallOrder"
+            let shouldCall = UserDefaults.standard.string(forKey: callKey).flatMap(UUID.init(uuidString:)) == orderID
+            UserDefaults.standard.removeObject(forKey: callKey)
             Task {
+                if shouldCall {
+                    riderCallURL = await model.liveActivityRiderCallURL(orderID: orderID)
+                    showingRiderCall = true
+                    return
+                }
                 if await model.focusV1Order(id: orderID) {
                     showingV1Order = true
                 }
@@ -417,6 +570,117 @@ public struct DastakCustomerRootView: View {
             ordersPath = [destination]
             Task { await model.refreshOrdersAndParcels() }
         }
+    }
+
+    private func selectService(_ service: DastakCustomerService) {
+        let resetsHome = navigation.service == service
+        guard navigation.selectService(service) else { return }
+        if resetsHome { model.searchText = "" }
+        model.cartService = service.basketService
+    }
+
+    private func openCart(_ service: DastakBasketService) {
+        // Select before presentation: a remembered basket must not choose the first
+        // billing frame when the customer opens the basket from another service.
+        model.cartService = service
+        showingCart = true
+    }
+
+    private func customerChrome(width: CGFloat, compact: Bool) -> some View {
+        DastakCustomerChrome(
+            navigation: navigation,
+            locationLabel: model.deliveryAddress?.label ?? "Choose your location",
+            map: model.v1BrowseMap,
+            selectSection: { section in
+                navigation.navigate(section)
+                if section == .home { model.searchText = "" }
+            },
+            selectService: selectService,
+            chooseLocation: { showingDeliveryAddressEditor = true },
+            openDirectory: openDirectory,
+            availableWidth: width, compact: compact
+        )
+    }
+
+    private func openDirectory(_ key: String) {
+        let keys = Set((model.v1BrowseMap?.nodes ?? []).filter { $0.kind == "DESTINATION" }.map(\.key))
+        _ = navigation.openDirectory(key, allowedKeys: keys)
+    }
+
+    private func homePanel(_ service: DastakCustomerService) -> some View {
+        NavigationStack {
+            DastakHomeView(model: model,
+                chooseLocation: { showingDeliveryAddressEditor = true },
+                openCart: { openCart(service.basketService) }, sendParcel: { showingParcel = true },
+                shellService: service,
+                homeRevision: service == .grocery ? navigation.groceryHomeRevision : navigation.foodHomeRevision,
+                startsWithSearch: navigation.startsWithSearch && navigation.service == service,
+                directoryKey: navigation.directoryKey, directoryRevision: navigation.directoryRevision,
+                isActive: navigation.section == .home && navigation.service == service,
+                onBrowseDestinationChanged: { key in
+                    guard service == .grocery else { return }
+                    let keys = Set((model.v1BrowseMap?.nodes ?? []).filter { $0.kind == "DESTINATION" }.map(\.key))
+                    navigation.updateDirectoryHighlight(key, allowedKeys: keys)
+                })
+                // Recreate exploration/scroll state on an explicit Home reset, never the basket model.
+                .id(service == .grocery ? navigation.groceryHomeRevision : navigation.foodHomeRevision)
+        }
+    }
+
+    private func accountPanel(_ panel: DastakCustomerAccountPanel) -> some View {
+        DastakAccountView(
+            customerModel: model, customer: model.checkoutCustomer,
+            location: model.defaultDeliveryAddress, savedAddressCount: model.savedAddresses.count,
+            accountSessionClient: accountSessionClient, linkedIdentities: model.linkedIdentities,
+            isLinkingIdentity: model.isLinkingIdentity, identityMessage: model.identityMessage,
+            identityMessageIsSuccess: model.identityMessageIsSuccess, hasActiveOrders: model.hasActiveOrders,
+            refreshFailure: model.accountRefreshFailure,
+            merchantOnboardingState: merchantOnboardingState, isMerchantAccessLoading: isMerchantAccessLoading,
+            deliveryPartnerAccess: deliveryPartnerAccess, isDeliveryPartnerAccessLoading: isDeliveryPartnerAccessLoading,
+            chooseLocation: { showingDeliveryAddressEditor = true },
+            openOrders: { navigation.navigate(.orders) },
+            becomeMerchant: becomeMerchant, becomeDeliveryPartner: becomeDeliveryPartner,
+            retryAccount: { Task { await model.refreshCheckoutCustomer() } },
+            refreshIdentities: { Task { await model.refreshCustomerIdentities() } },
+            linkIdentity: { provider in Task { await model.linkIdentity(provider) } },
+            updateProfile: { try await model.updateAccountProfile(displayName: $0, phoneNumber: $1) },
+            deleteAccount: { try await model.deleteAccount(); await signOut() },
+            reauthenticate: { provider in
+                guard let oauthReauthenticator else { throw MarketplaceAuthenticatedServicesError.authenticationRequired }
+                try await oauthReauthenticator(provider)
+            },
+            exportAccount: { try await model.exportAccount() }, panel: panel,
+            isActive: panel == .profile ? navigation.section == .profile : navigation.section == .settings
+        )
+    }
+
+    private var contextualBars: some View {
+        VStack(spacing: 6) {
+            DastakBasketDock(model: model, service: navigation.service.basketService,
+                             openCart: { openCart(navigation.service.basketService) })
+            if let order = model.activeV1Order, DastakCustomerModel.isActiveV1Order(order.status) {
+                MarketplaceFeedbackButton { showingV1Order = true } label: {
+                    HStack {
+                        Image(systemName: "circle.fill").font(.system(size: 7))
+                        Text(DastakV1OrderPresentation.title(order.status, trackingPhase: order.tracking?.phase,
+                                                            fulfilmentState: order.fulfilmentProgress?.state)).font(.caption.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .marketplaceGlass(cornerRadius: 16)
+                .accessibilityIdentifier("dastak.active-order")
+            }
+        }
+        .padding(.horizontal, 12)
+    }
+
+    private var bucketSummary: String {
+        let basket = model.baskets[navigation.service.basketService]
+        return "\(basket.itemCount) \(basket.itemCount == 1 ? "item" : "items") · \(DastakFormatting.money(basket.subtotal)) estimated"
     }
 
     private func consumePendingDestination() -> DastakCustomerDestination? {
@@ -489,6 +753,14 @@ public struct DastakCustomerRootView: View {
 }
 
 private extension View {
+    func customerSectionVisible(_ visible: Bool) -> some View {
+        opacity(visible ? 1 : 0)
+            .allowsHitTesting(visible)
+            .accessibilityHidden(!visible)
+    }
+}
+
+private extension View {
     @ViewBuilder
     func dastakOnboardingCover<Content: View>(
         item: Binding<DastakCustomerOnboardingStep?>,
@@ -503,6 +775,38 @@ private extension View {
 }
 
 private typealias DastakCustomerNotice = DastakActionNotice
+
+private struct DastakMainPanelLiquidGlass: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        if #available(iOS 26.0, macOS 26.0, *),
+           DastakPanelReadability.surface(isDark: colorScheme == .dark, supportsNativeGlass: true,
+                reduceTransparency: reduceTransparency,
+                increasedContrast: contrast == .increased) != .opaque {
+            // Keep one structural content branch. iOS can change appearance
+            // while snapshotting a backgrounded app; swapping branches discards
+            // the category and product presentation state owned by its children.
+            content
+                .clipShape(shape)
+                .glassEffect(colorScheme == .dark ? .regular
+                    : .clear.tint(.white.opacity(DastakPanelReadability.lightGlassTintOpacity)), in: shape)
+        } else {
+            fallback(content, shape: shape)
+        }
+    }
+
+    private func fallback(_ content: Content, shape: RoundedRectangle) -> some View {
+        content
+            .background(MarketplaceColors.surface(for: colorScheme), in: shape)
+            .clipShape(shape)
+            .overlay(shape.stroke(.primary.opacity(0.1), lineWidth: 1))
+    }
+}
 
 private struct DastakSessionExpiredView: View {
     let signInAgain: () -> Void

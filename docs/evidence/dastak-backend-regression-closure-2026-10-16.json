@@ -1,0 +1,1868 @@
+{
+  "date": "2026-10-16",
+  "scope": "isolated local corrections and empty-database replay; no production changes",
+  "runtime": {
+    "image": "public.ecr.aws/supabase/postgres:17.6.1.155",
+    "digest": "sha256:3866d94d8426927e8db3f1c5d790752292bfbe27b5f1f46e199ae1b7d3c1710b",
+    "sessionPreload": "supautils",
+    "hintRoles": "anon, authenticated, service_role",
+    "fixtureRole": "postgres",
+    "upstreamFix": "https://github.com/supabase/supautils/issues/214"
+  },
+  "manifest": {
+    "count": 289,
+    "chainSha256": "414a48042a283eb806fd7455cf5ebc91700f52502390a0a780f2a067331cd147",
+    "migrations": [
+      {
+        "name": "20260715090000_bootstrap_identity.sql",
+        "sha256": "0491a5eacc209834c761e930f1697f1274048dea1a645fdf4dff536c9e72fa40"
+      },
+      {
+        "name": "20260715140344_security_audit_zones.sql",
+        "sha256": "aade21c8df83ef74b2ecffb4316ce35592d8adf640d0468f03ae0a2d748d3c2a"
+      },
+      {
+        "name": "20260715170000_revoke_authenticated_storage_delete.sql",
+        "sha256": "0925d949ffc450c43bdca7e01910f09c9d857f0f254eb36f38f0b4d472641d62"
+      },
+      {
+        "name": "20260715202448_harden_service_zone_grants.sql",
+        "sha256": "e3760b4efcb4d9d904bd1173db9d5b44b0da379c0106cbbd434df5c6b74eb358"
+      },
+      {
+        "name": "20260716014805_resolve_app_access.sql",
+        "sha256": "4dcf6a743c09dbf312de3e76155aae8eb52450c79f7389e81abf5cc9b6263b69"
+      },
+      {
+        "name": "20260716130601_merchant_onboarding.sql",
+        "sha256": "dc0b2fbb2fc211104fadf3524c1ff548318ce0c71c1b9954d70964fac60e0da4"
+      },
+      {
+        "name": "20260716131905_fix_merchant_onboarding_expressions.sql",
+        "sha256": "0d7eaae37593d89df0b1f7a9d4eb0d9f3700c2f16b1a291db0bc06c8364f6524"
+      },
+      {
+        "name": "20260716132143_fix_merchant_owner_membership_lookup.sql",
+        "sha256": "2bfd00258d4544f63ad88b9cb475ddae3ffce0b30957ad6d0c5adb58c1d78d67"
+      },
+      {
+        "name": "20260716135559_merchant_catalogue.sql",
+        "sha256": "9a14aa17e2d90f4bfa3037ec4e998c433d6e68c18c9a396a5e8fde13263ad7be"
+      },
+      {
+        "name": "20260716143711_merchant_order_checkout.sql",
+        "sha256": "cce58e2ff6b6abc662a4dd1e0e9dfb4e806b09da41c8f85c58f7b9942fdd03b2"
+      },
+      {
+        "name": "20260716151101_remove_unused_merchant_order_rate_variable.sql",
+        "sha256": "fbbb8edc4b54ec08ad683e955c6d6b760fd75cdee0abf81f7444465a729dca4e"
+      },
+      {
+        "name": "20260716164824_delivery_partner_onboarding_availability.sql",
+        "sha256": "d9a3e2e3b685bc294ab2bf814cd586f7234db55463689d2c307e5e0a90da2098"
+      },
+      {
+        "name": "20260716173755_courier_dispatch_assignment.sql",
+        "sha256": "4167fd0ccc9e6f195a8c7c6f16a5fffbc7f2caacd505706357666dd07b61f2d4"
+      },
+      {
+        "name": "20260716182140_fix_courier_dispatch_idempotency_lock.sql",
+        "sha256": "4421561fa52bf8edcf4265d23b6723055f585b973f4470eb2a4175a1181ee8a4"
+      },
+      {
+        "name": "20260716191000_optimize_accounts_self_policy.sql",
+        "sha256": "414a3351e39a51bde94179d6c8a1e00cc52055c14cf95aaa8847ffb5e5e69aa7"
+      },
+      {
+        "name": "20260716200000_courier_job_lifecycle.sql",
+        "sha256": "c4b3b657e1d01f2f25cca249d1b6bae56709bbd4aad61c0ef5dda1b6ffc121bf"
+      },
+      {
+        "name": "20260716214658_secure_order_handoff_codes.sql",
+        "sha256": "4821cf36c50f2093546812aee58eef57eea680427933176352323d47be11ccc7"
+      },
+      {
+        "name": "20260716220831_owner_handoff_code_recovery.sql",
+        "sha256": "a0ec91af18e9cdc8b26d908174de6d80dc016b7ad8163ed8f18a07eb89d89d1b"
+      },
+      {
+        "name": "20260717120355_merchant_order_payment_ledger.sql",
+        "sha256": "a9d5649010bd3e1a87d621992b91abb4ef17353edc03c6d75acd007d38187a6a"
+      },
+      {
+        "name": "20260718210909_parcel_delivery_foundation.sql",
+        "sha256": "6c29f9b57b0d9d2d61b09051e8d17789ae32e67d4bcda1db0def007cbf8ed020"
+      },
+      {
+        "name": "20260719103000_controlled_category_enforcement.sql",
+        "sha256": "c8f4a5b4c6eb5bcf208dca830ae220092ab6274cf73174f9d27ba3a2a083b873"
+      },
+      {
+        "name": "20260719104500_cleanup_controlled_order_lint.sql",
+        "sha256": "b7b2f23b055eae2a95fc694f072d17af3bfd8d243d95b2de19ed020138f5daea"
+      },
+      {
+        "name": "20260721222424_city_marketplace_configuration.sql",
+        "sha256": "3b843f90ad5be8f3166c121e1fb4e5b5d415bfd769f88a8562d66e5c8f877ae7"
+      },
+      {
+        "name": "20260721223304_fix_city_distance_calculator.sql",
+        "sha256": "35300651d4412d0e19a45a7c1d1c7c7ae5246dcb85c634e3f2f419e401f22146"
+      },
+      {
+        "name": "20260721235206_apply_distance_pricing_to_merchant_quotes.sql",
+        "sha256": "ff38cedd3513923a9e3f276f46482045feecea60475d842d7bd31ba9216d16be"
+      },
+      {
+        "name": "20260722001051_harden_distance_priced_order_creation.sql",
+        "sha256": "4d4236c1bcece1e916f3f1ef31eaff87ad6dddd8b0ef14d851bf6903643406ec"
+      },
+      {
+        "name": "20260722030347_razorpay_test_payments.sql",
+        "sha256": "4019dcf5c1243c8a6e63f4d33eb10041b35e0a1bac0b2135b0076e0f86c53c2c"
+      },
+      {
+        "name": "20260722070000_dastak_admin_order_oversight.sql",
+        "sha256": "06eec9fefcba65315edd5b5b3ee54ad14bae22dfec12f55255cf19e24f678579"
+      },
+      {
+        "name": "20260722080000_owner_refund_review_and_returns.sql",
+        "sha256": "7f9e1d152f462742a57d21a93383a3e41e35be2742f5ae24f2daec68423b759a"
+      },
+      {
+        "name": "20260722081000_allow_refund_review_row_lock.sql",
+        "sha256": "ce5c2465a960554b50f32ed11760193927e41aea40a26fb387cc437806c9ee29"
+      },
+      {
+        "name": "20260722110000_parcel_razorpay_checkout.sql",
+        "sha256": "f6521f06cf98a21ff39aef654b989f75bdf6008d2c197583d69fef68d16f53d0"
+      },
+      {
+        "name": "20260722113000_reload_parcel_api_schema.sql",
+        "sha256": "0cc9b525170c14ae2807821473c238986ea143bdcdab50d0e16c28214fcaf10e"
+      },
+      {
+        "name": "20260722114500_fix_customer_parcel_list_order.sql",
+        "sha256": "d43c262bfd6c6468a7812f04aa165a9439ddcdaef92052adafe189f68d106ed1"
+      },
+      {
+        "name": "20260722120000_fix_qualified_postgres_special_forms.sql",
+        "sha256": "cf14e5f77e54fb589ccfc32c4a597c84e655d880da24fb822340abddafdbafc6"
+      },
+      {
+        "name": "20260725214526_fix_razorpay_parcel_amount_contract.sql",
+        "sha256": "b3833e56aed440dc701cf5afe8d142010515c0ec967722179530d5724bac144b"
+      },
+      {
+        "name": "20260726143000_sync_legacy_merchant_order_rate_cards.sql",
+        "sha256": "500269ef60d04b472f8c44212c45eb8d9e2eea12276ed12950ff8eec700bce22"
+      },
+      {
+        "name": "20260726220000_expose_courier_offer_payout.sql",
+        "sha256": "2e2967b6be41e7e1ed3c0f23349c7f2c86a8c227b7bf00572d9eb7f200672280"
+      },
+      {
+        "name": "20260730220834_dastak_earnings_snapshots.sql",
+        "sha256": "c0a57cfe877cd780dc93d671fd3350a4b18a5fb2a6d0f4e3c61067cfd5d87dc2"
+      },
+      {
+        "name": "20260807212116_register_dastak_device_tokens.sql",
+        "sha256": "237c06079f8381f386dfd3edb71fca4c2f7ed1036e9fb07e9f855264ffc230be"
+      },
+      {
+        "name": "20260807214703_queue_dastak_order_notifications.sql",
+        "sha256": "fc10693454f8f0d5b415a65c75c1afae3fd7a2a5f257df775ea153bbd8561733"
+      },
+      {
+        "name": "20260807215637_schedule_dastak_notification_worker.sql",
+        "sha256": "13cb0b7e68004e104ca5ab2810d1a978ed34cfa0b471a3f0b626f74bf1b57537"
+      },
+      {
+        "name": "20260807220341_fix_dastak_notification_trigger_permissions.sql",
+        "sha256": "2a6360176f2a80caa4c03b34df907d6eb7a001be4e3c4de712859a11148c809e"
+      },
+      {
+        "name": "20260807221323_expose_notification_queue_for_worker.sql",
+        "sha256": "f674acc3ae5d05e0d5bc40fd7cb358759e952dde5f6c8ffdc5b2146a5a4f111c"
+      },
+      {
+        "name": "20260807221900_grant_notification_worker_access.sql",
+        "sha256": "6466f75f28620fe5120ddd605dac65d17c0898ab7b1c810c7e118504b0b5f303"
+      },
+      {
+        "name": "20260812204027_make_auth_user_deletion_safe.sql",
+        "sha256": "e31e9c97df37faf747166d39f687b7f25df3fa633bc4e9121906df2e1229f30a"
+      },
+      {
+        "name": "20260812212308_allow_anonymised_review_history.sql",
+        "sha256": "e3287d777f43855a69b804e9f43a92cde939a6714d8fe8b3be03d865366868ee"
+      },
+      {
+        "name": "20260813003805_fix_dastak_delivery_earnings_role.sql",
+        "sha256": "e213952e4dc92009b49f3ba4ea73ac879c65d72f01f66e366ccdefc08d6f287f"
+      },
+      {
+        "name": "20260813100007_customer_delivery_lifecycle.sql",
+        "sha256": "3aeb449c068fd7cd99e957eed0f6684494cc9090bae73e92bb17650f17ad5837"
+      },
+      {
+        "name": "20260813105839_fix_customer_delivery_address_snapshot.sql",
+        "sha256": "1f8ad02179a186916fa72124a97566ad02789f79ed2696d8ad9b9e27ec5a6155"
+      },
+      {
+        "name": "20260815120000_merchant_application_self_snapshot.sql",
+        "sha256": "82ee90f77af74477c6bde9824779ef425a113a5f16111fc9b703137b4a664e6c"
+      },
+      {
+        "name": "20260815142816_add_delivery_partner_vehicle_verification.sql",
+        "sha256": "b1e9ccf91fa8e8bc153b409575db42d72a90063cc98b26b90666354d4a7ccfaf"
+      },
+      {
+        "name": "20260815235259_add_address_book_and_account_sessions.sql",
+        "sha256": "e9bba29462f47ad1b33fac46018c3d8def44be89d198e218adfa588bba780a9c"
+      },
+      {
+        "name": "20260816020228_canonical_order_lifecycle_realtime.sql",
+        "sha256": "beec0553e1d8e2c62f9584ee614f340dba59aec093e7f87e1ce0e00b8a5a3a45"
+      },
+      {
+        "name": "20260816030558_customer_order_experience.sql",
+        "sha256": "5e7b1b98797e5eba6efeac94eb5ed8b417d1b57c1017dd08610ccf553d40761b"
+      },
+      {
+        "name": "20260820135959_finish_order_operations.sql",
+        "sha256": "ad8e5a0191867aac99ee0af269b0d92e26673b4a3f49f6634f725a4a8569856a"
+      },
+      {
+        "name": "20260820180713_dastak_v1_batch_1a_kernel.sql",
+        "sha256": "f54cec690381e8006a9d3c412109ac64ad283499221a50b2c0771c2059714d8e"
+      },
+      {
+        "name": "20260820180723_dastak_v1_batch_1b_commands.sql",
+        "sha256": "38d0fb52c260697eb052d91eb918c8201af51adc43a79a402c1527489559dbfa"
+      },
+      {
+        "name": "20260820195404_dastak_v1_wave_1.sql",
+        "sha256": "b7fb5e61cbaeac3686387a54d22d99492645517504f62021272c025f4dff1bdf"
+      },
+      {
+        "name": "20260821231709_dastak_v1_canonical_catalogue_runtime.sql",
+        "sha256": "d3236b957ebd7503348e51a3a965615f0a888f72e76fc99811f2d86a817d559d"
+      },
+      {
+        "name": "20260822003536_dastak_v1_wave_2_fully_secured_payment.sql",
+        "sha256": "3e94fbd61c4af2bc5eddb0b8f658526e6dd8fb84b7580ec1d68f495a6b5ab4da"
+      },
+      {
+        "name": "20260822003605_dastak_v1_wave_2_runtime_and_payments.sql",
+        "sha256": "1a1471a9e5145f665d005aac3cc9f78a485ff7052edad64958b34e0ccf65a471"
+      },
+      {
+        "name": "20260822015543_dastak_v1_preparation_ready_packages.sql",
+        "sha256": "58176b67151862e27cb893950f08ce025dead834da10a0bcfe301d39440b67a1"
+      },
+      {
+        "name": "20260822030230_dastak_v1_rider_matching_pickup_custody.sql",
+        "sha256": "17c8cba1ee0662fffe8a7ecb765cc9a981230d02cdbf990da5886c3fc3edb013"
+      },
+      {
+        "name": "20260822175812_dastak_v1_final_delivery.sql",
+        "sha256": "c775883fdc5dad40516f479cc1c354e96579363972d065cf2a0760db0ef3a654"
+      },
+      {
+        "name": "20260822232358_dastak_v1_rider_distance_band_payout.sql",
+        "sha256": "b5979663b6ccbe27ea925efdfbf4123e941a789ff845d2b01e6196a974a2eaaf"
+      },
+      {
+        "name": "20260823001500_dastak_v1_launch_failure_financial_completion.sql",
+        "sha256": "4e1871b127f6e49664348ee7f4d431a61829b18fdf63f27ae58fec376501a992"
+      },
+      {
+        "name": "20260823001501_dastak_v1_launch_failure_financial_runtime.sql",
+        "sha256": "4c8661befd194f3f6cd66d0b308dff7079424f9ede5848fad060430d5abf7079"
+      },
+      {
+        "name": "20260823001502_dastak_v1_launch_failure_projections.sql",
+        "sha256": "95b89969c528b18fd948dee725a437cbc463a96c27ed4055d9332f21be4a337b"
+      },
+      {
+        "name": "20260823023000_dastak_v1_launch_hardening.sql",
+        "sha256": "89fc57d5339cb1f8d879a0276b76ea50c3fadd9ebdcaefdd08557eaad5488bec"
+      },
+      {
+        "name": "20260823204204_dastak_auth_hook_pgcrypto_permissions.sql",
+        "sha256": "164ea8c6a7aa14d53ed943e65c5398ecc46ad5c98d2765239def6503d48f47ae"
+      },
+      {
+        "name": "20260824000000_dastak_v1_identity_merchant_control.sql",
+        "sha256": "2c9ec1bb6cc6ddfaf21e72acd5864bcd8d868ec2c40ef9f9cd931aa97e0c75ba"
+      },
+      {
+        "name": "20260824010000_dastak_v1_transport_operational_safety.sql",
+        "sha256": "c8d56b5184b0a042c08385dc334f3a650391cb4aa65f5bc24cebd8f042e9b676"
+      },
+      {
+        "name": "20260824020000_dastak_v1_restaurant_cafe_runtime.sql",
+        "sha256": "c01a31d39fd55884b4697798c54f8672f6dc1a21432aca9a889de881ab731b60"
+      },
+      {
+        "name": "20260824030000_dastak_v1_configuration_acceptance_closure.sql",
+        "sha256": "ae75980384e355600002dd182b5eb18cba0bfeee15c08e3bdc192ad69bbad2d4"
+      },
+      {
+        "name": "20260824040000_dastak_v1_royalty_platform_fee.sql",
+        "sha256": "833d397edc874fd33c9cf56bbe54d0f90398577347a68c6ad0e850dc0ffd3f28"
+      },
+      {
+        "name": "20260824050000_dastak_v1_razorpayx_royalty_withdrawals.sql",
+        "sha256": "692c7abcb28db7d856e64b3588db0244270768e04c7f33518f36277f270e8b9f"
+      },
+      {
+        "name": "20260824060000_dastak_v1_merchant_sku_outbox_identity_hotfix.sql",
+        "sha256": "dd2c512703b356b2ae19cdbcfd090f22c2f6f1b3b1a8ccff1e47cc33e34599b7"
+      },
+      {
+        "name": "20260824070000_customer_onboarding_completion.sql",
+        "sha256": "ea3663d4ad6a5be4fa1df570f585dcd8d107e16797f73fd625b2bedf6c526653"
+      },
+      {
+        "name": "20260824080000_recover_orphaned_customer_oauth_identity.sql",
+        "sha256": "1a398b8e6f20d7de405300755db8ded93067a7df82ca5a05f6bede07c1822266"
+      },
+      {
+        "name": "20260824090000_customer_account_completion.sql",
+        "sha256": "b91db0a05820d721f2c168eb4dff15e473ab03926139ed1a86eb3c783aa2b972"
+      },
+      {
+        "name": "20260824100000_customer_orders_experience_completion.sql",
+        "sha256": "05f4420451955ae2c11d2a05e9ee9b21937141bdbb5b3bb35cc49eba5fd1a959"
+      },
+      {
+        "name": "20260824110330_customer_wishlist_completion.sql",
+        "sha256": "16afd5060169fb5b7182805187f672913697abfa12aaf48e80646435699a49c6"
+      },
+      {
+        "name": "20260824193109_fix_v1_admin_execution_projection_contract.sql",
+        "sha256": "665530eef33976ee4eaa9a0b59b662151a01cd774122019c030aedf4618b2280"
+      },
+      {
+        "name": "20260824202546_restore_v1_admin_execution_authenticated_grants.sql",
+        "sha256": "3d7fb087606194a3d1bc103258a5492cbbeef220cf471deb7f0a6c59acb9f8ed"
+      },
+      {
+        "name": "20260824214134_dastak_v1_custom_checkout_completion.sql",
+        "sha256": "2ec1e637303acdbd85f639a1d9db24ca8d17a8237c27a39a0b1c752b12d5b0d8"
+      },
+      {
+        "name": "20260826105547_dastak_v1_razorpay_mode_isolation.sql",
+        "sha256": "d33f5776713a27cb29a950dc76079fe514148f95f8d6287f37afa9ab71770792"
+      },
+      {
+        "name": "20260828115505_dastak_v1_pay_on_delivery_launch.sql",
+        "sha256": "ed052e5e593c0ab0cce06fc9ad148c2dae4ac0ccf38df7af6decb429901d51a9"
+      },
+      {
+        "name": "20260828130101_fix_razorpay_mode_attempt_version.sql",
+        "sha256": "35805c6688d445a77b078054f2254cd6627671a1c61e78dc6ce8a9be7c33bb37"
+      },
+      {
+        "name": "20260828143000_fix_razorpay_mode_service_role_boundary.sql",
+        "sha256": "5a1921a7d42fb6aa8e2343725e88fa0ec739138c1b9b8da63bec0a2c83401450"
+      },
+      {
+        "name": "20260828200342_dastak_v1_giant_catalogue_foundation.sql",
+        "sha256": "ca221ce0047e857752d9fadee3dbe75ccb7230654ed920d3933ef198f0d88c64"
+      },
+      {
+        "name": "20260828200451_fix_giant_catalogue_page_cte_scope.sql",
+        "sha256": "d3c298900acadffb1579b607c066def37511184afe21571cac7ecbd126777dad"
+      },
+      {
+        "name": "20260828200720_seed_giant_catalogue_category_types_and_categories.sql",
+        "sha256": "b820135bf64d9cf8520e896df733eea337d6f00a7ed74d4bfe2547a1266c13c9"
+      },
+      {
+        "name": "20260828200838_seed_giant_catalogue_subcategories_food.sql",
+        "sha256": "7309c67da13e3cbdec4562458db7f200883852f1424d6a795eec5bde12c85b37"
+      },
+      {
+        "name": "20260828200955_seed_giant_catalogue_subcategories_non_food.sql",
+        "sha256": "6db1985348ee60d036693b40c75aca2a3ee8be7faeaa30fd999be06046d4cea0"
+      },
+      {
+        "name": "20260828201108_dastak_v1_catalogue_ingestion_and_quality_foundation.sql",
+        "sha256": "859d5f55653861bf10060d541d85443deee882ec9ec3cdd9f8085344d2d00306"
+      },
+      {
+        "name": "20260828203417_add_rice_masala_subcategory.sql",
+        "sha256": "b4efa0c2ba87da228a7bf71973c3455d304a827c77e3bfa545e105ed2127b069"
+      },
+      {
+        "name": "20260828203646_add_sesame_oil_subcategory.sql",
+        "sha256": "73dcdc9e121d2ca912f9e40087534da4dc789015b296f356505dbbeb21b46538"
+      },
+      {
+        "name": "20260828204444_add_dairy_powders_condensed_milk_taxonomy.sql",
+        "sha256": "b2132acbbd3c5f7de4a09d4dd96ac4e791eac3aec7ec1f6ea340cef0103950f4"
+      },
+      {
+        "name": "20260828204518_refine_ghee_tea_rusk_taxonomy.sql",
+        "sha256": "e9767c2d91c6b4b095dd839069842af70e6e28fa9a48d85523bda88cb14eebc3"
+      },
+      {
+        "name": "20260828205303_dastak_v1_catalogue_asset_queue.sql",
+        "sha256": "c51bc27c6c32d812688a0c6f69fdc29064ff3664989863a227fab26862e0aa48"
+      },
+      {
+        "name": "20260828205402_schedule_catalogue_asset_worker.sql",
+        "sha256": "dd242708a585e30953e8337731d25aaa712521c54c8590d4839470eb3ad177c7"
+      },
+      {
+        "name": "20260828205622_dastak_v1_catalogue_source_commercial_observations.sql",
+        "sha256": "eeae1ce469560f5547a91799b15ac05c5e798d7fa5ad221c975955a785548597"
+      },
+      {
+        "name": "20260828210048_dastak_v1_catalogue_source_crawl_queue.sql",
+        "sha256": "3753ca82864b3c8c7f4dc7d18dd448d5873284e47a5ac354a29fb99e3629c802"
+      },
+      {
+        "name": "20260828210116_dastak_v1_catalogue_source_crawl_ingest_rpcs.sql",
+        "sha256": "9c793e8be2cad40f4fbac301e1dde21a567a6255aa4d219ee3d923c274926edd"
+      },
+      {
+        "name": "20260828210207_schedule_catalogue_source_worker.sql",
+        "sha256": "d3ed4257d746844d0d96f502760dd9dbb0bdc754eac2000d8df4b8bca6d10d02"
+      },
+      {
+        "name": "20260828210356_dastak_v1_catalogue_image_rights_clearance.sql",
+        "sha256": "a772ddd2163871265db66af89230bfcdf4bfdede6f47f270d038258f53e3e51f"
+      },
+      {
+        "name": "20260828210624_fix_catalogue_source_raw_ingest_batch_update.sql",
+        "sha256": "af21bddc10f551bc827b0e137a530be693a908d75415f0317f8eb28373f0ec4a"
+      },
+      {
+        "name": "20260828210713_accelerate_catalogue_source_worker_during_ingestion.sql",
+        "sha256": "54e03e5d5ed183822add494921bbcd6fe4c38d76a5c7d562003a3d51f6e51a94"
+      },
+      {
+        "name": "20260828210907_dastak_v1_catalogue_import_item_identifiers.sql",
+        "sha256": "f003de9ec27ddaee051a6d82e3b58a8ca08005677a7b8b7465d38ddba23ff31f"
+      },
+      {
+        "name": "20260828212653_expand_catalogue_source_parser_types.sql",
+        "sha256": "5b1dc8116970ecea1b5105a2a76ea174e1fc5ae004348320c53a8ed4c79c8e0b"
+      },
+      {
+        "name": "20260828213728_add_catalogue_normalization_rule_layer.sql",
+        "sha256": "13051d59c3d087208f98a102b5ab3087555fbe3f96dac1e115c3ad8a015021e6"
+      },
+      {
+        "name": "20260828214107_add_exact_shopify_catalogue_normalizer.sql",
+        "sha256": "e75e9ace726ba2cfc676967468b8b98562e677d867cab267e8fbd18815834486"
+      },
+      {
+        "name": "20260828214321_fix_exact_shopify_normalizer_regex_precedence_v2.sql",
+        "sha256": "6b816c1de3c601191add23e8811430dfdb4cb76535fc914677b8daead0233bef"
+      },
+      {
+        "name": "20260828224233_restore_catalogue_worker_schedules.sql",
+        "sha256": "53a874113e33a46e665363a2ffa2aee19981a3ec8d22ac6f5958e417d578556b"
+      },
+      {
+        "name": "20260829135115_add_fruit_yogurt_subcategory.sql",
+        "sha256": "a31afce6a7c07cb18ac54b8b3abef4662860bacb8f56440e251a64dd3432525c"
+      },
+      {
+        "name": "20260829135326_add_coffee_capsules_subcategory.sql",
+        "sha256": "d5f6463b03ca6ab6c73c63d9a7e52a34f49b9bac2557eb6856366cd9021f7436"
+      },
+      {
+        "name": "20260829135447_add_cold_brew_and_iced_latte_subcategories.sql",
+        "sha256": "f6e308d0385b199b0a4f1dbba32ccb0de9c7cc6878c185eb9213bbaf93a97728"
+      },
+      {
+        "name": "20260829135628_add_epigamia_dairy_beverage_subcategories.sql",
+        "sha256": "db190a5fd562b7ff3a0896e7b9e3f0fed38751dfb2d2d7ae58e8b346ce84c7f9"
+      },
+      {
+        "name": "20260829140610_add_organic_tattva_taxonomy_gaps.sql",
+        "sha256": "ee4cb2e887747ab3dd40700b3f56c6039e81637edff6eabdb18d8e49ae401736"
+      },
+      {
+        "name": "20260829140632_add_ajwain_subcategory.sql",
+        "sha256": "ad6ae1a9fcfc87fab2ca64d3b13a3929e45dd158bc3620674036447359093da4"
+      },
+      {
+        "name": "20260829142453_add_apple_cider_vinegar_subcategory.sql",
+        "sha256": "6853e46328b2db9ff2a48f547db339ca75043c91a3a2953d6f4bf7a949d00b19"
+      },
+      {
+        "name": "20260829142626_add_millet_and_pulse_chips_subcategories.sql",
+        "sha256": "ed60ac6e38be1799f28925df8df5723223467fde62f20715b6b7f97af418be17"
+      },
+      {
+        "name": "20260829142739_add_mukhwas_mouth_fresheners_subcategory.sql",
+        "sha256": "9d53d7b04fba8256049945099e0a5cc6f803dbfb14221b31c27bdf3eb5f5bd1e"
+      },
+      {
+        "name": "20260829143216_add_tamarind_sauce_subcategory.sql",
+        "sha256": "1453ab77b03c13fb12cabba21d82303e9d78143333c7d696b570de669080b915"
+      },
+      {
+        "name": "20260829143407_add_snackible_exact_subcategories.sql",
+        "sha256": "f12d4627472b30adc88c8996894660815bb08fce0595935c8cee018fe6a24ca3"
+      },
+      {
+        "name": "20260829224834_phase7_draft_canonicalization_contract.sql",
+        "sha256": "a621160827fcd8f324f6d797b87b2c14e384ace0da377f9f810ce0f37cb65a5c"
+      },
+      {
+        "name": "20260829230453_phase9_catalogue_activation_readiness.sql",
+        "sha256": "4978d2cd63926f6df3dcffed48baf758c97257895da8d7228ef5b788cf0413f1"
+      },
+      {
+        "name": "20260829230545_phase9_harden_active_catalogue_invariants.sql",
+        "sha256": "5b1496ef504c4423137fb903c6e8cd208c0564b08d3ffbf9a01bfd34a0401318"
+      },
+      {
+        "name": "20260831131307_admin_role_access_control.sql",
+        "sha256": "5e5df9dde4012dbc2d6046f4c3fdb3075b9c26a348f38807b2ef8b3837389572"
+      },
+      {
+        "name": "20260831170000_dastak_identity_persona_recovery.sql",
+        "sha256": "a6f911ba401c9af421738cc89c939b89b44dddcda423d51151ad318493dbb62b"
+      },
+      {
+        "name": "20260831171328_retire_existing_dastak_personas.sql",
+        "sha256": "588ab86f1db6d5ccc54dd708f6169159b64f38ea4c72c2dd4c11fbeb39aad010"
+      },
+      {
+        "name": "20260831183759_admin_command_center_network_and_catalogue_page.sql",
+        "sha256": "a59abe6845d29784d8555530470e04ecb24d87da18eaf12e5449956d96aadad2"
+      },
+      {
+        "name": "20260831190000_admin_catalogue_security_hardening.sql",
+        "sha256": "cfe4fc16b676f3d2e92821ef7d8b6c53f7257744717ef2450c8844fadec60ef5"
+      },
+      {
+        "name": "20260831191000_admin_catalogue_activation_readiness.sql",
+        "sha256": "9236ac858c4e2a4f2ecaa579edfe5a9a57cfa440435b424bce5bb59ddd4cd735"
+      },
+      {
+        "name": "20260901054029_fix_admin_operational_safety_grants.sql",
+        "sha256": "66556f8bdd74fed5fb9a803a471212f50dc2bdbff4c4a0c37cf5fc0f33d28546"
+      },
+      {
+        "name": "20260901054548_close_unstaffed_merchant_branches.sql",
+        "sha256": "610af17a6cfcab152fe87483439d7e2ab5b398ad92ce8d3c9fae07d95858ee03"
+      },
+      {
+        "name": "20260901105137_repair_admin_royalty_snapshot_service_access.sql",
+        "sha256": "fedf94094324b38d388a2a70d21cefdfa956dfc0de1c29c898be4d77e1ba3609"
+      },
+      {
+        "name": "20260901112945_enrich_admin_catalogue_presentation.sql",
+        "sha256": "11723e6fc0a8a8abe6dcf38c35f649937d4f2888a87bdc4e2e076db83c15e7f9"
+      },
+      {
+        "name": "20260901174500_align_launch_cod_validation.sql",
+        "sha256": "aae837ba2e9dcd0d5b85dfca621dd0db314f55a39313d9a6af05ac3bf4f5cc2c"
+      },
+      {
+        "name": "20260902044408_dastak_profile_phone_without_otp.sql",
+        "sha256": "f38c2225e38877103a022ad9bd9f9e6e2a809cedd590c233725b20e73603e586"
+      },
+      {
+        "name": "20260902074940_dastak_complete_partner_onboarding.sql",
+        "sha256": "12cf3a4cea7038650a7f11ec76991b1ee370ffa3f39e068781e775a6c96cab9c"
+      },
+      {
+        "name": "20260902131332_retire_walking_add_goods_vehicle.sql",
+        "sha256": "d15ba09c96410f2abed486745eb9fb32dda622cd37adda9af1fa89c7f8b80a6a"
+      },
+      {
+        "name": "20260902190813_unified_catalogue_experience.sql",
+        "sha256": "2ead3a780cab5afba7c74e296276e5597e71cf7df87c8eefe0ba5cfcae792e13"
+      },
+      {
+        "name": "20260904220540_admin_realtime_invalidation.sql",
+        "sha256": "9a3d4fc629b5270ee9bd2f4262271389e41226c95cc656c71f2d8bb87f7d1a4b"
+      },
+      {
+        "name": "20260905090445_batch_merchant_catalogue_selection.sql",
+        "sha256": "d2a99c1c2cfb0c2343d2d9e4d9cf74af7fa6f65e1b7faea1a5fd79ac5900daa9"
+      },
+      {
+        "name": "20260905094106_fix_admin_realtime_builtin_expressions.sql",
+        "sha256": "adbab3719a6c6bbb5ed55045b49dc488b97e50d357d0d2f9a1555788a361ab00"
+      },
+      {
+        "name": "20260905170959_catalogue_taxonomy_parity_and_controlled_sections.sql",
+        "sha256": "427d73fb71809e846b5c2ba799889b32ab7d860bd6da6f5a7e1de6c741891303"
+      },
+      {
+        "name": "20260905200941_curate_catalogue_navigation_and_artwork.sql",
+        "sha256": "2cf2bdef150b98cf84cf4e578f8dbde4afbd6949275c7abd68255d1492e8da15"
+      },
+      {
+        "name": "20260905213837_restore_walking_bicycle.sql",
+        "sha256": "e330c2525c7508839a5e2a0c8e9164dfca42cf227429a34a8e4db090a0578115"
+      },
+      {
+        "name": "20260905221208_merchant_product_card_stock.sql",
+        "sha256": "6e1d6ee73eecb3b75fef1d7fe11241c64a1a27a90751dd747f1e89a6db50c945"
+      },
+      {
+        "name": "20260905224838_automatic_merchant_sku_inventory.sql",
+        "sha256": "2d41644734830220ff03277ddf2fbbef7456c653c8e0ff674d52f33fc0d67edd"
+      },
+      {
+        "name": "20260906214326_admin_order_cancellation_states.sql",
+        "sha256": "d1b15f8c0ae0be19463499d23c9cadc06d51e88f35cdd984a499799414f179c9"
+      },
+      {
+        "name": "20260906214344_admin_order_cancellation.sql",
+        "sha256": "5aa34746f9671e8560670a0e7fe3168ff366a4cf3c062549f9ac31eaa14f5621"
+      },
+      {
+        "name": "20260907172722_merchant_app_notifications.sql",
+        "sha256": "9017a4a012277065a78d93df214860ca102ab774205b43e313ecac88fab202b9"
+      },
+      {
+        "name": "20260907224352_restore_merchant_order_notification_routes.sql",
+        "sha256": "1a54e48a39b105640a1f0d71a37d20fe48c30797386258c377799d93a76eed0a"
+      },
+      {
+        "name": "20260907230629_restore_customer_delivery_notification_routes.sql",
+        "sha256": "bbf1c13fb89863c17576cf325bdc86c25a11e5486677c973ee5096b805a258bb"
+      },
+      {
+        "name": "20260907232655_accelerate_delivery_order_notifications.sql",
+        "sha256": "336c615efaf28936e5f4d63e40dbb8df78363d3c64fce40ed8eab17902e91401"
+      },
+      {
+        "name": "20260908113424_repair_launch_ready_and_delivery_snapshot_permissions.sql",
+        "sha256": "5f7e442d1d4391149089d717c0b20ffff75c2cb73117dfc04d08df6517bdfbbb"
+      },
+      {
+        "name": "20260908133157_restore_handoff_key_integrity.sql",
+        "sha256": "735cfdeaf8f8e9dff6a7035edf87520c4d0c4dd54f70ced3ebc4511d549df204"
+      },
+      {
+        "name": "20260908141125_repair_delivery_rpc_execution_boundary.sql",
+        "sha256": "06d92f414bd973f2c24ec2704ca3f8ada05564cec584b22d781b9e0314c546f1"
+      },
+      {
+        "name": "20260908151354_deduplicate_preparation_notifications.sql",
+        "sha256": "f6990e3757ba3c46b8d0203f39e5a63491b8d644545e9e65231cfcbdc44edc44"
+      },
+      {
+        "name": "20260908201530_live_delivery_tracking_and_ordered_handoff.sql",
+        "sha256": "ed62a61f8ba7fd750d25ee48ea2203db10c874eccf7e960aa75f710c07764583"
+      },
+      {
+        "name": "20260911003000_repair_restaurant_menu_updates_and_store_discovery.sql",
+        "sha256": "cd203621dd9ed9b5baf20e15987ecdc764047694f49f05a557f3442e4ddf270e"
+      },
+      {
+        "name": "20260911060701_delivery_group_a_assignment_return_integrity.sql",
+        "sha256": "a507461969b0d761cc69173d2a3eca2c9275490449e8a722a83e04e4608b1a58"
+      },
+      {
+        "name": "20260911183000_delivery_partner_work_history.sql",
+        "sha256": "fe4a3476071144eda3ba9c36ade616807f92c50869039d69f08f0c277bbf13ed"
+      },
+      {
+        "name": "20260911203106_admin_network_permission_hardening.sql",
+        "sha256": "a55b3af22cc9950148d9d5dcc7cae868824633047f2a3021331a01c8e166df46"
+      },
+      {
+        "name": "20260912113357_admin_operational_scale_pagination.sql",
+        "sha256": "4a945c95c1f6b02b876d570e55676b2fcf99182148723d980a9533c458ffd02d"
+      },
+      {
+        "name": "20260912185758_admin_c2_1_permissions_audit_history.sql",
+        "sha256": "4836475b6b7ee7f1ff8169202832d27dc3aa8265c1a1d66ee6d45df849e8557e"
+      },
+      {
+        "name": "20260912195149_admin_c2_2_merchant_governance.sql",
+        "sha256": "f54ff4eb782c392c4493fc65df9e6b42d6bdd49ea80813bbbf0c845c2d4068ed"
+      },
+      {
+        "name": "20260912210626_admin_c2_3_delivery_partner_governance.sql",
+        "sha256": "4154b7ab363eea4a37a8aac03e22adda5837702ad9a9ac57303980b7bbb0beba"
+      },
+      {
+        "name": "20260912215157_admin_c2_4_customer_account_recovery.sql",
+        "sha256": "96f05fe50ea4d1fed2078ad1eeea27efb6060fa39ab7ada8e13eb24df546442f"
+      },
+      {
+        "name": "20260913120000_admin_c2_5_catalogue_asset_governance.sql",
+        "sha256": "e7f7bb681cdb452c52277204ed7a0afe5a89b72c7a9e68a8de56560c6c2532b4"
+      },
+      {
+        "name": "20260913222542_governed_taxonomy_restaurant_media.sql",
+        "sha256": "f41872963a05e75ba095baca66d4c085cad1d825a0df711dd8ada0862a5d6b9f"
+      },
+      {
+        "name": "20260914224449_merchant_fulfilment_product_pricing.sql",
+        "sha256": "c07b36f376c5e4666149fd1e29d986de6e4c0c56805a639f5642c740b9098d60"
+      },
+      {
+        "name": "20260914225843_legacy_merchant_product_price_projection.sql",
+        "sha256": "529cbd95707300e52a6cf0f2f350d88a7fae0eff81304bcc1797826965b5f5e3"
+      },
+      {
+        "name": "20260915070000_seed_permanent_taxonomy_artwork.sql",
+        "sha256": "16351f74c2778fe83e20011ec9fbc97cf8148397657f7b0e4f6668e60027744d"
+      },
+      {
+        "name": "20260915093000_correct_pharmacy_wellness_artwork.sql",
+        "sha256": "35c875478a024f71e181dba6280967951772fd6be8f4a4d85f553a4011a7f0c8"
+      },
+      {
+        "name": "20260915094000_lock_care_taxonomy_artwork.sql",
+        "sha256": "77dcd368ca447d006a4fbf9295ecccb124a0a1ae3a6ea42bc03c7a33df5d2c35"
+      },
+      {
+        "name": "20260915124028_add_hobby_category_artwork_v2.sql",
+        "sha256": "c68c7bd439bae5774045084f881f43d84c588cbae1058ecfc34a15776da9b937"
+      },
+      {
+        "name": "20260915125955_subcategory_artwork_reference.sql",
+        "sha256": "fa223b45e8d5e69f3c4f4c003a670be3dccae51e6b8d2e5650616fd7608336eb"
+      },
+      {
+        "name": "20260915232758_fix_governed_media_actor_context.sql",
+        "sha256": "553e01b24d263f04dad056d435d7a487c580f847ef5817751df8579383906aac"
+      },
+      {
+        "name": "20260915234731_keep_open_restaurants_visible.sql",
+        "sha256": "aef5e183dc66b8b563065a2fb273cde1d0a374c957f4b9b9c60ac208770fff01"
+      },
+      {
+        "name": "20260916005658_fix_menu_item_media_version_finalize.sql",
+        "sha256": "dd20877eaeca0eca6f5966ba673da54fd1ffb3c1552333856ff7a2c7f42e3484"
+      },
+      {
+        "name": "20260916014923_expose_full_bill_to_delivery.sql",
+        "sha256": "0b885f7e31f89f17cd134a3a11f3f3ef3233dee80e17d71fdea51294588654eb"
+      },
+      {
+        "name": "20260916023844_add_legacy_admin_platform_fee.sql",
+        "sha256": "fcda004dae3034d2b6332e786a228cac49dce96cf766221f509589b478f7dfd7"
+      },
+      {
+        "name": "20260916042000_seed_fresh_produce_skus.sql",
+        "sha256": "b6a5ed7c9bf802741b5bee00eec9791597ccfa53aff34bf419cf543bdba30709"
+      },
+      {
+        "name": "20260916043000_activate_fresh_produce_catalogue.sql",
+        "sha256": "4a5ff28a2c16405a958def99848280a01380bc52a572fa1b407439fd49ba84f7"
+      },
+      {
+        "name": "20260916043500_fix_fresh_produce_subcategory_artwork_keys.sql",
+        "sha256": "7b8099402d7a5c0b3e37a9f92746eae413f9a1c63a43fa0fa63e62a2b96699b5"
+      },
+      {
+        "name": "20260916050000_price_v1_delivery_and_platform_fees.sql",
+        "sha256": "bf1acf3027eabdc369c806e26d3d5d7ac920df2a0c4cfc9093cd7feb21d291af"
+      },
+      {
+        "name": "20260916051000_revert_flat_v1_fee_override.sql",
+        "sha256": "8c2cc66b62edf70abc18afda0f134694e8c1f4ae8cd2f0780744b538b3c88061"
+      },
+      {
+        "name": "20260916052000_authoritative_dastak_delivery_fee.sql",
+        "sha256": "4762bb390dd3eaa1cdc8c97fd36a90d670025f7970e775219e4f88ce77190a8c"
+      },
+      {
+        "name": "20260916060000_include_released_merchant_history.sql",
+        "sha256": "73832155b58ed402a922eebf4295642e797540ff0f9e06643f3ae458b7187bf7"
+      },
+      {
+        "name": "20260916190931_seed_dairy_bread_eggs_catalogue.sql",
+        "sha256": "e67dc133abcbb7a051fd87e50dfd253699452d423bc37e51dba56aaa2e906013"
+      },
+      {
+        "name": "20260916203544_backfill_dairy_bread_eggs_sku_provenance.sql",
+        "sha256": "9dced389fe512af77e512500f28787785e3d3fe5cea239c82b2267ed9628e8f5"
+      },
+      {
+        "name": "20260916205229_seed_amul_aavin_arokya_dairy_catalogue.sql",
+        "sha256": "28cda6d6c868871481be69af7cb5a4494f311f2cbcb8ed8f06f66f147be35435"
+      },
+      {
+        "name": "20260917033000_seed_curds_yogurts_amul_aavin_arokya_hatsun.sql",
+        "sha256": "3a2621dbd56a8800a09bf508b9417b6098358a13025630c6abcb2acbf719d397"
+      },
+      {
+        "name": "20260917040000_seed_paneer_cream_amul_milkymist.sql",
+        "sha256": "6e3277d36fc895b5f9ab03573f23ab7635a5ce2f80f55452dc4b17d96b7b06e9"
+      },
+      {
+        "name": "20260917050000_seed_butter_margarine_amul_milkymist.sql",
+        "sha256": "baae457462bcc6de050d5b61734fb8e8d881df61c80038a727911db6fc4cda37"
+      },
+      {
+        "name": "20260917053000_seed_cheese_amul_milkymist.sql",
+        "sha256": "e01e4888bb31121ccbae1911dca5979e9465e57f030199e9b6a8b5dd565be080"
+      },
+      {
+        "name": "20260918010000_seed_milk_powders_amul_nestle.sql",
+        "sha256": "7b0916ffec0940aa8d2d53fca4f37611c869dd20a604d1cb9daf09ab5eec296f"
+      },
+      {
+        "name": "20260918193018_rice-brand-refresh.sql",
+        "sha256": "cc6b3c67f5b444488056576624449ceaa3fc95ca39c69397c4533c4bdb0edb8e"
+      },
+      {
+        "name": "20260918205624_admin-catalogue-management.sql",
+        "sha256": "c79bb30ddb5f21138e081b159821b940cbab0a480a495e014a5e35376b1ff752"
+      },
+      {
+        "name": "20260918214048_admin-sku-permanent-delete.sql",
+        "sha256": "336da49bc1c33fd0df12924cb0732ffc09f3c61ae9a83c27c65eda240dd48964"
+      },
+      {
+        "name": "20260919093000_customer_rider_call_and_bill_repair.sql",
+        "sha256": "173d6ad2a0a9c8ade0268f3565114486432cf380945ecc87e87f8943e7c5a001"
+      },
+      {
+        "name": "20260919143853_replace_atta_flours_brands.sql",
+        "sha256": "457cd00edc7d3c99291c4d49f541ae1a8f60fea7ea8ddca0015b2776ba05c614"
+      },
+      {
+        "name": "20260919214727_hide_archived_skus_from_merchants.sql",
+        "sha256": "b09e84d0fa346432ba13f8cdb7ed1235e11c5deb5b2bc3a998c12e058d3ef480"
+      },
+      {
+        "name": "20260919221849_resolve_cheese_slices_sku.sql",
+        "sha256": "83966de7e3f54f92b20d0d494651d629b02bf69d72f60ba1d7da8566703bc0a8"
+      },
+      {
+        "name": "20260920121119_archive_dals_pulses_selected_brands.sql",
+        "sha256": "436774cda1c20898936ecbb9626d69c3fb920764d701db07286af0c4b4b7034b"
+      },
+      {
+        "name": "20260920141428_optimise_catalogue_rpc_access_paths.sql",
+        "sha256": "adce0bf599349d2b68c529276141ec93af36a32e9e4abd4e8230b014a00f9f99"
+      },
+      {
+        "name": "20260920194403_archive_fresh_produce_coming_soon.sql",
+        "sha256": "c21dc17cccad7e4236b4281b2efd32f68b5d65881a03925bb0449f11a961492b"
+      },
+      {
+        "name": "20260920194743_permanently_delete_unreferenced_fresh_produce.sql",
+        "sha256": "a04b527e765e01eee534d7fe279725d1c0d58fad319adab7ffcdd3240378da7b"
+      },
+      {
+        "name": "20260920195122_show_fresh_produce_as_coming_soon.sql",
+        "sha256": "63a399cdf13a282c99706216edca999ceffd14fc1cdebf3dfee6569cba7483b3"
+      },
+      {
+        "name": "20260920195838_permanently_delete_archived_curd_yogurt.sql",
+        "sha256": "ad83d4d8d94d9f1b316d7b665845867708079524b8a68cdcfda97ab067b9c2bf"
+      },
+      {
+        "name": "20260920200247_permanently_delete_archived_curd_yogurt_category.sql",
+        "sha256": "19cc650b8e5d322c83accafee9254ec0acc9788f9a362381884c8d14ee5cbb31"
+      },
+      {
+        "name": "20260920201827_permanently_delete_archived_rice.sql",
+        "sha256": "5104a74e21401fa218acfc5e3b002047da9e689ec6d81f538873ba202dd6f54f"
+      },
+      {
+        "name": "20260920202418_permanently_delete_archived_atta_flours.sql",
+        "sha256": "31fac43fc5fee71acbdba01b36d2b905415ab794c4549c0d1806e922c1dc8f2a"
+      },
+      {
+        "name": "20260920202723_permanently_delete_dals_pulses_skus.sql",
+        "sha256": "f8c9c6e75a56df12447d47500305ef83be18924a6631ef5193516f49fd9fc9b7"
+      },
+      {
+        "name": "20260920203000_permanently_delete_millets_grains_skus.sql",
+        "sha256": "150516ca32c920a87b0efac9d5538865e55d92e3c85e549a7c6f1cc982036b5b"
+      },
+      {
+        "name": "20260920203222_permanently_delete_seeds_skus.sql",
+        "sha256": "2ad2070f1ff8e2b9aec5a448479202785e4476ae832c3bd1d1193c5325e2f5b8"
+      },
+      {
+        "name": "20260920204724_delete_live_dry_fruits_nuts_skus.sql",
+        "sha256": "c303fedaf14cf8bc0532dbae9bbc9dea4a5b6a3fd500562ac0d26acbbce8c1a2"
+      },
+      {
+        "name": "20260920205025_permanently_delete_archived_salt.sql",
+        "sha256": "441c881bb1870cd423eb93f488efb635234cd4691d67dd65230bc8db15067840"
+      },
+      {
+        "name": "20260920210159_permanently_delete_sugar_sweeteners_skus.sql",
+        "sha256": "cc1f7d095e12b082fceb226d307388daf115bc2b48f0840f1588fb351124b584"
+      },
+      {
+        "name": "20260920210509_permanently_delete_archived_ghee.sql",
+        "sha256": "629f0b05d74b21050efc558a307cadc8b171fd3da2f3ff79fb1b27171aee5529"
+      },
+      {
+        "name": "20260920213958_delete_live_cooking_oils_skus.sql",
+        "sha256": "efacd9aeb8f2b8d3dde93ad7e5b0b8a5e09e736d2950a90868533258b12f40a7"
+      },
+      {
+        "name": "20260920214951_delete_live_whole_spices_skus.sql",
+        "sha256": "e2eaa5cef36333352fa6b602d25ed75a09fe13513ccfe6c62a28003cbf95ae8e"
+      },
+      {
+        "name": "20260920224132_delete_live_powdered_spices_skus.sql",
+        "sha256": "e89ec8ed8cf3d782d945c58eb2778044b878029d8b8b273d2cb340a509e21e03"
+      },
+      {
+        "name": "20260920234755_breakfast_spreads_category_artwork.sql",
+        "sha256": "6aab33de60fe99616106b7c729c4be6ceca0c92b1da6e14814b8444232a9062f"
+      },
+      {
+        "name": "20260921004643_snacks_munchies_category_artwork.sql",
+        "sha256": "fbc1cd1b2f65f32d57ddb845e43611610fc2bb8c9d89e870e8af82b3c41a23d5"
+      },
+      {
+        "name": "20260921005021_snacks_munchies_category_artwork_fix.sql",
+        "sha256": "c849166072f64cd397b29860f81c8e95a3aa7881cb652cc162063a94451250c3"
+      },
+      {
+        "name": "20260921012147_repair_oats_slug_length.sql",
+        "sha256": "49c41719ae944b51ca868e750b7620fcfe28f8112b015375c3d08c6936fc2879"
+      },
+      {
+        "name": "20260921013239_biscuits_bakery_category_artwork.sql",
+        "sha256": "e3a2562e0003c64f26eb2108300c99a9d0ece17d49e02040f7834c3caaa9b32c"
+      },
+      {
+        "name": "20260921014852_beverages_category_artwork.sql",
+        "sha256": "5c47d69bfc2aa5f30f52c006a3a4a6fcce9a0806f967dd8e49d39179ccfc82ad"
+      },
+      {
+        "name": "20260921021313_tea_coffee_drink_mixes_category_artwork.sql",
+        "sha256": "05888384b13fc0a9f8a424a3cd8fbffefaebfbb1505d518d0f2ddb0cb74b8218"
+      },
+      {
+        "name": "20260921022244_chocolates_sweets_category_artwork.sql",
+        "sha256": "bf2ae13803d16ff0d1844c36f0d2e8c6a7ba6d23be0d6f15acac4e5454afb6a6"
+      },
+      {
+        "name": "20260921023637_instant_ready_frozen_food_category_artwork.sql",
+        "sha256": "d8168e8880159d7272419065c3446ceae620cc94f6ed0f6b6f210342aa67357a"
+      },
+      {
+        "name": "20260921201301_beauty_grooming_category_artwork.sql",
+        "sha256": "902afcc791a657dfe1f63df3e522af775470a18e0731269c222c7af44ff101cb"
+      },
+      {
+        "name": "20260921202203_health_hygiene_category_artwork.sql",
+        "sha256": "d30e622d84c97631216f11c5dfbc4b415bffb76cd26622a9a8aa35f825a6745b"
+      },
+      {
+        "name": "20260921204309_baby_care_category_artwork.sql",
+        "sha256": "b85962e4792df3782feff63c74298b082cef17d998de699e879adb89c78a3e06"
+      },
+      {
+        "name": "20260921205322_pharmacy_category_artwork.sql",
+        "sha256": "731ea9415bb9c773199c0692de3b83a2bacff07aabc1edcf5fd03bf3a339541d"
+      },
+      {
+        "name": "20260921210144_home_cleaning_category_artwork.sql",
+        "sha256": "cc754349c0adc8705c9f7c0e959a4494c07808326efef058851adf2cb8119907"
+      },
+      {
+        "name": "20260921210734_kitchen_dining_category_artwork.sql",
+        "sha256": "cf02452875b63bd04f3a9ecb749d7ef70bc3064ac478eaea8918677123c7f04d"
+      },
+      {
+        "name": "20260922005320_align_catalogue_department_groups.sql",
+        "sha256": "a53ed1f86d5b32e21120697224f8b1bc55f53725c33794fbf52c6b1aeeb2ee7a"
+      },
+      {
+        "name": "20260922012844_personal_care_category_artwork.sql",
+        "sha256": "99b11d3abf2e803f282ac3526b80e85e054242ac612b7ab2aee2e3b691fe72b2"
+      },
+      {
+        "name": "20260922014327_archive_fresh_produce_empty_categories.sql",
+        "sha256": "26702e5358618d0226310275dfaab1699317dc1c9ed208b8f336b5639ee8336b"
+      },
+      {
+        "name": "20260922021240_add_fresh_fruit_category_groups.sql",
+        "sha256": "3fe2d9ec265f1d8d5081808a58ade792d990fba596c7af5cb874883843dfacf0"
+      },
+      {
+        "name": "20260922022039_complete_fresh_items_taxonomy.sql",
+        "sha256": "0ea7fcf2f6beb4b1eb2408ac81851c5ca4ba2a0aa061e06c8e7cd26955442e51"
+      },
+      {
+        "name": "20260922040000_refine_dairy_bread_eggs_taxonomy.sql",
+        "sha256": "2f82d99fb38d1ecc93bd2a3f7951d2413d18b5c675e3b04036a645fe43a7ee9f"
+      },
+      {
+        "name": "20260922041000_move_nestle_whitener_to_milk.sql",
+        "sha256": "9f753d9a57d7e6ec36a7439e7274206467cfde2c061ba3bf33aab0f68a5469ce"
+      },
+      {
+        "name": "20260922042000_add_missing_dairy_bread_eggs_categories.sql",
+        "sha256": "315aa367478afa34b9fca0a700f5f4543178d593a61fdc652c908f80233adc52"
+      },
+      {
+        "name": "20260922043000_move_dairy_bread_eggs_skus.sql",
+        "sha256": "b0bf8402ed64f54fa477e63fad9c3dd46a3bc347482159ff117e71d1648cd780"
+      },
+      {
+        "name": "20260922043100_correct_dairy_bread_eggs_sku_move.sql",
+        "sha256": "d31236dce17f1b4e01a9993aa8111b2224b04ac37897092f34d555a1bd11f4f2"
+      },
+      {
+        "name": "20260922044000_add_meat_seafood_image_categories.sql",
+        "sha256": "d1bc253175f7c7216b83f246c08633b70c046351258d78cbca11ab6fb645c84e"
+      },
+      {
+        "name": "20260922044100_add_remaining_meat_seafood_categories.sql",
+        "sha256": "7689c9bcb1abbc202d55a18bd9aeacb561fcf5a39fb71eb0578adad854de95bf"
+      },
+      {
+        "name": "20260922045000_remove_unrequested_meat_seafood_categories.sql",
+        "sha256": "fa1626cbf295fd8771c1aa51ca57a012b08e1760180554efae6e75f5d743450c"
+      },
+      {
+        "name": "20260922071000_refresh_fresh_produce_categories.sql",
+        "sha256": "1400114b24d659588d93c0f2ab61b1025d01ea4d1c284b974ab151eccc9523b5"
+      },
+      {
+        "name": "20260923002047_align_atta_rice_dal_curated_categories.sql",
+        "sha256": "7a884fd77afad58c12c40b673c86abcadf8846f45d288b7f4fb0647ad1cfd6c1"
+      },
+      {
+        "name": "20260925134938_retire_high_protein_atta.sql",
+        "sha256": "4273c6b87c1b103a5424d2336d4313cb5e49c076db17cdc829bf4cfcfd060ce4"
+      },
+      {
+        "name": "20260925141021_add_missing_masalas_categories.sql",
+        "sha256": "e0a216436fe6361696629c40d0422668be1a5f7b4e69395c1d4e042f55c94f6e"
+      },
+      {
+        "name": "20260925185849_align_masalas_canonical_parents.sql",
+        "sha256": "f5d069ae7b1ed8a60baad44f67aba3d049a6aca83e33296674e6e2b6e928fcf2"
+      },
+      {
+        "name": "20260925191117_separate_oils_and_ghee_department.sql",
+        "sha256": "5b9b4c6a35b845d41a4e1309ef8226068549697a91c79c182a2cce9e874cd219"
+      },
+      {
+        "name": "20260925222726_reference_catalogue_browse_map.sql",
+        "sha256": "106ff892653c01b0d816e55732025d07042b99ed203cd531653a2a512e4b7782"
+      },
+      {
+        "name": "20260926133030_delete_two_pani_puri_kits.sql",
+        "sha256": "2db177459e0e9220f1f98c44be3ec206da2543ac6d94adf4e763ed30b0acbf45"
+      },
+      {
+        "name": "20260926224214_place_honey_under_sauces_spreads_browse.sql",
+        "sha256": "dce9a35f69f9505e01dde981ac7a670232f7f1972aedbdc8179fe629b587bae4"
+      },
+      {
+        "name": "20260928224102_recognize_doorstep_collection_in_paid_invariant.sql",
+        "sha256": "e6ac7604558b6315c648658cf027c72013f5b7eb268f99285971c0de38e6f39d"
+      },
+      {
+        "name": "20260929191745_activate_reference_catalogue_browse_map.sql",
+        "sha256": "1a4c428bcfa1ff85b35c392497c873f91f7d5c3ac5a569dea10a66ad6ac5ae84"
+      },
+      {
+        "name": "20261007200623_customer_food_cursor_pages.sql",
+        "sha256": "0530b6f55304dccc0bb0f25316e13b1328e2747339e3fc638e45f1dc248fbe63"
+      },
+      {
+        "name": "20261008084004_customer_food_nearest_pages.sql",
+        "sha256": "0ae6158b8b16bd6c530ae7bb421d22e02bc0f210d1d382c530db41ed7132bdd7"
+      },
+      {
+        "name": "20261008095639_customer_area_availability.sql",
+        "sha256": "cede7596aa4f0c66c1bec38dd2c2edfbc4c78a44dda74748a812b5c7fa672c62"
+      },
+      {
+        "name": "20261008114655_admin_customer_restaurant_visibility.sql",
+        "sha256": "b63fcb5b46a0832fa3e607e4326314429a883878770e58388f40a8627ad29ada"
+      },
+      {
+        "name": "20261008130951_customer_active_order_discovery.sql",
+        "sha256": "e1236b20c85386a6a4fd7040dec288820208fcb93448cbcce3c77fda9a84fab0"
+      },
+      {
+        "name": "20261008174027_repair_customer_active_order_discovery_permissions.sql",
+        "sha256": "9528de2e698d83ebae9a78af0c14682fcbbb9647c55f52fc5b68ac330ee63a81"
+      },
+      {
+        "name": "20261008182018_catalogue_product_type_metadata.sql",
+        "sha256": "f7dd045233c8137eacdf1aeba092f8078f7b582c71a7e8d15c4eb893dc3b1833"
+      },
+      {
+        "name": "20261009111558_checkout_fee_quotes.sql",
+        "sha256": "a29de3f0487d675075ce2df0c198627e681d62c3a0e69369df6a99fd9edf3096"
+      },
+      {
+        "name": "20261009122717_india_wide_local_onboarding.sql",
+        "sha256": "835131c0798646055efff64c5e9b4fe8607f8b92313e1feb70cedaa28b687275"
+      },
+      {
+        "name": "20261009131135_customer_thirty_km_serviceability.sql",
+        "sha256": "2ea1f8e75430f8156d9e038b0bce8c8eb8d635bdf0abe1064f85b686750a86e7"
+      },
+      {
+        "name": "20261009134004_repair_customer_rider_phone.sql",
+        "sha256": "c338c39218dd1f379eefe2d3e8968f13207ab5a7fa2ac8dba6966a6b63016c32"
+      },
+      {
+        "name": "20261009182754_reconnect_pending_merchant_requests.sql",
+        "sha256": "e2fff58768f9eab5b1fe9093d8dbb59abb59e89d58936eb200d08716f54cc83f"
+      },
+      {
+        "name": "20261013233951_customer_local_trending.sql",
+        "sha256": "6f108590deed9264ec9d57d1e1b2c60b511270dd37b410629065bc258d409b73"
+      },
+      {
+        "name": "20261014111434_customer_order_live_activities.sql",
+        "sha256": "6ae90e18607f40cb873a1893e33106a09404473dc0399b24ea900f26db703c5e"
+      },
+      {
+        "name": "20261014121929_live_activity_rider_arrival.sql",
+        "sha256": "89af54b383af6d77e260bf7586efaa0bd947f1b80cbb8dae6abc1ef0d1a2c8c5"
+      },
+      {
+        "name": "20261014192213_live_activity_assigning_rider.sql",
+        "sha256": "85227366738b871e9e7d1019f1a432f71b8adf648750d788f8f075dfb4663921"
+      },
+      {
+        "name": "20261014195708_preserve_preparation_before_rider_assignment.sql",
+        "sha256": "b23a2b10753fabdac04ab2acb1314ec8c644e845f21db3a9bd3fd945006a6dd4"
+      },
+      {
+        "name": "20261014223639_rename_pooja_store_to_janamaz_and_tasbih.sql",
+        "sha256": "becf34970858a7210300f7d4f97deea316b82a8df7fac3f10077580233180be1"
+      },
+      {
+        "name": "20261014224848_replace_pooja_catalogue_with_prayer_essentials.sql",
+        "sha256": "86bacbe3cea80dd701b2e53690ed40b8696813167c53af89f61e7c9cf353830b"
+      },
+      {
+        "name": "20261015003730_delivery_partner_order_details.sql",
+        "sha256": "0e91baf522299aa49c6231afb4d15dfc5e431d75e1233eb1a07495de7d78be5c"
+      },
+      {
+        "name": "20261015154016_delivery_notification_offer_expiry.sql",
+        "sha256": "65cdad28c431bc3c6b162f74294f5efc7d4d4981c4d8f8135175ef651e278ec9"
+      },
+      {
+        "name": "20261015203400_reconcile_catalogue_browse_activation.sql",
+        "sha256": "379f3b5ac4140be2226fa84b7fc474a237fa62f7bbf97c7bc42f6bb484ea71b8"
+      },
+      {
+        "name": "20261015214234_harden_governed_entity_media.sql",
+        "sha256": "7097121c3837817095b7eef25a4f9a090752abed7124d872406f47f2fcc21130"
+      },
+      {
+        "name": "20261015214450_legacy_order_platform_fee_ledger.sql",
+        "sha256": "06820b75032e81b556718e2ba01ce9e5defd3258ef622c1c158cdd2cba9b1faf"
+      }
+    ]
+  },
+  "replay": {
+    "ok": true,
+    "applied": 289,
+    "chainSha256": "414a48042a283eb806fd7455cf5ebc91700f52502390a0a780f2a067331cd147"
+  },
+  "hashVerification": {
+    "sourceAndHistoryMatch": 289,
+    "historicalMigrationsUnchanged": 287,
+    "chainSha256": "414a48042a283eb806fd7455cf5ebc91700f52502390a0a780f2a067331cd147"
+  },
+  "contracts": {
+    "files": 76,
+    "passed": 76,
+    "failed": 0,
+    "assertions": 2081,
+    "runName": "release-final",
+    "runtime": {
+      "version": "PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit",
+      "user": "postgres",
+      "sessionPreload": "supautils",
+      "cron": "off"
+    },
+    "results": [
+      {
+        "name": "001_identity.pgtap.sql",
+        "ok": true,
+        "assertions": 26,
+        "exitStatus": 0,
+        "sha256": "941cdf8aa6cbf18eb61eabd8b7708e3263ea44484e4cb9fe8c4bf5439187d760",
+        "expandedSha256": "941cdf8aa6cbf18eb61eabd8b7708e3263ea44484e4cb9fe8c4bf5439187d760"
+      },
+      {
+        "name": "002_security_audit_zones.pgtap.sql",
+        "ok": true,
+        "assertions": 42,
+        "exitStatus": 0,
+        "sha256": "e2a9fb63a2d0afb760eda740a539d244e7281014c8cb726e21b17ea80ca61716",
+        "expandedSha256": "e2a9fb63a2d0afb760eda740a539d244e7281014c8cb726e21b17ea80ca61716"
+      },
+      {
+        "name": "003_app_access.pgtap.sql",
+        "ok": true,
+        "assertions": 16,
+        "exitStatus": 0,
+        "sha256": "15c24c872889845dbf7057774364b52bbdd28950e830e6763482b208f8996477",
+        "expandedSha256": "15c24c872889845dbf7057774364b52bbdd28950e830e6763482b208f8996477"
+      },
+      {
+        "name": "004_merchant_onboarding.pgtap.sql",
+        "ok": true,
+        "assertions": 36,
+        "exitStatus": 0,
+        "sha256": "ef24df9897c1a03662bcaedfed83db767aec18338fa2c839fa8866259769e9b7",
+        "expandedSha256": "ef24df9897c1a03662bcaedfed83db767aec18338fa2c839fa8866259769e9b7"
+      },
+      {
+        "name": "005_merchant_catalogue.pgtap.sql",
+        "ok": true,
+        "assertions": 55,
+        "exitStatus": 0,
+        "sha256": "5e06ef7091ef8eebd7e6ced47a309d6b9f386a4c71c58bbddc6e07394092bf13",
+        "expandedSha256": "5e06ef7091ef8eebd7e6ced47a309d6b9f386a4c71c58bbddc6e07394092bf13"
+      },
+      {
+        "name": "006_merchant_order_checkout.pgtap.sql",
+        "ok": true,
+        "assertions": 69,
+        "exitStatus": 0,
+        "sha256": "2917a0721dca20b7df9776962168f63b4efffb50bca7602a2cd209cb83e03392",
+        "expandedSha256": "2917a0721dca20b7df9776962168f63b4efffb50bca7602a2cd209cb83e03392"
+      },
+      {
+        "name": "007_delivery_partner_foundation.pgtap.sql",
+        "ok": true,
+        "assertions": 65,
+        "exitStatus": 0,
+        "sha256": "b26b341567495833f1ee23eba441e979770244a5acfd22e324bb32f5dd0f9db2",
+        "expandedSha256": "b26b341567495833f1ee23eba441e979770244a5acfd22e324bb32f5dd0f9db2"
+      },
+      {
+        "name": "008_courier_dispatch_assignment.pgtap.sql",
+        "ok": true,
+        "assertions": 80,
+        "exitStatus": 0,
+        "sha256": "8f58326bfc018f1aa2bd93933873e31b0cf9468c075b6a6faa56494f839069f3",
+        "expandedSha256": "8f58326bfc018f1aa2bd93933873e31b0cf9468c075b6a6faa56494f839069f3"
+      },
+      {
+        "name": "009_merchant_order_payment_ledger.pgtap.sql",
+        "ok": true,
+        "assertions": 37,
+        "exitStatus": 0,
+        "sha256": "0805f89a9d79bd86c4e74437b82f5c6bbb7cd7fdb96e847d138907e19b2d4785",
+        "expandedSha256": "0805f89a9d79bd86c4e74437b82f5c6bbb7cd7fdb96e847d138907e19b2d4785"
+      },
+      {
+        "name": "010_parcel_delivery_foundation.pgtap.sql",
+        "ok": true,
+        "assertions": 47,
+        "exitStatus": 0,
+        "sha256": "b1d4feded09abf204339106f3b138b7b2bcc2826016e3bcb00b3df0681e4f854",
+        "expandedSha256": "b1d4feded09abf204339106f3b138b7b2bcc2826016e3bcb00b3df0681e4f854"
+      },
+      {
+        "name": "011_controlled_categories.pgtap.sql",
+        "ok": true,
+        "assertions": 43,
+        "exitStatus": 0,
+        "sha256": "b45319bfec389b6b38168b55f42b39e175c0c159cf3b854d4dc5955b2a023b3d",
+        "expandedSha256": "b45319bfec389b6b38168b55f42b39e175c0c159cf3b854d4dc5955b2a023b3d"
+      },
+      {
+        "name": "012_city_marketplace_configuration.pgtap.sql",
+        "ok": true,
+        "assertions": 13,
+        "exitStatus": 0,
+        "sha256": "8bbeeb1347ba1bb6b073bd72ea996dd2aaeb1242afdf30de0a397558584aa7b5",
+        "expandedSha256": "8bbeeb1347ba1bb6b073bd72ea996dd2aaeb1242afdf30de0a397558584aa7b5"
+      },
+      {
+        "name": "013_geographic_enforcement.pgtap.sql",
+        "ok": true,
+        "assertions": 8,
+        "exitStatus": 0,
+        "sha256": "05fcdc6820015ff388af0d21d26adfd037a440d32340729b6afd05e7134749ad",
+        "expandedSha256": "05fcdc6820015ff388af0d21d26adfd037a440d32340729b6afd05e7134749ad"
+      },
+      {
+        "name": "014_distance_priced_checkout.pgtap.sql",
+        "ok": true,
+        "assertions": 7,
+        "exitStatus": 0,
+        "sha256": "ab0a970704bda6849f3ac050fd6823a48779743db7c21bb615c3e8dc335fa2f3",
+        "expandedSha256": "ab0a970704bda6849f3ac050fd6823a48779743db7c21bb615c3e8dc335fa2f3"
+      },
+      {
+        "name": "022_canonical_order_lifecycle.pgtap.sql",
+        "ok": true,
+        "assertions": 19,
+        "exitStatus": 0,
+        "sha256": "f2d286e6f0447222a6e8c0f9e740eddecd8977b54d14703f77465de469140018",
+        "expandedSha256": "f2d286e6f0447222a6e8c0f9e740eddecd8977b54d14703f77465de469140018"
+      },
+      {
+        "name": "025_dastak_v1_batch_1.pgtap.sql",
+        "ok": true,
+        "assertions": 40,
+        "exitStatus": 0,
+        "sha256": "cfdd83019703d6a6d0ce487cbebfa000523d08647c2da5fba059ded653cdcaf5",
+        "expandedSha256": "d425e5142d88ec445a533b3fe190e6df332eab1926c90c111f4a178682918fae"
+      },
+      {
+        "name": "026_dastak_v1_wave_1.pgtap.sql",
+        "ok": true,
+        "assertions": 81,
+        "exitStatus": 0,
+        "sha256": "b7237254c10916087afc1045ab9e83b83a5d63b2fa1a11eb03f3774b79d1431e",
+        "expandedSha256": "d31b9ceabdcfa63b1380afaa90537a1ec40cf179017ef9781beb9dcd6be0e9c0"
+      },
+      {
+        "name": "027_dastak_v1_canonical_catalogue.pgtap.sql",
+        "ok": true,
+        "assertions": 30,
+        "exitStatus": 0,
+        "sha256": "1009f3fddb2aa4202ba14808d9ef327229e5672cbaf7b30992b093c4603d31d5",
+        "expandedSha256": "c9f5c8935dcb3ba5c026b5396fef330dfa5eecfdd7171482033b8565fa4e66f6"
+      },
+      {
+        "name": "028_dastak_v1_wave_2_payment.pgtap.sql",
+        "ok": true,
+        "assertions": 46,
+        "exitStatus": 0,
+        "sha256": "41de6f2eed5211a6944ebc8d68e45977c9149847f35bf0cbc153696223f1e324",
+        "expandedSha256": "2b0b37f5ba885d82e86671d8aed12ad5f41e215ce1f2d9b5147f414184153e12"
+      },
+      {
+        "name": "029_dastak_v1_preparation_ready.pgtap.sql",
+        "ok": true,
+        "assertions": 19,
+        "exitStatus": 0,
+        "sha256": "8912fe974fd6dff9eb98052698b53e11a46e964eb473f7d693677b711e8d5f43",
+        "expandedSha256": "8912fe974fd6dff9eb98052698b53e11a46e964eb473f7d693677b711e8d5f43"
+      },
+      {
+        "name": "030_dastak_v1_rider_pickup.pgtap.sql",
+        "ok": true,
+        "assertions": 25,
+        "exitStatus": 0,
+        "sha256": "e6bfdedeac60b4a7ca897696e7a3efd66c71bbf96f094049b134a337e2526f1d",
+        "expandedSha256": "e6bfdedeac60b4a7ca897696e7a3efd66c71bbf96f094049b134a337e2526f1d"
+      },
+      {
+        "name": "031_dastak_v1_final_delivery.pgtap.sql",
+        "ok": true,
+        "assertions": 13,
+        "exitStatus": 0,
+        "sha256": "be06a2d5103ad2f2efc861b0b34ccee86b838eed151814ca33577493a1d027a9",
+        "expandedSha256": "be06a2d5103ad2f2efc861b0b34ccee86b838eed151814ca33577493a1d027a9"
+      },
+      {
+        "name": "032_dastak_v1_launch_failure_financial_completion.pgtap.sql",
+        "ok": true,
+        "assertions": 21,
+        "exitStatus": 0,
+        "sha256": "4574e99c0f647595d8ee389ed09452d3612825e0e307e8b00f66c7ba9eef0ac7",
+        "expandedSha256": "4574e99c0f647595d8ee389ed09452d3612825e0e307e8b00f66c7ba9eef0ac7"
+      },
+      {
+        "name": "033_dastak_v1_launch_hardening.pgtap.sql",
+        "ok": true,
+        "assertions": 32,
+        "exitStatus": 0,
+        "sha256": "59c0b5610791bda8a0b2b587f42d73949bdc93af34a096a587cd90396fa46121",
+        "expandedSha256": "59c0b5610791bda8a0b2b587f42d73949bdc93af34a096a587cd90396fa46121"
+      },
+      {
+        "name": "034_dastak_v1_rider_distance_payout.pgtap.sql",
+        "ok": true,
+        "assertions": 17,
+        "exitStatus": 0,
+        "sha256": "3fe99c2bf81e70bd6c0a5f66b9809832acf5dd02b38dfa3e7bb0aa29acf28bf3",
+        "expandedSha256": "3fe99c2bf81e70bd6c0a5f66b9809832acf5dd02b38dfa3e7bb0aa29acf28bf3"
+      },
+      {
+        "name": "035_dastak_v1_identity_merchant_control.pgtap.sql",
+        "ok": true,
+        "assertions": 50,
+        "exitStatus": 0,
+        "sha256": "aa3adfdd6643369277c1546e7c42f205e325159f8c11c009b26423a02433f42c",
+        "expandedSha256": "aa3adfdd6643369277c1546e7c42f205e325159f8c11c009b26423a02433f42c"
+      },
+      {
+        "name": "036_dastak_v1_transport_operational_safety.pgtap.sql",
+        "ok": true,
+        "assertions": 59,
+        "exitStatus": 0,
+        "sha256": "1cb4d68ed2880891db6465ad348029114978baf343ae8eeb0007d7f38c639cf7",
+        "expandedSha256": "1cb4d68ed2880891db6465ad348029114978baf343ae8eeb0007d7f38c639cf7"
+      },
+      {
+        "name": "037_dastak_v1_restaurant_cafe.pgtap.sql",
+        "ok": true,
+        "assertions": 55,
+        "exitStatus": 0,
+        "sha256": "3c3e095df9f5db604a652b90eca9617bc1d5a13ea2853d1757aa9a73b342f0ce",
+        "expandedSha256": "185599c2095078223ddcca2db21eb8c78ee38e79496e40e805acb628dac3225d"
+      },
+      {
+        "name": "038_dastak_v1_configuration_acceptance_closure.pgtap.sql",
+        "ok": true,
+        "assertions": 25,
+        "exitStatus": 0,
+        "sha256": "81681b0f0f9240354cda654a04d508d87780794d6abda3a7f29c41f3c10fd795",
+        "expandedSha256": "81681b0f0f9240354cda654a04d508d87780794d6abda3a7f29c41f3c10fd795"
+      },
+      {
+        "name": "039_dastak_v1_royalty_platform_fee.pgtap.sql",
+        "ok": true,
+        "assertions": 43,
+        "exitStatus": 0,
+        "sha256": "b301198571f3c5cc6d1c77e9615e93c74bad1c4c89b395c608ca73e9a04f1a44",
+        "expandedSha256": "b301198571f3c5cc6d1c77e9615e93c74bad1c4c89b395c608ca73e9a04f1a44"
+      },
+      {
+        "name": "040_dastak_v1_razorpayx_royalty.pgtap.sql",
+        "ok": true,
+        "assertions": 50,
+        "exitStatus": 0,
+        "sha256": "dd8c0539270c66551f00a6541a9d0d5e0c3c4b31e3a9cff770eb2b67163c9012",
+        "expandedSha256": "dd8c0539270c66551f00a6541a9d0d5e0c3c4b31e3a9cff770eb2b67163c9012"
+      },
+      {
+        "name": "041_customer_onboarding_completion.pgtap.sql",
+        "ok": true,
+        "assertions": 20,
+        "exitStatus": 0,
+        "sha256": "54295739064a7fb58092594a61a168f10f046ae6b8b3e647aa89edc9468b56ea",
+        "expandedSha256": "54295739064a7fb58092594a61a168f10f046ae6b8b3e647aa89edc9468b56ea"
+      },
+      {
+        "name": "042_customer_auth_orphan_recovery.pgtap.sql",
+        "ok": true,
+        "assertions": 18,
+        "exitStatus": 0,
+        "sha256": "9148fd5501cc35c477fbad29a7722ec7f9156d3f06b7f19f7994175663a4e422",
+        "expandedSha256": "9148fd5501cc35c477fbad29a7722ec7f9156d3f06b7f19f7994175663a4e422"
+      },
+      {
+        "name": "043_customer_account_completion.pgtap.sql",
+        "ok": true,
+        "assertions": 24,
+        "exitStatus": 0,
+        "sha256": "ea687926f35f0545c3d28869fdaf8a64d1ecfe40a6acbe7b8db00d4c69cf245d",
+        "expandedSha256": "ea687926f35f0545c3d28869fdaf8a64d1ecfe40a6acbe7b8db00d4c69cf245d"
+      },
+      {
+        "name": "044_customer_orders_experience_completion.pgtap.sql",
+        "ok": true,
+        "assertions": 14,
+        "exitStatus": 0,
+        "sha256": "432d8202278f5995b27ef8f3bb8e7c6361982ef5a8f3b43e6d9455d03cd1efab",
+        "expandedSha256": "fbee71bf640b2a97ec9da71fc644c43374c222f434daba5c56691c97c6f8317b"
+      },
+      {
+        "name": "045_customer_wishlist_completion.pgtap.sql",
+        "ok": true,
+        "assertions": 8,
+        "exitStatus": 0,
+        "sha256": "c050347d7c55fb97f2311c5d72be09816a0910561da9acb14df016b53421d22a",
+        "expandedSha256": "c050347d7c55fb97f2311c5d72be09816a0910561da9acb14df016b53421d22a"
+      },
+      {
+        "name": "046_admin_execution_projection_contract.pgtap.sql",
+        "ok": true,
+        "assertions": 11,
+        "exitStatus": 0,
+        "sha256": "a5f52a13117868efa1add10d332b58ae553ba96a8c0aac192e0838286b0cac42",
+        "expandedSha256": "a5f52a13117868efa1add10d332b58ae553ba96a8c0aac192e0838286b0cac42"
+      },
+      {
+        "name": "047_dastak_v1_custom_checkout_completion.pgtap.sql",
+        "ok": true,
+        "assertions": 44,
+        "exitStatus": 0,
+        "sha256": "a95198f7e91650afdf83ebe5a2b94eab9653e85fc573638a724e6a24ee86e9ae",
+        "expandedSha256": "a95198f7e91650afdf83ebe5a2b94eab9653e85fc573638a724e6a24ee86e9ae"
+      },
+      {
+        "name": "049_dastak_v1_launch_payment.pgtap.sql",
+        "ok": true,
+        "assertions": 53,
+        "exitStatus": 0,
+        "sha256": "df24105c18b321acaf8909df432c6dc86acf83bdc3f384a5ec9d796c91815113",
+        "expandedSha256": "df24105c18b321acaf8909df432c6dc86acf83bdc3f384a5ec9d796c91815113"
+      },
+      {
+        "name": "050_admin_role_access_control.pgtap.sql",
+        "ok": true,
+        "assertions": 25,
+        "exitStatus": 0,
+        "sha256": "3dfc2658ebb4cb8d4bc05a539e5193eb6e75d48f0ee4b8f2ede8c0de429b8451",
+        "expandedSha256": "3dfc2658ebb4cb8d4bc05a539e5193eb6e75d48f0ee4b8f2ede8c0de429b8451"
+      },
+      {
+        "name": "051_dastak_identity_persona_recovery.pgtap.sql",
+        "ok": true,
+        "assertions": 51,
+        "exitStatus": 0,
+        "sha256": "569faa624d88fb58f9b796277bb183bcd7e120089d5c7fecfae9ea2ccc8c4721",
+        "expandedSha256": "569faa624d88fb58f9b796277bb183bcd7e120089d5c7fecfae9ea2ccc8c4721"
+      },
+      {
+        "name": "052_dastak_existing_identity_retirement.pgtap.sql",
+        "ok": true,
+        "assertions": 19,
+        "exitStatus": 0,
+        "sha256": "df7e582d7246f55752145a68e40bc0aa1879dc61e5c85ddf2cd67fe404149815",
+        "expandedSha256": "df7e582d7246f55752145a68e40bc0aa1879dc61e5c85ddf2cd67fe404149815"
+      },
+      {
+        "name": "053_dastak_v1_admin_command_center.pgtap.sql",
+        "ok": true,
+        "assertions": 26,
+        "exitStatus": 0,
+        "sha256": "fb7c8e8954d1bb2e92215ab84d52f8a96a65363473a17677f833b8a10de2562f",
+        "expandedSha256": "fb7c8e8954d1bb2e92215ab84d52f8a96a65363473a17677f833b8a10de2562f"
+      },
+      {
+        "name": "054_admin_operational_safety_grants.pgtap.sql",
+        "ok": true,
+        "assertions": 6,
+        "exitStatus": 0,
+        "sha256": "03b4c0e27e404167f953b16827385f92b0742f45351631fc355ccbf2c4977992",
+        "expandedSha256": "03b4c0e27e404167f953b16827385f92b0742f45351631fc355ccbf2c4977992"
+      },
+      {
+        "name": "055_close_unstaffed_merchant_branches.pgtap.sql",
+        "ok": true,
+        "assertions": 6,
+        "exitStatus": 0,
+        "sha256": "acea599394cb4d8626d886d1f84887b39db97307ff34b4102ae5a92008c36863",
+        "expandedSha256": "acea599394cb4d8626d886d1f84887b39db97307ff34b4102ae5a92008c36863"
+      },
+      {
+        "name": "056_admin_royalty_snapshot_service_access.pgtap.sql",
+        "ok": true,
+        "assertions": 6,
+        "exitStatus": 0,
+        "sha256": "5a90bd9de375ef8053b0fdfc15d5ebf6ee3d5b75a973c9d0f9cb9b792a54c52f",
+        "expandedSha256": "5a90bd9de375ef8053b0fdfc15d5ebf6ee3d5b75a973c9d0f9cb9b792a54c52f"
+      },
+      {
+        "name": "057_admin_catalogue_presentation_contract.pgtap.sql",
+        "ok": true,
+        "assertions": 6,
+        "exitStatus": 0,
+        "sha256": "c592a435dc673b6570fa08df6dbfacc4d6105757aa8df0d53e0eaa9976b9ab3b",
+        "expandedSha256": "c592a435dc673b6570fa08df6dbfacc4d6105757aa8df0d53e0eaa9976b9ab3b"
+      },
+      {
+        "name": "058_launch_cod_configuration_validity.pgtap.sql",
+        "ok": true,
+        "assertions": 3,
+        "exitStatus": 0,
+        "sha256": "69af661780fb1b1e41a8cf3e9d870131c5a0f3b9708df06ef5ece0d1bd405f1a",
+        "expandedSha256": "69af661780fb1b1e41a8cf3e9d870131c5a0f3b9708df06ef5ece0d1bd405f1a"
+      },
+      {
+        "name": "059_complete_partner_onboarding.pgtap.sql",
+        "ok": true,
+        "assertions": 36,
+        "exitStatus": 0,
+        "sha256": "9ee893d24a9241d0d8bd46daa13691d906005546a30aba785d907f813df2967c",
+        "expandedSha256": "9ee893d24a9241d0d8bd46daa13691d906005546a30aba785d907f813df2967c"
+      },
+      {
+        "name": "060_retired_delivery_methods.pgtap.sql",
+        "ok": true,
+        "assertions": 38,
+        "exitStatus": 0,
+        "sha256": "ded507b85b6c70a4c10b011473b653f0397dcd3365f9390a5847c9450d0dbb9c",
+        "expandedSha256": "ded507b85b6c70a4c10b011473b653f0397dcd3365f9390a5847c9450d0dbb9c"
+      },
+      {
+        "name": "061_unified_catalogue_experience.pgtap.sql",
+        "ok": true,
+        "assertions": 8,
+        "exitStatus": 0,
+        "sha256": "74484f863d012203be2ebc489ba8a89ef35ef80ba6907e98f989a1e36ca721c9",
+        "expandedSha256": "74484f863d012203be2ebc489ba8a89ef35ef80ba6907e98f989a1e36ca721c9"
+      },
+      {
+        "name": "062_admin_realtime_invalidation.pgtap.sql",
+        "ok": true,
+        "assertions": 9,
+        "exitStatus": 0,
+        "sha256": "6f33569d8e11417b362f8bdfd8d0b3319cf9515cd6304f83969dbb2767c38420",
+        "expandedSha256": "6f33569d8e11417b362f8bdfd8d0b3319cf9515cd6304f83969dbb2767c38420"
+      },
+      {
+        "name": "063_catalogue_taxonomy_parity.pgtap.sql",
+        "ok": true,
+        "assertions": 10,
+        "exitStatus": 0,
+        "sha256": "e87ad0cbb44d78f1875068297ff6dd06f4be5f4712ed978d4f1834fb4c8e7e5f",
+        "expandedSha256": "e87ad0cbb44d78f1875068297ff6dd06f4be5f4712ed978d4f1834fb4c8e7e5f"
+      },
+      {
+        "name": "064_curated_catalogue_navigation.pgtap.sql",
+        "ok": true,
+        "assertions": 6,
+        "exitStatus": 0,
+        "sha256": "69a93c9d872071913b0dfc947921da4cfa51bf901ec8a548bb5eaa2e593d4e6f",
+        "expandedSha256": "69a93c9d872071913b0dfc947921da4cfa51bf901ec8a548bb5eaa2e593d4e6f"
+      },
+      {
+        "name": "065_admin_order_cancellation.pgtap.sql",
+        "ok": true,
+        "assertions": 40,
+        "exitStatus": 0,
+        "sha256": "26ab99960d956942f0ba87c591f3872797ec84ff64e746ce13b7dc5e8f615701",
+        "expandedSha256": "711f6f84b546a2799266c2415db4ff8e0eea2ef122a3971e6f007be63cb12d9b"
+      },
+      {
+        "name": "066_merchant_app_notifications.pgtap.sql",
+        "ok": true,
+        "assertions": 11,
+        "exitStatus": 0,
+        "sha256": "4bf44c33a6f3d81b2e53fb4e6492663c43fef06bd65bcf9f262f8eecb74b84e5",
+        "expandedSha256": "4bf44c33a6f3d81b2e53fb4e6492663c43fef06bd65bcf9f262f8eecb74b84e5"
+      },
+      {
+        "name": "067_merchant_notification_route_repair.pgtap.sql",
+        "ok": true,
+        "assertions": 5,
+        "exitStatus": 0,
+        "sha256": "19bded2b59d1d46037773793a530a3fe5f216a5b7ae8bcff3fede24b8697070a",
+        "expandedSha256": "19bded2b59d1d46037773793a530a3fe5f216a5b7ae8bcff3fede24b8697070a"
+      },
+      {
+        "name": "068_customer_delivery_notification_routes.pgtap.sql",
+        "ok": true,
+        "assertions": 7,
+        "exitStatus": 0,
+        "sha256": "bd08a9cf5eeea8a6216744363ad554d5bdb374dc5d9763888520e2c54635c71c",
+        "expandedSha256": "bd08a9cf5eeea8a6216744363ad554d5bdb374dc5d9763888520e2c54635c71c"
+      },
+      {
+        "name": "069_launch_ready_and_delivery_snapshot_permissions.pgtap.sql",
+        "ok": true,
+        "assertions": 4,
+        "exitStatus": 0,
+        "sha256": "4bb8ae1d55045c3a305cc3b5a90b8a8c31b64c49d49d4930251b8484335731bb",
+        "expandedSha256": "4bb8ae1d55045c3a305cc3b5a90b8a8c31b64c49d49d4930251b8484335731bb"
+      },
+      {
+        "name": "070_handoff_key_integrity.pgtap.sql",
+        "ok": true,
+        "assertions": 6,
+        "exitStatus": 0,
+        "sha256": "462da05596393dac203c9f54fad353f53fcec0bd8d2e5e45c41c707b501918b9",
+        "expandedSha256": "462da05596393dac203c9f54fad353f53fcec0bd8d2e5e45c41c707b501918b9"
+      },
+      {
+        "name": "071_delivery_rpc_execution_boundary.pgtap.sql",
+        "ok": true,
+        "assertions": 5,
+        "exitStatus": 0,
+        "sha256": "9fafc2481b5f7add639f3f824a65ab723810a32d567e2c4491ce0cb710ba6310",
+        "expandedSha256": "9fafc2481b5f7add639f3f824a65ab723810a32d567e2c4491ce0cb710ba6310"
+      },
+      {
+        "name": "072_preparation_notification_deduplication.pgtap.sql",
+        "ok": true,
+        "assertions": 3,
+        "exitStatus": 0,
+        "sha256": "7d405f2572350d0b891e25fa95aaa95c6d8429d737ead59a1302eea544608e5e",
+        "expandedSha256": "7d405f2572350d0b891e25fa95aaa95c6d8429d737ead59a1302eea544608e5e"
+      },
+      {
+        "name": "073_live_delivery_tracking.pgtap.sql",
+        "ok": true,
+        "assertions": 57,
+        "exitStatus": 0,
+        "sha256": "281d4058adfbf23d3168ae051d1102bcca494ddd036b045064f43855bd5247cf",
+        "expandedSha256": "5278811cb60833e4690f741ecc50810dacfdf81951fbbe1deae6dbe177be05a8"
+      },
+      {
+        "name": "074_delivery_group_a_integrity.pgtap.sql",
+        "ok": true,
+        "assertions": 23,
+        "exitStatus": 0,
+        "sha256": "b9fa6755f53186f4ff8e9ee15315860556857040fca724c03766884783af4d36",
+        "expandedSha256": "b9fa6755f53186f4ff8e9ee15315860556857040fca724c03766884783af4d36"
+      },
+      {
+        "name": "075_delivery_partner_work_history.pgtap.sql",
+        "ok": true,
+        "assertions": 4,
+        "exitStatus": 0,
+        "sha256": "e91243504429a8ea9794273f28d5f102d1719898ff00552b9715dc5cb8f7314f",
+        "expandedSha256": "e91243504429a8ea9794273f28d5f102d1719898ff00552b9715dc5cb8f7314f"
+      },
+      {
+        "name": "076_admin_network_permission_hardening.pgtap.sql",
+        "ok": true,
+        "assertions": 25,
+        "exitStatus": 0,
+        "sha256": "c1806658c23f260bcb3ee083d6f51c573bc0fd3c245b9c9ca16a3e4a03a120c0",
+        "expandedSha256": "c1806658c23f260bcb3ee083d6f51c573bc0fd3c245b9c9ca16a3e4a03a120c0"
+      },
+      {
+        "name": "077_admin_operational_scale_pagination.pgtap.sql",
+        "ok": true,
+        "assertions": 10,
+        "exitStatus": 0,
+        "sha256": "1002e70728db3e64992eb7d434c24da095877b51221ea88eb8f98e5612fc1103",
+        "expandedSha256": "1002e70728db3e64992eb7d434c24da095877b51221ea88eb8f98e5612fc1103"
+      },
+      {
+        "name": "078_admin_c2_1_audit_history.pgtap.sql",
+        "ok": true,
+        "assertions": 26,
+        "exitStatus": 0,
+        "sha256": "f03d36472ac3386647d2506cc7b459633cc1854049fafdf3f9210f07802387f8",
+        "expandedSha256": "f03d36472ac3386647d2506cc7b459633cc1854049fafdf3f9210f07802387f8"
+      },
+      {
+        "name": "079_admin_c2_2_merchant_governance.pgtap.sql",
+        "ok": true,
+        "assertions": 51,
+        "exitStatus": 0,
+        "sha256": "3f3b44dba70a9826d9e47214ccb71feac3dc09204ae45e54598b031bab541965",
+        "expandedSha256": "3f3b44dba70a9826d9e47214ccb71feac3dc09204ae45e54598b031bab541965"
+      },
+      {
+        "name": "079_delivery_partner_order_details.pgtap.sql",
+        "ok": true,
+        "assertions": 29,
+        "exitStatus": 0,
+        "sha256": "a9379e6371862230e4baa1dee2db54bbee9434031b75bddda4681b49ed7807ef",
+        "expandedSha256": "11b8c706f4affa502816c7635bd876609422092d6c115144ca71c4679824e0b7"
+      },
+      {
+        "name": "080_admin_c2_3_delivery_partner_governance.pgtap.sql",
+        "ok": true,
+        "assertions": 40,
+        "exitStatus": 0,
+        "sha256": "67b0d7272715c33597903f7f59500c7f1653d7b73785ff61527a5d29a1def517",
+        "expandedSha256": "67b0d7272715c33597903f7f59500c7f1653d7b73785ff61527a5d29a1def517"
+      },
+      {
+        "name": "081_admin_c2_4_customer_account_recovery.pgtap.sql",
+        "ok": true,
+        "assertions": 44,
+        "exitStatus": 0,
+        "sha256": "0f74c245967fd7c84ab2ac89256239bbab8cc92988a03a3508270356c372fc46",
+        "expandedSha256": "0f74c245967fd7c84ab2ac89256239bbab8cc92988a03a3508270356c372fc46"
+      },
+      {
+        "name": "082_admin_c2_5_catalogue_asset_governance.pgtap.sql",
+        "ok": true,
+        "assertions": 28,
+        "exitStatus": 0,
+        "sha256": "ffbc6d4335d06e99590bcd9510195e54f8e3929d9aef9b7d0d14ccfff3833d60",
+        "expandedSha256": "ffbc6d4335d06e99590bcd9510195e54f8e3929d9aef9b7d0d14ccfff3833d60"
+      },
+      {
+        "name": "082_reference_catalogue_parent_paths.pgtap.sql",
+        "ok": true,
+        "assertions": 12,
+        "exitStatus": 0,
+        "sha256": "3c9f542b8af8bc39f5677742829bf89b863ac772d96f95453912fc548828d4ab",
+        "expandedSha256": "4276bb09d45bf73e4c4472a9e5d0611c964cfcee6c9432365240ec5c54a5dc55"
+      },
+      {
+        "name": "084_reference_catalogue_browse_map.pgtap.sql",
+        "ok": true,
+        "assertions": 25,
+        "exitStatus": 0,
+        "sha256": "d9fd9ca6919ab8e5b21bd98f7b3c53f61416f8a6fe8ea8bc327211d06d914244",
+        "expandedSha256": "d9fd9ca6919ab8e5b21bd98f7b3c53f61416f8a6fe8ea8bc327211d06d914244"
+      },
+      {
+        "name": "085_governed_media_hardening.pgtap.sql",
+        "ok": true,
+        "assertions": 10,
+        "exitStatus": 0,
+        "sha256": "fd7bc98fddf07a0db47a179e8edd0fbdbdb492fe96796423d512998dba9f8e65",
+        "expandedSha256": "fd7bc98fddf07a0db47a179e8edd0fbdbdb492fe96796423d512998dba9f8e65"
+      }
+    ]
+  },
+  "finalAudit": {
+    "cron": "off",
+    "preload": "supautils",
+    "version": "PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit",
+    "mediaRls": true,
+    "authUsers": 0,
+    "hintRoles": "anon, authenticated, service_role",
+    "httpQueue": 0,
+    "mediaIndex": true,
+    "httpResponses": 0,
+    "cronExecutions": 0,
+    "migrationCount": 289,
+    "mediaClientRead": false,
+    "mediaClientInsert": false,
+    "disabledAppTriggers": 0,
+    "checkoutPricingDefault": "1",
+    "ordersAvailabilityDefault": "1"
+  },
+  "catalogue": {
+    "nodes": 121,
+    "sources": 134,
+    "versions": [
+      {
+        "state": "ACTIVE",
+        "version": 1,
+        "created_at": "2026-10-15T21:57:30.57265+00:00",
+        "source_label": "Catalogue Map Dastak reference and later user corrections"
+      }
+    ],
+    "activeSkus": 95,
+    "invalidPaths": null,
+    "nodesFingerprint": "e655fb9301b2ef89c609acbd07c63a08",
+    "invalidActiveSkus": 0,
+    "migrationRecorded": true,
+    "sourcesFingerprint": "c662c330891c50f4a66dd78e017209cb",
+    "dairyAlternativeSources": [
+      {
+        "version": 1,
+        "node_key": "dairy-alternatives",
+        "type_slug": "dairy-bread-eggs",
+        "source_order": 10,
+        "category_slug": "dairy-alternatives",
+        "subcategory_slug": null,
+        "excluded_category_slugs": [],
+        "excluded_subcategory_slugs": []
+      }
+    ],
+    "activeDairyAlternativeSkus": 1
+  },
+  "staticTests": {
+    "passed": 166,
+    "failed": 0
+  },
+  "runtimePinTests": {
+    "passed": 5,
+    "failed": 0
+  },
+  "advisors": {
+    "status": "unavailable_due_to_internal_network",
+    "note": "CLI loopback connection intentionally unavailable; targeted SQL privilege/RLS/index/default/trigger checks and repository no-client-DML assertion passed"
+  }
+}

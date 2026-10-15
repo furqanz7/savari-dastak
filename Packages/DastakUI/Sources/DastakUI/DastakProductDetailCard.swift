@@ -23,6 +23,9 @@ struct DastakProductDetailCard<Controls: View, Action: View>: View {
     var isSaved = false
     var wishlistBusy = false
     var toggleWishlist: (() -> Void)?
+    var openCart: (() -> Void)?
+    var cartCount = 0
+    var basketModel: DastakCustomerModel?
     @ViewBuilder let controls: () -> Controls
     @ViewBuilder let action: () -> Action
     @Environment(\.colorScheme) private var colorScheme
@@ -32,9 +35,10 @@ struct DastakProductDetailCard<Controls: View, Action: View>: View {
     var body: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
+                toolbar
                 ScrollView(.vertical) {
                     VStack(spacing: 12) {
-                        gallery(height: max(220, geometry.size.height * 0.56))
+                        gallery(height: max(180, geometry.size.height * 0.46))
                         information
                         controls()
                         facts
@@ -43,7 +47,6 @@ struct DastakProductDetailCard<Controls: View, Action: View>: View {
                 }
                 .scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
-                .overlay(alignment: .top) { toolbar }
                 HStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(product.packSize).font(.caption).foregroundStyle(palette.secondary)
@@ -75,12 +78,27 @@ struct DastakProductDetailCard<Controls: View, Action: View>: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Button(action: close) { Image(systemName: "chevron.down") }.accessibilityLabel("Close product details")
+            MarketplaceFeedbackButton(action: close) { Image(systemName: "chevron.down") }.accessibilityLabel("Close product details")
             Spacer()
             if let toggleWishlist {
-                Button(action: toggleWishlist) { Image(systemName: isSaved ? "bookmark.fill" : "bookmark") }
+                MarketplaceFeedbackButton(action: toggleWishlist) { Image(systemName: isSaved ? "bookmark.fill" : "bookmark") }
                     .disabled(wishlistBusy)
                     .accessibilityLabel(isSaved ? "Remove from Wishlist" : "Save to Wishlist")
+            }
+            if let basketModel {
+                DastakBasketPickupButton(model: basketModel, service: .grocery)
+            } else if let openCart {
+                MarketplaceFeedbackButton(action: openCart) {
+                    Image(systemName: "cart")
+                        .overlay(alignment: .topTrailing) {
+                            if cartCount > 0 {
+                                Text(cartCount.formatted()).font(.system(size: 10, weight: .bold))
+                                    .padding(3).background(palette.accent, in: Circle())
+                                    .offset(x: 9, y: -9)
+                            }
+                        }
+                }
+                .accessibilityLabel("Open Grocery cart, \(cartCount) items")
             }
             ShareLink(item: "\(product.name) · \(product.packSize) · \(product.price) — Dastak") { Image(systemName: "square.and.arrow.up") }
                 .accessibilityLabel("Share product")
@@ -95,28 +113,29 @@ struct DastakProductDetailCard<Controls: View, Action: View>: View {
     private func gallery(height: CGFloat) -> some View {
         VStack(spacing: 2) {
             // Photo arrows/dots browse images; a card swipe always changes the product.
-            DastakProductArtwork(imageKey: product.images[min(photo, product.images.count - 1)], detail: true)
-                .id(product.id.uuidString + ":\(photo)")
-                .padding(.horizontal, 24)
-                .padding(.top, 34)
-                .padding(.bottom, 18)
-                .frame(maxWidth: .infinity)
+            GeometryReader { bounds in
+                DastakProductArtwork(imageKey: product.images[min(photo, product.images.count - 1)], detail: true)
+                    .id(product.id.uuidString + ":\(photo)")
+                    .frame(width: bounds.size.width, height: bounds.size.height)
+            }
                 .frame(height: height)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
                 .accessibilityLabel("Photo \(photo + 1) of \(product.images.count), \(product.name)")
                 .accessibilityHidden(false)
             if product.images.count > 1 {
                 HStack(spacing: 2) {
-                    Button { photo = (photo - 1 + product.images.count) % product.images.count } label: {
+                    MarketplaceFeedbackButton { photo = (photo - 1 + product.images.count) % product.images.count } label: {
                         Image(systemName: "chevron.left").frame(width: 44, height: 32)
                     }.accessibilityLabel("Previous product photo")
                     ForEach(product.images.indices, id: \.self) { position in
-                        Button { photo = position } label: {
+                        MarketplaceFeedbackButton { photo = position } label: {
                             Capsule().fill(photo == position ? palette.accent : palette.secondary.opacity(0.3))
                                 .frame(width: photo == position ? 14 : 5, height: 5).frame(width: 24, height: 32)
                         }.accessibilityLabel("View photo \(position + 1)")
                             .accessibilityAddTraits(photo == position ? .isSelected : [])
                     }
-                    Button { photo = (photo + 1) % product.images.count } label: {
+                    MarketplaceFeedbackButton { photo = (photo + 1) % product.images.count } label: {
                         Image(systemName: "chevron.right").frame(width: 44, height: 32)
                     }.accessibilityLabel("Next product photo")
                 }.font(.caption).buttonStyle(.plain).foregroundStyle(palette.secondary)
@@ -141,7 +160,7 @@ struct DastakProductDetailCard<Controls: View, Action: View>: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 10) {
                         ForEach(packs) { pack in
-                            Button { select(pack.id) } label: {
+                            MarketplaceFeedbackButton(haptic: .selection) { select(pack.id) } label: {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(pack.packSize).font(.subheadline.bold())
                                     Text(pack.price).font(.subheadline.bold())
@@ -189,6 +208,7 @@ struct DastakDetailProduct: Identifiable {
     let name: String
     let brand: String?
     let variant: String?
+    let familyScope: String
     let packSize: String
     let description: String?
     let imageKey: String?
@@ -213,13 +233,14 @@ struct DastakDetailProduct: Identifiable {
         return DastakFormatting.money(Money(paise: Int((Double(pricePaise) * 100 / base).rounded()))) + "/100 " + (["kg", "g"].contains(unit) ? "g" : "ml")
     }
     func sameFamily(as other: Self) -> Bool {
-        func normalized(_ item: Self) -> String {
-            item.name.lowercased().replacingOccurrences(of: item.packSize.lowercased(), with: "").split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        }
-        return id == other.id || (brand != nil && brand == other.brand && variant == other.variant && normalized(self) == normalized(other))
+        let name = DastakGroceryPresentation.normalizedName(name, packSize: packSize)
+        return id == other.id || (brand?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false &&
+            brand == other.brand && variant == other.variant && familyScope == other.familyScope && !name.isEmpty &&
+            name == DastakGroceryPresentation.normalizedName(other.name, packSize: other.packSize))
     }
     init(_ sku: DastakV1CatalogueSKU) {
         id = sku.id; name = sku.name; brand = sku.brand?.name; variant = sku.variant; packSize = sku.packSize
+        familyScope = "\(sku.categoryID)|\(sku.subcategoryID)"
         description = sku.description; imageKey = sku.imageKey; gallery = sku.galleryImageKeys ?? []
         pricePaise = sku.sellingPricePaise; listPricePaise = sku.listPricePaise
         quantityValue = sku.quantityValue.map { NSDecimalNumber(decimal: $0).doubleValue }; quantityUnit = sku.quantityUnit; packCount = sku.packCount
@@ -227,6 +248,7 @@ struct DastakDetailProduct: Identifiable {
     }
     init(_ sku: DastakV1MerchantCatalogueSnapshot.SKU) {
         id = sku.id; name = sku.name; brand = sku.brandName; variant = sku.variant; packSize = sku.packSize
+        familyScope = "\(sku.categoryID)|\(sku.subcategoryID)"
         description = sku.description; imageKey = sku.imageKey; gallery = sku.galleryImageKeys
         pricePaise = sku.sellingPricePaise; listPricePaise = sku.listPricePaise
         quantityValue = sku.quantityValue; quantityUnit = sku.quantityUnit; packCount = sku.packCount
@@ -246,23 +268,27 @@ private struct ProductCircleButtonStyle: ButtonStyle {
 struct DastakCustomerProductDetailView: View {
     @ObservedObject var model: DastakCustomerModel
     let products: [DastakV1CatalogueSKU]
-    @State private var selectedID: UUID
+    @State private var deck: DastakGroceryPresentation.DetailDeck
     let close: () -> Void
+    let openCart: () -> Void
 
-    init(model: DastakCustomerModel, initial: DastakV1CatalogueSKU, products: [DastakV1CatalogueSKU], close: @escaping () -> Void) {
+    init(model: DastakCustomerModel, initial: DastakV1CatalogueSKU, products: [DastakV1CatalogueSKU], close: @escaping () -> Void, openCart: @escaping () -> Void) {
         self.model = model
         let categoryProducts = products.filter { $0.categoryID == initial.categoryID }
         self.products = categoryProducts.contains(where: { $0.id == initial.id }) ? categoryProducts : [initial] + categoryProducts
         self.close = close
-        _selectedID = State(initialValue: initial.id)
+        self.openCart = openCart
+        _deck = State(initialValue: DastakGroceryPresentation.DetailDeck(initial: initial, products: self.products))
     }
 
     var body: some View {
-        DastakProductDetailCarousel(products: products.map(DastakDetailProduct.init), selectedID: $selectedID) { id, select in
-            if let sku = products.first(where: { $0.id == id }) {
-                DastakCustomerProductPage(model: model, sku: sku, products: products, select: select, close: close)
+        DastakProductDetailCarousel(products: deck.families.map { DastakDetailProduct($0.product) }, selectedID: $deck.selectedFamilyID) { id, _ in
+            if let sku = deck.selectedProduct(in: id) {
+                DastakCustomerProductPage(model: model, sku: sku, products: products,
+                    select: { deck.selectPack($0, in: id) }, close: close, openCart: openCart)
             }
         }
+        .dastakBasketExperience(model: model, service: .grocery, openCart: openCart)
     }
 }
 
@@ -272,32 +298,70 @@ private struct DastakCustomerProductPage: View {
     let products: [DastakV1CatalogueSKU]
     let select: (UUID) -> Void
     let close: () -> Void
+    let openCart: () -> Void
 
     var body: some View {
-            let count = model.cart.entries.first { $0.product.id == sku.id }?.quantity ?? 0
+            let count = model.baskets[.grocery].entries.first { $0.product.id == sku.id }?.quantity ?? 0
+            let stock = model.groceryStockQuantity(sku.id)
+            let isOutOfStock = stock == 0
             DastakProductDetailCard(
                 product: DastakDetailProduct(sku),
                 products: products.filter { $0.categoryID == sku.categoryID }.map(DastakDetailProduct.init),
                 select: select, close: close,
                 isSaved: model.isWishlisted(kind: .retailSKU, itemID: sku.id),
-                wishlistBusy: model.wishlistUpdatingIDs.contains(sku.id),
-                toggleWishlist: { Task { await model.toggleWishlist(kind: .retailSKU, itemID: sku.id) } }
+            wishlistBusy: model.wishlistChangeDisabled(sku.id),
+                toggleWishlist: { Task { await model.toggleWishlist(kind: .retailSKU, itemID: sku.id) } },
+                openCart: openCart, cartCount: model.baskets[.grocery].itemCount, basketModel: model
             ) {
                 EmptyView()
             } action: {
                 HStack(spacing: 12) {
-                    if count > 0 {
-                        Button { model.decrementCartItem(sku.id) } label: { Image(systemName: "minus").frame(width: 36, height: 46) }.accessibilityLabel("Remove one \(sku.name)")
+                    if isOutOfStock {
+                        VStack(spacing: 4) {
+                            MarketplaceFeedbackButton {} label: {
+                                Text(DastakGroceryPresentation.purchaseTitle(stockQuantity: stock)).font(.subheadline.weight(.semibold))
+                                    .frame(width: 130, height: 46)
+                            }
+                            .disabled(true)
+                            .accessibilityLabel("\(sku.name), \(sku.packSize), Out of stock")
+                            if count > 0 {
+                                HStack {
+                                    MarketplaceFeedbackButton { model.decrementCartItem(sku.id) } label: {
+                                        Image(systemName: "minus").frame(width: 44, height: 44)
+                                            .contentShape(Rectangle())
+                                    }.accessibilityLabel("Remove one \(sku.name)")
+                                    Text("\(count)").font(.headline).accessibilityLabel("\(count) in basket")
+                                }
+                            }
+                        }
+                    } else if count > 0 {
+                        MarketplaceFeedbackButton { model.decrementCartItem(sku.id) } label: {
+                            Image(systemName: "minus").frame(width: 44, height: 46)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Remove one \(sku.name)")
+                        .accessibilityIdentifier("grocery.detail.minus.\(sku.id)")
                         Text("\(count)").font(.headline).accessibilityLabel("\(count) in basket")
-                        Button { model.addToCart(sku) } label: { Image(systemName: "plus").frame(width: 36, height: 46) }.disabled(count >= DastakCart.maximumQuantity).accessibilityLabel("Add one \(sku.name)")
+                        MarketplaceFeedbackButton { model.addShoppingProduct(sku) } label: {
+                            Image(systemName: "plus").frame(width: 44, height: 46)
+                                .contentShape(Rectangle())
+                        }
+                        .disabled(count >= DastakCart.maximumQuantity || model.groceryAddIssue(sku.id) != nil)
+                        .accessibilityLabel("Add one \(sku.name)")
+                        .accessibilityIdentifier("grocery.detail.plus.\(sku.id)")
                     } else {
-                        Button { model.addToCart(sku) } label: { Text("ADD").font(.headline.bold()).frame(width: 130, height: 46) }.accessibilityLabel("Add \(sku.name) to basket")
+                        MarketplaceFeedbackButton { model.addShoppingProduct(sku) } label: {
+                            Text(DastakGroceryPresentation.purchaseTitle(stockQuantity: stock)).font(.headline.bold())
+                                .frame(width: 130, height: 46)
+                                .contentShape(Rectangle())
+                        }.disabled(model.groceryAddIssue(sku.id) != nil).accessibilityLabel("Add \(sku.name) to basket")
                     }
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.white)
-                .background(Color(red: 0.02, green: 0.32, blue: 1), in: RoundedRectangle(cornerRadius: 12))
+                .background(isOutOfStock ? Color.secondary.opacity(0.25) : Color(red: 0.02, green: 0.32, blue: 1), in: RoundedRectangle(cornerRadius: 12))
             }
+            .dastakBasketAnchor(DastakBasketService.grocery.itemAnchor(sku.id))
     }
 }
 
@@ -403,7 +467,7 @@ private struct DastakMerchantProductPage: View {
                         Text("\(sku.stockReservedQuantity ?? 0) reserved")
                     }.font(.caption).foregroundStyle(palette.secondary)
                     HStack {
-                        Button { stock = String(max(min(max(Int(stock) ?? 0, 0), 1_000_000) - 1, 0)); saved = false } label: { Image(systemName: "minus").frame(width: 44, height: 44) }.accessibilityLabel("Decrease stock count")
+                        MarketplaceFeedbackButton { stock = String(max(min(max(Int(stock) ?? 0, 0), 1_000_000) - 1, 0)); saved = false } label: { Image(systemName: "minus").frame(width: 44, height: 44) }.accessibilityLabel("Decrease stock count")
                         TextField("Not set", text: $stock).multilineTextAlignment(.center).textFieldStyle(.plain)
                             .font(.title3.weight(.semibold)).foregroundStyle(palette.ink)
                             .padding(.vertical, 12)
@@ -415,7 +479,7 @@ private struct DastakMerchantProductPage: View {
                             .onChange(of: stock) { _, newValue in
                                 if newValue != sku.stockQuantity.map(String.init) { saved = false }
                             }
-                        Button { stock = String(min(min(max(Int(stock) ?? 0, 0), 1_000_000) + 1, 1_000_000)); saved = false } label: { Image(systemName: "plus").frame(width: 44, height: 44) }.accessibilityLabel("Increase stock count")
+                        MarketplaceFeedbackButton { stock = String(min(min(max(Int(stock) ?? 0, 0), 1_000_000) + 1, 1_000_000)); saved = false } label: { Image(systemName: "plus").frame(width: 44, height: 44) }.accessibilityLabel("Increase stock count")
                     }.buttonStyle(.plain).foregroundStyle(palette.accent).disabled(!draft.canEdit)
                         .opacity(draft.canEdit ? 1 : 0.5)
                     if !draft.isStockMode {
@@ -431,7 +495,7 @@ private struct DastakMerchantProductPage: View {
                         .font(.caption2).foregroundStyle(palette.secondary)
                     if stockVersion != sku.selectionVersion {
                         Text("The stock count has changed.").font(.caption)
-                        Button("Use latest stock count") {
+                        MarketplaceFeedbackButton("Use latest stock count") {
                             stock = sku.stockQuantity.map(String.init) ?? ""
                             stockVersion = sku.selectionVersion
                             saved = false; addingEmptySKU = false
@@ -441,7 +505,7 @@ private struct DastakMerchantProductPage: View {
                     if saved { Label("Stock count saved", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.green) }
                 }.productInfoSurface()
             } action: {
-                Button {
+                MarketplaceFeedbackButton {
                     guard draft.canSubmit else { return }
                     if !draft.isStockMode && sku.stockQuantity == 0 {
                         addingEmptySKU = true

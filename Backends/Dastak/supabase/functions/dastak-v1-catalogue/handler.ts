@@ -3,11 +3,42 @@ import { V1RequestError } from "../_shared/v1-rpc.ts";
 
 export type V1Actor = { accountId: string; accessToken: string };
 export type V1CatalogueDependencies = {
-  customerCheckoutQuote?: (input: { accessToken: string; addressId: string; addressVersion: string; lines: unknown[]; restaurantBranchId: string | null }) => Promise<unknown>;
-  customerAreaAvailability?: (input: { accessToken: string; addressId: string; addressVersion: string }) => Promise<unknown>;
-  customerRestaurantAreaPage?: (input: { accessToken: string; addressId: string; addressVersion: string; query: string | null; limit: number; afterName: string | null; afterBranchId: string | null; afterDistanceMeters: number | null; branchId: string | null }) => Promise<unknown>;
-  adminCatalogueSkuDelete?: (input: { accessToken: string; skuId: string; idempotencyKey: string }) => Promise<unknown>;
-  adminCatalogueTaxonomyMutation?: (input: { accessToken: string; idempotencyKey: string; operation: string; payload: Record<string, unknown> }) => Promise<unknown>;
+  customerCheckoutQuote?: (
+    input: {
+      accessToken: string;
+      addressId: string;
+      addressVersion: string;
+      lines: unknown[];
+      restaurantBranchId: string | null;
+    },
+  ) => Promise<unknown>;
+  customerAreaAvailability?: (
+    input: { accessToken: string; addressId: string; addressVersion: string },
+  ) => Promise<unknown>;
+  customerRestaurantAreaPage?: (
+    input: {
+      accessToken: string;
+      addressId: string;
+      addressVersion: string;
+      query: string | null;
+      limit: number;
+      afterName: string | null;
+      afterBranchId: string | null;
+      afterDistanceMeters: number | null;
+      branchId: string | null;
+    },
+  ) => Promise<unknown>;
+  adminCatalogueSkuDelete?: (
+    input: { accessToken: string; skuId: string; idempotencyKey: string },
+  ) => Promise<unknown>;
+  adminCatalogueTaxonomyMutation?: (
+    input: {
+      accessToken: string;
+      idempotencyKey: string;
+      operation: string;
+      payload: Record<string, unknown>;
+    },
+  ) => Promise<unknown>;
   authenticateBearer: (authorization: string) => Promise<V1Actor>;
   customerCatalogue: (input: {
     accessToken: string;
@@ -26,12 +57,22 @@ export type V1CatalogueDependencies = {
     limit: number;
   }) => Promise<unknown>;
   customerRestaurantPage: (input: {
-    accessToken: string; query: string | null; limit: number;
-    afterName: string | null; afterBranchId: string | null; branchId: string | null;
+    accessToken: string;
+    query: string | null;
+    limit: number;
+    afterName: string | null;
+    afterBranchId: string | null;
+    branchId: string | null;
   }) => Promise<unknown>;
   customerRestaurantNearestPage?: (input: {
-    accessToken: string; addressId: string; addressVersion: string; query: string | null; limit: number;
-    afterName: string | null; afterBranchId: string | null; afterDistanceMeters: number | null;
+    accessToken: string;
+    addressId: string;
+    addressVersion: string;
+    query: string | null;
+    limit: number;
+    afterName: string | null;
+    afterBranchId: string | null;
+    afterDistanceMeters: number | null;
   }) => Promise<unknown>;
   adminSnapshot: (
     input: { accessToken: string; skuLimit: number },
@@ -104,13 +145,29 @@ export type V1CatalogueDependencies = {
   }) => Promise<void>;
   deleteAdminCatalogueAsset: (input: { objectPath: string }) => Promise<void>;
   prepareGovernedMedia: (input: {
-    actorId: string; entityType: string; entityId: string; expectedMediaVersion: number;
-    mimeType: string; byteSize: number; sourceReference: string; reason: string; idempotencyKey: string;
+    actorId: string;
+    entityType: string;
+    entityId: string;
+    expectedMediaVersion: number;
+    mimeType: string;
+    byteSize: number;
+    sourceReference: string;
+    reason: string;
+    idempotencyKey: string;
   }) => Promise<unknown>;
   finalizeGovernedMedia: (input: {
-    actorId: string; entityType: string; entityId: string; assetId: string; expectedMediaVersion: number;
-    checksumSha256: string; mimeType: string; byteSize: number; widthPixels: number; heightPixels: number;
-    reason: string; idempotencyKey: string;
+    actorId: string;
+    entityType: string;
+    entityId: string;
+    assetId: string;
+    expectedMediaVersion: number;
+    checksumSha256: string;
+    mimeType: string;
+    byteSize: number;
+    widthPixels: number;
+    heightPixels: number;
+    reason: string;
+    idempotencyKey: string;
   }) => Promise<unknown>;
   merchantSnapshot: (input: {
     accessToken: string;
@@ -209,41 +266,98 @@ export async function handleV1Catalogue(
     switch (body.operation) {
       case "customerCheckoutQuote": {
         const addressId = requiredUUID(body.addressId);
-        const addressVersion = typeof body.addressVersion === "string" && body.addressVersion.length <= 40
-          && /^\d{4}-\d{2}-\d{2}T/.test(body.addressVersion) && Number.isFinite(Date.parse(body.addressVersion)) ? body.addressVersion : null;
+        const addressVersion =
+          typeof body.addressVersion === "string" && body.addressVersion.length <= 40 &&
+            /^\d{4}-\d{2}-\d{2}T/.test(body.addressVersion) &&
+            Number.isFinite(Date.parse(body.addressVersion))
+            ? body.addressVersion
+            : null;
         const restaurantBranchId = optionalUUID(body.restaurantBranchId);
-        if (!addressId || !addressVersion || restaurantBranchId === undefined || !Array.isArray(body.lines)
-          || body.lines.length < 1 || body.lines.length > 80 || body.lines.some(value => {
+        if (
+          !addressId || !addressVersion || restaurantBranchId === undefined ||
+          !Array.isArray(body.lines) ||
+          body.lines.length < 1 || body.lines.length > 80 || body.lines.some((value) => {
             const line = record(value);
-            return !line || !Number.isInteger(line.quantity) || Number(line.quantity) < 1 || Number(line.quantity) > 99
-              || (line.lineType === "RETAIL_SKU" ? !requiredUUID(line.skuId)
-                : line.lineType === "FOOD_MENU_ITEM" ? !requiredUUID(line.menuItemId) || !Array.isArray(line.optionIds)
-                  || line.optionIds.length > 80 || line.optionIds.some(id => !requiredUUID(id)) : true);
-          })) return validationError();
-        if (!dependencies.customerCheckoutQuote) throw new V1RequestError(503, "unavailable", "Checkout pricing is unavailable.");
-        return json(await dependencies.customerCheckoutQuote({ accessToken: actor.accessToken, addressId, addressVersion, lines: body.lines, restaurantBranchId }));
+            return !line || !Number.isInteger(line.quantity) || Number(line.quantity) < 1 ||
+              Number(line.quantity) > 99 ||
+              (line.lineType === "RETAIL_SKU"
+                ? !requiredUUID(line.skuId)
+                : line.lineType === "FOOD_MENU_ITEM"
+                ? !requiredUUID(line.menuItemId) || !Array.isArray(line.optionIds) ||
+                  line.optionIds.length > 80 || line.optionIds.some((id) => !requiredUUID(id))
+                : true);
+          })
+        ) return validationError();
+        if (!dependencies.customerCheckoutQuote) {
+          throw new V1RequestError(503, "unavailable", "Checkout pricing is unavailable.");
+        }
+        return json(
+          await dependencies.customerCheckoutQuote({
+            accessToken: actor.accessToken,
+            addressId,
+            addressVersion,
+            lines: body.lines,
+            restaurantBranchId,
+          }),
+        );
       }
       case "customerAreaAvailability":
       case "customerRestaurantAreaPage": {
         const addressId = requiredUUID(body.addressId);
-        const addressVersion = typeof body.addressVersion === "string" && body.addressVersion.length <= 40
-          && /^\d{4}-\d{2}-\d{2}T/.test(body.addressVersion) && Number.isFinite(Date.parse(body.addressVersion)) ? body.addressVersion : null;
+        const addressVersion =
+          typeof body.addressVersion === "string" && body.addressVersion.length <= 40 &&
+            /^\d{4}-\d{2}-\d{2}T/.test(body.addressVersion) &&
+            Number.isFinite(Date.parse(body.addressVersion))
+            ? body.addressVersion
+            : null;
         if (!addressId || !addressVersion) return validationError();
         if (body.operation === "customerAreaAvailability") {
-          if (!dependencies.customerAreaAvailability) throw new V1RequestError(503, "unavailable", "Area availability is unavailable.");
-          return json(await dependencies.customerAreaAvailability({ accessToken: actor.accessToken, addressId, addressVersion }));
+          if (!dependencies.customerAreaAvailability) {
+            throw new V1RequestError(503, "unavailable", "Area availability is unavailable.");
+          }
+          return json(
+            await dependencies.customerAreaAvailability({
+              accessToken: actor.accessToken,
+              addressId,
+              addressVersion,
+            }),
+          );
         }
         const query = optionalText(body.query, 80), limit = optionalInteger(body.limit, 1, 100);
         const branchId = optionalUUID(body.branchId), cursor = record(body.cursor);
-        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length > 0 && cursor.name.length <= 160 ? cursor.name : null;
+        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length > 0 &&
+            cursor.name.length <= 160
+          ? cursor.name
+          : null;
         const afterBranchId = cursor ? requiredUUID(cursor.branchId) : null;
-        const afterDistanceMeters = cursor?.distanceMeters == null ? null : optionalInteger(cursor.distanceMeters, 0, 41000000);
-        if (query === undefined || branchId === undefined || (body.limit != null && limit === undefined) || afterDistanceMeters === undefined
-          || (branchId && cursor) || (body.cursor != null && (!cursor || !afterName || !afterBranchId || !Object.hasOwn(cursor, "distanceMeters")
-            || cursor.addressId !== addressId || typeof cursor.addressVersion !== "string" || Date.parse(cursor.addressVersion) !== Date.parse(addressVersion)))) return validationError();
-        if (!dependencies.customerRestaurantAreaPage) throw new V1RequestError(503, "unavailable", "Food area menus are unavailable.");
-        return json(await dependencies.customerRestaurantAreaPage({ accessToken: actor.accessToken, addressId, addressVersion,
-          query, limit: limit ?? 100, branchId, afterName, afterBranchId: afterBranchId ?? null, afterDistanceMeters }));
+        const afterDistanceMeters = cursor?.distanceMeters == null
+          ? null
+          : optionalInteger(cursor.distanceMeters, 0, 41000000);
+        if (
+          query === undefined || branchId === undefined ||
+          (body.limit != null && limit === undefined) || afterDistanceMeters === undefined ||
+          (branchId && cursor) ||
+          (body.cursor != null &&
+            (!cursor || !afterName || !afterBranchId || !Object.hasOwn(cursor, "distanceMeters") ||
+              cursor.addressId !== addressId || typeof cursor.addressVersion !== "string" ||
+              Date.parse(cursor.addressVersion) !== Date.parse(addressVersion)))
+        ) return validationError();
+        if (!dependencies.customerRestaurantAreaPage) {
+          throw new V1RequestError(503, "unavailable", "Food area menus are unavailable.");
+        }
+        return json(
+          await dependencies.customerRestaurantAreaPage({
+            accessToken: actor.accessToken,
+            addressId,
+            addressVersion,
+            query,
+            limit: limit ?? 100,
+            branchId,
+            afterName,
+            afterBranchId: afterBranchId ?? null,
+            afterDistanceMeters,
+          }),
+        );
       }
       case "catalogueBrowseMap":
         return json(await dependencies.catalogueBrowseMap({ accessToken: actor.accessToken }));
@@ -252,10 +366,12 @@ export async function handleV1Catalogue(
         if (typeof nodeKey !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(nodeKey)) {
           return validationError();
         }
-        return json(await dependencies.catalogueBrowseSkuIds({
-          accessToken: actor.accessToken,
-          nodeKey,
-        }));
+        return json(
+          await dependencies.catalogueBrowseSkuIds({
+            accessToken: actor.accessToken,
+            nodeKey,
+          }),
+        );
       }
       case "customerCatalogue":
         return await customerCatalogue(body, actor, dependencies);
@@ -281,33 +397,72 @@ export async function handleV1Catalogue(
         const query = optionalText(body.query, 80);
         const limit = optionalInteger(body.limit, 1, 100);
         const cursor = record(body.cursor);
-        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length > 0 && cursor.name.length <= 160 ? cursor.name : null;
+        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length > 0 &&
+            cursor.name.length <= 160
+          ? cursor.name
+          : null;
         const afterBranchId = cursor ? optionalUUID(cursor.branchId) : null;
         const branchId = optionalUUID(body.branchId);
-        if (query === undefined || branchId === undefined
-          || (body.limit != null && limit === undefined)
-          || (body.cursor != null && (!cursor || !afterName || !afterBranchId))
-          || (branchId && cursor)) return validationError();
-        return json(await dependencies.customerRestaurantPage({ accessToken: actor.accessToken, query, limit: limit ?? 100, afterName, afterBranchId: afterBranchId ?? null, branchId }));
+        if (
+          query === undefined || branchId === undefined ||
+          (body.limit != null && limit === undefined) ||
+          (body.cursor != null && (!cursor || !afterName || !afterBranchId)) ||
+          (branchId && cursor)
+        ) return validationError();
+        return json(
+          await dependencies.customerRestaurantPage({
+            accessToken: actor.accessToken,
+            query,
+            limit: limit ?? 100,
+            afterName,
+            afterBranchId: afterBranchId ?? null,
+            branchId,
+          }),
+        );
       }
       case "customerRestaurantNearestPage": {
         const query = optionalText(body.query, 80);
         const limit = optionalInteger(body.limit, 1, 100);
         const addressId = requiredUUID(body.addressId);
-        const addressVersion = typeof body.addressVersion === "string" && body.addressVersion.length <= 40
-          && /^\d{4}-\d{2}-\d{2}T/.test(body.addressVersion) && Number.isFinite(Date.parse(body.addressVersion)) ? body.addressVersion : null;
+        const addressVersion =
+          typeof body.addressVersion === "string" && body.addressVersion.length <= 40 &&
+            /^\d{4}-\d{2}-\d{2}T/.test(body.addressVersion) &&
+            Number.isFinite(Date.parse(body.addressVersion))
+            ? body.addressVersion
+            : null;
         const cursor = record(body.cursor);
-        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length > 0 && cursor.name.length <= 160 ? cursor.name : null;
+        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length > 0 &&
+            cursor.name.length <= 160
+          ? cursor.name
+          : null;
         const afterBranchId = cursor ? requiredUUID(cursor.branchId) : null;
-        const afterDistanceMeters = cursor?.distanceMeters == null ? null : optionalInteger(cursor.distanceMeters, 0, 41000000);
-        if (!addressId || !addressVersion || query === undefined || (body.limit != null && limit === undefined)
-          || body.branchId != null || afterDistanceMeters === undefined
-          || (body.cursor != null && (!cursor || !afterName || !afterBranchId
-            || !Object.hasOwn(cursor, "distanceMeters") || cursor.addressId !== addressId
-            || typeof cursor.addressVersion !== "string" || Date.parse(cursor.addressVersion) !== Date.parse(addressVersion)))) return validationError();
-        if (!dependencies.customerRestaurantNearestPage) throw new V1RequestError(503, "unavailable", "Nearest restaurants are unavailable.");
-        return json(await dependencies.customerRestaurantNearestPage({ accessToken: actor.accessToken, addressId, addressVersion, query,
-          limit: limit ?? 100, afterName, afterBranchId: afterBranchId ?? null, afterDistanceMeters }));
+        const afterDistanceMeters = cursor?.distanceMeters == null
+          ? null
+          : optionalInteger(cursor.distanceMeters, 0, 41000000);
+        if (
+          !addressId || !addressVersion || query === undefined ||
+          (body.limit != null && limit === undefined) ||
+          body.branchId != null || afterDistanceMeters === undefined ||
+          (body.cursor != null && (!cursor || !afterName || !afterBranchId ||
+            !Object.hasOwn(cursor, "distanceMeters") || cursor.addressId !== addressId ||
+            typeof cursor.addressVersion !== "string" ||
+            Date.parse(cursor.addressVersion) !== Date.parse(addressVersion)))
+        ) return validationError();
+        if (!dependencies.customerRestaurantNearestPage) {
+          throw new V1RequestError(503, "unavailable", "Nearest restaurants are unavailable.");
+        }
+        return json(
+          await dependencies.customerRestaurantNearestPage({
+            accessToken: actor.accessToken,
+            addressId,
+            addressVersion,
+            query,
+            limit: limit ?? 100,
+            afterName,
+            afterBranchId: afterBranchId ?? null,
+            afterDistanceMeters,
+          }),
+        );
       }
       case "adminSnapshot": {
         const parsedLimit = optionalInteger(body.skuLimit, 1, 1000);
@@ -408,16 +563,27 @@ export async function handleV1Catalogue(
         const payload = record(body.payload);
         if (!idempotencyKey || !operation || !payload) return validationError();
         if (!dependencies.adminCatalogueTaxonomyMutation) return validationError();
-        return json(await dependencies.adminCatalogueTaxonomyMutation({
-          accessToken: actor.accessToken, idempotencyKey, operation, payload,
-        }));
+        return json(
+          await dependencies.adminCatalogueTaxonomyMutation({
+            accessToken: actor.accessToken,
+            idempotencyKey,
+            operation,
+            payload,
+          }),
+        );
       }
       case "deleteAdminCatalogueSku": {
         if (!dependencies.adminCatalogueSkuDelete) return validationError();
         const idempotencyKey = requiredIdempotencyKey(request);
         const skuId = typeof body.skuId === "string" ? body.skuId : "";
         if (!skuId || !idempotencyKey) return validationError();
-        return json(await dependencies.adminCatalogueSkuDelete({ accessToken: actor.accessToken, skuId, idempotencyKey }));
+        return json(
+          await dependencies.adminCatalogueSkuDelete({
+            accessToken: actor.accessToken,
+            skuId,
+            idempotencyKey,
+          }),
+        );
       }
       case "updateSku":
         return await updateSku(request, body, actor, dependencies);
@@ -457,30 +623,89 @@ export async function handleV1Catalogue(
   }
 }
 
-async function uploadGovernedMedia(request: Request, actor: V1Actor, dependencies: V1CatalogueDependencies) {
+async function uploadGovernedMedia(
+  request: Request,
+  actor: V1Actor,
+  dependencies: V1CatalogueDependencies,
+) {
   const idempotencyKey = requiredIdempotencyKey(request);
   let form: FormData;
-  try { form = await request.formData(); } catch { return validationError(); }
-  const entityType = requiredChoice(form.get("entityType"), ["CATEGORY_TYPE", "CATEGORY", "SUBCATEGORY", "RESTAURANT_BRANCH_BANNER", "RESTAURANT_MENU_ITEM"]);
+  try {
+    form = await request.formData();
+  } catch {
+    return validationError();
+  }
+  const entityType = requiredChoice(form.get("entityType"), [
+    "CATEGORY_TYPE",
+    "CATEGORY",
+    "SUBCATEGORY",
+    "RESTAURANT_BRANCH_BANNER",
+    "RESTAURANT_MENU_ITEM",
+  ]);
   const entityId = requiredUUID(form.get("entityId"));
   const expectedMediaVersion = formInteger(form.get("expectedMediaVersion"), 1);
   const sourceReference = requiredFormText(form.get("sourceReference"), 3, 500);
   const reason = requiredFormText(form.get("reason"), 3, 500);
   const file = form.get("file");
-  if (!idempotencyKey || !entityType || !entityId || expectedMediaVersion === undefined || !sourceReference || !reason || !(file instanceof File) || file.size < 1 || file.size > 5 * 1024 * 1024) return validationError();
+  if (
+    !idempotencyKey || !entityType || !entityId || expectedMediaVersion === undefined ||
+    !sourceReference || !reason || !(file instanceof File) || file.size < 1 ||
+    file.size > 5 * 1024 * 1024
+  ) return validationError();
   const bytes = new Uint8Array(await file.arrayBuffer());
   const inspected = inspectImage(bytes);
   if (!inspected || inspected.mimeType !== file.type) return validationError();
   const checksumSha256 = await sha256(bytes);
-  const prepared = record(await dependencies.prepareGovernedMedia({ actorId: actor.accountId, entityType, entityId, expectedMediaVersion, mimeType: inspected.mimeType, byteSize: bytes.byteLength, sourceReference, reason, idempotencyKey: `${idempotencyKey}:prepare` }));
+  const prepared = record(
+    await dependencies.prepareGovernedMedia({
+      actorId: actor.accountId,
+      entityType,
+      entityId,
+      expectedMediaVersion,
+      mimeType: inspected.mimeType,
+      byteSize: bytes.byteLength,
+      sourceReference,
+      reason,
+      idempotencyKey: `${idempotencyKey}:prepare`,
+    }),
+  );
   const assetId = requiredUUID(prepared?.assetId);
   const imageKey = typeof prepared?.imageKey === "string" ? prepared.imageKey : undefined;
   const preparedVersion = optionalInteger(prepared?.mediaVersion, 1, Number.MAX_SAFE_INTEGER);
   const scope = entityType.startsWith("RESTAURANT_") ? "restaurant" : "taxonomy";
   const expectedPrefix = `canonical/${scope}/${entityType.toLowerCase()}/${entityId}/`;
-  if (!assetId || !imageKey?.startsWith(expectedPrefix) || preparedVersion === undefined || !/^canonical\/(taxonomy|restaurant)\/[A-Za-z0-9/_-]+\.(jpg|jpeg|png|webp)$/.test(imageKey)) throw new V1RequestError(500, "invalid_asset_contract", "The governed media preparation result was invalid.");
-  await dependencies.storeAdminCatalogueAsset({ objectPath: imageKey, bytes, mimeType: inspected.mimeType, checksumSha256 });
-  return json(await dependencies.finalizeGovernedMedia({ actorId: actor.accountId, entityType, entityId, assetId, expectedMediaVersion: preparedVersion, checksumSha256, mimeType: inspected.mimeType, byteSize: bytes.byteLength, widthPixels: inspected.width, heightPixels: inspected.height, reason, idempotencyKey: `${idempotencyKey}:finalize` }));
+  if (
+    !assetId || !imageKey?.startsWith(expectedPrefix) || preparedVersion === undefined ||
+    !/^canonical\/(taxonomy|restaurant)\/[A-Za-z0-9/_-]+\.(jpg|jpeg|png|webp)$/.test(imageKey)
+  ) {
+    throw new V1RequestError(
+      500,
+      "invalid_asset_contract",
+      "The governed media preparation result was invalid.",
+    );
+  }
+  await dependencies.storeAdminCatalogueAsset({
+    objectPath: imageKey,
+    bytes,
+    mimeType: inspected.mimeType,
+    checksumSha256,
+  });
+  return json(
+    await dependencies.finalizeGovernedMedia({
+      actorId: actor.accountId,
+      entityType,
+      entityId,
+      assetId,
+      expectedMediaVersion: preparedVersion,
+      checksumSha256,
+      mimeType: inspected.mimeType,
+      byteSize: bytes.byteLength,
+      widthPixels: inspected.width,
+      heightPixels: inspected.height,
+      reason,
+      idempotencyKey: `${idempotencyKey}:finalize`,
+    }),
+  );
 }
 
 async function uploadAdminCatalogueAsset(

@@ -57,6 +57,32 @@ const configuration = {
   privateKey: "private-key",
 };
 
+Deno.test("rider Web Push cannot outlive its offer or share another alert's topic", async () => {
+  const options: Array<{ TTL?: number; topic?: string }> = [];
+  let current = 1_800_000_000_000;
+  const sender = createWebPushSender(configuration, {
+    setVapidDetails: () => undefined,
+    sendNotification: (_subscription, _payload, requestOptions) => {
+      options.push(requestOptions ?? {});
+      return Promise.resolve({ statusCode: 201, body: "", headers: {} });
+    },
+  }, () => current);
+  const offer = {
+    ...job(),
+    notificationType: "rider.mission_offer",
+    expiresAt: new Date(current + 20_000).toISOString(),
+  };
+  assertEquals((await sender(offer)).succeeded, true);
+  assertEquals(options[0].TTL, 20);
+  assertEquals(options[0].topic, offer.deliveryId.replaceAll("-", ""));
+  const other = { ...job(), deliveryId: "94000000-0000-4000-8000-000000000005" };
+  await sender(other);
+  assertEquals(options[0].topic === options[1].topic, false);
+  current += 20_000;
+  assertEquals((await sender(offer)).suppressed, true);
+  assertEquals(options.length, 2, "Expired retry never reaches Web Push either");
+});
+
 function job(): V1NotificationJob {
   return {
     deliveryId: "94000000-0000-4000-8000-000000000001",

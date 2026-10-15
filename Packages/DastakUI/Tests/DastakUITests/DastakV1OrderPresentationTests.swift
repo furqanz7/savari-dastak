@@ -4,6 +4,38 @@ import XCTest
 @testable import DastakUI
 
 final class DastakV1OrderPresentationTests: XCTestCase {
+    func testAssignmentIsConsistentAcrossOrderCardAndJourney() {
+        for status in [DastakV1OrderStatus.paid, .preparing] {
+            XCTAssertEqual(DastakV1OrderPresentation.title(status), "Preparing your order")
+            XCTAssertEqual(DastakV1OrderPresentation.title(status, fulfilmentState: "PREPARING"), "Preparing your order")
+            XCTAssertEqual(DastakV1OrderPresentation.title(status, fulfilmentState: "ASSIGNING_RIDER"), "Assigning your rider")
+            XCTAssertEqual(DastakV1OrderPresentation.journeyLabel(status, fulfilmentState: "ASSIGNING_RIDER"), "Assigning your rider")
+            XCTAssertTrue(DastakV1OrderPresentation.message(status, fulfilmentState: "ASSIGNING_RIDER").contains("finding a delivery partner"))
+            XCTAssertEqual(DastakV1OrderPresentation.title(status, trackingPhase: "ASSIGNED"), "Preparing your order")
+        }
+        XCTAssertFalse(DastakV1OrderPresentation.isAssigningRider(.awaitingPayment, trackingPhase: nil))
+        XCTAssertFalse(DastakV1OrderPresentation.isAssigningRider(.cancelled, trackingPhase: nil))
+    }
+    func testBothCancellationStatesNeverShowActiveFindingJourney() {
+        for status in [DastakV1OrderStatus.cancelledPrepayment, .cancelled] {
+            XCTAssertFalse(DastakV1OrderPresentation.isActive(status))
+            XCTAssertNil(DastakV1OrderPresentation.journeyStep(status))
+            XCTAssertEqual(DastakV1OrderPresentation.title(status), "Order cancelled")
+            XCTAssertTrue(DastakV1OrderPresentation.canReorder(status))
+        }
+    }
+
+    func testUnavailableExpiredAndFailedOrdersDoNotAppearInActiveJourney() {
+        for status in [DastakV1OrderStatus.unavailable, .paymentExpired, .fulfilmentFailure] {
+            XCTAssertFalse(DastakV1OrderPresentation.isActive(status))
+            XCTAssertNil(DastakV1OrderPresentation.journeyStep(status))
+        }
+        XCTAssertEqual(DastakV1OrderPresentation.title(.unavailable), "Basket unavailable")
+        XCTAssertEqual(DastakV1OrderPresentation.title(.paymentExpired), "Payment window expired")
+        XCTAssertEqual(DastakV1OrderPresentation.title(.fulfilmentFailure), "Order needs attention")
+        XCTAssertFalse(DastakV1OrderPresentation.canReorder(.fulfilmentFailure))
+    }
+
     func testEveryLifecycleStateHasCustomerCopyAndPurposefulSymbol() {
         let statuses: [DastakV1OrderStatus] = [
             .created, .matching, .fullySecured, .awaitingPayment, .paid, .preparing,

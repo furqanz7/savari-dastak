@@ -9,9 +9,11 @@ struct DastakOrdersView: View {
     let openCart: () -> Void
     let openDestination: (DastakCustomerDestination) -> Void
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.marketplaceHapticScope) private var haptics
     @State private var scope: DastakOrderHistoryScope = .active
     @State private var hasChosenScope = false
-    @State private var pendingReorder: DastakV1OrderSnapshot?
+    @State private var pendingReorder: DastakReorderReview?
+    @State private var mixedReorder: DastakV1OrderSnapshot?
 
     init(
         model: DastakCustomerModel,
@@ -52,10 +54,14 @@ struct DastakOrdersView: View {
                 }
             } else {
                 List {
+                    if model.isResolvingSavedItems || model.isReordering {
+                        ProgressView("Checking items for Order again")
+                    }
                     Section {
                         Picker("Order history", selection: Binding(
                             get: { scope },
                             set: { value in
+                                if scope != value { haptics?.play(.selection) }
                                 scope = value
                                 hasChosenScope = true
                             }
@@ -105,7 +111,7 @@ struct DastakOrdersView: View {
 
                         if !filteredParcels.isEmpty {
                             ForEach(filteredParcels, id: \.parcel.parcelID) { customerParcel in
-                                Button {
+                                MarketplaceFeedbackButton {
                                     openDestination(.parcel(customerParcel.parcel.parcelID))
                                 } label: {
                                     DastakParcelHistoryRow(customerParcel: customerParcel)
@@ -118,7 +124,7 @@ struct DastakOrdersView: View {
 
                         if !filteredOrders.isEmpty {
                             ForEach(filteredOrders, id: \.orderID) { order in
-                                Button {
+                                MarketplaceFeedbackButton {
                                     openDestination(.merchantOrder(order.orderID))
                                 } label: {
                                     DastakOrderRow(order: order)
@@ -130,7 +136,7 @@ struct DastakOrdersView: View {
                         }
 
                         if scope == .past, model.canLoadMoreV1Orders {
-                            Button {
+                            MarketplaceFeedbackButton {
                                 Task { await model.loadMoreV1Orders() }
                             } label: {
                                 HStack {
@@ -203,7 +209,7 @@ struct DastakOrdersView: View {
             }
         }
         .confirmationDialog(
-            "Replace your current basket?",
+            "Replace your \(pendingReorder?.service.title ?? "selected") basket?",
             isPresented: Binding(
                 get: { pendingReorder != nil },
                 set: { if !$0 { pendingReorder = nil } }
@@ -211,13 +217,27 @@ struct DastakOrdersView: View {
             titleVisibility: .visible
         ) {
             Button("Replace basket and reorder") {
-                guard let order = pendingReorder else { return }
+                guard let review = pendingReorder else { return }
                 pendingReorder = nil
-                performReorder(order)
+                performReorder(review)
             }
             Button("Keep current basket", role: .cancel) { pendingReorder = nil }
         } message: {
-            Text("Reordering replaces the items already in your basket. You can review availability and prices before submitting.")
+            Text("Only your \(pendingReorder?.service.title ?? "selected") basket will be replaced after checking current items and availability. Your other basket stays unchanged. No order is placed.")
+        }
+        .confirmationDialog("Which basket should we rebuild?", isPresented: Binding(
+            get: { mixedReorder != nil }, set: { if !$0 { mixedReorder = nil } }
+        ), titleVisibility: .visible) {
+            ForEach(DastakBasketService.allCases) { service in
+                Button("Reorder \(service.title)") {
+                    guard let order = mixedReorder else { return }
+                    mixedReorder = nil
+                    reviewReorder(order, service: service)
+                }
+            }
+            Button("Keep both baskets", role: .cancel) { mixedReorder = nil }
+        } message: {
+            Text("This historical order contains Grocery and Food. Rebuild one separately; the other basket will not change.")
         }
     }
 
@@ -268,12 +288,21 @@ struct DastakOrdersView: View {
     }
 
     private func reorder(_ order: DastakV1OrderSnapshot) {
-        if model.cart.isEmpty { performReorder(order) }
-        else { pendingReorder = order }
+        guard !model.isReordering else { return }
+        if DastakReorderReview.services(for: order).count > 1 { mixedReorder = order }
+        else { reviewReorder(order) }
     }
 
-    private func performReorder(_ order: DastakV1OrderSnapshot) {
-        if model.reorder(order).openedBasket { openCart() }
+    private func reviewReorder(_ order: DastakV1OrderSnapshot, service: DastakBasketService? = nil) {
+        guard let review = model.reviewReorder(order, service: service) else { return }
+        if review.requiresReplacement { pendingReorder = review }
+        else { performReorder(review) }
+    }
+
+    private func performReorder(_ review: DastakReorderReview) {
+        Task {
+            if await model.reorderWithCurrentCatalogue(review).openedBasket { openCart() }
+        }
     }
 }
 
@@ -296,13 +325,26 @@ private struct DastakV1OrderHistoryRow: View {
     let imageKey: (DastakV1OrderLine) -> String?
     let reorder: () -> Void
     let open: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var stacksContent: Bool { dynamicTypeSize >= .xxxLarge }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Button(action: open) {
+        let headerLayout = stacksContent
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: MarketplaceSpacing.compact))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: MarketplaceSpacing.compact))
+        let metadataLayout = stacksContent
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout())
+        let actionsLayout = stacksContent
+            ? AnyLayout(VStackLayout(spacing: 0))
+            : AnyLayout(HStackLayout(spacing: 0))
+        return VStack(spacing: 0) {
+            MarketplaceFeedbackButton(action: open) {
                 VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-                    HStack(alignment: .top, spacing: MarketplaceSpacing.compact) {
-                        Image(systemName: DastakV1OrderPresentation.symbol(order.status))
+                    headerLayout {
+                        Image(systemName: DastakV1OrderPresentation.symbol(order.status, trackingPhase: order.tracking?.phase,
+                                                                         fulfilmentState: order.fulfilmentProgress?.state))
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(MarketplaceColors.dastakAccent.color)
                             .frame(width: 40, height: 40)
@@ -313,17 +355,19 @@ private struct DastakV1OrderHistoryRow: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(deliveryTitle)
                                 .font(.headline)
-                            Text(order.restaurant?.name ?? DastakV1OrderPresentation.orderType(order.orderType))
+                            Text(order.restaurant.map {
+                                DastakRestaurantPresentation.customerFacingName(name: $0.name, branchName: $0.branchName)
+                            } ?? DastakV1OrderPresentation.orderType(order.orderType))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                                .lineLimit(stacksContent ? nil : 1)
                         }
-                        Spacer(minLength: MarketplaceSpacing.small)
+                        if !stacksContent { Spacer(minLength: MarketplaceSpacing.small) }
                         Text(DastakFormatting.money(order.price.total))
                             .font(.headline.monospacedDigit())
                     }
 
-                    HStack(spacing: 8) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 54, maximum: 54), spacing: 8)], alignment: .leading, spacing: 8) {
                         ForEach(Array(order.lines.prefix(4))) { line in
                             DastakProductArtwork(
                                 imageKey: imageKey(line),
@@ -348,17 +392,19 @@ private struct DastakV1OrderHistoryRow: View {
                                 .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
+                    .accessibilityHidden(true)
 
                     Text(productSummary)
                         .font(.subheadline.weight(.medium))
-                        .lineLimit(2)
+                        .lineLimit(stacksContent ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    HStack {
+                    metadataLayout {
                         Text("\(itemCount) item\(itemCount == 1 ? "" : "s")")
-                        Text("·")
+                        if !stacksContent { Text("·") }
                         Text(order.displayOrderNumber)
                             .font(.caption.monospaced())
-                        Spacer()
+                        if !stacksContent { Spacer() }
                         if let date = DastakV1OrderPresentation.date(order.submittedAt ?? order.createdAt) {
                             Text(date.formatted(date: .abbreviated, time: .shortened))
                         }
@@ -367,27 +413,35 @@ private struct DastakV1OrderHistoryRow: View {
                     .foregroundStyle(.secondary)
 
                     if DastakV1OrderPresentation.isActive(order.status) {
-                        DastakV1JourneyProgress(status: order.status, compact: true)
+                        DastakV1JourneyProgress(status: order.status, deliveryPhase: order.tracking?.phase,
+                                               fulfilmentState: order.fulfilmentProgress?.state, compact: true)
                     }
                 }
                 .padding(MarketplaceSpacing.medium)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityHint("Opens details for order \(order.displayOrderNumber)")
 
             Divider().padding(.horizontal, MarketplaceSpacing.medium)
-            HStack(spacing: 0) {
+            actionsLayout {
                 if DastakV1OrderPresentation.canReorder(order.status) {
-                    Button(action: reorder) {
+                    MarketplaceFeedbackButton(action: reorder) {
                         Label("Order again", systemImage: "arrow.clockwise")
-                            .frame(maxWidth: .infinity)
+                            .frame(maxWidth: .infinity, minHeight: MarketplaceMetrics.minimumTouchTarget)
+                            .contentShape(Rectangle())
                     }
+                    .accessibilityLabel("Order again, \(order.displayOrderNumber)")
                     .accessibilityHint("Rebuilds this order using products currently available")
-                    Divider().frame(height: 26)
+                    if stacksContent { Divider() }
+                    else { Divider().frame(height: 26) }
                 }
-                Button(action: open) {
+                MarketplaceFeedbackButton(action: open) {
                     Text(DastakV1OrderPresentation.isActive(order.status) ? "Track order" : "Details")
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: MarketplaceMetrics.minimumTouchTarget)
+                    .contentShape(Rectangle())
                 }
+                .accessibilityLabel("\(DastakV1OrderPresentation.isActive(order.status) ? "Track order" : "Details"), \(order.displayOrderNumber)")
             }
             .font(.subheadline.bold())
             .foregroundStyle(MarketplaceColors.dastakAccent.color)
@@ -400,7 +454,8 @@ private struct DastakV1OrderHistoryRow: View {
 
     private var deliveryTitle: String {
         DastakV1OrderPresentation.deliveredDuration(order) ??
-            DastakV1OrderPresentation.title(order.status)
+            DastakV1OrderPresentation.title(order.status, trackingPhase: order.tracking?.phase,
+                                           fulfilmentState: order.fulfilmentProgress?.state)
     }
 
     private var itemCount: Int { DastakV1OrderPresentation.itemCount(order) }
@@ -415,6 +470,7 @@ private struct DastakV1OrderHistoryRow: View {
 struct DastakV1JourneyProgress: View {
     let status: DastakV1OrderStatus
     var deliveryPhase: String? = nil
+    var fulfilmentState: String? = nil
     var compact = false
 
     var body: some View {
@@ -431,7 +487,8 @@ struct DastakV1JourneyProgress: View {
                 }
                 if let label = DastakV1OrderPresentation.journeyLabel(
                     status,
-                    trackingPhase: deliveryPhase
+                    trackingPhase: deliveryPhase,
+                    fulfilmentState: fulfilmentState
                 ) {
                     Text(label)
                         .font(.caption2.weight(.semibold))
@@ -442,7 +499,8 @@ struct DastakV1JourneyProgress: View {
             .accessibilityLabel(
                 DastakV1OrderPresentation.journeyLabel(
                     status,
-                    trackingPhase: deliveryPhase
+                    trackingPhase: deliveryPhase,
+                    fulfilmentState: fulfilmentState
                 ) ?? "Order progress"
             )
         }
@@ -727,7 +785,7 @@ private struct DastakParcelDetailView: View {
                 )
                 .padding(.horizontal, MarketplaceSpacing.medium)
                 if canPay {
-                    Button {
+                    MarketplaceFeedbackButton {
                         Task { await pay() }
                     } label: {
                         Label("Pay securely", systemImage: "lock.fill")
@@ -736,7 +794,7 @@ private struct DastakParcelDetailView: View {
                     .padding(.horizontal, MarketplaceSpacing.medium)
                 }
                 if canCancel {
-                    Button(role: .destructive) {
+                    MarketplaceFeedbackButton(role: .destructive) {
                         showingCancellationReasons = true
                     } label: {
                         isCancelling ? AnyView(ProgressView()) : AnyView(Text("Cancel delivery"))
@@ -925,7 +983,7 @@ private struct DastakParcelDetailView: View {
     }
 
     private func cancellationButton(_ reason: String) -> some View {
-        Button(reason, role: .destructive) {
+        MarketplaceFeedbackButton(reason, role: .destructive) {
             isCancelling = true
             Task {
                 await cancel(reason)
@@ -1223,7 +1281,7 @@ private struct DastakOrderDetailView: View {
     }
 
     private var cancelButton: some View {
-        Button(role: .destructive) {
+        MarketplaceFeedbackButton(role: .destructive) {
             showingCancellationReasons = true
         } label: {
             if isCancelling {
@@ -1238,7 +1296,7 @@ private struct DastakOrderDetailView: View {
     }
 
     private var payButton: some View {
-        Button {
+        MarketplaceFeedbackButton {
             Task { await pay() }
         } label: {
             Label("Pay securely", systemImage: "lock.fill")
@@ -1288,7 +1346,7 @@ private struct DastakOrderDetailView: View {
     }
 
     private func cancellationButton(_ reason: String) -> some View {
-        Button(reason, role: .destructive) {
+        MarketplaceFeedbackButton(reason, role: .destructive) {
             isCancelling = true
             Task {
                 await cancel(reason)
@@ -1365,7 +1423,7 @@ private struct DastakOrderSupportCard: View {
     }
 
     var body: some View {
-        Button(action: action) {
+        MarketplaceFeedbackButton(action: action) {
             HStack(spacing: MarketplaceSpacing.compact) {
                 Image(systemName: latestCase == nil ? "questionmark.bubble" : "checkmark.bubble.fill")
                     .font(.title3)
@@ -1401,6 +1459,7 @@ private struct DastakOrderSupportSheet: View {
     let submit: (CustomerOrderSupportCategory, String) async throws -> CustomerOrderSupportCase
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.marketplaceHapticScope) private var haptics
     @State private var category: CustomerOrderSupportCategory = .deliveryStatus
     @State private var message = ""
     @State private var isSubmitting = false
@@ -1434,6 +1493,7 @@ private struct DastakOrderSupportSheet: View {
                                 }
                             }
                             .pickerStyle(.menu)
+                            .marketplaceSelectionFeedback(category)
                             .tint(MarketplaceColors.dastakAccent.color)
                         }
 
@@ -1470,12 +1530,12 @@ private struct DastakOrderSupportSheet: View {
             .dastakInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    MarketplaceFeedbackButton("Close") { dismiss() }
                 }
             }
             .safeAreaInset(edge: .bottom) {
                 if createdCase == nil {
-                    Button {
+                    MarketplaceFeedbackButton {
                         Task { await submitRequest() }
                     } label: {
                         if isSubmitting {
@@ -1505,7 +1565,7 @@ private struct DastakOrderSupportSheet: View {
                 .font(.headline.monospaced())
             Text("You can close this page. The current status will remain visible inside this order.")
                 .foregroundStyle(.secondary)
-            Button("Done") { dismiss() }
+            MarketplaceFeedbackButton("Done") { dismiss() }
                 .buttonStyle(MarketplacePrimaryButtonStyle())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1518,8 +1578,10 @@ private struct DastakOrderSupportSheet: View {
         defer { isSubmitting = false }
         do {
             createdCase = try await submit(category, normalizedMessage)
+            haptics?.play(.success)
         } catch {
             errorMessage = "Your request could not be sent. Please try again."
+            haptics?.play(.error)
         }
     }
 }

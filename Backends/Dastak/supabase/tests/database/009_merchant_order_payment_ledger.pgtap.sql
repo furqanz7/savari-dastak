@@ -269,7 +269,7 @@ select is(
       'payment_captured',
       'provider-order-1',
       'provider-payment-1',
-      14000,
+      14280,
       now(),
       'payment-captured-digest-1'
     )
@@ -298,7 +298,7 @@ select is(
       'payment_captured',
       'provider-order-1',
       'provider-payment-1',
-      14000,
+      14280,
       now(),
       'payment-captured-digest-1'
     )
@@ -326,7 +326,7 @@ select is(
       'payment_captured',
       'provider-order-1',
       'provider-payment-1',
-      14000,
+      14280,
       now(),
       'different-digest'
     )
@@ -430,7 +430,7 @@ select is(
       'payment_captured',
       'provider-order-2',
       'provider-payment-2',
-      15000,
+      15300,
       now(),
       'payment-captured-digest-2'
     )
@@ -512,6 +512,19 @@ select ok(
   ),
   'every financial transaction is balanced in integer paise'
 );
+
+select is((select sum(e.amount_paise) from private.merchant_order_ledger_entries e
+ join private.merchant_order_ledger_transactions t on t.id=e.transaction_id
+ where t.order_id='82000000-0000-4000-8000-000000000081'
+ and t.kind='order_settlement' and e.account_code='platform_fee' and e.side='credit'),
+ 280::numeric,'the customer platform fee receives its own exact settlement credit');
+select private.post_merchant_order_settlement(o,'repeat-settlement-probe')
+from private.merchant_orders o where id='82000000-0000-4000-8000-000000000081';
+select is((select count(*) from private.merchant_order_ledger_transactions
+ where order_id='82000000-0000-4000-8000-000000000081' and kind='order_settlement'),
+ 1::bigint,'settlement replay cannot allocate the platform fee twice');
+select throws_ok($$select private.assert_merchant_order_transaction_balanced(gen_random_uuid())$$,
+ '23514','merchant_order_ledger_unbalanced','the positive balanced-ledger invariant remains enforced');
 
 reset role;
 

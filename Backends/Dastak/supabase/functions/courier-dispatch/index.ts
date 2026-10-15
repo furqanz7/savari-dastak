@@ -32,6 +32,7 @@ Deno.serve((request) =>
     advanceJob,
     getV1PartnerSnapshot,
     getPartnerHistory,
+    getPartnerOrderDetail,
     acceptV1Offer,
     declineV1Offer,
     heartbeatV1Mission,
@@ -80,6 +81,16 @@ async function getPartnerHistory(accountId: string, limit: number) {
     "dastak_delivery_partner_work_history",
     { p_account_id: accountId, p_limit: limit },
   );
+  if (error) throw error;
+  return data;
+}
+
+async function getPartnerOrderDetail(accountId: string, kind: string, workId: string) {
+  const { data, error } = await serviceClient.rpc("dastak_delivery_partner_order_detail", {
+    p_account_id: accountId,
+    p_kind: kind,
+    p_work_id: workId,
+  });
   if (error) throw error;
   return data;
 }

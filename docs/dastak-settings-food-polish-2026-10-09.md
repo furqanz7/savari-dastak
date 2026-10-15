@@ -32,7 +32,20 @@ Five initially failing mounted tests reproduced callback-triggered session reloa
 
 ## Release
 
-Customer-only production release and post-release checks pending at commit time. Further evidence will be appended locally after release.
+Customer-only production release completed (post-release evidence appended locally).
+
+- Commit `1945c26dff04664e201d6523c25714c6bf5870e9` pushed to `origin/codex/dastak-v1-launch`.
+- Deployment `dpl_DT95neH1cWueAmBoDxUakYuzAhHs`: READY, production, Vite/React, 75-second build.
+- Normal address: https://dastak-customer.vercel.app/ ; immutable build: https://dastak-fe9y3qcgl-liquiflows-projects.vercel.app/ .
+- Normal-address HTML provenance matches the commit, Customer variant, production environment and deployment ID; CSP and nosniff checks passed.
+- Production tab refreshed: matching commit confirmed; account stayed signed in and Settings loaded.
+- Devices and sessions finished loading without an alert; current device present. Closing restored trigger focus and cleared modal/body scroll lock. No devices removed.
+- Help with an order opened Orders; Edit your Profile opened Profile. Both screens had one main heading.
+- Sign-out confirmation focused Cancel; cancellation restored its trigger. Delete Customer confirmation focused Keep Customer; cancelled without entering DELETE or submitting.
+- Real Food discovery showed Craft; menu and Cappuccino detail loaded with uploaded images. The current area displayed the no-delivery-partner warning; no live cart or order changed.
+- Production proof: `docs/verification/dastak-settings-food-2026-10-09/food-menu-production.png`.
+- Narrow Vercel error-log scan for this deployment (last 10 minutes) returned no entries. This is not comprehensive monitoring; drains configuration was not inspected.
+- Three new-SHA non-production queued/building previews cancelled to save build use. Merchant preview was already READY and left intact. No other production role changed.
 
 ## Not claimed
 

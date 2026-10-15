@@ -310,7 +310,10 @@ Deno.test("Admin payout trace remains platform-RBAC mediated by the database", a
     dependencies({
       callRPC: async (rpc, args) => {
         call = [rpc, args];
-        return [{ response_body: { withdrawals: [], hasMore: false, nextCursor: null }, response_status: 200 }];
+        return [{
+          response_body: { withdrawals: [], hasMore: false, nextCursor: null },
+          response_status: 200,
+        }];
       },
     }),
   );

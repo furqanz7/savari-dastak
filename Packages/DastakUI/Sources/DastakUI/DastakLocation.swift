@@ -5,6 +5,7 @@ import MarketplaceFoundation
 
 public struct DastakDeliveryLocation: Codable, Equatable, Sendable, Identifiable {
     public let addressID: UUID?
+    public let addressVersion: String?
     public let address: String
     public let point: GeoPoint
     public let label: String?
@@ -16,6 +17,7 @@ public struct DastakDeliveryLocation: Codable, Equatable, Sendable, Identifiable
 
     public init(
         addressID: UUID? = nil,
+        addressVersion: String? = nil,
         address: String,
         point: GeoPoint,
         label: String? = nil,
@@ -26,6 +28,7 @@ public struct DastakDeliveryLocation: Codable, Equatable, Sendable, Identifiable
         deliveryNotes: String? = nil
     ) {
         self.addressID = addressID
+        self.addressVersion = addressVersion
         self.address = address
         self.point = point
         self.label = Self.cleaned(label)
@@ -68,6 +71,7 @@ final class DastakLocationManager: NSObject, ObservableObject, CLLocationManager
     @Published private(set) var errorMessage: String?
 
     private let manager = CLLocationManager()
+    private var requestRevision = UUID()
 
     override init() {
         authorizationStatus = manager.authorizationStatus
@@ -77,6 +81,10 @@ final class DastakLocationManager: NSObject, ObservableObject, CLLocationManager
     }
 
     func requestLocation() {
+        // An explicit request must not reuse a previous GPS fix or its error.
+        requestRevision = UUID()
+        location = nil
+        errorMessage = nil
         let status = manager.authorizationStatus
         if status == .notDetermined {
             #if os(iOS)
@@ -109,11 +117,14 @@ final class DastakLocationManager: NSObject, ObservableObject, CLLocationManager
     ) {
         guard let coordinate = locations.last?.coordinate else { return }
         Task { @MainActor in
+            let revision = UUID()
+            requestRevision = revision
             let point = GeoPoint(
                 latitude: coordinate.latitude,
                 longitude: coordinate.longitude
             )
             let address = await reverseGeocode(locations.last) ?? "Current location"
+            guard requestRevision == revision else { return }
             location = DastakDeliveryLocation(address: address, point: point)
             errorMessage = nil
         }
@@ -121,6 +132,7 @@ final class DastakLocationManager: NSObject, ObservableObject, CLLocationManager
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         Task { @MainActor in
+            requestRevision = UUID()
             errorMessage = "Current location could not be found. Search for an address instead."
         }
     }
@@ -165,13 +177,31 @@ struct DastakPlaceSuggestion: Identifiable, Sendable {
 @MainActor
 final class DastakPlaceSearchModel: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
     @Published var query = "" {
-        didSet { completer.queryFragment = query }
+        didSet {
+            cancelResolution()
+            suggestions = []
+            errorMessage = nil
+            completionTask?.cancel()
+            completer.cancel()
+            let fragment = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            isSearching = !fragment.isEmpty
+            guard !fragment.isEmpty else { return }
+            completionTask = Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled, query.trimmingCharacters(in: .whitespacesAndNewlines) == fragment else { return }
+                completer.queryFragment = fragment
+            }
+        }
     }
     @Published private(set) var suggestions: [DastakPlaceSuggestion] = []
+    @Published private(set) var isSearching = false
     @Published private(set) var isResolving = false
     @Published private(set) var errorMessage: String?
 
     private let completer = MKLocalSearchCompleter()
+    private var completionTask: Task<Void, Never>?
+    private var resolution: MKLocalSearch?
+    private var resolutionID = UUID()
 
     override init() {
         super.init()
@@ -180,11 +210,15 @@ final class DastakPlaceSearchModel: NSObject, ObservableObject, MKLocalSearchCom
     }
 
     nonisolated func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        let fragment = completer.queryFragment
         let results = completer.results.prefix(12).map {
             DastakPlaceSuggestion(title: $0.title, subtitle: $0.subtitle)
         }
         Task { @MainActor in
+            guard !query.isEmpty, query.trimmingCharacters(in: .whitespacesAndNewlines) == fragment else { return }
             suggestions = results
+            isSearching = false
+            errorMessage = nil
         }
     }
 
@@ -192,22 +226,30 @@ final class DastakPlaceSearchModel: NSObject, ObservableObject, MKLocalSearchCom
         _ completer: MKLocalSearchCompleter,
         didFailWithError error: Error
     ) {
+        let fragment = completer.queryFragment
         Task { @MainActor in
+            guard !query.isEmpty, query.trimmingCharacters(in: .whitespacesAndNewlines) == fragment else { return }
+            isSearching = false
             errorMessage = "Address search is unavailable right now."
         }
     }
 
     func resolve(_ suggestion: DastakPlaceSuggestion) async -> DastakDeliveryLocation? {
+        cancelResolution()
+        let token = resolutionID
         isResolving = true
-        defer { isResolving = false }
+        defer { if token == resolutionID { isResolving = false } }
         do {
             let request = MKLocalSearch.Request()
             request.naturalLanguageQuery = [suggestion.title, suggestion.subtitle]
                 .filter { !$0.isEmpty }
                 .joined(separator: ", ")
-            guard let item = try await MKLocalSearch(request: request).start().mapItems.first else {
+            let operation = MKLocalSearch(request: request)
+            resolution = operation
+            guard let item = try await operation.start().mapItems.first else {
                 throw DastakPlaceSearchError.noResult
             }
+            guard !Task.isCancelled, token == resolutionID else { return nil }
             let coordinate = item.placemark.coordinate
             errorMessage = nil
             return DastakDeliveryLocation(
@@ -221,9 +263,17 @@ final class DastakPlaceSearchModel: NSObject, ObservableObject, MKLocalSearchCom
                 )
             )
         } catch {
+            guard !Task.isCancelled, token == resolutionID else { return nil }
             errorMessage = "That address could not be resolved."
             return nil
         }
+    }
+
+    func cancelResolution() {
+        resolutionID = UUID()
+        resolution?.cancel()
+        resolution = nil
+        isResolving = false
     }
 }
 

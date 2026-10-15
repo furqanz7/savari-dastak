@@ -271,20 +271,23 @@ insert into dastak_v1.branch_operational_states (
 );
 
 insert into dastak_v1.merchant_sku_selections (
-  branch_id, sku_id, state, selected_by
+  branch_id, sku_id, state, selected_by, stock_quantity
 ) values
 (
   '97000000-0000-4000-8000-000000000021',
   '97000000-0000-4000-8000-000000000013',
   'SELECTED',
-  '97000000-0000-4000-8000-000000000003'
+  '97000000-0000-4000-8000-000000000003',20
 ),
 (
   '97000000-0000-4000-8000-000000000031',
   '97000000-0000-4000-8000-000000000013',
   'SELECTED',
-  '97000000-0000-4000-8000-000000000004'
+  '97000000-0000-4000-8000-000000000004',20
 );
+
+\ir fixtures/customer-area.sql.inc
+select pg_temp.available_rider('97000000-0000-4000-8000-000000000010','97000000-0000-4000-8000-000000000002');
 
 set local role authenticated;
 select set_config(
@@ -447,6 +450,39 @@ select set_config(
   true
 );
 
+reset role;
+-- Current submissions must still fail closed without approved coverage or
+-- known positive inventory. These are independent of historical fixture flags.
+create function pg_temp.current_admission_probe() returns jsonb language sql as $$
+ select public.dastak_v1_submit_order('current-admission-negative',0,
+ '{"deliveryAddress":{"line1":"Current admission fixture","countryCode":"IN","latitude":12.68,"longitude":78.62},
+ "recipient":{"name":"Wave One Customer","phoneNumber":"+919700000001"},
+ "lines":[{"lineType":"RETAIL_SKU","skuId":"97000000-0000-4000-8000-000000000013","quantity":1}]}'::jsonb);
+$$;
+savepoint admission_no_rider;
+update private.account_memberships set approved_at=null where role='dastak_partner';
+set local role authenticated;
+select throws_ok($$select pg_temp.current_admission_probe()$$,'55000',
+ 'No delivery partners are available in your area right now. Your cart is saved; please try again later.',
+ 'current submissions reject an unapproved rider without creating an order');
+rollback to admission_no_rider;
+savepoint admission_unknown_stock;
+update dastak_v1.merchant_sku_selections set stock_quantity=null,version=version+1;
+set local role authenticated;
+select throws_ok($$select pg_temp.current_admission_probe()$$,'55000',
+ 'This pack is out of stock in your area. Review your saved cart.',
+ 'current submissions reject unknown stock rather than using legacy compatibility');
+rollback to admission_unknown_stock;
+savepoint admission_zero_stock;
+update dastak_v1.merchant_sku_selections set stock_quantity=0,version=version+1;
+set local role authenticated;
+select throws_ok($$select pg_temp.current_admission_probe()$$,'55000',
+ 'This pack is out of stock in your area. Review your saved cart.',
+ 'current submissions reject zero inventory');
+rollback to admission_zero_stock;
+select is((select count(*) from dastak_v1.idempotency_records where idempotency_key='current-admission-negative'),
+ 0::bigint,'rejected submissions leave no partial idempotency result');
+set local role authenticated;
 create temp table tap_wave1_order on commit drop as
 select public.dastak_v1_submit_order(
   'wave1-submit-one',
@@ -745,6 +781,11 @@ select is((select state::text from dastak_v1.merchant_sku_selections
 rollback to stock_zero_test;
 
 savepoint untracked_stock_test;
+-- Explicit historical compatibility scenario; new orders require known stock.
+update dastak_v1.orders set availability_policy_version=0,version=version+1
+where id=(select (body->>'id')::uuid from tap_wave1_order);
+update dastak_v1.merchant_sku_selections set stock_quantity=null,version=version+1
+where branch_id='97000000-0000-4000-8000-000000000031';
 select set_config('request.jwt.claim.sub', '97000000-0000-4000-8000-000000000004', true);
 select lives_ok($$select dastak_v1_api.accept_wave1_opportunity(
   '97000000-0000-4000-8000-000000000004',
@@ -755,10 +796,10 @@ select is((select count(*) from dastak_v1.merchant_stock_reservations), 0::bigin
 select dastak_v1_api.update_merchant_stock_selection(
   '97000000-0000-4000-8000-000000000004',
   '97000000-0000-4000-8000-000000000031',
-  '97000000-0000-4000-8000-000000000013', true, 1, 'first-count-after-order', 10);
+  '97000000-0000-4000-8000-000000000013', true, 2, 'first-count-after-order', 10);
 select set_config('request.jwt.claim.sub', '97000000-0000-4000-8000-000000000001', true);
 select public.dastak_v1_cancel_prepayment_order(
-  (select (body ->> 'id')::uuid from tap_wave1_order), 'untracked-cancel', 4);
+  (select (body ->> 'id')::uuid from tap_wave1_order), 'untracked-cancel', 5);
 select is((select stock_quantity from dastak_v1.merchant_sku_selections
   where branch_id = '97000000-0000-4000-8000-000000000031'), 10,
   'historical untracked orders cannot inflate a newly entered stock count');

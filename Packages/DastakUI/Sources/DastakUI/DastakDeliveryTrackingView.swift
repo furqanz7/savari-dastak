@@ -6,7 +6,11 @@ import SwiftUI
 struct DastakDeliveryTrackingView: View {
     let tracking: DastakDeliveryTracking
     var destination: CLLocationCoordinate2D? = nil
+    // Merchant reuse does not expose Customer-specific contact controls.
+    var customerOrderStatus: String? = nil
     @State private var camera: MapCameraPosition = .automatic
+    @Environment(\.openURL) private var openURL
+    @State private var callingUnavailable = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -19,6 +23,21 @@ struct DastakDeliveryTrackingView: View {
                 }
                 Spacer()
                 DastakTrackingLivenessBadge(tracking: tracking)
+            }
+            if let status = customerOrderStatus {
+                if let url = tracking.customerCallURL(orderStatus: status) {
+                    MarketplaceFeedbackButton {
+                        openURL(url) { accepted in callingUnavailable = !accepted }
+                    } label: {
+                        Label("Call delivery partner", systemImage: "phone.fill")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(MarketplaceSecondaryButtonStyle())
+                    .accessibilityIdentifier("dastak.delivery.call-partner")
+                } else {
+                    Text("Your delivery partner’s phone number is not available yet.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
             }
             if tracking.location != nil || destination != nil {
                 Map(position: $camera) {
@@ -39,7 +58,7 @@ struct DastakDeliveryTrackingView: View {
                 .frame(height: 230)
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .overlay(alignment: .bottomTrailing) {
-                    Button { withAnimation { camera = .automatic } } label: {
+                    MarketplaceFeedbackButton { withAnimation { camera = .automatic } } label: {
                         Image(systemName: "scope").padding(10).background(.regularMaterial, in: Circle())
                     }
                     .accessibilityLabel("Recenter delivery map").padding(12)
@@ -50,6 +69,11 @@ struct DastakDeliveryTrackingView: View {
         }
         .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
+        .alert("Calling isn’t available on this device", isPresented: $callingUnavailable) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Use a phone with calling enabled to contact your delivery partner.")
+        }
     }
 
     private var phase: String {
@@ -119,7 +143,7 @@ struct DastakArrivalButton: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(alignment: .leading, spacing: 8) {
-                Button("I’ve arrived", action: action)
+                MarketplaceFeedbackButton("I’ve arrived", action: action)
                     .buttonStyle(MarketplacePrimaryButtonStyle())
                     .disabled(busy || eligibility?.canArrive(at: context.date) != true)
                 if eligibility?.canArrive(at: context.date) != true {

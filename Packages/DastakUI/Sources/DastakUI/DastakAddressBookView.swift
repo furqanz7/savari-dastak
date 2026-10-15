@@ -6,6 +6,7 @@ struct DastakAddressBookView: View {
     let requiresCompletion: Bool
     let currentLocation: DastakDeliveryLocation?
     let requestCurrentLocation: () -> Void
+    var currentLocationError: String? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var editingAddress: DastakDeliveryLocation?
@@ -22,7 +23,7 @@ struct DastakAddressBookView: View {
                     } description: {
                         Text("Add a precise pin and doorstep instructions for faster checkout.")
                     } actions: {
-                        Button("Add address") { addAddress() }
+                        MarketplaceFeedbackButton("Add address") { addAddress() }
                             .buttonStyle(MarketplacePrimaryButtonStyle())
                     }
                 } else {
@@ -48,10 +49,10 @@ struct DastakAddressBookView: View {
             .dastakInlineNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    MarketplaceFeedbackButton("Close") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button { addAddress() } label: { Image(systemName: "plus") }
+                    MarketplaceFeedbackButton { addAddress() } label: { Image(systemName: "plus") }
                         .disabled(model.savedAddresses.count >= 10 || isBusy)
                         .accessibilityLabel("Add address")
                 }
@@ -62,8 +63,9 @@ struct DastakAddressBookView: View {
                 requiresCompletion: requiresCompletion,
                 initialLocation: editingAddress,
                 currentLocation: currentLocation,
+                currentLocationError: currentLocationError,
                 requestCurrentLocation: requestCurrentLocation,
-                save: { await model.setLocation($0) },
+                save: { await model.setLocation($0, makeDefault: !requiresCompletion) },
                 onSaved: {
                     showingEditor = false
                     if requiresCompletion { dismiss() }
@@ -94,7 +96,7 @@ struct DastakAddressBookView: View {
                 .tracking(1.2)
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
             Text("Where should we bring it?")
-                .font(MarketplaceTypography.instrumentSerif(size: 40, relativeTo: .largeTitle))
+                .font(.title2.bold())
             Text(requiresCompletion
                 ? "Choose a saved address or add another. You can keep up to ten."
                 : "Tap an address to use it as your default. You can keep up to ten.")
@@ -117,11 +119,12 @@ struct DastakAddressBookView: View {
     }
 
     private func addressRow(_ address: DastakDeliveryLocation) -> some View {
-        let selected = address.addressID == model.deliveryAddress?.addressID
-        return Button {
+        let isDefault = address.addressID == model.defaultDeliveryAddress?.addressID
+        let selected = requiresCompletion ? address.addressID == model.deliveryAddress?.addressID : isDefault
+        return MarketplaceFeedbackButton {
             isBusy = true
             Task {
-                let didSelect = await model.selectSavedAddress(address)
+                let didSelect = await model.selectSavedAddress(address, makeDefault: !requiresCompletion)
                 isBusy = false
                 if didSelect { dismiss() }
             }
@@ -135,8 +138,8 @@ struct DastakAddressBookView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(address.displayName).font(.headline).foregroundStyle(.primary)
-                        if selected {
-                            Label("Default", systemImage: "checkmark.circle.fill")
+                        if isDefault || selected {
+                            Label(isDefault ? "Default" : "Selected", systemImage: "checkmark.circle.fill")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
                                 .padding(.horizontal, 7)
@@ -169,12 +172,12 @@ struct DastakAddressBookView: View {
         .dastakAccountSurface(accented: selected)
         .accessibilityHint("Tap to use this address. Touch and hold to edit or delete it.")
         .contextMenu {
-            Button { edit(address) } label: { Label("Edit", systemImage: "pencil") }
-            Button(role: .destructive) { deletingAddress = address } label: { Label("Delete", systemImage: "trash") }
+            MarketplaceFeedbackButton { edit(address) } label: { Label("Edit", systemImage: "pencil") }
+            MarketplaceFeedbackButton(role: .destructive) { deletingAddress = address } label: { Label("Delete", systemImage: "trash") }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) { deletingAddress = address } label: { Label("Delete", systemImage: "trash") }
-            Button { edit(address) } label: { Label("Edit", systemImage: "pencil") }.tint(MarketplaceColors.dastakAccent.color)
+            MarketplaceFeedbackButton(role: .destructive) { deletingAddress = address } label: { Label("Delete", systemImage: "trash") }
+            MarketplaceFeedbackButton { edit(address) } label: { Label("Edit", systemImage: "pencil") }.tint(MarketplaceColors.dastakAccent.color)
         }
     }
 

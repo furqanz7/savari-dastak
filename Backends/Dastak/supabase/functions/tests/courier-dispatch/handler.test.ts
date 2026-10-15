@@ -10,6 +10,52 @@ const offerId = "33333333-3333-4333-8333-333333333333";
 const missionId = "44444444-4444-4444-8444-444444444444";
 const stopId = "55555555-5555-4555-8555-555555555555";
 
+Deno.test("full order detail binds authenticated rider and validates kind and work", async () => {
+  let recorded: unknown;
+  const reply = await handleCourierDispatch(
+    request({
+      body: {
+        operation: "partnerOrderDetail",
+        accountId: assignmentId,
+        kind: "V1_DELIVERY",
+        workId: missionId,
+      },
+    }),
+    dependencies({
+      getPartnerOrderDetail: (actor, kind, work) => {
+        recorded = [actor, kind, work];
+        return Promise.resolve({ workId: work });
+      },
+    }),
+  );
+  assertEquals(reply.status, 200);
+  assertEquals(recorded, [accountId, "V1_DELIVERY", missionId]);
+  for (
+    const body of [{ kind: "ADMIN", workId: missionId }, { kind: "V1_DELIVERY", workId: "invalid" }]
+  ) {
+    await assertError(
+      await handleCourierDispatch(
+        request({ body: { operation: "partnerOrderDetail", ...body } }),
+        dependencies(),
+      ),
+      400,
+      "validation_failed",
+    );
+  }
+});
+
+Deno.test("full order detail never leaks database or other rider details", async () => {
+  for (const code of ["42501", "P0002"]) {
+    const response = await handleCourierDispatch(
+      request({ body: { operation: "partnerOrderDetail", kind: "RETURN", workId: missionId } }),
+      dependencies({
+        getPartnerOrderDetail: () => Promise.reject({ code, message: "private database detail" }),
+      }),
+    );
+    await assertError(response, code === "42501" ? 403 : 404, "delivery_detail_unavailable");
+  }
+});
+
 Deno.test("courier dispatch serves browser preflight without authentication", async () => {
   const response = await handleCourierDispatch(
     new Request("http://localhost/functions/v1/courier-dispatch", { method: "OPTIONS" }),
@@ -669,6 +715,7 @@ function dependencies(
     getV1PartnerSnapshot: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     getPartnerHistory: () => Promise.resolve({ items: [] }),
+    getPartnerOrderDetail: () => Promise.resolve({}),
     acceptV1Offer: () =>
       Promise.resolve({ responseBody: { offer: null, currentMission: null }, responseStatus: 200 }),
     declineV1Offer: () =>

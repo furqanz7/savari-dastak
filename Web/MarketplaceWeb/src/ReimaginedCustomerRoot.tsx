@@ -85,14 +85,6 @@ function AccountExperience(props: Props) {
   const groceryQuery = groceryExploration.view.kind === "search" ? groceryExploration.view.query : "";
   const grocerySearch = useReimaginedGrocerySearch(props, groceryExploration.searchDraft, groceryQuery,
     groceryExploration.searchOpen, state.service === "grocery" && state.section === "home" && !groceryExploration.checkout, online);
-  const groceryData = useMemo(() => {
-    if (!resource.data) return undefined;
-    const skus = new Map(resource.data.catalogue.skus.map(sku => [sku.id, sku]));
-    for (const sku of grocerySearch.facts ?? []) if (!skus.has(sku.id)) skus.set(sku.id, sku);
-    for (const sku of grocerySearch.results ?? []) skus.set(sku.id, sku);
-    for (const sku of grocerySearch.suggestions ?? []) if (!skus.has(sku.id) || groceryExploration.detailId === sku.id) skus.set(sku.id, sku);
-    return { ...resource.data, catalogue: { ...resource.data.catalogue, skus: [...skus.values()] } };
-  }, [resource.data, grocerySearch.facts, grocerySearch.results, grocerySearch.suggestions, groceryExploration.detailId]);
   const wishlist = useReimaginedWishlist(props, online);
   const { accountId, accessToken, supabaseUrl, publishableKey } = props;
   const checkout = useMemo(() => new ReimaginedGroceryCheckout({ accessToken, supabaseUrl, publishableKey }, undefined, undefined, undefined, checkoutJournal(accountId, supabaseUrl)), [accountId, accessToken, supabaseUrl, publishableKey]);
@@ -117,6 +109,15 @@ function AccountExperience(props: Props) {
   const foodQuery = foodView.kind === "search" && !state.exploration.food.checkout && state.section === "home" ? foodView.query : "";
   const foodLocation = addresses.selected ? { addressId: addresses.selected.addressId, updatedAt: addresses.selected.updatedAt } : undefined;
   const availability = useReimaginedAvailability(props, foodLocation, online);
+  const groceryData = useMemo(() => {
+    if (!resource.data) return undefined;
+    const skus = new Map(resource.data.catalogue.skus.map(sku => [sku.id, sku]));
+    for (const sku of grocerySearch.facts ?? []) if (!skus.has(sku.id)) skus.set(sku.id, sku);
+    for (const sku of grocerySearch.results ?? []) skus.set(sku.id, sku);
+    for (const sku of grocerySearch.suggestions ?? []) if (!skus.has(sku.id) || groceryExploration.detailId === sku.id) skus.set(sku.id, sku);
+    for (const sku of availability.data?.trendingSkus ?? []) skus.set(sku.id, sku);
+    return { ...resource.data, catalogue: { ...resource.data.catalogue, skus: [...skus.values()] } };
+  }, [resource.data, grocerySearch.facts, grocerySearch.results, grocerySearch.suggestions, groceryExploration.detailId, availability.data?.trendingSkus]);
   reorderContext.current = JSON.stringify([props.accountId, props.accessToken, state.section, state.shopping, online, canEditCart, foodLocation, availability.data?.checkedAt]);
   const foodResource = useReimaginedFood(props, foodEnabled && Boolean(foodLocation), online, undefined, foodQuery, foodLocation);
   const foodSearchEnabled = state.service === "food" && state.section === "home" && state.exploration.food.searchOpen
@@ -263,7 +264,10 @@ function AccountExperience(props: Props) {
         dispatch({ type: "selectService", service: skuId ? "grocery" : "food" });
         if (branchId) dispatch({ type: "openRestaurant", branchId });
         if (skuId || itemId) dispatch({ type: "openDetail", id: (skuId ?? itemId)! });
-      }} /> : state.service === "grocery" ? <ReimaginedGrocery state={state} dispatch={dispatch} data={groceryExploration.view.kind === "search" || groceryExploration.detailId ? groceryData : resource.data} status={resource.status} wishlist={wishlist} online={online}
+      }} /> : state.service === "grocery" ? <ReimaginedGrocery state={state} dispatch={dispatch} data={groceryData} status={resource.status} wishlist={wishlist} online={online}
+        trending={availability.data?.groceryServiceable && availability.data.trendingSkus ? { city: "your city", skuIds: availability.data.trendingSkus.map(sku => sku.id) } : undefined}
+        trendingStatus={availability.status === "ready" && availability.data?.trendingSkus === undefined ? "unavailable" : availability.status}
+        onRetryTrending={availability.retry}
         searchResults={grocerySearch.results} searchLoading={grocerySearch.resultsLoading} searchError={grocerySearch.resultsError} onRetrySearch={() => { dispatch({ type: "closeSearch" }); grocerySearch.retry(groceryQuery); }}
         availabilityNotice={!availability.data?.groceryServiceable ? areaNotice() : undefined}
         onRetry={resource.retry} supabaseUrl={props.supabaseUrl}

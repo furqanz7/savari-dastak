@@ -5,8 +5,23 @@
 	};
 	objectVersion = 60;
 	objects = {
+/* Begin PBXCopyFilesBuildPhase section */
+        AC270000000000000000000C = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (AC2700000000000000000005, ); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXBuildFile section */
+        AC3800000000000000000001 = {isa = PBXBuildFile; fileRef = AC3800000000000000000003; };
+        AC3800000000000000000002 = {isa = PBXBuildFile; fileRef = AC3800000000000000000003; };
+        AC3800000000000000000004 = {isa = PBXBuildFile; fileRef = AC3800000000000000000006; };
+        AC3800000000000000000005 = {isa = PBXBuildFile; fileRef = AC3800000000000000000006; };
+        AC3800000000000000000007 = {isa = PBXBuildFile; fileRef = AC3800000000000000000008; };
+        AC3300000000000000000001 = {isa = PBXBuildFile; fileRef = AC3300000000000000000003; };
+        AC3300000000000000000002 = {isa = PBXBuildFile; fileRef = AC3300000000000000000003; };
+        AC3300000000000000000004 = {isa = PBXBuildFile; fileRef = AC3300000000000000000005; };
+        AC3300000000000000000006 = {isa = PBXBuildFile; productRef = AC3300000000000000000007; };
+        AC2700000000000000000001 = {isa = PBXBuildFile; fileRef = AC2700000000000000000002; };
+        AC2700000000000000000003 = {isa = PBXBuildFile; productRef = AC2700000000000000000004; };
+        AC2700000000000000000005 = {isa = PBXBuildFile; fileRef = AC2700000000000000000006; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		13F6641909457C06B89C50B4 /* DastakAdminApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7393478D80AEBF6ECFAD3B6 /* DastakAdminApp.swift */; };
 		4A4A4A4A4A4A4A4A4A4A4A4A /* AuthenticationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B4B4B4B4B4B4B4B4B4B4B4B /* AuthenticationCoordinatorTests.swift */; };
 		6A6A6A6A6A6A6A6A6A6A6A6A /* DastakAuthenticationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B6B6B6B6B6B6B6B6B6B6B6B /* DastakAuthenticationCoordinator.swift */; };
@@ -21,6 +36,8 @@
 		8D69905E9C394A25AFD4CBC4 /* DastakMerchantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06C142CB347F221ACF0D27CD /* DastakMerchantTests.swift */; };
 		9406EE4208344F5EE4BBDDEA /* DastakAdminTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B904E5C6BCAD41FF8BEE5FC /* DastakAdminTests.swift */; };
 		A60000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000002 /* PrivacyInfo.xcprivacy */; };
+		A60000000000000000000003 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000002 /* PrivacyInfo.xcprivacy */; };
+		A60000000000000000000004 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A60000000000000000000002 /* PrivacyInfo.xcprivacy */; };
 		ABCDABCDABCDABCDABCDABCD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ABCDABCDABCDABCDABCDABCE /* Assets.xcassets */; };
 		D1355344301AA9830029B36C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ABCDABCDABCDABCDABCDABCE /* Assets.xcassets */; };
 		D1355345301AA9830029B36C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ABCDABCDABCDABCDABCDABCE /* Assets.xcassets */; };
@@ -41,6 +58,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+        AC2700000000000000000007 = {isa = PBXContainerItemProxy; containerPortal = DA806623C44B40C468E7FAE4; proxyType = 1; remoteGlobalIDString = AC2700000000000000000008; remoteInfo = DastakOrderWidget; };
 		31EB6F9051D227E27C1FA44F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = DA806623C44B40C468E7FAE4 /* Project object */;
@@ -65,6 +83,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        AC3800000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DastakOrderWidget/DastakHomeWidgets.swift; sourceTree = SOURCE_ROOT; };
+        AC3800000000000000000006 = {isa = PBXFileReference; lastKnownFileType = file; path = ../../Packages/MarketplaceDesignSystem/Sources/MarketplaceDesignSystem/Resources/Fonts/InstrumentSerif-Regular.ttf; sourceTree = SOURCE_ROOT; };
+        AC3800000000000000000008 = {isa = PBXFileReference; lastKnownFileType = text; path = ../../Packages/MarketplaceDesignSystem/Sources/MarketplaceDesignSystem/Resources/Fonts/InstrumentSerif-OFL.txt; sourceTree = SOURCE_ROOT; };
+        AC3300000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Dastak/DastakAppIntents.swift; sourceTree = SOURCE_ROOT; };
+        AC3300000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DastakOrderWidget/DastakControls.swift; sourceTree = SOURCE_ROOT; };
+        AC2700000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/DastakOrderWidget/DastakOrderWidget.swift; sourceTree = SOURCE_ROOT; };
+        AC2700000000000000000006 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = DastakOrderWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		06C142CB347F221ACF0D27CD /* DastakMerchantTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DastakMerchantTests.swift; sourceTree = "<group>"; };
 		1B380B0452B976BF2A5DE99B /* DastakAdminTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DastakAdminTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DBF380F1FE1D56B113DBFBD /* DastakMerchantTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DastakMerchantTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -87,6 +112,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+        AC2700000000000000000009 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (AC2700000000000000000003, AC3300000000000000000006, ); runOnlyForDeploymentPostprocessing = 0; };
 		03A1122FE2791C3B8833B693 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -154,6 +180,7 @@
 		05E66D5BB2F1192F69B3775D /* Products */ = {
 			isa = PBXGroup;
 			children = (
+                AC2700000000000000000006,
 				8D878A197BA6A8D855996FD1 /* Dastak.app */,
 				FB01BEB49EC50B8C67ADAB6D /* DastakTests.xctest */,
 				3E142EFC320F2584292AC456 /* DastakMerchant.app */,
@@ -167,6 +194,12 @@
 		0ACFAC0E041AEE72689D15B3 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+                AC2700000000000000000002,
+                AC3300000000000000000003,
+                AC3300000000000000000005,
+                AC3800000000000000000003,
+                AC3800000000000000000006,
+                AC3800000000000000000008,
 				AA51E9C705268647BA43BFC8 /* Dastak */,
 				70C81D61DC07E54F4725F3F8 /* DastakMerchant */,
 				4E475333315343BD50AD62A2 /* DastakAdmin */,
@@ -283,6 +316,17 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+        AC2700000000000000000008 = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = AC270000000000000000000A;
+            buildPhases = (AC270000000000000000000B, AC2700000000000000000009, AC3800000000000000000009, );
+            buildRules = (); dependencies = ();
+            name = DastakOrderWidget;
+            packageProductDependencies = (AC2700000000000000000004, AC3300000000000000000007, );
+            productName = DastakOrderWidget;
+            productReference = AC2700000000000000000006;
+            productType = "com.apple.product-type.app-extension";
+        };
 		2D6F6FAF110E7243A342BB58 /* DastakAdminTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F16658DB8E216118961570A7 /* Build configuration list for PBXNativeTarget "DastakAdminTests" */;
@@ -332,10 +376,12 @@
 				F96AA0A39B6D1344D9E0D8F9 /* Sources */,
 				E3AA1710FAF7B95D4687666E /* Frameworks */,
 				22FAE9EA1381AA14B887A9EB /* Resources */,
+                AC270000000000000000000C,
 			);
 			buildRules = (
 			);
 			dependencies = (
+                AC270000000000000000000D,
 			);
 			name = Dastak;
 			packageProductDependencies = (
@@ -461,6 +507,7 @@
 			);
 			mainGroup = BF532B9E5E2A53EA8059EC89;
 			packageReferences = (
+                AC270000000000000000000E,
 				710710710710710710710710 /* XCLocalSwiftPackageReference "../../Packages/MarketplaceInfrastructure" */,
 				711711711711711711711711 /* XCLocalSwiftPackageReference "../../Packages/MarketplaceFoundation" */,
 				D0D0D0D0D0D0D0D0D0D0D0D0 /* XCLocalSwiftPackageReference "../../Packages/DastakDomain" */,
@@ -471,6 +518,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+                AC2700000000000000000008,
 				51D58DF103DED824F85DD03F /* Dastak */,
 				58C58211F46D4BD61CDBC757 /* DastakTests */,
 				88E70E6AF4428C4AB51DDD84 /* DastakMerchant */,
@@ -482,11 +530,13 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+        AC3800000000000000000009 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (AC3800000000000000000004, AC3800000000000000000007, ); runOnlyForDeploymentPostprocessing = 0; };
 		1A18236D6FCECDD9D55FC5E8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				ABCDABCDABCDABCDABCDABCD /* Assets.xcassets in Resources */,
+				A60000000000000000000004 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -496,6 +546,7 @@
 			files = (
 				D1355344301AA9830029B36C /* Assets.xcassets in Resources */,
 				A60000000000000000000001 /* PrivacyInfo.xcprivacy in Resources */,
+                AC3800000000000000000005,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -525,12 +576,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				D1355345301AA9830029B36C /* Assets.xcassets in Resources */,
+				A60000000000000000000003 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+        AC270000000000000000000B = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (AC2700000000000000000001, AC3300000000000000000002, AC3300000000000000000004, AC3800000000000000000001, ); runOnlyForDeploymentPostprocessing = 0; };
 		55985BAD784D2B26A0D31E87 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -578,12 +631,15 @@
 			files = (
 				6A6A6A6A6A6A6A6A6A6A6A6A /* DastakAuthenticationCoordinator.swift in Sources */,
 				DD61A65FDF5ABEF81F0E8F48 /* DastakApp.swift in Sources */,
+                AC3300000000000000000001,
+                AC3800000000000000000002,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+        AC270000000000000000000D = {isa = PBXTargetDependency; target = AC2700000000000000000008; targetProxy = AC2700000000000000000007; };
 		468D2CA267C469E42E2E2082 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = DastakAdmin;
@@ -605,6 +661,10 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+        AC270000000000000000000F = {isa = XCBuildConfiguration; baseConfigurationReference = B1B1B1B1B1B1B1B1B1B1B1B1;
+            buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = "Supporting/OrderWidget-Info.plist"; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.dastak.app.order-tracking; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DASTAK_CONTROL_EXTENSION"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"); }; name = Debug; };
+        AC2700000000000000000010 = {isa = XCBuildConfiguration; baseConfigurationReference = B1B1B1B1B1B1B1B1B1B1B1B1;
+            buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = "Supporting/OrderWidget-Info.plist"; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.dastak.app.order-tracking; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SKIP_INSTALL = YES; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DASTAK_CONTROL_EXTENSION"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"); }; name = Release; };
 		04D28CBF5898DB23B9873E75 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1015,6 +1075,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+        AC270000000000000000000A = {isa = XCConfigurationList; buildConfigurations = (AC270000000000000000000F, AC2700000000000000000010, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		0D250147FB684C13985B2E0C /* Build configuration list for PBXNativeTarget "DastakMerchant" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1081,6 +1142,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+        AC270000000000000000000E = {isa = XCLocalSwiftPackageReference; relativePath = ../../Packages/DastakLiveTracking; };
 		710710710710710710710710 /* XCLocalSwiftPackageReference "../../Packages/MarketplaceInfrastructure" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../Packages/MarketplaceInfrastructure;
@@ -1104,6 +1166,8 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+        AC3300000000000000000007 = {isa = XCSwiftPackageProductDependency; package = 711711711711711711711711; productName = MarketplaceFoundation; };
+        AC2700000000000000000004 = {isa = XCSwiftPackageProductDependency; productName = DastakLiveTracking; };
 		712712712712712712712712 /* MarketplaceInfrastructure */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 710710710710710710710710 /* XCLocalSwiftPackageReference "../../Packages/MarketplaceInfrastructure" */;

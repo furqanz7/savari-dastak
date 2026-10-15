@@ -13,6 +13,7 @@ export type V1NotificationJob = {
   body: string;
   payload: Record<string, unknown>;
   attempt: number;
+  expiresAt?: string;
 };
 
 export type CustomerAccountDeletionJob = {
@@ -22,6 +23,7 @@ export type CustomerAccountDeletionJob = {
 
 export type V1ProviderDelivery = {
   succeeded: boolean;
+  suppressed?: boolean;
   permanentTokenFailure: boolean;
   providerStatus: number | null;
   providerResponse: string;
@@ -42,6 +44,7 @@ export type V1OutboxWorkerDependencies = {
     error?: string,
   ) => Promise<void>;
   runInvariantMonitors: () => Promise<Record<string, unknown>>;
+  processLiveActivities?: () => Promise<void>;
 };
 
 export async function handleV1OutboxWorker(
@@ -96,10 +99,17 @@ export async function handleV1OutboxWorker(
         };
       }
       await dependencies.complete(job, result);
-      return result.succeeded;
+      return result.suppressed ? "suppressed" : result.succeeded ? "sent" : "retry";
     });
-    const sent = outcomes.filter(Boolean).length;
-    const retriedOrDeadLettered = outcomes.length - sent;
+    const sent = outcomes.filter((outcome) => outcome === "sent").length;
+    const suppressed = outcomes.filter((outcome) => outcome === "suppressed").length;
+    const retriedOrDeadLettered = outcomes.length - sent - suppressed;
+    // Merchant/customer alerts are delivered first. ActivityKit failure is isolated.
+    try {
+      await dependencies.processLiveActivities?.();
+    } catch {
+      console.error("Live Activity delivery pass failed");
+    }
     const invariants = notificationsOnly
       ? { skipped: true }
       : await dependencies.runInvariantMonitors();
@@ -113,6 +123,7 @@ export async function handleV1OutboxWorker(
       fanout,
       claimed: jobs.length,
       sent,
+      suppressed,
       retriedOrDeadLettered,
       invariants,
     });

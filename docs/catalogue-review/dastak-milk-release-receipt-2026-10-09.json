@@ -1,0 +1,239 @@
+{
+  "receipt": {
+    "activeSkus": 572,
+    "batchRows": 8,
+    "classifiedActiveSkus": 8,
+    "outboxRows": 8,
+    "projections": [
+      {
+        "arguments": "p_actor_id uuid, p_sku_limit integer",
+        "hasFullAttributesProjection": false,
+        "hasProductTypeProjection": false,
+        "name": "admin_catalogue_snapshot"
+      },
+      {
+        "arguments": "p_actor_id uuid, p_query text, p_category_id uuid, p_subcategory_id uuid, p_limit integer, p_after_name text, p_after_sku_id uuid",
+        "hasFullAttributesProjection": true,
+        "hasProductTypeProjection": false,
+        "name": "customer_catalogue"
+      },
+      {
+        "arguments": "p_actor_id uuid, p_branch_id uuid, p_limit integer",
+        "hasFullAttributesProjection": true,
+        "hasProductTypeProjection": true,
+        "name": "merchant_canonical_catalogue_snapshot"
+      }
+    ],
+    "skus": [
+      {
+        "changedFields": [
+          "attributes"
+        ],
+        "description": "Branded Amul Taaza Toned Milk for Dastak delivery.",
+        "fromVersion": 6,
+        "id": "5d9344b3-4d48-4cc2-a041-289fba4155bb",
+        "name": "Amul Taaza Toned Milk",
+        "outboxPresent": true,
+        "pack": "1 L",
+        "pricePaise": 5400,
+        "productType": "Toned",
+        "slug": "dairy-amul-amul-taaza-toned-milk",
+        "version": 7
+      },
+      {
+        "changedFields": [
+          "attributes"
+        ],
+        "description": "Curated Amul Taaza Toned Milk for Dastak grocery delivery.",
+        "fromVersion": 7,
+        "id": "a51d8c7d-bd8c-4f1e-8728-27b2b3df7397",
+        "name": "Amul Taaza Toned Milk",
+        "outboxPresent": true,
+        "pack": "200 ml",
+        "pricePaise": 1700,
+        "productType": "Toned",
+        "slug": "dairy-bread-eggs-a2-milk-starter",
+        "version": 8
+      },
+      {
+        "changedFields": [
+          "attributes"
+        ],
+        "description": "Branded Arokya Full Cream Milk for Dastak delivery.",
+        "fromVersion": 5,
+        "id": "5908c4c1-9dce-4104-9342-13a9ab7926aa",
+        "name": "Arokya Full Cream Milk",
+        "outboxPresent": true,
+        "pack": "1 L",
+        "pricePaise": 8200,
+        "productType": "Full Cream",
+        "slug": "dairy-arokya-arokya-full-cream-milk",
+        "version": 6
+      },
+      {
+        "changedFields": [
+          "attributes"
+        ],
+        "description": "Branded Arokya Toned Milk for Dastak delivery.",
+        "fromVersion": 5,
+        "id": "3ca69e40-a71f-4c10-977b-738aa67b9b3f",
+        "name": "Arokya Toned Milk",
+        "outboxPresent": true,
+        "pack": "500 ml",
+        "pricePaise": 4200,
+        "productType": "Toned",
+        "slug": "dairy-arokya-arokya-toned-milk",
+        "version": 6
+      },
+      {
+        "changedFields": [
+          "attributes"
+        ],
+        "description": "Branded Nestle Everyday Dairy Whitener for Dastak delivery.",
+        "fromVersion": 5,
+        "id": "6c425649-c011-4f9e-80dc-3b228a95b5ff",
+        "name": "Nestle Everyday Dairy Whitener",
+        "outboxPresent": true,
+        "pack": "1 kg",
+        "pricePaise": 62500,
+        "productType": "Dairy Whitener",
+        "slug": "nestle-everyday-dairy-whitener-1kg",
+        "version": 6
+      },
+      {
+        "changedFields": [
+          "attributes",
+          "description"
+        ],
+        "description": "Dairy whitener for tea and coffee.",
+        "fromVersion": 9,
+        "id": "2642d986-1130-4d4a-88bf-d0da178469d7",
+        "name": "Nestle Everyday Dairy Whitener",
+        "outboxPresent": true,
+        "pack": "15 g",
+        "pricePaise": 1000,
+        "productType": "Dairy Whitener",
+        "slug": "dairy-bread-eggs-infant-milk-formula-starter",
+        "version": 10
+      },
+      {
+        "changedFields": [
+          "attributes"
+        ],
+        "description": "Branded Nestle Everyday Dairy Whitener for Dastak delivery.",
+        "fromVersion": 5,
+        "id": "21de9800-be42-4da4-ba6f-13bf17980145",
+        "name": "Nestle Everyday Dairy Whitener",
+        "outboxPresent": true,
+        "pack": "200 g",
+        "pricePaise": 12800,
+        "productType": "Dairy Whitener",
+        "slug": "nestle-everyday-dairy-whitener-200",
+        "version": 6
+      },
+      {
+        "changedFields": [
+          "attributes"
+        ],
+        "description": "Branded Nestle Everyday Dairy Whitener for Dastak delivery.",
+        "fromVersion": 5,
+        "id": "d5e0f1fc-f851-4469-b307-b858d4fed175",
+        "name": "Nestle Everyday Dairy Whitener",
+        "outboxPresent": true,
+        "pack": "400 g",
+        "pricePaise": 25500,
+        "productType": "Dairy Whitener",
+        "slug": "nestle-everyday-dairy-whitener-400",
+        "version": 6
+      }
+    ],
+    "verifiedAt": "2026-10-08T19:29:28.748054+00:00"
+  },
+  "projections": {
+    "admin": [
+      {
+        "id": "21de9800-be42-4da4-ba6f-13bf17980145",
+        "pack": "200 g",
+        "productType": "Dairy Whitener"
+      },
+      {
+        "id": "2642d986-1130-4d4a-88bf-d0da178469d7",
+        "pack": "15 g",
+        "productType": "Dairy Whitener"
+      },
+      {
+        "id": "3ca69e40-a71f-4c10-977b-738aa67b9b3f",
+        "pack": "500 ml",
+        "productType": "Toned"
+      },
+      {
+        "id": "5908c4c1-9dce-4104-9342-13a9ab7926aa",
+        "pack": "1 L",
+        "productType": "Full Cream"
+      },
+      {
+        "id": "5d9344b3-4d48-4cc2-a041-289fba4155bb",
+        "pack": "1 L",
+        "productType": "Toned"
+      },
+      {
+        "id": "6c425649-c011-4f9e-80dc-3b228a95b5ff",
+        "pack": "1 kg",
+        "productType": "Dairy Whitener"
+      },
+      {
+        "id": "a51d8c7d-bd8c-4f1e-8728-27b2b3df7397",
+        "pack": "200 ml",
+        "productType": "Toned"
+      },
+      {
+        "id": "d5e0f1fc-f851-4469-b307-b858d4fed175",
+        "pack": "400 g",
+        "productType": "Dairy Whitener"
+      }
+    ],
+    "merchant": [
+      {
+        "id": "21de9800-be42-4da4-ba6f-13bf17980145",
+        "pack": "200 g",
+        "productType": "Dairy Whitener"
+      },
+      {
+        "id": "2642d986-1130-4d4a-88bf-d0da178469d7",
+        "pack": "15 g",
+        "productType": "Dairy Whitener"
+      },
+      {
+        "id": "3ca69e40-a71f-4c10-977b-738aa67b9b3f",
+        "pack": "500 ml",
+        "productType": "Toned"
+      },
+      {
+        "id": "5908c4c1-9dce-4104-9342-13a9ab7926aa",
+        "pack": "1 L",
+        "productType": "Full Cream"
+      },
+      {
+        "id": "5d9344b3-4d48-4cc2-a041-289fba4155bb",
+        "pack": "1 L",
+        "productType": "Toned"
+      },
+      {
+        "id": "6c425649-c011-4f9e-80dc-3b228a95b5ff",
+        "pack": "1 kg",
+        "productType": "Dairy Whitener"
+      },
+      {
+        "id": "a51d8c7d-bd8c-4f1e-8728-27b2b3df7397",
+        "pack": "200 ml",
+        "productType": "Toned"
+      },
+      {
+        "id": "d5e0f1fc-f851-4469-b307-b858d4fed175",
+        "pack": "400 g",
+        "productType": "Dairy Whitener"
+      }
+    ],
+    "merchantAuthorizedBranchFound": true
+  }
+}

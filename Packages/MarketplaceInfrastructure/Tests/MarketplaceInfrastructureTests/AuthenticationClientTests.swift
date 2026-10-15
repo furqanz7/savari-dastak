@@ -59,6 +59,21 @@ final class AuthenticationClientTests: XCTestCase {
         XCTAssertNil(profileLookupAccountID)
     }
 
+    func testRestorePreservesTransientSessionFailureInsteadOfReturningSignedOut() async throws {
+        let operations = RecordingAuthenticationOperations(sessionReadError: URLError(.timedOut))
+        let client = SupabaseAuthenticationClient(operations: operations)
+        do {
+            _ = try await client.restoreAccount()
+            XCTFail("Expected retryable failure, not signed out")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .timedOut)
+        }
+        let lookup = await operations.recordedProfileLookupAccountID()
+        let signOuts = await operations.recordedSignOutCallCount()
+        XCTAssertNil(lookup)
+        XCTAssertEqual(signOuts, 0)
+    }
+
     func testRestoreWithCurrentAccountAndNoProfileReturnsNeedsProfile() async throws {
         let accountID = UUID()
         let operations = RecordingAuthenticationOperations(

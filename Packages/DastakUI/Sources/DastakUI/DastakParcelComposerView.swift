@@ -53,6 +53,7 @@ struct DastakParcelComposerView: View {
             .sheet(isPresented: $choosingPickup) {
                 DastakLocationPicker(
                     title: "Pickup location",
+                    initialLocation: pickup,
                     currentLocation: currentLocation,
                     useLocation: { pickup = $0 },
                     requestCurrentLocation: requestCurrentLocation
@@ -61,6 +62,7 @@ struct DastakParcelComposerView: View {
             .sheet(isPresented: $choosingDropoff) {
                 DastakLocationPicker(
                     title: "Drop-off location",
+                    initialLocation: dropoff,
                     currentLocation: currentLocation,
                     useLocation: { dropoff = $0 },
                     requestCurrentLocation: requestCurrentLocation
