@@ -1,0 +1,160 @@
+{
+  "date": "2026-10-16",
+  "scope": "Customer + Delivery repository/CI/web release handoff",
+  "status": "complete",
+  "branch": "codex/dastak-v1-launch",
+  "startingHead": "94f531d679e6dcca1bd588ab63c5000b1eb2c620",
+  "finalSourceCommit": "dc971c3ba038487c576a85336a896924ef81f9fd",
+  "hostedCI": {
+    "conclusion": "success",
+    "createdAt": "2026-10-15T22:57:51Z",
+    "headSha": "dc971c3ba038487c576a85336a896924ef81f9fd",
+    "id": 38820588305,
+    "jobs": [
+      {
+        "completedAt": "2026-10-15T23:04:28Z",
+        "conclusion": "success",
+        "name": "ios-build",
+        "startedAt": "2026-10-15T22:57:57Z",
+        "status": "completed"
+      },
+      {
+        "completedAt": "2026-10-15T23:06:18Z",
+        "conclusion": "success",
+        "name": "swift-packages",
+        "startedAt": "2026-10-15T22:57:58Z",
+        "status": "completed"
+      },
+      {
+        "completedAt": "2026-10-15T23:01:59Z",
+        "conclusion": "success",
+        "name": "dastak-backend",
+        "startedAt": "2026-10-15T22:57:54Z",
+        "status": "completed"
+      },
+      {
+        "completedAt": "2026-10-15T23:02:52Z",
+        "conclusion": "success",
+        "name": "dastak-web",
+        "startedAt": "2026-10-15T22:57:54Z",
+        "status": "completed"
+      },
+      {
+        "completedAt": "2026-10-15T23:00:53Z",
+        "conclusion": "success",
+        "name": "savari-backend",
+        "startedAt": "2026-10-15T22:57:54Z",
+        "status": "completed"
+      }
+    ],
+    "status": "completed",
+    "updatedAt": "2026-10-15T23:06:19Z",
+    "url": "https://github.com/furqanz7/savari-dastak/actions/runs/38820588305"
+  },
+  "database": {
+    "project": "zmtsolkfxlrxepshnjdf",
+    "matchingMigrations": 289,
+    "mismatches": 0,
+    "appliedThisHandoff": [],
+    "finalErrorLevelSecurityAdvisors": "No issues found",
+    "historicalSQLModified": false
+  },
+  "edge": {
+    "activeFunctions": 29,
+    "downloadedSourceFiles": 71,
+    "normalizedRepositoryMatches": 68,
+    "archiveOnlyHelpers": [
+      {
+        "name": "catalogue-packshot-ingest",
+        "version": 2
+      },
+      {
+        "name": "process-catalogue-assets",
+        "version": 3
+      },
+      {
+        "name": "process-catalogue-sources",
+        "version": 16
+      }
+    ],
+    "deployedThisHandoff": [],
+    "comparison": "Identical Deno formatting normalization; three recovered helpers archived outside active function discovery"
+  },
+  "web": {
+    "stagedSourceCommit": "966e523aa9c9a9a9746ecd7faab014e164428135",
+    "stagedAndFinalSourceWebTree": "1b9de6ec8fa72343c8d909ab233203917b7372ba",
+    "deploymentMode": "Production-configured staged artifacts, promoted only after exact-source CI passed",
+    "customer": {
+      "url": "https://dastak-customer.vercel.app",
+      "deploymentId": "dpl_9iMzxvNYeeV68UXisVobH3TwuYYt",
+      "state": "READY",
+      "canonicalProvenance": "verified",
+      "httpStatus": 200,
+      "entryPointAssetStatuses": [
+        200,
+        200,
+        200,
+        200
+      ],
+      "securityHeadersVerified": true,
+      "errorLogRecords": 0,
+      "errorLogWindow": "preceding ten minutes"
+    },
+    "delivery": {
+      "url": "https://dastak-delivery.vercel.app",
+      "deploymentId": "dpl_DVCGTxtRpZME3Y4cYPgRcg8tqNqm",
+      "state": "READY",
+      "canonicalProvenance": "verified",
+      "httpStatus": 200,
+      "entryPointAssetStatuses": [
+        200,
+        200,
+        200,
+        200
+      ],
+      "securityHeadersVerified": true,
+      "errorLogRecords": 0,
+      "errorLogWindow": "preceding ten minutes"
+    },
+    "protectionChanged": false
+  },
+  "localVerification": {
+    "nativeUI": 547,
+    "infrastructure": 183,
+    "liveTracking": 6,
+    "webTests": 1062,
+    "webFiles": 149,
+    "edgeTests": 370,
+    "staticDatabaseContracts": 166,
+    "replayStoreTests": 1,
+    "runnerAndFixtureTests": 17,
+    "formattedBackendFiles": 269,
+    "webBuildAndLint": "passed"
+  },
+  "hostedDatabase": {
+    "files": 76,
+    "assertions": 2081,
+    "concurrencySuites": 10,
+    "allPassed": true
+  },
+  "localOnlyPreserved": {
+    "unreviewedScreenshots": 36,
+    "nonProductionHistoricalRPMAssets": 2,
+    "deleted": false
+  },
+  "outOfScopeActionsPerformed": [],
+  "separateDecisions": [
+    "Main-branch merge",
+    "TestFlight/App Store distribution and privacy/commercial-weather configuration",
+    "Merchant/Admin completion or production release",
+    "Actual payout settlement",
+    "Ongoing monitoring/drains audit"
+  ],
+  "limits": [
+    "Owner-reported prior phone acceptance is not a fresh real-order trace in this handoff",
+    "Credential pattern scanning is not a universal secret-detection guarantee",
+    "Old catalogue helpers were archived, not newly functionally/security certified",
+    "Vercel error-log scan is bounded and does not cover all Supabase execution"
+  ],
+  "receiptCommit": "Documentation-only follow-up to the exact source tested by hosted CI"
+}
