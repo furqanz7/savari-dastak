@@ -71,7 +71,11 @@ if [[ "$scope" == "--linked" ]]; then
     run_linked_pgtap "$test_file"
   done
 else
-  supabase db test "${test_files[@]}" "$scope"
+  if [[ "$backend" == "Dastak" ]]; then
+    node scripts/test-local-database-contracts.mjs
+  else
+    supabase db test "${test_files[@]}" "$scope"
+  fi
 fi
 
 if [[ -n "${SUPABASE_PROFILE:-}" ]]; then

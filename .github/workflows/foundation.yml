@@ -85,7 +85,7 @@ jobs:
       - run: supabase start
       - run: supabase db reset --local
       - run: ../../scripts/test-backend-security.sh Dastak --local
-      - run: supabase test db
+      - run: node --test tests/pin-local-test-postgres.test.mjs tests/local-database-contracts.test.mjs
       - run: scripts/test-v1-batch1-concurrency.sh
       - run: scripts/test-v1-wave1-concurrency.sh
       - run: scripts/test-v1-wave2-payment-concurrency.sh
