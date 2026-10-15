@@ -24,27 +24,91 @@ enum DastakGrocerySceneTextures {
             .foregroundColor: ink, .paragraphStyle: style
         ])
     }
-    static func package(_ family: Int) -> UIImage {
+    static func package(_ family: Int, variant: Int = 0) -> UIImage {
         image(128,256) { ctx in
-            let i = family % 12
-            color(DastakGrocerySceneReference.packageColors[i]).setFill(); ctx.fill(CGRect(x:0,y:0,width:128,height:256))
-            let ink = i % 4 == 1 ? color(0x23362c) : color(0xfff6e4)
-            color(i % 2 == 0 ? 0x182e27 : 0xffffee).setFill(); ctx.fill(CGRect(x:0,y:0,width:128,height:26))
-            text("DASTAK PANTRY",x:0,y:7,width:128,size:10,ink:i % 2 == 0 ? .white : color(0x243629),bold:true)
-            text(DastakGrocerySceneReference.packageNames[i],x:3,y:43,width:122,size:i == 9 ? 19 : 23,ink:ink,bold:true)
-            text(i % 2 == 0 ? "SELECT COLLECTION" : "EVERYDAY ESSENTIALS",x:2,y:74,width:124,size:8,ink:ink)
-            color(0xf2dfb4).setFill(); ctx.fillEllipse(in:CGRect(x:21,y:115,width:86,height:68))
-            for n in 0..<17 {
-                let angle = Double(n)*2.4, radius = 6+sqrt(Double(n))*6
-                color(n % 3 == 0 ? 0xdbb864 : i % 2 == 0 ? 0x654c2c : 0xa77a39).setFill()
-                ctx.saveGState(); ctx.translateBy(x:64+cos(angle)*radius,y:145+sin(angle)*radius*0.6)
-                ctx.rotate(by:angle); ctx.fillEllipse(in:CGRect(x:-4,y:-2,width:i % 3 == 0 ? 6 : 12,height:6)); ctx.restoreGState()
+            let i = family % DastakGrocerySceneReference.packageNames.count
+            let base = color(DastakGrocerySceneReference.packageColors[i])
+            let cream = color(0xf6edda), dark = color(0x23382f)
+            let lightPack = [1,4,5,12,13,14,15,17].contains(i)
+            let ink = lightPack ? dark : cream
+            base.setFill(); ctx.fill(CGRect(x:0,y:0,width:128,height:256))
+            // Three distinct label compositions, with a second restrained colourway.
+            // Textures are baked once and shared by all facings of that pack.
+            if variant == 1 {
+                cream.withAlphaComponent(0.3).setFill()
+                ctx.fill(CGRect(x:0,y:0,width:128,height:256))
             }
-            ink.setFill(); ctx.fill(CGRect(x:10,y:205,width:108,height:2))
-            text("LOCAL SCENERY",x:0,y:215,width:128,size:9,ink:ink)
+            if i % 3 == 0 {
+                cream.setFill(); ctx.fill(CGRect(x:8,y:33,width:112,height:65))
+            } else if i % 3 == 1 {
+                ink.withAlphaComponent(0.13).setFill()
+                for x in stride(from:0,to:128,by:16) { ctx.fill(CGRect(x:x,y:0,width:5,height:256)) }
+            } else {
+                cream.withAlphaComponent(0.8).setFill()
+                ctx.move(to:CGPoint(x:0,y:180)); ctx.addLine(to:CGPoint(x:128,y:148)); ctx.addLine(to:CGPoint(x:128,y:256))
+                ctx.addLine(to:CGPoint(x:0,y:256)); ctx.closePath(); ctx.fillPath()
+            }
+            text(i >= 12 ? "DASTAK / CHILLED" : "DASTAK / PANTRY",x:0,y:12,width:128,size:9,ink:ink,bold:true)
+            text(DastakGrocerySceneReference.packageNames[i],x:3,y:45,width:122,size:i == 9 ? 19 : 22,
+                 ink:i % 3 == 0 ? dark : ink,bold:true)
+            let subtitles = ["WHOLE GRAINS","ROLLED OATS","GROUND SPICES","LEAF TEA","GOLDEN BITES","DURUM WHEAT",
+                             "DARK COCOA","FRUIT BLEND","ROASTED BEANS","BAKED CRACKERS","MIXED NUTS","STILL WATER",
+                             "FRESH MILK","CULTURED DAIRY","BERRY YOGHURT","CITRUS JUICE","APPLE JUICE","CULTURED MILK"]
+            text(subtitles[i],x:2,y:77,width:124,size:8,ink:i % 3 == 0 ? dark : ink)
+            motif(i,context:ctx)
+            dark.withAlphaComponent(0.8).setFill(); ctx.fill(CGRect(x:10,y:205,width:108,height:1))
+            text(i >= 12 ? "KEEP CHILLED" : "PANTRY COLLECTION",x:0,y:216,width:128,size:8,ink:i % 3 == 2 ? dark : ink)
             color(0xfffdf5).setFill(); ctx.fill(CGRect(x:88,y:231,width:29,height:18))
             color(0x263027).setFill()
             for n in 0..<11 { ctx.fill(CGRect(x:90+n*2,y:234,width:n % 3 == 0 ? 2 : 1,height:12)) }
+        }
+    }
+
+    private static func motif(_ family: Int, context ctx: CGContext) {
+        if [7,14,15,16].contains(family) {
+            // Citrus wedges, berries and apples have their own silhouettes.
+            let fruit = family == 15 ? color(0xf5b448) : family == 16 ? color(0x93b767) : color(0xa74756)
+            color(0xfaf1d7).setFill(); ctx.fillEllipse(in:CGRect(x:25,y:112,width:78,height:78))
+            fruit.setFill(); ctx.fillEllipse(in:CGRect(x:31,y:118,width:66,height:66))
+            if family == 15 {
+                ctx.setStrokeColor(color(0xffefc0).cgColor); ctx.setLineWidth(2)
+                for n in 0..<8 {
+                    let a=Double(n)*Double.pi/4
+                    ctx.move(to:CGPoint(x:64,y:151)); ctx.addLine(to:CGPoint(x:64+cos(a)*30,y:151+sin(a)*30)); ctx.strokePath()
+                }
+            } else {
+                color(0x436b43).setFill(); ctx.fillEllipse(in:CGRect(x:60,y:106,width:23,height:10))
+                color(0xffefd5).withAlphaComponent(0.5).setFill(); ctx.fillEllipse(in:CGRect(x:43,y:130,width:9,height:18))
+            }
+        } else if [11,12,13,17].contains(family) {
+            color(0xffffff).setFill()
+            let drop=UIBezierPath(); drop.move(to:CGPoint(x:64,y:108))
+            drop.addCurve(to:CGPoint(x:64,y:185),controlPoint1:CGPoint(x:5,y:167),controlPoint2:CGPoint(x:42,y:185))
+            drop.addCurve(to:CGPoint(x:64,y:108),controlPoint1:CGPoint(x:104,y:185),controlPoint2:CGPoint(x:110,y:164))
+            drop.fill()
+            color(0x78aab7).setStroke(); ctx.setLineWidth(3)
+            ctx.move(to:CGPoint(x:20,y:194)); ctx.addQuadCurve(to:CGPoint(x:108,y:194),control:CGPoint(x:64,y:178)); ctx.strokePath()
+        } else if family == 3 {
+            ctx.setStrokeColor(color(0xd5dbaa).cgColor); ctx.setLineWidth(3)
+            ctx.move(to:CGPoint(x:45,y:187)); ctx.addLine(to:CGPoint(x:80,y:112)); ctx.strokePath()
+            for n in 0..<5 {
+                color(n%2 == 0 ? 0x9ba56b : 0xd0d8a2).setFill()
+                ctx.saveGState(); ctx.translateBy(x:51+Double(n)*6,y:174-Double(n)*13); ctx.rotate(by:n%2 == 0 ? -0.6 : 0.6)
+                ctx.fillEllipse(in:CGRect(x:-17,y:-8,width:34,height:14)); ctx.restoreGState()
+            }
+        } else {
+            for n in 0..<13 {
+                let a=Double(n)*2.4, r=7+sqrt(Double(n))*7
+                let cocoa = family == 6 || family == 8
+                color(cocoa ? (n%2 == 0 ? 0x573a2b : 0x8c6145) : (n%2 == 0 ? 0xdab46f : 0xf0d696)).setFill()
+                ctx.saveGState(); ctx.translateBy(x:64+cos(a)*r,y:151+sin(a)*r*0.85); ctx.rotate(by:a)
+                if family == 9 || family == 4 {
+                    ctx.fill(CGRect(x:-9,y:-7,width:18,height:14))
+                } else {
+                    ctx.fillEllipse(in:CGRect(x:-9,y:-4,width:18,height:family == 5 ? 5 : 8))
+                }
+                ctx.restoreGState()
+            }
         }
     }
     static func ticket() -> UIImage {

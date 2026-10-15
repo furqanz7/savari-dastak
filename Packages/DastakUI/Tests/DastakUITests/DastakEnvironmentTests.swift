@@ -124,12 +124,36 @@ final class DastakEnvironmentTests: XCTestCase {
         XCTAssertEqual(reference.entranceTarget,[0.3,1.20,10])
         XCTAssertEqual(reference.entrancePosition[1] - reference.entranceTarget[1],0.3,accuracy:0.0001)
         XCTAssertEqual(reference.shelfLevels.count,5)
-        XCTAssertEqual(reference.packageNames.count,12)
+        XCTAssertEqual(reference.packageNames.count,18)
         XCTAssertEqual(reference.packageColors.count,reference.packageNames.count)
+        XCTAssertEqual(reference.packageShapes.count,reference.packageNames.count)
         XCTAssertEqual(reference.portraitFieldOfView,2*atan(tan(0.6)/0.74)*180 / .pi,accuracy:0.0001)
         XCTAssertEqual(reference.portraitProjectionOffset,-0.26)
         XCTAssertGreaterThan(reference.portraitFieldOfView,68)
         XCTAssertLessThan(reference.portraitFieldOfView,90)
+    }
+    func testStockVariesByBayAndKeepsChilledProductsInFridges() {
+        let reference = DastakGrocerySceneReference.self
+        let bays = (0..<3).map { bay in
+            (0..<5).flatMap { level in
+                (0..<4).map { reference.stockFamily(slot:$0,level:level,bay:bay,chilled:true) }
+            }
+        }
+        XCTAssertNotEqual(bays[0],bays[1])
+        XCTAssertNotEqual(bays[1],bays[2])
+        XCTAssertTrue(bays.flatMap { $0 }.allSatisfy { (12..<18).contains($0) })
+        for bay in 0..<12 {
+            for level in 0..<5 {
+                let row = (0..<44).map { reference.stockFamily(slot:$0,level:level,bay:bay) }
+                XCTAssertTrue(row.allSatisfy { (0..<12).contains($0) })
+                XCTAssertGreaterThan(Set(row).count,8)
+                for slot in 0..<44 {
+                    let size=reference.stockSize(slot:slot,level:level,bay:bay)
+                    XCTAssertLessThan(size+0.025,0.38) // Clears the shelf above.
+                    XCTAssertLessThan(size*0.68,0.24) // Widest tub clears its neighbour.
+                }
+            }
+        }
     }
     func testServiceSwitchUsesItsOwnHomeOrBillingScene() {
         XCTAssertEqual(DastakEnvironmentPlace.customer(service:.food,cartPresented:true),.cafeCounter)

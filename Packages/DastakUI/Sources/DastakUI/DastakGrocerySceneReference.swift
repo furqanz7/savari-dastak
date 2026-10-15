@@ -19,7 +19,30 @@ enum DastakGrocerySceneReference {
     static let portraitFieldOfView = 2 * atan(tan(1.2 / 2) / 0.74) * 180 / .pi
     static let portraitProjectionOffset = -0.26
     static let packageColors: [UInt32] = [0xae7732,0xecd3a0,0xa92923,0x215941,0xecb82d,0xe5eee9,
-                                        0x244f8b,0x903657,0xd77828,0x64a441,0x8e5436,0x386e88]
-    static let packageNames = ["GRAINS","OATS","SPICE","TEA","CRUNCH","MILK",
-                               "COCOA","BLEND","COFFEE","CRACKERS","NUTS","SPRING"]
+                                        0x244f8b,0x903657,0xd77828,0x64a441,0x8e5436,0x386e88,
+                                        0xf0f3e9,0x9ebdc8,0xe3b0ac,0xe5a54b,0x719c79,0xc9d9cf]
+    static let packageNames = ["GRAINS","OATS","SPICE","TEA","CRUNCH","PASTA",
+                               "COCOA","BLEND","COFFEE","CRACKERS","NUTS","SPRING",
+                               "MILK","DAIRY","YOGHURT","ORANGE","APPLE","KEFIR"]
+
+    enum PackShape { case carton, pouch, jar, bottle, tin, tub }
+    static let packageShapes: [PackShape] = [.pouch,.carton,.jar,.tin,.pouch,.carton,
+        .tin,.bottle,.jar,.carton,.pouch,.bottle,.carton,.bottle,.tub,.carton,.bottle,.bottle]
+
+    /// Stable merchandising, not live inventory. Small facings remain grouped, but
+    /// neighbouring bays, shelf levels and sides do not repeat the same stripe.
+    static func stockFamily(slot: Int, level: Int, bay: Int, chilled: Bool = false) -> Int {
+        if chilled {
+            let sections = [[12,13,14,12,15], [15,16,15,17,14], [13,12,17,14,16]]
+            return sections[bay % sections.count][(level + (slot >= 3 ? 1 : 0)) % 5]
+        }
+        let groups = [0,0,1,1,1,2,2,3,3,3,3]
+        let assortment = [0,5,2,8,3,6,1,9,10,4,7,11]
+        return assortment[(groups[slot % groups.count] + (slot / groups.count)*4 + level*5 + bay*3) % assortment.count]
+    }
+
+    static func stockSize(slot: Int, level: Int, bay: Int) -> Double {
+        // Under the 0.38 m shelf pitch, including bottle caps and pouch seals.
+        0.235 + Double((slot / 2 + level*3 + bay) % 5)*0.014
+    }
 }

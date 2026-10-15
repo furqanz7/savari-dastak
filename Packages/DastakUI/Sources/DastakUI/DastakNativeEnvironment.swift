@@ -624,9 +624,12 @@ final class DastakEnvironmentScene: NSObject {
             for side in [-1.0,1.0] {
                 box(parent,"shelf ticket rail",x+side*width/2,y+0.02,z,0.018,0.058,length,dark)
                 for i in 0..<Int(length/0.24)-1 {
-                    let family = (i/5+level*3+seed)%12
-                    groceryPack(parent,x:x+side*(width/2-0.14),y:y+0.025,z:z-length/2+0.2+Double(i)*0.24,
-                                family:family,rotation:side * .pi/2,size:0.24+Double(family%3)*0.014)
+                    let bay = seed + (side > 0 ? 2 : 0)
+                    let family = DastakGrocerySceneReference.stockFamily(slot:i,level:level,bay:bay)
+                    let inset = Double((i*7+level+bay)%4)*0.009
+                    groceryPack(parent,x:x+side*(width/2-0.14-inset),y:y+0.025,z:z-length/2+0.2+Double(i)*0.24,
+                                family:family,rotation:side * .pi/2 + Double(i%3-1)*0.025,
+                                size:DastakGrocerySceneReference.stockSize(slot:i,level:level,bay:bay),variant:(i/3+level+bay)%2)
                     if i%5 == 0 { groceryTicket(parent,x:x+side*(width/2+0.012),y:y+0.026,z:z-length/2+0.4+Double(i)*0.24,side:side) }
                 }
             }
@@ -643,7 +646,8 @@ final class DastakEnvironmentScene: NSObject {
                 for n in 0..<7 {
                     let angle = -Double.pi / 2 + Double(n) * .pi / 6
                     groceryPack(fixtures,x:x+sin(angle)*0.41,y:y+0.03,z:3.75-cos(angle)*0.41,
-                                family:(level+Int((x+4).rounded()))%12,rotation:-angle,size:0.28)
+                                family:DastakGrocerySceneReference.stockFamily(slot:n,level:level,bay:index+1),
+                                rotation:-angle,size:DastakGrocerySceneReference.stockSize(slot:n,level:level,bay:index),variant:(n/3+level)%2)
                 }
                 groceryTicket(fixtures,x:x,y:y,z:3.18,side:0)
             }
@@ -659,17 +663,23 @@ final class DastakEnvironmentScene: NSObject {
             box(fixtures,"wall stock shelf",2.6,y,8.6,0.54,0.045,11.2,steel)
             for n in 0..<44 {
                 let z = 3.18+Double(n)*0.25
-                groceryPack(fixtures,x:2.48,y:y+0.025,z:z,family:(n/5+level*3)%12,rotation: -.pi/2,size:0.25)
+                groceryPack(fixtures,x:2.48+Double(n%3)*0.012,y:y+0.025,z:z,
+                            family:DastakGrocerySceneReference.stockFamily(slot:n,level:level,bay:6),rotation: -.pi/2,
+                            size:DastakGrocerySceneReference.stockSize(slot:n,level:level,bay:6),variant:(n/3+level)%2)
                 if n%5 == 0 { groceryTicket(fixtures,x:2.318,y:y+0.026,z:z,side:-1) }
             }
         }
-        for z in stride(from:2.5,to:17,by:1.25) {
+        for (bay,z) in stride(from:2.5,to:17,by:1.25).enumerated() {
             box(fixtures,"fridge cabinet",-3.25,1.23,z,1.05,2.46,1.22,dark)
             box(fixtures,"fridge interior",-2.705,1.27,z,0.012,2.15,1.12,material(0xe6e9e8))
             for level in 0..<5 {
                 let y = 0.36+Double(level)*0.4
                 box(fixtures,"chilled shelf",-2.7,y,z,0.45,0.025,1.13,steel)
-                for k in 0..<4 { groceryPack(fixtures,x:-2.58,y:y+0.02,z:z-0.4+Double(k)*0.24,family:(level+k)%12,rotation: .pi/2,size:0.29) }
+                for k in 0..<4 {
+                    groceryPack(fixtures,x:-2.58-Double((k+bay)%3)*0.012,y:y+0.02,z:z-0.4+Double(k)*0.24,
+                                family:DastakGrocerySceneReference.stockFamily(slot:k,level:level,bay:bay,chilled:true),
+                                rotation:.pi/2,size:DastakGrocerySceneReference.stockSize(slot:k,level:level,bay:bay),variant:(bay+level)%2)
+                }
             }
             // Glass stays out of the flattened opaque fixtures. Otherwise the
             // merged geometry can write door depth before rendering chilled stock.
@@ -712,22 +722,34 @@ final class DastakEnvironmentScene: NSObject {
         m.diffuse.contents = image(); m.roughness.contents = roughness
         materials[key] = m; return m
     }
-    private func groceryPack(_ parent: SCNNode, x: Double, y: Double, z: Double, family: Int, rotation: Double, size: Double) {
-        let i = family%12, height = size*(1+Double(i%4)*0.07)
-        let printed = groceryPrintedMaterial("pantry-label-\(i)",image:{ DastakGrocerySceneTextures.package(i) },roughness:i%4 == 2 ? 0.38 : 0.65)
+    private func groceryPack(_ parent: SCNNode, x: Double, y: Double, z: Double, family: Int, rotation: Double, size: Double, variant: Int = 0) {
+        let i = family % DastakGrocerySceneReference.packageNames.count
+        let shape = DastakGrocerySceneReference.packageShapes[i]
+        let height = size * (shape == .tub ? 0.55 : shape == .tin ? 0.82 : 1)
+        let printed = groceryPrintedMaterial("pantry-label-\(i)-\(variant)",image:{ DastakGrocerySceneTextures.package(i,variant:variant) },roughness:shape == .tin ? 0.38 : 0.65)
         // Keep static stock geometry in the same coordinate space as the fixtures.
         // SceneKit's flattened clone must not depend on transform-only package parents.
         let centerY = y+height/2
-        if i%4 == 0 || i%4 == 3 {
-            let radius = size*(i%4 == 3 ? 0.2 : 0.25)
-            let jar = cylinder(parent,"printed pantry jar",x,centerY,z,radius,height*0.84,printed)
+        if shape == .jar || shape == .tin || shape == .tub || shape == .bottle {
+            let radius = size * (shape == .bottle ? 0.22 : shape == .tub ? 0.34 : 0.28)
+            let bodyHeight = height * (shape == .bottle ? 0.76 : 0.9)
+            let jar = cylinder(parent,"printed \(shape)",x,y+bodyHeight/2,z,radius,bodyHeight,printed)
             jar.eulerAngles.y = Float(-rotation)
-            cylinder(parent,"jar cap",x,centerY+height*0.45,z,radius*1.03,height*0.12,material(0x839391,roughness:0.32,metal:0.6))
+            let cap = material(i >= 12 ? (variant == 0 ? 0xe8eee8 : 0x326257) : 0x454b45,roughness:0.45)
+            if shape == .bottle {
+                let shoulder = SCNCone(topRadius:radius*0.48,bottomRadius:radius,height:height*0.14)
+                shoulder.radialSegmentCount = 12; shoulder.materials = [printed]
+                let node=SCNNode(geometry:shoulder); node.position=v(x,y+bodyHeight+height*0.07,z)
+                node.eulerAngles.y=Float(-rotation); parent.addChildNode(node)
+                cylinder(parent,"bottle cap",x,y+height*0.95,z,radius*0.5,height*0.10,cap)
+            } else {
+                cylinder(parent,"pack lid",x,y+height*0.95,z,radius*1.03,height*0.10,cap)
+            }
         } else {
-            let pack = box(parent,i%4 == 2 ? "printed pantry pouch" : "printed pantry carton",x,centerY,z,size*0.64,height,size*0.34,printed,bevel:0.012)
+            let pack = box(parent,shape == .pouch ? "printed pantry pouch" : "printed pantry carton",x,centerY,z,size*0.64,height,size*0.34,printed,bevel:shape == .pouch ? 0.022 : 0.004)
             pack.eulerAngles.y = Float(-rotation)
-            if i%4 == 2 {
-                let seal = box(parent,"pouch seal",x,centerY+height*0.48,z,size*0.60,0.012,size*0.07,printed,bevel:0.002)
+            if shape == .pouch {
+                let seal = box(parent,"pouch seal",x,centerY+height*0.48,z,size*0.60,0.009,size*0.07,material(0xe3d4b2),bevel:0.002)
                 seal.eulerAngles.y = Float(-rotation)
             }
         }
