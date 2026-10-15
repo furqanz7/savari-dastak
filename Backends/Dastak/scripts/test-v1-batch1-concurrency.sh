@@ -113,6 +113,17 @@ where id = '99000000-0000-4000-8000-000000000012'
   and status <> 'ACTIVE';
 SQL
 
+# Real submissions use current admission policy: provide an eligible rider,
+# known stock and a geocoded address rather than bypassing production guards.
+"${psql_base[@]}" -f "$(dirname "${BASH_SOURCE[0]}")/../supabase/tests/database/fixtures/customer-area.sql.inc" -f - <<'SQL'
+insert into public.service_zones(id,name,boundary,active) values
+('99000000-0000-4000-8000-000000000090','Concurrent submission fixture',
+extensions.st_geomfromtext('POLYGON((78 12,79 12,79 13,78 13,78 12))',4326),true)
+on conflict(id) do nothing;
+select pg_temp.available_rider('99000000-0000-4000-8000-000000000090','99000000-0000-4000-8000-000000000002');
+select pg_temp.stocked_store('99000000-0000-4000-8000-000000000090','99000000-0000-4000-8000-000000000002','99000000-0000-4000-8000-000000000012',100);
+SQL
+
 submit_order() {
   "${psql_base[@]}" -At <<'SQL'
 begin;
@@ -129,6 +140,8 @@ select public.dastak_v1_submit_order(
     "deliveryAddress":{
       "line1":"1 Concurrency Road",
       "city":"Vaniyambadi",
+      "latitude":12.68,
+      "longitude":78.62,
       "countryCode":"IN"
     },
     "recipient":{

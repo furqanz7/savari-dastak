@@ -201,29 +201,7 @@ public struct DastakCustomerRootView: View {
             }
         }
         .task {
-            guard !isPreview else {
-                isReadyForAppAction = true
-                consumeAppAction()
-                return
-            }
-            // The shared auth shell verifies the session before mounting this view.
-            await model.bootstrap()
-            let notificationState = await DastakNotificationPreferences.status()
-            if notificationState != .notRequested {
-                model.completeOnboarding()
-            }
-            onboardingStep = DastakCustomerOnboardingStep.next(
-                hasCompleted: model.hasCompletedOnboarding,
-                notificationState: notificationState
-            )
-            isReadyForAppAction = true
-            if DastakAppActionInbox().peek() != nil {
-                consumeAppAction()
-            } else if let destination = consumePendingDestination() {
-                open(destination)
-            } else {
-                showingV1Order = model.activeV1Order != nil
-            }
+            await prepareCustomer()
         }
         .task {
             guard !isPreview else { return }
@@ -519,6 +497,34 @@ public struct DastakCustomerRootView: View {
         // Outside all presentation modifiers so sheets/covers inherit the same
         // action scope. Full-screen details must not disable their own feedback.
         .environment(\.marketplaceHapticScope, haptics)
+    }
+
+    // Keep asynchronous startup outside the large SwiftUI result-builder chain
+    // so both simulator architectures can type-check it on the CI toolchain.
+    private func prepareCustomer() async {
+        guard !isPreview else {
+            isReadyForAppAction = true
+            consumeAppAction()
+            return
+        }
+        // The shared auth shell verifies the session before mounting this view.
+        await model.bootstrap()
+        let notificationState = await DastakNotificationPreferences.status()
+        if notificationState != .notRequested {
+            model.completeOnboarding()
+        }
+        onboardingStep = DastakCustomerOnboardingStep.next(
+            hasCompleted: model.hasCompletedOnboarding,
+            notificationState: notificationState
+        )
+        isReadyForAppAction = true
+        if DastakAppActionInbox().peek() != nil {
+            consumeAppAction()
+        } else if let destination = consumePendingDestination() {
+            open(destination)
+        } else {
+            showingV1Order = model.activeV1Order != nil
+        }
     }
 
     private func consumeAppAction() {

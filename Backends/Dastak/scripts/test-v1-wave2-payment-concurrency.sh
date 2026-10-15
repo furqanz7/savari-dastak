@@ -223,6 +223,12 @@ where not exists (
 );
 SQL
 
+"${psql_base[@]}" -f "$(dirname "${BASH_SOURCE[0]}")/../supabase/tests/database/fixtures/customer-area.sql.inc" -f - <<'SQL'
+select pg_temp.available_rider('99200000-0000-4000-8000-000000000010','99200000-0000-4000-8000-000000000002');
+update dastak_v1.merchant_sku_selections set stock_quantity=100
+where sku_id in ('99200000-0000-4000-8000-000000000013','99200000-0000-4000-8000-000000000014');
+SQL
+
 submit_order() {
   local key="$1"
   "${psql_base[@]}" -At -v key="$key" -v customer_id="$customer_id" <<'SQL' | tail -n 1
