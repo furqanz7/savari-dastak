@@ -321,7 +321,7 @@ SQL
 
 "${psql_base[@]}" -f "$(dirname "${BASH_SOURCE[0]}")/../supabase/tests/database/fixtures/customer-area.sql.inc" -f - <<'SQL'
 select pg_temp.available_rider('99100000-0000-4000-8000-000000000010','99100000-0000-4000-8000-000000000002');
-update dastak_v1.merchant_sku_selections set stock_quantity=100
+update dastak_v1.merchant_sku_selections set stock_quantity=100,version=version+1,updated_at=now()
 where sku_id='99100000-0000-4000-8000-000000000013';
 SQL
 

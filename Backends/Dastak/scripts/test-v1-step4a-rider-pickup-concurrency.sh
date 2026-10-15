@@ -167,10 +167,11 @@ set is_open=true,accepting_orders=true,updated_by=excluded.updated_by,
     version=dastak_v1.branch_operational_states.version+1;
 
 insert into dastak_v1.orders (
-  id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,version
+  customer_availability_version,checkout_pricing_version,id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,version
 ) values
-('99400000-0000-4000-8000-000000000100','DV1-STEP4-A','99400000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',now()-interval '20 minutes',now()-interval '10 minutes',1),
-('99400000-0000-4000-8000-000000000101','DV1-STEP4-B','99400000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',now()-interval '20 minutes',now()-interval '10 minutes',1)
+-- Historical fixed-price custody fixtures, not fresh checkout submissions.
+(0,0,'99400000-0000-4000-8000-000000000100','DV1-STEP4-A','99400000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',now()-interval '20 minutes',now()-interval '10 minutes',1),
+(0,0,'99400000-0000-4000-8000-000000000101','DV1-STEP4-B','99400000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',now()-interval '20 minutes',now()-interval '10 minutes',1)
 on conflict (id) do nothing;
 insert into dastak_v1.order_context_snapshots (order_id,delivery_address,recipient,snapshot_hash) values
 ('99400000-0000-4000-8000-000000000100','{"line1":"10 Customer Road","countryCode":"IN","latitude":15.69,"longitude":80.61}','{"name":"Step Customer","phoneNumber":"+919940000002"}',decode(repeat('01',32),'hex')),
@@ -398,8 +399,9 @@ fulfilment_c='99400000-0000-4000-8000-000000000113'
 "${psql_base[@]}" <<'SQL'
 begin;
 insert into dastak_v1.orders (
-  id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,version
+  customer_availability_version,checkout_pricing_version,id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,version
 ) values (
+  0,0,
   '99400000-0000-4000-8000-000000000102','DV1-STEP4-C',
   '99400000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',
   now()-interval '20 minutes',now()-interval '10 minutes',1

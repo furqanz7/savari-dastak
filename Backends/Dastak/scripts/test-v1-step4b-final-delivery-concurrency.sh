@@ -163,12 +163,13 @@ update dastak_v1.skus set status='ACTIVE',updated_at=now(),version=version+1
 where id='99500000-0000-4000-8000-000000000014' and status <> 'ACTIVE';
 
 insert into dastak_v1.orders (
-  id, display_order_number, customer_id, order_type, status,
+  customer_availability_version, checkout_pricing_version, id, display_order_number, customer_id, order_type, status,
   submitted_at, fully_secured_at, payment_expires_at, paid_at, version
 ) values
-('99500000-0000-4000-8000-000000000100','DV1-STEP4B-NORMAL','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',null,null,now()-interval '20 minutes',8),
-('99500000-0000-4000-8000-000000000101','DV1-STEP4B-MISSING','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',now()-interval '22 minutes',now()+interval '1 hour',null,8),
-('99500000-0000-4000-8000-000000000102','DV1-STEP4B-OVERRIDE','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',now()-interval '22 minutes',now()+interval '1 hour',null,8)
+-- Fixed-price historical handoff fixtures; current submission tests remain v1.
+(0,0,'99500000-0000-4000-8000-000000000100','DV1-STEP4B-NORMAL','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',null,null,now()-interval '20 minutes',8),
+(0,0,'99500000-0000-4000-8000-000000000101','DV1-STEP4B-MISSING','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',now()-interval '22 minutes',now()+interval '1 hour',null,8),
+(0,0,'99500000-0000-4000-8000-000000000102','DV1-STEP4B-OVERRIDE','99500000-0000-4000-8000-000000000002','RETAIL_ONLY','PICKUP_IN_PROGRESS',now()-interval '30 minutes',now()-interval '22 minutes',now()+interval '1 hour',null,8)
 on conflict (id) do nothing;
 insert into dastak_v1.order_context_snapshots (
   order_id, delivery_address, recipient, snapshot_hash

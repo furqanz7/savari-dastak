@@ -102,6 +102,12 @@ public struct DastakCustomerRootView: View {
     #endif
 
     public var body: some View {
+        presentedContent
+            // Sheets/covers inherit the same action scope.
+            .environment(\.marketplaceHapticScope, haptics)
+    }
+
+    private var workspaceContent: some View {
         GeometryReader { geometry in
             let layout = DastakCustomerLayout(width: geometry.size.width, height: geometry.size.height,
                                               largerText: dynamicTypeSize >= .xxxLarge)
@@ -152,6 +158,10 @@ public struct DastakCustomerRootView: View {
                                openCart: { openCart(navigation.service.basketService) })
         .allowsHitTesting(!showingCart)
         .accessibilityHidden(showingCart)
+    }
+
+    private var styledContent: some View {
+        workspaceContent
         .tint(MarketplaceColors.accent(for: colorScheme))
         .onAppear {
             haptics.isActive = scenePhase == .active
@@ -200,6 +210,10 @@ public struct DastakCustomerRootView: View {
                 .padding(.bottom, MarketplaceSpacing.small)
             }
         }
+    }
+
+    private var lifecycleContent: some View {
+        styledContent
         .task {
             await prepareCustomer()
         }
@@ -318,6 +332,10 @@ public struct DastakCustomerRootView: View {
             UserDefaults.standard.set(service.rawValue, forKey: "dastak.customer.lastService")
         }
         .onDisappear { appActionTask?.cancel() }
+    }
+
+    private var presentedContent: some View {
+        lifecycleContent
         .sheet(isPresented: $showingDeliveryAddressEditor) {
             DastakAddressBookView(
                 model: model,
@@ -494,9 +512,6 @@ public struct DastakCustomerRootView: View {
                 }
             }
         }
-        // Outside all presentation modifiers so sheets/covers inherit the same
-        // action scope. Full-screen details must not disable their own feedback.
-        .environment(\.marketplaceHapticScope, haptics)
     }
 
     // Keep asynchronous startup outside the large SwiftUI result-builder chain

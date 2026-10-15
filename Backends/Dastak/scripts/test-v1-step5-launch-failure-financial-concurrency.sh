@@ -227,11 +227,12 @@ from (values
 where not exists (select 1 from dastak_v1.platform_settings existing where existing.setting_key=setting.key and existing.scope_type='GLOBAL' and existing.scope_id is null);
 
 insert into dastak_v1.orders (
-  id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,delivered_at,version
+  customer_availability_version,checkout_pricing_version,id,display_order_number,customer_id,order_type,status,submitted_at,paid_at,delivered_at,version
 ) values
-('99600000-0000-4000-8000-000000000100','DV1-STEP5-RECOVERY','99600000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',now()-interval '30 minutes',now()-interval '20 minutes',null,4),
-('99600000-0000-4000-8000-000000000101','DV1-STEP5-RETURN','99600000-0000-4000-8000-000000000002','RETAIL_ONLY','DELIVERED',now()-interval '2 hours',now()-interval '110 minutes',now()-interval '10 minutes',12),
-('99600000-0000-4000-8000-000000000102','DV1-STEP5-DELIVERY-RECOVERY','99600000-0000-4000-8000-000000000002','RETAIL_ONLY','OUT_FOR_DELIVERY',now()-interval '2 hours',now()-interval '110 minutes',null,10)
+-- Historic paid-order recovery, not current checkout admission/pricing.
+(0,0,'99600000-0000-4000-8000-000000000100','DV1-STEP5-RECOVERY','99600000-0000-4000-8000-000000000002','RETAIL_ONLY','PREPARING',now()-interval '30 minutes',now()-interval '20 minutes',null,4),
+(0,0,'99600000-0000-4000-8000-000000000101','DV1-STEP5-RETURN','99600000-0000-4000-8000-000000000002','RETAIL_ONLY','DELIVERED',now()-interval '2 hours',now()-interval '110 minutes',now()-interval '10 minutes',12),
+(0,0,'99600000-0000-4000-8000-000000000102','DV1-STEP5-DELIVERY-RECOVERY','99600000-0000-4000-8000-000000000002','RETAIL_ONLY','OUT_FOR_DELIVERY',now()-interval '2 hours',now()-interval '110 minutes',null,10)
 on conflict (id) do nothing;
 insert into dastak_v1.order_context_snapshots (order_id,delivery_address,recipient,snapshot_hash) values
 ('99600000-0000-4000-8000-000000000100','{"line1":"1 Recovery Road","latitude":15.68,"longitude":80.62}','{"name":"Step 5 Customer","phoneNumber":"+919960000002"}',extensions.digest('step5-recovery','sha256')),
