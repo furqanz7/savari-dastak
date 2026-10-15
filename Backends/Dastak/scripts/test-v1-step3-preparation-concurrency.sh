@@ -99,6 +99,7 @@ set committed_at = pg_catalog.statement_timestamp() - interval '12 minutes',
     prep_started_at = pg_catalog.statement_timestamp() - interval '11 minutes',
     estimated_ready_at = pg_catalog.statement_timestamp() - interval '1 minute'
 where id = '$base_fulfilment'::uuid;
+set constraints all immediate;
 alter table dastak_v1.fulfilments enable trigger fulfilments_guard
 " >/dev/null
 late_truth="$("${psql_base[@]}" -At -F ' ' -c "
@@ -115,6 +116,7 @@ update dastak_v1.fulfilments
 set prep_started_at = pg_catalog.statement_timestamp(),
     estimated_ready_at = pg_catalog.statement_timestamp() + interval '10 minutes'
 where id = '$base_fulfilment'::uuid;
+set constraints all immediate;
 alter table dastak_v1.fulfilments enable trigger fulfilments_guard
 " >/dev/null
 
@@ -223,6 +225,7 @@ update dastak_v1.fulfilments
 set prep_started_at = pg_catalog.statement_timestamp() - interval '5 minutes',
     estimated_ready_at = pg_catalog.statement_timestamp() + interval '5 minutes'
 where id = '$second_fulfilment'::uuid;
+set constraints all immediate;
 alter table dastak_v1.fulfilments enable trigger fulfilments_guard
 " >/dev/null
 multi_after="$("${psql_base[@]}" -Atc "select dastak_v1_api.order_rider_match_eligibility('$base_order'::uuid, pg_catalog.clock_timestamp()) ->> 'eligible'")"

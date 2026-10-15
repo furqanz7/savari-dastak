@@ -85,7 +85,7 @@ jobs:
       - run: supabase start
       - run: supabase db reset --local
       - run: ../../scripts/test-backend-security.sh Dastak --local
-      - run: node --test tests/pin-local-test-postgres.test.mjs tests/local-database-contracts.test.mjs
+      - run: node --test tests/pin-local-test-postgres.test.mjs tests/local-database-contracts.test.mjs tests/concurrency-fixture-contracts.test.mjs
       - name: All delivery and financial concurrency gates
         run: |
           failed=0

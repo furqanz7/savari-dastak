@@ -755,7 +755,7 @@ set +e
 legacy_settle_rc=$?
 set -e
 [[ $legacy_settle_rc -ne 0 ]] || { printf 'legacy manual settlement bypass remained active\n' >&2; exit 1; }
-rg -q 'ROYALTY_WITHDRAWAL_REQUIRED' "$work_dir/legacy-settle.err" || { printf 'legacy settlement did not direct Operations to Royalty withdrawals\n' >&2; exit 1; }
+grep -q 'ROYALTY_WITHDRAWAL_REQUIRED' "$work_dir/legacy-settle.err" || { printf 'legacy settlement did not direct Operations to Royalty withdrawals\n' >&2; exit 1; }
 settlement_truth="$("${psql_base[@]}" -At -F '|' -c "select status,
   (select count(*) from dastak_v1.financial_journal_transactions transaction where transaction.settlement_entry_id=e.id and transaction.transaction_type='ROYALTY_FAULT_ADJUSTMENT'),
   payout_cadence_snapshot is null

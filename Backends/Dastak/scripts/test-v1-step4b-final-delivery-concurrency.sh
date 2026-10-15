@@ -295,6 +295,20 @@ call_final() {
   local object_sql='null' code_sql='null'
   if [[ -n "$object_path" ]]; then object_sql="'$object_path'::text"; fi
   if [[ -n "$code" ]]; then code_sql="'$code'::text"; fi
+  if [[ "$action" == "ARRIVE_CUSTOMER" ]]; then
+    # Supply the fresh accurate GPS sample required by the real arrival command.
+    # Do not disable the structural proximity guard for handoff race fixtures.
+    "${psql_base[@]}" -c "
+      select public.dastak_v1_publish_mission_location(
+        '$rider'::uuid,'$mission'::uuid,
+        (context.delivery_address->>'latitude')::double precision,
+        (context.delivery_address->>'longitude')::double precision,
+        5::double precision,clock_timestamp())
+      from dastak_v1.delivery_missions mission
+      join dastak_v1.order_context_snapshots context on context.order_id=mission.order_id
+      where mission.id='$mission'::uuid and mission.assigned_rider_id='$rider'::uuid
+        and mission.status='OUT_FOR_DELIVERY'" >/dev/null
+  fi
   "${psql_base[@]}" -At -F '|' -c "
     select response_status,coalesce(response_body->'error'->>'code','OK')
     from public.dastak_v1_advance_final_delivery(
