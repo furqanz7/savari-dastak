@@ -397,7 +397,9 @@ public struct MarketplaceCustomerSignInPreview: View {
 }
 
 private struct SignInLayoutClient: AuthenticationClient {
-    func restoreAccount() async throws -> AccountRoute { .signedOut }
+    func restoreAccount() async throws -> AccountRoute {
+        ProcessInfo.processInfo.arguments.contains("-DastakSignInFooterProfilePreview") ? .needsProfile : .signedOut
+    }
     func signInWithApple(identityToken: String, nonce: String) async throws { throw AuthenticationShellError.appleCredentialUnavailable }
     func signInWithGoogle(idToken: String) async throws { throw AuthenticationShellError.appleCredentialUnavailable }
     func signInWithGoogle(redirectTo: URL) async throws { throw AuthenticationShellError.appleCredentialUnavailable }
@@ -667,6 +669,12 @@ private struct AuthenticationRouteView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // New-customer setup can retain the outside scenery too. Reserve
+            // actual footer space for its credit rather than covering the form.
+            if requiredAccess == .dastakCustomer, coordinator.route != .signedOut,
+               let authenticationFooter { authenticationFooter() }
+        }
     }
 
     @ViewBuilder
