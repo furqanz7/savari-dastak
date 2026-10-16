@@ -1,6 +1,6 @@
 # Dastak App Store listing draft
 
-Status: preparation only, not saved to App Store Connect. Customer + Delivery only; Merchant remains deferred. Release candidate: version 1.0.0, Build 57, uploaded and available to the existing internal Testing group; owner installation/compact-footer acceptance remain pending. A read-only check found the existing App Store version is 1.0, English (U.K.), with no selected build and empty listing/review fields. Reconcile the version/build selection before saving; do not assume those fields are complete.
+Status: preparation only, not saved to App Store Connect. Customer + Delivery only; Merchant remains deferred. Intended release candidate: version 1.0.0, Build 58, with the owner-approved centred under-panel weather credit. Upload and processing succeeded; Build 58 shows Missing Compliance, and the owner has been asked to complete the encryption questionnaire. Internal availability is not yet verified. Build 57 remains the last verified internally available build. A read-only check found the existing App Store version is 1.0, English (U.K.), with no selected build and empty listing/review fields. Reconcile the version/build selection before saving; do not assume those fields are complete.
 
 ## Public copy
 
@@ -78,6 +78,6 @@ Suggested truthful sequence:
 5. Native order tracking, including a representative supported Live Activity state.
 6. Approved Delivery workspace and full-order detail using isolated sample data.
 
-Screenshots must reflect the Build 57 release-candidate experience, not a proposed redesign. Any sample data must remain representative and must not be presented as a real fulfilled order. Check both required iPhone and iPad display slots. Do not repurpose old pre-polish screenshots as current release assets.
+Screenshots must reflect the Build 58 release-candidate experience, not a proposed redesign. Any sample data must remain representative and must not be presented as a real fulfilled order. Check both required iPhone and iPad display slots. Do not repurpose old pre-polish screenshots as current release assets.
 
 Live checks still needed: existing version/localization, selected build, screenshots, app description and URLs, category, age-rating questionnaire, pricing/territories, content rights, App Privacy, review contact/access, release timing and submission validation. Any legal attestations or agreements require owner confirmation at action time. No App Review submission has occurred in this preparation step.
