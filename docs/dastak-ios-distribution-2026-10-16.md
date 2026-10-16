@@ -58,6 +58,7 @@ Build 56 verification:
 - Organizer confirmed `Dastak 1.0.0 (56) uploaded`; ContentDelivery reported `UPLOAD SUCCEEDED with no errors`. The re-signed distribution package passed deep/strict signature verification, app and widget both report Build 56, and final entitlements retain production APNs, WeatherKit and `get-task-allow=false`.
 - Safari initially showed Build 56 uploaded at 7:23 AM with **Missing Compliance**. After the owner reported completing the encryption questionnaire, a live refresh confirmed Build 56 **Ready to Submit**, assigned to Testing, with 90 days remaining. The existing internal group uses Automatic for Xcode Builds.
 - A live inspection of that internal group's tester record subsequently showed **Installed 1.0.0 (56), 16 October 2026**, on the owner's iPhone 12 running iOS 27.0.1. Internal availability and installation are therefore confirmed; this is not external beta review or App Store approval.
+- The owner subsequently confirmed that the corrected Build 56 footer looks good on the installed TestFlight app. The footer acceptance gate is closed.
 - The App Encryption Documentation questionnaire was opened read-only by the agent; no answer was selected or saved by the agent. The owner completed the declaration directly. The archive does not include `ITSAppUsesNonExemptEncryption`; no encryption behavior or declaration key was changed as part of the footer polish. The owner's exact questionnaire selection has not been independently inspected.
 
 ## Public privacy deployment
@@ -66,10 +67,34 @@ The Customer web artifact for the exact Build 55 source was staged, verified, th
 
 ## Remaining release gates
 
-- Obtain owner acceptance of the Build 56 footer on the installed TestFlight app. Upload, compliance clearance, internal availability and installation are confirmed.
-- Finish truthful TestFlight metadata and obtain owner acceptance of the footer correction. Build 55 functional acceptance remains recorded above.
+- Finish truthful TestFlight metadata. Build 55 functional acceptance and Build 56 footer acceptance are recorded above.
 - Resolve reviewer access to the approved Delivery workspace while retaining Apple/Google login.
 - Finish App Store privacy answers, screenshots, age rating, app details and review contact/access information; select the uploaded build.
 - Submit the completed version for App Review and track the actual Apple decision. Do not label an upload or a local archive as approval or public availability.
 
 References: [Apple distribution flow](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases), [uploading builds](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds/), [WeatherKit setup and included allowance](https://developer.apple.com/weatherkit/), [both WeatherKit portal settings](https://developer.apple.com/help/account/services/weatherkit/).
+
+## App Store listing preparation checkpoint
+
+The next Safari inspection could not be completed: the computer-use connection continued returning another Safari window and rejected actions as a changed application, including after reconnection. No App Store Connect fields were changed or saved during this attempt. This is a tooling/window-selection blocker, not a build failure or a confirmed App Store Connect rejection.
+
+Local draft copy, privacy declaration cross-check notes and the screenshot plan are in `docs/dastak-app-store-listing-draft-2026-10-16.md`. These are preparation artifacts, not claims that the live listing is complete. Build 56 remains the intended release candidate. Reviewer Delivery access remains unresolved; no additional access or review bypass has been created.
+
+## Build 57 compact weather credit
+
+The owner requested a quieter weather attribution after accepting Build 56. The credit now pairs the retained Apple Weather mark with a short **Data sources** link in a compact row, removes the extra scenery sentence, and reduces the backing/padding. It retains the SDK-provided legal destination, correct light/dark mark selection, a 44-point minimum link target and one descriptive accessibility label. A stacked alternative is available when horizontal space is insufficient. Weather requests, permissions, account behavior and commerce are unchanged.
+
+- The Build 57 Debug simulator build passed (`/tmp/dastak57-simulator-build.log`).
+- All 16 local design-system tests passed: eight XCTest and eight Swift Testing (`/tmp/dastak57-design-tests.log`). These are regression tests, not proof of a live WeatherKit response.
+- Normal and Accessibility 3 sign-in layouts were visually inspected through Device Hub using the existing isolated, noninteractive fixture. Mark/link remain separate from consent and legal links. The fixture uses the fallback mark and sample rainy scenery; no live location, real sign-in or order was used. Proof: `/tmp/dastak57-weather-credit-normal.png` and `/tmp/dastak57-weather-credit-large.png`.
+- The first Release archive attempt failed with **IO failure on output stream: No space left on device** (`/tmp/dastak57-archive.log`). At that checkpoint no Build 57 archive/upload was complete; the successful retry and upload are recorded below. Build 56 remains the last verified installed TestFlight version.
+- A scoped storage audit found that ordinary Xcode DerivedData is approximately 874 MB, npm cache 428 MB and SwiftPM cache 221 MB; clearing those alone would not provide the requested archive headroom. After explicit owner approval, the unused downloadable iOS 18.5 runtime (8,837,333,817 bytes, identifier `91BB1B74-243C-46A6-847F-FFE129094EF1`) was removed with `simctl runtime delete`, following a dry run and a fresh check that no devices used it. A subsequent runtime list confirms only iOS 26.5/27 and tvOS 18.5 remain; the Mac reported approximately 7 GiB available. The removed runtime can be downloaded again through Xcode. No other cache, runtime, archive or personal file was removed; the physical iPhone app, source, archives, Codex and ChatGPT remain untouched by cleanup.
+- The compact-credit code is committed and pushed as `5d52251587c4681b2a42d3bc839df2cc87ff5a8a`. All five hosted Foundation jobs passed for that exact source at [38888803220](https://github.com/furqanz7/savari-dastak/actions/runs/38888803220): Swift packages, iOS build, Dastak backend, Savari backend and Dastak web.
+- The Release archive retry succeeded (`/tmp/dastak57-archive-retry.log`) at `/Users/Furqan/Library/Developer/Xcode/Archives/2026-10-16/Dastak57.xcarchive`. Deep/strict signature verification passed; app/widget both report Build 57, the identifier/team match the retained app record, and the Release binary excludes the Debug footer fixtures.
+- Organizer confirmed **Dastak 1.0.0 (57) uploaded**. ContentDelivery logged **UPLOAD SUCCEEDED with no errors** in `/var/folders/tx/3mqqzxlx7wq9jwfq95jyk18c0000gp/T/Dastak_2026-10-16_16-19-17.799.xcdistributionlogs`. The re-signed distribution package passed deep/strict signature verification and retains production APNs, WeatherKit, Apple sign-in and `get-task-allow=false`. Proof: `/tmp/dastak57-upload-complete.png`.
+- Safari independently showed Build Uploads → 1.0.0 (57) → **Processing**, created 16 October 2026 at 4:21 PM. This confirms upload receipt, not internal availability, installation or App Review approval.
+- A subsequent Safari inspection showed Build 57 **Missing Compliance** after processing completed. The owner was asked to complete Manage → encryption questionnaire, as for Build 56. No declaration was selected or saved by the agent. Proof of the live status: `/tmp/dastak57-missing-compliance.png`. Internal availability and installation are not yet confirmed.
+
+Pending: obtain the owner's Build 57 encryption declaration and confirm compliance/internal availability and installation before replacing the installed Build 56 in the acceptance checklist. Then obtain owner acceptance of the compact credit. App Store listing/reviewer-access gates remain as above.
+
+The Safari connection subsequently worked after opening App Store Connect from Organizer. A read-only inspection of Distribution showed an existing **iOS App Version 1.0 / Prepare for Submission**, English (U.K.) localization, empty promotional text/description/keywords/support/marketing/copyright/review-contact/notes fields, no selected build, and **Sign-in required** checked. Automatic release after approval is currently selected; this was not changed. Screenshot slots and other app-level questionnaires still require inspection. No listing field was edited, no Add for Review action was taken, and no public release was submitted during this check.
