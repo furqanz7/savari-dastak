@@ -628,7 +628,9 @@ private actor SuspendedDeliveryMutationFunctions: FunctionClient {
     func releaseOriginalReply() { original?.resume(); original = nil }
     func invoke<Request: Encodable & Sendable, Response: Decodable & Sendable>(_ name: String,
         request: Request, idempotencyKey: IdempotencyKey) async throws -> Response {
-        let body = try JSONEncoder().encode(request)
+        // Compare the replayed payload without depending on JSON object-key order.
+        let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+        let body = try encoder.encode(request)
         let operation = (try JSONSerialization.jsonObject(with: body) as? [String: Any])?["operation"] as? String
         if operation == "partnerOrderDetail" {
             return try JSONDecoder().decode(Response.self, from: Data("{\"kind\":\"V1_DELIVERY\",\"workId\":\"\(returnID)\",\"terminal\":false,\"missionStatus\":\"EN_ROUTE_TO_PICKUPS\",\"collection\":null}".utf8))
