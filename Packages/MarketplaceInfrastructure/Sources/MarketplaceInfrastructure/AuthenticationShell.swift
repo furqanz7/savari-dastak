@@ -773,7 +773,8 @@ private struct AuthenticationRouteView: View {
                         Spacer(minLength: 12)
                         if let authenticationFooter { authenticationFooter() }
                     }
-                    .frame(height: compact ? 110 : 134)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minHeight: compact ? 110 : 134, alignment: .bottom)
                     dastakLegalLinks
                 }
                 .frame(maxWidth: 430, alignment: .topLeading)
@@ -1657,7 +1658,7 @@ private struct DastakGoogleSignInLabel: View {
             GoogleLogoMark()
             Text(title)
                 .lineLimit(1)
-                .minimumScaleFactor(0.82)
+                .minimumScaleFactor(0.4)
         }
     }
 }

@@ -230,7 +230,8 @@ private struct DastakWeatherAttribution: View {
                 AsyncImage(url:usesLightMark ? combinedMarkLightURL : combinedMarkDarkURL) { image in
                     image.resizable().scaledToFit().frame(width:100,height:16)
                 } placeholder: {
-                    Label("Weather",systemImage:"apple.logo").font(.caption).frame(height:16)
+                    Label("Weather",systemImage:"apple.logo")
+                        .font(.system(size:13,weight:.medium)).frame(height:16)
                 }
                 Text("Scenery derived from Apple Weather · Data sources")
                     .font(.caption2)

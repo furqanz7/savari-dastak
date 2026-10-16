@@ -34,11 +34,19 @@ final class MarketplaceHapticsScopeTests: XCTestCase {
         var events: [MarketplaceHapticEvent] = []
         let scope = MarketplaceHapticScope(output: { events.append($0) }, enabled: { true }, foreground: { true })
         scope.isActive = true
+        // Wait for the queued callback rather than assuming a loaded CI runner
+        // will deliver it within 80 ms. Exact event assertions still catch duplicates.
+        func waitForEventCount(_ count: Int) async throws {
+            for _ in 0..<200 {
+                if events.count >= count { return }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
         scope.play(.tap); scope.play(.itemAdded); scope.play(.tap)
-        try await Task.sleep(for: .milliseconds(80))
+        try await waitForEventCount(1)
         XCTAssertEqual(events, [.itemAdded])
         scope.play(.itemRemoved)
-        try await Task.sleep(for: .milliseconds(80))
+        try await waitForEventCount(2)
         XCTAssertEqual(events, [.itemAdded, .itemRemoved])
     }
     func testScopeInactiveAndPreferenceOffStaySilent() async throws {
