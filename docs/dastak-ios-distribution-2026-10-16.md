@@ -2,6 +2,8 @@
 
 Status: in progress. Merchant work remains deferred until this distribution work is handled.
 
+Latest distribution settings: free download in all 175 countries/regions, with iPhone/iPad supported and Mac/Apple Vision Pro availability disabled. The owner explicitly corrected the earlier India-only choice to all countries. These settings are verified in the final checkpoint below. Earlier checkpoints are historical, not outstanding availability blockers. App Review has not been submitted.
+
 ## Confirmed baseline
 
 - Combined app: `com.dastak.app`, Apple team `RBLBKM3W74`.
@@ -137,3 +139,14 @@ The owner then supplied **2026 Dastak دستک**, explicitly retained automatic 
 The next App Information inspection again displayed subtitle **Groceries, food & deliveries** and unset category placeholders, but its Save button was still enabled. Subtitle persistence is therefore not yet verified. The native category-menu action then explicitly reported the Mac locked; the owner was asked to unlock it. No category choice or further save was completed after the lock.
 
 After unlocking, the owner approved free/India/iPhone-iPad scope and discussion of an isolated demo. Mac/Vision Pro were unchecked with Save invoked; subsequent observations showed both off. The ₹0.00 pricing wizard was confirmed, but its final base-country summary differs from the selected India base and needs detailed-price verification. Storefront selection still could not be verified: even after the owner manually completed the country step and reported done, a refreshed page continued to show other countries Available on App Release. The owner was asked to reopen the picker and confirm exactly one selected country, India. This remains a submission blocker; no public submission or pre-order was made. Category/subtitle persistence remains unfinished. The demo discussion and unsent request to Apple are recorded separately; no implementation, external contact or production role/access change occurred.
+
+## Final price and availability verification
+
+The owner clarified **“i explicitly chose all”**, superseding the initial India-only instruction. A fresh Safari inspection confirmed **175 countries/regions available on app release**. This matches the owner's latest choice; the earlier India-only discrepancy is closed and must not be carried forward as a blocker.
+
+- Navigating away and returning to Pricing and Availability showed both **Make this app available on Mac** and **Make this app available on Apple Vision Pro** unchecked. This verifies persistence of the device exclusions, not merely the initial checkbox interaction. iPhone/iPad remain the intended supported device families.
+- Apple's current-price schedule was downloaded through its visible **Download** action to `/Users/Furqan/Downloads/Prices.zip`. The sole entry, `Current Price .csv`, contains 175 records for 175 distinct countries/regions. A read-only CSV parse with decimal comparisons found **no nonzero download prices and no nonzero proceeds**. India is explicitly `INR,0.0,0.0`. The saved schedule's United States (USD) base does not result in a paid price anywhere; all-country free pricing is verified. No base-country change was made during this check.
+- The owner's previously verified automatic-release-on-approval choice is retained. Copyright, review contact, privacy-policy URL and selected Build 58 remain recorded in earlier checkpoints.
+- This verification changed no Apple pricing, country, device or legal settings and did not submit the version for review. No pre-order, external review request, demo implementation or production access change occurred.
+
+Remaining release work: description/promotional text, subtitle persistence and categories, current iPhone/iPad screenshots, truthful age/content-rights/privacy declarations (including assessment of the existing trader declaration for the selected storefronts), and a working owner-approved reviewer Delivery-access solution. The isolated demo remains a discussion proposal, not an approved implementation or Apple-approved access substitute.

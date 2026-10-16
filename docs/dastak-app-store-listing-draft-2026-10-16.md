@@ -1,6 +1,6 @@
 # Dastak App Store listing draft
 
-Status: partially saved to App Store Connect, not submitted. Customer + Delivery only; Merchant remains deferred. Release candidate: version 1.0.0, Build 58, with the owner-approved centred under-panel weather credit. Upload, processing and compliance clearance succeeded; a live Safari refresh confirmed Ready to Submit in the existing internal Testing group. The owner reported installing Build 58 and explicitly accepted the centred footer and its legal-text spacing. The existing App Store version is 1.0, English (U.K.). Its Add Build chooser offered Build 58 (1.0.0), which was selected and saved; keywords, support URL and marketing URL were also saved. Description/promotional text remain blank because Safari text-area input did not take; the copy below remains a draft. No version-number change was needed to select Build 58. Review contact/access, copyright, screenshots and other declarations remain unfinished.
+Status: partially saved to App Store Connect, not submitted. Customer + Delivery only; Merchant remains deferred. Release candidate: version 1.0.0, Build 58, with the owner-approved centred under-panel weather credit. Upload, processing and compliance clearance succeeded; a live Safari refresh confirmed Ready to Submit in the existing internal Testing group. The owner reported installing Build 58 and explicitly accepted the centred footer and its legal-text spacing. The existing App Store version is 1.0, English (U.K.). Its Add Build chooser offered Build 58 (1.0.0), which was selected and saved; keywords, support URL and marketing URL were also saved. Copyright, review contact and the privacy-policy URL are saved. The latest owner choice is free download in all 175 countries/regions, iPhone/iPad only, with automatic release on approval; saved zero prices and Mac/Vision Pro exclusions are verified below. Description/promotional text remain blank because Safari text-area input did not take; the copy below remains a draft. No version-number change was needed to select Build 58. Reviewer access, screenshots and other declarations remain unfinished.
 
 ## Public copy
 
@@ -112,7 +112,7 @@ The Supabase-guided source review made no backend, role, payout or runtime confi
 
 Apple’s [current privacy-data definitions](https://developer.apple.com/app-store/app-privacy-details/) require accounting for developer and third-party collection. Bank account numbers fall under Payment Info, and income/balances under Other Financial Info. Review storage/retention, purpose, linkage, optional-disclosure criteria and third-party behavior before confirming answers. Do not publish an incomplete label or infer it mechanically from the current manifest.
 
-## Authorized distribution configuration and verification gap
+## Historical distribution configuration and verification gap
 
 The owner approved free download, India only, iPhone/iPad only, with Mac and Vision Pro disabled. The Mac and Vision Pro checkboxes were unchecked and Save invoked; subsequent pricing-page observations showed both unchecked. A dedicated reload verification is still required before closing the device-availability gate.
 
@@ -123,3 +123,14 @@ The country-availability picker repeatedly reverted under automation, including 
 Subtitle save/category selection also remain unfinished: the subtitle is visible but persistence is not verified, and the category picker did not expand reliably. No content-rights, age-rating or privacy declaration was answered.
 
 The owner chose to **discuss** an isolated full-featured demo. The proposal and unsent Apple guidance request are in `docs/dastak-app-review-demo-proposal-2026-10-16.md`. This is not authorization to implement, grant roles, create external infrastructure or contact Apple. Prior Apple approval is a separate gate under the conditions in Guideline 2.1(a); no approval or message transmission has occurred.
+
+## Current verified distribution settings
+
+This checkpoint supersedes the historical India-only requirement and its verification gap. The owner explicitly clarified that **all countries/regions were intentionally selected**.
+
+- **Countries:** live Safari displayed 175 countries/regions available on app release. This is the intended setting, not an unresolved mismatch.
+- **Download price:** Apple's saved current-price export (`/Users/Furqan/Downloads/Prices.zip`, entry `Current Price .csv`) contains 175 rows and 175 distinct countries/regions. Read-only CSV analysis using decimal comparisons confirmed every Price and Proceeds value is zero. India's row is INR 0.0. The persisted base country is United States (USD); the saved prices still establish a free download everywhere. No further base-country change was made.
+- **Devices:** after navigating away and returning, both Mac and Apple Vision Pro availability checkboxes remained off. Device-exclusion persistence is verified. The release targets iPhone/iPad.
+- **Release:** retain the owner's automatic-release-on-approval decision. This setting is separate from submission, approval and actual publication; none has occurred.
+
+No App Store setting was mutated during this final verification. Remaining gates are listing text/subtitle/categories, screenshots, truthful age/content-rights/privacy answers and assessment of the existing trader declaration, plus a working reviewer-access solution. Do not treat the demo discussion as implementation approval or prior approval from Apple.
