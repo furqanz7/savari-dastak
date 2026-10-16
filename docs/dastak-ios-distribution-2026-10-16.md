@@ -5,7 +5,7 @@ Status: in progress. Merchant work remains deferred until this distribution work
 ## Confirmed baseline
 
 - Combined app: `com.dastak.app`, Apple team `RBLBKM3W74`.
-- Existing App Store Connect record: Dastak Local, app ID `6796518603`.
+- Existing App Store Connect record: app ID `6796518603` (initially Dastak Local; the latest Safari view showed Dastak دستک).
 - Version 1.0.0 Build 54 is installed on the owner's iPhone.
 - Source `89181d1015143181c941380342ee1d24fc941932` passed all five hosted Foundation jobs in run [38824003188](https://github.com/furqanz7/savari-dastak/actions/runs/38824003188).
 - App Store Connect currently contains old Builds 1 and 3, not Build 54. Build 3 was rejected in September under Guideline 2.1(a) because the reviewer could not access the app. Beta review notes/sign-in information were empty.
@@ -22,20 +22,32 @@ The Mac has one usable local Apple Development identity. Apple's portal also lis
 
 The owner approved using Apple WeatherKit within the membership's included allowance. The app now requests current weather with the native SDK, sends rounded two-decimal coordinates, keeps the opt-in and 15-minute throttling, cancels requests when the outside scenery becomes inactive, and falls back to device-clock scenery after a 12-second deadline or failure. Freshness/range validation and late-response guards are retained. Apple Weather attribution and a source link accompany the scenery and Settings controls.
 
-WeatherKit is isolated to the combined app's new `CustomerPartner.entitlements`; Merchant/Admin retain their existing entitlements. The native privacy manifest declares optional unlinked coarse location, and the public privacy-policy source explains the weather processing. The policy source must be deployed before submission.
+WeatherKit is isolated to the combined app's new `CustomerPartner.entitlements`; Merchant/Admin retain their existing entitlements. The native privacy manifest declares optional unlinked coarse location, and the public privacy policy explains the weather processing.
 
-WeatherKit was enabled and saved under the existing App ID's Capabilities on Apple's portal. The owner has been asked to check the separate App Services WeatherKit setting because Safari coordinate interaction was unavailable. Provisioning profiles must be refreshed after this capability change.
+WeatherKit was enabled and saved under the existing App ID's Capabilities on Apple's portal. The owner confirmed completing the separate App Services WeatherKit setting. The resulting archive's provisioning entitlement includes WeatherKit; actual WeatherKit service access still needs verification on the distributed build.
 
-The corrected WeatherKit code passed the host compiler, but the local test build failed while linking with `errno=28` (disk full); no successful test execution or new iOS build is claimed. The disposable simulator derived data and failed host test output were cleared, preserving source, installed apps, existing archives and the signed Build 54 product. At the latest check only approximately 1 GB remained free. The owner is freeing at least 8 GB before the archive proceeds.
+The initial local host test failed while linking with `errno=28` (disk full). Build 55 source `3d26a2df9cf2d92bd33826c68b1e12e8737637b7` subsequently passed all five hosted Foundation jobs in run [38827379170](https://github.com/furqanz7/savari-dastak/actions/runs/38827379170): Swift packages, iOS build, Dastak backend, Savari backend and Dastak web. This is hosted test/build evidence, not a claim that live WeatherKit requests have been exercised.
 
-A TestFlight description was entered into the existing form but remains unsaved. Attempts to reach the policy/review fields were blocked by the Mac locking. No new beta build has been uploaded, no tester invitations have been sent and no App Review submission or public release has occurred.
+With explicit owner approval, only the unused downloadable iOS 18.4 runtime (`0CF8ADE5-0090-42BB-9077-A5A286D0A2AC`, approximately 8.8 GB) was removed through `simctl runtime delete`, after a dry run. It can be downloaded again through Xcode. iOS 18.5, 26.5 and 27 runtimes, simulator devices, source, installed apps, existing archives and Codex/ChatGPT data were retained. The latest check showed approximately 11 GiB available.
+
+## Archive and upload checkpoint
+
+- Release archive succeeded at `/Users/Furqan/Library/Developer/Xcode/Archives/2026-10-16/Dastak55.xcarchive`; version 1.0.0, Build 55, arm64, bundle `com.dastak.app`, team `RBLBKM3W74`.
+- Deep strict code-signature verification passed. The archive contains the Live Activity/widget extension and app/dependency privacy manifests.
+- The archive is development-signed pending App Store export. Its current APNs entitlement is `development` and `get-task-allow` is true; production signing must be verified after successful export. These archive entitlements are not claimed to be final distribution entitlements.
+- App Store Connect export/upload failed before uploading with `App Store Connect Credentials Error`, `Unexpected nil property at path: 'Actor/relationships/providerId'`. Xcode's Apple Accounts settings are open and the owner has been asked to refresh the owning Apple account directly in Xcode. No credentials have been changed or recorded here.
+- The signed archive is retained so export can be retried without another archive build after authentication is repaired.
+- A TestFlight description and public URLs were entered in Safari but remain unsaved. Review notes and accurate sign-in/access information remain unfinished. The legacy unchecked sign-in-required setting must not be treated as truthful completed metadata.
+- No Build 55 upload, tester invitation, App Review submission or public iOS release has occurred. Build 54 remains the last confirmed physical iPhone installation.
+
+## Public privacy deployment
+
+The Customer web artifact for the exact Build 55 source was staged, verified, then promoted without rebuilding. Deployment `dpl_DoFzNGLTcvmvZdugdky3p27pRZGi` is Ready. The public [privacy page](https://dastak-customer.vercel.app/privacy) returns HTTP 200, declares the expected source SHA / Customer variant / production environment, and serves the same JavaScript hash as the verified staged artifact. Its policy is dated 16 October 2026 and includes the optional iOS Apple WeatherKit section. CSP and `nosniff` headers remain present. Merchant, Admin and Delivery web deployments were not changed by this promotion.
 
 ## Remaining release gates
 
-- Confirm storage, run the focused weather/privacy checks and compile the new native code for iOS.
-- Confirm both WeatherKit portal settings and refresh signing profiles.
-- Create a Release archive; inspect bundle IDs, entitlements, extensions, privacy manifests, version and production configuration.
-- Validate/export/upload the archive and wait for Apple's processing result.
+- Refresh Xcode's App Store Connect authentication; successfully export the retained archive with App Store distribution signing and verify the final entitlements.
+- Validate/upload the archive and wait for Apple's processing result.
 - Finish truthful TestFlight metadata, internal testing and production notification/weather checks on the distributed build.
 - Resolve reviewer access to the approved Delivery workspace while retaining Apple/Google login.
 - Finish App Store privacy answers, screenshots, age rating, app details and review contact/access information; select the uploaded build.
