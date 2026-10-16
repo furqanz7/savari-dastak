@@ -56,8 +56,9 @@ Build 56 verification:
 - Exact source `b4a5389e20fcf07626037a8797dbcad49ed8a0aa` passed all five hosted Foundation jobs in run [38836892060](https://github.com/furqanz7/savari-dastak/actions/runs/38836892060). An earlier unrelated Savari CI attempt timed out starting local Storage; the final exact-source run passed without backend changes.
 - Final Release archive succeeded at `/Users/Furqan/Library/Developer/Xcode/Archives/2026-10-16/Dastak56.xcarchive`. The Release binary excludes the Debug sign-in fixture.
 - Organizer confirmed `Dastak 1.0.0 (56) uploaded`; ContentDelivery reported `UPLOAD SUCCEEDED with no errors`. The re-signed distribution package passed deep/strict signature verification, app and widget both report Build 56, and final entitlements retain production APNs, WeatherKit and `get-task-allow=false`.
-- Safari shows Build 56 uploaded at 7:23 AM with **Missing Compliance** in the build list. Its internal TestFlight availability is not yet confirmed. The existing internal group uses Automatic for Xcode Builds, but that does not bypass the compliance gate.
-- The App Encryption Documentation questionnaire was opened read-only. It asks which encryption algorithms the app implements, including standard/proprietary implementation choices; no answer was selected or saved. The archive does not include `ITSAppUsesNonExemptEncryption`. Owner confirmation/completion of this declaration is required before claiming Build 56 is available to install. No encryption behavior or declaration key was changed as part of the footer polish.
+- Safari initially showed Build 56 uploaded at 7:23 AM with **Missing Compliance**. After the owner reported completing the encryption questionnaire, a live refresh confirmed Build 56 **Ready to Submit**, assigned to Testing, with 90 days remaining. The existing internal group uses Automatic for Xcode Builds.
+- A live inspection of that internal group's tester record subsequently showed **Installed 1.0.0 (56), 16 October 2026**, on the owner's iPhone 12 running iOS 27.0.1. Internal availability and installation are therefore confirmed; this is not external beta review or App Store approval.
+- The App Encryption Documentation questionnaire was opened read-only by the agent; no answer was selected or saved by the agent. The owner completed the declaration directly. The archive does not include `ITSAppUsesNonExemptEncryption`; no encryption behavior or declaration key was changed as part of the footer polish. The owner's exact questionnaire selection has not been independently inspected.
 
 ## Public privacy deployment
 
@@ -65,7 +66,7 @@ The Customer web artifact for the exact Build 55 source was staged, verified, th
 
 ## Remaining release gates
 
-- Obtain the owner's encryption compliance declaration for Build 56, then confirm internal TestFlight availability. Visual verification and upload are complete.
+- Obtain owner acceptance of the Build 56 footer on the installed TestFlight app. Upload, compliance clearance, internal availability and installation are confirmed.
 - Finish truthful TestFlight metadata and obtain owner acceptance of the footer correction. Build 55 functional acceptance remains recorded above.
 - Resolve reviewer access to the approved Delivery workspace while retaining Apple/Google login.
 - Finish App Store privacy answers, screenshots, age rating, app details and review contact/access information; select the uploaded build.
