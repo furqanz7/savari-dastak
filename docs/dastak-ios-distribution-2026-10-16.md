@@ -23,6 +23,8 @@ Source `fb953eba9e4a25c329496c3843d02855a5c2dd34` passed all five hosted Foundat
 
 Xcode Organizer loaded Build 59 and began App Store Connect distribution. The generated distribution package at `/var/folders/tx/3mqqzxlx7wq9jwfq95jyk18c0000gp/T/XcodeDistPipeline.~~~2ZbdKt/Root/Payload/Dastak.app` passed deep/strict signature verification, is signed by Apple Distribution for the expected team, and has production APNs, WeatherKit, Apple sign-in, `beta-reports-active=true` and `get-task-allow=false`. No Razorpay-named files are present in that package. Distribution logs are at `/var/folders/tx/3mqqzxlx7wq9jwfq95jyk18c0000gp/T/Dastak_2026-10-17_00-32-59.455.xcdistributionlogs`. The last visible step was checking the uploaded asset's completion status; then the Mac locked. Final upload receipt, Apple processing/compliance and internal availability are not yet verified. The owner was asked to unlock the Mac. No privacy Publish or App Review submission occurred.
 
+Subsequent read-only log inspection confirmed **UPLOAD SUCCEEDED** in `ContentDelivery.log`. Build 59 upload receipt is therefore confirmed despite the locked Mac. Apple processing, compliance clearance, internal TestFlight availability and installation are still unverified and require the next unlocked Safari/Xcode check; do not conflate upload success with those later gates.
+
 ## Confirmed baseline
 
 - Combined app: `com.dastak.app`, Apple team `RBLBKM3W74`.
