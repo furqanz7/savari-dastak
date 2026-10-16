@@ -30,7 +30,7 @@ export const publicInformationPages: Record<PublicInformationKind, PublicInforma
     eyebrow: "Your data",
     title: "Privacy Policy",
     summary: "How Dastak collects, uses and protects information when you browse, order and receive deliveries.",
-    updated,
+    updated: "16 October 2026",
     sections: [
       {
         title: "Information we collect",
@@ -63,6 +63,13 @@ export const publicInformationPages: Record<PublicInformationKind, PublicInforma
           "We disclose only what is reasonably needed to fulfil the service. Assigned merchants receive the relevant request and operational contact details; assigned delivery partners receive pickup and delivery information. Retail merchant identity remains hidden from customers, while Restaurant/Cafe identity may be shown as part of the selected food order.",
           "We also use service providers for hosting and authentication (Supabase), customer payments (Razorpay), Apple or Google sign-in, notifications (Apple Push Notification service and Web Push), and web delivery (Vercel). They process information for those services under their own security and legal obligations.",
           "We may disclose information when required by law or when necessary to protect customers, partners, Dastak or the public. We do not sell personal data or use it for third-party behavioural advertising.",
+        ],
+      },
+      {
+        title: "Optional weather scenery on iOS",
+        paragraphs: [
+          "Before sign-in, you may choose to connect the scenery to local weather. With your permission, the iOS app rounds your nearby-area latitude and longitude to two decimal places and sends that approximate location to Apple Weather through WeatherKit. Weather-location requests run while the sign-in scenery is visible, refresh no more often than every 15 minutes, and stop when the app is inactive or the scenery closes.",
+          "Dastak does not send your saved delivery address, Dastak account credentials or account identifier with these weather requests, and does not retain weather-location fixes or attach them to your Dastak account. The weather data is transformed into scenery effects. You can disconnect weather in Settings; the scenery then follows the device clock. Apple processes weather requests under its own privacy terms, and the app provides Apple Weather attribution and data-source information.",
         ],
       },
       {

@@ -2,6 +2,7 @@ import CoreLocation
 import Foundation
 import MarketplaceDesignSystem
 import SwiftUI
+import WeatherKit
 
 enum DastakSceneWeatherChoice: String {
     case connected, notNow
@@ -23,11 +24,13 @@ final class DastakSceneWeather: NSObject, ObservableObject, @preconcurrency CLLo
     }()
     @Published private(set) var status = "Time-only sky · live weather not connected"
     @Published private(set) var enabled = false
+    @Published private(set) var attribution: WeatherAttribution?
     private let manager = CLLocationManager()
     private var snapshot: DastakEnvironmentWeather?
     private var observedAt: Date?
     private var lastAttempt: Date?
     private var task: Task<Void, Never>?
+    private var deadline: Task<Void, Never>?
     private var revision = UUID()
     private var sceneActive = false
     private let defaults: UserDefaults
@@ -43,23 +46,12 @@ final class DastakSceneWeather: NSObject, ObservableObject, @preconcurrency CLLo
     func skipFirstLaunchWeather() {
         defaults.set(DastakSceneWeatherChoice.notNow.rawValue, forKey: DastakSceneWeatherChoice.key)
     }
-    var provider: URL? {
-        if let value = Bundle.main.object(forInfoDictionaryKey:"DASTAK_SCENE_WEATHER_URL") as? String,
-           let url = URL(string:value), url.scheme == "https", url.user == nil, url.password == nil { return url }
-        #if DEBUG
-        return URL(string:"https://api.open-meteo.com/v1/forecast")
-        #else
-        // Do not silently use a noncommercial public weather endpoint in a commercial release.
-        return nil
-        #endif
-    }
     func current(at date: Date) -> DastakEnvironmentWeather {
         if let snapshot, let observedAt, abs(date.timeIntervalSince(observedAt)) <= 3600 { return snapshot }
         return .localClock(date)
     }
     func enable() {
         defaults.set(DastakSceneWeatherChoice.connected.rawValue, forKey: DastakSceneWeatherChoice.key)
-        guard provider != nil else { status = "Time-only sky · live weather service is not configured"; return }
         enabled = true; status = "Waiting for location permission…"
         if manager.authorizationStatus == .notDetermined { manager.requestWhenInUseAuthorization() }
         else { resumeIfAllowed() }
@@ -67,17 +59,17 @@ final class DastakSceneWeather: NSObject, ObservableObject, @preconcurrency CLLo
     func disable() {
         defaults.set(DastakSceneWeatherChoice.notNow.rawValue, forKey: DastakSceneWeatherChoice.key)
         revision = UUID()
-        enabled = false; task?.cancel(); task = nil; manager.stopUpdatingLocation()
-        snapshot = nil; observedAt = nil; lastAttempt = nil
+        enabled = false; task?.cancel(); task = nil; deadline?.cancel(); deadline = nil; manager.stopUpdatingLocation()
+        snapshot = nil; observedAt = nil; lastAttempt = nil; attribution = nil
         status = "Time-only sky · live weather not connected"
     }
-    func pause() { revision = UUID(); task?.cancel(); task = nil; manager.stopUpdatingLocation() }
+    func pause() { revision = UUID(); task?.cancel(); task = nil; deadline?.cancel(); deadline = nil; manager.stopUpdatingLocation() }
     func setSceneActive(_ active: Bool) {
         sceneActive = active
         if active { resumeIfAllowed() } else { pause() }
     }
     func resumeIfAllowed() {
-        guard sceneActive, enabled, provider != nil, task == nil else { return }
+        guard sceneActive, enabled, task == nil else { return }
         guard lastAttempt == nil || Date().timeIntervalSince(lastAttempt!) >= 900 else { return }
         switch manager.authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways: manager.requestLocation()
@@ -94,50 +86,55 @@ final class DastakSceneWeather: NSObject, ObservableObject, @preconcurrency CLLo
         status = "Location unavailable · time-only sky"
     }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard sceneActive, enabled, task == nil, let fix = locations.last, let provider else { return }
+        guard sceneActive, enabled, task == nil, let fix = locations.last else { return }
         guard fix.horizontalAccuracy >= 0, abs(fix.timestamp.timeIntervalSinceNow) < 120 else { return }
-        var url = URLComponents(url:provider,resolvingAgainstBaseURL:false)!
-        // No device-precision coordinates, saved address, account token or user identifier.
-        url.queryItems = [
-            .init(name:"latitude",value:String(format:"%.2f",fix.coordinate.latitude)),
-            .init(name:"longitude",value:String(format:"%.2f",fix.coordinate.longitude)),
-            .init(name:"current",value:"cloud_cover,precipitation,weather_code,wind_speed_10m,is_day"),
-            .init(name:"timezone",value:"auto"),.init(name:"timeformat",value:"unixtime")
-        ]
-        guard let endpoint = url.url else { return }
+        // Only a rounded nearby-area coordinate reaches Apple Weather. Delivery
+        // addresses, Dastak credentials and device-precision fixes stay out of it.
+        let coarse = Self.weatherLocation(fix)
         lastAttempt = Date(); status = "Fetching nearby-area weather…"
         let generation = revision
+        deadline = Task { [weak self] in
+            do { try await Task.sleep(for:.seconds(12)) } catch { return }
+            guard let self, self.revision == generation else { return }
+            self.revision = UUID(); self.task?.cancel(); self.task = nil; self.deadline = nil
+            self.snapshot = nil; self.observedAt = nil; self.attribution = nil
+            self.status = "Weather unavailable · time-only sky"
+        }
         task = Task { [weak self] in
-            guard let self else { return }; defer { if self.revision == generation { self.task = nil } }
+            guard let self else { return }
+            defer {
+                if self.revision == generation {
+                    self.task = nil; self.deadline?.cancel(); self.deadline = nil
+                }
+            }
             do {
-                let config = URLSessionConfiguration.ephemeral
-                config.timeoutIntervalForRequest = 12; config.httpCookieStorage = nil; config.urlCredentialStorage = nil
-                let session = URLSession(configuration:config); defer { session.invalidateAndCancel() }
-                let (data,response) = try await session.data(from:endpoint)
+                async let current = WeatherService.shared.weather(for:coarse,including:.current)
+                async let credit = WeatherService.shared.attribution
+                let (value,attribution) = try await (current,credit)
                 guard !Task.isCancelled, self.sceneActive, self.enabled, self.revision == generation else { return }
-                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-                let value = try JSONDecoder().decode(WeatherResponse.self,from:data).current
-                guard abs(Date().timeIntervalSince1970-value.time) < 3600,
-                      [value.cloud_cover,value.precipitation,value.wind_speed_10m].allSatisfy(\.isFinite),
-                      value.cloud_cover >= 0, value.cloud_cover <= 100, value.precipitation >= 0,
-                      value.wind_speed_10m >= 0, [0,1].contains(value.is_day) else { throw CocoaError(.coderReadCorrupt) }
-                self.snapshot = .init(daylight:value.is_day == 1 ? 1 : 0,cloud:value.cloud_cover/100,
-                    wind:min(150,value.wind_speed_10m),precipitation:min(20,value.precipitation),
-                    snow:[71,73,75,77,85,86].contains(value.weather_code))
-                self.observedAt = Date(timeIntervalSince1970:value.time)
-                self.status = "Nearby-area weather · updated \(self.observedAt!.formatted(date:.omitted,time:.shortened)) · Open-Meteo"
+                let wind=value.wind.speed.converted(to:.kilometersPerHour).value
+                // Foundation has no millimetres/hour UnitSpeed on all supported OSes.
+                let rain=value.precipitationIntensity.converted(to:.metersPerSecond).value * 3_600_000
+                guard abs(value.date.timeIntervalSinceNow) < 3600,
+                      [value.cloudCover,wind,rain].allSatisfy(\.isFinite),
+                      (0...1).contains(value.cloudCover), wind >= 0, rain >= 0,
+                      attribution.legalPageURL.scheme == "https" else { throw CocoaError(.coderReadCorrupt) }
+                self.attribution = attribution
+                self.snapshot = .init(daylight:value.isDaylight ? 1 : 0,cloud:value.cloudCover,
+                    wind:min(150,wind),precipitation:min(20,rain),
+                    snow:[.snow,.heavySnow,.blizzard,.blowingSnow,.flurries,.sunFlurries,.wintryMix].contains(value.condition))
+                self.observedAt = value.date
+                self.status = "Nearby-area weather · updated \(value.date.formatted(date:.omitted,time:.shortened)) · Apple Weather"
             } catch {
                 guard !Task.isCancelled, self.revision == generation else { return }
-                self.snapshot = nil; self.observedAt = nil; self.status = "Weather unavailable · time-only sky"
+                self.snapshot = nil; self.observedAt = nil; self.attribution = nil
+                self.status = "Weather unavailable · time-only sky"
             }
         }
     }
-    private struct WeatherResponse: Decodable {
-        let current: Reading
-        struct Reading: Decodable {
-            let time,cloud_cover,precipitation,wind_speed_10m: Double
-            let weather_code,is_day: Int
-        }
+    static func weatherLocation(_ fix: CLLocation) -> CLLocation {
+        CLLocation(latitude:(fix.coordinate.latitude*100).rounded()/100,
+                   longitude:(fix.coordinate.longitude*100).rounded()/100)
     }
 }
 
@@ -154,7 +151,7 @@ private struct DastakFirstLaunchWeather: ViewModifier {
     func body(content: Content) -> some View {
         content
             .task(id: phase) {
-                if phase == .active, weather.needsFirstLaunchChoice, weather.provider != nil {
+                if phase == .active, weather.needsFirstLaunchChoice {
                     showingChoice = true
                 }
             }
@@ -162,7 +159,13 @@ private struct DastakFirstLaunchWeather: ViewModifier {
                 Button("Not now", role: .cancel) { weather.skipFirstLaunchWeather() }
                 Button("Connect") { weather.enable() }
             } message: {
-                Text("Bring the sign-in scenery to life with weather near you. Connect uses your approximate location and sends rounded nearby-area coordinates to \(weather.provider?.host ?? "the weather service"). You can change this in Settings.")
+                Text("Bring the sign-in scenery to life with weather near you. Connect sends rounded nearby-area coordinates to Apple Weather. You can change this in Settings.")
+            }
+            .overlay(alignment:.bottom) {
+                if let attribution = weather.attribution {
+                    DastakWeatherAttribution(attribution:attribution)
+                        .padding(.bottom,100)
+                }
             }
     }
 }
@@ -178,8 +181,7 @@ struct DastakSceneWeatherControls: View {
                 if weather.enabled { weather.disable() } else { consent = true }
             }
             .frame(minHeight:44)
-            .disabled(weather.provider == nil)
-            if weather.provider == nil { Text("Live weather service is not configured. Day/night still follows the device clock.").font(.footnote) }
+            if let attribution = weather.attribution { DastakWeatherAttribution(attribution:attribution) }
         }
         .padding(12)
         .marketplaceFlatSurface()
@@ -187,7 +189,27 @@ struct DastakSceneWeatherControls: View {
             Button("Cancel",role:.cancel) {}
             Button("Connect") { weather.enable() }
         } message: {
-            Text("Your location is requested only for scenery. Rounded nearby-area coordinates are sent to the configured weather service (Open-Meteo in this development build). Your delivery address and account details are not sent. You can disconnect here.")
+            Text("Your location is requested only for scenery. Rounded nearby-area coordinates are sent to Apple Weather. Your delivery address and Dastak account details are not sent. You can disconnect here.")
         }
+    }
+}
+
+private struct DastakWeatherAttribution: View {
+    let attribution: WeatherAttribution
+    @Environment(\.colorScheme) private var scheme
+    var body: some View {
+        Link(destination:attribution.legalPageURL) {
+            VStack(spacing:3) {
+                AsyncImage(url:scheme == .dark ? attribution.combinedMarkLightURL : attribution.combinedMarkDarkURL) { image in
+                    image.resizable().scaledToFit().frame(width:100,height:16)
+                } placeholder: {
+                    Label("Weather",systemImage:"apple.logo").font(.caption)
+                }
+                Text("Scenery derived from Apple Weather · Data sources").font(.system(size:10))
+            }
+            .padding(.horizontal,10).padding(.vertical,6)
+            .background(.regularMaterial,in:RoundedRectangle(cornerRadius:10))
+        }
+        .accessibilityLabel("Scenery derived from Apple Weather. View weather data sources.")
     }
 }
