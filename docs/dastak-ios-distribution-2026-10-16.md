@@ -8,7 +8,7 @@ Status: in progress. Merchant work remains deferred until this distribution work
 - Existing App Store Connect record: app ID `6796518603` (initially Dastak Local; the latest Safari view showed Dastak دستک).
 - Version 1.0.0 Build 54 is installed on the owner's iPhone.
 - Source `89181d1015143181c941380342ee1d24fc941932` passed all five hosted Foundation jobs in run [38824003188](https://github.com/furqanz7/savari-dastak/actions/runs/38824003188).
-- App Store Connect currently contains old Builds 1 and 3, not Build 54. Build 3 was rejected in September under Guideline 2.1(a) because the reviewer could not access the app. Beta review notes/sign-in information were empty.
+- App Store Connect contains old Builds 1 and 3 and now records Build 55's upload as Complete. Build 3 was rejected in September under Guideline 2.1(a) because the reviewer could not access the app. Beta review notes/sign-in information were empty.
 - The owner wants reviewers to use the existing Apple/Google sign-in options. No password login, approval bypass, review identity or demonstration mode has been added.
 - Newly signed-in users do not automatically become approved Delivery partners. Reviewer access to assigned Delivery work remains an unresolved review prerequisite; explanatory notes alone do not prove that Apple can test it.
 
@@ -34,11 +34,12 @@ With explicit owner approval, only the unused downloadable iOS 18.4 runtime (`0C
 
 - Release archive succeeded at `/Users/Furqan/Library/Developer/Xcode/Archives/2026-10-16/Dastak55.xcarchive`; version 1.0.0, Build 55, arm64, bundle `com.dastak.app`, team `RBLBKM3W74`.
 - Deep strict code-signature verification passed. The archive contains the Live Activity/widget extension and app/dependency privacy manifests.
-- The archive is development-signed pending App Store export. Its current APNs entitlement is `development` and `get-task-allow` is true; production signing must be verified after successful export. These archive entitlements are not claimed to be final distribution entitlements.
-- App Store Connect export/upload failed before uploading with `App Store Connect Credentials Error`, `Unexpected nil property at path: 'Actor/relationships/providerId'`. Xcode's Apple Accounts settings are open and the owner has been asked to refresh the owning Apple account directly in Xcode. No credentials have been changed or recorded here.
-- The signed archive is retained so export can be retried without another archive build after authentication is repaired.
+- The original archive is development-signed, but Organizer successfully re-signed the uploaded package with Apple Distribution for team `RBLBKM3W74`. Deep strict code-signature verification of that distribution package passed. Its final entitlements include `aps-environment=production`, `get-task-allow=false`, `beta-reports-active=true`, Apple sign-in and WeatherKit.
+- The command-line App Store Connect export/upload failed twice with `App Store Connect Credentials Error`, `Unexpected nil property at path: 'Actor/relationships/providerId'`. The owner correctly noted that Xcode was already signed in; live inspection confirmed the account and team membership, and App Store Connect showed Account Holder/Admin access. The exact cause of the command-line-specific failure was not established.
+- Using Xcode's native Archives Organizer with the same retained Build 55 archive succeeded without signing out, removing credentials or changing certificates. Organizer displayed `Dastak 1.0.0 (55) uploaded`; ContentDelivery logged `UPLOAD SUCCEEDED with no errors`.
+- Safari independently showed Build Uploads → 1.0.0 (55) → Complete, created 16 October 2026 at 6:22 AM. At the last observation the separate testable Builds table still showed only Builds 1 and 3; Build 55's testable/review status is not yet verified. The upload receipt must not be treated as App Review approval or confirmed tester availability.
 - A TestFlight description and public URLs were entered in Safari but remain unsaved. Review notes and accurate sign-in/access information remain unfinished. The legacy unchecked sign-in-required setting must not be treated as truthful completed metadata.
-- No Build 55 upload, tester invitation, App Review submission or public iOS release has occurred. Build 54 remains the last confirmed physical iPhone installation.
+- Build 55 upload is complete. No new tester invitation, App Review submission or public iOS release has occurred. Build 54 remains the last confirmed physical iPhone installation.
 
 ## Public privacy deployment
 
@@ -46,8 +47,7 @@ The Customer web artifact for the exact Build 55 source was staged, verified, th
 
 ## Remaining release gates
 
-- Refresh Xcode's App Store Connect authentication; successfully export the retained archive with App Store distribution signing and verify the final entitlements.
-- Validate/upload the archive and wait for Apple's processing result.
+- Verify Build 55's processed/testable status and any Apple processing messages; add the processed build to the existing internal testing group when available.
 - Finish truthful TestFlight metadata, internal testing and production notification/weather checks on the distributed build.
 - Resolve reviewer access to the approved Delivery workspace while retaining Apple/Google login.
 - Finish App Store privacy answers, screenshots, age rating, app details and review contact/access information; select the uploaded build.
