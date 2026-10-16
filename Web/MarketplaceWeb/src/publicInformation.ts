@@ -22,7 +22,7 @@ export type PublicInformationPage = {
   actions?: PublicInformationAction[];
 };
 
-const updated = "24 August 2026";
+const updated = "17 October 2026";
 
 export const publicInformationPages: Record<PublicInformationKind, PublicInformationPage> = {
   privacy: {
@@ -129,17 +129,17 @@ export const publicInformationPages: Record<PublicInformationKind, PublicInforma
       {
         title: "Orders and pricing",
         bullets: [
-          "Your basket may contain retail items and at most one Restaurant/Cafe. Dastak must secure every required fulfilment before payment becomes available.",
-          "The final payable amount displayed by Dastak before payment is server-authoritative. Review the basket, address and total before paying.",
-          "Launch orders are prepaid only. Cash on delivery, substitutions and scheduled orders are not supported.",
+          "Your basket may contain retail items and at most one Restaurant/Cafe. Dastak must secure every required fulfilment before order confirmation becomes available.",
+          "The final payable amount displayed by Dastak before confirmation is server-authoritative. Review the basket, address and total before confirming.",
+          "Current Grocery and Food orders use Pay via UPI/Cash on Delivery. Review the secured basket and final total before confirming. Confirmation starts preparation; payment is collected by the delivery partner at the doorstep. No payment is taken when you confirm.",
           "Adding an item to the cart or submitting a request does not guarantee availability; an order is secured only when Dastak confirms the complete plan.",
         ],
       },
       {
         title: "Payment, cancellation and refunds",
         paragraphs: [
-          "Customer payments are processed through Razorpay. A failed payment may be retried while the reservation remains active. A late provider success after reservation expiry will not revive the order and will be reconciled or reversed through the payment process.",
-          "Customers may cancel before successful payment. After payment, normal cancellation is unavailable because merchants and delivery operations may already be committed. Use the order's help flow for missing, damaged, incorrect or undelivered items. Approved refunds are issued to the original payment method; bank or payment-provider posting times may vary.",
+          "The current Customer iOS release does not offer Razorpay checkout, online-payment retries for older orders, or new prepaid parcel orders. Older order history remains viewable. Where an older supported online-payment flow is available on another Dastak platform, its provider and available payment actions are shown for that order.",
+          "Use Cancel order while it is available before confirmation. Confirmation starts preparation, after which normal customer cancellation is unavailable. For an issue with a confirmed order or a payment already collected, use that order’s help flow. Any approved resolution, refund method and timing will be communicated for the case. Do not make a second payment to resolve an uncertain payment result without checking the recorded order state and contacting support.",
         ],
       },
       {
@@ -211,8 +211,8 @@ export const publicInformationPages: Record<PublicInformationKind, PublicInforma
       {
         title: "Payment and refund help",
         paragraphs: [
-          "Check the order state before trying payment again. A failed attempt can be retried only while the secured payment window is active. If money is confirmed after an expired window, Dastak records it for reconciliation rather than reviving the order.",
-          "Approved customer refunds go to the original payment method. Dastak shows the recorded refund state, while the final posting time depends on the payment provider or bank.",
+          "For current Grocery and Food orders, confirm the secured basket in the app, then pay the assigned delivery partner by UPI or cash at the doorstep. Check the recorded amount and collection status before paying again. If the payment result is uncertain or incorrect, open the affected order’s help flow.",
+          "Online-payment retries for older orders are unavailable in the current Customer iOS release. Older order history remains available for reference. Report a payment or refund issue from the affected order; the applicable resolution, refund method and timing will be communicated for the case. Never send a UPI PIN, bank password or full card credentials through support.",
         ],
       },
       {
