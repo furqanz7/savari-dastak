@@ -226,29 +226,47 @@ private struct DastakWeatherAttribution: View {
     private var usesLightMark: Bool { overScenery || scheme == .dark }
     var body: some View {
         Link(destination:legalPageURL) {
-            VStack(spacing:5) {
-                AsyncImage(url:usesLightMark ? combinedMarkLightURL : combinedMarkDarkURL) { image in
-                    image.resizable().scaledToFit().frame(width:100,height:16)
-                } placeholder: {
-                    Label("Weather",systemImage:"apple.logo")
-                        .font(.system(size:13,weight:.medium)).frame(height:16)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing:8) {
+                    weatherMark
+                    dataSources
                 }
-                Text("Scenery derived from Apple Weather · Data sources")
-                    .font(.caption2)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal:false,vertical:true)
+                .fixedSize(horizontal:true,vertical:false)
+                VStack(spacing:4) {
+                    weatherMark
+                    dataSources
+                }
             }
             .foregroundStyle(overScenery ? Color.white : Color.primary)
-            .padding(.horizontal,12).padding(.vertical,8)
+            .padding(.horizontal,8).padding(.vertical,5)
             .background {
                 if overScenery {
-                    RoundedRectangle(cornerRadius:12).fill(Color.black.opacity(0.82))
+                    RoundedRectangle(cornerRadius:9).fill(Color.black.opacity(0.72))
                 } else {
-                    RoundedRectangle(cornerRadius:12).fill(.regularMaterial)
+                    RoundedRectangle(cornerRadius:9).fill(.regularMaterial)
                 }
             }
+            .frame(minHeight:44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Scenery derived from Apple Weather. View weather data sources.")
+        .accessibilityLabel("Apple Weather. View weather data sources.")
+    }
+
+    private var weatherMark: some View {
+        AsyncImage(url:usesLightMark ? combinedMarkLightURL : combinedMarkDarkURL) { image in
+            image.resizable().scaledToFit().frame(width:84,height:14)
+        } placeholder: {
+            Label("Weather",systemImage:"apple.logo")
+                .font(.system(size:12,weight:.medium)).frame(width:84,height:14)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var dataSources: some View {
+        Text("Data sources")
+            .font(.caption2)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal:false,vertical:true)
     }
 }
