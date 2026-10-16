@@ -1,6 +1,6 @@
 # Dastak App Store listing draft
 
-Status: preparation only, not saved to App Store Connect. Customer + Delivery only; Merchant remains deferred. Intended release candidate: version 1.0.0, Build 58, with the owner-approved centred under-panel weather credit. Upload and processing succeeded; Build 58 shows Missing Compliance, and the owner has been asked to complete the encryption questionnaire. Internal availability is not yet verified. Build 57 remains the last verified internally available build. A read-only check found the existing App Store version is 1.0, English (U.K.), with no selected build and empty listing/review fields. Reconcile the version/build selection before saving; do not assume those fields are complete.
+Status: preparation only, not saved to App Store Connect. Customer + Delivery only; Merchant remains deferred. Intended release candidate: version 1.0.0, Build 58, with the owner-approved centred under-panel weather credit. Upload, processing and compliance clearance succeeded; a live Safari refresh confirmed Ready to Submit in the existing internal Testing group. Installation and owner acceptance of the distributed centred footer remain pending. A read-only check found the existing App Store version is 1.0, English (U.K.), with no selected build and empty listing/review fields. Reconcile the version/build selection before saving; do not assume those fields are complete.
 
 ## Public copy
 
