@@ -22,8 +22,7 @@ struct DastakApp: App {
                 if ProcessInfo.processInfo.arguments.contains("-DastakSignInFooterPreview") {
                     MarketplaceCustomerSignInPreview()
                         .environment(\.marketplaceAuthenticationBackdrop, {
-                            AnyView(DastakNativeEnvironment(place: .outside,
-                                weather: .init(daylight: 0.5, cloud: 0.9, wind: 22, precipitation: 4)))
+                            AnyView(DastakNativeEnvironment.signInFooterPreview)
                         })
                         .environment(\.marketplaceAuthenticationFooter, {
                             AnyView(DastakSceneWeatherCredit.layoutPreview)

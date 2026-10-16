@@ -13,6 +13,12 @@ public struct DastakNativeEnvironment: View {
     init(place: DastakEnvironmentPlace, weather: DastakEnvironmentWeather, heldEyes: Bool = false) {
         self.place = place; weatherOverride = weather; self.heldEyes = heldEyes
     }
+    #if DEBUG
+    public static var signInFooterPreview: some View {
+        DastakNativeEnvironment(place: .outside,
+            weather: .init(daylight: 0.5, cloud: 0.9, wind: 22, precipitation: 4))
+    }
+    #endif
 
     public var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -40,7 +46,7 @@ public struct DastakNativeEnvironment: View {
                 LinearGradient(colors: [.gray, .black], startPoint: .top, endPoint: .bottom)
                 #endif
             }
-            .task(id:context.date) { if phase == .active, place == .outside { weather.resumeIfAllowed() } }
+            .task(id:context.date) { if weatherOverride == nil, phase == .active, place == .outside { weather.resumeIfAllowed() } }
         }
         .overlay(alignment:.top) {
             // Interior controls need separation from ceiling lights. Outside,
@@ -54,9 +60,9 @@ public struct DastakNativeEnvironment: View {
         .ignoresSafeArea()
         .accessibilityHidden(true)
         .allowsHitTesting(false)
-        .task { weather.setSceneActive(phase == .active && place == .outside) }
-        .onChange(of:phase) { _,value in weather.setSceneActive(value == .active && place == .outside) }
-        .onChange(of:place) { _,value in weather.setSceneActive(phase == .active && value == .outside) }
+        .task { weather.setSceneActive(weatherOverride == nil && phase == .active && place == .outside) }
+        .onChange(of:phase) { _,value in weather.setSceneActive(weatherOverride == nil && value == .active && place == .outside) }
+        .onChange(of:place) { _,value in weather.setSceneActive(weatherOverride == nil && phase == .active && value == .outside) }
         .onDisappear { if place == .outside { weather.setSceneActive(false) } }
     }
 }
