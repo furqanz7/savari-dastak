@@ -19,7 +19,17 @@ struct DastakApp: App {
         WindowGroup {
             DastakLaunchView(variant: .customerAndPartner) {
                 #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("-DastakDeliveryHistoryPreview") {
+                if ProcessInfo.processInfo.arguments.contains("-DastakSignInFooterPreview") {
+                    MarketplaceCustomerSignInPreview()
+                        .environment(\.marketplaceAuthenticationBackdrop, {
+                            AnyView(DastakNativeEnvironment(place: .outside,
+                                weather: .init(daylight: 0.5, cloud: 0.9, wind: 22, precipitation: 4)))
+                        })
+                        .environment(\.marketplaceAuthenticationFooter, {
+                            AnyView(DastakSceneWeatherCredit.layoutPreview)
+                        })
+                        .dynamicTypeSize(ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewLargeText") ? .accessibility3 : .large)
+                } else if ProcessInfo.processInfo.arguments.contains("-DastakDeliveryHistoryPreview") {
                     DastakDeliveryHistoryPreview()
                         .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewLight") ? .light : .dark)
                         .dynamicTypeSize(ProcessInfo.processInfo.arguments.contains("-DastakUIPreviewLargeText") ? .accessibility3 : .large)
@@ -85,6 +95,9 @@ struct DastakApp: App {
         }
         .environment(\.marketplaceAuthenticationBackdrop, {
             AnyView(DastakNativeEnvironment(place: .outside).dastakFirstLaunchWeather())
+        })
+        .environment(\.marketplaceAuthenticationFooter, {
+            AnyView(DastakSceneWeatherCredit())
         })
         .marketplaceHaptics()
     }

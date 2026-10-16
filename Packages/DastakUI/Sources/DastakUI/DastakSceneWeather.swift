@@ -161,13 +161,24 @@ private struct DastakFirstLaunchWeather: ViewModifier {
             } message: {
                 Text("Bring the sign-in scenery to life with weather near you. Connect sends rounded nearby-area coordinates to Apple Weather. You can change this in Settings.")
             }
-            .overlay(alignment:.bottom) {
-                if let attribution = weather.attribution {
-                    DastakWeatherAttribution(attribution:attribution)
-                        .padding(.bottom,100)
-                }
-            }
     }
+}
+
+/// Mounted in the authentication footer, not on the full-screen scenery behind it.
+public struct DastakSceneWeatherCredit: View {
+    @ObservedObject private var weather = DastakSceneWeather.shared
+    public init() {}
+    public var body: some View {
+        if let attribution = weather.attribution {
+            DastakWeatherAttribution(attribution: attribution, overScenery: true)
+        }
+    }
+    #if DEBUG
+    /// Layout-only credit using the same fallback mark, without location or network access.
+    public static var layoutPreview: some View {
+        DastakWeatherAttribution(layoutPreview: true)
+    }
+    #endif
 }
 
 struct DastakSceneWeatherControls: View {
@@ -195,21 +206,48 @@ struct DastakSceneWeatherControls: View {
 }
 
 private struct DastakWeatherAttribution: View {
-    let attribution: WeatherAttribution
+    let legalPageURL: URL
+    let combinedMarkLightURL: URL?
+    let combinedMarkDarkURL: URL?
+    let overScenery: Bool
     @Environment(\.colorScheme) private var scheme
+    init(attribution: WeatherAttribution, overScenery: Bool = false) {
+        legalPageURL = attribution.legalPageURL
+        combinedMarkLightURL = attribution.combinedMarkLightURL
+        combinedMarkDarkURL = attribution.combinedMarkDarkURL
+        self.overScenery = overScenery
+    }
+    #if DEBUG
+    init(layoutPreview: Bool) {
+        legalPageURL = URL(string:"https://weatherkit.apple.com/legal-attribution.html")!
+        combinedMarkLightURL = nil; combinedMarkDarkURL = nil; overScenery = true
+    }
+    #endif
+    private var usesLightMark: Bool { overScenery || scheme == .dark }
     var body: some View {
-        Link(destination:attribution.legalPageURL) {
-            VStack(spacing:3) {
-                AsyncImage(url:scheme == .dark ? attribution.combinedMarkLightURL : attribution.combinedMarkDarkURL) { image in
+        Link(destination:legalPageURL) {
+            VStack(spacing:5) {
+                AsyncImage(url:usesLightMark ? combinedMarkLightURL : combinedMarkDarkURL) { image in
                     image.resizable().scaledToFit().frame(width:100,height:16)
                 } placeholder: {
-                    Label("Weather",systemImage:"apple.logo").font(.caption)
+                    Label("Weather",systemImage:"apple.logo").font(.caption).frame(height:16)
                 }
-                Text("Scenery derived from Apple Weather · Data sources").font(.system(size:10))
+                Text("Scenery derived from Apple Weather · Data sources")
+                    .font(.caption2)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal:false,vertical:true)
             }
-            .padding(.horizontal,10).padding(.vertical,6)
-            .background(.regularMaterial,in:RoundedRectangle(cornerRadius:10))
+            .foregroundStyle(overScenery ? Color.white : Color.primary)
+            .padding(.horizontal,12).padding(.vertical,8)
+            .background {
+                if overScenery {
+                    RoundedRectangle(cornerRadius:12).fill(Color.black.opacity(0.82))
+                } else {
+                    RoundedRectangle(cornerRadius:12).fill(.regularMaterial)
+                }
+            }
         }
+        .buttonStyle(.plain)
         .accessibilityLabel("Scenery derived from Apple Weather. View weather data sources.")
     }
 }

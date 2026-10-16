@@ -378,6 +378,34 @@ private struct DastakSessionRegistrationModifier: ViewModifier {
     }
 }
 
+#if DEBUG
+/// Isolated layout fixture: no saved session, sign-in transport or account writes.
+public struct MarketplaceCustomerSignInPreview: View {
+    @StateObject private var coordinator = AuthenticationCoordinator(client: SignInLayoutClient())
+    public init() {}
+    public var body: some View {
+        AuthenticationRouteView(
+            applicationName: "Dastak", product: .dastak, requiredAccess: .dastakCustomer,
+            coordinator: coordinator, legalLinks: MarketplaceLegalLinks(values: [
+                MarketplaceLegalLinks.termsKey: "https://dastak-customer.vercel.app/terms",
+                MarketplaceLegalLinks.privacyPolicyKey: "https://dastak-customer.vercel.app/privacy",
+                MarketplaceLegalLinks.supportKey: "https://dastak-customer.vercel.app/support"
+            ]), showsPersistentSignOut: false, activeContent: AnyView(EmptyView()), restrictedContent: nil
+        )
+        .allowsHitTesting(false)
+    }
+}
+
+private struct SignInLayoutClient: AuthenticationClient {
+    func restoreAccount() async throws -> AccountRoute { .signedOut }
+    func signInWithApple(identityToken: String, nonce: String) async throws { throw AuthenticationShellError.appleCredentialUnavailable }
+    func signInWithGoogle(idToken: String) async throws { throw AuthenticationShellError.appleCredentialUnavailable }
+    func signInWithGoogle(redirectTo: URL) async throws { throw AuthenticationShellError.appleCredentialUnavailable }
+    func bootstrapAccount(displayName: String, phoneNumber: String, key: IdempotencyKey) async throws { throw AuthenticationShellError.appleCredentialUnavailable }
+    func signOut() async throws {}
+}
+#endif
+
 private struct DefaultMarketplaceActiveView: View {
     var body: some View {
         Text("Account active")
@@ -386,6 +414,7 @@ private struct DefaultMarketplaceActiveView: View {
 
 private struct AuthenticationRouteView: View {
     @Environment(\.marketplaceAuthenticationBackdrop) private var authenticationBackdrop
+    @Environment(\.marketplaceAuthenticationFooter) private var authenticationFooter
     @Environment(\.marketplaceHapticScope) private var haptics
     @ScaledMetric(relativeTo: .title2) private var customerWelcomeSize: CGFloat = 24
     private enum SignInProvider: String {
@@ -738,10 +767,13 @@ private struct AuthenticationRouteView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                     .shadow(color: Color.black.opacity(0.28), radius: 28, y: 18)
 
-                    // Keep the legal footer anchored at the safe-area bottom,
-                    // Leave the entrance carpet unobscured above the panel while
-                    // retaining the legal footer at the safe-area bottom.
-                    Spacer().frame(height: compact ? 110 : 134)
+                    // Use the existing gap for optional attribution without
+                    // moving the sign-in panel or covering the legal links.
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 12)
+                        if let authenticationFooter { authenticationFooter() }
+                    }
+                    .frame(height: compact ? 110 : 134)
                     dastakLegalLinks
                 }
                 .frame(maxWidth: 430, alignment: .topLeading)
