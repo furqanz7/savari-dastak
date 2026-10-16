@@ -30,7 +30,7 @@ export const publicInformationPages: Record<PublicInformationKind, PublicInforma
     eyebrow: "Your data",
     title: "Privacy Policy",
     summary: "How Dastak collects, uses and protects information when you browse, order and receive deliveries.",
-    updated: "16 October 2026",
+    updated: "17 October 2026",
     sections: [
       {
         title: "Information we collect",
@@ -39,6 +39,8 @@ export const publicInformationPages: Record<PublicInformationKind, PublicInforma
           "Delivery addresses, precise location when you choose to share it, cart and order history, item preferences, payment references, refunds and support cases.",
           "Photos or other evidence you submit for delivery, returns, safety or issue resolution.",
           "Device, browser, session and notification-subscription information used to keep your account secure and deliver service updates.",
+          "For delivery-partner onboarding and account operations: submitted identity and applicable vehicle documents, earnings, balances, withdrawals and any bank-account or UPI payout details you provide through an available registration flow.",
+          "Operational diagnostics, including request timestamps, IP addresses, user-agent information, account or session identifiers where present, response status, processing times and server runtime or error information. These records may be linked to your account and are used to operate, secure and troubleshoot the service, not for third-party behavioural advertising.",
         ],
       },
       {
@@ -61,7 +63,7 @@ export const publicInformationPages: Record<PublicInformationKind, PublicInforma
         title: "Who receives information",
         paragraphs: [
           "We disclose only what is reasonably needed to fulfil the service. Assigned merchants receive the relevant request and operational contact details; assigned delivery partners receive pickup and delivery information. Retail merchant identity remains hidden from customers, while Restaurant/Cafe identity may be shown as part of the selected food order.",
-          "We also use service providers for hosting and authentication (Supabase), customer payments (Razorpay), Apple or Google sign-in, notifications (Apple Push Notification service and Web Push), and web delivery (Vercel). They process information for those services under their own security and legal obligations.",
+          "We also use service providers for hosting, authentication and operational logging (Supabase), Apple or Google sign-in, notifications (Apple Push Notification service and Web Push), and web delivery (Vercel). Where an older supported online-payment flow uses Razorpay, it processes the payment for that flow. They process information for those services under their own security and legal obligations.",
           "We may disclose information when required by law or when necessary to protect customers, partners, Dastak or the public. We do not sell personal data or use it for third-party behavioural advertising.",
         ],
       },
@@ -75,7 +77,8 @@ export const publicInformationPages: Record<PublicInformationKind, PublicInforma
       {
         title: "Payments",
         paragraphs: [
-          "Razorpay processes customer payment credentials. Dastak records the amount, provider references, status, reconciliation and refund information needed to operate and audit an order; Dastak does not ask customers to send card or UPI credentials through support.",
+          "The current Customer iOS Grocery and Food checkout uses Pay via UPI/Cash on Delivery. Payment is collected by the delivery partner at the doorstep; Dastak records the selected collection method, amount and collection status. This release does not include Razorpay checkout or online-payment retries for older merchant or parcel orders.",
+          "Where an older supported online-payment flow is available on another Dastak platform, Razorpay processes its payment credentials. Dastak records the amount, provider references, status, reconciliation and refund information needed to operate and audit that order. Dastak does not ask customers to send card, bank or UPI credentials through support.",
         ],
       },
       {

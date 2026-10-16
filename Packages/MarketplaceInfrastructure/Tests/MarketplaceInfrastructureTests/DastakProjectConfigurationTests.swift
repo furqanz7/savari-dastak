@@ -26,7 +26,7 @@ final class DastakProjectConfigurationTests: XCTestCase {
         XCTAssertEqual(Set(types), Set([
             "CoarseLocation", "Name", "EmailAddress", "PhoneNumber", "PhysicalAddress", "PreciseLocation",
             "PhotosorVideos", "CustomerSupport", "OtherUserContent", "UserID", "DeviceID", "PurchaseHistory",
-            "PaymentInfo", "OtherFinancialInfo", "ProductInteraction"
+            "PaymentInfo", "OtherFinancialInfo", "ProductInteraction", "PerformanceData", "OtherDiagnosticData"
         ].map { "NSPrivacyCollectedDataType" + $0 }))
         for entry in entries {
             XCTAssertEqual(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool, true)

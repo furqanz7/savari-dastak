@@ -4,6 +4,14 @@ Status: partially saved to App Store Connect, not submitted. Customer + Delivery
 
 ## Public copy
 
+### Follow-up after Build 59 owner acceptance — 17 October
+
+The owner reported installation and both release-scope smoke checks passed. A later live TestFlight inspection now shows Build 59 in the internal Testing group; no tester access was changed by the agent. The version form still has Build 58 attached; replacement was interrupted by the Mac locking before an edit completed.
+
+Read-only production log aggregates now confirm account-linked execution timings from Dastak app requests. **Performance Data and Other Diagnostic Data** are therefore prepared in the next-source manifest, both linked / App Functionality / not tracking. App Store Connect remains a 15-type unpublished draft until the owner adds these two; the next manifest has 17 types and is not in distributed Build 59. The clarified policy source is a local unpublished draft, not an approved deployment. Log-drain destinations/configured retention remain unverified because the documented settings read was denied. See [the evidence checkpoint](dastak-release-privacy-evidence-2026-10-17.md).
+
+Do not publish privacy answers, claim a completed privacy audit, or reuse Build 59 as the final manifest-corrected submission. Screenshot preparation is draft-only; the reviewer-access and trader-status decisions are still open. No demo, external message, role grant or review submission has been made.
+
 ### Latest checkpoint — 17 October
 
 This checkpoint supersedes the earlier incomplete-form observations below; those are historical receipts.

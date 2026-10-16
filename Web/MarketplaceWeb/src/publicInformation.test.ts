@@ -21,4 +21,15 @@ describe("public Dastak information pages", () => {
     ]);
     expect(JSON.stringify(publicInformationPages.support)).not.toMatch(/mailto:/i);
   });
+
+  it("describes retained diagnostics and distinguishes current doorstep payment from legacy online checkout", () => {
+    const privacy = JSON.stringify(publicInformationPages.privacy);
+    expect(privacy).toContain("request timestamps, IP addresses");
+    expect(privacy).toContain("processing times");
+    expect(privacy).toContain("may be linked to your account");
+    expect(privacy).toContain("Pay via UPI/Cash on Delivery");
+    expect(privacy).toContain("does not include Razorpay checkout");
+    expect(privacy).toContain("older supported online-payment flow");
+    expect(privacy).toContain("earnings, balances, withdrawals");
+  });
 });
