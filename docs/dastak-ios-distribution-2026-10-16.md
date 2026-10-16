@@ -28,7 +28,7 @@ WeatherKit was enabled and saved under the existing App ID's Capabilities on App
 
 The initial local host test failed while linking with `errno=28` (disk full). Build 55 source `3d26a2df9cf2d92bd33826c68b1e12e8737637b7` subsequently passed all five hosted Foundation jobs in run [38827379170](https://github.com/furqanz7/savari-dastak/actions/runs/38827379170): Swift packages, iOS build, Dastak backend, Savari backend and Dastak web. This is hosted test/build evidence, not a claim that live WeatherKit requests have been exercised.
 
-With explicit owner approval, only the unused downloadable iOS 18.4 runtime (`0CF8ADE5-0090-42BB-9077-A5A286D0A2AC`, approximately 8.8 GB) was removed through `simctl runtime delete`, after a dry run. It can be downloaded again through Xcode. iOS 18.5, 26.5 and 27 runtimes, simulator devices, source, installed apps, existing archives and Codex/ChatGPT data were retained. The latest check showed approximately 11 GiB available.
+With explicit owner approval, only the unused downloadable iOS 18.4 runtime (`0CF8ADE5-0090-42BB-9077-A5A286D0A2AC`, approximately 8.8 GB) was removed through `simctl runtime delete`, after a dry run. It can be downloaded again through Xcode. iOS 18.5, 26.5 and 27 runtimes, simulator devices, source, installed apps, existing archives and Codex/ChatGPT data were retained. The post-cleanup checkpoint showed approximately 11 GiB available; subsequent archives and simulator compilation consumed part of that space.
 
 ## Archive and upload checkpoint
 
@@ -47,7 +47,17 @@ The owner reported passing sign-in/session persistence, Grocery/Food browsing, D
 
 The owner's 06:44 sign-in screenshot showed rain scenery with Apple Weather attribution. Source inspection confirms that attribution is populated only after a successful, validated weather response and attribution fetch. This supports successful WeatherKit operation on TestFlight, although it does not independently establish current local weather accuracy. The screenshot also exposed attribution crowding the consent footer and weak mark contrast.
 
-The owner approved a narrowly scoped Build 56 polish: move attribution from a fixed backdrop overlay into the Customer sign-in footer's existing gap, pair Apple's light mark with a dark backing over scenery, keep the data-source link, and preserve the sign-in panel/scenery. The footer hook defaults to absent for other apps. A Debug-only, noninteractive fixture exercises the actual sign-in layout without using saved sessions, live location or commerce. Two new environment-isolation tests and the existing design-system tests passed locally. Build 56 upload remains pending until the final simulator checks and exact-source archive are verified.
+The owner approved a narrowly scoped Build 56 polish: move attribution from a fixed backdrop overlay into the Customer sign-in footer's existing gap, pair Apple's light mark with a dark backing over scenery, keep the data-source link, and preserve the normal-size sign-in panel/scenery. The footer grows for larger text and reserves space during new-customer setup as well. The Google label fits its button at the tested accessibility size. The footer hook defaults to absent for other apps. A Debug-only, noninteractive fixture exercises the actual sign-in layout without using saved sessions, live location or commerce.
+
+Build 56 verification:
+
+- Normal text and Accessibility 3 sign-in layouts visually inspected in the dedicated simulator; attribution and consent/links remain separate. Normal-text new-customer setup also retains a separate credit beneath the form. These are isolated layout fixtures, not live weather/account tests.
+- Local design-system tests passed: eight XCTest tests (including two new footer/environment isolation cases) plus eight Swift Testing tests. A hosted run exposed an existing haptic test's 80 ms scheduling assumption; only the test was changed to wait for the callback with a bounded timeout. No production haptic behavior changed.
+- Exact source `b4a5389e20fcf07626037a8797dbcad49ed8a0aa` passed all five hosted Foundation jobs in run [38836892060](https://github.com/furqanz7/savari-dastak/actions/runs/38836892060). An earlier unrelated Savari CI attempt timed out starting local Storage; the final exact-source run passed without backend changes.
+- Final Release archive succeeded at `/Users/Furqan/Library/Developer/Xcode/Archives/2026-10-16/Dastak56.xcarchive`. The Release binary excludes the Debug sign-in fixture.
+- Organizer confirmed `Dastak 1.0.0 (56) uploaded`; ContentDelivery reported `UPLOAD SUCCEEDED with no errors`. The re-signed distribution package passed deep/strict signature verification, app and widget both report Build 56, and final entitlements retain production APNs, WeatherKit and `get-task-allow=false`.
+- Safari shows Build 56 uploaded at 7:23 AM with **Missing Compliance** in the build list. Its internal TestFlight availability is not yet confirmed. The existing internal group uses Automatic for Xcode Builds, but that does not bypass the compliance gate.
+- The App Encryption Documentation questionnaire was opened read-only. It asks which encryption algorithms the app implements, including standard/proprietary implementation choices; no answer was selected or saved. The archive does not include `ITSAppUsesNonExemptEncryption`. Owner confirmation/completion of this declaration is required before claiming Build 56 is available to install. No encryption behavior or declaration key was changed as part of the footer polish.
 
 ## Public privacy deployment
 
@@ -55,7 +65,7 @@ The Customer web artifact for the exact Build 55 source was staged, verified, th
 
 ## Remaining release gates
 
-- Finish Build 56 footer visual verification and upload; confirm its processed/internal testing status.
+- Obtain the owner's encryption compliance declaration for Build 56, then confirm internal TestFlight availability. Visual verification and upload are complete.
 - Finish truthful TestFlight metadata and obtain owner acceptance of the footer correction. Build 55 functional acceptance remains recorded above.
 - Resolve reviewer access to the approved Delivery workspace while retaining Apple/Google login.
 - Finish App Store privacy answers, screenshots, age rating, app details and review contact/access information; select the uploaded build.
