@@ -4,6 +4,17 @@ Status: partially saved to App Store Connect, not submitted. Customer + Delivery
 
 ## Public copy
 
+### Latest checkpoint — 17 October
+
+This checkpoint supersedes the earlier incomplete-form observations below; those are historical receipts.
+
+- The owner pasted and saved the promotional text and description. Subtitle **Groceries, food & deliveries**, primary Shopping and secondary Food & Drink categories were subsequently observed in Safari.
+- The owner completed age ratings (4+ in the main storefront summary) and content-rights setup. These are owner declarations, not an independent legal/content-license audit.
+- App Privacy currently has 14 draft types, linked to identity and not used for tracking: name, email, phone, physical address, precise/coarse location, photos/videos, customer support, other user content, user/device IDs, purchase history, payment information and other financial information. Purchase history includes Product Personalization for city-popularity recommendations; the others currently list App Functionality.
+- Product Interaction still needs to be added to the App Store Connect draft for account-linked saved/favourite item activity. The Build 59 manifest includes it. Hosted operational logging/diagnostic collection and retention still require reconciliation; do not treat a source inventory as proof of production log configuration.
+- The owner chose **current Grocery/Food doorstep payment only; disable older retries and exclude Razorpay**. Build 59 is being prepared with that scope. Old merchant/parcel history remains readable; legacy online retries and new prepaid parcel creation are blocked. Backend payment/payout configuration is unchanged.
+- No privacy Publish or Add for Review action has been taken. Required screenshots, reviewer Delivery access and the existing trader declaration remain separate submission gates. Build 58 remains the confirmed selected/available build until Build 59 upload and processing are verified.
+
 Preserve the owner's current App Store Connect name, last observed as **Dastak دستک**. Inspect the live version and localization before replacing existing copy.
 
 Subtitle (28 characters): **Groceries, food & deliveries**
@@ -57,11 +68,12 @@ The current combined-app manifest (`Apps/Dastak/Supporting/PrivacyInfo.xcprivacy
 
 | Data | Linked to identity | Purpose | Tracking |
 | --- | --- | --- | --- |
-| Coarse location (optional weather) | No | App functionality | No |
+| Coarse location (also used by account-linked address flows) | Yes | App functionality | No |
 | Name, email, phone, physical address | Yes | App functionality | No |
 | Precise location | Yes | App functionality | No |
 | Photos/videos, customer support, other user content | Yes | App functionality | No |
-| User ID, device ID, purchase history | Yes | App functionality | No |
+| User ID, device ID, payment info, other financial info, product interaction | Yes | App functionality | No |
+| Purchase history | Yes | App functionality, product personalization | No |
 
 This is a manifest cross-check, **not a completed App Store privacy audit or a substitute for App Store Connect answers**. Reconcile the live privacy form with the app, its services and third-party SDK behavior before publishing. In particular, review Delivery onboarding documents and earnings/payment-related information, diagnostics, retention and optional-collection conditions; do not infer that unlisted data is absent just because this manifest does not list it.
 

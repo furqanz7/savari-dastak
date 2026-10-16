@@ -51,46 +51,14 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-				<string>razorpay-$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>DastakRazorpayPaymentMode</key>
-	<string>$(DASTAK_RAZORPAY_PAYMENT_MODE)</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>com.dastak.merchant</string>
-		<string>tez</string>
-		<string>phonepe</string>
-		<string>paytmmp</string>
-		<string>credpay</string>
-		<string>mobikwik</string>
-		<string>in.fampay.app</string>
-		<string>bhim</string>
-		<string>amazonpay</string>
-		<string>navi</string>
-		<string>kiwi</string>
-		<string>payzapp</string>
-		<string>jupiter</string>
-		<string>omnicard</string>
-		<string>icici</string>
-		<string>popclubapp</string>
-		<string>sbiyono</string>
-		<string>myjio</string>
-		<string>slice-upi</string>
-		<string>bobupi</string>
-		<string>shriramone</string>
-		<string>indusmobile</string>
-		<string>whatsapp</string>
-		<string>whatsapp-consumer</string>
-		<string>kotakbank</string>
-		<string>freecharge</string>
-		<string>postpe</string>
-		<string>super</string>
-		<string>lxme</string>
-		<string>scapia</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>

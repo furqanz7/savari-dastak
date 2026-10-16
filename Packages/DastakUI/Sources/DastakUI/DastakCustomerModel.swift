@@ -1975,6 +1975,10 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func retryPayment(for order: MerchantOrderSnapshot) async {
+        guard DastakLaunchCommercePolicy.allowsLegacyOnlineCheckout else {
+            ordersActionMessage = DastakLaunchCommercePolicy.onlinePaymentUnavailableMessage
+            return
+        }
         guard order.paymentState == .paymentPending, !isCheckingOut else { return }
         isCheckingOut = true
         defer { isCheckingOut = false }
@@ -2155,6 +2159,10 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     func retryPayment(for parcel: CustomerParcelDelivery) async {
+        guard DastakLaunchCommercePolicy.allowsLegacyOnlineCheckout else {
+            ordersActionMessage = DastakLaunchCommercePolicy.onlinePaymentUnavailableMessage
+            return
+        }
         guard parcel.audience == .sender,
               parcel.parcel.paymentStatus == .pending || parcel.parcel.paymentStatus == .failed,
               !isCheckingOut else { return }
@@ -2258,6 +2266,10 @@ final class DastakCustomerModel: ObservableObject {
         declaredContents: String,
         declaredValuePaise: Int
     ) async -> ParcelDelivery? {
+        guard DastakLaunchCommercePolicy.allowsLegacyOnlineCheckout else {
+            parcelErrorMessage = "Parcel booking is not available in this release."
+            return nil
+        }
         guard let parcelQuote, !isCheckingOut else { return nil }
         isCheckingOut = true
         defer { isCheckingOut = false }

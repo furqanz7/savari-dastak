@@ -4,6 +4,17 @@ Status: in progress. Merchant work remains deferred until this distribution work
 
 Latest distribution settings: free download in all 175 countries/regions, with iPhone/iPad supported and Mac/Apple Vision Pro availability disabled. The owner explicitly corrected the earlier India-only choice to all countries. These settings are verified in the final checkpoint below. Earlier checkpoints are historical, not outstanding availability blockers. App Review has not been submitted.
 
+Latest listing checkpoint (17 October): owner-pasted description/promotional text, subtitle, Shopping/Food & Drink categories, age ratings and content rights are now saved/observed. App Privacy has 14 draft types and remains unpublished; Product Interaction plus hosted operational-logging reconciliation remain unfinished. Required screenshots, reviewer Delivery access and trader-status assessment remain submission gates. The owner approved Build 59 cleanup: current Grocery/Food doorstep payment only, legacy merchant/parcel online retries disabled, Razorpay SDK excluded, old history retained. Build 59 verification/upload is in progress; Build 58 remains the last confirmed internally available build. See the latest checkpoint in the listing draft for details.
+
+## Build 59 release-scope cleanup
+
+- Removed Razorpay's Swift package product/dependency from DastakUI and its resolved workspace graph. Retained the SDK-backed implementation behind its existing conditional imports for future separately scoped use; no provider/backend code or payment configuration was deleted or activated.
+- Removed the combined Customer/Delivery app's provider callback, payment-app discovery schemes and TEST-mode Info setting. Authentication callback and Merchant-app handoff remain.
+- A launch commerce policy hides legacy merchant/parcel Pay controls and guards both retry methods before any request. New prepaid parcel booking is refused before order creation. Read-only history, support and eligible existing cancellation remain; current V1 Grocery/Food doorstep confirmation/collection are unchanged.
+- Reconciled the first-party manifest with linked approximate-address location, purchase-history Product Personalization, Payment Info, Other Financial Info and Product Interaction. This does not settle hosted diagnostics/retention questions or publish the App Store privacy label.
+- Local `swift test --package-path Packages/DastakUI --jobs 1` passed **553 tests, zero failures**, including four new policy/request-spy tests and the existing V1 confirmation/Delivery collection cases. `swift test --package-path Packages/MarketplaceInfrastructure --jobs 1` passed **185 tests, zero failures**, including release Info/manifest configuration checks. These use fixtures, not live orders or payments.
+- Both plists lint and `git diff --check` pass. The initial archive caught a parcel notice type mismatch; it was corrected, the full UI suite passed afterward, and the corrected Release archive is being built. Archive absence/signing, hosted checks, upload, Apple processing and TestFlight acceptance are not yet claimed.
+
 ## Confirmed baseline
 
 - Combined app: `com.dastak.app`, Apple team `RBLBKM3W74`.

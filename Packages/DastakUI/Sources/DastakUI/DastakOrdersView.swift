@@ -793,6 +793,11 @@ private struct DastakParcelDetailView: View {
                     .buttonStyle(MarketplacePrimaryButtonStyle())
                     .padding(.horizontal, MarketplaceSpacing.medium)
                 }
+                if !DastakLaunchCommercePolicy.allowsLegacyOnlineCheckout,
+                   customerParcel.audience == .sender,
+                   parcel.paymentStatus == .pending || parcel.paymentStatus == .failed {
+                    DastakLegacyOnlinePaymentNotice()
+                }
                 if canCancel {
                     MarketplaceFeedbackButton(role: .destructive) {
                         showingCancellationReasons = true
@@ -946,7 +951,9 @@ private struct DastakParcelDetailView: View {
     }
 
     private var canPay: Bool {
-        parcel.customerActions?.canPay ?? (presentation.primaryAction == .pay)
+        DastakLaunchCommercePolicy.canRetryLegacyPayment(
+            serverAllows: parcel.customerActions?.canPay ?? (presentation.primaryAction == .pay)
+        )
     }
 
     private var canCancel: Bool {
@@ -1060,6 +1067,10 @@ private struct DastakOrderDetailView: View {
                 .padding(.horizontal, MarketplaceSpacing.medium)
                 if canPay {
                     payButton
+                }
+                if !DastakLaunchCommercePolicy.allowsLegacyOnlineCheckout,
+                   order.paymentState == .paymentPending {
+                    DastakLegacyOnlinePaymentNotice()
                 }
                 if canCancel {
                     cancelButton
@@ -1329,7 +1340,9 @@ private struct DastakOrderDetailView: View {
     }
 
     private var canPay: Bool {
-        order.customerActions?.canPay ?? (order.paymentState == .paymentPending)
+        DastakLaunchCommercePolicy.canRetryLegacyPayment(
+            serverAllows: order.customerActions?.canPay ?? (order.paymentState == .paymentPending)
+        )
     }
 
     private var presentation: DastakCustomerLifecyclePresentation {
@@ -1645,6 +1658,18 @@ private struct DastakTimelineCard: View {
         }
         .padding(MarketplaceSpacing.medium)
         .marketplaceFlatSurface()
+    }
+}
+
+private struct DastakLegacyOnlinePaymentNotice: View {
+    var body: some View {
+        Label(DastakLaunchCommercePolicy.onlinePaymentUnavailableMessage, systemImage: "info.circle")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(MarketplaceSpacing.medium)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .marketplaceFlatSurface()
+            .padding(.horizontal, MarketplaceSpacing.medium)
     }
 }
 

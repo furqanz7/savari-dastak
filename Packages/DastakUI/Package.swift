@@ -14,8 +14,7 @@ let package = Package(
         .package(path: "../DastakDomain"),
         .package(path: "../MarketplaceDesignSystem"),
         .package(path: "../MarketplaceFoundation"),
-        .package(path: "../MarketplaceInfrastructure"),
-        .package(url: "https://github.com/razorpay/razorpay-customui-pod.git", exact: "2.2.0")
+        .package(path: "../MarketplaceInfrastructure")
     ],
     targets: [
         .target(
@@ -30,12 +29,7 @@ let package = Package(
                 "DastakDomain",
                 "MarketplaceDesignSystem",
                 "MarketplaceFoundation",
-                "MarketplaceInfrastructure",
-                .product(
-                    name: "RazorpayCustomUI",
-                    package: "razorpay-customui-pod",
-                    condition: .when(platforms: [.iOS])
-                )
+                "MarketplaceInfrastructure"
             ],
             resources: [.process("Resources")]
         ),

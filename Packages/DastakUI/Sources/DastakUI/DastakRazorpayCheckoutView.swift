@@ -936,7 +936,7 @@ public struct DastakRazorpayCheckoutView: View {
     }
 
     public var body: some View {
-        Color.clear.task { onResult(.failed("Razorpay Custom Checkout is available only on iPhone and iPad.")) }
+        Color.clear.task { onResult(.failed(DastakLaunchCommercePolicy.onlinePaymentUnavailableMessage)) }
     }
 }
 #endif
