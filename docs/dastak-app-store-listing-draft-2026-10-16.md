@@ -1,6 +1,6 @@
 # Dastak App Store listing draft
 
-Status: preparation only, not saved to App Store Connect. Customer + Delivery only; Merchant remains deferred. Intended release candidate: version 1.0.0, Build 58, with the owner-approved centred under-panel weather credit. Upload, processing and compliance clearance succeeded; a live Safari refresh confirmed Ready to Submit in the existing internal Testing group. The owner reported installing Build 58 and explicitly accepted the centred footer and its legal-text spacing. A read-only check found the existing App Store version is 1.0, English (U.K.), with no selected build and empty listing/review fields. Reconcile the version/build selection before saving; do not assume those fields are complete.
+Status: partially saved to App Store Connect, not submitted. Customer + Delivery only; Merchant remains deferred. Release candidate: version 1.0.0, Build 58, with the owner-approved centred under-panel weather credit. Upload, processing and compliance clearance succeeded; a live Safari refresh confirmed Ready to Submit in the existing internal Testing group. The owner reported installing Build 58 and explicitly accepted the centred footer and its legal-text spacing. The existing App Store version is 1.0, English (U.K.). Its Add Build chooser offered Build 58 (1.0.0), which was selected and saved; keywords, support URL and marketing URL were also saved. Description/promotional text remain blank because Safari text-area input did not take; the copy below remains a draft. No version-number change was needed to select Build 58. Review contact/access, copyright, screenshots and other declarations remain unfinished.
 
 ## Public copy
 
@@ -81,3 +81,12 @@ Suggested truthful sequence:
 Screenshots must reflect the Build 58 release-candidate experience, not a proposed redesign. Any sample data must remain representative and must not be presented as a real fulfilled order. Check both required iPhone and iPad display slots. Do not repurpose old pre-polish screenshots as current release assets.
 
 Live checks still needed: existing version/localization, selected build, screenshots, app description and URLs, category, age-rating questionnaire, pricing/territories, content rights, App Privacy, review contact/access, release timing and submission validation. Any legal attestations or agreements require owner confirmation at action time. No App Review submission has occurred in this preparation step.
+
+## Live setup checkpoint after Build 58 acceptance
+
+- Saved and subsequently observed after navigation: keywords, support URL, marketing URL and selected Build 58 (1.0.0) in the existing version 1.0 draft. Save returned disabled after each save. No Add for Review action was taken.
+- Promotional text and description remain empty. Native Safari text-area setters/clicks failed to focus them; an attempted paste landed in Marketing URL instead, was detected, and the URL was restored and verified before saving. No erroneous description-as-URL value was saved.
+- The subtitle was entered on App Information but its persistence was not verified; do not count it complete. Category remained Primary/Secondary placeholders, and Set Up Content Rights Information and Set Up Age Ratings were still present. No answers or legal declarations were selected.
+- App Information currently reports non-trader status. This is an observed existing declaration, not an audited conclusion or a declaration made by the agent; it must be assessed with the intended storefronts before submission.
+- The owner was asked for the exact copyright-holder name, a manual-versus-automatic release decision, and to enter review contact details directly in Apple's form. Native interaction was paused when the contact form became active to avoid interfering with the owner's entry.
+- Pricing/territories and App Privacy have not yet been inspected in this checkpoint. Do not treat them as completed.
