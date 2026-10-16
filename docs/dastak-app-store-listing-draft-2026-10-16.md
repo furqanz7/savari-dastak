@@ -90,3 +90,24 @@ Live checks still needed: existing version/localization, selected build, screens
 - App Information currently reports non-trader status. This is an observed existing declaration, not an audited conclusion or a declaration made by the agent; it must be assessed with the intended storefronts before submission.
 - The owner was asked for the exact copyright-holder name, a manual-versus-automatic release decision, and to enter review contact details directly in Apple's form. Native interaction was paused when the contact form became active to avoid interfering with the owner's entry.
 - Pricing/territories and App Privacy have not yet been inspected in this checkpoint. Do not treat them as completed.
+
+## Owner decisions and subsequent live inspection
+
+- Owner supplied the exact copyright text **2026 Dastak دستک**. This was entered, saved and observed with Save disabled afterward.
+- Owner explicitly chose **Automatic release on approval**. The existing automatic setting was verified selected and retained; this authorizes that setting, not a claim that App Review submission or approval has occurred.
+- Owner confirmed entering/saving review contact directly in Apple’s form. A live inspection confirmed first name, last name, phone and email all populated while Save was disabled. Their values are deliberately not copied here.
+- App Privacy initially showed no policy URL and a **Get Started** data-collection questionnaire. The existing public privacy URL was entered and saved; the modal closed and the page showed `https://dastak-customer.vercel.app/privacy`. No privacy answers were selected or published.
+- Pricing and Availability showed **Add Pricing** and **Set Up Availability**: app-download price and storefront countries are not configured. Mac and Apple Vision Pro availability were both enabled by default and remain untested. Owner was asked whether to configure free download, India only, iPhone/iPad only and disable those two defaults. No such availability change has been applied yet.
+- Reviewer Delivery access remains undecided. Owner was asked whether to use a dedicated Google review account approved for Delivery or discuss a fully featured isolated demo. No review account, role approval or demo implementation was created.
+
+## Read-only privacy inventory follow-up
+
+The Supabase-guided source review made no backend, role, payout or runtime configuration changes. It confirms additional areas to reconcile before publishing labels; this is not a complete production privacy audit:
+
+- `DastakDeliveryPartnerAccessView.swift`: government identity proof and, for applicable delivery methods, vehicle registration/make/model and vehicle evidence are uploaded to account-scoped paths in `dastak-evidence`. Classify document contents accurately; a document photo is not automatically biometric processing merely because it contains a face.
+- `DastakDeliveryEarningsClient.swift` and `DastakDeliveryEarningsView.swift`: account-linked earnings balances, credits, adjustments and withdrawals; conditional bank-account/IFSC/account-holder or UPI registration. Apple’s **Other Financial Info** and **Payment Info** categories need explicit consideration. These financial data types are not listed in the current app privacy manifest.
+- `earnings/provider-clients.ts` gates destination registration and withdrawal availability on configuration. Source inspection does not establish the current production gate values. Do not activate payouts or infer live collection solely from the presence of code.
+- `DastakDeviceTokenClient.swift`: notification registration sends APNs token, platform, app ID and APNs environment to the backend; the existing Device ID declaration must be reconciled with actual use.
+- A targeted source search did not find named Sentry/Crashlytics/Firebase Analytics/Mixpanel/PostHog/IDFA integrations in the inspected app/infrastructure directories. This is not proof of absence of server logs, diagnostics or third-party collection.
+
+Apple’s [current privacy-data definitions](https://developer.apple.com/app-store/app-privacy-details/) require accounting for developer and third-party collection. Bank account numbers fall under Payment Info, and income/balances under Other Financial Info. Review storage/retention, purpose, linkage, optional-disclosure criteria and third-party behavior before confirming answers. Do not publish an incomplete label or infer it mechanically from the current manifest.
