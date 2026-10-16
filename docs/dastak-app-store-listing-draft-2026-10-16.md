@@ -111,3 +111,15 @@ The Supabase-guided source review made no backend, role, payout or runtime confi
 - A targeted source search did not find named Sentry/Crashlytics/Firebase Analytics/Mixpanel/PostHog/IDFA integrations in the inspected app/infrastructure directories. This is not proof of absence of server logs, diagnostics or third-party collection.
 
 Apple’s [current privacy-data definitions](https://developer.apple.com/app-store/app-privacy-details/) require accounting for developer and third-party collection. Bank account numbers fall under Payment Info, and income/balances under Other Financial Info. Review storage/retention, purpose, linkage, optional-disclosure criteria and third-party behavior before confirming answers. Do not publish an incomplete label or infer it mechanically from the current manifest.
+
+## Authorized distribution configuration and verification gap
+
+The owner approved free download, India only, iPhone/iPad only, with Mac and Vision Pro disabled. The Mac and Vision Pro checkboxes were unchecked and Save invoked; subsequent pricing-page observations showed both unchecked. A dedicated reload verification is still required before closing the device-availability gate.
+
+The free-price wizard selected India (INR) and ₹0.00, reviewed its all-country zero-price equivalents and confirmed. The resulting summary now contains a current price schedule for 175 countries, but reports United States as base country despite the wizard’s India selection. The exact saved India price/base needs verification in the price matrix; do not claim that discrepancy is resolved. Price entries for all countries are separate from which storefronts are enabled.
+
+The country-availability picker repeatedly reverted under automation, including after resetting the UI connection. The owner was asked to complete None → India → Next → confirmation manually and reported done. A subsequent refreshed page still listed Afghanistan, Albania, Algeria and Angola as Available on App Release. India-only availability is therefore **not verified**; the owner was asked to reopen Manage Availability and confirm exactly one selected country (India). Do not submit while this remains unresolved. An unrelated pre-order dialog was dismissed without a date or confirmation; no pre-order was scheduled.
+
+Subtitle save/category selection also remain unfinished: the subtitle is visible but persistence is not verified, and the category picker did not expand reliably. No content-rights, age-rating or privacy declaration was answered.
+
+The owner chose to **discuss** an isolated full-featured demo. The proposal and unsent Apple guidance request are in `docs/dastak-app-review-demo-proposal-2026-10-16.md`. This is not authorization to implement, grant roles, create external infrastructure or contact Apple. Prior Apple approval is a separate gate under the conditions in Guideline 2.1(a); no approval or message transmission has occurred.
