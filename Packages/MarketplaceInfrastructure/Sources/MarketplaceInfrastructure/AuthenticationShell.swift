@@ -775,16 +775,16 @@ private struct AuthenticationRouteView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                     .shadow(color: Color.black.opacity(0.28), radius: 28, y: 18)
 
-                    // Anchor optional attribution to the panel's lower-left
-                    // edge. Keep the existing gap and bottom legal-link position.
-                    VStack(alignment: .leading, spacing: 0) {
+                    // Centre optional attribution directly beneath the panel.
+                    // Keep the existing gap and bottom legal-link position.
+                    VStack(alignment: .center, spacing: 0) {
                         if let authenticationFooter {
                             authenticationFooter().padding(.top, 10)
                         }
                         Spacer(minLength: 12)
                     }
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(minHeight: compact ? 110 : 134, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: compact ? 110 : 134, alignment: .top)
                     dastakLegalLinks
                 }
                 .frame(maxWidth: 430, alignment: .topLeading)
