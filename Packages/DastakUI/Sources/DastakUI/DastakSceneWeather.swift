@@ -227,26 +227,35 @@ private struct DastakWeatherAttribution: View {
     var body: some View {
         Link(destination:legalPageURL) {
             ViewThatFits(in: .horizontal) {
-                HStack(spacing:8) {
+                HStack(spacing:9) {
                     weatherMark
+                    Rectangle()
+                        .fill(.primary.opacity(0.22))
+                        .frame(width:1,height:12)
+                        .accessibilityHidden(true)
                     dataSources
                 }
                 .fixedSize(horizontal:true,vertical:false)
-                VStack(spacing:4) {
+                VStack(spacing:6) {
                     weatherMark
                     dataSources
                 }
             }
             .foregroundStyle(overScenery ? Color.white : Color.primary)
-            .padding(.horizontal,8).padding(.vertical,5)
+            .padding(.horizontal,10).padding(.vertical,7)
             .background {
                 if overScenery {
-                    RoundedRectangle(cornerRadius:9).fill(Color.black.opacity(0.72))
+                    RoundedRectangle(cornerRadius:10,style:.continuous)
+                        .fill(Color.black.opacity(0.60))
+                        .overlay {
+                            RoundedRectangle(cornerRadius:10,style:.continuous)
+                                .strokeBorder(Color.white.opacity(0.12),lineWidth:0.5)
+                        }
                 } else {
-                    RoundedRectangle(cornerRadius:9).fill(.regularMaterial)
+                    RoundedRectangle(cornerRadius:10,style:.continuous).fill(.regularMaterial)
                 }
             }
-            .frame(minHeight:44)
+            .frame(minHeight:44,alignment:.topLeading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -264,9 +273,14 @@ private struct DastakWeatherAttribution: View {
     }
 
     private var dataSources: some View {
-        Text("Data sources")
-            .font(.caption2)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal:false,vertical:true)
+        HStack(spacing:4) {
+            Text("Data sources")
+                .font(.caption2.weight(.medium))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal:false,vertical:true)
+            Image(systemName:"arrow.up.right")
+                .font(.caption2.weight(.semibold))
+                .accessibilityHidden(true)
+        }
     }
 }

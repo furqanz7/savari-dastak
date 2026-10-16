@@ -775,14 +775,16 @@ private struct AuthenticationRouteView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                     .shadow(color: Color.black.opacity(0.28), radius: 28, y: 18)
 
-                    // Use the existing gap for optional attribution without
-                    // moving the sign-in panel or covering the legal links.
-                    VStack(spacing: 0) {
+                    // Anchor optional attribution to the panel's lower-left
+                    // edge. Keep the existing gap and bottom legal-link position.
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let authenticationFooter {
+                            authenticationFooter().padding(.top, 10)
+                        }
                         Spacer(minLength: 12)
-                        if let authenticationFooter { authenticationFooter() }
                     }
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(minHeight: compact ? 110 : 134, alignment: .bottom)
+                    .frame(minHeight: compact ? 110 : 134, alignment: .topLeading)
                     dastakLegalLinks
                 }
                 .frame(maxWidth: 430, alignment: .topLeading)
