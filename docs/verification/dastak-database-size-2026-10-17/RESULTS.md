@@ -45,7 +45,9 @@ The synthetic local fixture passed the initial fingerprint guard, 3,000-row rete
 
 ## Quota and follow-up boundary
 
-Supabase's organization Usage page still displayed its grace-period/Fair Use warning and older usage measurements during this work. The page says usage may take up to one hour to refresh; official documentation also explains that Fair Use can depend on billing-period average database size. **The measured live database reduction does not establish that this warning or every possible service restriction has cleared.** No paid upgrade or provider-contact workaround was used.
+The final Safari refresh of Supabase's organization Usage page showed **Database Size 0.456 / 0.5 GB (91%)**, with the Dastak per-project database panel showing **434.8 MB**. These provider accounting figures are below the allowance and are recorded separately from the direct SQL byte measurement; their labels/aggregation/refresh timing are not assumed identical. The earlier over-limit database usage display has therefore refreshed below quota too.
+
+The general **grace period is over** notice remains visible. It says requests *can* be restricted if the organization is over quota; that notice alone is not evidence of a current restriction. The page also says usage may take up to one hour to refresh, and official documentation explains the separate billing-period-average Fair Use rule. **This cleanup does not establish that every possible service restriction has cleared or that every authenticated app operation was tested.** No paid upgrade or provider-contact workaround was used.
 
 File Storage remains a separate near-limit resource (last dashboard observation about **0.929 / 1 GB**); no product image or evidence object was deleted. Future application/audit growth can still consume Free capacity even with successful-cron history bounded. A next-day stability check has not yet elapsed and no automatic expansion of deletion scope is authorized.
 
