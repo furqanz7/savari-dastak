@@ -23,6 +23,14 @@ enum DastakArtworkURLFactory {
         baseURLString: String?,
         pixelSize: Int = 512
     ) -> DastakArtworkRequest? {
+        // Reserved local namespace. Even an unknown demo image must not fall
+        // through to the production Storage URL builder.
+        if let imageKey, imageKey.hasPrefix("review-demo/") {
+            let name = String(imageKey.dropFirst("review-demo/".count))
+            guard !name.contains("/"), !name.contains(".."),
+                  let url = Bundle.module.url(forResource: "demo-" + name, withExtension: nil) else { return nil }
+            return DastakArtworkRequest(thumbnailURL: url, originalURL: url)
+        }
         guard let imageKey,
               let baseURLString,
               !baseURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -133,6 +141,10 @@ private actor DastakArtworkDataStore {
     }
 
     private static func download(_ url: URL) async -> Data? {
+        if url.isFileURL, url.lastPathComponent.hasPrefix("demo-"),
+           url.deletingLastPathComponent().standardizedFileURL == Bundle.module.bundleURL.standardizedFileURL {
+            return try? Data(contentsOf: url)
+        }
         for attempt in 0..<3 {
             if Task.isCancelled { return nil }
             var urlRequest = URLRequest(

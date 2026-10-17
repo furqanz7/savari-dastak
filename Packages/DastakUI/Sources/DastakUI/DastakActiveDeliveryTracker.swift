@@ -17,6 +17,7 @@ public final class DastakActiveDeliveryTracker: NSObject, ObservableObject, @pre
     @Published public private(set) var heartbeatFailure: String?
     private let manager = CLLocationManager()
     private let functions: any FunctionClient
+    private let demonstration: Bool
     private let client: SupabaseDastakV1DeliveryClient
     private let heartbeatMonitor: DastakDeliveryHeartbeat
     private var lastUpload: Date?
@@ -30,7 +31,8 @@ public final class DastakActiveDeliveryTracker: NSObject, ObservableObject, @pre
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 #endif
 
-    public init(functions: any FunctionClient) {
+    public init(functions: any FunctionClient, demonstration: Bool = false) {
+        self.demonstration = demonstration
         let bounded = DastakDeliveryFunctionClient(base: functions)
         self.functions = bounded
         client = SupabaseDastakV1DeliveryClient(functions: bounded)
@@ -125,6 +127,7 @@ public final class DastakActiveDeliveryTracker: NSObject, ObservableObject, @pre
     }
 
     private func updatePermissionAndReporting() {
+        guard !demonstration else { return }
         guard trackingID != nil, !stopped else { return }
         switch manager.authorizationStatus {
         case .notDetermined:

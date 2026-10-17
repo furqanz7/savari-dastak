@@ -8,6 +8,7 @@ import UIKit
 #endif
 
 struct DastakAccountView: View {
+    @Environment(\.marketplaceDemonstration) private var demonstration
     private enum AccountAlert: Identifiable {
         case signOut
         case error(String)
@@ -803,6 +804,7 @@ struct DastakAccountView: View {
 
     @MainActor
     private func manageNotifications() async {
+        guard !demonstration else { return }
         switch notificationStatus {
         case .notRequested:
             notificationStatus = await DastakNotificationPreferences.request()

@@ -20,10 +20,12 @@ public struct DastakDeliveryPartnerRootView: View {
 
     public init(services: MarketplaceAuthenticatedServices) {
         self.services = services
-        let operations = DastakDeliveryOperations(services: services)
+        let operations = DastakDeliveryOperations(services: services,
+            storage: services.isDemonstration ? DastakDemoDeliveryStorage() : DastakDeliveryCommandFileStore.shared)
         _operations = StateObject(wrappedValue: operations)
         _model = StateObject(wrappedValue: DastakDeliveryPartnerModel(functions: services.functions, operations: operations))
-        _earningsModel = StateObject(wrappedValue: DastakDeliveryEarningsModel(services: services))
+        _earningsModel = StateObject(wrappedValue: DastakDeliveryEarningsModel(services: services,
+            storage: services.isDemonstration ? DastakDemoPayoutStorage() : DastakDeliveryPayoutFileStore.shared))
     }
 
     public var body: some View {

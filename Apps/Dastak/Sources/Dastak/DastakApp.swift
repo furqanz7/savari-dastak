@@ -13,6 +13,7 @@ import WidgetKit
 
 @main
 struct DastakApp: App {
+    @State private var showingReviewDemo = false
     @UIApplicationDelegateAdaptor(DastakNotificationDelegate.self) private var notificationDelegate
 
     var body: some Scene {
@@ -65,7 +66,14 @@ struct DastakApp: App {
                 #endif
             }
             .onOpenURL { url in
-                if let action = DastakAppAction(url: url) { DastakAppActionInbox().request(action) }
+                if url.scheme == "com.dastak.app", url.host == "demo" { showingReviewDemo = true }
+                else if let action = DastakAppAction(url: url) { DastakAppActionInbox().request(action) }
+                else if showingReviewDemo, url.scheme == "com.dastak.app", url.host == "order" {
+                    DastakAppActionInbox().request(.tracking)
+                }
+            }
+            .fullScreenCover(isPresented: $showingReviewDemo) {
+                DastakReviewDemoRootView(exit: { showingReviewDemo = false })
             }
         }
     }
@@ -83,6 +91,7 @@ struct DastakApp: App {
             restrictedContent: { _, _ in EmptyView() }
         )
         .onOpenURL { url in
+            guard !showingReviewDemo else { return }
             guard url.scheme == "com.dastak.app", url.host == "order",
                   let id = url.pathComponents.last, UUID(uuidString: id) != nil else { return }
             if URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: {
@@ -97,6 +106,16 @@ struct DastakApp: App {
         })
         .environment(\.marketplaceAuthenticationFooter, {
             AnyView(DastakSceneWeatherCredit())
+        })
+        .environment(\.marketplaceAuthenticationDemoEntry, {
+            AnyView(Button {
+                showingReviewDemo = true
+            } label: {
+                Label("Explore the demo", systemImage: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }.buttonStyle(.plain).accessibilityHint("Explore Customer and Delivery using isolated sample data. No sign-in or real orders."))
         })
         .marketplaceHaptics()
     }
@@ -175,6 +194,11 @@ final class DastakNotificationDelegate: NSObject, UIApplicationDelegate, UNUserN
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
+        // Local demo notifications never enter the production order inbox.
+        if response.notification.request.content.userInfo["dastakReviewDemo"] as? Bool == true {
+            DastakReviewDemoRouting.openSampleUpdate()
+            return
+        }
         notificationInbox.clear()
         guard let route = DastakNotificationRoute.route(
             from: response.notification.request.content.userInfo

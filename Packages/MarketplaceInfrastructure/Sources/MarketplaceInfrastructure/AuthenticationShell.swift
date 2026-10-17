@@ -417,6 +417,7 @@ private struct DefaultMarketplaceActiveView: View {
 private struct AuthenticationRouteView: View {
     @Environment(\.marketplaceAuthenticationBackdrop) private var authenticationBackdrop
     @Environment(\.marketplaceAuthenticationFooter) private var authenticationFooter
+    @Environment(\.marketplaceAuthenticationDemoEntry) private var authenticationDemoEntry
     @Environment(\.marketplaceHapticScope) private var haptics
     @ScaledMetric(relativeTo: .title2) private var customerWelcomeSize: CGFloat = 24
     private enum SignInProvider: String {
@@ -763,6 +764,7 @@ private struct AuthenticationRouteView: View {
                             .foregroundStyle(.white.opacity(0.9))
                             .accessibilityAddTraits(.isHeader)
                         dastakSignedOutView
+                        if let authenticationDemoEntry { authenticationDemoEntry() }
                         signInProgressView
                         dastakErrorView
                     }

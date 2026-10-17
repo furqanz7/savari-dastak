@@ -36,6 +36,7 @@ public struct DastakCustomerRootView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
     private let isPreview: Bool
+    private let demonstration: Bool
     private let merchantOnboardingState: MerchantOnboardingState?
     private let isMerchantAccessLoading: Bool
     private let deliveryPartnerAccess: DeliveryPartnerAccess
@@ -60,7 +61,9 @@ public struct DastakCustomerRootView: View {
         deliveryPartnerAccess: DeliveryPartnerAccess = .unavailable,
         isDeliveryPartnerAccessLoading: Bool = false,
         becomeMerchant: @escaping () -> Void = {},
-        becomeDeliveryPartner: @escaping () -> Void = {}
+        becomeDeliveryPartner: @escaping () -> Void = {},
+        demonstration: Bool = false,
+        demonstrationDefaults: UserDefaults? = nil
     ) {
         _model = StateObject(
             wrappedValue: DastakCustomerModel(
@@ -68,10 +71,17 @@ public struct DastakCustomerRootView: View {
                 checkoutCustomerProvider: checkoutCustomerProvider,
                 accountIDProvider: accountIDProvider,
                 issueEvidenceUploader: issueEvidenceUploader,
-                oauthIdentityLinker: oauthIdentityLinker
+                oauthIdentityLinker: oauthIdentityLinker,
+                basketDefaults: demonstrationDefaults ?? .standard,
+                checkoutJournalStorage: demonstration ? DastakDemoCheckoutStorage() : DastakFileCheckoutJournalStorage(),
+                demonstration: demonstration
             )
         )
         isPreview = false
+        self.demonstration = demonstration
+        let locationManager = DastakLocationManager()
+        locationManager.isDemonstration = demonstration
+        _locationManager = StateObject(wrappedValue: locationManager)
         self.merchantOnboardingState = merchantOnboardingState
         self.isMerchantAccessLoading = isMerchantAccessLoading
         self.deliveryPartnerAccess = deliveryPartnerAccess
@@ -88,6 +98,7 @@ public struct DastakCustomerRootView: View {
     public init(preview: Bool, shoppingFixtures: Bool = false) {
         _model = StateObject(wrappedValue: DastakCustomerModel.preview(panelFixtures: true, shoppingFixtures: shoppingFixtures))
         isPreview = preview
+        demonstration = false
         merchantOnboardingState = .notApplied
         isMerchantAccessLoading = false
         deliveryPartnerAccess = .notApplied
@@ -169,11 +180,11 @@ public struct DastakCustomerRootView: View {
         }
         .onChange(of: scenePhase) { _, phase in haptics.isActive = phase == .active }
         .onChange(of: model.v1Orders) { _, _ in
-            guard !isPreview else { return }
+            guard !isPreview, !demonstration else { return }
             Task { await model.syncOrderLiveTracking() }
         }
         .onChange(of: model.activeV1Order) { _, _ in
-            guard !isPreview else { return }
+            guard !isPreview, !demonstration else { return }
             Task { await model.syncOrderLiveTracking() }
         }
         .environment(\.dastakOpenCart, DastakOpenCartAction { service in openCart(service) })
@@ -320,6 +331,7 @@ public struct DastakCustomerRootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: dastakOrderNotificationOpened)) { notification in
+            guard !demonstration else { return }
             guard let destination = DastakCustomerDestination(
                 notificationPayload: notification.userInfo ?? [:]
             ) else { return }
@@ -329,6 +341,7 @@ public struct DastakCustomerRootView: View {
             consumeAppAction()
         }
         .onChange(of: navigation.service) { _, service in
+            guard !demonstration else { return }
             UserDefaults.standard.set(service.rawValue, forKey: "dastak.customer.lastService")
         }
         .onDisappear { appActionTask?.cancel() }
@@ -524,6 +537,10 @@ public struct DastakCustomerRootView: View {
         }
         // The shared auth shell verifies the session before mounting this view.
         await model.bootstrap()
+        if demonstration {
+            isReadyForAppAction = true
+            return
+        }
         let notificationState = await DastakNotificationPreferences.status()
         if notificationState != .notRequested {
             model.completeOnboarding()

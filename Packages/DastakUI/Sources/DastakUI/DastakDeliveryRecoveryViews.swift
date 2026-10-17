@@ -31,6 +31,7 @@ struct DastakDeliveryRecoveryPanel: View {
 }
 
 struct DastakReturnMissionCard: View {
+    @Environment(\.marketplaceDemonstration) private var demonstration
     @ObservedObject var operations: DastakDeliveryOperations
     let mission: DastakV1ReturnMission
     let refresh: () async -> Void
@@ -64,9 +65,19 @@ struct DastakReturnMissionCard: View {
                     if mission.status == "AT_CUSTOMER" {
                         Text("1. Check all packages · 2. Take photo · 3. Ask for return PIN")
                             .font(.footnote.bold())
+                        if demonstration {
+                            Button("Use sample return photo") {
+                                Task {
+                                    await operations.submitReturn(.evidence, mission: mission,
+                                        photo: Data([0x44, 0x45, 0x4d, 0x4f]), contentType: "image/jpeg")
+                                    await refresh()
+                                }
+                            }.disabled(!operations.canReturn(.evidence, mission: mission) || operations.busy)
+                        } else {
                         PhotosPicker(selection: $photo, matching: .images) {
                             Label(mission.evidence.isEmpty ? "Add return package photo" : "Replace return package photo", systemImage: "camera")
                         }.disabled(!operations.canReturn(.evidence, mission: mission) || operations.busy)
+                        }
                         if !mission.evidence.isEmpty { Label("Return evidence recorded", systemImage: "checkmark.shield") }
                         if let photoMessage { Text(photoMessage).font(.footnote) }
                         Toggle("All \(mission.packageCount) return packages are present and accounted for", isOn: $confirmed)

@@ -1,5 +1,15 @@
 # Dastak isolated review demo proposal
 
+## Implementation checkpoint — 18 October 2026
+
+After Apple's new generic reply was read and reported, the owner explicitly authorized implementation. Local Customer/Delivery demo code and regression tests now exist; see [the implementation and verification checkpoint](dastak-review-demo-implementation-2026-10-18.md). No new binary upload, role grant, privacy publication or review submission is claimed. The original discussion below remains historical evidence, not the current implementation status or Apple approval.
+
+## Later checkpoint — 17 October 2026
+
+The proposal below is preserved as its original discussion record. The owner subsequently explicitly authorized sending a guidance request to Apple. It was posted in the existing App Review thread and verified by Messages (2) plus the new posted message. Apple's older beta response explicitly allows a demonstration mode exhibiting full functionality; the new message asks whether the proposed isolated Customer / Delivery approach is suitable for the forthcoming review and satisfies any applicable prior-approval requirement. No new Apple response or approval is claimed. Demo implementation, production access changes and review submission remain unperformed and require their own authorization. Build 59 contains no new review demo.
+
+Thread: https://appstoreconnect.apple.com/apps/6796518603/distribution/reviewsubmissions/threads/dccc7bf3-7293-3cce-a8b2-840abcc4ad6a
+
 Status: discussion and draft only. The owner asked to discuss this approach; implementation, production access changes and contacting Apple are not authorized by that choice. No demo code, reviewer account or role approval has been created. Build 58 contains no new review demo.
 
 ## Why this is separate from normal sign-in

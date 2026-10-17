@@ -153,6 +153,7 @@ final class DastakCustomerModel: ObservableObject {
     private var quoteRequestID = UUID()
     private var quotedBasketKey: String?
     private let enforcesAreaChecks: Bool
+    private let preferenceDefaults: UserDefaults
     var requiresAreaChecks: Bool { accountIDProvider != nil && enforcesAreaChecks }
     @Published var discoveryRadiusKilometres = 10
     @Published var searchText = "" {
@@ -355,7 +356,8 @@ final class DastakCustomerModel: ObservableObject {
         oauthIdentityLinker: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil,
         basketDefaults: UserDefaults = .standard,
         checkoutJournalStorage: any DastakCheckoutJournalStorage = DastakFileCheckoutJournalStorage(),
-        enforcesAreaChecks: Bool = true
+        enforcesAreaChecks: Bool = true,
+        demonstration: Bool = false
     ) {
         self.catalogueClient = catalogueClient
         self.v1Client = v1Client
@@ -368,6 +370,7 @@ final class DastakCustomerModel: ObservableObject {
         self.checkoutCustomerProvider = checkoutCustomerProvider
         self.accountIDProvider = accountIDProvider
         self.enforcesAreaChecks = enforcesAreaChecks
+        self.preferenceDefaults = demonstration ? basketDefaults : .standard
         self.basketStore = DastakBasketStore(defaults: basketDefaults)
         self.checkoutJournalStorage = checkoutJournalStorage
         self.isCartStorageReady = accountIDProvider == nil
@@ -383,7 +386,8 @@ final class DastakCustomerModel: ObservableObject {
         oauthIdentityLinker: (@Sendable (MarketplaceOAuthProvider) async throws -> Void)? = nil,
         basketDefaults: UserDefaults = .standard,
         checkoutJournalStorage: any DastakCheckoutJournalStorage = DastakFileCheckoutJournalStorage(),
-        enforcesAreaChecks: Bool = true
+        enforcesAreaChecks: Bool = true,
+        demonstration: Bool = false
     ) {
         self.init(
             catalogueClient: SupabaseCatalogueClient(functions: functions),
@@ -400,9 +404,10 @@ final class DastakCustomerModel: ObservableObject {
             oauthIdentityLinker: oauthIdentityLinker,
             basketDefaults: basketDefaults,
             checkoutJournalStorage: checkoutJournalStorage,
-            enforcesAreaChecks: enforcesAreaChecks
+            enforcesAreaChecks: enforcesAreaChecks,
+            demonstration: demonstration
         )
-        if let accountIDProvider {
+        if let accountIDProvider, !demonstration {
             orderLiveTracking = DastakOrderLiveTracking(functions: functions, accountID: accountIDProvider)
         }
     }
@@ -586,7 +591,7 @@ final class DastakCustomerModel: ObservableObject {
 
     func completeOnboarding() {
         hasCompletedOnboarding = true
-        UserDefaults.standard.set(true, forKey: preferenceKey("onboardingCompleted"))
+        preferenceDefaults.set(true, forKey: preferenceKey("onboardingCompleted"))
     }
 
     func refreshCheckoutCustomer() async {
@@ -667,7 +672,7 @@ final class DastakCustomerModel: ObservableObject {
         basketStore.remove(accountID: accountID)
         let scope = accountID.uuidString.lowercased()
         for name in ["discoveryLocation", "deliveryLocation", "discoveryRadiusKilometres"] {
-            UserDefaults.standard.removeObject(forKey: "dastak.customer.\(scope).\(name)")
+            preferenceDefaults.removeObject(forKey: "dastak.customer.\(scope).\(name)")
         }
         accountDeletionAttempt.complete(scope: scope)
         try checkoutJournalStorage.removeAfterAcknowledgedCustomerDeletion(accountID: accountID)
@@ -2310,9 +2315,9 @@ final class DastakCustomerModel: ObservableObject {
         isDeliveryAddressConfirmed = false
         await restoreCartStorage()
         if let basketAccountID { preferenceScope = basketAccountID.uuidString.lowercased() }
-        selectedLocation = Self.savedDiscoveryLocation(scope: preferenceScope)
-        discoveryRadiusKilometres = Self.savedDiscoveryRadius(scope: preferenceScope)
-        hasCompletedOnboarding = UserDefaults.standard.bool(
+        selectedLocation = Self.savedDiscoveryLocation(scope: preferenceScope, defaults: preferenceDefaults)
+        discoveryRadiusKilometres = Self.savedDiscoveryRadius(scope: preferenceScope, defaults: preferenceDefaults)
+        hasCompletedOnboarding = preferenceDefaults.bool(
             forKey: preferenceKey("onboardingCompleted")
         )
 
@@ -2698,7 +2703,7 @@ final class DastakCustomerModel: ObservableObject {
     }
 
     private func persistDiscoveryPreferences() {
-        let defaults = UserDefaults.standard
+        let defaults = preferenceDefaults
         defaults.set(discoveryRadiusKilometres, forKey: preferenceKey("discoveryRadiusKilometres"))
         if let selectedLocation,
            let data = try? JSONEncoder().encode(selectedLocation) {
@@ -2711,8 +2716,7 @@ final class DastakCustomerModel: ObservableObject {
         "dastak.customer.\(preferenceScope).\(name)"
     }
 
-    private static func savedDiscoveryLocation(scope: String) -> DastakDeliveryLocation? {
-        let defaults = UserDefaults.standard
+    private static func savedDiscoveryLocation(scope: String, defaults: UserDefaults = .standard) -> DastakDeliveryLocation? {
         let keyPrefix = "dastak.customer.\(scope)."
         guard let data = defaults.data(forKey: keyPrefix + "discoveryLocation")
             ?? defaults.data(forKey: keyPrefix + "deliveryLocation") else {
@@ -2724,8 +2728,8 @@ final class DastakCustomerModel: ObservableObject {
         return discoveryLocation(from: saved)
     }
 
-    private static func savedDiscoveryRadius(scope: String) -> Int {
-        let value = UserDefaults.standard.integer(forKey: "dastak.customer.\(scope).discoveryRadiusKilometres")
+    private static func savedDiscoveryRadius(scope: String, defaults: UserDefaults = .standard) -> Int {
+        let value = defaults.integer(forKey: "dastak.customer.\(scope).discoveryRadiusKilometres")
         return (10...30).contains(value) ? value : 10
     }
 

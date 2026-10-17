@@ -8,11 +8,15 @@ final class MarketplaceAuthenticationEnvironmentTests: XCTestCase {
         let values = EnvironmentValues()
         XCTAssertNil(values.marketplaceAuthenticationBackdrop)
         XCTAssertNil(values.marketplaceAuthenticationFooter)
+        XCTAssertNil(values.marketplaceAuthenticationDemoEntry)
+        XCTAssertFalse(values.marketplaceDemonstration)
     }
 
     func testFooterAndBackdropRemainIndependent() {
         var values = EnvironmentValues()
         values.marketplaceAuthenticationFooter = { AnyView(Text("Weather credit")) }
+        values.marketplaceAuthenticationDemoEntry = { AnyView(Text("Explore the demo")) }
+        values.marketplaceDemonstration = true
         XCTAssertNotNil(values.marketplaceAuthenticationFooter)
         XCTAssertNil(values.marketplaceAuthenticationBackdrop)
 
@@ -20,5 +24,7 @@ final class MarketplaceAuthenticationEnvironmentTests: XCTestCase {
         values.marketplaceAuthenticationFooter = nil
         XCTAssertNil(values.marketplaceAuthenticationFooter)
         XCTAssertNotNil(values.marketplaceAuthenticationBackdrop)
+        XCTAssertNotNil(values.marketplaceAuthenticationDemoEntry)
+        XCTAssertTrue(values.marketplaceDemonstration)
     }
 }

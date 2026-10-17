@@ -9,7 +9,21 @@ private struct AuthenticationBackdropKey: EnvironmentKey {
 private struct AuthenticationFooterKey: EnvironmentKey {
     static var defaultValue: (@MainActor () -> AnyView)? { nil }
 }
+private struct AuthenticationDemoEntryKey: EnvironmentKey {
+    static var defaultValue: (@MainActor () -> AnyView)? { nil }
+}
+private struct DemonstrationKey: EnvironmentKey {
+    static let defaultValue = false
+}
 public extension EnvironmentValues {
+    var marketplaceDemonstration: Bool {
+        get { self[DemonstrationKey.self] }
+        set { self[DemonstrationKey.self] = newValue }
+    }
+    var marketplaceAuthenticationDemoEntry: (@MainActor () -> AnyView)? {
+        get { self[AuthenticationDemoEntryKey.self] }
+        set { self[AuthenticationDemoEntryKey.self] = newValue }
+    }
     /// Opt-in only; other marketplace apps retain their existing page canvas.
     var marketplaceImmersiveEnvironment: Bool {
         get { self[ImmersiveEnvironmentKey.self] }

@@ -44,6 +44,8 @@ public struct MarketplaceCheckoutCustomer: Equatable, Sendable {
 }
 
 public struct MarketplaceAuthenticatedServices: Sendable {
+    /// Explicit local environment; never inferred from an account, URL or remote claim.
+    public let isDemonstration: Bool
     public let functions: any FunctionClient
     public let orderEvents: any OrderEventClient
     public let adminEvents: any AdminEventClient
@@ -64,6 +66,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
 
     init(
         functions: any FunctionClient,
+        isDemonstration: Bool = false,
         orderEvents: any OrderEventClient = NoopOrderEventClient(),
         adminEvents: any AdminEventClient = NoopAdminEventClient(),
         accountIDProvider: @escaping @Sendable () async throws -> UUID,
@@ -86,6 +89,7 @@ public struct MarketplaceAuthenticatedServices: Sendable {
         },
         sessionRefresher: @escaping @Sendable () async throws -> Void = {}
     ) {
+        self.isDemonstration = isDemonstration
         self.functions = functions
         self.orderEvents = orderEvents
         self.adminEvents = adminEvents

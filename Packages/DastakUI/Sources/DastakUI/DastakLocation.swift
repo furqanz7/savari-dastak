@@ -66,6 +66,7 @@ public struct DastakDeliveryLocation: Codable, Equatable, Sendable, Identifiable
 
 @MainActor
 final class DastakLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    var isDemonstration = false
     @Published private(set) var location: DastakDeliveryLocation?
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
     @Published private(set) var errorMessage: String?
@@ -81,6 +82,10 @@ final class DastakLocationManager: NSObject, ObservableObject, CLLocationManager
     }
 
     func requestLocation() {
+        guard !isDemonstration else {
+            location = DastakDeliveryLocation(address: "Sample Garden Street, Vaniyambadi", point: .init(latitude: 12.6819, longitude: 78.6201))
+            return
+        }
         // An explicit request must not reuse a previous GPS fix or its error.
         requestRevision = UUID()
         location = nil

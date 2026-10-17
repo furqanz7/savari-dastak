@@ -39,7 +39,7 @@ struct DastakDeliveryPartnerWorkspaceView: View {
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(15))
-                guard !Task.isCancelled, model.isOnline, scenePhase == .active else { continue }
+                guard !Task.isCancelled, !services.isDemonstration, model.isOnline, scenePhase == .active else { continue }
                 locationManager.requestLocation()
             }
         }
@@ -161,6 +161,13 @@ struct DastakDeliveryPartnerWorkspaceView: View {
                     },
                     captureEvidence: { item in
                         Task { await captureV1Evidence(item, mission: mission) }
+                    },
+                    captureSampleEvidence: {
+                        Task {
+                            await operations.submitDelivery(.deliveryEvidence, mission: mission,
+                                photo: Data([0x44, 0x45, 0x4d, 0x4f]), contentType: "image/jpeg")
+                            await model.actionFinished()
+                        }
                     }
                 )
                 .id(mission.id)
@@ -325,6 +332,10 @@ struct DastakDeliveryPartnerWorkspaceView: View {
     }
 
     private func changeAvailability(_ online: Bool) {
+        if services.isDemonstration {
+            Task { await model.setAvailability(online: online, location: .init(address: "Sample Garden Street", point: .init(latitude: 12.6819, longitude: 78.6201))) }
+            return
+        }
         if online, locationManager.location == nil {
             pendingOnlineRequest = true
             locationManager.requestLocation()
@@ -465,6 +476,8 @@ private struct DastakV1MissionCard: View {
         String?
     ) -> Void
     let captureEvidence: (PhotosPickerItem) -> Void
+    var captureSampleEvidence: (() -> Void)? = nil
+    @Environment(\.marketplaceDemonstration) private var demonstration
     @State private var pickupCodes: [UUID: String] = [:]
     @State private var packageCounts: [UUID: Int] = [:]
     @State private var deliveryCode = ""
@@ -584,6 +597,10 @@ private struct DastakV1MissionCard: View {
                 }
                 if mission.canCaptureDeliveryEvidence,
                    mission.finalVerification?.evidencePresent != true {
+                    if demonstration {
+                        Button("Use sample package photo") { captureSampleEvidence?() }
+                            .buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(busy)
+                    } else {
                     PhotosPicker(selection: $evidenceItem, matching: .images) {
                         Label("Add package handoff photo", systemImage: "photo.badge.plus")
                             .frame(maxWidth: .infinity)
@@ -594,6 +611,7 @@ private struct DastakV1MissionCard: View {
                         guard let item else { return }
                         captureEvidence(item)
                         evidenceItem = nil
+                    }
                     }
                 }
                 if mission.finalVerification?.evidencePresent == true {
