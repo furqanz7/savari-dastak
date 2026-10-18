@@ -6,6 +6,43 @@ import MarketplaceFoundation
 
 @MainActor
 final class DastakMerchantNotificationTests: XCTestCase {
+    func testDevelopmentSignedReleaseUsesSandboxInMerchantRegistration() async throws {
+        let functions = NotificationFunctionsStub(), system = NotificationSystemStub()
+        let profile = try PropertyListSerialization.data(fromPropertyList:
+            ["Entitlements": ["aps-environment": "development"]], format: .xml, options: 0)
+        system.environment = DastakAPNSEnvironment.resolve(embeddedProfile: profile)?.rawValue
+        let alerts = controller(system, functions: functions)
+        await alerts.receiveDeviceToken("fresh-development-token")
+        let calls = await functions.calls
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(calls.first)) as? [String: String])
+        XCTAssertEqual(body["apnsEnvironment"], "sandbox")
+        XCTAssertEqual(body["applicationId"], "com.dastak.merchant")
+        XCTAssertEqual(alerts.registration, .registered)
+    }
+
+    func testDistributedBuildRegistersProductionEnvironment() async throws {
+        let functions = NotificationFunctionsStub(), system = NotificationSystemStub()
+        system.environment = DastakAPNSEnvironment.resolve(embeddedProfile: nil)?.rawValue
+        let alerts = controller(system, functions: functions)
+        await alerts.receiveDeviceToken("fresh-distribution-token")
+        let calls = await functions.calls
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(calls.first)) as? [String: String])
+        XCTAssertEqual(body["apnsEnvironment"], "production")
+        XCTAssertEqual(alerts.registration, .registered)
+    }
+
+    func testUnknownSigningEnvironmentDoesNotSendOrConfirmDeviceRegistration() async {
+        let functions = NotificationFunctionsStub(), system = NotificationSystemStub()
+        system.environment = nil
+        let alerts = controller(system, functions: functions)
+        await alerts.receiveDeviceToken("token-must-not-be-sent")
+        let calls = await functions.calls
+        XCTAssertTrue(calls.isEmpty)
+        XCTAssertEqual(alerts.registration, .failed)
+        XCTAssertFalse(alerts.isConnecting)
+        XCTAssertNotNil(alerts.failureReason)
+    }
+
     func testSharedCustomerDeliveryAppRegistersFreshTokenWithCorrectTopic() async throws {
         let functions = NotificationFunctionsStub()
         let system = NotificationSystemStub()
@@ -202,6 +239,7 @@ final class DastakMerchantNotificationTests: XCTestCase {
 
 @MainActor
 private final class NotificationSystemStub {
+    var environment: String? = "sandbox"
     var currentSettings = DastakNotificationSettings(permission: .enabled, alertsEnabled: true, soundEnabled: true)
     var appleRequests = 0
     var settingsOpened = 0
@@ -211,7 +249,7 @@ private final class NotificationSystemStub {
         .init(settings: { if let loader = self.settingsLoader { return await loader() }; return self.currentSettings }, requestPermission: {
             self.permissionRequests += 1
             self.currentSettings.permission = .enabled
-        }, registerWithApple: { self.appleRequests += 1 }, openSettings: { self.settingsOpened += 1 }, environment: "sandbox")
+        }, registerWithApple: { self.appleRequests += 1 }, openSettings: { self.settingsOpened += 1 }, environment: self.environment)
     }
 }
 

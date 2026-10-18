@@ -101,6 +101,7 @@ final class DastakOrderLiveTracking {
         tokenTasks[activity.id] = Task {
             for await bytes in activity.pushTokenUpdates {
                 let token = bytes.map { String(format: "%02x", $0) }.joined()
+                guard let environment = DastakNotificationPreferences.apnsEnvironment else { continue }
                 // Token rotation is registered independently of ordinary APNs tokens.
                 var attempt = 0
                 while !Task.isCancelled {
@@ -109,7 +110,7 @@ final class DastakOrderLiveTracking {
                         let _: Registration = try await functions.invoke("register-order-live-activity",
                             request: RegistrationRequest(orderId: activity.attributes.orderID,
                                 activityId: activity.id, token: token,
-                                environment: DastakNotificationPreferences.apnsEnvironment),
+                                environment: environment),
                             idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!)
                         break
                     } catch {

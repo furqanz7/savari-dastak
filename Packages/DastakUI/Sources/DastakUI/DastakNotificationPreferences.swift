@@ -22,13 +22,7 @@ enum DastakNotificationPermissionState: Equatable, Sendable {
 
 @MainActor
 enum DastakNotificationPreferences {
-    static var apnsEnvironment: String {
-        #if DEBUG
-        "sandbox"
-        #else
-        "production"
-        #endif
-    }
+    static var apnsEnvironment: String? { DastakAPNSEnvironment.current?.rawValue }
 
     static func registerForRemoteNotifications() {
         #if os(iOS)

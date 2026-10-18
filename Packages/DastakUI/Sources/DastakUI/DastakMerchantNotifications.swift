@@ -14,7 +14,7 @@ struct DastakMerchantNotificationSystem {
     var requestPermission: @MainActor @Sendable () async -> Void
     var registerWithApple: @MainActor @Sendable () -> Void
     var openSettings: @MainActor @Sendable () -> Void
-    var environment: String
+    var environment: String?
 
     static var live: Self {
         Self(
@@ -136,6 +136,10 @@ final class DastakMerchantNotifications: ObservableObject {
         let currentAttempt = UUID()
         attempt = currentAttempt
         guard !token.isEmpty, token.count <= 512 else { fail("Apple returned an invalid device token. Retry notification setup."); return }
+        guard let environment = system.environment else {
+            fail("This app's push signing environment could not be verified. Update the app or retry notification setup.")
+            return
+        }
         registration = .registering
         registeringToken = token
         defer { if attempt == currentAttempt { registeringToken = nil } }
@@ -145,7 +149,7 @@ final class DastakMerchantNotifications: ObservableObject {
                 guard settings.permission == .enabled else { return (settings, false) }
                 let actor = try await accountIDProvider?()
                 let registered = try await client.register(token: token, applicationId: applicationID,
-                    apnsEnvironment: system.environment, idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!)
+                apnsEnvironment: environment, idempotencyKey: IdempotencyKey(rawValue: UUID().uuidString)!)
                 if let actor, try await accountIDProvider?() != actor { throw MarketplaceAuthenticatedServicesError.identityMismatch }
                 return (settings, registered)
             }

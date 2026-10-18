@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-19",
+  "status": "BUILD_63_INSTALLED_SANDBOX_REGISTRATION_VERIFIED_THREE_NOTIFICATION_CHECKS_OWNER_CONFIRMED",
+  "baseCommit": "abb8f77db0840a0db68eabad2dd94f03aa6d34a6",
+  "branch": "codex/dastak-v1-launch",
+  "source": [
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakAPNSEnvironment.swift",
+      "sha256": "6a5dcea5e402e4c2b76eac7bc1cc21fe6ac7e2e60f66a58b55538ab8a2ecbeeb"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakNotificationPreferences.swift",
+      "sha256": "bd0492bb03e1f7ffb82c9c3b4755d9a598fe9687e9664fad0d1544b84de52812"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantNotifications.swift",
+      "sha256": "d9f41b0f1a4ee839161aaf3726248d231323998136564c24c75366eccbad29d7"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakOrderLiveTracking.swift",
+      "sha256": "636e208ec104635d6701b68bf1e9568dd241c868dacc0a35f6fe69f603a0ce9b"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakAPNSEnvironmentTests.swift",
+      "sha256": "7978205bcadc9ffb420c053e63473675e21a048e9e87f9e3db58fc81b3d461ab"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantNotificationTests.swift",
+      "sha256": "ff458d06e9718b463f025ede71dcb2a916feb3e6c5b5527ff48b881f1abd8d74"
+    }
+  ],
+  "tests": {
+    "focused": 25,
+    "fullUI": 758,
+    "failures": 0,
+    "optimizedWithoutDebugActualDevelopmentProfile": "sandbox",
+    "productionAndAbsentStoreProfile": "production",
+    "malformedProfile": "refused"
+  },
+  "artifact": {
+    "path": "/private/tmp/dastak-merchant-push63.HJ0yVl/Build63.app",
+    "build": "63",
+    "version": "1.0.0",
+    "bundle": "com.dastak.merchant",
+    "binarySha256": "33df46fc9cb8c0d6a4a55134d923a89dc0cbe51a4f864737b32f9dda30536303",
+    "signedEnvironment": "development",
+    "resolvedAPNsEnvironment": "sandbox",
+    "signatureVerified": true,
+    "installedAndVersionIndependentlyVerified": true,
+    "launched": true,
+    "frozenPinCount": 8
+  },
+  "observedRegistration": {
+    "checkedAt": "2026-10-18T21:18:02.808215Z",
+    "applicationId": "com.dastak.merchant",
+    "apnsEnvironment": "sandbox",
+    "active": true,
+    "activeDevices": 1,
+    "lastSeenAt": "2026-10-18T21:17:45.517327Z",
+    "priorProductionRowLastSeenUnchanged": "2026-10-18T21:04:26.831559Z",
+    "method": "Read-only aggregate metadata; no device tokens or account identifiers retrieved"
+  },
+  "scope": {
+    "migration": false,
+    "functionDeployment": false,
+    "providerOrSecretChange": false,
+    "manualTokenMutation": false,
+    "replay": false,
+    "syntheticOrder": false,
+    "syntheticNotification": false,
+    "customerDeliveryInstall": false
+  },
+  "ownerAcceptance": {
+    "date": "2026-10-19",
+    "timezone": "Asia/Calcutta",
+    "build": "63",
+    "source": "Direct owner replies in this chat after installation",
+    "freshNotificationArrivalConfirmed": true,
+    "confirmation": "All three notification checks passed",
+    "checks": [
+      "Background delivery and correct notification-tap destination",
+      "Closed-app delivery and destination retained through launch",
+      "Foreground queue updates without relaunch or observed duplicate alerts"
+    ],
+    "result": "PASSED_OWNER_REPORTED",
+    "boundary": "Not an automated device observation, every-event coverage or a guarantee of future exactly-once delivery."
+  },
+  "sourceCheckpoint": {
+    "authorization": "Owner explicitly approved committing and pushing only the Build 63 notification fix, regression tests and updated verification evidence",
+    "paths": 8,
+    "identity": "The Git commit containing this receipt; push outcome independently verified during execution",
+    "runtimeAndTestSourceUnchangedSinceVerifiedBuild": true,
+    "implementationPhaseCommitOrPush": false
+  },
+  "remaining": "Broader iPad/accessibility acceptance, universal alert-type/timing coverage and Merchant TestFlight/App Store distribution remain separate."
+}
