@@ -1,0 +1,620 @@
+{
+  "date": "2026-10-19",
+  "timezone": "Asia/Kolkata",
+  "status": "PRODUCTION_MERCHANT_DATABASE_AND_THREE_EDGE_FUNCTIONS_ACTIVATED",
+  "project": {
+    "name": "Dastak",
+    "ref": "zmtsolkfxlrxepshnjdf",
+    "region": "ap-south-1"
+  },
+  "sourceCommit": "6c379f61653cac81b0ec0a227b23f28097cf6983",
+  "sourceChainSha256": "631b55eee8ea11249c5831599b81d3b10176b313ab73c5802004bdf2a678657f",
+  "authorization": "User approved refreshing production preflight, applying exactly four Merchant migrations and deploying exactly three prepared Edge updates.",
+  "preflight": {
+    "observedAt": "2026-10-18T20:04:12.527761+00:00",
+    "readOnly": "on",
+    "applied": 291,
+    "all291PriorReceiptsUnchanged": true,
+    "pending": [
+      "20261018003730_merchant_scoped_order_detail.sql",
+      "20261018014110_merchant_active_and_paged_history.sql",
+      "20261018131824_merchant_catalogue_and_location_pages.sql",
+      "20261018151210_merchant_payout_review_guards.sql"
+    ],
+    "prerequisiteBodiesAndMetadataMatched": 12,
+    "clientDmlViolations": 0,
+    "financialGuardsUnchanged": true,
+    "retentionUnchanged": true,
+    "fulfilments": {
+      "estimatedRows": 45,
+      "indexes": [
+        {
+          "definition": "CREATE UNIQUE INDEX fulfilments_pkey ON dastak_v1.fulfilments USING btree (id)",
+          "name": "dastak_v1.fulfilments_pkey",
+          "ready": true,
+          "valid": true
+        },
+        {
+          "definition": "CREATE UNIQUE INDEX fulfilments_source_opportunity_id_key ON dastak_v1.fulfilments USING btree (source_opportunity_id)",
+          "name": "dastak_v1.fulfilments_source_opportunity_id_key",
+          "ready": true,
+          "valid": true
+        },
+        {
+          "definition": "CREATE INDEX fulfilments_order_idx ON dastak_v1.fulfilments USING btree (order_id, status)",
+          "name": "dastak_v1.fulfilments_order_idx",
+          "ready": true,
+          "valid": true
+        },
+        {
+          "definition": "CREATE INDEX fulfilments_organization_idx ON dastak_v1.fulfilments USING btree (organization_id, status)",
+          "name": "dastak_v1.fulfilments_organization_idx",
+          "ready": true,
+          "valid": true
+        },
+        {
+          "definition": "CREATE INDEX fulfilments_branch_idx ON dastak_v1.fulfilments USING btree (branch_id, status)",
+          "name": "dastak_v1.fulfilments_branch_idx",
+          "ready": true,
+          "valid": true
+        },
+        {
+          "definition": "CREATE UNIQUE INDEX fulfilments_recovery_opportunity_uidx ON dastak_v1.fulfilments USING btree (source_recovery_opportunity_id) WHERE (source_recovery_opportunity_id IS NOT NULL)",
+          "name": "dastak_v1.fulfilments_recovery_opportunity_uidx",
+          "ready": true,
+          "valid": true
+        },
+        {
+          "definition": "CREATE INDEX fulfilments_recovery_opportunity_fk_idx ON dastak_v1.fulfilments USING btree (source_recovery_opportunity_id)",
+          "name": "dastak_v1.fulfilments_recovery_opportunity_fk_idx",
+          "ready": true,
+          "valid": true
+        },
+        {
+          "definition": "CREATE UNIQUE INDEX fulfilments_restaurant_request_uidx ON dastak_v1.fulfilments USING btree (source_restaurant_request_id) WHERE (source_restaurant_request_id IS NOT NULL)",
+          "name": "dastak_v1.fulfilments_restaurant_request_uidx",
+          "ready": true,
+          "valid": true
+        },
+        {
+          "definition": "CREATE INDEX fulfilments_restaurant_request_fk_idx ON dastak_v1.fulfilments USING btree (source_restaurant_request_id)",
+          "name": "dastak_v1.fulfilments_restaurant_request_fk_idx",
+          "ready": true,
+          "valid": true
+        },
+        {
+          "definition": "CREATE INDEX fulfilments_status_idx ON dastak_v1.fulfilments USING btree (status)",
+          "name": "dastak_v1.fulfilments_status_idx",
+          "ready": true,
+          "valid": true
+        }
+      ],
+      "locks": 0,
+      "owner": "postgres",
+      "rls": true,
+      "tableBytes": 16384,
+      "totalBytes": 212992,
+      "waitingLocks": 0
+    },
+    "activity": {
+      "otherActiveSessions": 0,
+      "transactionsOlderThanMinute": 0
+    },
+    "securityAdvisorErrorLevel": "No issues found"
+  },
+  "hostedRollback": {
+    "mode": "rollback",
+    "sqlSha256": "c2461255de3e6e957515bb0a720762ca3495c802505531c45c01cd6ac94ab543",
+    "elapsedMs": 3548,
+    "response": [
+      {
+        "merchant_release_verification": {
+          "history": 295,
+          "lockTimeout": "2s",
+          "mode": "rollback",
+          "readOnly": "off",
+          "statementTimeout": "15s",
+          "transactionId": 932926660
+        }
+      }
+    ],
+    "independentlyVerifiedUnchanged": true
+  },
+  "productionCommit": {
+    "mode": "commit",
+    "sqlSha256": "c33f6601285335c7882b5a4e23e4ffe5e2033b8ee95b3f7fcd851137b7fe8829",
+    "elapsedMs": 3188,
+    "response": [
+      {
+        "merchant_release_verification": {
+          "history": 295,
+          "lockTimeout": "2s",
+          "mode": "commit",
+          "readOnly": "off",
+          "statementTimeout": "15s",
+          "transactionId": 932926928
+        }
+      }
+    ],
+    "independentlyVerified": true
+  },
+  "databaseVerification": {
+    "observedAt": "2026-10-18T20:06:36.06378+00:00",
+    "history": 295,
+    "previous291ReceiptsUnchanged": true,
+    "fourNewReceiptsMatchExactSource": true,
+    "installedFunctionsVerified": 16,
+    "bodyMetadataSearchPathAndGrantChecks": "passed",
+    "financialGuardsUnchanged": true,
+    "clientDmlViolations": 0,
+    "index": {
+      "definition": "CREATE INDEX fulfilments_merchant_history_cursor_idx ON dastak_v1.fulfilments USING btree (branch_id, committed_at DESC, id DESC)",
+      "name": "dastak_v1.fulfilments_merchant_history_cursor_idx",
+      "ready": true,
+      "valid": true
+    },
+    "receipts": [
+      {
+        "name": "merchant_scoped_order_detail",
+        "sha256": "4c0d751d4be7ec902838520cbabea2f6dc528ddc14e85e82259d4a754d619efb",
+        "version": "20261018003730"
+      },
+      {
+        "name": "merchant_active_and_paged_history",
+        "sha256": "d9ec3997ca9343a14625993d2b81ff5f251ee8f7df308d157d562219ce9d539b",
+        "version": "20261018014110"
+      },
+      {
+        "name": "merchant_catalogue_and_location_pages",
+        "sha256": "e9bbca935a581e80ffe75a2d883e0f6c8c3f86091787c82bfffea005e71d7423",
+        "version": "20261018131824"
+      },
+      {
+        "name": "merchant_payout_review_guards",
+        "sha256": "32ad928af302722510784e5e6231b5e762e663e645fefac70e4f226f5c8db676",
+        "version": "20261018151210"
+      }
+    ],
+    "functions": [
+      {
+        "anon": false,
+        "authenticated": true,
+        "bodyHash": "9f49145ca5dc643c64ec6b8c1086edcb6c621c12eef9d8dc2c0f6c182b7900c5",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": true,
+        "name": "dastak_v1_api.list_merchant_fulfilments",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": false,
+        "bodyHash": "30ecb50ce8fa557561e03f98b5cbb0034ab48fc37820338cf7a6cea32cb29e86",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": false,
+        "name": "dastak_v1_api.merchant_detail_fields",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "i"
+      },
+      {
+        "anon": false,
+        "authenticated": false,
+        "bodyHash": "4d6a1d226bc97f5f3d9273a86ce1c93326a553bbde222c61468f097e99e52b5c",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": false,
+        "name": "dastak_v1_api.merchant_detail_record",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "i"
+      },
+      {
+        "anon": false,
+        "authenticated": true,
+        "bodyHash": "ee816d14a81de5ec644ddbb673c5ebf388db9e1776ae06cf1d3a38e7d1bc815d",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": true,
+        "name": "dastak_v1_api.merchant_fulfilment_history",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": false,
+        "bodyHash": "813def0c2578ba97fdc083d1ac4c5a65aa70f9c6aece6b8bc149305623df641b",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": false,
+        "name": "dastak_v1_api.merchant_fulfilment_is_history",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "i"
+      },
+      {
+        "anon": false,
+        "authenticated": true,
+        "bodyHash": "03f30ff4071d6c454a800b98994e5feaec1f274d3a5a82c98d2c38347e49fef7",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": true,
+        "name": "dastak_v1_api.merchant_inventory_page",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": true,
+        "bodyHash": "103f7ac8298d4e57c93f9053cb3a3059fbea36d4b14552dd62275a09b2d753ff",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": true,
+        "name": "dastak_v1_api.merchant_locations_page",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": true,
+        "bodyHash": "392c400168e880b2819f9c15a2483f9e80122ed160e9e4295ec0314d38e2c868",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": true,
+        "name": "dastak_v1_api.merchant_order_detail",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": false,
+        "bodyHash": "bea1af07ddfb33bae01b11dff96fa1d57e9fad6e97d23130f919e4e158db05ea",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": true,
+        "name": "dastak_v1_api.merchant_royalty_controls_snapshot",
+        "owner": "postgres",
+        "service": true,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": false,
+        "bodyHash": "cdacd3289e62365581f3253eccfc79d54549921ad31e9713fa1478886835ffe5",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": true,
+        "name": "dastak_v1_api.request_merchant_royalty_withdrawal_checked",
+        "owner": "postgres",
+        "service": true,
+        "volatility": "v"
+      },
+      {
+        "anon": false,
+        "authenticated": true,
+        "bodyHash": "184715ce5f72a5c0623e65b3fe5dc1f0f63243e3032d9517f07c73b3c2cc838a",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": false,
+        "name": "public.dastak_v1_merchant_fulfilment_history",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": true,
+        "bodyHash": "a0bb04e043409385fc9806b7a37237ee27e73b279aca1e351f0c0d5ed8b62eb5",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": false,
+        "name": "public.dastak_v1_merchant_inventory_page",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": true,
+        "bodyHash": "7a2f5a4e363d35c5915d6556e914b917d9529878d0540b1f5858ea45191037ac",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": false,
+        "name": "public.dastak_v1_merchant_locations_page",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": true,
+        "bodyHash": "f68a8961b237cc3671acbe36e4536a89e43194820de244463ed7c0700c468357",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": false,
+        "name": "public.dastak_v1_merchant_order_detail",
+        "owner": "postgres",
+        "service": false,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": false,
+        "bodyHash": "a9d487950741fc1f8043ce44a510f2517defe3f9984d2eb0250574e9392e148a",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": false,
+        "name": "public.dastak_v1_merchant_royalty_controls_snapshot",
+        "owner": "postgres",
+        "service": true,
+        "volatility": "s"
+      },
+      {
+        "anon": false,
+        "authenticated": false,
+        "bodyHash": "194eaedf7db1914369809c7b03599c2d0316ee44994085e713a99f5fdc9be38e",
+        "config": [
+          "search_path=\"\""
+        ],
+        "definer": false,
+        "name": "public.dastak_v1_request_merchant_royalty_withdrawal_checked",
+        "owner": "postgres",
+        "service": true,
+        "volatility": "v"
+      }
+    ]
+  },
+  "functions": [
+    {
+      "name": "earnings",
+      "version": 22,
+      "status": "ACTIVE",
+      "verifyJwt": true,
+      "bundleSha256": "d66d23dc8b6367b70f932b053cbfed9d37d0b25cd22f2a4d5a23ae923b2abffc",
+      "previousVersion": 21
+    },
+    {
+      "name": "dastak-v1-catalogue",
+      "version": 28,
+      "status": "ACTIVE",
+      "verifyJwt": false,
+      "bundleSha256": "7070bf743345ea9fcb2ed4248353fe5478c9475557c1e036bed47654d1d73882",
+      "previousVersion": 27
+    },
+    {
+      "name": "dastak-v1-orders",
+      "version": 22,
+      "status": "ACTIVE",
+      "verifyJwt": false,
+      "bundleSha256": "56cb176f2845413eaa6f5365e18619a0fecb4856491a1be8e2096a55c951ebe2",
+      "previousVersion": 21
+    }
+  ],
+  "unchangedOtherFunctions": 26,
+  "deployedSource": {
+    "sourceComparison": "AST node structure and leaf text, formatting/comments ignored, only single-throw blocks unwrapped",
+    "filesMatched": 18,
+    "bundles": [
+      {
+        "name": "dastak-v1-orders",
+        "files": [
+          {
+            "path": "_shared/auth.ts",
+            "deployedSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "committedSourceSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/http.ts",
+            "deployedSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "committedSourceSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/v1-rpc.ts",
+            "deployedSha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8",
+            "committedSourceSha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "dastak-v1-orders/handler.ts",
+            "deployedSha256": "142814560b60c6705dd79ad7e2d3d879f913c98496ed63056561f5edb3937a5a",
+            "committedSourceSha256": "142814560b60c6705dd79ad7e2d3d879f913c98496ed63056561f5edb3937a5a",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "dastak-v1-orders/index.ts",
+            "deployedSha256": "d0073eb5bd30eddf01e525ef4ffcd936256780b9378052cbfc85a1e20d3c8f91",
+            "committedSourceSha256": "d0073eb5bd30eddf01e525ef4ffcd936256780b9378052cbfc85a1e20d3c8f91",
+            "exact": true,
+            "normalizedASTMatch": true
+          }
+        ]
+      },
+      {
+        "name": "dastak-v1-catalogue",
+        "files": [
+          {
+            "path": "_shared/auth.ts",
+            "deployedSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "committedSourceSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/http.ts",
+            "deployedSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "committedSourceSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/v1-rpc.ts",
+            "deployedSha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8",
+            "committedSourceSha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "dastak-v1-catalogue/handler.ts",
+            "deployedSha256": "5f2e73b237f7c633d20db4cf50d4fd3ae51a99f5e5a1ad46499dbc891fcd76c9",
+            "committedSourceSha256": "5f2e73b237f7c633d20db4cf50d4fd3ae51a99f5e5a1ad46499dbc891fcd76c9",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "dastak-v1-catalogue/index.ts",
+            "deployedSha256": "b3235b8c9f27e5a413898f76ec4a094eefec02da93df701ca4124a0c43abdccd",
+            "committedSourceSha256": "b3235b8c9f27e5a413898f76ec4a094eefec02da93df701ca4124a0c43abdccd",
+            "exact": true,
+            "normalizedASTMatch": true
+          }
+        ]
+      },
+      {
+        "name": "earnings",
+        "files": [
+          {
+            "path": "_shared/auth.ts",
+            "deployedSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "committedSourceSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/http.ts",
+            "deployedSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "committedSourceSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/payout-gateway.ts",
+            "deployedSha256": "5e99654cd5ab3e662a06bc3e019109fa07f3af87d30ca74158d5edcc57b557b5",
+            "committedSourceSha256": "5e99654cd5ab3e662a06bc3e019109fa07f3af87d30ca74158d5edcc57b557b5",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/razorpayx.ts",
+            "deployedSha256": "8bb80a044927a9e200fedb17ee09c1272f1542edf2b7bccb91e63c5a947906c6",
+            "committedSourceSha256": "8bb80a044927a9e200fedb17ee09c1272f1542edf2b7bccb91e63c5a947906c6",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "earnings/handler.ts",
+            "deployedSha256": "da2216a83b58c005a9d1eb0217a3b440672c663a61a3bc8a15bf90cc81aa914a",
+            "committedSourceSha256": "da2216a83b58c005a9d1eb0217a3b440672c663a61a3bc8a15bf90cc81aa914a",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "earnings/index.ts",
+            "deployedSha256": "bfd75ab32288154b1faf6c148a1bba3854e1c48a60dd55a9364705944fce8637",
+            "committedSourceSha256": "bfd75ab32288154b1faf6c148a1bba3854e1c48a60dd55a9364705944fce8637",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "earnings/provider-clients.ts",
+            "deployedSha256": "d5b00630483feb629e9170a4e526963aa6edf585def1f4c4f3d9b4b8b248aa0c",
+            "committedSourceSha256": "d5b00630483feb629e9170a4e526963aa6edf585def1f4c4f3d9b4b8b248aa0c",
+            "exact": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "earnings/razorpayx.ts",
+            "deployedSha256": "8b418e99f58145d3d6c657c05c109eda3257e75751ffe7752004895ca76e5db7",
+            "committedSourceSha256": "8b418e99f58145d3d6c657c05c109eda3257e75751ffe7752004895ca76e5db7",
+            "exact": true,
+            "normalizedASTMatch": true
+          }
+        ]
+      }
+    ],
+    "all18RuntimeFilesByteIdentical": true
+  },
+  "securityAdvisorAfter": {
+    "level": "error",
+    "type": "security",
+    "result": "No issues found",
+    "exitCode": 0
+  },
+  "unauthenticatedHTTP": {
+    "checks": 8,
+    "passed": 8,
+    "status": 401,
+    "merchantHandlerCode": "authentication_required",
+    "earningsGatewayCode": "UNAUTHORIZED_NO_AUTH_HEADER",
+    "authenticatedSessionNotUsed": true
+  },
+  "databaseRoleReadSmoke": {
+    "transaction": "BEGIN READ ONLY; ROLLBACK",
+    "method": "Existing actors selected inside the database; local SQL role and claim simulation; aggregate/boolean output only; no JWT minted or signed-in HTTP session used.",
+    "result": {
+      "existingCustomerActiveOrders": true,
+      "existingDeliveryRoyalty": true,
+      "existingDeliverySnapshot": true,
+      "existingMerchantCatalogue": true,
+      "existingMerchantList": true,
+      "foreignBranchDenied": true,
+      "fullOrderDetail": true,
+      "history": true,
+      "historyCursor": true,
+      "historyRows": 1,
+      "inventory": true,
+      "inventoryCursor": true,
+      "inventoryRows": 1,
+      "locationRows": 1,
+      "locations": true,
+      "merchantRoyaltyCapabilities": true,
+      "nonMerchantDenied": true,
+      "royaltySubjectRows": 1
+    },
+    "notes": [
+      "No location continuation existed for the selected actor, so location cursor continuation was not exercised.",
+      "Initial script mistakenly supplied DELIVERY instead of the existing RIDER royalty-kind value; the read-only attempt failed, was corrected, and the final pass is recorded here. No deployed code changed for that correction."
+    ]
+  },
+  "notPerformed": [
+    "Provider/secrets/billing changes",
+    "Payout destination registration or withdrawal request/execution",
+    "Order or inventory mutations",
+    "Web publication",
+    "App installation or distribution",
+    "Signed-in HTTP/device acceptance, APNs timing, Keychain lifecycle"
+  ],
+  "evidenceBoundary": "Timestamped deployment, installed schema/grants and scoped read-only checks; not a universal production health or financial/provider acceptance claim.",
+  "finalMigrationDryRun": {
+    "exitCode": 0,
+    "result": "Remote database is up to date.",
+    "applied": false
+  }
+}

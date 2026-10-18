@@ -1,5 +1,7 @@
 # Merchant backend activation — scoped preparation, not a release receipt
 
+**19 October production follow-up:** [Activation completed](dastak-merchant-production-activation-2026-10-19.md) from pushed commit `6c379f6`: all four migrations installed, Orders 22 / Catalogue 28 / Earnings 22 active, scoped installed-state and read-only checks passed. The preparation narrative below remains historical; its pending source/activation statements are superseded by that receipt. Device acceptance, web publication, providers and Merchant distribution remain separate.
+
 18 October 2026. Follow-up to the [completion audit](dastak-merchant-completion-audit-2026-10-18.md) and [native payout-controls checkpoint](dastak-merchant-payout-controls-implementation-2026-10-18.md).
 
 **Current outcome:** exact local activation candidates and dependencies identified; four isolated database fixtures and the complete Edge suite passed again. No production database, migration history, deployed function, website, app installation, provider configuration or money movement was changed. This document is not authorization to activate anything.

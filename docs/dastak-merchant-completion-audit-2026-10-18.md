@@ -1,5 +1,7 @@
 # Dastak Merchant — completion audit and implementation checklist
 
+**19 October production follow-up:** the [activation receipt](dastak-merchant-production-activation-2026-10-19.md) records the pushed Merchant checkpoint, all four installed migrations and three active Edge updates. This supersedes pending backend/source statements in the historical follow-ups below, not their separate device, web-publication, provider or distribution boundaries.
+
 18 October 2026, Asia/Calcutta. **Source-grounded audit, not a Merchant release sign-off.**
 
 **Later local implementation:** the first native reliability/recovery/scroll slice is tracked separately in the [18 October implementation checkpoint](dastak-merchant-reliability-implementation-2026-10-18.md). Findings below describe the audited baseline; they are not assertions that the same baseline code remains unchanged after that implementation. See the M-04 follow-up next; separate live/device acceptance remains pending.
