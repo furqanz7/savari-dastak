@@ -4,10 +4,13 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { validateMerchantRebuildManifest } from './merchant-rebuild-manifest.mjs';
 
 const root = realpathSync(process.argv[2] ?? '');
+const merchantBaseline = process.argv[3] === '--merchant-baseline-291';
+if (process.argv.length > (merchantBaseline ? 4 : 3)) throw new Error('Unexpected replay arguments');
 if (!/^\/private\/tmp\/dastak-full-rebuild\.[A-Za-z0-9]+$/.test(root)) throw new Error('Refusing non-disposable target');
-if (existsSync(join(root, 'supabase/.temp/project-ref'))) throw new Error('Linked target forbidden');
+if (existsSync(join(root, 'supabase/.temp/project-ref')) || existsSync(join(root,'.env'))) throw new Error('Linked/environment target forbidden');
 const project = readFileSync(join(root, 'supabase/config.toml'), 'utf8').match(/^project_id = "(DastakRebuild20261016(?:R[2-9])?)"$/m)?.[1];
 if (!project) throw new Error('Unexpected project identity');
 const container = `supabase_db_${project}`;
@@ -36,10 +39,13 @@ create table if not exists supabase_migrations.schema_migrations(version text pr
 select count(*) from supabase_migrations.schema_migrations;`);
 if (history.status || history.stdout.trim() !== '0') throw new Error('Migration history is not empty');
 const manifest = JSON.parse(readFileSync(join(root, 'rebuild-manifest.json'), 'utf8'));
-if (manifest.count !== 289 || manifest.migrations.length !== 289) throw new Error('Unexpected migration count');
+if (manifest.count === 295) validateMerchantRebuildManifest(manifest);
+else if (manifest.count !== 289 || manifest.migrations.length !== 289) throw new Error('Unexpected migration count');
+if (merchantBaseline && manifest.count !== 295) throw new Error('Merchant baseline requires the exact reviewed 295-file source');
+const replayRows = merchantBaseline ? manifest.migrations.slice(0,291) : manifest.migrations;
 const quote = text => "'" + text.replaceAll("'", "''") + "'";
 let applied = 0;
-for (const { name, sha256 } of manifest.migrations) {
+for (const { name, sha256 } of replayRows) {
   if (!/^\d{14}_.+\.sql$/.test(name)) throw new Error('Invalid migration filename');
   const sql = readFileSync(join(root, 'supabase/migrations', name), 'utf8');
   if (createHash('sha256').update(sql).digest('hex') !== sha256) throw new Error(`Migration changed after staging: ${name}`);
@@ -61,5 +67,6 @@ values (${quote(version)},${quote(label)},array[${quote(sql)}]);\ncommit;`);
   applied++;
   console.log(`APPLIED ${applied}/${manifest.count} ${name}`);
 }
-writeFileSync(join(root, 'rebuild-result.json'), JSON.stringify({ ok: true, applied, chainSha256: manifest.chainSha256 }, null, 2));
+writeFileSync(join(root, 'rebuild-result.json'), JSON.stringify({ ok: true, applied, chainSha256: manifest.chainSha256,
+  ...(merchantBaseline ? {fixtureMode:'merchant-pre-release-291'} : {}) }, null, 2));
 console.log(`All ${applied} migration files applied without skips.`);

@@ -1067,6 +1067,36 @@ const categoryTypeId = "00000000-0000-4000-8000-000000000001";
 const categoryId = "11111111-1111-4111-8111-111111111111";
 const subcategoryId = "22222222-2222-4222-8222-222222222222";
 const skuId = "33333333-3333-4333-8333-333333333333";
+Deno.test("Merchant inventory page forwards only bearer scope and a complete bounded cursor", async () => {
+  let recorded: unknown;
+  const response = await handleV1Catalogue(request({ operation:"merchantInventoryPage",branchId:skuId,
+    query:"  Acme tea ",selectedOnly:true,limit:100,cursor:{ name:"Tea",skuId },accountId:otherAccountId,stockQuantity:0 }),
+    dependencies({merchantInventoryPage: input => { recorded=input; return Promise.resolve({}); }}));
+  assertEquals(response.status,200);
+  assertEquals(recorded,{accessToken:actor.accessToken,branchId:skuId,query:"Acme tea",selectedOnly:true,limit:100,afterName:"Tea",afterSkuId:skuId});
+});
+Deno.test("Merchant discovery rejects malformed query, limits, identity and cursors without invoking SQL", async () => {
+  let calls=0;
+  const deps=dependencies({merchantInventoryPage:()=>{calls++;return Promise.resolve({});},
+    merchantLocationsPage:()=>{calls++;return Promise.resolve({});}});
+  for(const patch of [{branchId:"bad"},{query:"x".repeat(81)},{selectedOnly:"true"},{limit:251},
+    {cursor:{name:"partial"}},{cursor:{name:"",skuId}},{cursor:"bad"}]) {
+    assertEquals((await handleV1Catalogue(request({operation:"merchantInventoryPage",branchId:skuId,...patch}),deps)).status,400);
+  }
+  for(const patch of [{afterId:"bad"},{focusId:"bad"},{limit:101}]) {
+    assertEquals((await handleV1Catalogue(request({operation:"merchantLocationsPage",...patch}),deps)).status,400);
+  }
+  assertEquals(calls,0);
+});
+Deno.test("Merchant location page cannot override the authenticated actor and has an explicit missing-endpoint outcome", async () => {
+  let recorded: unknown;
+  assertEquals((await handleV1Catalogue(request({operation:"merchantLocationsPage",limit:50,afterId:skuId,focusId:otherAccountId,accountId:skuId}),
+    dependencies({merchantLocationsPage:input=>{recorded=input;return Promise.resolve({});}}))).status,200);
+  assertEquals(recorded,{accessToken:actor.accessToken,limit:50,afterId:skuId,focusId:otherAccountId});
+  assertEquals((await handleV1Catalogue(request({operation:"merchantLocationsPage"}),dependencies())).status,503);
+  assertEquals((await handleV1Catalogue(request({operation:"merchantInventoryPage",branchId:skuId}),dependencies())).status,503);
+});
+
 const otherAccountId = "44444444-4444-4444-8444-444444444444";
 const actor = {
   accountId: "55555555-5555-4555-8555-555555555555",
@@ -1119,6 +1149,8 @@ function dependencies(
     deleteAdminCatalogueAsset: overrides.deleteAdminCatalogueAsset ?? (() => Promise.resolve()),
     prepareGovernedMedia: overrides.prepareGovernedMedia ?? (() => Promise.resolve({})),
     finalizeGovernedMedia: overrides.finalizeGovernedMedia ?? (() => Promise.resolve({})),
+    merchantInventoryPage: overrides.merchantInventoryPage,
+    merchantLocationsPage: overrides.merchantLocationsPage,
     merchantSnapshot: overrides.merchantSnapshot ??
       (() => Promise.resolve(snapshot)),
     merchantRestaurantMenu: overrides.merchantRestaurantMenu ??

@@ -399,6 +399,7 @@ private struct ProductStockButtonStyle: ButtonStyle {
 
 struct DastakMerchantProductDetailView: View {
     @ObservedObject var model: DastakMerchantModel
+    let branchID: UUID?
     @State private var selectedID: UUID
     let categoryID: UUID
     let close: () -> Void
@@ -406,17 +407,18 @@ struct DastakMerchantProductDetailView: View {
     init(model: DastakMerchantModel, initial: DastakV1MerchantCatalogueSnapshot.SKU, close: @escaping () -> Void) {
         self.model = model
         self.categoryID = initial.categoryID
+        self.branchID = model.canonicalCatalogue?.branch.branchID
         self.close = close
         _selectedID = State(initialValue: initial.id)
     }
 
     var body: some View {
-        if let snapshot = model.canonicalCatalogue {
+        if let snapshot = model.canonicalCatalogue, snapshot.branch.branchID == branchID {
             let products = snapshot.skus.filter { $0.categoryID == categoryID }
             DastakProductDetailCarousel(products: products.map(DastakDetailProduct.init), selectedID: $selectedID,
                 navigationDisabled: model.isBusy) { id, select in
                 if let sku = products.first(where: { $0.id == id }) {
-                    DastakMerchantProductPage(model: model, initial: sku, select: select, close: close)
+                    DastakMerchantProductPage(model: model, initial: sku, branchID: branchID, select: select, close: close)
                 }
             }
         }
@@ -425,6 +427,7 @@ struct DastakMerchantProductDetailView: View {
 
 private struct DastakMerchantProductPage: View {
     @ObservedObject var model: DastakMerchantModel
+    let branchID: UUID?
     let selectedID: UUID
     let select: (UUID) -> Void
     let close: () -> Void
@@ -435,8 +438,9 @@ private struct DastakMerchantProductPage: View {
     @Environment(\.colorScheme) private var colorScheme
     private var palette: ProductDetailPalette { .init(dark: colorScheme == .dark) }
 
-    init(model: DastakMerchantModel, initial: DastakV1MerchantCatalogueSnapshot.SKU, select: @escaping (UUID) -> Void, close: @escaping () -> Void) {
+    init(model: DastakMerchantModel, initial: DastakV1MerchantCatalogueSnapshot.SKU, branchID: UUID?, select: @escaping (UUID) -> Void, close: @escaping () -> Void) {
         self.model = model
+        self.branchID = branchID
         self.selectedID = initial.id
         self.select = select
         self.close = close
@@ -445,10 +449,10 @@ private struct DastakMerchantProductPage: View {
     }
 
     var body: some View {
-        if let snapshot = model.canonicalCatalogue, let sku = snapshot.skus.first(where: { $0.id == selectedID }) {
+        if let snapshot = model.canonicalCatalogue, snapshot.branch.branchID == branchID, let sku = snapshot.skus.first(where: { $0.id == selectedID }) {
             let draft = DastakProductStockDraft(text: stock, currentQuantity: sku.stockQuantity,
                 reserved: sku.stockReservedQuantity ?? 0, selected: sku.selected, addingEmptySKU: addingEmptySKU,
-                stale: stockVersion != sku.selectionVersion, busy: model.isBusy, active: sku.catalogueStatus == "ACTIVE")
+                stale: stockVersion != sku.selectionVersion, busy: model.canonicalChangesDisabled, active: sku.catalogueStatus == "ACTIVE")
             DastakProductDetailCard(product: DastakDetailProduct(sku),
                 products: snapshot.skus.filter { $0.categoryID == sku.categoryID }.map(DastakDetailProduct.init),
                 select: select, close: { if !model.isBusy { close() } }
@@ -502,6 +506,7 @@ private struct DastakMerchantProductPage: View {
                         }.disabled(model.isBusy)
                     }
                     if let error = model.errorMessage { Text(error).font(.caption).foregroundStyle(.red) }
+                    if !model.canonicalCatalogueCurrent { Text("Store products need a successful refresh before stock or selections can change.").font(.caption).foregroundStyle(palette.secondary) }
                     if saved { Label("Stock count saved", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.green) }
                 }.productInfoSurface()
             } action: {
@@ -514,9 +519,9 @@ private struct DastakMerchantProductPage: View {
                     Task {
                         let success: Bool
                         if draft.isStockMode, let quantity = draft.quantity {
-                            success = await model.saveStockCount(sku, quantity: quantity)
+                            success = await model.saveStockCount(sku, quantity: quantity, branchID: branchID)
                         } else {
-                            success = await model.addCanonicalSKU(sku)
+                            success = await model.addCanonicalSKU(sku, branchID: branchID)
                         }
                         if success, let latest = model.canonicalCatalogue?.skus.first(where: { $0.id == selectedID }) {
                             stock = latest.stockQuantity.map(String.init) ?? ""

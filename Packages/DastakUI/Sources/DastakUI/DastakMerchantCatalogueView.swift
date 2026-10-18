@@ -16,14 +16,34 @@ struct DastakMerchantStoreAndCatalogueView: View {
     @State private var legacySection = LegacySection.store
 
     var body: some View {
-        if model.isLoading {
+        if (model.isLoading && model.canonicalCatalogue == nil && model.restaurantMenu == nil) || (!model.locationsInitialized && model.locationMessage == nil) || (model.isRefreshingCatalogue && model.canonicalCatalogue == nil) {
             DastakLoadingOverlay(title: "Loading store")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if model.restaurantMenu != nil {
+        } else if model.selectedLocation?.kind == .restaurant, model.restaurantMenu?.restaurant.branchID == model.selectedLocationID {
             DastakMerchantRestaurantMenuView(model: model)
-        } else if model.canonicalCatalogue != nil {
+        } else if model.selectedLocation?.kind == .retail, model.canonicalCatalogue?.branch.branchID == model.selectedLocationID {
             DastakMerchantCanonicalCatalogueView(model: model)
         } else {
+          VStack(alignment: .leading, spacing: 14) {
+            DastakEmptyState(symbol: "storefront", title: "Store details unavailable",
+                message: model.selectedLocation?.kind == .unknown
+                    ? "Orders remain available for this location. Refresh locations to verify Store management access."
+                    : "Refresh the selected location to load its Store. No other location's settings are shown here.")
+            if let reason = model.selectedLocation?.kind == .restaurant ? model.restaurantRefreshFailure : model.catalogueRefreshFailure {
+                Text(reason).font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+            }
+            Button("Retry selected Store") { Task { await model.refreshSelectedStore() } }.disabled(model.isBusy || model.isRefreshingCatalogue || model.isRefreshingCatalogueMap)
+            if model.catalogue?.stores.isEmpty == false {
+                DisclosureGroup("Earlier account-wide Store tools") { legacyWorkspace }
+                    .padding()
+            }
+          }
+        }
+    }
+
+    // Retained earlier catalogue editors are not used as a fallback when a
+    // current-generation location fails to load.
+    private var legacyWorkspace: some View {
             VStack(spacing: 0) {
                 if model.restaurantRefreshFailure != nil {
                     VStack(alignment: .leading, spacing: 8) {
@@ -49,12 +69,13 @@ struct DastakMerchantStoreAndCatalogueView: View {
                     DastakMerchantCatalogueView(model: model)
                 }
             }
-        }
     }
 }
 
 private struct DastakMerchantCanonicalCatalogueView: View {
     @ObservedObject var model: DastakMerchantModel
+    @StateObject private var inventory: DastakMerchantInventoryModel
+    @State private var browsingAll = false
     @State private var query = ""
     @State private var selectedOnly = false
     @State private var categoryTypeID: UUID?
@@ -63,19 +84,24 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     @State private var browseDestinationKey: String?
     @State private var browseRailKey: String?
     @State private var selectedProduct: DastakV1MerchantCatalogueSnapshot.SKU?
+    @Environment(\.dynamicTypeSize) private var typeSize
+    init(model: DastakMerchantModel) {
+        self.model = model
+        _inventory = StateObject(wrappedValue: model.makeInventorySearch())
+    }
 
-    private let columns = [
-        GridItem(.flexible(), spacing: MarketplaceSpacing.compact),
-        GridItem(.flexible(), spacing: MarketplaceSpacing.compact),
-    ]
+    private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: MarketplaceSpacing.compact), count: typeSize.isAccessibilitySize ? 1 : 2) }
 
     var body: some View {
         NavigationStack {
             Group {
-                if let snapshot = model.canonicalCatalogue, let map = model.canonicalBrowseMap {
-                    referenceBrowse(snapshot: snapshot, map: map)
+                if let snapshot = model.canonicalCatalogue, showsGlobalResults {
+                    resultsPage(snapshot)
                 } else if let snapshot = model.canonicalCatalogue, categoryTypeID != nil {
-                    categoryBrowser(categoryID: categoryID, snapshot: snapshot)
+                    if typeSize.isAccessibilitySize { accessibleCategoryBrowser(snapshot) }
+                    else { categoryBrowser(categoryID: categoryID, snapshot: snapshot) }
+                } else if let snapshot = model.canonicalCatalogue, let map = model.canonicalBrowseMap {
+                    referenceBrowse(snapshot: snapshot, map: map)
                 } else if let snapshot = model.canonicalCatalogue {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
@@ -95,7 +121,16 @@ private struct DastakMerchantCanonicalCatalogueView: View {
             }
             .navigationTitle("Store & Catalogue")
             .dastakInlineNavigationTitle()
+            .modifier(DastakMerchantKeyboardDismiss())
             .searchable(text: $query, prompt: "Products, brands, packs or categories")
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let snapshot = model.canonicalCatalogue {
+                    VStack(alignment: .leading, spacing: 8) {
+                        catalogueStatus(snapshot)
+                        scopePicker
+                    }.padding(.horizontal, MarketplaceSpacing.medium).padding(.vertical, 8).background(.regularMaterial)
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 if model.hasPendingCanonicalSelections {
                     pendingSelectionBar
@@ -104,10 +139,102 @@ private struct DastakMerchantCanonicalCatalogueView: View {
             .task(id: priorityArtworkKeys) {
                 await DastakProductArtwork.prefetch(imageKeys: priorityArtworkKeys)
             }
+            .task(id: inventoryContext) {
+                inventory.invalidate()
+                guard inventoryContext != nil else { return }
+                do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+                await loadInventory()
+            }
+            .onDisappear { inventory.invalidate() }
             .dastakProductOverlay(item: $selectedProduct) { sku in
                 DastakMerchantProductDetailView(model: model, initial: sku, close: { if !model.isBusy { selectedProduct = nil } })
             }
         }
+    }
+
+    private var showsGlobalResults: Bool {
+        let hasDestination: Bool
+        if categoryTypeID != nil || categoryID != nil { hasDestination = true }
+        else if let map = model.canonicalBrowseMap { hasDestination = map.nodes.contains { $0.key == browseDestinationKey && $0.kind == "DESTINATION" } }
+        else { hasDestination = false }
+        return browsingAll || DastakMerchantCataloguePresentation.showsResults(query: query, selectedOnly: selectedOnly, hasDestination: hasDestination)
+    }
+    private var inventoryContext: DastakMerchantInventoryContext? {
+        guard showsGlobalResults, !model.isBusy, let snapshot = model.canonicalCatalogue else { return nil }
+        return .init(branch: snapshot.branch.branchID,query: query.trimmingCharacters(in: .whitespacesAndNewlines),
+            selectedOnly: selectedOnly,revision: model.inventoryReadRevision,checkedAt: model.catalogueCheckedAt)
+    }
+    private func loadInventory(more: Bool = false) async {
+        guard let context = inventoryContext else { return }
+        await inventory.load(context,more: more)
+        guard inventory.current, inventory.context == inventoryContext else { return }
+        if !(await model.mergeVerifiedInventory(inventory.rows,branch: context.branch,revision: context.revision)) { inventory.invalidate() }
+    }
+
+    private var scopePicker: some View {
+      VStack(alignment: .leading, spacing: 8) {
+        Picker("Catalogue scope", selection: $selectedOnly) {
+            Text("All products").tag(false)
+            Text("My storefront").tag(true)
+        }.pickerStyle(.segmented).accessibilityIdentifier("merchant.catalogue.scope")
+        Button(browsingAll ? "Return to category directory" : "Browse complete catalogue") { browsingAll.toggle() }
+            .font(.subheadline.weight(.semibold)).frame(minHeight: 44)
+      }
+    }
+
+    private func catalogueStatus(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(snapshot.skus.count) products loaded\(snapshot.truncated ? " · partial catalogue" : "")").font(.caption.weight(.semibold))
+                Spacer()
+                Button { Task { await model.refreshCanonicalCatalogue(reportFailure: false) } } label: {
+                    Image(systemName: "arrow.clockwise").frame(minWidth: 44, minHeight: 44)
+                }.accessibilityLabel("Refresh store catalogue").disabled(model.isRefreshingCatalogue || model.isRefreshingCatalogueMap || model.isBusy)
+            }
+            if model.isRefreshingCatalogue { ProgressView("Updating products").font(.caption) }
+            else if let failure = model.catalogueRefreshFailure { Label(failure, systemImage: "wifi.exclamationmark").font(.caption) }
+            else if let date = model.catalogueCheckedAt { Text("Products checked \(date.formatted(date: .abbreviated, time: .shortened))").font(.caption2).foregroundStyle(.secondary) }
+            if snapshot.truncated { Text("Category previews use a partial cached catalogue. Search, My storefront at the root and Browse complete catalogue use separate server pages beyond that preview limit.").font(.caption).foregroundStyle(.secondary) }
+            if model.isRefreshingCatalogueMap { ProgressView("Updating category navigation").font(.caption) }
+            else if let failure = model.catalogueBrowseFailure { Text(failure).font(.caption).foregroundStyle(.secondary) }
+            if model.missingCanonicalSelectionCount > 0 { Text("\(model.missingCanonicalSelectionCount) unsaved selection(s) are outside the loaded set. Saving is paused; refresh or explicitly discard them.").font(.caption) }
+        }.accessibilityIdentifier("merchant.catalogue.status")
+    }
+
+    private func resultsPage(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
+        let matchesContext = inventory.context == inventoryContext
+        let serverRows = matchesContext ? inventory.rows.filter { !selectedOnly || (model.pendingCanonicalSelections[$0.id] ?? $0.selected) } : []
+        let staged = selectedOnly ? DastakMerchantCataloguePresentation.products(snapshot,query: query,selectedOnly: true,pending: model.pendingCanonicalSelections)
+            .filter { model.pendingCanonicalSelections[$0.id] == true } : []
+        let serverIDs = Set(serverRows.map(\.id))
+        let products = staged.filter { !serverIDs.contains($0.id) } + serverRows
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
+                storeHeader(snapshot)
+                operatingControls(snapshot)
+                Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? (selectedOnly ? "My storefront" : "Complete catalogue") : "Search the complete catalogue").font(.title2.bold())
+                Text("\(products.count) results loaded\(selectedOnly ? " · includes staged selections" : "")").font(.caption).foregroundStyle(.secondary)
+                if model.isBusy { Text("Catalogue search is paused while the current action or saved-action recovery is being resolved.").font(.footnote).foregroundStyle(.secondary) }
+                else if inventory.loading || !matchesContext { ProgressView("Searching the catalogue") }
+                if let failure = inventory.failure, matchesContext { Text(failure).font(.footnote).foregroundStyle(.secondary) }
+                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button("Clear search") { query = "" }.frame(minHeight: 44)
+                }
+                if products.isEmpty, inventory.current, matchesContext {
+                    Text(inventory.cursor == nil ? "No matching products for this query and scope." : "No visible matches in these pages. More server results remain.").foregroundStyle(.secondary)
+                }
+                if !products.isEmpty { LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) { ForEach(products) { sku in canonicalProductCard(sku) } }.disabled(!inventory.current || !matchesContext) }
+                if inventory.cursor != nil, matchesContext {
+                    Button("Load more products") { Task { await loadInventory(more: true) } }.frame(minHeight: 44).disabled(!inventory.current || inventory.loading)
+                } else if inventory.current, matchesContext { Text("All currently matching results loaded.").font(.caption).foregroundStyle(.secondary) }
+                Button("Refresh complete results") { Task { await loadInventory() } }.frame(minHeight: 44).disabled(inventory.loading)
+            }.frame(maxWidth: MarketplaceMetrics.contentMaxWidth).padding(.horizontal, MarketplaceSpacing.medium).padding(.bottom, 148).frame(maxWidth: .infinity)
+        }.refreshable { await model.refreshCanonicalCatalogue(); await loadInventory() }
+    }
+
+    private func emptyCatalogue(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
+        DastakEmptyState(symbol: "magnifyingglass", title: "No matching loaded products",
+            message: DastakMerchantCataloguePresentation.emptyMessage(query: query, selectedOnly: selectedOnly, truncated: snapshot.truncated, current: model.canonicalCatalogueCurrent))
     }
 
     private func referenceBrowse(snapshot: DastakV1MerchantCatalogueSnapshot, map: DastakV1CatalogueBrowseMap) -> some View {
@@ -139,10 +266,10 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     HStack {
                         Text(node.label).font(.title3.bold())
                         Spacer()
-                        Text("\(products.count) products").foregroundStyle(.secondary)
+                        Text("\(products.count) loaded products").foregroundStyle(.secondary)
                     }
                     if products.isEmpty {
-                        DastakEmptyState(symbol: "shippingbox", title: "No products here yet", message: "Choose another category.")
+                        emptyCatalogue(snapshot)
                     } else {
                         LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) {
                             ForEach(products) { sku in canonicalProductCard(sku) }
@@ -173,21 +300,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     }
 
     private func referenceProducts(snapshot: DastakV1MerchantCatalogueSnapshot, map: DastakV1CatalogueBrowseMap, nodeKey: String) -> [DastakV1MerchantCatalogueSnapshot.SKU] {
-        let taxonomy = DastakV1CatalogueBrowseMap.Taxonomy(
-            typeSlugs: Dictionary(snapshot.categoryTypes.map { ($0.id, $0.slug) }, uniquingKeysWith: { first, _ in first }),
-            categories: snapshot.categories.compactMap { category in
-                category.categoryTypeID.map { DastakV1CatalogueBrowseMap.Taxonomy.Category(id: category.id, typeID: $0, slug: category.slug) }
-            },
-            subcategories: snapshot.subcategories.map {
-                DastakV1CatalogueBrowseMap.Taxonomy.Subcategory(id: $0.id, categoryID: $0.categoryID, slug: $0.slug)
-            }
-        )
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return snapshot.skus.filter { sku in
-            map.matches(nodeKey: nodeKey, categoryID: sku.categoryID, subcategoryID: sku.subcategoryID, taxonomy: taxonomy) &&
-            (!selectedOnly || model.canonicalSelection(for: sku)) &&
-            (normalized.isEmpty || [sku.name, sku.brandName, sku.packSize].compactMap { $0 }.joined(separator: " ").localizedCaseInsensitiveContains(normalized))
-        }
+        DastakMerchantCataloguePresentation.products(snapshot, query: query, selectedOnly: selectedOnly, pending: model.pendingCanonicalSelections, map: map, nodeKey: nodeKey)
     }
 
     private func categoryBrowser(
@@ -199,12 +312,6 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         let departmentName = snapshot.categoryTypes.first { $0.id == categoryTypeID }?.name ?? categoryName
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
-                Picker("Catalogue scope", selection: $selectedOnly) {
-                    Text("All products").tag(false)
-                    Text("My storefront").tag(true)
-                }
-                .pickerStyle(.segmented)
-
                 HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.small) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("DASTAK CATALOGUE")
@@ -216,7 +323,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                             .lineLimit(1)
                     }
                     Spacer(minLength: 4)
-                    Text("\(products.count) products")
+                    Text("\(products.count) loaded products")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Button("All categories") {
@@ -254,17 +361,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 ScrollView(.vertical) {
                     Group {
                         if products.isEmpty {
-                            DastakEmptyState(
-                                symbol: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? DastakCatalogueSymbol.symbol(for: categoryName)
-                                    : "magnifyingglass",
-                                title: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? "Approved products coming soon"
-                                    : "No matching products",
-                                message: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? "This category is in the master catalogue. Selectable SKUs will appear after catalogue and safety checks are complete."
-                                    : "Try a different product, brand, pack or category."
-                            )
+                            emptyCatalogue(snapshot)
                             .frame(minHeight: 300)
                         } else {
                             LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) {
@@ -289,8 +386,28 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private func accessibleCategoryBrowser(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                Text(snapshot.categoryTypes.first { $0.id == categoryTypeID }?.name ?? "Products").font(.title2.bold())
+                Button("All categories") { categoryTypeID = nil; categoryID = nil; subcategoryID = nil }
+                    .frame(minHeight: 44)
+                Picker("Category", selection: $categoryID) {
+                    Text("All categories in this department").tag(UUID?.none)
+                    ForEach(snapshot.categories.filter { $0.categoryTypeID == categoryTypeID }) { Text($0.name).tag(UUID?.some($0.id)) }
+                }.pickerStyle(.menu).frame(minHeight: 44)
+                Picker("Type", selection: $subcategoryID) {
+                    Text("All types").tag(UUID?.none)
+                    ForEach(snapshot.subcategories.filter { $0.categoryID == categoryID }) { Text($0.name).tag(UUID?.some($0.id)) }
+                }.pickerStyle(.menu).frame(minHeight: 44)
+                productGrid(snapshot)
+            }.padding(18).frame(maxWidth: MarketplaceMetrics.contentMaxWidth).frame(maxWidth: .infinity)
+        }.onChange(of: categoryID) { _, _ in subcategoryID = nil }
+            .refreshable { await model.refreshCanonicalCatalogue() }
+    }
+
     private var pendingSelectionBar: some View {
-        HStack(spacing: MarketplaceSpacing.compact) {
+        DastakMerchantAdaptiveRow {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(model.pendingCanonicalSelections.count) unsaved \(model.pendingCanonicalSelections.count == 1 ? "change" : "changes")")
                     .font(.subheadline.bold())
@@ -298,7 +415,6 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 4)
             Button("Discard") { model.discardCanonicalSelections() }
                 .buttonStyle(.bordered)
                 .disabled(model.isBusy)
@@ -307,7 +423,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(MarketplaceColors.dastakAccent.color)
-            .disabled(model.isBusy)
+            .disabled(model.canonicalChangesDisabled || model.missingCanonicalSelectionCount > 0)
         }
         .padding(.horizontal, MarketplaceSpacing.medium)
         .frame(minHeight: 72)
@@ -316,19 +432,14 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     }
 
     private func storeHeader(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
-        HStack(alignment: .center, spacing: MarketplaceSpacing.compact) {
+        DastakMerchantAdaptiveRow {
             VStack(alignment: .leading, spacing: 3) {
                 Text("YOUR STOREFRONT")
                     .font(.caption2.bold())
                     .tracking(1.2)
                     .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                Text(snapshot.branch.branchName)
+                Text(DastakMerchantLocation(snapshot.branch).name)
                     .font(.title2.bold())
-                    .lineLimit(1)
-                Text(snapshot.branch.organizationName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
             Spacer(minLength: MarketplaceSpacing.small)
             VStack(alignment: .trailing, spacing: 6) {
@@ -352,10 +463,10 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 merchantControl(
                     symbol: "storefront",
                     title: state.isOpen ? "Store open" : "Store closed",
-                    detail: "Branch availability",
+                    detail: "Store availability",
                     action: state.isOpen ? "Close" : "Open"
                 ) {
-                    Task { await model.setCanonicalBranch(isOpen: !state.isOpen, acceptingOrders: false) }
+                    Task { await model.setCanonicalBranch(isOpen: !state.isOpen, acceptingOrders: false, branchID: snapshot.branch.branchID) }
                 }
                 merchantControl(
                     symbol: "shippingbox",
@@ -363,7 +474,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     detail: state.acceptingOrders ? "Taking new orders" : "New orders paused",
                     action: state.acceptingOrders ? "Pause" : "Accept"
                 ) {
-                    Task { await model.setCanonicalBranch(isOpen: true, acceptingOrders: !state.acceptingOrders) }
+                    Task { await model.setCanonicalBranch(isOpen: true, acceptingOrders: !state.acceptingOrders, branchID: snapshot.branch.branchID) }
                 }
             }
         }
@@ -376,23 +487,23 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         action: String,
         perform: @escaping () -> Void
     ) -> some View {
-        HStack(spacing: MarketplaceSpacing.small) {
+        DastakMerchantAdaptiveRow {
             Image(systemName: symbol)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(MarketplaceColors.dastakAccent.color)
                 .frame(width: 34, height: 34)
                 .background(MarketplaceColors.dastakAccentSoft.color, in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.bold()).lineLimit(1)
-                Text(detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Text(title).font(.subheadline.bold())
+                Text(detail).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 2)
             Button(action, action: perform)
                 .buttonStyle(.bordered)
-                .controlSize(.mini)
-                .disabled(model.isBusy)
+                .frame(minWidth: 44, minHeight: 44)
+                .disabled(model.canonicalChangesDisabled)
         }
-        .frame(width: 250)
+        .frame(width: typeSize.isAccessibilitySize ? 290 : 270)
         .frame(minHeight: 62, alignment: .leading)
         .padding(MarketplaceSpacing.small)
         .marketplaceFlatSurface()
@@ -416,12 +527,6 @@ private struct DastakMerchantCanonicalCatalogueView: View {
 
     private func catalogueTools(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.compact) {
-            Picker("Catalogue scope", selection: $selectedOnly) {
-                Text("All products").tag(false)
-                Text("My storefront").tag(true)
-            }
-            .pickerStyle(.segmented)
-
             if let selectedType = snapshot.categoryTypes.first(where: { $0.id == categoryTypeID }) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -493,14 +598,10 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     private func productGrid(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
         let products = visibleProducts(snapshot)
         return Group {
-            if categoryID == nil && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedOnly {
+            if categoryID == nil && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedOnly && !snapshot.categoryTypes.isEmpty {
                 EmptyView()
             } else if products.isEmpty {
-                DastakEmptyState(
-                    symbol: "magnifyingglass",
-                    title: "No matching products",
-                    message: "Try a different product, brand, pack or category."
-                )
+                emptyCatalogue(snapshot)
             } else {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: MarketplaceSpacing.compact) {
                     ForEach(products) { sku in
@@ -553,6 +654,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         _ sku: DastakV1MerchantCatalogueSnapshot.SKU
     ) -> some View {
         let selected = model.canonicalSelection(for: sku)
+        let branchID = model.canonicalCatalogue?.branch.branchID
         return VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
                 DastakProductArtwork(imageKey: sku.imageKey, fallbackSymbol: "shippingbox")
@@ -591,7 +693,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 Spacer(minLength: 2)
                 Button {
                     if sku.stockQuantity == 0 && !selected { selectedProduct = sku }
-                    else { model.stageCanonicalSelection(sku) }
+                    else { model.stageCanonicalSelection(sku, branchID: branchID) }
                 } label: {
                     Image(systemName: selected ? "minus" : "plus")
                         .font(.subheadline.bold())
@@ -600,7 +702,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.roundedRectangle(radius: 11))
                 .tint(MarketplaceColors.dastakAccent.color)
-                .disabled(model.busyIdentity == "canonical-catalogue-save" || sku.catalogueStatus != "ACTIVE")
+                .disabled(model.canonicalChangesDisabled || sku.catalogueStatus != "ACTIVE")
                 .accessibilityLabel(selected ? "Remove \(sku.name)" : "Select \(sku.name)")
             }
         }
@@ -615,23 +717,8 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     }
 
     private func visibleProducts(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> [DastakV1MerchantCatalogueSnapshot.SKU] {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let categories = Dictionary(uniqueKeysWithValues: snapshot.categories.map { ($0.id, $0.name) })
-        let subcategories = Dictionary(uniqueKeysWithValues: snapshot.subcategories.map { ($0.id, $0.name) })
-        return snapshot.skus.filter { sku in
-            guard categoryTypeID == nil || sku.categoryTypeID == categoryTypeID,
-                  categoryID == nil || sku.categoryID == categoryID,
-                  subcategoryID == nil || sku.subcategoryID == subcategoryID,
-                  !selectedOnly || model.canonicalSelection(for: sku)
-            else { return false }
-            guard !normalized.isEmpty else { return true }
-            return [sku.name, sku.brandName, sku.variant, sku.packSize, categories[sku.categoryID], subcategories[sku.subcategoryID]]
-                .compactMap { $0 }
-                .joined(separator: " ")
-                .appending(" " + sku.searchTerms.joined(separator: " "))
-                .lowercased()
-                .contains(normalized)
-        }
+        DastakMerchantCataloguePresentation.products(snapshot, query: query, selectedOnly: selectedOnly, pending: model.pendingCanonicalSelections,
+            typeID: categoryTypeID, categoryID: categoryID, subcategoryID: subcategoryID)
     }
 
     private func categoryArtworkKey(_ categoryID: UUID, in snapshot: DastakV1MerchantCatalogueSnapshot) -> String? {
@@ -641,7 +728,9 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     private var priorityArtworkKeys: [String] {
         guard let snapshot = model.canonicalCatalogue else { return [] }
         var keys: [String] = []
-        if let categoryID {
+        if showsGlobalResults {
+            keys.append(contentsOf: visibleProducts(snapshot).prefix(16).compactMap(\.imageKey))
+        } else if let categoryID {
             if let key = snapshot.categories.first(where: { $0.id == categoryID })
                 .flatMap({ $0.imageKey ?? categoryArtworkKey($0.id, in: snapshot) }) {
                 keys.append(key)
@@ -1196,6 +1285,9 @@ private struct DastakProductEditor: View {
     @State private var imageData: Data?
     @State private var imageContentType: String?
     @State private var imageName: String?
+    @State private var photoLoading = false
+    @State private var photoFailure: String?
+    @State private var photoGeneration = UUID()
     @State private var step = DastakProductEditorStep.details
 
     init(
@@ -1226,12 +1318,15 @@ private struct DastakProductEditor: View {
                         #if os(iOS)
                         .keyboardType(.decimalPad)
                         #endif
+                        if DastakMerchantPriceParser.optionalPaise(from: draft.priceRupees) == nil {
+                            Text(DastakMerchantValidation.priceHelp).font(.caption).foregroundStyle(.secondary)
+                        }
                         TextField("Description", text: $draft.description, axis: .vertical)
                             .lineLimit(2...5)
                     } header: {
                         Text("Product details")
                     } footer: {
-                        Text("Step 1 of 2")
+                        Text("Step 1 of 2 · Enter a name, category, unit and valid price to continue.")
                     }
                 } else {
                     Section("Availability") {
@@ -1255,7 +1350,14 @@ private struct DastakProductEditor: View {
                         ) {
                             Label(photoLabel, systemImage: "photo.badge.plus")
                         }
-                        Text("JPG, PNG, or WebP, up to 5 MB.")
+                        .disabled(photoLoading || model.isBusy)
+                        if photoLoading { ProgressView("Opening photo…") }
+                        if let photoFailure {
+                            Text(photoFailure).font(.caption).foregroundStyle(.orange)
+                            Button(imageData == nil ? "Continue without replacing the photo" : "Keep the previously selected photo") { self.photoFailure = nil }
+                                .disabled(photoLoading || model.isBusy)
+                        }
+                        Text("JPEG, PNG or WebP up to 5 MB. HEIC up to 20 MB is converted to JPEG on this device.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } header: {
@@ -1295,7 +1397,7 @@ private struct DastakProductEditor: View {
                                 }
                             }
                         }
-                        .disabled(model.isBusy)
+                        .disabled(model.isBusy || photoLoading || !detailsAreValid || photoFailure != nil)
                     }
                 }
             }
@@ -1303,41 +1405,31 @@ private struct DastakProductEditor: View {
         .onChange(of: photoItem) { _, item in
             Task { await loadPhoto(item) }
         }
+        .onDisappear { photoGeneration = UUID(); photoLoading = false }
     }
 
     private var detailsAreValid: Bool {
         !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !draft.unitLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && (try? DastakMerchantPriceParser.paise(from: draft.priceRupees)) != nil
+            && DastakMerchantPriceParser.optionalPaise(from: draft.priceRupees) != nil
             && categories.contains(where: { $0.categoryID == draft.categoryID })
     }
 
     private func loadPhoto(_ item: PhotosPickerItem?) async {
         guard let item else { return }
+        guard !photoLoading else { return }
+        let token = UUID(); photoGeneration = token; photoLoading = true; photoFailure = nil
+        defer { if photoGeneration == token { photoLoading = false; photoItem = nil } }
         do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  data.count <= 5 * 1_024 * 1_024
-            else {
-                throw DastakProductPhotoError.invalid
-            }
-            let contentType = item.supportedContentTypes.first {
-                $0.conforms(to: .jpeg) || $0.conforms(to: .png) || $0.identifier == "org.webmproject.webp"
-            } ?? .jpeg
-            imageData = data
-            imageContentType = contentType.preferredMIMEType ?? "image/jpeg"
-            imageName = "New product photo"
+            let photo = try await DastakMerchantPhoto.load(purpose: .catalogue) { try await item.loadTransferable(type: Data.self) }
+            guard photoGeneration == token, !Task.isCancelled else { return }
+            imageData = photo.data
+            imageContentType = photo.contentType
+            imageName = photo.converted ? "New photo · HEIC converted to JPEG" : "New product photo"
         } catch {
-            model.errorMessage = "Choose a JPG, PNG, or WebP image up to 5 MB."
-            photoItem = nil
-            imageData = nil
-            imageContentType = nil
-            imageName = nil
+            if photoGeneration == token { photoFailure = DastakMerchantPhoto.failureMessage(error) }
         }
     }
-}
-
-private enum DastakProductPhotoError: Error {
-    case invalid
 }
 
 private enum DastakProductEditorStep {

@@ -4,9 +4,10 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { join, dirname, resolve } from 'node:path';
+import { validateMerchantRebuildManifest } from './merchant-rebuild-manifest.mjs';
 const root = realpathSync(process.argv[2] ?? '');
 if (!/^\/private\/tmp\/dastak-full-rebuild\.[A-Za-z0-9]+$/.test(root)
-    || existsSync(join(root, 'supabase/.temp/project-ref'))) throw new Error('Disposable unlinked project required');
+    || existsSync(join(root, 'supabase/.temp/project-ref')) || existsSync(join(root,'.env'))) throw new Error('Disposable unlinked project required');
 const project = readFileSync(join(root, 'supabase/config.toml'), 'utf8').match(/^project_id = "(DastakRebuild20261016(?:R[2-9])?)"$/m)?.[1];
 if (!project || !JSON.parse(readFileSync(join(root, 'rebuild-result.json'), 'utf8')).ok) throw new Error('Successful rebuild required');
 const container = `supabase_db_${project}`;
@@ -25,7 +26,12 @@ const psql = sql => spawnSync('docker', [...docker, 'exec', ...(fixtureSuperuser
   '-i', container, 'psql', '-X', '-Atq', '-v', 'ON_ERROR_STOP=1', '-U', fixtureSuperuser ? 'supabase_admin' : 'postgres', '-d', 'postgres'],
   { input: sql, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
 const expectedMigrations = JSON.parse(readFileSync(join(root,'rebuild-result.json'),'utf8')).applied;
-if (![287,289].includes(expectedMigrations)) throw new Error('Unreviewed migration manifest');
+if (expectedMigrations === 295) {
+  const manifest = validateMerchantRebuildManifest(JSON.parse(readFileSync(join(root,'rebuild-manifest.json'),'utf8')));
+  for (const row of manifest.migrations) {
+    if (createHash('sha256').update(readFileSync(join(root,'supabase/migrations',row.name))).digest('hex') !== row.sha256) throw new Error('Staged migration changed');
+  }
+} else if (![287,289].includes(expectedMigrations)) throw new Error('Unreviewed migration manifest');
 const guard = psql(`select (select count(*) from supabase_migrations.schema_migrations)=${expectedMigrations} and current_setting('cron.launch_active_jobs')='off';`);
 if (guard.status || guard.stdout.trim() !== 't') throw new Error('Migration/scheduler guard failed');
 const runtime = psql("select json_build_object('version',version(),'user',current_user,'sessionPreload',current_setting('session_preload_libraries'),'cron',current_setting('cron.launch_active_jobs'));");

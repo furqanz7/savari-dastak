@@ -1,0 +1,559 @@
+{
+  "date": "2026-10-19",
+  "observedAt": "2026-10-18T19:32:23.146167+00:00",
+  "status": "READ_ONLY_PREFLIGHT_MATCHED_SCOPED_BASELINE_NOT_ACTIVATED",
+  "project": {
+    "ref": "zmtsolkfxlrxepshnjdf",
+    "name": "Dastak",
+    "region": "ap-south-1",
+    "managementStatus": "ACTIVE_HEALTHY"
+  },
+  "sourceHead": "4d835cb0f411b2199fcd49c8499a4b3b40a5a801",
+  "sourceChainSha256": "631b55eee8ea11249c5831599b81d3b10176b313ab73c5802004bdf2a678657f",
+  "readOnly": "on",
+  "serverVersion": "17.6",
+  "history": {
+    "applied": 291,
+    "local": 295,
+    "earlierReceiptsCompared": 289,
+    "earlierReceiptHash": "4cbc571f349ce856ee226935846acf05b49f2a441db15b4738f412ed428aeb48",
+    "earlierReceiptsUnchanged": true,
+    "retentionReceipts": [
+      {
+        "version": "20261017173813",
+        "sourceSha256": "46f63dfdec836622526da906afc4ebe4478cad277190b6189d91e1eb98ad06ca",
+        "receiptMatchesSourceExceptFinalSemicolon": true
+      },
+      {
+        "version": "20261017180844",
+        "sourceSha256": "1b7ef03fb9f2c0daf12d9ba74477c18997dae7d8abb38a7c21d512d233a01561",
+        "receiptMatchesSourceExceptFinalSemicolon": true
+      }
+    ],
+    "pending": [
+      {
+        "name": "20261018003730_merchant_scoped_order_detail.sql",
+        "sha256": "4c0d751d4be7ec902838520cbabea2f6dc528ddc14e85e82259d4a754d619efb"
+      },
+      {
+        "name": "20261018014110_merchant_active_and_paged_history.sql",
+        "sha256": "d9ec3997ca9343a14625993d2b81ff5f251ee8f7df308d157d562219ce9d539b"
+      },
+      {
+        "name": "20261018131824_merchant_catalogue_and_location_pages.sql",
+        "sha256": "e9bbca935a581e80ffe75a2d883e0f6c8c3f86091787c82bfffea005e71d7423"
+      },
+      {
+        "name": "20261018151210_merchant_payout_review_guards.sql",
+        "sha256": "32ad928af302722510784e5e6231b5e762e663e645fefac70e4f226f5c8db676"
+      }
+    ],
+    "unexpectedPending": 0,
+    "unrecordedNewPrivateFunctions": 0,
+    "unrecordedNewPublicFunctions": 0,
+    "historyIndexPresent": false
+  },
+  "functions": [
+    {
+      "signature": "dastak_v1_api.actor_can_manage_royalty_subject(uuid,dastak_v1.settlement_subject_type,uuid,boolean)",
+      "present": true,
+      "source": "20260824040000_dastak_v1_royalty_platform_fee.sql",
+      "normalizedBodySha256": "fbbc1de9a79e39ce9ac4680a85809d704c4097e18b498e3d92b8e7f3e2a9eb67",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "dastak_v1_api.actor_has_wave1_merchant_permission(uuid,uuid,text,uuid)",
+      "present": true,
+      "source": "20260820195404_dastak_v1_wave_1.sql",
+      "normalizedBodySha256": "1b323da6de3d53fe218fd85f5a78ce64f69f0717da1267265dd7d59e6a4309e4",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": null
+    },
+    {
+      "signature": "dastak_v1_api.assert_authenticated_actor(uuid)",
+      "present": true,
+      "source": "20260820195404_dastak_v1_wave_1.sql",
+      "normalizedBodySha256": "f3570d9d5a0adc4235f0ff6579f44c8eb1943a8db8a860f7639b3b5e4dec3440",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": null
+    },
+    {
+      "signature": "dastak_v1_api.get_royalty_snapshot(uuid,text)",
+      "present": true,
+      "source": "20260824040000_dastak_v1_royalty_platform_fee.sql",
+      "normalizedBodySha256": "02c687b6f576733859cc4ed94b683dee0c0dcadb7498cde123828d775fcb9316",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "dastak_v1_api.list_merchant_fulfilments(uuid,integer)",
+      "present": true,
+      "source": "20260916060000_include_released_merchant_history.sql",
+      "normalizedBodySha256": "3c8ea3a6f267c1349d3e5e513f98d5dd3b938355672ad37d4c5ca36905400c78",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}"
+    },
+    {
+      "signature": "dastak_v1_api.merchant_fulfilment_json(uuid,uuid)",
+      "present": true,
+      "source": "20260914224449_merchant_fulfilment_product_pricing.sql",
+      "normalizedBodySha256": "48e7f5b0b3cadcec7ae10f265efad31a5aac3783e9757f83f34f41c30969a22e",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "dastak_v1_api.merchant_opportunity_json(uuid,uuid)",
+      "present": true,
+      "source": "20260914224449_merchant_fulfilment_product_pricing.sql",
+      "normalizedBodySha256": "836b81d5cfb7264797269654b811eafbddb44eca4a7a8b8d5c0eafaa91c1602e",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "dastak_v1_api.post_balanced_financial_transaction(text,text,bigint,text,dastak_v1.settlement_subject_type,uuid,text,dastak_v1.settlement_subject_type,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text,jsonb)",
+      "present": true,
+      "source": "20260824040000_dastak_v1_royalty_platform_fee.sql",
+      "normalizedBodySha256": "fb28a7ea2b9dfd90e4dc86fc389fc0c33f64a4d4e6d49403a6cec1143c203fcf",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "dastak_v1_api.register_royalty_payout_destination(uuid,text,uuid,text,text,text,text,jsonb)",
+      "present": true,
+      "source": "20260824040000_dastak_v1_royalty_platform_fee.sql",
+      "normalizedBodySha256": "9a2ed3e4bbdbb4301de5538f10ba45dafb07edc6644c9625b4a78eebfb46735d",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "dastak_v1_api.request_royalty_withdrawal(uuid,text,uuid,bigint,text)",
+      "present": true,
+      "source": "20260824040000_dastak_v1_royalty_platform_fee.sql",
+      "normalizedBodySha256": "bdfb70e91679824f9885d4474b7628f9768ae8519baca0b8b4fb096d2649b616",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "dastak_v1_api.restaurant_request_json(uuid,uuid)",
+      "present": true,
+      "source": "20260914224449_merchant_fulfilment_product_pricing.sql",
+      "normalizedBodySha256": "cc464627b19737450105ea5bf0f22a8ae336e2fc2c0f2ead3899faa4092a8950",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "dastak_v1.catalogue_prefix_query(text)",
+      "present": true,
+      "source": "20260821231709_dastak_v1_canonical_catalogue_runtime.sql",
+      "normalizedBodySha256": "0664fcc2b45c3466922fc47370fb00a823282b7efe03047075e3804e4b91ef85",
+      "bodyMatchesSource": true,
+      "owner": "postgres",
+      "securityDefiner": false,
+      "volatility": "i",
+      "config": [
+        "search_path=\"\""
+      ],
+      "acl": null
+    },
+    {
+      "signature": "public.dastak_v1_merchant_fulfilment_history(uuid,timestamptz,uuid,integer)",
+      "present": false
+    },
+    {
+      "signature": "public.dastak_v1_merchant_inventory_page(uuid,text,boolean,integer,text,uuid)",
+      "present": false
+    },
+    {
+      "signature": "public.dastak_v1_merchant_locations_page(integer,uuid,uuid)",
+      "present": false
+    },
+    {
+      "signature": "public.dastak_v1_merchant_order_detail(uuid,text,uuid)",
+      "present": false
+    },
+    {
+      "signature": "public.dastak_v1_merchant_royalty_controls_snapshot(uuid)",
+      "present": false
+    },
+    {
+      "signature": "public.dastak_v1_request_merchant_royalty_withdrawal_checked(uuid,uuid,bigint,text,uuid,bigint)",
+      "present": false
+    }
+  ],
+  "fulfilments": {
+    "estimatedRows": 45,
+    "indexes": [
+      {
+        "definition": "CREATE UNIQUE INDEX fulfilments_pkey ON dastak_v1.fulfilments USING btree (id)",
+        "name": "dastak_v1.fulfilments_pkey",
+        "ready": true,
+        "valid": true
+      },
+      {
+        "definition": "CREATE UNIQUE INDEX fulfilments_source_opportunity_id_key ON dastak_v1.fulfilments USING btree (source_opportunity_id)",
+        "name": "dastak_v1.fulfilments_source_opportunity_id_key",
+        "ready": true,
+        "valid": true
+      },
+      {
+        "definition": "CREATE INDEX fulfilments_order_idx ON dastak_v1.fulfilments USING btree (order_id, status)",
+        "name": "dastak_v1.fulfilments_order_idx",
+        "ready": true,
+        "valid": true
+      },
+      {
+        "definition": "CREATE INDEX fulfilments_organization_idx ON dastak_v1.fulfilments USING btree (organization_id, status)",
+        "name": "dastak_v1.fulfilments_organization_idx",
+        "ready": true,
+        "valid": true
+      },
+      {
+        "definition": "CREATE INDEX fulfilments_branch_idx ON dastak_v1.fulfilments USING btree (branch_id, status)",
+        "name": "dastak_v1.fulfilments_branch_idx",
+        "ready": true,
+        "valid": true
+      },
+      {
+        "definition": "CREATE UNIQUE INDEX fulfilments_recovery_opportunity_uidx ON dastak_v1.fulfilments USING btree (source_recovery_opportunity_id) WHERE (source_recovery_opportunity_id IS NOT NULL)",
+        "name": "dastak_v1.fulfilments_recovery_opportunity_uidx",
+        "ready": true,
+        "valid": true
+      },
+      {
+        "definition": "CREATE INDEX fulfilments_recovery_opportunity_fk_idx ON dastak_v1.fulfilments USING btree (source_recovery_opportunity_id)",
+        "name": "dastak_v1.fulfilments_recovery_opportunity_fk_idx",
+        "ready": true,
+        "valid": true
+      },
+      {
+        "definition": "CREATE UNIQUE INDEX fulfilments_restaurant_request_uidx ON dastak_v1.fulfilments USING btree (source_restaurant_request_id) WHERE (source_restaurant_request_id IS NOT NULL)",
+        "name": "dastak_v1.fulfilments_restaurant_request_uidx",
+        "ready": true,
+        "valid": true
+      },
+      {
+        "definition": "CREATE INDEX fulfilments_restaurant_request_fk_idx ON dastak_v1.fulfilments USING btree (source_restaurant_request_id)",
+        "name": "dastak_v1.fulfilments_restaurant_request_fk_idx",
+        "ready": true,
+        "valid": true
+      },
+      {
+        "definition": "CREATE INDEX fulfilments_status_idx ON dastak_v1.fulfilments USING btree (status)",
+        "name": "dastak_v1.fulfilments_status_idx",
+        "ready": true,
+        "valid": true
+      }
+    ],
+    "locks": 0,
+    "owner": "postgres",
+    "rls": true,
+    "tableBytes": 16384,
+    "totalBytes": 212992,
+    "waitingLocks": 0
+  },
+  "clientDmlViolations": 0,
+  "domainClientUsage": false,
+  "financialGuards": [
+    {
+      "definition": "CREATE TRIGGER merchant_order_ledger_transactions_immutable BEFORE DELETE OR UPDATE ON private.merchant_order_ledger_transactions FOR EACH ROW EXECUTE FUNCTION private.reject_merchant_order_ledger_mutation()",
+      "enabled": "O",
+      "name": "merchant_order_ledger_transactions_immutable",
+      "table": "private.merchant_order_ledger_transactions"
+    },
+    {
+      "definition": "CREATE TRIGGER merchant_order_ledger_entries_immutable BEFORE DELETE OR UPDATE ON private.merchant_order_ledger_entries FOR EACH ROW EXECUTE FUNCTION private.reject_merchant_order_ledger_mutation()",
+      "enabled": "O",
+      "name": "merchant_order_ledger_entries_immutable",
+      "table": "private.merchant_order_ledger_entries"
+    },
+    {
+      "definition": "CREATE TRIGGER financial_journal_transactions_immutable BEFORE DELETE OR UPDATE ON dastak_v1.financial_journal_transactions FOR EACH ROW EXECUTE FUNCTION dastak_v1.reject_financial_mutation()",
+      "enabled": "O",
+      "name": "financial_journal_transactions_immutable",
+      "table": "dastak_v1.financial_journal_transactions"
+    },
+    {
+      "definition": "CREATE CONSTRAINT TRIGGER financial_transactions_balanced AFTER INSERT ON dastak_v1.financial_journal_transactions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION dastak_v1.assert_financial_transaction_balanced()",
+      "enabled": "O",
+      "name": "financial_transactions_balanced",
+      "table": "dastak_v1.financial_journal_transactions"
+    },
+    {
+      "definition": "CREATE TRIGGER financial_journal_lines_immutable BEFORE DELETE OR UPDATE ON dastak_v1.financial_journal_lines FOR EACH ROW EXECUTE FUNCTION dastak_v1.reject_financial_mutation()",
+      "enabled": "O",
+      "name": "financial_journal_lines_immutable",
+      "table": "dastak_v1.financial_journal_lines"
+    },
+    {
+      "definition": "CREATE CONSTRAINT TRIGGER financial_lines_balanced AFTER INSERT ON dastak_v1.financial_journal_lines DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION dastak_v1.assert_financial_transaction_balanced()",
+      "enabled": "O",
+      "name": "financial_lines_balanced",
+      "table": "dastak_v1.financial_journal_lines"
+    }
+  ],
+  "retentionJob": {
+    "active": true,
+    "commandSha256": "04c86e253d98c66292232113e29a187e6bcdd9424284b0f3bcb68448814404cb",
+    "commandMatchesSource": true
+  },
+  "activity": {
+    "otherActiveSessions": 1,
+    "transactionsOlderThanMinute": 0
+  },
+  "securityAdvisor": {
+    "scope": "security error-level only",
+    "result": "No issues found",
+    "exitCode": 0,
+    "initialConcurrentAuthenticationAttempt": "failed and terminated; sequential retry succeeded"
+  },
+  "dryRun": {
+    "exactFourCandidates": true,
+    "applied": false
+  },
+  "scope": {
+    "applicationRPCsCalled": false,
+    "migrationApplied": false,
+    "deployed": false,
+    "providerCalls": 0,
+    "secretChanges": false,
+    "ordersCreated": false,
+    "rawCustomerDataSelected": false,
+    "sourceCommittedOrPushed": false
+  },
+  "remainingGates": [
+    "Scoped source checkpoint and push authority",
+    "Effective release-runner transaction/timeout rehearsal",
+    "Explicit exact migration/function activation authority",
+    "Read-only deployed smoke checks after activation",
+    "Web publication",
+    "Device operational and notification acceptance",
+    "Provider readiness and separately authorized financial acceptance",
+    "Merchant distribution"
+  ],
+  "deployedSource": {
+    "method": "Parsed TypeScript node kinds, leaf text and child structure; ignores comments/formatting and unwraps blocks containing exactly one throw; no other AST normalization",
+    "bundles": [
+      {
+        "name": "dastak-v1-orders",
+        "version": 21,
+        "status": "ACTIVE",
+        "verifyJwt": false,
+        "bundleSha256": "c6d849f2997104097bdf1abc1cb3c7683be6bd56e81a1b5abcbaf1b6ca9a8374",
+        "files": [
+          {
+            "path": "_shared/auth.ts",
+            "deployedSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "baselineSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/http.ts",
+            "deployedSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "baselineSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/v1-rpc.ts",
+            "deployedSha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8",
+            "baselineSha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "dastak-v1-orders/handler.ts",
+            "deployedSha256": "93155c41db6f6177bfcf2a0f975afc7bbc6ccc5e15826af229fcf4020165428a",
+            "baselineSha256": "f62b86fe1542c3089dec221d6ff33cb9c86f5d21acf4cb2b22a59e3f0792e29f",
+            "exactBaselineMatch": false,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "dastak-v1-orders/index.ts",
+            "deployedSha256": "d5c86ee645841bcdc50b27d073366274d43613f24b64c43a55b30013219f0e42",
+            "baselineSha256": "67c6df3af0f7bd18a8153f5f1464050bcdb3c9dabdeb5dca02044b2af65cc681",
+            "exactBaselineMatch": false,
+            "normalizedASTMatch": true
+          }
+        ]
+      },
+      {
+        "name": "dastak-v1-catalogue",
+        "version": 27,
+        "status": "ACTIVE",
+        "verifyJwt": false,
+        "bundleSha256": "1fd7b992ae2fef566f5b5bffca5c5d72bd592a9ffccf381d01fc914f9568ed5c",
+        "files": [
+          {
+            "path": "_shared/auth.ts",
+            "deployedSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "baselineSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/http.ts",
+            "deployedSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "baselineSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/v1-rpc.ts",
+            "deployedSha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8",
+            "baselineSha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "dastak-v1-catalogue/handler.ts",
+            "deployedSha256": "d6b5cd19cd24100764493157c2b6557c647afe28b7b510883974a16145267987",
+            "baselineSha256": "ffad34c584bf4cd926f7d1b4abab25f3ba0423565188439ce8e2a08b6fc60ba0",
+            "exactBaselineMatch": false,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "dastak-v1-catalogue/index.ts",
+            "deployedSha256": "518112182033ecc9a70868f7d3ee9f293d08900a4a01507882d60d5aae9e928a",
+            "baselineSha256": "79e291f604d7affdeac30dbc64ae4d4943c0ce3535d7250e84e5f4283d4fa5cb",
+            "exactBaselineMatch": false,
+            "normalizedASTMatch": true
+          }
+        ]
+      },
+      {
+        "name": "earnings",
+        "version": 21,
+        "status": "ACTIVE",
+        "verifyJwt": true,
+        "bundleSha256": "969c9a53cec1bf3fd0fbe00aa1b56e091e2ffa7843f87ec39cc86e9276282238",
+        "files": [
+          {
+            "path": "_shared/auth.ts",
+            "deployedSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "baselineSha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/http.ts",
+            "deployedSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "baselineSha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/payout-gateway.ts",
+            "deployedSha256": "5e99654cd5ab3e662a06bc3e019109fa07f3af87d30ca74158d5edcc57b557b5",
+            "baselineSha256": "5e99654cd5ab3e662a06bc3e019109fa07f3af87d30ca74158d5edcc57b557b5",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "_shared/razorpayx.ts",
+            "deployedSha256": "8bb80a044927a9e200fedb17ee09c1272f1542edf2b7bccb91e63c5a947906c6",
+            "baselineSha256": "8bb80a044927a9e200fedb17ee09c1272f1542edf2b7bccb91e63c5a947906c6",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "earnings/handler.ts",
+            "deployedSha256": "7e0590e83eb1ffbcec805fe9adb1068440a907a2bced1c44ad9d4b84ee5c43dc",
+            "baselineSha256": "e87fccebdeaeb177dbe3ea6b12c4d364d9e1c66650a0d127f7c125fe829e5266",
+            "exactBaselineMatch": false,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "earnings/index.ts",
+            "deployedSha256": "bfd75ab32288154b1faf6c148a1bba3854e1c48a60dd55a9364705944fce8637",
+            "baselineSha256": "bfd75ab32288154b1faf6c148a1bba3854e1c48a60dd55a9364705944fce8637",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "earnings/provider-clients.ts",
+            "deployedSha256": "d5b00630483feb629e9170a4e526963aa6edf585def1f4c4f3d9b4b8b248aa0c",
+            "baselineSha256": "d5b00630483feb629e9170a4e526963aa6edf585def1f4c4f3d9b4b8b248aa0c",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          },
+          {
+            "path": "earnings/razorpayx.ts",
+            "deployedSha256": "8b418e99f58145d3d6c657c05c109eda3257e75751ffe7752004895ca76e5db7",
+            "baselineSha256": "8b418e99f58145d3d6c657c05c109eda3257e75751ffe7752004895ca76e5db7",
+            "exactBaselineMatch": true,
+            "normalizedASTMatch": true
+          }
+        ]
+      }
+    ]
+  },
+  "deployedRevisionsStableDuringInspection": true
+}

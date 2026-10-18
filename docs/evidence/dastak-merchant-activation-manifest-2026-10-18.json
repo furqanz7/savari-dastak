@@ -1,0 +1,205 @@
+{
+  "generatedAt": "2026-10-18T15:45:35.330Z",
+  "status": "LOCAL_PREPARATION_ONLY_NOT_ACTIVATED",
+  "baseHead": "4d835cb0f411b2199fcd49c8499a4b3b40a5a801",
+  "migrationCount": 295,
+  "chainSha256": "631b55eee8ea11249c5831599b81d3b10176b313ab73c5802004bdf2a678657f",
+  "pendingCandidateMigrations": [
+    {
+      "name": "20261018003730_merchant_scoped_order_detail.sql",
+      "sha256": "4c0d751d4be7ec902838520cbabea2f6dc528ddc14e85e82259d4a754d619efb"
+    },
+    {
+      "name": "20261018014110_merchant_active_and_paged_history.sql",
+      "sha256": "d9ec3997ca9343a14625993d2b81ff5f251ee8f7df308d157d562219ce9d539b"
+    },
+    {
+      "name": "20261018131824_merchant_catalogue_and_location_pages.sql",
+      "sha256": "e9bbca935a581e80ffe75a2d883e0f6c8c3f86091787c82bfffea005e71d7423"
+    },
+    {
+      "name": "20261018151210_merchant_payout_review_guards.sql",
+      "sha256": "32ad928af302722510784e5e6231b5e762e663e645fefac70e4f226f5c8db676"
+    }
+  ],
+  "functions": [
+    {
+      "name": "dastak-v1-orders",
+      "verifyJwt": false,
+      "files": [
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/auth.ts",
+          "sha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/http.ts",
+          "sha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/v1-rpc.ts",
+          "sha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/dastak-v1-catalogue/handler.ts",
+          "sha256": "5f2e73b237f7c633d20db4cf50d4fd3ae51a99f5e5a1ad46499dbc891fcd76c9"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/dastak-v1-orders/handler.ts",
+          "sha256": "142814560b60c6705dd79ad7e2d3d879f913c98496ed63056561f5edb3937a5a"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/dastak-v1-orders/index.ts",
+          "sha256": "d0073eb5bd30eddf01e525ef4ffcd936256780b9378052cbfc85a1e20d3c8f91"
+        }
+      ]
+    },
+    {
+      "name": "dastak-v1-catalogue",
+      "verifyJwt": false,
+      "files": [
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/auth.ts",
+          "sha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/http.ts",
+          "sha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/v1-rpc.ts",
+          "sha256": "42951d9344cd7642802028719a582ec2cfe719f230f986086075d2890e5637d8"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/dastak-v1-catalogue/handler.ts",
+          "sha256": "5f2e73b237f7c633d20db4cf50d4fd3ae51a99f5e5a1ad46499dbc891fcd76c9"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/dastak-v1-catalogue/index.ts",
+          "sha256": "b3235b8c9f27e5a413898f76ec4a094eefec02da93df701ca4124a0c43abdccd"
+        }
+      ]
+    },
+    {
+      "name": "earnings",
+      "verifyJwt": true,
+      "files": [
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/auth.ts",
+          "sha256": "edc41745be80f59c6d118559f864d5aa763285f7602e3faf8b54ab3b125fa5fa"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/http.ts",
+          "sha256": "f529c58c27b6de5d713031457fb15ed2addef399eac0ca9cf1ad09ad5eff8e07"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/payout-gateway.ts",
+          "sha256": "5e99654cd5ab3e662a06bc3e019109fa07f3af87d30ca74158d5edcc57b557b5"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/phone.ts",
+          "sha256": "ae9cf1c38681d63fab5b38ef28f6907c1bca10ff651c440fd28c994135a81962"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/_shared/razorpayx.ts",
+          "sha256": "8bb80a044927a9e200fedb17ee09c1272f1542edf2b7bccb91e63c5a947906c6"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/bootstrap-account/handler.ts",
+          "sha256": "09cce32a86b4da6a48dbadbe46b6246d0306b30d3b32d33a05c1c8fafc54018c"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/earnings/handler.ts",
+          "sha256": "da2216a83b58c005a9d1eb0217a3b440672c663a61a3bc8a15bf90cc81aa914a"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/earnings/index.ts",
+          "sha256": "bfd75ab32288154b1faf6c148a1bba3854e1c48a60dd55a9364705944fce8637"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/earnings/provider-clients.ts",
+          "sha256": "d5b00630483feb629e9170a4e526963aa6edf585def1f4c4f3d9b4b8b248aa0c"
+        },
+        {
+          "path": "Backends/Dastak/supabase/functions/earnings/razorpayx.ts",
+          "sha256": "8b418e99f58145d3d6c657c05c109eda3257e75751ffe7752004895ca76e5db7"
+        }
+      ]
+    }
+  ],
+  "configuration": {
+    "path": "Backends/Dastak/supabase/config.toml",
+    "sha256": "d12b3c0c9e9df59ea78426530b1b11ee7f0d5fe4426c23750b7c51c24db3b52d"
+  },
+  "dependencyLock": {
+    "path": "Backends/Dastak/supabase/functions/deno.lock",
+    "sha256": "a60db2d38f527bbeb8aa505a9f93ece6b655b22b6be8f5a43e9acf5a277ef68e"
+  },
+  "verification": {
+    "scope": "Fresh local checks during activation preparation; no production access",
+    "isolatedDatabaseFixtures": [
+      {
+        "name": "merchant-order-detail",
+        "result": "passed",
+        "log": "/tmp/dastak-merchant-activation-order-detail.log"
+      },
+      {
+        "name": "merchant-history",
+        "result": "passed",
+        "log": "/tmp/dastak-merchant-activation-history.log"
+      },
+      {
+        "name": "merchant-discovery",
+        "result": "passed",
+        "log": "/tmp/dastak-merchant-activation-discovery.log"
+      },
+      {
+        "name": "merchant-payout-guards",
+        "result": "passed",
+        "log": "/tmp/dastak-merchant-activation-payout-guards.log"
+      }
+    ],
+    "edgeTests": {
+      "passed": 384,
+      "failed": 0,
+      "log": "/tmp/dastak-merchant-activation-edge.log"
+    },
+    "entrypoints": {
+      "result": "type-check passed",
+      "log": "/tmp/dastak-merchant-activation-edge-check.log"
+    },
+    "staticDatabaseContracts": {
+      "passed": 166,
+      "failed": 0,
+      "log": "/tmp/dastak-merchant-activation-static.log"
+    },
+    "full295MigrationRebuild": {
+      "status": "PASSED_LOCAL_ISOLATED",
+      "applied": 295,
+      "databaseContractFiles": 76,
+      "databaseAssertions": 2081,
+      "integratedScenarioAssertions": 113,
+      "additionalUniqueIntegrationAssertions": 32,
+      "evidence": "dastak-merchant-full-rebuild-2026-10-18.json"
+    },
+    "productionHistoryDriftAndAdvisors": {
+      "status": "PASSED_SCOPED_READ_ONLY_PREFLIGHT_2026_10_19",
+      "applied": 291,
+      "pending": 4,
+      "unexpectedPending": 0,
+      "prerequisiteFunctionBodiesMatched": 12,
+      "securityAdvisorErrorLevel": "No issues found",
+      "evidence": "dastak-merchant-production-preflight-2026-10-19.json",
+      "boundary": "Timestamped metadata/source inspection, not activation or deployed feature acceptance"
+    },
+    "boundedLocalReleaseRehearsal": {
+      "status": "PASSED_LOCAL_ONLY_2026_10_19",
+      "casesPassed": 5,
+      "effectiveLockTimeout": "2s",
+      "effectiveStatementTimeout": "15s per statement",
+      "evidence": "dastak-merchant-release-rehearsal-2026-10-19.json",
+      "hostedWriteTransportRehearsed": false
+    },
+    "deployedFunctions": "NOT_CHANGED",
+    "deviceAcceptance": "SEPARATE"
+  }
+}

@@ -1,0 +1,1038 @@
+{
+  "date": "2026-10-19",
+  "status": "PREPARED_SEPARATE_INDEX_TREE_NOT_A_COMMIT_OR_PUSH",
+  "baseHead": "4d835cb0f411b2199fcd49c8499a4b3b40a5a801",
+  "branch": "codex/dastak-v1-launch",
+  "tree": "624fabb5eb4e772e03f579f2d1751414fa85fc47",
+  "paths": 130,
+  "realIndexBeforeSha256": "c3d661064e2f57d275f82bf91a4970ab31d03d59b0d41eafa1faefd5a53382dd",
+  "realIndexAfterSha256": "c3d661064e2f57d275f82bf91a4970ab31d03d59b0d41eafa1faefd5a53382dd",
+  "indexIsolated": true,
+  "committed": false,
+  "pushed": false,
+  "groups": {
+    "native-merchant": 56,
+    "merchant-backend-and-verification": 37,
+    "merchant-documentation-and-evidence": 28,
+    "merchant-web": 9
+  },
+  "files": [
+    {
+      "path": "Apps/Dastak/Sources/DastakMerchant/DastakMerchantApp.swift",
+      "bytes": 3555,
+      "sha256": "8efc0fded0481a0ac13362e60abdd16e1b1ca44818470bd671c8c8cd91352d1d",
+      "gitBlob": "ee89ef9ecfef5b47d24476c2561ed33d6aba525e",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Backends/Dastak/scripts/merchant-production-preflight.sql",
+      "bytes": 4895,
+      "sha256": "198f0567e54d9d14d2f8cb58f15aee3cabb1f6c77b3a4907bd27f996ab66340a",
+      "gitBlob": "1bc6ec5ed2f018e97acc7fd1ec7a7386682cd689",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/merchant-rebuild-manifest.mjs",
+      "bytes": 1045,
+      "sha256": "8c1382ee7684b400264747d1715d0b494ee5444956e0d9bbab0e15f36904ef76",
+      "gitBlob": "5eb8fe1185b70c6c44d4e21ad14e7fedcb47a3cf",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/merchant-release-sql.mjs",
+      "bytes": 6201,
+      "sha256": "64196808cb56ec0ca640a6e7186749c286888dc6105471da97e9a6cdc8e752eb",
+      "gitBlob": "a9e1ba7cee7ca899be793d70cbda0a448aa8b261",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/rehearse-merchant-release.mjs",
+      "bytes": 6677,
+      "sha256": "e8277318c3990673037e14ed59faf3819afe1952daf750f1c73b5f6cde585a40",
+      "gitBlob": "ba974d73cbe8bb42a6a87562613c0aa85b99bbb1",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/replay-clean-rebuild.mjs",
+      "bytes": 5226,
+      "sha256": "38da0d09df34d70ffc8a018608a4b25365b1e73a4354b5b5d6ffcd0f13f27ca1",
+      "gitBlob": "f21954bb75f8967ff4da6301403ceb55ae98391f",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/stage-clean-rebuild.mjs",
+      "bytes": 2618,
+      "sha256": "e992a374aec83fa53b1a9eaf3ca5e2d82b727c6044fa35ae68ecaf9e27aa1a57",
+      "gitBlob": "9ccb4ab9b9961ceff9aaca5857318cadd56c2049",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/test-clean-rebuild.mjs",
+      "bytes": 5903,
+      "sha256": "5fe3914489bd3258594f8b12c1ccbf861623ed997c4711b2c54596a67aca6076",
+      "gitBlob": "b7b46fc9c7748a1c5d9f355b8446e073279352c5",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/test-merchant-discovery.mjs",
+      "bytes": 1934,
+      "sha256": "425521a08bbc09d4c696376bf68fb36f682cfaa314bacd1c168ee0658ef1c011",
+      "gitBlob": "59727812b21ccf01a45377409b3915276c9a9371",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/test-merchant-history.mjs",
+      "bytes": 1852,
+      "sha256": "9f7551ce2f7e72ee2a9b707ff3f501d61a72a166358f6461e6bfb8607c2ce034",
+      "gitBlob": "b6bce8bf2934ed2510d13cad5930a454287b780f",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/test-merchant-order-detail.mjs",
+      "bytes": 1369,
+      "sha256": "a980ab63cfc96b2e493244d597db6cd517d5001efa000deadb1b56f4fad1d6dd",
+      "gitBlob": "38fe931ee846acfe6ca14bfc1ac8b7cbf67c90c3",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/test-merchant-payout-guards.mjs",
+      "bytes": 4285,
+      "sha256": "561fb94a4d12dee9c2766100cddd41be7549c56c58fd5efb9f14b9b929297330",
+      "gitBlob": "0f2b6ba60839742b21539cc3b764faed8a97ed6a",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/scripts/test-merchant-rebuild-integration.mjs",
+      "bytes": 3666,
+      "sha256": "9ae33baf33a0137efd7de1b456f7d666ffb83beb2456ec90e767cb5e4fea9312",
+      "gitBlob": "71cc1f2e18571eb228677ffabd35f5785456d442",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/dastak-v1-catalogue/handler.ts",
+      "bytes": 47459,
+      "sha256": "5f2e73b237f7c633d20db4cf50d4fd3ae51a99f5e5a1ad46499dbc891fcd76c9",
+      "gitBlob": "83ccc386e6b937a590882c17dd4cbfa2b58e2943",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/dastak-v1-catalogue/index.ts",
+      "bytes": 13075,
+      "sha256": "b3235b8c9f27e5a413898f76ec4a094eefec02da93df701ca4124a0c43abdccd",
+      "gitBlob": "0dfa3376ea23c4c9ef040e41a54aaa3935a3afa5",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/dastak-v1-orders/handler.ts",
+      "bytes": 62548,
+      "sha256": "142814560b60c6705dd79ad7e2d3d879f913c98496ed63056561f5edb3937a5a",
+      "gitBlob": "a6f5afb856363d907c9d597b352327040d32d64b",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/dastak-v1-orders/index.ts",
+      "bytes": 17539,
+      "sha256": "d0073eb5bd30eddf01e525ef4ffcd936256780b9378052cbfc85a1e20d3c8f91",
+      "gitBlob": "97d38bbd7d5d379de469d175391d1c3558f3bda3",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/earnings/handler.ts",
+      "bytes": 13285,
+      "sha256": "da2216a83b58c005a9d1eb0217a3b440672c663a61a3bc8a15bf90cc81aa914a",
+      "gitBlob": "e78fbb56626df5478f942cf8dc4ac23564aea9d5",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/tests/dastak-v1-catalogue/handler.test.ts",
+      "bytes": 39354,
+      "sha256": "23c346ca61b1e146011c249bf2364e2190f550d7c8d9bef11289cb5d6e8b1861",
+      "gitBlob": "df69eddc4acd42456ed6e1d9c929b1b3a56d618c",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/tests/dastak-v1-orders/handler.test.ts",
+      "bytes": 59535,
+      "sha256": "87d514c7fbc84c7c84066d60ba0d199cb6adf0d9b6a0f2bf34c6157c3f984201",
+      "gitBlob": "0227ae00d287c5ea74074d57eed733e0cf6bfcd9",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/tests/earnings/handler.test.ts",
+      "bytes": 14598,
+      "sha256": "41014dfbecc259ee3116e525cff91f9be6058b5fdc65c4011c2a5f4a7d235875",
+      "gitBlob": "2ade12b7992059dbbceee10cfe91f4b952642f58",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/tests/process-v1-outbox/apns.test.ts",
+      "bytes": 10421,
+      "sha256": "7ad775eaaecc828db0d81266b99bcbfdc468e6ad1231353835dc9b2a016ab8a8",
+      "gitBlob": "26bc547cab4b3d98fe249ee598c8948397757121",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/migrations/20261018003730_merchant_scoped_order_detail.sql",
+      "bytes": 9544,
+      "sha256": "4c0d751d4be7ec902838520cbabea2f6dc528ddc14e85e82259d4a754d619efb",
+      "gitBlob": "b9e351f41f40ed746b0547b368af58477fa10dbc",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/migrations/20261018014110_merchant_active_and_paged_history.sql",
+      "bytes": 9002,
+      "sha256": "d9ec3997ca9343a14625993d2b81ff5f251ee8f7df308d157d562219ce9d539b",
+      "gitBlob": "11f732c33458ad27dcfee45b37731fe8056c53c6",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/migrations/20261018131824_merchant_catalogue_and_location_pages.sql",
+      "bytes": 9528,
+      "sha256": "e9bbca935a581e80ffe75a2d883e0f6c8c3f86091787c82bfffea005e71d7423",
+      "gitBlob": "876a2e276185c7c2d8cf6f0a7af920a5164133aa",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/migrations/20261018151210_merchant_payout_review_guards.sql",
+      "bytes": 4955,
+      "sha256": "32ad928af302722510784e5e6231b5e762e663e645fefac70e4f226f5c8db676",
+      "gitBlob": "7b5eff619c9e73695fc8564a5c13c8f78b3d00eb",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_discovery_assertions.sql",
+      "bytes": 5590,
+      "sha256": "cf32a18bb8b3671d6fc828f73be4d5eade830e7d0493fe1958f914415c76d639",
+      "gitBlob": "6bd4177efffd73362eff1b0b0cadac2cb435f1c2",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_discovery_fixture.sql",
+      "bytes": 6068,
+      "sha256": "478aef180fa9d497c068be6dd637a5cb26b3664c6b4be7c6190c74c959472130",
+      "gitBlob": "b5d3393f0a1c7c2b530980f301db02c2e3c4b35e",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_history_assertions.sql",
+      "bytes": 4420,
+      "sha256": "bbdbc984c5129bd3559ffd499e64005947f05fecb3fd63955add7cbb46be4c89",
+      "gitBlob": "48d4e0b48a10a3edeb78f2e5900cb998274ffeec",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_history_fixture.sql",
+      "bytes": 2290,
+      "sha256": "cc271674054b6f69bff9308eb2f619a3d7dc543ee023a01338da2b8c02a43a4b",
+      "gitBlob": "9f003fc401ed2340e441a2acd093608bf32c7b4b",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_order_detail_assertions.sql",
+      "bytes": 4114,
+      "sha256": "0e3afd3cc7f032deaf150418e29347244dfb59a548ad8bd4d5bedf810523f0c3",
+      "gitBlob": "5e0f53400143291f5a016056c6b6cfe0b9e9b8fc",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_order_detail_fixture.sql",
+      "bytes": 7930,
+      "sha256": "640f8d6786358140538b4066050098924f5f8c8ee8cc13e6926fd4219dd69685",
+      "gitBlob": "a3b3fb01010163e7e41fb75b6bdcc143d493c300",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_payout_assertions.sql",
+      "bytes": 2166,
+      "sha256": "92b5e243915c4b78cd24070d82d348110600ec8919116a0d0ed81980ef750b69",
+      "gitBlob": "86f19e869cf6f3c4d66c40e61e372048801ee132",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_payout_fixture.sql",
+      "bytes": 3061,
+      "sha256": "61639bd0f044d1ca9a11730e937771a4c67f57639f47fa7a26fdd29d93e8c400",
+      "gitBlob": "0ffe04a1b3f5880f11ca383be12271adde6bb697",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_rebuild_active.sql",
+      "bytes": 713,
+      "sha256": "a3c55805a46c32801401b3849ae0898a663a411ccffc84d4b12e5f14b5907c44",
+      "gitBlob": "dbe2c7a2f3ad397a34e058188ef430c6b84be88d",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/supabase/tests/merchant_rebuild_integration.sql",
+      "bytes": 11075,
+      "sha256": "ac0a81ca4f6049501515b427e3d39f2e5489632e89f81ece7189fa842b758de7",
+      "gitBlob": "ff8f5223be5c5ef926e609d56476af84d38a4c2d",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/tests/merchant-rebuild-manifest.test.mjs",
+      "bytes": 1768,
+      "sha256": "211b8986f468dc9a9ad55719bac24c3a4aeb208c4a1b1decf394510496d60907",
+      "gitBlob": "52800bbf770cb329655bf49f1f48f41f8429d53e",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "Backends/Dastak/tests/merchant-release-sql.test.mjs",
+      "bytes": 1373,
+      "sha256": "f1f2693ce39a13875560d46280ea041580f4fcce237192421b37d54cb1128964",
+      "gitBlob": "bdc6cc3d153413329b8aeb78ba98179c7bfde4d1",
+      "group": "merchant-backend-and-verification"
+    },
+    {
+      "path": "docs/dastak-merchant-backend-activation-plan-2026-10-18.md",
+      "bytes": 18223,
+      "sha256": "2abe5e3cc50e7a0b1f08c02ba550bbff4263da696c93618fafda8a4f83a8641f",
+      "gitBlob": "5ff62ebf5a98e63207cbec43e3762a2395228e50",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-catalogue-search-implementation-2026-10-18.md",
+      "bytes": 9096,
+      "sha256": "22817eb6ca600290bb40474fd7ff6fb7befde5cc8f800fc690f5e199ab84cd57",
+      "gitBlob": "8d21fa9e48a90c61cf33919a0aeeb92905ce8b67",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-completion-audit-2026-10-18.md",
+      "bytes": 36186,
+      "sha256": "387930793b8d1bafabc9772a024bd594af64b0247b45eea6f432f36a81de47ec",
+      "gitBlob": "32b0a3f8d4c91ae0a21bb9b186e59af5f048a6d8",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-discovery-implementation-2026-10-18.md",
+      "bytes": 12012,
+      "sha256": "b50d00776ece7f3466d130778c4206b0c5d3f438024ec95534d883d2bea07d38",
+      "gitBlob": "8757da2a928ec688fdb90327e2cd37cb5f8b3d72",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-earnings-implementation-2026-10-18.md",
+      "bytes": 9241,
+      "sha256": "6325df1d6a758534ecb0400006130bb4db888a7122ed2b1181f1d84b24144672",
+      "gitBlob": "74e3950b2c4c551826f82b819a6e38d8159c9164",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-full-rebuild-2026-10-18.md",
+      "bytes": 11853,
+      "sha256": "77a5db5a538ef1ead34c8e54b995a023d480146fcfbc65bc751f4212893a69d9",
+      "gitBlob": "1dc0616dc137c4d6a2f71e01fcedc203de34c087",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-history-implementation-2026-10-18.md",
+      "bytes": 8500,
+      "sha256": "3c7f7c5f4b65233daf4b5e175efc37b39c0384653d562ac7d32bf7f1f91773c6",
+      "gitBlob": "c7e1af0def56e5b00ed7f1bb9da787de6be98fc6",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-location-implementation-2026-10-18.md",
+      "bytes": 7698,
+      "sha256": "25df27c5dac718c672d6958c8f4d128827d53107d5913e624cc66910a6b4916b",
+      "gitBlob": "d35cf26f4ddf4bea32d0f2d91a354e1e64a39d1e",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-menu-completion-2026-10-18.md",
+      "bytes": 10614,
+      "sha256": "45be47770d2f45445727c53be498e54e316b1da7a3385c034e9024663d5b2c9b",
+      "gitBlob": "5a9349547e12e596c647106c8fdc711c8b289bb4",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-menu-editing-implementation-2026-10-18.md",
+      "bytes": 8836,
+      "sha256": "046965e7ab8ac159e2f29b065e4fba056d74a20dd9116232276bf34ab50695ad",
+      "gitBlob": "92326ac7a93072f44e994e0b9ad296b27da79236",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-notification-implementation-2026-10-18.md",
+      "bytes": 8954,
+      "sha256": "0dd51120c54a72188fa151673701c81bbcdcbd60db449ea233ac8e8d5fe036b2",
+      "gitBlob": "945c372e6b80b24526385193ea1e18ef2dc062ff",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-order-detail-implementation-2026-10-18.md",
+      "bytes": 9411,
+      "sha256": "657b265ab91dc992d517d53cb8793b2067dccc6ffa3c90885bd79a4048227145",
+      "gitBlob": "ab241ce2edb8e4048248eb8a21af5593e2e3e37d",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-payout-controls-implementation-2026-10-18.md",
+      "bytes": 11279,
+      "sha256": "60f55e8221e604863ea2a990d798c0295c4b5b288fdd9f4872fcb87f8f902336",
+      "gitBlob": "65d4e64c4623fef988f02c6a2fe1709a20b6cd65",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-polish-implementation-2026-10-18.md",
+      "bytes": 9349,
+      "sha256": "37411375e3701a3f67afcdd7438beb5de0457eb8edbe5db1c9079db2391dcecc",
+      "gitBlob": "ca73369452347a861797e1b489a289d3ae8b7cc7",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-production-preflight-2026-10-19.md",
+      "bytes": 10676,
+      "sha256": "88c0aab609e4e028ba726243580d5250b69040db74e66088bbcdc21725d1c80f",
+      "gitBlob": "01da87429f515670f1d2b18a8872546dc5fee5b0",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-release-rehearsal-2026-10-19.md",
+      "bytes": 9490,
+      "sha256": "971c43df00b953b1a8811cfa4a4565eae4563f1771f39c9e7c59a2b39c7932c8",
+      "gitBlob": "5bc111ce867ca201f6386020776bb5ce6b59e41d",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-reliability-implementation-2026-10-18.md",
+      "bytes": 7936,
+      "sha256": "cae73621368cbacf50063ae79d6cb0955fbe56a3ae3457bc398498e812283884",
+      "gitBlob": "abbba77dda79727bcbc2c21cf218af3a784fb350",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/dastak-merchant-validation-implementation-2026-10-18.md",
+      "bytes": 7681,
+      "sha256": "593d73c488736e37ca163c3f98576ad11e2bd8292919c7a24601ecb1b1df94bc",
+      "gitBlob": "6b921ad02b46cded56da1ddb7870478d0da3e634",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/evidence/dastak-merchant-activation-manifest-2026-10-18.json",
+      "bytes": 7832,
+      "sha256": "fb4faffadcba277f3543587c9d1a2f8b7ba2aadfdfe7467a7f2b6c4526e132d5",
+      "gitBlob": "1e3ebbae8010bb8558273f6907c3cb29ac011c30",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/evidence/dastak-merchant-full-rebuild-2026-10-18.json",
+      "bytes": 28698,
+      "sha256": "b8e11d361cb168a50b4a85e460a4727fb5e95d1b749d4fbd51820cf57ba6cc1e",
+      "gitBlob": "39d63ded403e9ee3c17558d9267b280567852488",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/evidence/dastak-merchant-production-preflight-2026-10-19.json",
+      "bytes": 22658,
+      "sha256": "b0cc8ffb37262e4e6fce96a6c2aa5505afe7c1608b32cc2047aef367c540a0ad",
+      "gitBlob": "067522192eff13ca260699d3ea1571e9bf76ffb9",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/evidence/dastak-merchant-release-rehearsal-2026-10-19.json",
+      "bytes": 2821,
+      "sha256": "ec607b26601bceb202ef43ee7d5ea7865facc4af2f6e0e51236ba2a22fdeb51b",
+      "gitBlob": "a1723fec771db576a87283fcf2c97c0dd52049bc",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/verification/dastak-merchant-polish-2026-10-18/ipad-startup-incomplete.png",
+      "bytes": 266890,
+      "sha256": "e6d122d4356c73d826656304512a915432279dc53f99db256918e8d31675ed9a",
+      "gitBlob": "215021bd3308dc1b40782f5f2415ceb9e668e07a",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/verification/dastak-merchant-polish-2026-10-18/phone-local-detail-feedback.png",
+      "bytes": 424357,
+      "sha256": "8fa3e0b0336da266ed838180aa43c971db907dc1c052ab6162eebc6ccf0ca843",
+      "gitBlob": "7ce19be4a61b52e41c09389bc26b2d2688695402",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/verification/dastak-merchant-polish-2026-10-18/phone-orders-accessibility-light.png",
+      "bytes": 399098,
+      "sha256": "8c62d52294c605e6e43f99db6fe8a4f36a6f6c60207e19261335c1460d9f759f",
+      "gitBlob": "8ffaee2c8cc9fee5231523214d641153465c7e2b",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/verification/dastak-merchant-polish-2026-10-18/phone-orders-dark.png",
+      "bytes": 468345,
+      "sha256": "a6c2f7ff4e49892b504933f2bc532b599ce599a601317f139689cebecd0479c6",
+      "gitBlob": "c6c4d7954490037a706577dc4b0d89be2a8f32c7",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/verification/dastak-merchant-polish-2026-10-18/phone-store-light.png",
+      "bytes": 864397,
+      "sha256": "3b1ba71be1b06b6f9f51941be9458b2ed44bef4bbce372899d64d82c81229d69",
+      "gitBlob": "115cca03ff1f6ea44b5371f311883286393a2b94",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "docs/verification/dastak-merchant-polish-2026-10-18/README.md",
+      "bytes": 1515,
+      "sha256": "b6d6ab17ad3556a336019f9519bd9aa05f6d77604aab8b7f60dde859454bde6d",
+      "gitBlob": "c0e4635a915a5569494363fc57d77f31135ef815",
+      "group": "merchant-documentation-and-evidence"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantApplicationView.swift",
+      "bytes": 37322,
+      "sha256": "6da1b7bad18a807af3ece679dd217b313dad033c941897e7a9c89cbb13b0f794",
+      "gitBlob": "401b096218895d7896cadecf7463a45add7b9b87",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantCataloguePresentation.swift",
+      "bytes": 4246,
+      "sha256": "59e9fb1f56cc0663880b554b7171fda1317b37afbff2aca26f988ba75a8c60fd",
+      "gitBlob": "385f2632e44b9a0e0452a3e327ea6757f3d1334a",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantCatalogueView.swift",
+      "bytes": 69785,
+      "sha256": "910781d617ab2adcc67aff9ba8ab49a2f7fbc411276005d5c0b36808acd41099",
+      "gitBlob": "f9cdc80f50d460852b4ec12accefdcdf43474623",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantCommandJournal.swift",
+      "bytes": 4312,
+      "sha256": "fd72d4307785f12259aad41c1badf15188e916fa231f136ed551b2b1415491a4",
+      "gitBlob": "a2fa112b9025520c4149875d0f1144fc2f0495de",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantDesign.swift",
+      "bytes": 8148,
+      "sha256": "464b44f824ffafa522f3a1f098cf124232cf0de4a0402df7a8f6f12ff72af271",
+      "gitBlob": "30cf8e54ec0bd0f8cdc6581797fbe5a883a50535",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantDesignPreview.swift",
+      "bytes": 6585,
+      "sha256": "9d09cc06d68ad40552e29af4bc235bf0b439f07f5692c53d94c527650eb1ff95",
+      "gitBlob": "8320ee1ab8932b58dfab4883852c7fde4c4d3aae",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantEarningsModel.swift",
+      "bytes": 18824,
+      "sha256": "58d7dc023b51c11b1df8648c6acf8cdc1bf95fcb1b89d02dd2de19939f4c5fd5",
+      "gitBlob": "ac911f65745590800e943e4ad55ac9c10e34e2a6",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantEarningsView.swift",
+      "bytes": 15739,
+      "sha256": "0e85e850dee6c9b10fd072dc6eaeaaf052fa6f899771503af3567eaa08121432",
+      "gitBlob": "59fc13fbc219a27bccf5c8b795ec5a64dd7a5968",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantHistoryView.swift",
+      "bytes": 5973,
+      "sha256": "d7b77db7960d5bad2c9ebb3c6c2394068d35f6a29ca7b0a935719c896450870f",
+      "gitBlob": "af188e1de0e5b3661f2c7735d1b046db3f89620d",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantIncomingCard.swift",
+      "bytes": 9345,
+      "sha256": "fd5f7f2c9b3163a51773d5cb82ab4dbde79d98ae390765a8117999b7b4cbe54f",
+      "gitBlob": "e31c734a6bc791d043b7a8d921120ca9fe7093d6",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantInventoryModel.swift",
+      "bytes": 4058,
+      "sha256": "5f89f1889ce26e39df5277c58f4636c5993fdf144a0a6c6d7dc4e299623471a7",
+      "gitBlob": "ceb1fc46c0ed53a19fff56e40998550cac2060c8",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantJournalBanner.swift",
+      "bytes": 3573,
+      "sha256": "972224cf4bfdd9e18b85feca365184e1337788eaab1c6afc443e5b9d51a6d291",
+      "gitBlob": "a9596acf8a7f0eec4aa8786edfd7d5730d7d4201",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantLocation.swift",
+      "bytes": 4752,
+      "sha256": "4ace30faebcf028c9ff30893776f6232cd093ee6d09eac66110264e225036e11",
+      "gitBlob": "f56243524f9aabc1d5db51e52afe3471b2556f24",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantLocationView.swift",
+      "bytes": 4686,
+      "sha256": "0ed051b503d148632682c95704caff7421f8140fd5f295a3de101351359cb2f2",
+      "gitBlob": "3b2a924eedba1b13dd1f698945b8bac9f43910b5",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantMenuDraft.swift",
+      "bytes": 20088,
+      "sha256": "9a0bcefdcbc8b6de2223fa0d4ae1efe834efcc264c97c1b67222ba6aeffc0c7a",
+      "gitBlob": "d916e44645a85cc9edd55357b10f55e134209cb2",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantMenuDraftStorage.swift",
+      "bytes": 3686,
+      "sha256": "d23908f7f651a7d0d83ad4d47ce8a9cd2b1505b1112f3f91a20beec2c8bee92f",
+      "gitBlob": "aadc4b3d95f03423acb1d0c39331dee5108f5daa",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantMenuEditors.swift",
+      "bytes": 18322,
+      "sha256": "554166be66a32aa9879e60789d63571958ca169aa96b74312e167f35a80bd8f8",
+      "gitBlob": "b1d78386810f7198fdf52340f80ac0473c173cf8",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantModel.swift",
+      "bytes": 92475,
+      "sha256": "e3614708be4f754ea246f10df09e803c0a04d19b52c0e33106fc7f41445f5698",
+      "gitBlob": "1065444ca88397a4abcd46b398781cd9a64bf45e",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantNotificationNavigation.swift",
+      "bytes": 6400,
+      "sha256": "388a81eb9a6b32ada0bfa00af5e22f4d2aa9af9c69ab39b9273f1c17660df538",
+      "gitBlob": "6f0a761f5b872b3437632c989247eeaaf4c50ee1",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantNotificationRoute.swift",
+      "bytes": 5798,
+      "sha256": "5ec76ebb98afb5a7532912de48719cdd360f843a88114cc22565240af201dfb6",
+      "gitBlob": "cb9ff80a45508e2e634af2495a97c60e8aaee009",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantNotifications.swift",
+      "bytes": 9175,
+      "sha256": "841a4369a40c40e5b23cd72721753124bfd6f04c5b80abfbc37d72c2b98300d7",
+      "gitBlob": "542492eb1db4961c6072d3d7c85c39c0ccd2e0c2",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantOperationCommand.swift",
+      "bytes": 5434,
+      "sha256": "77f9d71e0cbbf84d4d3dfb0f0e8b832d6cad2995b594b20d55facc9df59a4330",
+      "gitBlob": "d360f1eefe8a62aa1fe891914cc886df69880cd7",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantOrderDetailView.swift",
+      "bytes": 10940,
+      "sha256": "5a0d4cb7e854d819a09f8a8f41a3ac1990095a6c31fa21557f85c492c1f6c06b",
+      "gitBlob": "f8d3c29e14caca9f25cece78b802b3b1f27d7db4",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantOrdersView.swift",
+      "bytes": 38589,
+      "sha256": "91e8bd1b451b202a293b61012b927c8c3c487085c5d43e1784d44d36fc319c2a",
+      "gitBlob": "7980100916acd79e1efa0ef4a32b8d571980b916",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantPayoutControls.swift",
+      "bytes": 9086,
+      "sha256": "7829d58435b4284574d471588e38ece7ad2b204d90b35c9ddaa70c6cdb5fa886",
+      "gitBlob": "c4286d0a9f6039436832b35761f381a0305cdcf0",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantPayoutStorage.swift",
+      "bytes": 5406,
+      "sha256": "8441374d07c449f72f29f2b39d3a5ef37b04c9fe3e82504b32fc3568bd19678f",
+      "gitBlob": "d2935f0ae7a3fc0796c5021946eba06cd91a1ee8",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantPhoto.swift",
+      "bytes": 5446,
+      "sha256": "76e05a2b2287fed5b120d90b67445168f6b2f754f2666d1e82f016dc30f51886",
+      "gitBlob": "d1b0d69fb60bf9fb5ac06cd5d2aeafe8abbfff37",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantReceiptsView.swift",
+      "bytes": 10011,
+      "sha256": "3f78651c4798c295ac3fcf3934143efb9169355b78662ded91879494e1a60d57",
+      "gitBlob": "4d7a8ab5a89cdfb85e63f159a546bb2d7eef9c57",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantRecoveryView.swift",
+      "bytes": 11761,
+      "sha256": "49d2be91a56d24ec86e2db53dea1855f8363f4deacd6d6dcd70d30e359f1c1f3",
+      "gitBlob": "875d9675756d8d9e53708d4229895844070a3d68",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantRequest.swift",
+      "bytes": 1659,
+      "sha256": "6e724ed281cf5d8a7a0004bb1d5b34d8d0b095744897fb00813953ebf7081b29",
+      "gitBlob": "f3e7f646d81d3f722fb4e28d4df0b3e3031e2ce7",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantRestaurantCommand.swift",
+      "bytes": 3322,
+      "sha256": "567e37fea5394669785fc718f87542701f786146c8f2201f302b58a3c8f70c86",
+      "gitBlob": "7c1916be8f321a087f9117fabc72cfd9972bb8fe",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantRestaurantMenuView.swift",
+      "bytes": 23776,
+      "sha256": "3047df4a0417563c2820b0cb32e673f62bd20d591eda0263fe9a5f5ea2124039",
+      "gitBlob": "dfe7d496d55b5d69aca3d5e652202ff0d6ad6f06",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantRootView.swift",
+      "bytes": 8461,
+      "sha256": "0ca94b3f7b8adea6eacfafa8674e1e9d175f66d5466527f8f34163ecd14f9e5f",
+      "gitBlob": "dc6750e64c82f39206930c4f63ed843dcc383210",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakMerchantValidation.swift",
+      "bytes": 2867,
+      "sha256": "1a6f837e7f20c06ecf7801d89c7427cb9e949ca3739605dbf04ccab7ed0af238",
+      "gitBlob": "8b96ccbbe13d9d333bad7ed2455f0fa7ddb03afb",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakNotificationPreferences.swift",
+      "bytes": 2523,
+      "sha256": "3bbb9bf88dade9cac918b988091b0aed0e8dbc1bc753f9144ac70bc53d051f7d",
+      "gitBlob": "f875457f198255b5d12e3db1c3b57dffe249ae03",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Sources/DastakUI/DastakProductDetailCard.swift",
+      "bytes": 30146,
+      "sha256": "4c4c9a340785e277fde689165eb8110dbe76cfb54b54deeb645dbf1be4a71bde",
+      "gitBlob": "e70391c6b6228a052b264863ba5e231234dea3c5",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantCatalogueTests.swift",
+      "bytes": 21964,
+      "sha256": "a76e77ed1b8af79beef28f0e28064bffc7bdd1510cd4c1df7774dbc31dd8a29b",
+      "gitBlob": "ef678309e151e811b1fe57da335a24c802631629",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantDesignTests.swift",
+      "bytes": 2122,
+      "sha256": "5c59e22f70169b5738ba14d58a75a7d49b4fa5aaec594ddf0d09756925170af5",
+      "gitBlob": "e17e0aae0de8ba638c5247067885ccc2ce83e84a",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantDiscoveryTests.swift",
+      "bytes": 18791,
+      "sha256": "1022cf80e8173bcc5f7c5a3c4628cc012f4eb6fd80db776ef4808a851c0d5435",
+      "gitBlob": "7ee1b5b65a0945cb27bdc78491786aa9a7c9de98",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantEarningsTests.swift",
+      "bytes": 15330,
+      "sha256": "1fe8fa9bbcaf7e1f85d9b2a0e5b29efb87bb77515447acf3c9518939c9562b66",
+      "gitBlob": "0e37480c3a031d4c9d2eacd732b95d3a63f6c428",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantHistoryTests.swift",
+      "bytes": 7879,
+      "sha256": "7dd7fb0d4cf713d69cd2c962f250ae4e6ab5e7e12cf33bee9a53fe9421ef1cfb",
+      "gitBlob": "1d9c29fec8588ca477446913429f48e1c9ca5d47",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantInboxTests.swift",
+      "bytes": 9575,
+      "sha256": "4316023829953322391c81b7cf4b88da92d1a50c2ac98a7907b87506599132dc",
+      "gitBlob": "3d956ad64ccc9eb5ef0db4b3ec9e7cb88e0810c3",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantLocationTests.swift",
+      "bytes": 17141,
+      "sha256": "26c42d95b52e8cfba1ff89a310a7e637dd6d40000ea2b68ef15fffa71d2b5cc8",
+      "gitBlob": "863e734ee0e9dbfac6d1a8cd71f60791e9aa7b7d",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantMenuDraftTests.swift",
+      "bytes": 46010,
+      "sha256": "35b6f47ce26b71e1975a2fcd953d05885c2ad4dfa70d84b92b243bd3611b944f",
+      "gitBlob": "b39d53bf28e6b9ccae7d42831e9d6c8b31b32d47",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantNotificationRouteTests.swift",
+      "bytes": 12410,
+      "sha256": "4f7d5a2ac99ea2c09018a57c36b60bb2713e029414cb2bcd1e471d769d4e3839",
+      "gitBlob": "cb0c0cbfbf8f8ce91c982e1e5b536085cb0d5af5",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantNotificationTests.swift",
+      "bytes": 12997,
+      "sha256": "f149b2a6b8fc3db140ea680b04d0cc387233bddde9c87c2247d2af41a3464448",
+      "gitBlob": "c99b6d8e77521bb75fc7d3daefe62280107d4a95",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantOperationTests.swift",
+      "bytes": 21365,
+      "sha256": "420d36a06aad3e70d9f615bd84fd888dbae515a1cb9865d3ebca286ae6efc2c8",
+      "gitBlob": "e58cf4d69ca6f52e7da384e52d5954859deb3605",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantOrderDetailTests.swift",
+      "bytes": 7821,
+      "sha256": "5cf686c1c1805c7f5ece4b5db0dbd35eeec0cd166a97e678bbd8f1b7ae7b2981",
+      "gitBlob": "02d179e249a0a0e11b7182da019097d2cae5a063",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantPayoutTests.swift",
+      "bytes": 19267,
+      "sha256": "a543457bf17630cd3ab530a98c8a63a93276c8ac5ce8426e690097ea94421fc4",
+      "gitBlob": "48dd54e7bdcd6b34d1be8f9defd405cff5166d42",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantRestaurantCommandTests.swift",
+      "bytes": 28869,
+      "sha256": "8a1616d45e0d11f9d432e29b37cfaa68767174bf3092c4c9811520b91c51b8c6",
+      "gitBlob": "e38cd66a7862d778d83160793101c0745cfa208c",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/DastakUI/Tests/DastakUITests/DastakMerchantValidationTests.swift",
+      "bytes": 8115,
+      "sha256": "176a30276c73e3f764e4e459007a81cf966c0743d3c6467ebb8e6d40d72aa5dd",
+      "gitBlob": "1bed598453e32ee596283ac1841b929798e50c5d",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/MarketplaceInfrastructure/Sources/MarketplaceInfrastructure/DastakMerchantDiscoveryClient.swift",
+      "bytes": 4457,
+      "sha256": "1704f1b68a11d9565bdd1c238efe907d809942601a216f5cddd6898e86582247",
+      "gitBlob": "4c0200eaa2ba9af4235aae3451cdb2539346c0cf",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/MarketplaceInfrastructure/Sources/MarketplaceInfrastructure/DastakMerchantHistoryClient.swift",
+      "bytes": 3411,
+      "sha256": "a83e63c9a1b53e6cf6f0f8868d17224422591093931fc230553eb665e7304ece",
+      "gitBlob": "4232d10f6c2f65fdf76d4ff677ac5bc869ee9999",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/MarketplaceInfrastructure/Sources/MarketplaceInfrastructure/DastakMerchantOrderDetail.swift",
+      "bytes": 4581,
+      "sha256": "8aebd96c6a195b33a669bc6105ee13f9e24993f41d0a059cc02b3b62a8c97f2e",
+      "gitBlob": "1eff2862278b1cabf9c773f8aaa8ce9c5b9c9716",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Packages/MarketplaceInfrastructure/Sources/MarketplaceInfrastructure/DastakMerchantRoyaltyClient.swift",
+      "bytes": 12481,
+      "sha256": "ad7e8f6d99cce34bf0f21a487e46b7ac7c27b88e830602b561cb449f585ce564",
+      "gitBlob": "f6a0c573065587a856a9a6aec40d600c3710afa1",
+      "group": "native-merchant"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/dastakV1.ts",
+      "bytes": 182098,
+      "sha256": "a4c984a9108fe08003a800486efc95cd24db65a6a5939415f6acb9ea908a5277",
+      "gitBlob": "3547253259abc7996579599315ed897da3382518",
+      "group": "merchant-web"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/MerchantFulfilmentHistory.tsx",
+      "bytes": 4021,
+      "sha256": "5001a53a3f24aa0da711640fa95d68ab9ded2e4d0d7bf0089767be923dc48f57",
+      "gitBlob": "6e48f03765af8db89a4d99467398beb88f7c4992",
+      "group": "merchant-web"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/merchantHistory.test.tsx",
+      "bytes": 6545,
+      "sha256": "1c453f06a5142d92bf5709d8d2c30d2dd676b5b49aac33fa6cf4fc5ff835e5a0",
+      "gitBlob": "091e13d2259c92ceb32a6df4bf970a774e2c2dcc",
+      "group": "merchant-web"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/merchantOrderDetail.css",
+      "bytes": 2684,
+      "sha256": "d1ddff37f623e4f6e66c72c3b0474c3b618630d0da54b4a4d25759a1455c2342",
+      "gitBlob": "8693792d11299c36a6c8b1aa9d5fa4e6ddd8b00b",
+      "group": "merchant-web"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/merchantOrderDetail.test.tsx",
+      "bytes": 7721,
+      "sha256": "fc88c11ac37e6aff111a4abcc55178f16898c7722c92a3174ee3cba3dcd6d17d",
+      "gitBlob": "f172c12504bfe5f61a59bffcfdf6a057a8eb0ff7",
+      "group": "merchant-web"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/merchantOrderDetail.ts",
+      "bytes": 7385,
+      "sha256": "3f5085acd5e5af8d8c6a55fc10261df9409a676ad8ebf3f34f2beda9d04e239b",
+      "gitBlob": "cf1b58c06c5d5208b9976bf05637fba4309f674c",
+      "group": "merchant-web"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/MerchantOrderDetailDialog.tsx",
+      "bytes": 8125,
+      "sha256": "057bd401e7385d6c6f58f7d075e862723588cdd850557055b312535103010184",
+      "gitBlob": "30154cfce9fcc53dc10eb3cc1e164f94768a025b",
+      "group": "merchant-web"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/MerchantRequestControls.tsx",
+      "bytes": 7629,
+      "sha256": "0a9364159df486711ade3c08be8a97aea1682b323df40c0047066b9ec966de10",
+      "gitBlob": "34f62e4e2264fc2faa854bbf629dd2d0a7ef8d72",
+      "group": "merchant-web"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/MerchantV1Opportunities.tsx",
+      "bytes": 60710,
+      "sha256": "7b4b55395d418156fc67f3bf6b241f679a8b0f814219eedf0b8ba79eac514152",
+      "gitBlob": "f43e524bc187c144227ce7ef16649ad98c1cc1af",
+      "group": "merchant-web"
+    }
+  ],
+  "excluded": [
+    "Apps/Dastak/Dastak.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+    "Packages/DastakUI/Sources/DastakUI/DastakComponents.swift",
+    "Packages/DastakUI/Sources/DastakUI/DastakCustomerModel.swift",
+    "Packages/DastakUI/Sources/DastakUI/DastakCustomerRootView.swift",
+    "Packages/DastakUI/Sources/DastakUI/DastakHomeView.swift",
+    "Packages/DastakUI/Sources/DastakUI/DastakShoppingPreviewClient.swift",
+    "Web/MarketplaceWeb/src/assets/reimagined/staff-rpm-idle.glb",
+    "Web/MarketplaceWeb/src/assets/reimagined/staff-rpm.glb",
+    "docs/dastak-distribution-checkpoint-2026-10-17.md",
+    "docs/dastak-release-copy-owner-review-2026-10-17.md",
+    "docs/dastak-release-privacy-evidence-2026-10-17.md",
+    "docs/verification/dastak-account-layout-2026-10-09/settings-live-881.jpg",
+    "docs/verification/dastak-account-navigation-2026-10-09/settings-after-navigation.png",
+    "docs/verification/dastak-app-store-2026-10-17/README.md",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/README.md",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/StoreCapture/browse.json",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/StoreCapture/burger.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/StoreCapture/catalogue.json",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/StoreCapture/coffee.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/StoreCapture/dal.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/StoreCapture/food.json",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/StoreCapture/fries.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/StoreCapture/rice.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/capture.cjs",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/ipad/01-grocery.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/ipad/02-food.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/ipad/03-menu.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/ipad/04-basket.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/ipad/05-delivery.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/iphone/01-grocery.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/iphone/02-food.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/iphone/03-menu.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/iphone/03-product.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/iphone/04-basket.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/captures/iphone/05-delivery.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/contact-sheet-ipad.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/contact-sheet.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/ipad/01-grocery.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/ipad/02-food.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/ipad/03-menu.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/ipad/04-basket.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/ipad/05-delivery.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/iphone/01-grocery.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/iphone/02-food.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/iphone/03-menu.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/iphone/04-basket.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/exports/iphone/05-delivery.png",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/index.html",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/prepare-fixtures.cjs",
+    "docs/verification/dastak-app-store-2026-10-17/editorial/render.cjs",
+    "docs/verification/dastak-creative-assets-2026-10-18/PROMPTS.md",
+    "docs/verification/dastak-creative-assets-2026-10-18/README.md",
+    "docs/verification/dastak-creative-assets-2026-10-18/export.cjs",
+    "docs/verification/dastak-creative-assets-2026-10-18/exports/dastak-header-3840x1646.png",
+    "docs/verification/dastak-creative-assets-2026-10-18/exports/dastak-search-results-1920x1280.png",
+    "docs/verification/dastak-creative-assets-2026-10-18/index.html",
+    "docs/verification/dastak-creative-assets-2026-10-18/masters/header-master.png",
+    "docs/verification/dastak-creative-assets-2026-10-18/masters/search-master.png",
+    "docs/verification/dastak-creative-assets-2026-10-18/previews/dastak-header-3840x1646.png",
+    "docs/verification/dastak-creative-assets-2026-10-18/previews/dastak-search-results-1920x1280.png",
+    "docs/verification/dastak-creative-assets-2026-10-18/verification.json",
+    "docs/verification/dastak-customer-release-2026-10-09/live-customer-home.jpg",
+    "docs/verification/dastak-customer-release-2026-10-09/live-food-menu-390.jpg",
+    "docs/verification/dastak-database-size-2026-10-17/NO_COST_SUPPORT_DRAFT.md",
+    "docs/verification/dastak-delivery-history-2026-10-16/history-dark.png",
+    "docs/verification/dastak-delivery-history-2026-10-16/history-footer.png",
+    "docs/verification/dastak-delivery-history-2026-10-16/history-large-text-footer.png",
+    "docs/verification/dastak-delivery-history-2026-10-16/history-large-text.png",
+    "docs/verification/dastak-delivery-history-2026-10-16/history-light.png",
+    "docs/verification/dastak-food-search-2026-10-09/phone-live-regional-suggestions.png",
+    "docs/verification/dastak-food-search-2026-10-09/phone-regional-suggestions-complete.png",
+    "docs/verification/dastak-ios-location-2026-10-10/address-draft.png",
+    "docs/verification/dastak-ios-location-2026-10-10/gps-refreshed.png",
+    "docs/verification/dastak-ios-location-2026-10-10/pin-adjusted.png",
+    "docs/verification/dastak-ios-location-2026-10-10/pin-reopened.png",
+    "docs/verification/dastak-ios-location-2026-10-10/suggestions.png",
+    "docs/verification/dastak-ios-navigation-2026-10-10/home.png",
+    "docs/verification/dastak-ios-navigation-2026-10-10/settings.png",
+    "docs/verification/dastak-ios-panels-2026-10-10/food-closed.png",
+    "docs/verification/dastak-ios-panels-2026-10-10/food-final.png",
+    "docs/verification/dastak-ios-panels-2026-10-10/grocery-basket.png",
+    "docs/verification/dastak-ios-panels-2026-10-10/grocery-final.png",
+    "docs/verification/dastak-ios-panels-2026-10-10/pack-picker.png",
+    "docs/verification/dastak-ios-panels-2026-10-10/profile.png",
+    "docs/verification/dastak-ios-panels-2026-10-10/settings-workspaces.png",
+    "docs/verification/dastak-ios-panels-2026-10-10/settings.png",
+    "docs/verification/dastak-location-controls-2026-10-09/phone-pin-reconfirmation.png",
+    "docs/verification/dastak-panel-release-2026-10-09/food-menu-live-390.jpg",
+    "docs/verification/dastak-phone-controls-2026-10-09/food-options-phone.png",
+    "docs/verification/dastak-phone-controls-2026-10-09/profile-short-viewport.png",
+    "docs/verification/dastak-profile-controls-2026-10-09/address-confirmation-local.png",
+    "docs/verification/dastak-responsive-polish-2026-10-09/phone-live-food.png",
+    "docs/verification/dastak-responsive-polish-2026-10-09/tablet-live-header.png",
+    "docs/verification/dastak-settings-food-2026-10-09/food-empty-local.png",
+    "docs/verification/dastak-settings-food-2026-10-09/food-menu-production.png",
+    "docs/verification/dastak-settings-food-2026-10-09/food-options-local.png"
+  ],
+  "receiptSelfExcluded": "docs/evidence/dastak-merchant-source-checkpoint-2026-10-19.json",
+  "notes": [
+    "The main Git index is byte-identical before and after preparation.",
+    "The prepared tree contains exactly these 130 changed/new paths over baseHead.",
+    "The manifest itself is outside the tree to avoid a circular hash.",
+    "Tests were run in the existing worktree, not a separately extracted candidate-tree build.",
+    "Unreferenced Git objects are not a durable backup; refresh content and tree guards before an approved commit.",
+    "No credentials or raw customer/bank data are intentionally included."
+  ]
+}

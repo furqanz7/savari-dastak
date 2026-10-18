@@ -13,8 +13,19 @@ struct DastakMerchantRestaurantCommand: Codable, Equatable, Sendable {
     let branchID: UUID
     let key: IdempotencyKey
     let operation: Operation
+    // Added without rewriting older journals. New creations retain their
+    // target UUID before the first request, so SQL's request hash is stable.
+    let creationEntityID: UUID?
+    init(branchID: UUID,key: IdempotencyKey,operation: Operation) {
+        self.branchID = branchID; self.key = key; self.operation = operation
+        if case .menu(entityID: nil,expectedVersion: 0,payload: _) = operation { creationEntityID = UUID() }
+        else { creationEntityID = nil }
+    }
     var valid: Bool {
         guard UUID(uuidString: key.rawValue) != nil else { return false }
+        if creationEntityID != nil {
+            guard case .menu(entityID: nil,expectedVersion: 0,payload: _) = operation else { return false }
+        }
         switch operation {
         case let .menu(entityID, version, _): return (0..<Int.max).contains(version) && (entityID == nil ? version == 0 : version > 0)
         case let .operating(open, accepting, version): return version > 0 && version < Int.max && (open || !accepting)

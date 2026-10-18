@@ -4,7 +4,7 @@ import UIKit
 import UserNotifications
 #endif
 
-enum DastakNotificationPermissionState: Equatable {
+enum DastakNotificationPermissionState: Equatable, Sendable {
     case notRequested
     case enabled
     case disabled

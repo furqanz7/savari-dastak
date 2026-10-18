@@ -8,7 +8,8 @@ struct DastakMerchantLineList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(lines) { line in
-                HStack(alignment: .top, spacing: 12) {
+                DastakMerchantAdaptiveRow {
+                  HStack(alignment: .top, spacing: 12) {
                     Text("\(line.quantity)×").font(.subheadline.bold().monospacedDigit())
                         .frame(minWidth: 30, minHeight: 30)
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -21,15 +22,32 @@ struct DastakMerchantLineList: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    Spacer(minLength: 0)
+                  }.frame(maxWidth: .infinity, alignment: .leading)
                     if let subtotal = line.lineSubtotalPaise {
                         Text(DastakFormatting.money(Money(paise: subtotal)))
                             .font(.subheadline.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(.primary).fixedSize(horizontal: true, vertical: true)
                     }
                 }
             }
         }.padding(.vertical, 4)
+    }
+}
+
+/// Confirmation cards retain every line. Only already-accepted work uses this
+/// compact summary; all hidden lines remain reachable without a network read.
+struct DastakMerchantLineSummary: View {
+    let lines: [DastakV1MerchantLine]
+    @State private var expanded = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            DastakMerchantLineList(lines: expanded ? lines : Array(lines.prefix(3)))
+            if lines.count > 3 {
+                MarketplaceFeedbackButton(expanded ? "Show fewer items" : "Show all \(lines.count) items", haptic: .selection) { expanded.toggle() }
+                    .font(.subheadline.weight(.semibold)).frame(minHeight: 44)
+                    .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+            }
+        }
     }
 }
 
@@ -44,6 +62,8 @@ struct DastakMerchantIncomingCard: View {
     let subset: Bool
     let busy: Bool
     let canRespond: Bool
+    var revision: Int = 0
+    var openDetail: (() -> Void)? = nil
     let respond: (Bool, Int, String?) -> Void
     @State private var confirmedItems = false
     @State private var prepMinutes = 15
@@ -55,7 +75,7 @@ struct DastakMerchantIncomingCard: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let expired = DastakMerchantOrderClock.isExpired(expiresAt, now: context.date)
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top) {
+                DastakMerchantAdaptiveRow {
                     VStack(alignment: .leading, spacing: 5) {
                         Label(isFood ? "NEW FOOD ORDER" : "NEW REQUEST", systemImage: isFood ? "fork.knife" : "bell.badge")
                             .font(.caption.weight(.bold)).tracking(1)
@@ -63,7 +83,6 @@ struct DastakMerchantIncomingCard: View {
                         Text(number).font(.title3.weight(.bold))
                         Text(branch).font(.caption).foregroundStyle(.secondary)
                     }
-                    Spacer()
                     if let expiresAt {
                         Text(expired ? "Expired" : DastakMerchantOrderClock.remaining(expiresAt, now: context.date))
                             .font(.subheadline.bold().monospacedDigit())
@@ -92,18 +111,14 @@ struct DastakMerchantIncomingCard: View {
                 Toggle(isFood ? "I can prepare this exact selection" : "I have physically checked every item", isOn: $confirmedItems)
                     .font(.subheadline.weight(.medium))
                     .tint(MarketplaceColors.accent(for: scheme))
-                HStack {
+                DastakMerchantAdaptiveRow {
                     Label("Preparation time", systemImage: "timer").font(.subheadline)
-                    Spacer()
                     Picker("Preparation time", selection: $prepMinutes) {
                         ForEach(options, id: \.self) { Text("\($0) min").tag($0) }
-                    }.pickerStyle(.menu)
+                    }.pickerStyle(.menu).frame(minHeight: 44)
                 }
-                HStack(spacing: 10) {
-                    Button("Decline", role: .destructive) { showingDecline = true }
-                        .buttonStyle(MarketplaceSecondaryButtonStyle())
-                        .disabled(busy || expired || !canRespond)
-                    Button {
+                DastakMerchantAdaptiveRow {
+                    MarketplaceFeedbackButton {
                         respond(true, prepMinutes, nil)
                     } label: {
                         HStack {
@@ -111,16 +126,25 @@ struct DastakMerchantIncomingCard: View {
                             Text("Accept order")
                         }.frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(MarketplacePrimaryButtonStyle())
+                    .buttonStyle(DastakMerchantActionStyle(primary: true))
                     .disabled(busy || expired || !canRespond || !confirmedItems)
+                    MarketplaceFeedbackButton("Decline", role: .destructive) { showingDecline = true }
+                        .buttonStyle(DastakMerchantActionStyle())
+                        .disabled(busy || expired || !canRespond)
                 }
                 Text("Acceptance holds the items. Start packing when the order moves to Preparing.")
                     .font(.caption).foregroundStyle(.secondary)
+                if let openDetail { Divider(); DastakMerchantDetailLink(action: openDetail) }
             }
             .padding(20).marketplaceFlatSurface()
-            .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(MarketplaceColors.accent(for: scheme).opacity(0.35), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: MarketplaceMetrics.compactCornerRadius).strokeBorder(MarketplaceColors.accent(for: scheme).opacity(0.35), lineWidth: 1))
         }
         .onAppear { prepMinutes = options.contains(15) ? 15 : options.first ?? 15 }
+        .onChange(of: revision) { _, _ in
+            confirmedItems = false
+            showingDecline = false
+            if !options.contains(prepMinutes) { prepMinutes = options.first ?? 15 }
+        }
         .alert("Decline this request?", isPresented: $showingDecline) {
             if isFood { TextField("Reason", text: $declineReason) }
             Button("Keep request", role: .cancel) {}

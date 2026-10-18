@@ -3,6 +3,9 @@ import { V1RequestError } from "../_shared/v1-rpc.ts";
 
 export type V1Actor = { accountId: string; accessToken: string };
 export type V1CatalogueDependencies = {
+  merchantInventoryPage?: (input: { accessToken: string; branchId: string; query: string | null;
+    selectedOnly: boolean; limit: number; afterName: string | null; afterSkuId: string | null }) => Promise<unknown>;
+  merchantLocationsPage?: (input: { accessToken: string; limit: number; afterId: string | null; focusId: string | null }) => Promise<unknown>;
   customerCheckoutQuote?: (
     input: {
       accessToken: string;
@@ -518,6 +521,24 @@ export async function handleV1Catalogue(
         return await promoteAdminCataloguePrimary(request, body, actor, dependencies);
       case "removeAdminCatalogueAsset":
         return await removeAdminCatalogueAsset(request, body, actor, dependencies);
+      case "merchantInventoryPage": {
+        const branchId = requiredUUID(body.branchId), query = optionalText(body.query,80);
+        const limit = optionalInteger(body.limit,1,250), cursor = record(body.cursor);
+        const afterName = cursor && typeof cursor.name === "string" && cursor.name.length>0 && cursor.name.length<=300 ? cursor.name : null;
+        const afterSkuId = cursor ? requiredUUID(cursor.skuId) : null;
+        if (!branchId || query === undefined || (body.limit != null && limit === undefined) ||
+          (body.selectedOnly != null && typeof body.selectedOnly !== "boolean") ||
+          (body.cursor != null && (!cursor || !afterName || !afterSkuId))) return validationError();
+        if (!dependencies.merchantInventoryPage) throw new V1RequestError(503,"unavailable","Paged Merchant catalogue is unavailable.");
+        return json(await dependencies.merchantInventoryPage({ accessToken: actor.accessToken,branchId,query,
+          selectedOnly: body.selectedOnly === true,limit: limit ?? 100,afterName,afterSkuId: afterSkuId ?? null }));
+      }
+      case "merchantLocationsPage": {
+        const limit = optionalInteger(body.limit,1,100), afterId = optionalUUID(body.afterId), focusId = optionalUUID(body.focusId);
+        if ((body.limit != null && limit === undefined) || afterId === undefined || focusId === undefined) return validationError();
+        if (!dependencies.merchantLocationsPage) throw new V1RequestError(503,"unavailable","Merchant location directory is unavailable.");
+        return json(await dependencies.merchantLocationsPage({ accessToken: actor.accessToken,limit: limit ?? 100,afterId,focusId }));
+      }
       case "merchantSnapshot": {
         const branchId = optionalUUID(body.branchId);
         const parsedLimit = optionalInteger(body.limit, 1, 5000);

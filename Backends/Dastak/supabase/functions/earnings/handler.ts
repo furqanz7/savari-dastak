@@ -5,6 +5,8 @@ type EarningsOperation =
   | "merchantSnapshot"
   | "deliveryPartnerSnapshot"
   | "merchantRoyaltySnapshot"
+  | "merchantRoyaltyControlsSnapshot"
+  | "requestMerchantRoyaltyWithdrawal"
   | "deliveryRoyaltySnapshot"
   | "requestRoyaltyWithdrawal"
   | "registerRoyaltyPayoutDestination"
@@ -15,6 +17,8 @@ type EarningsRPC =
   | "get_dastak_merchant_earnings"
   | "get_dastak_delivery_earnings"
   | "dastak_v1_get_royalty_snapshot"
+  | "dastak_v1_merchant_royalty_controls_snapshot"
+  | "dastak_v1_request_merchant_royalty_withdrawal_checked"
   | "dastak_v1_request_royalty_withdrawal"
   | "dastak_v1_razorpayx_admin_page";
 
@@ -50,6 +54,8 @@ type RequestBody = {
   vpa?: unknown;
   withdrawalId?: unknown;
   expectedVersion?: unknown;
+  destinationId?: unknown;
+  destinationVersion?: unknown;
   limit?: unknown;
   cursor?: unknown;
 };
@@ -95,6 +101,11 @@ export async function handleEarnings(request: Request, dependencies: EarningsDep
         }),
       );
     }
+    if (operation === "merchantRoyaltyControlsSnapshot") {
+      return snapshotResponse(await dependencies.callRPC("dastak_v1_merchant_royalty_controls_snapshot",{
+        p_account_id:actor.accountId,
+      }),{ payoutAvailability:{...dependencies.payoutAvailability(),merchantControlsAvailable:true} });
+    }
     if (operation === "merchantRoyaltySnapshot" || operation === "deliveryRoyaltySnapshot") {
       return snapshotResponse(
         await dependencies.callRPC(
@@ -107,7 +118,7 @@ export async function handleEarnings(request: Request, dependencies: EarningsDep
         { payoutAvailability: dependencies.payoutAvailability() },
       );
     }
-    if (operation === "requestRoyaltyWithdrawal") {
+    if (operation === "requestRoyaltyWithdrawal" || operation === "requestMerchantRoyaltyWithdrawal") {
       const idempotencyKey = request.headers.get("x-idempotency-key") ??
         body?.idempotencyKey;
       if (
@@ -123,7 +134,16 @@ export async function handleEarnings(request: Request, dependencies: EarningsDep
           error: { code: "invalid_withdrawal", message: "Enter a valid withdrawal amount." },
         }, 400);
       }
-      const result = await dependencies.callRPC("dastak_v1_request_royalty_withdrawal", {
+      const checked = operation === "requestMerchantRoyaltyWithdrawal";
+      if (checked && (body.subjectType !== "MERCHANT_ORGANIZATION" || typeof body.destinationId !== "string" ||
+        !uuidPattern.test(body.destinationId) || typeof body.destinationVersion !== "number" ||
+        !Number.isSafeInteger(body.destinationVersion) || body.destinationVersion<1)) {
+        return json({error:{code:"invalid_destination_review",message:"Review the current payout destination."}},400);
+      }
+      const result = await dependencies.callRPC(checked ? "dastak_v1_request_merchant_royalty_withdrawal_checked" : "dastak_v1_request_royalty_withdrawal", checked ? {
+        p_account_id:actor.accountId,p_organization_id:body.subjectId,p_amount_paise:body.amountPaise,
+        p_idempotency_key:idempotencyKey,p_destination_id:body.destinationId,p_destination_version:body.destinationVersion,
+      } : {
         p_account_id: actor.accountId,
         p_subject_type: body.subjectType,
         p_subject_id: body.subjectId,
@@ -224,6 +244,9 @@ export async function handleEarnings(request: Request, dependencies: EarningsDep
     }, 400);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
+    if (message.includes("REVIEWED_PAYOUT_DESTINATION_CHANGED")) {
+      return json({error:{code:"payout_destination_changed",message:"The payout destination changed. Refresh and review it before making a new request."}},409);
+    }
     if (message.includes("PAYOUT_DESTINATION_REQUIRED")) {
       return json({
         error: {

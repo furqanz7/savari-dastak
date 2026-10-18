@@ -41,7 +41,7 @@ struct DastakMerchantReturnsView: View {
     let history: Bool
     let showAll: Bool
     private var receipts: [DastakV1MerchantReturnReceipt] {
-        model.returnReceipts.filter { showAll || (($0.status == "COMPLETED") == history) }
+        model.scopedReturnReceipts.filter { showAll || (($0.status == "COMPLETED") == history) }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -57,10 +57,13 @@ struct DastakMerchantReturnsView: View {
                     Text("No return receipts are available.").foregroundStyle(.secondary)
                 }
                 Button("Refresh return receipts") { Task { await model.refreshV1Fulfilments() } }
+                    .frame(minHeight: 44)
                     .accessibilityIdentifier("merchant.returns.refresh")
                 ForEach(receipts) { receipt in
                     DastakMerchantReturnCard(receipt: receipt, current: model.returnsCurrent,
                         refreshedAt: model.returnsRefreshedAt)
+                    DastakMerchantOrderDetailButton(model: model,
+                        target: .init(kind: .returned, id: receipt.id, branchID: receipt.branch.id))
                 }
             }
         }.accessibilityIdentifier("merchant.returns.lane")
@@ -102,10 +105,10 @@ private struct DastakMerchantReturnCard: View {
                         Text(code).font(.largeTitle.monospaced().bold())
                             .accessibilityLabel("Return receipt code \(code.map(String.init).joined(separator: " "))")
                             .accessibilityIdentifier("merchant.returns.code")
-                        Button("Hide code") { revealed = false }
+                        Button("Hide code") { revealed = false }.frame(minHeight: 44)
                     } else {
                         Button("Show return receipt code") { revealed = true }
-                            .buttonStyle(MarketplaceSecondaryButtonStyle())
+                            .buttonStyle(DastakMerchantActionStyle())
                             .disabled(code == nil || scenePhase != .active)
                         Text("Check every package, then reveal the code. If unavailable, refresh return receipts.")
                             .font(.caption).foregroundStyle(.secondary)

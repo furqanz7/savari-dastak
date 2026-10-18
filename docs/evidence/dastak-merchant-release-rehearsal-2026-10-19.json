@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-19",
+  "scope": "LOCAL_RELEASE_REHEARSAL_ONLY_NO_PRODUCTION_APPLICATION",
+  "sourceHead": "4d835cb0f411b2199fcd49c8499a4b3b40a5a801",
+  "diagnostics": "/private/tmp/dastak-full-rebuild.HTHzAw",
+  "rehearsal": {
+    "ok": true,
+    "localOnly": true,
+    "project": "DastakRebuild20261016R6",
+    "chainSha256": "631b55eee8ea11249c5831599b81d3b10176b313ab73c5802004bdf2a678657f",
+    "results": [
+      {
+        "case": "explicit-rollback",
+        "ok": true,
+        "observedBudgets": {
+          "history": 295,
+          "lockTimeout": "2s",
+          "statementTimeout": "15s",
+          "readOnly": "off",
+          "transactionId": 4727,
+          "mode": "rollback"
+        }
+      },
+      {
+        "case": "conflicting-index-lock",
+        "ok": true,
+        "sqlState": "55P03",
+        "durationMs": 478,
+        "noPartialSchemaOrHistory": true
+      },
+      {
+        "case": "statement-timeout-after-install-verification",
+        "ok": true,
+        "sqlState": "57014",
+        "durationMs": 696,
+        "noPartialSchemaOrHistory": true
+      },
+      {
+        "case": "explicit-local-commit",
+        "ok": true,
+        "historyMatches": 295,
+        "observedBudgets": {
+          "history": 295,
+          "lockTimeout": "2s",
+          "statementTimeout": "15s",
+          "readOnly": "off",
+          "transactionId": 4732,
+          "mode": "commit"
+        }
+      },
+      {
+        "case": "already-applied-rejected",
+        "ok": true,
+        "noDuplicateHistory": true
+      }
+    ],
+    "before": {
+      "history": 291,
+      "detail": false,
+      "index": false,
+      "historyHash": "c91a66ffe9d3a172bd03881071055134",
+      "listHash": "12b8c905270f06306e28c91d30478ab1"
+    },
+    "after": {
+      "history": 295,
+      "detail": true,
+      "index": true,
+      "historyHash": "78248beaf0c2c4910322059f4824992c",
+      "listHash": "9524f8949c5af2e5c9aee8f8d8d88674"
+    },
+    "sourceHistoryMatches": 295
+  },
+  "contracts": {
+    "files": 76,
+    "passed": 76,
+    "failed": 0,
+    "assertions": 2081,
+    "runtime": {
+      "version": "PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit",
+      "user": "postgres",
+      "sessionPreload": "supautils",
+      "cron": "off"
+    }
+  },
+  "integration": {
+    "ok": true,
+    "assertions": 113,
+    "chainSha256": "631b55eee8ea11249c5831599b81d3b10176b313ab73c5802004bdf2a678657f",
+    "scope": "Original Wave-1 contract plus new Merchant assertions; real migrated helpers and financial posting; rollback only"
+  },
+  "tests": {
+    "releaseAndRuntimeSafety": 12,
+    "edge": 384,
+    "ui": 748,
+    "focusedWeb": 19
+  },
+  "productionChanged": false,
+  "deployed": false,
+  "sourceCommitted": false,
+  "pushed": false,
+  "providerCalls": 0,
+  "mainGitIndexChanged": false
+}

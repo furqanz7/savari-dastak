@@ -7,11 +7,21 @@ import SwiftUI
 
 struct DastakMerchantRestaurantMenuView: View {
     @ObservedObject var model: DastakMerchantModel
-    @State private var categoryName = ""
-    @State private var itemName = ""
-    @State private var itemPrice = ""
-    @State private var itemCategoryID: UUID?
+    @ObservedObject private var drafts: DastakMerchantMenuDraftStore
+    let branchID: UUID?
+    private var categoryName: String { drafts.composer.categoryName }
+    private var itemName: String { drafts.composer.itemName }
+    private var itemPrice: String { drafts.composer.itemPrice }
+    private var itemCategoryID: UUID? { drafts.composer.itemCategoryID }
+    @State private var discardingDrafts = false
     @State private var operatingAction: OperatingAction?
+    @State private var query = ""
+
+    init(model: DastakMerchantModel) {
+        self.model = model
+        self.drafts = model.menuDrafts
+        self.branchID = model.restaurantMenu?.restaurant.branchID
+    }
 
     private enum OperatingAction: String, Identifiable {
         case open = "Open restaurant", close = "Close restaurant", pause = "Pause new orders", resume = "Accept new orders"
@@ -21,37 +31,44 @@ struct DastakMerchantRestaurantMenuView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                if let menu = model.restaurantMenu {
+                if let menu = model.restaurantMenu, menu.restaurant.branchID == branchID {
                     LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("YOUR KITCHEN").font(.caption2.bold()).tracking(1.2).foregroundStyle(MarketplaceColors.dastakAccent.color)
-                            Text(menu.restaurant.name).font(MarketplaceTypography.instrumentSerif(fixedSize: 38))
-                            Text("Your menu, made easy to manage.").font(.subheadline).foregroundStyle(.secondary)
-                        }
+                        DastakMerchantHeading(eyebrow: "YOUR KITCHEN", title: "A menu made yours.",
+                            subtitle: "Photos, dishes and the little extras. Manage what your customers can discover.", symbol: "fork.knife")
                         restaurantStatus(menu)
+                        if let reason = model.restaurantEditUnavailableReason {
+                            Text(reason).font(.footnote).foregroundStyle(.secondary)
+                        }
                         operatingControls(menu)
                         restaurantBanner(menu)
+                        menuSearch(menu)
+                        draftStorageStatus(menu)
+                        unavailableDrafts
                         addMenuContent(menu)
                             .disabled(model.restaurantChangesDisabled)
                         if menu.categories.isEmpty {
                             DastakEmptyState(symbol: "fork.knife", title: "Make this menu yours", message: "Add your first category and dish above.")
                                 .frame(minHeight: 260)
                         } else {
-                            ForEach(menu.categories) { category in
+                            ForEach(DastakMerchantMenuSearch.categories(menu.categories, query: query)) { category in
                                 categorySection(category)
                                     .disabled(model.restaurantChangesDisabled)
+                            }
+                            if DastakMerchantMenuSearch.categories(menu.categories, query: query).isEmpty {
+                                DastakEmptyState(symbol: "magnifyingglass", title: "No matching menu entries", message: "Try a category, dish, description or extra name. Hidden entries are included in search.")
                             }
                         }
                     }
                     .frame(maxWidth: MarketplaceMetrics.contentMaxWidth)
                     .padding(.horizontal, MarketplaceSpacing.medium)
-                    .padding(.bottom, 140)
+                    .padding(.bottom, 32)
                     .frame(maxWidth: .infinity)
                 }
             }
             .refreshable { await model.refreshRestaurantMenu() }
             .navigationTitle("Restaurant menu")
             .dastakInlineNavigationTitle()
+            .modifier(DastakMerchantKeyboardDismiss())
             .onChange(of: model.restaurantMenu?.restaurant.operationalVersion) { _, _ in operatingAction = nil }
             .onChange(of: model.restaurantMenu?.restaurant.branchID) { _, _ in operatingAction = nil }
             .onChange(of: model.restaurantMenu?.restaurant.branchStatus) { _, _ in operatingAction = nil }
@@ -63,7 +80,7 @@ struct DastakMerchantRestaurantMenuView: View {
                         operatingAction = nil
                         Task {
                             await model.setRestaurantOperatingState(isOpen: action != .close,
-                                acceptingOrders: action == .resume)
+                                acceptingOrders: action == .resume, branchID: branchID)
                         }
                     }
                     .disabled(!model.canChangeRestaurantOperatingState)
@@ -72,6 +89,60 @@ struct DastakMerchantRestaurantMenuView: View {
             } message: {
                 Text("Existing confirmed orders continue. Opening keeps new orders paused until you choose Accept new orders.")
             }
+        }
+    }
+
+    private func menuSearch(_ menu: DastakV1RestaurantMenu) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+                TextField("Search categories, dishes or extras", text: $query)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("merchant.menu.search")
+                if !query.isEmpty { Button("Clear", systemImage: "xmark.circle.fill") { query = "" }.labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44) }
+            }
+            Text("\(DastakMerchantMenuSearch.categories(menu.categories, query: query).reduce(0) { $0 + DastakMerchantMenuSearch.items($1, query: query).count }) matching dishes · includes hidden entries")
+                .font(.caption).foregroundStyle(.secondary)
+            if drafts.dirtyCount > 0 { Text("\(drafts.dirtyCount) unsaved or review-needed drafts, including entries hidden by search. These do not change your live menu until you save.").font(.caption).foregroundStyle(.secondary) }
+        }.padding(16).marketplaceFlatSurface()
+    }
+
+    private func draftStorageStatus(_ menu: DastakV1RestaurantMenu) -> some View {
+        VStack(alignment: .leading,spacing: 10) {
+            if let failure = drafts.persistenceFailure {
+                Label(failure,systemImage: "externaldrive.badge.exclamationmark").font(.footnote)
+                if drafts.needsRestoreRetry {
+                    Button("Retry reading saved drafts") { drafts.retryRestoring(menu) }.frame(minHeight: 44)
+                        .disabled(drafts.dirtyCount>0 || model.needsRestaurantRefresh || model.isRefreshingRestaurant)
+                    if drafts.dirtyCount>0 { Text("Copy your new edits before discarding local drafts; retrying a stored file will not replace new typing automatically.").font(.caption).foregroundStyle(.secondary) }
+                } else { Button("Retry draft storage") { drafts.retryPersistence() }.frame(minHeight: 44) }
+            } else if drafts.usesDeviceStorage {
+                Text("Drafts stay privately on this device for this account and store. After reopening, fresh menu details are checked before edits can be saved.").font(.caption).foregroundStyle(.secondary)
+            }
+            if drafts.dirtyCount>0 || drafts.persistenceFailure != nil {
+                Button("Discard local drafts for this store",role: .destructive) { discardingDrafts = true }
+                    .frame(minHeight: 44).disabled(model.busyIdentity != nil || model.isRefreshingRestaurant)
+            }
+        }.confirmationDialog("Discard local menu drafts?",isPresented: $discardingDrafts,titleVisibility: .visible) {
+            Button("Discard this store's local drafts",role: .destructive) { drafts.discardLocalDrafts(menu) }.disabled(model.busyIdentity != nil || model.isRefreshingRestaurant)
+            Button("Keep drafts",role: .cancel) {}
+        } message: { Text("This removes unsaved edits on this device for this account and store only. It does not change your live menu, other stores, or the saved-action recovery journal.") }
+    }
+
+    @ViewBuilder private var unavailableDrafts: some View {
+        if !drafts.unavailable.isEmpty || !drafts.unavailableAdditions.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Entries no longer in this menu", systemImage: "exclamationmark.triangle").font(.headline)
+                Text("These drafts are retained for reference, but cannot be saved. Refresh or copy the text before discarding.").font(.caption).foregroundStyle(.secondary)
+                ForEach(drafts.unavailable, id: \.baseline.id) { draft in
+                    Text("\(draft.value.name)\(draft.value.price.isEmpty ? "" : " · ₹" + draft.value.price)\n\(draft.value.description)").textSelection(.enabled)
+                    Button("Discard unavailable draft", role: .destructive) { drafts.discardUnavailable(draft.baseline.id) }
+                }
+                ForEach(drafts.unavailableAdditions, id: \.0) { id, value in
+                    Text("New choice/extra · \(value.name) · ₹\(value.price)").textSelection(.enabled)
+                    Button("Discard unavailable new-entry draft", role: .destructive) { drafts.discardUnavailable(id) }
+                }
+            }.padding(16).marketplaceFlatSurface()
         }
     }
 
@@ -84,7 +155,7 @@ struct DastakMerchantRestaurantMenuView: View {
                 Text("The result is uncertain. Other restaurant changes are paused. Retry checks this same action and original details; do not submit it again as a new change.")
                     .font(.subheadline).foregroundStyle(.secondary)
                 Button("Check pending restaurant change") { Task { await model.retryRestaurantCommand() } }
-                    .buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.busyIdentity != nil || !model.merchantJournalRestored)
+                    .buttonStyle(DastakMerchantActionStyle()).disabled(model.busyIdentity != nil || !model.merchantJournalRestored)
                     .accessibilityIdentifier("merchant.restaurant.retryPending")
             }
             if let failure = model.restaurantRefreshFailure {
@@ -94,7 +165,7 @@ struct DastakMerchantRestaurantMenuView: View {
                 ProgressView("Refreshing restaurant details")
             } else if model.needsRestaurantRefresh {
                 Button("Refresh restaurant details") { Task { await model.refreshRestaurantMenu(reportFailure: false) } }
-                    .buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.isBusy || model.isRefreshingRestaurant)
+                    .buttonStyle(DastakMerchantActionStyle()).disabled(model.isBusy || model.isRefreshingRestaurant)
             }
             if menu.restaurant.operationalVersion == nil {
                 Text("Operating controls are unavailable until Dastak provides the current restaurant version. Refresh or contact support.")
@@ -125,7 +196,7 @@ struct DastakMerchantRestaurantMenuView: View {
             Text("\(menu.restaurant.activeOrderCount) active orders · Changes apply to new requests, not confirmed orders.")
                 .font(.footnote).foregroundStyle(.secondary)
         }
-        .buttonStyle(MarketplaceSecondaryButtonStyle())
+        .buttonStyle(DastakMerchantActionStyle())
         .padding(MarketplaceSpacing.medium).marketplaceFlatSurface()
     }
 
@@ -149,32 +220,45 @@ struct DastakMerchantRestaurantMenuView: View {
             VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("New category").font(.headline)
-                    TextField("Breakfast", text: $categoryName).textFieldStyle(.roundedBorder)
+                    TextField("Breakfast", text: composerField(\.categoryName)).textFieldStyle(.roundedBorder)
+                    if !categoryName.isEmpty, let issue = DastakMerchantValidation.nameIssue(categoryName, maximum: 100, field: "a category name") {
+                        Text(issue).font(.caption).foregroundStyle(.secondary)
+                    }
                     Button("Add category", systemImage: "plus") {
                         let name = categoryName.trimmingCharacters(in: .whitespacesAndNewlines)
                         Task {
-                            if await model.saveRestaurantEntity(entityID: nil, expectedVersion: 0, payload: .category(name: name, description: "", sortOrder: menu.categories.count, status: "ACTIVE")) { categoryName = "" }
+                            _ = await model.saveRestaurantEntity(entityID: nil, expectedVersion: 0, payload: .category(name: name, description: "", sortOrder: menu.categories.count, status: "ACTIVE"), branchID: branchID)
                         }
                     }
-                    .buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.isBusy || categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .buttonStyle(DastakMerchantActionStyle()).disabled(model.isBusy || !(1...100).contains(categoryName.trimmingCharacters(in: .whitespacesAndNewlines).unicodeScalars.count))
                 }
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     Text("New dish").font(.headline)
-                    Picker("Category", selection: $itemCategoryID) {
+                    Picker("Category", selection: Binding(get: { itemCategoryID },set: { var value = drafts.composer; value.itemCategoryID = $0; drafts.editComposer(value) })) {
                         Text("Choose category").tag(UUID?.none)
                         ForEach(menu.categories) { Text($0.name).tag(UUID?.some($0.id)) }
                     }.pickerStyle(.menu)
-                    TextField("Dish name", text: $itemName).textFieldStyle(.roundedBorder)
-                    TextField("Price in rupees", text: $itemPrice).dastakDecimalKeyboard().textFieldStyle(.roundedBorder)
+                    TextField("Dish name", text: composerField(\.itemName)).textFieldStyle(.roundedBorder)
+                    if !itemName.isEmpty, let issue = DastakMerchantValidation.nameIssue(itemName, maximum: 160, field: "a dish name") {
+                        Text(issue).font(.caption).foregroundStyle(.secondary)
+                    }
+                    if itemCategoryID == nil { Text("Choose a category before adding a dish.").font(.caption).foregroundStyle(.secondary) }
+                    if let itemCategoryID, !menu.categories.contains(where: { $0.id == itemCategoryID }) {
+                        Text("The draft's category is no longer available. Choose a current category before adding this dish.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    TextField("Price in rupees", text: composerField(\.itemPrice)).dastakDecimalKeyboard().textFieldStyle(.roundedBorder)
                     Button("Add dish", systemImage: "plus") {
-                        guard let categoryID = itemCategoryID, let paise = DastakMerchantPriceParser.optionalPaise(from: itemPrice) else { return }
+                        guard let categoryID = itemCategoryID, let paise = DastakMerchantPriceParser.optionalPaise(from: itemPrice) else {
+                            model.errorMessage = "Choose a category. " + DastakMerchantValidation.priceHelp; return
+                        }
                         let name = itemName.trimmingCharacters(in: .whitespacesAndNewlines)
                         Task {
-                            if await model.saveRestaurantEntity(entityID: nil, expectedVersion: 0, payload: .item(categoryID: categoryID, name: name, description: "", imageKey: "", basePricePaise: paise, taxRateBps: 0, logisticsAttributes: DastakV1SKULogistics(), status: "ACTIVE")) { itemName = ""; itemPrice = "" }
+                            _ = await model.saveRestaurantEntity(entityID: nil, expectedVersion: 0, payload: .item(categoryID: categoryID, name: name, description: "", imageKey: "", basePricePaise: paise, taxRateBps: 0, logisticsAttributes: DastakV1SKULogistics(), status: "ACTIVE"), branchID: branchID)
                         }
                     }
-                    .buttonStyle(MarketplacePrimaryButtonStyle()).disabled(model.isBusy || itemCategoryID == nil || itemName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .buttonStyle(DastakMerchantActionStyle(primary: true)).disabled(model.isBusy || !menu.categories.contains { $0.id == itemCategoryID } || !(1...160).contains(itemName.trimmingCharacters(in: .whitespacesAndNewlines).unicodeScalars.count) || DastakMerchantPriceParser.optionalPaise(from: itemPrice) == nil)
+                    Text(DastakMerchantValidation.priceHelp).font(.caption).foregroundStyle(.secondary)
                 }
             }.padding(.top, MarketplaceSpacing.medium)
         }
@@ -183,103 +267,27 @@ struct DastakMerchantRestaurantMenuView: View {
 
     private func categorySection(_ category: DastakV1RestaurantMenuCategory) -> some View {
         VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-            HStack {
+            DastakMerchantAdaptiveRow {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(category.name).font(.title3.bold())
                     Text("\(category.items.count) items · \(category.status.lowercased())").font(.caption).foregroundStyle(.secondary)
                 }
-                Spacer()
-                Button(category.status == "ACTIVE" ? "Hide" : "Activate") {
-                    Task { _ = await model.saveRestaurantEntity(entityID: category.id, expectedVersion: category.version, payload: .category(name: category.name, description: category.description ?? "", sortOrder: category.sortOrder, status: category.status == "ACTIVE" ? "INACTIVE" : "ACTIVE")) }
-                }.buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.isBusy)
             }
-            ForEach(category.items) { item in
-                DastakMerchantDishEditor(model: model, categoryID: category.id, item: item)
-                    // Refreshing a newer entity must also refresh its editable fields.
-                    // Do not pair old @State text with the new server version.
-                    .id("\(item.id)-\(item.version)-\(item.mediaVersion ?? 1)")
+            DastakMerchantMenuCategoryEditor(model: model,drafts: drafts,category: category,branchID: branchID)
+            ForEach(DastakMerchantMenuSearch.items(category, query: query)) { item in
+                DastakMerchantMenuDishEditor(model: model, drafts: drafts, item: item, branchID: branchID)
             }
         }.padding(MarketplaceSpacing.medium).marketplaceFlatSurface()
     }
-}
 
-private struct DastakMerchantDishEditor: View {
-    @ObservedObject var model: DastakMerchantModel
-    let categoryID: UUID
-    let item: DastakV1RestaurantMenuItem
-    @State private var name: String
-    @State private var description: String
-    @State private var price: String
-    @State private var groupName = ""
-    @State private var selectionType = "SINGLE"
-
-    init(model: DastakMerchantModel, categoryID: UUID, item: DastakV1RestaurantMenuItem) {
-        self.model = model; self.categoryID = categoryID; self.item = item
-        _name = State(initialValue: item.name); _description = State(initialValue: item.description ?? "")
-        _price = State(initialValue: String(format: "%.2f", Double(item.basePricePaise) / 100))
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-            DastakMerchantMediaPicker(title: "Dish photo", message: "Optional. A clear photo helps customers recognise this dish.", imageKey: item.imageKey, compact: true, busy: model.restaurantChangesDisabled) { media in
-                await model.uploadRestaurantMedia(entityType: "RESTAURANT_MENU_ITEM", entityID: item.id, expectedMediaVersion: item.mediaVersion ?? 1, data: media.data, contentType: media.contentType, fileName: media.fileName)
-            }
-            TextField("Dish name", text: $name).textFieldStyle(.roundedBorder)
-            TextField("Description", text: $description).textFieldStyle(.roundedBorder)
-            TextField("Price in rupees", text: $price).dastakDecimalKeyboard().textFieldStyle(.roundedBorder)
-            HStack {
-                Button("Save changes") { save() }.buttonStyle(MarketplacePrimaryButtonStyle()).disabled(model.isBusy)
-                Button(item.status == "ACTIVE" ? "Mark unavailable" : "Activate") { save(status: item.status == "ACTIVE" ? "INACTIVE" : "ACTIVE") }.buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.isBusy)
-            }
-            DisclosureGroup {
-                VStack(alignment: .leading, spacing: MarketplaceSpacing.medium) {
-                    ForEach(item.optionGroups) { group in
-                        DastakMerchantChoiceGroup(model: model, itemID: item.id, group: group)
-                    }
-                    Text("Example: “Choose a size” with Small, Medium and Large; or “Add extras” with Cheese and Sauce.").font(.caption).foregroundStyle(.secondary)
-                    TextField("Choice name, e.g. Choose a size", text: $groupName).textFieldStyle(.roundedBorder)
-                    Picker("How customers choose", selection: $selectionType) { Text("One option").tag("SINGLE"); Text("One or more options").tag("MULTIPLE") }.pickerStyle(.segmented)
-                    Button("Add choice group", systemImage: "plus") {
-                        let value = groupName.trimmingCharacters(in: .whitespacesAndNewlines)
-                        Task { if await model.saveRestaurantEntity(entityID: nil, expectedVersion: 0, payload: .optionGroup(menuItemID: item.id, name: value, selectionType: selectionType, minimumSelections: 0, maximumSelections: selectionType == "SINGLE" ? 1 : 20, sortOrder: item.optionGroups.count, status: "ACTIVE")) { groupName = "" } }
-                    }.buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.isBusy || groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }.padding(.top, 10)
-            } label: {
-                VStack(alignment: .leading, spacing: 2) { Text("Customer choices & extras").font(.headline); Text("Sizes, flavours, preparation choices or paid extras").font(.caption).foregroundStyle(.secondary) }
-            }
-        }.padding(.vertical, MarketplaceSpacing.small)
-    }
-
-    private func save(status: String? = nil) {
-        guard let paise = DastakMerchantPriceParser.optionalPaise(from: price) else { return }
-        Task { _ = await model.saveRestaurantEntity(entityID: item.id, expectedVersion: item.version, payload: .item(categoryID: categoryID, name: name.trimmingCharacters(in: .whitespacesAndNewlines), description: description.trimmingCharacters(in: .whitespacesAndNewlines), imageKey: item.imageKey ?? "", basePricePaise: paise, taxRateBps: item.taxRateBps, logisticsAttributes: item.logisticsAttributes, status: status ?? item.status)) }
+    private func composerField(_ path: WritableKeyPath<DastakMerchantMenuComposer,String>) -> Binding<String> {
+        Binding(get: { drafts.composer[keyPath: path] },set: { var value = drafts.composer; value[keyPath: path] = $0; drafts.editComposer(value) })
     }
 }
 
-private struct DastakMerchantChoiceGroup: View {
-    @ObservedObject var model: DastakMerchantModel
-    let itemID: UUID
-    let group: DastakV1RestaurantMenuOptionGroup
-    @State private var optionName = ""
-    @State private var optionPrice = "0"
+struct DastakMerchantImageUpload: Sendable { let data: Data; let contentType: String; let fileName: String }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack { VStack(alignment: .leading) { Text(group.name).bold(); Text(group.selectionType == "SINGLE" ? "Customer chooses one option" : "Customer may choose more than one").font(.caption).foregroundStyle(.secondary) }; Spacer(); Button(group.status == "ACTIVE" ? "Hide" : "Activate") { Task { _ = await model.saveRestaurantEntity(entityID: group.id, expectedVersion: group.version, payload: .optionGroup(menuItemID: itemID, name: group.name, selectionType: group.selectionType, minimumSelections: group.minimumSelections, maximumSelections: group.maximumSelections, sortOrder: group.sortOrder, status: group.status == "ACTIVE" ? "INACTIVE" : "ACTIVE")) } }.font(.caption.bold()) }
-            ForEach(group.options) { option in HStack { Text(option.name); Spacer(); Text(DastakFormatting.money(Money(paise: option.priceDeltaPaise))); Text(option.status.lowercased()).font(.caption).foregroundStyle(.secondary) } }
-            HStack { TextField("Option name", text: $optionName).textFieldStyle(.roundedBorder); TextField("Extra ₹", text: $optionPrice).dastakDecimalKeyboard().frame(width: 92).textFieldStyle(.roundedBorder) }
-            Button("Add option", systemImage: "plus") {
-                guard let paise = DastakMerchantPriceParser.optionalNonnegativePaise(from: optionPrice) else { return }
-                let value = optionName.trimmingCharacters(in: .whitespacesAndNewlines)
-                Task { if await model.saveRestaurantEntity(entityID: nil, expectedVersion: 0, payload: .option(optionGroupID: group.id, name: value, priceDeltaPaise: paise, sortOrder: group.options.count, status: "ACTIVE")) { optionName = ""; optionPrice = "0" } }
-            }.buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.isBusy || optionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }.padding(12).background(MarketplaceColors.dastakAccentSoft.color.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-}
-
-private struct DastakMerchantImageUpload: Sendable { let data: Data; let contentType: String; let fileName: String }
-
-private struct DastakMerchantMediaPicker: View {
+struct DastakMerchantMediaPicker: View {
     let title: String
     let message: String
     let imageKey: String?
@@ -288,26 +296,46 @@ private struct DastakMerchantMediaPicker: View {
     let upload: (DastakMerchantImageUpload) async -> Bool
     @State private var selection: PhotosPickerItem?
     @State private var loading = false
+    @State private var photoMessage: String?
+    @State private var generation = UUID()
 
     var body: some View {
-        let actionTitle = loading ? "Uploading…" : imageKey == nil ? "Add photo" : "Replace"
-        HStack(spacing: 14) {
-            DastakProductArtwork(imageKey: imageKey, fallbackSymbol: "camera")
-                .frame(width: compact ? 76 : 108, height: compact ? 66 : 76)
+        let actionTitle = loading ? "Processing photo…" : imageKey == nil ? "Add photo" : "Replace"
+        VStack(alignment: .leading, spacing: 10) {
+          if !compact {
+            DastakRestaurantBanner(imageKey: imageKey)
+                .frame(maxWidth: .infinity).frame(height: 160).clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 18)).accessibilityLabel("Current restaurant banner")
+          }
+          DastakMerchantAdaptiveRow {
+            if compact { DastakProductArtwork(imageKey: imageKey, fallbackSymbol: "camera").frame(width: 72, height: 72).accessibilityHidden(true) }
             VStack(alignment: .leading, spacing: 4) { Text(title).font(.headline); Text(message).font(.caption).foregroundStyle(.secondary) }
-            Spacer(minLength: 4)
-            PhotosPicker(selection: $selection, matching: .images) { Label(actionTitle, systemImage: "photo.badge.plus") }.buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(busy || loading)
+          }
+          PhotosPicker(selection: $selection, matching: .images) { Label(actionTitle, systemImage: "photo.badge.plus") }
+              .buttonStyle(DastakMerchantActionStyle()).disabled(busy || loading)
+          Text("JPEG, PNG or WebP up to 5 MB. HEIC up to 20 MB is converted to JPEG on this device.")
+              .font(.caption).foregroundStyle(.secondary)
+          if let photoMessage { Text(photoMessage).font(.caption).accessibilityIdentifier("merchant.photo.feedback") }
         }
         .padding(compact ? 12 : 16).marketplaceFlatSurface()
         .onChange(of: selection) { _, item in
             guard let item else { return }
-            loading = true
+            let token = UUID(); generation = token; loading = true; photoMessage = nil
             Task {
-                defer { loading = false; selection = nil }
-                guard let data = try? await item.loadTransferable(type: Data.self), let inspected = DastakMerchantImageInspector.inspect(data) else { return }
-                _ = await upload(.init(data: data, contentType: inspected.contentType, fileName: "restaurant-\(UUID().uuidString.lowercased()).\(inspected.extension)"))
+                defer { if generation == token { loading = false; selection = nil } }
+                do {
+                    let photo = try await DastakMerchantPhoto.load(purpose: .catalogue) { try await item.loadTransferable(type: Data.self) }
+                    guard generation == token, !Task.isCancelled else { return }
+                    guard !busy else { photoMessage = "The Store changed while this photo was loading. Review the latest details and choose it again."; return }
+                    let saved = await upload(.init(data: photo.data, contentType: photo.contentType,
+                        fileName: "restaurant-\(UUID().uuidString.lowercased()).\(photo.fileExtension)"))
+                    guard generation == token else { return }
+                    photoMessage = saved ? (photo.converted ? "HEIC converted to JPEG. Photo saved." : "Photo saved.")
+                        : "Photo not confirmed. Check the Store message or saved-action recovery above before trying again."
+                } catch { if generation == token { photoMessage = DastakMerchantPhoto.failureMessage(error) } }
             }
         }
+        .onDisappear { generation = UUID(); loading = false; selection = nil }
     }
 }
 
@@ -324,25 +352,21 @@ private extension View {
 
 enum DastakMerchantImageInspector {
     static func inspect(_ data: Data) -> (contentType: String, extension: String)? {
-        guard !data.isEmpty, data.count <= 5 * 1_024 * 1_024,
-              let source = CGImageSourceCreateWithData(data as CFData, nil),
-              CGImageSourceGetCount(source) > 0,
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              (properties[kCGImagePropertyPixelWidth] as? Int ?? 0) > 0,
-              (properties[kCGImagePropertyPixelHeight] as? Int ?? 0) > 0
-        else { return nil }
-        let bytes = [UInt8](data.prefix(12))
-        if bytes.starts(with: [0xFF, 0xD8, 0xFF]) { return ("image/jpeg", "jpg") }
-        if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return ("image/png", "png") }
-        if bytes.count >= 12, String(bytes: bytes[0..<4], encoding: .ascii) == "RIFF", String(bytes: bytes[8..<12], encoding: .ascii) == "WEBP" { return ("image/webp", "webp") }
-        return nil
+        guard let photo = try? DastakMerchantPhoto.prepare(data, purpose: .catalogue), !photo.converted else { return nil }
+        return (photo.contentType, photo.fileExtension)
     }
 }
 
 extension DastakMerchantPriceParser {
-    static func optionalPaise(from value: String) -> Int? { try? paise(from: value) }
+    static func optionalPaise(from value: String) -> Int? {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.range(of: "^[0-9]{1,7}(\\.[0-9]{1,2})?$", options: .regularExpression) != nil else { return nil }
+        return try? paise(from: value)
+    }
     static func optionalNonnegativePaise(from value: String) -> Int? {
-        guard let decimal = Decimal(string: value.trimmingCharacters(in: .whitespacesAndNewlines), locale: Locale(identifier: "en_US_POSIX")), decimal >= 0, decimal <= 1_000_000 else { return nil }
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.range(of: "^[0-9]{1,7}(\\.[0-9]{1,2})?$", options: .regularExpression) != nil,
+              let decimal = Decimal(string: value, locale: Locale(identifier: "en_US_POSIX")), decimal >= 0, decimal <= 1_000_000 else { return nil }
         var scaled = decimal * 100; var rounded = Decimal(); NSDecimalRound(&rounded, &scaled, 0, .plain)
         return rounded == scaled ? NSDecimalNumber(decimal: rounded).intValue : nil
     }

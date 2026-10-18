@@ -6,51 +6,90 @@ public struct DastakMerchantRootView: View {
     private enum Section: Hashable {
         case orders
         case store
+        case earnings
         case account
     }
 
     @StateObject private var model: DastakMerchantModel
+    @StateObject private var earnings: DastakMerchantEarningsModel
+    @StateObject private var notificationNavigator: DastakMerchantNotificationNavigator
+    @StateObject private var haptics = MarketplaceHapticScope(enabled: {
+        UserDefaults.standard.object(forKey: "dastak.merchant.hapticsEnabled") as? Bool ?? true
+    })
+    @AppStorage("dastak.merchant.hapticsEnabled") private var hapticsEnabled = true
+    @State private var orderQueue: DastakMerchantQueue = .all
+    @State private var showingNotification = false
     @State private var section: Section = .orders
     @Environment(\.scenePhase) private var scenePhase
     private let services: MarketplaceAuthenticatedServices
 
     public init(services: MarketplaceAuthenticatedServices) {
         self.services = services
-        _model = StateObject(wrappedValue: DastakMerchantModel(services: services))
+        _model = StateObject(wrappedValue: DastakMerchantModel(services: services,menuDraftStorage: DastakMerchantMenuFileDraftStorage.shared))
+        _earnings = StateObject(wrappedValue: DastakMerchantEarningsModel(services: services,storage: DastakMerchantPayoutKeychainStore.shared))
+        _notificationNavigator = StateObject(wrappedValue: DastakMerchantNotificationNavigator(services: services))
     }
 
     public var body: some View {
         TabView(selection: $section) {
-            DastakMerchantOrdersView(model: model)
+            DastakMerchantOrdersView(model: model, queue: $orderQueue)
                 .tabItem { Label("Orders", systemImage: "list.bullet.clipboard") }
                 .tag(Section.orders)
 
             DastakMerchantStoreAndCatalogueView(model: model)
+                .id(model.selectedLocationID)
                 .tabItem { Label("Store", systemImage: "square.grid.2x2") }
                 .tag(Section.store)
+
+            DastakMerchantEarningsView(model: earnings)
+                .tabItem { Label("Earnings", systemImage: "wallet.bifold") }
+                .tag(Section.earnings)
 
             DastakIdentityAccountView(
                 roleName: "Merchant",
                 openWorkspace: { section = .store },
                 services: services
             )
+                .safeAreaInset(edge: .bottom) {
+                    Toggle("Touch feedback", isOn: $hapticsEnabled).font(.subheadline)
+                        .padding(.horizontal, 20).padding(.vertical, 10).background(.regularMaterial)
+                        .accessibilityHint("Use gentle haptics for Merchant navigation and supported buttons.")
+                }
                 .tabItem { Label("Account", systemImage: "person.text.rectangle") }
                 .tag(Section.account)
         }
         .tint(MarketplaceColors.dastakAccent.color)
         .marketplacePage()
-        .safeAreaInset(edge: .top) { DastakMerchantJournalBanner(model: model) }
+        .environment(\.marketplaceHapticScope, haptics)
+        .marketplaceSelectionFeedback(section)
+        .marketplaceSelectionFeedback(orderQueue)
+        .onAppear { haptics.isActive = scenePhase == .active }
+        .onChange(of: scenePhase) { _, phase in haptics.isActive = phase == .active }
+        .onDisappear { haptics.isActive = false }
+        .safeAreaInset(edge: .top) {
+            VStack(alignment: .leading, spacing: 0) {
+                DastakMerchantJournalBanner(model: model)
+                if section == .orders || section == .store { DastakMerchantLocationView(model: model) }
+                if section == .store, model.selectedLocation?.kind == .retail, model.canonicalCatalogue == nil, let failure = model.catalogueRefreshFailure {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(failure, systemImage: "arrow.triangle.2.circlepath").font(.caption)
+                        Button("Refresh store products") { Task { await model.refreshCanonicalCatalogue(reportFailure: false) } }
+                            .disabled(model.isBusy || model.isRefreshingCatalogue || model.isRefreshingCatalogueMap)
+                    }.padding(12)
+                }
+            }
+        }
         .onChange(of: section) { _, selectedSection in
             Task {
                 switch selectedSection {
                 case .orders:
                     await model.refreshOrders()
                 case .store:
-                    async let retail: Void = model.refreshCanonicalCatalogue(reportFailure: false)
-                    async let restaurant = model.refreshRestaurantMenu(reportFailure: false)
-                    _ = await (retail, restaurant)
+                    await model.refreshSelectedStore()
                 case .account:
                     await model.notifications.refresh()
+                case .earnings:
+                    await earnings.load()
                 }
             }
         }
@@ -63,9 +102,18 @@ public struct DastakMerchantRootView: View {
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await model.recoverPendingActionIfNeeded()
+                await model.notifications.recoverIfNeeded()
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            }
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
             await model.notifications.refresh()
             while !Task.isCancelled {
                 await model.refreshOrders()
+                await model.discoverNewOperationalLocations()
                 // Realtime is primary; this slower pass is outage recovery.
                 try? await Task.sleep(for: .seconds(30))
                 guard !Task.isCancelled else { return }
@@ -85,6 +133,9 @@ public struct DastakMerchantRootView: View {
             openPendingOrders()
             Task { await model.refreshOrders() }
         }
+        .sheet(isPresented: $showingNotification) {
+            DastakMerchantNotificationDestination(navigator: notificationNavigator, merchant: model)
+        }
         .alert(
             "Dastak Merchant",
             isPresented: Binding(
@@ -99,9 +150,14 @@ public struct DastakMerchantRootView: View {
     }
 
     private func openPendingOrders() {
-        guard UserDefaults.standard.bool(forKey: "dastak.merchant.openOrders") else { return }
-        section = .orders
-        UserDefaults.standard.removeObject(forKey: "dastak.merchant.openOrders")
+        if let route = DastakMerchantNotificationInbox().take() {
+            section = .orders; orderQueue = route.queue
+            showingNotification = true
+            Task { await notificationNavigator.open(route) }
+        } else if UserDefaults.standard.bool(forKey: "dastak.merchant.openOrders") {
+            section = .orders; orderQueue = .all
+            UserDefaults.standard.removeObject(forKey: "dastak.merchant.openOrders")
+        }
     }
 
     private func observeOrderChanges() async {

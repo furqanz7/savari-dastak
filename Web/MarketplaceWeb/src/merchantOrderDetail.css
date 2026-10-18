@@ -1,0 +1,16 @@
+.merchant-order-detail{width:min(740px,calc(100vw - 24px));max-height:calc(100dvh - 32px);padding:0;border:1px solid color-mix(in srgb,currentColor 15%,transparent);border-radius:26px;background:var(--surface,#fffaf1);color:var(--text,#261c16);box-shadow:0 30px 100px #0005}
+.merchant-order-detail::backdrop{background:#10171299;backdrop-filter:blur(8px)}
+.merchant-order-detail>header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 22px;border-bottom:1px solid #b18d5233;position:sticky;top:0;background:inherit;z-index:1}
+.merchant-order-detail>header>span{display:flex;align-items:center;gap:9px;font-weight:700}
+.merchant-order-detail button{min-height:44px;min-width:44px;cursor:pointer;border:1px solid #b18d5244;border-radius:14px;color:inherit;background:transparent}
+.merchant-order-detail button:focus-visible{outline:3px solid #b18d52;outline-offset:3px}
+.merchant-detail-body{padding:22px;display:grid;gap:20px}.merchant-detail-body p{margin:0;line-height:1.6;overflow-wrap:anywhere}
+.merchant-detail-hero{padding:24px;border-radius:20px;background:linear-gradient(135deg,#b18d5225,#b18d5208);border:1px solid #b18d5240}
+.merchant-detail-hero h2{font-size:clamp(20px,4.5vw,29px);overflow-wrap:anywhere;margin:8px 0 14px;letter-spacing:-.025em}
+.merchant-detail-record{padding:20px;border:1px solid #b18d5233;border-radius:20px;display:grid;gap:12px;background:color-mix(in srgb,currentColor 2%,transparent)}
+.merchant-detail-record h3{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;margin:0}.merchant-detail-record h3 span{font-size:13px;font-weight:600;color:#997740}
+.merchant-detail-note,.merchant-detail-stamp, .merchant-detail-record small{font-size:13px;opacity:.76}.merchant-detail-stamp,.merchant-detail-value{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.merchant-detail-lines{list-style:none;margin:0;padding:0;display:grid;gap:16px}.merchant-detail-lines li{display:flex;align-items:start;gap:10px}.merchant-detail-lines li>span{flex:1}.merchant-detail-lines small{display:block;line-height:1.6}.merchant-detail-lines li>strong{font-size:14px;white-space:nowrap}
+.merchant-detail-value{padding-top:12px;border-top:1px solid #b18d5233}.merchant-detail-warning{padding:14px;border-radius:14px;background:#b18d521a}.merchant-detail-refresh{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;font-weight:600}
+@media(prefers-color-scheme:dark){.merchant-order-detail{background:var(--surface,#1b1b19);color:var(--text,#f6f2e9)}}
+@media(max-width:480px){.merchant-detail-body{padding:14px}.merchant-detail-record{padding:16px}.merchant-detail-hero{padding:18px}}

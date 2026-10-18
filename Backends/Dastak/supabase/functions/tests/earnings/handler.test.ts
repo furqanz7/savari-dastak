@@ -44,6 +44,44 @@ const dependencies = (
   ...overrides,
 });
 
+Deno.test("Merchant controls snapshot derives its actor and advertises only the checked contract",async()=>{
+  let call:unknown;
+  const response=await handleEarnings(request({operation:"merchantRoyaltyControlsSnapshot",accountId:subjectId}),dependencies({
+    callRPC:async(rpc,args)=>{call=[rpc,args];return [{response_body:{subjects:[]},response_status:200}];},
+  }));
+  assertEquals(response.status,200);
+  assertEquals(call,["dastak_v1_merchant_royalty_controls_snapshot",{p_account_id:accountId}]);
+  assertEquals((await response.json()).payoutAvailability,{destinationRegistrationAvailable:true,withdrawalExecutionAvailable:true,merchantControlsAvailable:true});
+});
+Deno.test("Merchant checked withdrawal binds reviewed destination and organization without trusting actor input",async()=>{
+  let call:unknown;
+  const response=await handleEarnings(request({operation:"requestMerchantRoyaltyWithdrawal",subjectType:"MERCHANT_ORGANIZATION",
+    subjectId,amountPaise:100,destinationId:accountId,destinationVersion:3,accountId:subjectId},"Bearer valid","checked-1"),dependencies({
+      callRPC:async(rpc,args)=>{call=[rpc,args];return {withdrawalId:subjectId,amountPaise:100,status:"REQUESTED",version:1};},
+  }));
+  assertEquals(response.status,200);
+  assertEquals(call,["dastak_v1_request_merchant_royalty_withdrawal_checked",{p_account_id:accountId,p_organization_id:subjectId,
+    p_amount_paise:100,p_idempotency_key:"checked-1",p_destination_id:accountId,p_destination_version:3}]);
+});
+Deno.test("Merchant checked withdrawal refuses Rider scope and malformed destination reviews before RPC",async()=>{
+  let calls=0;
+  const deps=dependencies({callRPC:async()=>{calls++;return {};}});
+  for(const patch of [{subjectType:"RIDER"},{destinationId:"wrong"},{destinationVersion:0},{destinationVersion:1.5},{destinationVersion:undefined}]){
+    const result=await handleEarnings(request({operation:"requestMerchantRoyaltyWithdrawal",subjectType:"MERCHANT_ORGANIZATION",subjectId,
+      amountPaise:100,destinationId:accountId,destinationVersion:1,...patch},"Bearer valid","checked-invalid"),deps);
+    assertEquals(result.status,400);
+  }
+  assertEquals(calls,0);
+});
+Deno.test("changed reviewed Merchant destination is explicit rejection and does not execute provider",async()=>{
+  let executions=0;
+  const response=await handleEarnings(request({operation:"requestMerchantRoyaltyWithdrawal",subjectType:"MERCHANT_ORGANIZATION",subjectId,
+    amountPaise:100,destinationId:accountId,destinationVersion:1},"Bearer valid","checked-changed"),dependencies({
+      callRPC:async()=>{throw new Error("REVIEWED_PAYOUT_DESTINATION_CHANGED");},executeWithdrawal:async()=>{executions++;return {};},
+  }));
+  assertEquals(response.status,409);assertEquals((await response.json()).error.code,"payout_destination_changed");assertEquals(executions,0);
+});
+
 Deno.test("earnings accepts browser CORS preflight", async () => {
   const response = await handleEarnings(
     new Request("https://example.test/earnings", { method: "OPTIONS" }),

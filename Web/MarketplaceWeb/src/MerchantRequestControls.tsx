@@ -45,10 +45,11 @@ export function MerchantDeclineDialog({ orderNumber, busy, reason, error, onReas
   </div>;
 }
 
-export function MerchantRestaurantRequestCard({ request, busy, prepMinutes, onPrepMinutes, onRespond }: {
+export function MerchantRestaurantRequestCard({ request, busy, prepMinutes, onPrepMinutes, onRespond, onViewDetails }: {
   request: V1RestaurantRequest; busy: boolean; prepMinutes: number;
   onPrepMinutes: (minutes: number) => void;
   onRespond: (response: "CONFIRM" | "DECLINE", reason?: string) => Promise<boolean>;
+  onViewDetails?: () => void;
 }) {
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState("");
@@ -56,6 +57,7 @@ export function MerchantRestaurantRequestCard({ request, busy, prepMinutes, onPr
   const [declineError, setDeclineError] = useState<string>();
   const actionable = request.status === "OFFERED";
   return <article className="v1-opportunity-card merchant-food-request" aria-label={`Food request ${request.displayOrderNumber}`} aria-busy={busy}>
+    {onViewDetails ? <button type="button" className="secondary-button" onClick={onViewDetails}>View full order</button> : null}
     <header><span className="v1-opportunity-icon"><ChefHat size={21} /></span><span><small className="merchant-card-eyebrow">New food order</small><strong>{request.displayOrderNumber}</strong><small>{request.branch.displayName}</small></span><b className="merchant-status-badge">New</b></header>
     <ul className="merchant-order-lines">{request.lines.map((line) => <li key={line.orderLineId}><b className="merchant-line-quantity">{line.quantity}×</b><span><strong>{line.name}</strong><small>{menuSelectionSummary(line.selection)}</small></span><em>{formatProductValue(line.lineSubtotalPaise ?? line.unitPricePaise * line.quantity)}</em></li>)}</ul>
     {request.productSubtotalPaise === undefined ? null : <p className="merchant-product-value"><span>Product value</span><strong>{formatProductValue(request.productSubtotalPaise)}</strong></p>}

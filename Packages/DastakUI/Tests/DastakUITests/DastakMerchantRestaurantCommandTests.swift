@@ -187,7 +187,7 @@ final class DastakMerchantRestaurantCommandTests: XCTestCase {
         let model = makeModel(functions)
         await model.refreshRestaurantMenu()
         await functions.setMenu(restaurantMenuData(mediaVersion: 8))
-        let bytes = Data([1, 2, 3, 4])
+        let bytes = restaurantPhotoFixture
         let saved = await model.uploadRestaurantMedia(entityType: "RESTAURANT_BRANCH_BANNER", entityID: restaurantBranch,
             expectedMediaVersion: 1, data: bytes, contentType: "image/png", fileName: "original.png")
         XCTAssertFalse(saved)
@@ -204,6 +204,30 @@ final class DastakMerchantRestaurantCommandTests: XCTestCase {
         XCTAssertEqual(uploads[1].file.data, bytes)
     }
 
+    func testInvalidMenuDraftAndPhotoAreRejectedWithExplanationBeforeJournalOrNetwork() async {
+        let functions = RestaurantCommandFunctions(), model = makeModel(functions)
+        await model.refreshRestaurantMenu()
+        let saved = await model.saveRestaurantEntity(entityID: nil, expectedVersion: 0,
+            payload: .category(name: " ", description: "", sortOrder: 0, status: "ACTIVE"))
+        XCTAssertFalse(saved); XCTAssertTrue(model.errorMessage?.contains("category name") == true)
+        XCTAssertNil(model.merchantJournal)
+        let media = await model.uploadRestaurantMedia(entityType: "RESTAURANT_BRANCH_BANNER", entityID: restaurantBranch,
+            expectedMediaVersion: 1, data: Data([1,2,3]), contentType: "image/png", fileName: "banner.png")
+        XCTAssertFalse(media); XCTAssertTrue(model.errorMessage?.contains("valid JPEG") == true)
+        XCTAssertNil(model.merchantJournal)
+        let writes = await functions.writes, uploads = await functions.uploads
+        XCTAssertTrue(writes.isEmpty); XCTAssertTrue(uploads.isEmpty)
+    }
+
+    func testWrongStoreTypeCannotPublishRestaurantMenuAndExplainsRecovery() async {
+        let functions = RestaurantCommandFunctions(), model = makeModel(functions)
+        let wrong = String(decoding: restaurantMenuData(), as: UTF8.self).replacingOccurrences(of: "RESTAURANT_CAFE", with: "RETAIL")
+        await functions.setMenu(Data(wrong.utf8))
+        let refreshed = await model.refreshRestaurantMenu(reportFailure: false)
+        XCTAssertFalse(refreshed); XCTAssertNil(model.restaurantMenu)
+        XCTAssertTrue(model.restaurantRefreshFailure?.contains("business type") == true)
+        XCTAssertTrue(model.restaurantChangesDisabled)
+    }
     func testMediaAcknowledgementClearsPendingOnlyForExactTargetAndAdvancedVersion() async {
         for version in [1, 2] {
             let functions = RestaurantCommandFunctions()
@@ -212,7 +236,7 @@ final class DastakMerchantRestaurantCommandTests: XCTestCase {
             let ack = "{\"entityId\":\"\(restaurantBranch)\",\"mediaVersion\":\(version),\"imageKey\":\"owned/banner.png\"}"
             await functions.enqueue("uploadGovernedMedia", .data(Data(ack.utf8)))
             let saved = await model.uploadRestaurantMedia(entityType: "RESTAURANT_BRANCH_BANNER", entityID: restaurantBranch,
-                expectedMediaVersion: 1, data: Data([1]), contentType: "image/png", fileName: "banner.png")
+                expectedMediaVersion: 1, data: restaurantPhotoFixture, contentType: "image/png", fileName: "banner.png")
             XCTAssertEqual(saved, version > 1)
         }
     }
@@ -284,8 +308,8 @@ final class DastakMerchantRestaurantCommandTests: XCTestCase {
     func testRestaurantMediaBytesPersistAndRelaunchRetriesSameMultipartFields() async throws {
         let functions = RestaurantCommandFunctions(); let store = MerchantJournalTestStore(); let accountID = UUID()
         let model = makeModel(functions, storage: store, accountID: accountID); await model.refreshRestaurantMenu()
-        let bytes = Data([1, 2, 3])
-        await model.uploadRestaurantMedia(entityType: "RESTAURANT_BRANCH_BANNER", entityID: restaurantBranch, expectedMediaVersion: 1, data: bytes, contentType: "image/jpeg", fileName: "banner.jpg")
+        let bytes = restaurantPhotoFixture
+        await model.uploadRestaurantMedia(entityType: "RESTAURANT_BRANCH_BANNER", entityID: restaurantBranch, expectedMediaVersion: 1, data: bytes, contentType: "image/png", fileName: "banner.png")
         let stored = try XCTUnwrap(model.merchantJournal)
         let roundTrip = try JSONDecoder().decode(DastakMerchantJournalRecord.self, from: JSONEncoder().encode(stored))
         XCTAssertEqual(stored, roundTrip)
@@ -413,6 +437,7 @@ private actor RestaurantCommandFunctions: FunctionClient {
 
 private let restaurantBranch = UUID(uuidString: "93000000-0000-4000-8000-000000000001")!
 private let restaurantCategory = UUID(uuidString: "93000000-0000-4000-8000-000000000002")!
+private let restaurantPhotoFixture = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")!
 private let categoryPayload = DastakV1RestaurantMenuPayload.category(name: "Breakfast", description: "", sortOrder: 0, status: "ACTIVE")
 
 private func restaurantMenuData(operationalVersion: Int? = 4, categoryVersion: Int = 2,
@@ -421,7 +446,7 @@ private func restaurantMenuData(operationalVersion: Int? = 4, categoryVersion: I
     return Data("""
     {"restaurant":{"organizationId":"93000000-0000-4000-8000-000000000003","branchId":"\(restaurantBranch)",
     "name":"Test Kitchen","branchName":"Test branch","mediaVersion":\(mediaVersion),"isOpen":\(open),"acceptingOrders":\(accepting)\(version),
-    "branchStatus":"ACTIVE","merchantType":"RESTAURANT","softActiveOrderThreshold":10,"activeOrderCount":2},
+    "branchStatus":"ACTIVE","merchantType":"RESTAURANT_CAFE","softActiveOrderThreshold":10,"activeOrderCount":2},
     "categories":[{"id":"\(restaurantCategory)","name":"Breakfast","sortOrder":0,"status":"ACTIVE","version":\(categoryVersion),"items":[]}]}
     """.utf8)
 }

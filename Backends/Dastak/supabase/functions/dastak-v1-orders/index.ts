@@ -106,6 +106,12 @@ Deno.serve((request) =>
           p_limit: input.limit,
         },
       ),
+    merchantFulfilmentHistory: (input) => callAuthenticatedRPC(input.accessToken, "dastak_v1_merchant_fulfilment_history", {
+      p_branch_id: input.branchId, p_before_at: input.beforeAt, p_before_id: input.beforeId, p_limit: input.limit,
+    }),
+    merchantOrderDetail: (input) => callAuthenticatedRPC(input.accessToken, "dastak_v1_merchant_order_detail", {
+      p_branch_id: input.branchId, p_target_kind: input.targetKind, p_target_id: input.targetId,
+    }),
     declareFulfilmentPackages: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

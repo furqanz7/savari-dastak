@@ -10,6 +10,16 @@ struct DastakMerchantApp: App {
     @UIApplicationDelegateAdaptor(MerchantNotificationDelegate.self) private var notificationDelegate
     var body: some Scene {
         WindowGroup {
+            #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("-DastakMerchantDesignPreview") {
+                DastakMerchantDesignPreview()
+            } else { workspace }
+            #else
+            workspace
+            #endif
+        }
+    }
+    private var workspace: some View {
             DastakLaunchView(variant: .merchant) {
                 MarketplaceAuthenticationShell(
                     applicationName: "Dastak Merchant",
@@ -22,7 +32,6 @@ struct DastakMerchantApp: App {
                     DastakMerchantAccessView(route: route, services: services)
                 }
             }
-        }
     }
 }
 
@@ -65,8 +74,12 @@ final class MerchantNotificationDelegate: NSObject, UIApplicationDelegate, UNUse
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
         notificationInbox.clear()
-        // Persist cold-launch navigation until authentication has restored the workspace.
-        UserDefaults.standard.set(true, forKey: "dastak.merchant.openOrders")
-        NotificationCenter.default.post(name: Notification.Name("dastak.merchant.openOrders"), object: nil)
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
+        // A validated, short-lived hint survives cold launch/sign-in. No order
+        // action is executed here and payload fields are never authority.
+        await MainActor.run {
+            _ = DastakMerchantNotificationInbox().receive(payload: response.notification.request.content.userInfo,
+                identifier: response.notification.request.identifier)
+        }
     }
 }

@@ -48,6 +48,9 @@ import {
   type MerchantOperationalOrderSnapshot,
 } from "./orders";
 import { MerchantLiveDelivery } from "./MerchantLiveDelivery";
+import { MerchantOrderDetailDialog } from "./MerchantOrderDetailDialog";
+import { MerchantFulfilmentHistory } from "./MerchantFulfilmentHistory";
+import type { MerchantDetailTarget } from "./merchantOrderDetail";
 import { validateDecodableImage } from "./imageValidation";
 import { CustomerEmptyState, CustomerNotice, CustomerSkeleton, CustomerSyncStatus } from "./CustomerUI";
 import { MerchantPrepChoices, MerchantRestaurantRequestCard } from "./MerchantRequestControls";
@@ -79,6 +82,8 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
   const [settlements, setSettlements] = useState<Record<string, unknown>[]>([]);
   const [legacyOrders, setLegacyOrders] = useState<MerchantOperationalOrderSnapshot[]>([]);
   const [queue, setQueue] = useState<MerchantOperationalQueue>("all");
+  const [detailTarget, setDetailTarget] = useState<MerchantDetailTarget>();
+  useEffect(() => setDetailTarget(undefined), [accountId, activeBranchId]);
   const [feedStates, setFeedStates] = useState<MerchantFeedStates>(initialMerchantFeedStates);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string>();
@@ -540,7 +545,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
     [branchOpportunities],
   );
   const queueFulfilments = useMemo(
-    () => branchFulfilments.filter((fulfilment) => queue === "all"
+    () => queue === "history" ? [] : branchFulfilments.filter((fulfilment) => queue === "all"
       ? merchantFulfilmentQueue(fulfilment) !== "history" && ["PREPARING", "READY", "PICKED_UP"].includes(fulfilment.status)
       : merchantFulfilmentQueue(fulfilment) === queue),
     [branchFulfilments, queue],
@@ -579,13 +584,20 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
         aria-pressed={queue === value}
         aria-controls="merchant-queue-content"
         onClick={() => setQueue(value)}
-      ><span>{value[0].toUpperCase() + value.slice(1)}</span><b>{displayCounts[value]}</b></button>)}
+      ><span>{value[0].toUpperCase() + value.slice(1)}</span>{value !== "history" ? <b>{displayCounts[value]}</b> : null}</button>)}
     </nav>
     <div id="merchant-queue-content" className="merchant-queue-content">
-    <MerchantOperationsStatus states={feedStates} hasContent={hasContent} queue={queue} onRetry={() => void refresh(true)} />
+    <MerchantOperationsStatus states={feedStates} hasContent={hasContent || showHistory} queue={queue} onRetry={() => void refresh(true)} />
+    {showHistory ? <>
+      <p>Earlier legacy orders remain a recent window, not lifetime history.</p>
+      {activeBranchId ? <MerchantFulfilmentHistory key={`${accountId}:${activeBranchId}`} auth={auth}
+        branchId={activeBranchId} onDetails={setDetailTarget} onSessionExpired={onSessionExpired} />
+        : <p>Choose a location to load its fulfilment history.</p>}
+    </> : null}
     {showIncoming && offeredRestaurants.length > 0 ? <div className="v1-opportunity-list">
         <h3 className="merchant-feed-heading">Kitchen requests <span>{offeredRestaurants.length}</span></h3>
         {offeredRestaurants.map((request) => <MerchantRestaurantRequestCard key={request.id} request={request} busy={Boolean(busyId)} prepMinutes={restaurantPrepMinutes[request.id] ?? 15}
+          onViewDetails={() => setDetailTarget({ kind: "RESTAURANT_REQUEST", id: request.id, branchId: request.branch.id })}
           onPrepMinutes={(value) => setRestaurantPrepMinutes((current) => ({ ...current, [request.id]: value }))}
           onRespond={(response, reason) => respondRestaurant(request, response, reason)} />)}
       </div> : null}
@@ -601,6 +613,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
           onPrepMinutes={(value) => setRecoveryPrepMinutes((current) => ({ ...current, [opportunity.id]: value }))}
           onUnavailable={() => void respondRecovery(opportunity, "UNAVAILABLE")}
           onAccept={() => void respondRecovery(opportunity, "ACCEPT")}
+          onViewDetails={() => setDetailTarget({ kind: "RECOVERY", id: opportunity.id, branchId: opportunity.branch.id })}
         />)}
       </div> : null}
       {showIncoming && visibleOpportunities.length > 0 ? <div className="v1-opportunity-list">
@@ -615,6 +628,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
           onPrepMinutes={(value) => setPrepMinutes((current) => ({ ...current, [opportunity.id]: value }))}
           onUnavailable={() => void respond(opportunity, "unavailable")}
           onAccept={() => void respond(opportunity, "accept")}
+          onViewDetails={() => setDetailTarget({ kind: "OPPORTUNITY", id: opportunity.id, branchId: opportunity.branch.id })}
         />)}
       </div> : null}
       {queueFulfilments.length > 0 ? <div className="v1-preparation-list">
@@ -622,6 +636,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
         {queueFulfilments.map((fulfilment) => <FulfilmentCard
           key={fulfilment.id}
           fulfilment={fulfilment}
+          onViewDetails={() => setDetailTarget({ kind: "FULFILMENT", id: fulfilment.id, branchId: fulfilment.branch.id })}
           trackingDelayed={realtimeHealth !== "subscribed"}
           busy={Boolean(busyId)}
           packageCount={packageCounts[fulfilment.id] ?? 1}
@@ -674,6 +689,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
         {branchReturnReceipts.map((receipt, index) => <article className="v1-preparation-card" key={recordText(receipt, "returnStopId") ?? index}>
           <header><span className="v1-opportunity-icon"><PackageCheck size={20} /></span><span><strong>Return receipt</strong><small>{recordText(recordObject(receipt, "branch"), "displayName") ?? "Merchant branch"}</small></span><b>{(recordText(receipt, "status") ?? "PENDING").replaceAll("_", " ")}</b></header>
           <p>{recordNumber(receipt, "packageCount") ?? 0} package(s) must transfer together from the assigned rider.</p>
+          {recordText(receipt, "returnStopId") && recordText(recordObject(receipt, "branch"), "id") ? <button type="button" className="secondary-button" onClick={() => setDetailTarget({ kind: "RETURN", id: recordText(receipt, "returnStopId")!, branchId: recordText(recordObject(receipt, "branch"), "id")! })}>View full order</button> : null}
           {recordText(receipt, "receiptCode") ? <div className="v1-merchant-pickup-code"><small>Give this in-app code only after every returned package is present</small><strong>{recordText(receipt, "receiptCode")}</strong></div> : <p className="v1-reservation-state">Receipt verification {recordText(receipt, "verificationStatus")?.toLowerCase() ?? "pending"}.</p>}
         </article>)}
       </div> : null}
@@ -683,6 +699,7 @@ export function MerchantV1Opportunities({ auth, client, accountId, onSessionExpi
         <span><small>Settled</small><strong>{branchSettlements.filter((item) => recordText(item, "status") === "SETTLED").length}</strong></span>
       </div> : null}
     </div>
+    {detailTarget && (!activeBranchId || detailTarget.branchId === activeBranchId) ? <MerchantOrderDetailDialog key={`${accountId}:${detailTarget.branchId}:${detailTarget.kind}:${detailTarget.id}`} auth={auth} target={detailTarget} onClose={() => setDetailTarget(undefined)} /> : null}
   </section>;
 }
 
@@ -719,6 +736,7 @@ export function MerchantOperationsStatus({ states, hasContent, queue = "all", on
 }
 
 type OpportunityCardProps = {
+  onViewDetails?: () => void;
   opportunity: V1MerchantOpportunity;
   busy: boolean;
   confirmed: boolean;
@@ -731,7 +749,7 @@ type OpportunityCardProps = {
 
 export function MerchantOpportunityCard({
   opportunity, busy, confirmed, prepMinutes,
-  onConfirmed, onPrepMinutes, onUnavailable, onAccept,
+  onConfirmed, onPrepMinutes, onUnavailable, onAccept, onViewDetails,
 }: OpportunityCardProps) {
   const expired = useDeadlineReached(opportunity.expiresAt);
   const offered = opportunity.status === "OFFERED" && !expired;
@@ -743,6 +761,7 @@ export function MerchantOpportunityCard({
     </header>
     <LineList lines={opportunity.lines} />
     <ProductValue value={opportunity.productSubtotalPaise} />
+    {onViewDetails ? <button type="button" className="secondary-button" onClick={onViewDetails}>View full order</button> : null}
     {offered ? <>
       <label className="v1-physical-check"><input type="checkbox" checked={confirmed} onChange={(event) => onConfirmed(event.target.checked)} /><span>I physically confirmed every exact SKU and quantity above.</span></label>
       <MerchantPrepChoices options={opportunity.prepTimeOptionsMinutes} value={prepMinutes} onChange={onPrepMinutes} disabled={busy} />
@@ -752,6 +771,7 @@ export function MerchantOpportunityCard({
 }
 
 type RecoveryOpportunityCardProps = {
+  onViewDetails?: () => void;
   opportunity: V1RecoveryOpportunity;
   busy: boolean;
   confirmed: boolean;
@@ -764,7 +784,7 @@ type RecoveryOpportunityCardProps = {
 
 function RecoveryOpportunityCard({
   opportunity, busy, confirmed, prepMinutes,
-  onConfirmed, onPrepMinutes, onUnavailable, onAccept,
+  onConfirmed, onPrepMinutes, onUnavailable, onAccept, onViewDetails,
 }: RecoveryOpportunityCardProps) {
   const expired = useDeadlineReached(opportunity.expiresAt);
   return <article className="v1-opportunity-card running-late">
@@ -774,6 +794,7 @@ function RecoveryOpportunityCard({
       <MerchantDeadline deadline={opportunity.expiresAt} />
     </header>
     <ul><li><span><strong>{opportunity.requestedQuantity}× {opportunity.sku.name}</strong><small>{[opportunity.sku.variantName, opportunity.sku.packSize].filter(Boolean).join(" · ")}</small></span></li></ul>
+    {onViewDetails ? <button type="button" className="secondary-button" onClick={onViewDetails}>View full order</button> : null}
     <label className="v1-physical-check"><input type="checkbox" checked={confirmed} onChange={(event) => onConfirmed(event.target.checked)} /><span>I physically hold this exact SKU and full quantity. No substitution.</span></label>
     <label className="v1-prep-choice"><span>Preparation promise</span><input type="number" min={1} max={180} value={prepMinutes} onChange={(event) => onPrepMinutes(Number(event.target.value))} /></label>
     <div className="v1-opportunity-actions"><button className="secondary-button" type="button" disabled={busy || expired} onClick={onUnavailable}><X size={17} /> Unavailable</button><button className="primary-button" type="button" disabled={busy || !confirmed || expired} onClick={onAccept}><Check size={17} /> Accept exact item</button></div>
@@ -781,6 +802,7 @@ function RecoveryOpportunityCard({
 }
 
 type FulfilmentCardProps = {
+  onViewDetails?: () => void;
   fulfilment: V1MerchantFulfilment;
   trackingDelayed: boolean;
   busy: boolean;
@@ -815,6 +837,7 @@ export function FulfilmentCard(props: FulfilmentCardProps) {
   const history = merchantFulfilmentQueue(fulfilment) === "history";
 
   return <article className={`v1-preparation-card ${runningLate ? "running-late" : ""}`} aria-label={`Order ${fulfilment.displayOrderNumber}`} aria-busy={props.busy}>
+    {props.onViewDetails ? <button type="button" className="secondary-button" onClick={props.onViewDetails}>View full order</button> : null}
     <header>
       <span className="v1-opportunity-icon">{runningLate ? <AlertTriangle size={20} /> : <Timer size={20} />}</span>
       <span><small className="merchant-card-eyebrow">{history ? "Past order" : preparing ? "Preparing" : "Pickup & handoff"}</small><strong>{fulfilment.displayOrderNumber}</strong><small>{fulfilment.branch.displayName} · {fulfilment.promisedPrepMinutes}-minute promise</small></span>

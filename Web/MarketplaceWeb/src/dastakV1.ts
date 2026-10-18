@@ -1937,6 +1937,33 @@ export async function respondToV1MerchantOpportunity(
   }, input.idempotencyKey, fetcher));
 }
 
+export type MerchantHistoryCursor = { committedAt: string; id: string };
+export type MerchantHistoryPage = { branchId: string; fulfilments: V1MerchantFulfilment[]; nextCursor?: MerchantHistoryCursor };
+
+export async function getV1MerchantFulfilmentHistory(
+  input: DastakV1Auth & { branchId: string; before?: MerchantHistoryCursor; limit?: number; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<MerchantHistoryPage> {
+  const limit = input.limit ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) invalidInput("Invalid history limit");
+  const branchId = requiredUuid(input.branchId);
+  const source = requiredRecord(await invoke(input, "dastak-v1-orders", {
+    operation: "merchantFulfilmentHistory", branchId, limit,
+    ...(input.before ? { beforeAt: input.before.committedAt, beforeId: input.before.id } : {}),
+  }, undefined, fetcher));
+  const fulfilments = requiredArray(source.fulfilments).map(parseMerchantFulfilment);
+  if (!("nextCursor" in source)) invalid("Missing history continuation");
+  const cursor = source.nextCursor == null ? undefined : requiredRecord(source.nextCursor);
+  const nextCursor = cursor ? { committedAt: optionalTimestamp(cursor.committedAt) ?? invalid("history cursor timestamp"), id: requiredUuid(cursor.id) } : undefined;
+  const terminal = new Set(["DELIVERED", "CANCELLED", "CANCELLED_PREPAYMENT", "PAYMENT_EXPIRED", "UNAVAILABLE", "DELIVERY_FAILED", "RETURNED", "REFUNDED", "DASTAK_FULFILMENT_FAILURE"]);
+  if (requiredUuid(source.branchId) !== branchId || fulfilments.length > limit ||
+    new Set(fulfilments.map((row) => row.id)).size !== fulfilments.length ||
+    fulfilments.some((row) => row.branch.id !== branchId || (!["COMPLETED", "RELEASED"].includes(row.status) && !terminal.has(row.orderStatus))) ||
+    (nextCursor && (fulfilments.length !== limit || nextCursor.id !== fulfilments.at(-1)?.id ||
+      (nextCursor.id === input.before?.id && nextCursor.committedAt === input.before?.committedAt)))) invalid("Merchant history page");
+  return { branchId, fulfilments, nextCursor };
+}
+
 export async function getV1MerchantFulfilments(
   input: DastakV1Auth & { limit?: number; signal?: AbortSignal },
   fetcher: Fetcher = fetch,
@@ -1947,6 +1974,18 @@ export async function getV1MerchantFulfilments(
   }, undefined, fetcher));
   if (!source || !Array.isArray(source.fulfilments)) invalid("merchant fulfilment collection");
   return source.fulfilments.map(parseMerchantFulfilment);
+}
+
+/** Independent branch-authorized historical read; never reuse Customer get. */
+export async function getV1MerchantOrderDetail(
+  input: DastakV1Auth & { branchId: string; targetKind: string; targetId: string; signal?: AbortSignal },
+  fetcher: Fetcher = fetch,
+): Promise<unknown> {
+  if (!["FULFILMENT", "OPPORTUNITY", "RESTAURANT_REQUEST", "RECOVERY", "RETURN"].includes(input.targetKind)) invalidInput("Invalid Merchant detail target");
+  return invoke(input, "dastak-v1-orders", {
+    operation: "merchantOrderDetail", branchId: requiredUuid(input.branchId),
+    targetKind: input.targetKind, targetId: requiredUuid(input.targetId),
+  }, undefined, fetcher);
 }
 
 export async function getV1MerchantOperations(

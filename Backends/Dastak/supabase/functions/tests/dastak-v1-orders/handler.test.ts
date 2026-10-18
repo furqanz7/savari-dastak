@@ -2,6 +2,61 @@ import { assertEquals } from "jsr:@std/assert";
 import { V1RequestError } from "../../_shared/v1-rpc.ts";
 import { handleV1Orders, type V1OrderDependencies } from "../../dastak-v1-orders/handler.ts";
 
+Deno.test("Merchant history binds the bearer, exact branch and lossless cursor", async () => {
+  let recorded: unknown;
+  const response = await handleV1Orders(request({ operation: "merchantFulfilmentHistory",
+    branchId: orderId, beforeAt: "2026-10-01T00:00:00.123456+00:00", beforeId: skuId, limit: 37, actorId: "forged" }),
+    dependencies({ merchantFulfilmentHistory: (input) => { recorded = input; return Promise.resolve({}); } }));
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accessToken: actor.accessToken, branchId: orderId,
+    beforeAt: "2026-10-01T00:00:00.123456+00:00", beforeId: skuId, limit: 37 });
+});
+Deno.test("Merchant history rejects invalid scope, partial cursor and invalid page sizes", async () => {
+  let calls = 0;
+  const deps = dependencies({ merchantFulfilmentHistory: () => { calls++; return Promise.resolve({}); } });
+  for (const patch of [{ branchId: null }, { branchId: "bad" }, { beforeId: skuId },
+    { beforeAt: "2026-10-01T00:00:00Z" }, { beforeAt: "bad", beforeId: skuId },
+    { beforeAt: "2026-10-01T00:00:00Z", beforeId: "bad" }, { limit: 0 }, { limit: 101 }, { limit: 1.5 }]) {
+    assertEquals((await handleV1Orders(request({ operation: "merchantFulfilmentHistory", branchId: orderId, ...patch }), deps)).status, 400);
+  }
+  assertEquals(calls, 0);
+});
+Deno.test("Merchant history rejects expired authentication before RPC", async () => {
+  let calls = 0;
+  const response = await handleV1Orders(request({ operation: "merchantFulfilmentHistory", branchId: orderId }), dependencies({
+    authenticateBearer: () => Promise.reject(new Error("expired")),
+    merchantFulfilmentHistory: () => { calls++; return Promise.resolve({}); },
+  }));
+  assertEquals(response.status, 401); assertEquals(calls, 0);
+});
+
+Deno.test("Merchant order detail binds verified bearer and exact branch/target, ignoring forged actor", async () => {
+  let recorded: unknown;
+  const response = await handleV1Orders(request({ operation: "merchantOrderDetail", branchId: orderId,
+    targetKind: "FULFILMENT", targetId: orderId, actorId: "forged", customerId: "forged" }), dependencies({
+      merchantOrderDetail: (input) => { recorded = input; return Promise.resolve({ records: [] }); },
+    }));
+  assertEquals(response.status, 200);
+  assertEquals(recorded, { accessToken: actor.accessToken, branchId: orderId, targetKind: "FULFILMENT", targetId: orderId });
+});
+Deno.test("Merchant detail rejects malformed and unsupported targets before RPC", async () => {
+  let calls = 0;
+  const deps = dependencies({ merchantOrderDetail: () => { calls++; return Promise.resolve({}); } });
+  for (const patch of [{ branchId: "bad" }, { targetId: "bad" }, { targetKind: "CUSTOMER" }, { targetKind: null }, { branchId: null }]) {
+    const response = await handleV1Orders(request({ operation: "merchantOrderDetail", branchId: orderId, targetId: orderId, targetKind: "FULFILMENT", ...patch }), deps);
+    assertEquals(response.status, 400);
+  }
+  assertEquals(calls, 0);
+});
+Deno.test("Merchant detail denies invalid bearer before calling detail provider", async () => {
+  let calls = 0;
+  const response = await handleV1Orders(request({ operation: "merchantOrderDetail", branchId: orderId, targetId: orderId, targetKind: "RETURN" }), dependencies({
+    authenticateBearer: () => Promise.reject(new Error("expired")),
+    merchantOrderDetail: () => { calls++; return Promise.resolve({}); },
+  }));
+  assertEquals(response.status, 401); assertEquals(calls, 0);
+});
+
 Deno.test("Customer active-order discovery forwards only the verified bearer, never an actor or order override", async () => {
   let recorded: unknown;
   const response = await handleV1Orders(
@@ -1788,6 +1843,8 @@ function dependencies(
       (() => Promise.resolve({})),
     declineMerchantOpportunity: overrides.declineMerchantOpportunity ??
       (() => Promise.resolve({})),
+    merchantOrderDetail: overrides.merchantOrderDetail ?? (() => Promise.resolve({})),
+    merchantFulfilmentHistory: overrides.merchantFulfilmentHistory ?? (() => Promise.resolve({})),
     listMerchantFulfilments: overrides.listMerchantFulfilments ??
       (() => Promise.resolve({ fulfilments: [] })),
     declareFulfilmentPackages: overrides.declareFulfilmentPackages ??

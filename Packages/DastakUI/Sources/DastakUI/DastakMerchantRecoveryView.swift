@@ -16,7 +16,7 @@ struct DastakMerchantRecoveryStatus: View {
                 Text("Related preparation changes are paused. Checking retries the original action, even if the latest order has changed.")
                     .font(.footnote).foregroundStyle(.secondary)
                 Button("Check pending recovery action") { Task { await model.retryRecoveryCommand() } }
-                    .buttonStyle(MarketplaceSecondaryButtonStyle()).disabled(model.busyIdentity != nil || !model.merchantJournalRestored)
+                    .buttonStyle(DastakMerchantActionStyle()).disabled(model.busyIdentity != nil || !model.merchantJournalRestored)
                     .accessibilityIdentifier("merchant.recovery.retry")
             }
         }
@@ -27,7 +27,7 @@ struct DastakMerchantRecoveryLane: View {
     @ObservedObject var model: DastakMerchantModel
     let history: Bool
     private var offers: [DastakV1RecoveryOpportunity] {
-        model.recoveryOpportunities.filter { history ? $0.status != "OFFERED" : $0.status == "OFFERED" }
+        model.scopedRecoveryOpportunities.filter { history ? $0.status != "OFFERED" : $0.status == "OFFERED" }
     }
     var body: some View {
         if !offers.isEmpty || !model.recoveryCurrent {
@@ -51,6 +51,8 @@ struct DastakMerchantRecoveryLane: View {
                         DastakMerchantRecoveryOfferCard(model: model, offer: offer)
                             .id("\(offer.id):\(offer.version)")
                     }
+                    DastakMerchantOrderDetailButton(model: model,
+                        target: .init(kind: .recovery, id: offer.id, branchID: offer.branch.id))
                 }
             }.accessibilityIdentifier("merchant.recovery.lane")
         }
@@ -78,10 +80,10 @@ private struct DastakMerchantRecoveryOfferCard: View {
                 Text("Your preparation promise must be allowed by your store configuration. Dastak validates it before acceptance.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Accept exact item") { review = Review(offer: offer, accept: true, minutes: prepMinutes) }
-                    .buttonStyle(MarketplacePrimaryButtonStyle()).disabled(!physicallyConfirmed)
+                    .buttonStyle(DastakMerchantActionStyle(primary: true)).disabled(!physicallyConfirmed)
                     .accessibilityIdentifier("merchant.recovery.accept")
                 Button("Unavailable") { review = Review(offer: offer, accept: false, minutes: 0) }
-                    .buttonStyle(MarketplaceSecondaryButtonStyle())
+                    .buttonStyle(DastakMerchantActionStyle())
                     .accessibilityIdentifier("merchant.recovery.unavailable")
             }
             .disabled(model.recoveryActionsDisabled || expired)
@@ -155,13 +157,22 @@ struct DastakMerchantProblemView: View {
                             review = Review(order: fulfilment, lineID: exactItem ? lineID : nil,
                                 reason: reason.trimmingCharacters(in: .whitespacesAndNewlines))
                         }
-                        .buttonStyle(MarketplaceSecondaryButtonStyle())
+                        .buttonStyle(DastakMerchantActionStyle())
                         .disabled(!reasonValid || (exactItem && lineID == nil))
                     }.padding(.top, 10).disabled(!model.canReportProblem(fulfilment))
                 }
             }
         }
         .accessibilityIdentifier("merchant.recovery.problem.\(fulfilment.id)")
+        .onChange(of: fulfilment.version) { _, _ in
+            review = nil
+            if fulfilment.canReportExactSkuFailure != true || fulfilment.packageCount != nil {
+                exactItem = false; lineID = nil
+            } else if let selected = lineID, !fulfilment.lines.contains(where: { $0.id == selected }) {
+                lineID = nil
+            }
+        }
+        .onChange(of: fulfilment.status) { _, _ in review = nil }
         .confirmationDialog("Submit this report for \(fulfilment.displayOrderNumber)?",
             isPresented: Binding(get: { review != nil }, set: { if !$0 { review = nil } }), titleVisibility: .visible) {
             if let reviewed = review {

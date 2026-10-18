@@ -85,6 +85,12 @@ export type V1OrderDependencies = {
     accessToken: string;
     limit: number;
   }) => Promise<unknown>;
+  merchantOrderDetail: (input: {
+    accessToken: string; branchId: string; targetKind: string; targetId: string;
+  }) => Promise<unknown>;
+  merchantFulfilmentHistory: (input: {
+    accessToken: string; branchId: string; beforeAt: string | null; beforeId: string | null; limit: number;
+  }) => Promise<unknown>;
   declareFulfilmentPackages: (input: {
     accessToken: string;
     fulfilmentId: string;
@@ -623,6 +629,22 @@ export async function handleV1Orders(
             limit,
           }),
         );
+      }
+      case "merchantFulfilmentHistory": {
+        const branchId = requiredUUID(body.branchId);
+        const beforeAt = body.beforeAt == null ? null : typeof body.beforeAt === "string" ? body.beforeAt : "";
+        const beforeId = body.beforeId == null ? null : requiredUUID(body.beforeId);
+        const limit = body.limit == null ? 50 : integer(body.limit, 1, 100);
+        if (!branchId || !limit || (body.beforeId != null && !beforeId) || (beforeAt === null) !== (beforeId === null) ||
+          (beforeAt !== null && (!/^\d{4}-\d{2}-\d{2}T/.test(beforeAt) || !Number.isFinite(Date.parse(beforeAt))))) return validationError();
+        return json(await dependencies.merchantFulfilmentHistory({ accessToken: actor.accessToken, branchId, beforeAt, beforeId: beforeId ?? null, limit }));
+      }
+      case "merchantOrderDetail": {
+        const branchId = requiredUUID(body.branchId);
+        const targetId = requiredUUID(body.targetId);
+        const targetKind = typeof body.targetKind === "string" ? body.targetKind : "";
+        if (!branchId || !targetId || !["FULFILMENT", "OPPORTUNITY", "RESTAURANT_REQUEST", "RECOVERY", "RETURN"].includes(targetKind)) return validationError();
+        return json(await dependencies.merchantOrderDetail({ accessToken: actor.accessToken, branchId, targetKind, targetId }));
       }
       case "declareFulfilmentPackages": {
         const fulfilmentId = requiredUUID(body.fulfilmentId);

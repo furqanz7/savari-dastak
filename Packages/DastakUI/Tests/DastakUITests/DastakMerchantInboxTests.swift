@@ -39,7 +39,7 @@ final class DastakMerchantInboxTests: XCTestCase {
         await model.refreshOrders()
         let opportunity = try XCTUnwrap(model.opportunities.first)
         await model.respondToOpportunity(opportunity, accept: true, prepMinutes: 20)
-        await model.respondToOpportunity(opportunity, accept: true, prepMinutes: 20)
+        await model.retryMerchantJournal()
         let calls = await functions.responses
         XCTAssertEqual(calls.count, 2)
         XCTAssertEqual(calls.first?.key, calls.last?.key, "A failed response must retry the same server command.")

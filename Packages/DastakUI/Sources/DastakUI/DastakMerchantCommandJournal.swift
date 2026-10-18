@@ -4,7 +4,8 @@ struct DastakMerchantJournalRecord: Codable, Equatable, Sendable {
     enum Command: Codable, Equatable, Sendable {
         case recovery(DastakMerchantRecoveryCommand)
         case restaurant(DastakMerchantRestaurantCommand)
-        var valid: Bool { switch self { case let .recovery(value): value.valid; case let .restaurant(value): value.valid } }
+        case operation(DastakMerchantOperationCommand)
+        var valid: Bool { switch self { case let .recovery(value): value.valid; case let .restaurant(value): value.valid; case let .operation(value): value.valid } }
     }
     var formatVersion = 1
     let accountID: UUID
@@ -12,7 +13,16 @@ struct DastakMerchantJournalRecord: Codable, Equatable, Sendable {
     var revision = UUID()
     var attempts = 0
     var acknowledged = false
-    var valid: Bool { formatVersion == 1 && (0..<Int.max).contains(attempts) && command.valid }
+    // Optional for backwards compatibility with existing protected journals.
+    var uploadCompleted: Bool?
+    var valid: Bool {
+        guard formatVersion == 1 && (0..<Int.max).contains(attempts) && command.valid else { return false }
+        if case let .operation(value) = command, let upload = value.upload {
+            let owner = accountID.uuidString.lowercased()
+            return upload.path.hasPrefix(upload.bucket == "dastak-evidence" ? "merchant-ready/\(owner)/" : "merchant/\(owner)/")
+        }
+        return true
+    }
 }
 protocol DastakMerchantJournalStorage: Sendable {
     func load(_ accountID: UUID) async throws -> DastakMerchantJournalRecord?
@@ -34,7 +44,7 @@ actor DastakMerchantFileJournal: DastakMerchantJournalStorage {
     func load(_ accountID: UUID) throws -> DastakMerchantJournalRecord? {
         let url = file(accountID)
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        guard (try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) <= 10 * 1_024 * 1_024 else { throw DastakAdminExecutionError.invalid }
+        guard (try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) <= 16 * 1_024 * 1_024 else { throw DastakAdminExecutionError.invalid }
         let record = try JSONDecoder().decode(DastakMerchantJournalRecord.self, from: Data(contentsOf: url))
         guard record.accountID == accountID && record.valid else { throw DastakAdminExecutionError.invalid }
         return record
@@ -45,7 +55,7 @@ actor DastakMerchantFileJournal: DastakMerchantJournalStorage {
         guard let record else { if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }; return }
         guard record.valid, record.accountID == accountID else { throw DastakAdminExecutionError.invalid }
         let data = try JSONEncoder().encode(record)
-        guard data.count <= 10 * 1_024 * 1_024 else { throw DastakAdminExecutionError.invalid }
+        guard data.count <= 16 * 1_024 * 1_024 else { throw DastakAdminExecutionError.invalid }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         var directoryURL = directory; var attributes = URLResourceValues(); attributes.isExcludedFromBackup = true
         try directoryURL.setResourceValues(attributes)

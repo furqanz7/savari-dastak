@@ -247,6 +247,13 @@ Deno.serve((request) =>
         p_reason: input.reason,
         p_idempotency_key: input.idempotencyKey,
       }),
+    merchantInventoryPage: (input) => callAuthenticatedRPC(input.accessToken,"dastak_v1_merchant_inventory_page",{
+      p_branch_id: input.branchId,p_query: input.query,p_selected_only: input.selectedOnly,p_limit: input.limit,
+      p_after_name: input.afterName,p_after_sku_id: input.afterSkuId,
+    }),
+    merchantLocationsPage: (input) => callAuthenticatedRPC(input.accessToken,"dastak_v1_merchant_locations_page",{
+      p_limit: input.limit,p_after_id: input.afterId,p_focus_id: input.focusId,
+    }),
     merchantSnapshot: (input) =>
       callAuthenticatedRPC(
         input.accessToken,

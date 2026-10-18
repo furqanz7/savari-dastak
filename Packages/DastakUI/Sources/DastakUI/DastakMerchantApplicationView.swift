@@ -501,7 +501,7 @@ public struct DastakMerchantAccessView: View {
             formSection(
                 symbol: "square.grid.2x2",
                 title: "Business type",
-                message: "This selects the catalogue and order tools your branch receives after approval."
+                message: "This selects the catalogue and order tools your business receives after approval."
             ) {
                 HStack(spacing: 10) {
                     merchantTypeButton(
@@ -521,8 +521,8 @@ public struct DastakMerchantAccessView: View {
 
             formSection(
                 symbol: "storefront",
-                title: "Business and branch",
-                message: "Tell Admin who operates it and what customers should see."
+                title: "Business names",
+                message: "Your legal name identifies the registered business. Your customer-facing name is the store or cafe name customers see. They can be the same."
             ) {
                 VStack(alignment: .leading, spacing: 9) {
                     fieldLabel("Legal business name", count: model.legalName.count, maximum: DastakMerchantApplicationModel.maximumLegalNameLength)
@@ -576,7 +576,7 @@ public struct DastakMerchantAccessView: View {
             formSection(
                 symbol: "mappin.and.ellipse",
                 title: "Exact store location",
-                message: "Required to connect this branch to the correct Dastak service area."
+                message: "Required to connect this store or cafe to the correct Dastak service area."
             ) {
                 Button {
                     focusedField = nil

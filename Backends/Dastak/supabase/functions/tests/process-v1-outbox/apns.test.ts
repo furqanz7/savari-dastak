@@ -204,6 +204,47 @@ Deno.test("APNs provider token is reused briefly and refreshed before Apple expi
   assertEquals(authorizations[0] === authorizations[2], false);
 });
 
+Deno.test("all Merchant alert routes preserve their order hint, topic, environment and retry identity", async () => {
+  const { privateKey } = await generateKeyPair("ES256", { extractable: true });
+  const requests: Request[] = [];
+  const sender = createApnsSender({
+    environment: "sandbox",
+    teamId: "TEAM123",
+    keyId: "KEY123",
+    bundleId: "com.dastak.app",
+    privateKey: await exportPKCS8(privateKey),
+  }, (input, init) => {
+    requests.push(new Request(input, init));
+    return Promise.resolve(new Response("", { status: 200 }));
+  });
+  const types = [
+    "merchant.opportunity", "merchant.restaurant_request", "merchant.recovery_opportunity",
+    "merchant.preparation_started", "merchant.rider_assigned", "merchant.rider_arrived",
+    "merchant.return_incoming", "merchant.order_cancelled",
+  ];
+  for (const [index, notificationType] of types.entries()) {
+    const deliveryId = `94000000-0000-4000-8000-${String(index + 10).padStart(12, "0")}`;
+    for (const apnsEnvironment of ["sandbox", "production"] as const) {
+      const alert: V1NotificationJob = { ...job(), deliveryId, notificationType, applicationId: "com.dastak.merchant", apnsEnvironment };
+      await sender(alert);
+      await sender({ ...alert, attempt: 2 });
+      for (const request of requests.splice(0)) {
+        const payload = await request.json();
+        assertEquals(request.headers.get("apns-topic"), "com.dastak.merchant");
+        assertEquals(new URL(request.url).hostname,
+          apnsEnvironment === "sandbox" ? "api.sandbox.push.apple.com" : "api.push.apple.com");
+        assertEquals(request.headers.get("apns-id"), deliveryId);
+        assertEquals(request.headers.get("apns-collapse-id"), deliveryId);
+        assertEquals(payload.notificationType, notificationType);
+        assertEquals(payload.entityType, "dastakV1Order");
+        assertEquals(payload.orderId, job().payload.orderId);
+        assertEquals(payload.entityId, job().payload.entityId);
+        assertEquals("branchId" in payload, false);
+      }
+    }
+  }
+});
+
 function job(): V1NotificationJob {
   return {
     deliveryId: "94000000-0000-4000-8000-000000000001",
