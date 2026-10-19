@@ -7,6 +7,13 @@ import MarketplaceInfrastructure
 @testable import DastakUI
 
 final class DastakMerchantValidationTests: XCTestCase {
+    func testStoreReadErrorsExplainRefreshWithoutOfferingLocationSelection() {
+        for error in [DastakMerchantStoreReadError.wrongService, .wrongLocation] {
+            XCTAssertTrue(error.message.contains("Refresh store"))
+            XCTAssertFalse(error.message.lowercased().contains("choose"))
+            XCTAssertFalse(error.message.lowercased().contains("location"))
+        }
+    }
     func testPackageRangeMatchesServerIncludingMoreThanTwenty() {
         for text in ["1", "21", "999", "1000", " 25 "] { XCTAssertNotNil(DastakMerchantValidation.packageCount(text)) }
         for text in ["", "0", "1001", "-1", "2.0", "1e2", "2x", "999999999999999999"] {

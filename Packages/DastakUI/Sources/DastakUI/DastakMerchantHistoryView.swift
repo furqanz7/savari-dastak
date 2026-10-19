@@ -65,7 +65,7 @@ struct DastakMerchantHistorySection: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 14) {
             Text("Past fulfilments").font(.title3.bold())
-            Text("Newest commitments first for this location. Load older orders to continue; earlier legacy orders and return records are separate.")
+            Text("Your store's newest commitments first. Load older orders to continue; earlier legacy orders and return records are separate.")
                 .font(.footnote).foregroundStyle(.secondary)
             if let failure = history.failure { Label(failure, systemImage: "wifi.exclamationmark").font(.footnote).foregroundStyle(.orange) }
             if history.loading { ProgressView("Loading history") }
@@ -79,7 +79,7 @@ struct DastakMerchantHistorySection: View {
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(18).marketplaceFlatSurface()
             }
             if history.checkedAt != nil, history.rows.isEmpty, history.failure == nil {
-                Text("No past fulfilments for this location.").foregroundStyle(.secondary)
+                Text("No past fulfilments for your store.").foregroundStyle(.secondary)
             }
             if history.cursor != nil {
                 Button("Load older orders", systemImage: "clock.arrow.circlepath") { Task { await history.load(older: true) } }

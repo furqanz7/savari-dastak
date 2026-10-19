@@ -47,7 +47,7 @@ struct DastakMerchantReturnsView: View {
         VStack(alignment: .leading, spacing: 14) {
             if showAll || !receipts.isEmpty {
                 Text(history ? "Completed return receipts" : "Return receipts").font(.title3.bold())
-                Text("Returns for your authorized branches. Check the branch and every package before sharing a code. The assigned delivery partner completes the handoff.")
+                Text("Returns for your store. Check the store details and every package before sharing a code. The assigned delivery partner completes the handoff.")
                     .font(.footnote).foregroundStyle(.secondary)
                 if !model.returnsCurrent {
                     Label("Return updates unavailable or refreshing. Previously loaded receipts are read-only; codes are hidden.", systemImage: "wifi.exclamationmark")
@@ -96,7 +96,7 @@ private struct DastakMerchantReturnCard: View {
                     Text("Completed: \(DastakMerchantReceiptPresentation.date(completed))").font(.caption)
                 }
                 if receipt.status == "ARRIVED", receipt.verificationStatus == "ACTIVE", receipt.completedAt == nil {
-                    Toggle("I checked this branch and all \(receipt.packageCount) returned packages are physically present.", isOn: $physicallyConfirmed)
+                    Toggle("I checked the store details and all \(receipt.packageCount) returned packages are physically present.", isOn: $physicallyConfirmed)
                         .disabled(!current || scenePhase != .active)
                         .accessibilityIdentifier("merchant.returns.packagesChecked")
                     if revealed, let code, scenePhase == .active {
@@ -134,7 +134,7 @@ struct DastakMerchantSettlementsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Settlement status").font(.title3.bold())
-            Text("Organization-wide entries available to this account, not a single branch's earnings. This list is not a lifetime balance or bank payout confirmation. No payment can be initiated here.")
+            Text("Business-wide entries available to this account, not an order-by-order earnings total. This list is not a lifetime balance or bank payout confirmation. No payment can be initiated here.")
                 .font(.footnote).foregroundStyle(.secondary)
             if !model.settlementsCurrent {
                 Label("Settlement updates unavailable or refreshing. Showing the last available information.", systemImage: "wifi.exclamationmark")

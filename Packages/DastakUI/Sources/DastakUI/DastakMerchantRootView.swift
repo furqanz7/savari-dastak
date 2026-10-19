@@ -67,17 +67,9 @@ public struct DastakMerchantRootView: View {
         .onChange(of: scenePhase) { _, phase in haptics.isActive = phase == .active }
         .onDisappear { haptics.isActive = false }
         .safeAreaInset(edge: .top) {
-            VStack(alignment: .leading, spacing: 0) {
-                DastakMerchantJournalBanner(model: model)
-                if section == .orders || section == .store { DastakMerchantLocationView(model: model) }
-                if section == .store, model.selectedLocation?.kind == .retail, model.canonicalCatalogue == nil, let failure = model.catalogueRefreshFailure {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label(failure, systemImage: "arrow.triangle.2.circlepath").font(.caption)
-                        Button("Refresh store products") { Task { await model.refreshCanonicalCatalogue(reportFailure: false) } }
-                            .disabled(model.isBusy || model.isRefreshingCatalogue || model.isRefreshingCatalogueMap)
-                    }.padding(12)
-                }
-            }
+            // Only urgent recovery stays global. Store identity belongs to the
+            // page layout, not an inset outside its NavigationStack.
+            DastakMerchantJournalBanner(model: model)
         }
         .onChange(of: section) { _, selectedSection in
             Task {

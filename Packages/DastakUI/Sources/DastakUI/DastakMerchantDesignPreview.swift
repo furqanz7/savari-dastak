@@ -15,8 +15,8 @@ public struct DastakMerchantDesignPreview: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     if section == "Orders" {
-                        DastakMerchantHeading(eyebrow: "THE ORDER DESK", title: "Good things, in motion.",
-                            subtitle: "From the first request to the final handoff. Your next steps, all in one place.", symbol: "storefront")
+                        DastakMerchantStoreHeading(name: "The Corner Kitchen", service: "Restaurant / Café",
+                            symbol: "fork.knife", presentation: .orders, refresh: {})
                         Label("Local design sample · no live orders", systemImage: "checkmark.shield").font(.caption).foregroundStyle(.secondary)
                         DastakMerchantDeskOverview(incoming: 2, preparing: 3, ready: 1, selection: $queue)
                         DastakMerchantQueuePicker(selection: $queue)
@@ -37,8 +37,8 @@ public struct DastakMerchantDesignPreview: View {
                             }
                         }
                     } else {
-                        DastakMerchantHeading(eyebrow: "YOUR KITCHEN", title: "A menu made yours.",
-                            subtitle: "Photos, dishes and the little extras. Manage what your customers can discover.", symbol: "fork.knife")
+                        DastakMerchantStoreHeading(name: "The Corner Kitchen", service: "Restaurant / Café",
+                            symbol: "fork.knife", presentation: .menu, refresh: {})
                         DastakMerchantMediaPicker(title: "Restaurant banner", message: "Shown at the top of your restaurant and menu. Use a clear landscape photo without text.", imageKey: nil, busy: true) { _ in false }
                         VStack(alignment: .leading, spacing: 14) {
                             Text("Dish details").font(.headline)

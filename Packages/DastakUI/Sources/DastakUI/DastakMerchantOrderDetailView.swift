@@ -71,7 +71,7 @@ struct DastakMerchantOrderDetailView: View {
                             Text(label(detail.order.status)).font(.headline)
                             stamp("Order placed", detail.order.createdAt)
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(18).marketplaceFlatSurface()
-                        Text("Only this location's items and operational records are shown. Product values in requested and fulfilled sections may overlap—do not add them together. Customer-wide charges and private delivery details are excluded.")
+                        Text("Only this store's items and operational records are shown. Product values in requested and fulfilled sections may overlap—do not add them together. Customer-wide charges and private delivery details are excluded.")
                             .font(.footnote).foregroundStyle(.secondary)
                         ForEach(detail.records, id: \.identity) { record in recordCard(record) }
                         if !detail.recoveryOffers.isEmpty {

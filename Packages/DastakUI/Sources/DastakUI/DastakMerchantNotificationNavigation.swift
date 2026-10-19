@@ -38,7 +38,7 @@ final class DastakMerchantNotificationNavigator: ObservableObject {
             message = choices.isEmpty
                 ? "This alert's exact record is no longer in the available Merchant reads. It may have expired, finished, moved outside the recent window or be unavailable to this account. Use the relevant Orders queue; no action was performed."
                 : result.1 ? "Some records could not be checked. Only the verified matches below are available. Opening a detail checks its permission again."
-                : "Choose the authorized record to view its latest details. This does not change your Store location or perform an order action."
+                : "Choose the authorized record to view its latest details. This does not change your Store workspace or perform an order action."
         } catch {
             guard token == generation, !Task.isCancelled else { return }
             choices = []

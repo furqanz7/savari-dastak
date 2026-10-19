@@ -335,7 +335,7 @@ public struct DastakMerchantAccessView: View {
         }
         .sheet(isPresented: $showsLocationPicker) {
             DastakLocationPicker(
-                title: "Store location",
+                title: "Pickup location",
                 initialLocation: model.selectedLocation,
                 currentLocation: locationManager.location,
                 currentLocationError: locationManager.errorMessage,
@@ -575,7 +575,7 @@ public struct DastakMerchantAccessView: View {
 
             formSection(
                 symbol: "mappin.and.ellipse",
-                title: "Exact store location",
+                title: "Store pickup location",
                 message: "Required to connect this store or cafe to the correct Dastak service area."
             ) {
                 Button {
@@ -590,7 +590,7 @@ public struct DastakMerchantAccessView: View {
                             .background(MarketplaceColors.dastakAccentSoft.color)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(model.selectedLocation == nil ? "Choose store location" : "Store pin selected")
+                            Text(model.selectedLocation == nil ? "Choose pickup location" : "Pickup pin selected")
                                 .font(.subheadline.weight(.semibold))
                             Text(model.selectedLocation?.address ?? "Search an address or use the current location")
                                 .font(.caption)

@@ -41,8 +41,8 @@ enum DastakMerchantStoreReadError: Error {
     case wrongService, wrongLocation
     var message: String {
         switch self {
-        case .wrongService: "These Store tools do not match this business type. Refresh locations and choose Grocery or Restaurant / Café as appropriate."
-        case .wrongLocation: "The response belongs to a different Store location. Refresh locations, then retry the selected Store."
+        case .wrongService: "These Store tools do not match your business type. Refresh store to verify your Grocery or Restaurant / Café access."
+        case .wrongLocation: "The response does not match your store. Refresh store and retry."
         }
     }
 }

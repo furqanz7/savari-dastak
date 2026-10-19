@@ -58,7 +58,7 @@ struct DastakMerchantOrdersView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
-                    header
+                    DastakMerchantLocationView(model: model, presentation: .orders)
                     if model.isLoading {
                         DastakLoadingOverlay(title: "Connecting your order desk")
                             .frame(maxWidth: .infinity, minHeight: 240)
@@ -71,7 +71,7 @@ struct DastakMerchantOrdersView: View {
                                 .font(.footnote).foregroundStyle(.secondary)
                             if let branch = model.selectedLocationID {
                                 DastakMerchantHistorySection(merchant: model, branch: branch).id(branch)
-                            } else { Text("Choose a location to load its history.").foregroundStyle(.secondary) }
+                            } else { Text("Refresh store to load your order history.").foregroundStyle(.secondary) }
                         }
                         DastakMerchantRecoveryStatus(model: model)
                         if let notice = model.notice {
@@ -114,11 +114,11 @@ struct DastakMerchantOrdersView: View {
                         if isEmpty && queue != .history {
                             DastakEmptyState(
                                 symbol: queue == .history ? "clock.arrow.circlepath" : "tray",
-                                title: model.selectedLocationID == nil ? "Location needed"
+                                title: model.selectedLocationID == nil ? "Store access needed"
                                     : !model.orderRefreshFailures.isEmpty ? "Order connection needs attention"
                                     : queue == .history ? "No completed orders in this window" : "You're all caught up",
                                 message: model.selectedLocationID == nil
-                                    ? model.locationMessage ?? "Check or choose your store location above to see its order desk."
+                                    ? model.locationMessage ?? "Refresh store above to check access to your order desk."
                                     : model.orderRefreshFailures.isEmpty
                                     ? "New requests appear here automatically. Keep this workspace open while accepting orders."
                                     : "Some orders could not be refreshed. Retry before assuming the queue is empty."
@@ -149,11 +149,6 @@ struct DastakMerchantOrdersView: View {
         }
         .sheet(item: $detail) { target in DastakMerchantOrderDetailView(model: model.makeOrderDetail(target)) }
         .onChange(of: model.selectedLocationID) { _, _ in detail = nil }
-    }
-
-    private var header: some View {
-        DastakMerchantHeading(eyebrow: "THE ORDER DESK", title: "Good things, in motion.",
-            subtitle: "From the first request to the final handoff. Your next steps, all in one place.", symbol: "storefront")
     }
 
     private var connectionStatus: some View {

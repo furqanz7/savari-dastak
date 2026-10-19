@@ -295,16 +295,16 @@ final class DastakMerchantModel: ObservableObject {
             if selectedLocationID != next { selectedLocationID = next; invalidateReads(); clearLocationStore() }
             locationsInitialized = true
             if let next { locationPreferences.save(next, account: account) }
-            locationMessage = failed ? "Some Store permissions could not be checked. Order-only locations remain available; retry to check Store access."
-                : merchantLocations.isEmpty ? "No locations were found in accessible Store or recent order records." : nil
+            locationMessage = failed ? "Store management access could not be fully checked. Available orders remain visible; refresh store to retry."
+                : merchantLocations.isEmpty ? "Your store could not be found. Check that your Merchant account is approved, then refresh store." : nil
             if journalLocationID != nil, next == nil {
-                locationMessage = "The saved action's original location is unavailable. Recover that action before choosing a different location."
+                locationMessage = "Store access for the saved action is unavailable. Recover that action before continuing."
             }
             if expired { sessionNeedsAttention = true }
         } catch {
             guard locationGeneration == generation else { return }
             recordConnectionFailure(error)
-            locationMessage = "Locations could not be checked. Retry when your connection and Merchant session are available."
+            locationMessage = "Your store could not be checked. Retry when your connection and Merchant session are available."
         }
     }
 
@@ -345,8 +345,8 @@ final class DastakMerchantModel: ObservableObject {
             locationDirectoryCursor = page.nextCursor; locationDirectoryComplete = page.nextCursor == nil
             locationDirectoryMessage = page.nextCursor == nil ? "All currently authorized locations loaded." : "More authorized locations are available. Load the next page below."
             locationMessage = journalLocationID != nil && next == nil
-                ? "The saved action's location is no longer authorized. Recover that action before choosing another location."
-                : merchantLocations.isEmpty ? "No authorized Merchant locations are available to this account." : nil
+                ? "Store access for the saved action is no longer authorized. Recover that action before continuing."
+                : merchantLocations.isEmpty ? "No approved store is available to this account. Check your Merchant approval and store access." : nil
             locationsInitialized = true
             if let next { locationPreferences.save(next,account: account) }
             return true
@@ -361,7 +361,7 @@ final class DastakMerchantModel: ObservableObject {
             recordConnectionFailure(error)
             if denied {
                 merchantLocations = []; selectedLocationID = nil; locationDirectoryCursor = nil; clearLocationStore()
-                locationMessage = "Reconnect your Merchant session or check current location permissions."
+                locationMessage = "Reconnect your Merchant session or check your store access."
                 return true
             }
             return loadMore
@@ -396,7 +396,7 @@ final class DastakMerchantModel: ObservableObject {
         switch selectedLocation?.kind {
         case .retail: await refreshCanonicalCatalogue(reportFailure: false)
         case .restaurant: _ = await refreshRestaurantMenu(reportFailure: false)
-        case .unknown: locationMessage = "Orders are available for this location. Refresh locations to verify Store management access."
+        case .unknown: locationMessage = "Your store's orders remain available. Refresh store to verify management access."
         case nil: break
         }
     }
@@ -770,7 +770,7 @@ final class DastakMerchantModel: ObservableObject {
         if isRefreshingRestaurant { return "Checking the latest menu. Editing resumes when the check finishes." }
         if needsRestaurantRefresh { return "Refresh this restaurant's menu before making changes." }
         if locationsInitialized && (selectedLocation?.kind != .restaurant || restaurantMenu?.restaurant.branchID != selectedLocationID) {
-            return "Choose the correct Restaurant / Café location, then refresh its menu."
+            return "Your restaurant's Store access could not be verified. Refresh store before editing its menu."
         }
         return nil
     }
@@ -1019,7 +1019,7 @@ final class DastakMerchantModel: ObservableObject {
     func setRestaurantOperatingState(isOpen: Bool, acceptingOrders: Bool, branchID: UUID? = nil) async -> Bool {
         guard canChangeRestaurantOperatingState, let restaurant = restaurantMenu?.restaurant,
               let version = restaurant.operationalVersion else {
-            errorMessage = restaurantEditUnavailableReason ?? "Operating controls are unavailable for this restaurant. Refresh locations and check its approval status."; return false
+            errorMessage = restaurantEditUnavailableReason ?? "Operating controls are unavailable for this restaurant. Refresh store and check its approval status."; return false
         }
         guard branchID == nil || branchID == restaurant.branchID else {
             errorMessage = DastakMerchantStoreReadError.wrongLocation.message; return false

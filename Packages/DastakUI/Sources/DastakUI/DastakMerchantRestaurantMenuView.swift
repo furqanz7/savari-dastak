@@ -33,8 +33,7 @@ struct DastakMerchantRestaurantMenuView: View {
             ScrollView {
                 if let menu = model.restaurantMenu, menu.restaurant.branchID == branchID {
                     LazyVStack(alignment: .leading, spacing: MarketplaceSpacing.large) {
-                        DastakMerchantHeading(eyebrow: "YOUR KITCHEN", title: "A menu made yours.",
-                            subtitle: "Photos, dishes and the little extras. Manage what your customers can discover.", symbol: "fork.knife")
+                        DastakMerchantLocationView(model: model, presentation: .menu)
                         restaurantStatus(menu)
                         if let reason = model.restaurantEditUnavailableReason {
                             Text(reason).font(.footnote).foregroundStyle(.secondary)

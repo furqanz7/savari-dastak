@@ -3,75 +3,115 @@ import MarketplaceDesignSystem
 
 struct DastakMerchantLocationView: View {
     @ObservedObject var model: DastakMerchantModel
-    @State private var proposedLocation: DastakMerchantLocation?
+    var presentation: DastakMerchantStoreHeading.Presentation = .compact
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            DastakMerchantAdaptiveRow {
-              HStack(spacing: 12) {
-                Image(systemName: model.selectedLocation?.symbol ?? "storefront").accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.selectedLocation?.service.uppercased() ?? "CURRENT LOCATION").font(.caption2.weight(.semibold)).tracking(1)
-                    Text(model.selectedLocation?.name ?? (model.locationsInitialized || model.locationMessage != nil ? "No location available" : "Checking locations…"))
-                        .font(.subheadline.weight(.semibold))
-                }
-              }.frame(maxWidth: .infinity, alignment: .leading)
-              HStack(spacing: 12) {
-                if model.isRefreshingLocations { ProgressView() }
-                if model.merchantLocations.count > 1 {
-                    Menu {
-                        ForEach(model.merchantLocations) { location in
-                            Button {
-                                proposedLocation = location
-                            } label: {
-                                Label(menuName(location), systemImage: location.id == model.selectedLocationID ? "checkmark" : location.symbol)
-                            }
-                        }
-                    } label: { Image(systemName: "chevron.up.chevron.down").frame(minWidth: 44, minHeight: 44) }
-                        .accessibilityLabel("Choose store location")
-                        .disabled(model.locationSwitchDisabled)
-                }
-                Button {
-                    Task { await model.refreshLocations(); await model.refreshSelectedStore() }
-                } label: { Image(systemName: "arrow.clockwise").frame(minWidth: 44, minHeight: 44) }
-                    .accessibilityLabel("Refresh locations")
-                    .disabled(model.locationSwitchDisabled)
-              }
+        VStack(alignment: .leading, spacing: 12) {
+            DastakMerchantStoreHeading(
+                name: model.selectedLocation?.name ?? (model.locationsInitialized || model.locationMessage != nil ? "Store unavailable" : "Checking your store…"),
+                service: model.selectedLocation?.service,
+                symbol: model.selectedLocation?.symbol ?? "storefront",
+                presentation: presentation,
+                refreshing: model.isRefreshingLocations || model.isRefreshingCatalogue || model.isRefreshingRestaurant,
+                refreshDisabled: model.locationSwitchDisabled || model.isRefreshingCatalogue || model.isRefreshingRestaurant
+            ) {
+                Task { await model.refreshLocations(); await model.refreshSelectedStore() }
             }
             if model.hasPendingCanonicalSelections {
-                Text("Save or discard your product selections before changing locations.").font(.caption).foregroundStyle(.secondary)
-            }
-            if model.merchantJournal != nil {
-                Text("Resolve the saved action before changing locations. It keeps its original location.").font(.caption).foregroundStyle(.secondary)
+                Text("Save or discard your product selections before refreshing your store.").font(.caption).foregroundStyle(.secondary)
             }
             if let message = model.locationMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
-            if model.locationDirectoryCursor != nil {
-                Button("Load more authorized locations") { Task { await model.refreshLocations(loadMore: true) } }
-                    .font(.subheadline.weight(.semibold)).frame(minHeight: 44).disabled(model.locationSwitchDisabled)
-            }
-            DisclosureGroup("About this location list") {
-                Text(model.locationDirectoryMessage ?? "Locations found through accessible Store and recent order records; this may not be a complete list.")
-                    .font(.caption).foregroundStyle(.secondary).padding(.vertical, 4)
-            }.font(.caption).frame(minHeight: 44)
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(.regularMaterial)
-        .overlay(alignment: .bottom) { Divider() }
         .accessibilityIdentifier("merchant.location.context")
-        .confirmationDialog("Switch store location?", isPresented: Binding(get: { proposedLocation != nil },
-            set: { if !$0 { proposedLocation = nil } }), titleVisibility: .visible) {
-            if let location = proposedLocation {
-                Button("Switch to \(location.name)") {
-                    proposedLocation = nil
-                    Task { await model.selectLocation(location.id) }
-                }.disabled(model.locationSwitchDisabled)
+    }
+}
+
+/// One unboxed page heading; compact identity is used inside category browsing.
+/// It lives in normal page flow and never supplies an overlay or a fixed height.
+struct DastakMerchantStoreHeading: View {
+    enum Presentation: CaseIterable {
+        case orders, catalogue, menu, compact
+        var eyebrow: String {
+            switch self {
+            case .orders: "THE ORDER DESK"
+            case .catalogue: "YOUR STOREFRONT"
+            case .menu: "FROM YOUR KITCHEN"
+            case .compact: ""
             }
-            Button("Keep current location", role: .cancel) { proposedLocation = nil }
-        } message: {
-            Text("Orders and Store will use this location. Any unsaved editor in the current Store will close. Saved actions keep their original location.")
+        }
+        var subtitle: String {
+            switch self {
+            case .orders: "Every request. Every handoff. All in view."
+            case .catalogue: "Your products, stock and everyday essentials."
+            case .menu: "Your dishes, photos and little extras."
+            case .compact: ""
+            }
         }
     }
-    private func menuName(_ location: DastakMerchantLocation) -> String {
-        let duplicate = model.merchantLocations.filter { $0.name == location.name && $0.kind == location.kind }.count > 1
-        return "\(location.name) · \(location.service)" + (duplicate ? " · \(location.id.uuidString.suffix(6))" : "")
+
+    let name: String
+    let service: String?
+    let symbol: String
+    var presentation: Presentation = .compact
+    var refreshing = false
+    var refreshDisabled = false
+    let refresh: () -> Void
+    @Environment(\.colorScheme) private var scheme
+    private var accent: Color { MarketplaceColors.accent(for: scheme) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: presentation == .compact ? 0 : 8) {
+            if presentation == .compact {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(name).font(.subheadline.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
+                        serviceLabel
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    refreshButton
+                }
+            } else {
+                HStack(spacing: 12) {
+                    Text(presentation.eyebrow).font(.caption2.weight(.bold)).tracking(1.8)
+                        .foregroundStyle(accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    refreshButton
+                }
+                Text(name).font(MarketplaceTypography.instrumentSerif(size: 36))
+                    .foregroundStyle(MarketplaceColors.primaryText(for: scheme))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Text(presentation.subtitle).font(.subheadline)
+                    .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                serviceLabel.padding(.top, 4)
+                Rectangle().fill(LinearGradient(colors: [accent.opacity(0.45), accent.opacity(0.05)], startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 1).padding(.top, 10).accessibilityHidden(true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, presentation == .compact ? 0 : 4)
+    }
+
+    @ViewBuilder private var serviceLabel: some View {
+        if let service {
+            Label(service, systemImage: symbol).font(.caption)
+                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var refreshButton: some View {
+        Button(action: refresh) {
+            ZStack {
+                Circle().fill(accent.opacity(0.07))
+                Circle().strokeBorder(accent.opacity(0.18), lineWidth: 0.75)
+                if refreshing { ProgressView().controlSize(.small) }
+                else { Image(systemName: "arrow.clockwise").font(.system(size: 15, weight: .medium)) }
+            }.foregroundStyle(accent).frame(width: 44, height: 44).contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(refreshing ? "Refreshing store" : "Refresh store")
+        .disabled(refreshDisabled || refreshing)
+        .accessibilityIdentifier("merchant.store.refresh")
     }
 }

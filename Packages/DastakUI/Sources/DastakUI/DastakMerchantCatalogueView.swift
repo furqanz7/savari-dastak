@@ -24,19 +24,25 @@ struct DastakMerchantStoreAndCatalogueView: View {
         } else if model.selectedLocation?.kind == .retail, model.canonicalCatalogue?.branch.branchID == model.selectedLocationID {
             DastakMerchantCanonicalCatalogueView(model: model)
         } else {
+          ScrollView {
           VStack(alignment: .leading, spacing: 14) {
+            DastakMerchantLocationView(model: model)
             DastakEmptyState(symbol: "storefront", title: "Store details unavailable",
                 message: model.selectedLocation?.kind == .unknown
-                    ? "Orders remain available for this location. Refresh locations to verify Store management access."
-                    : "Refresh the selected location to load its Store. No other location's settings are shown here.")
+                    ? "Your store's orders remain available. Refresh store to verify management access."
+                    : "Refresh store to load your products and settings.")
             if let reason = model.selectedLocation?.kind == .restaurant ? model.restaurantRefreshFailure : model.catalogueRefreshFailure {
                 Text(reason).font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
             }
-            Button("Retry selected Store") { Task { await model.refreshSelectedStore() } }.disabled(model.isBusy || model.isRefreshingCatalogue || model.isRefreshingCatalogueMap)
+            Button("Retry store") { Task { await model.refreshSelectedStore() } }.disabled(model.isBusy || model.isRefreshingCatalogue || model.isRefreshingCatalogueMap)
             if model.catalogue?.stores.isEmpty == false {
                 DisclosureGroup("Earlier account-wide Store tools") { legacyWorkspace }
                     .padding()
             }
+          }
+          .frame(maxWidth: MarketplaceMetrics.contentMaxWidth)
+          .padding(MarketplaceSpacing.medium)
+          .frame(maxWidth: .infinity, alignment: .leading)
           }
         }
     }
@@ -311,6 +317,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
         let categoryName = snapshot.categories.first { $0.id == categoryID }?.name ?? "Products"
         let departmentName = snapshot.categoryTypes.first { $0.id == categoryTypeID }?.name ?? categoryName
         return VStack(alignment: .leading, spacing: 0) {
+            DastakMerchantLocationView(model: model)
             VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
                 HStack(alignment: .firstTextBaseline, spacing: MarketplaceSpacing.small) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -389,6 +396,7 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     private func accessibleCategoryBrowser(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
+                DastakMerchantLocationView(model: model)
                 Text(snapshot.categoryTypes.first { $0.id == categoryTypeID }?.name ?? "Products").font(.title2.bold())
                 Button("All categories") { categoryTypeID = nil; categoryID = nil; subcategoryID = nil }
                     .frame(minHeight: 44)
@@ -432,17 +440,10 @@ private struct DastakMerchantCanonicalCatalogueView: View {
     }
 
     private func storeHeader(_ snapshot: DastakV1MerchantCatalogueSnapshot) -> some View {
-        DastakMerchantAdaptiveRow {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("YOUR STOREFRONT")
-                    .font(.caption2.bold())
-                    .tracking(1.2)
-                    .foregroundStyle(MarketplaceColors.dastakAccent.color)
-                Text(DastakMerchantLocation(snapshot.branch).name)
-                    .font(.title2.bold())
-            }
-            Spacer(minLength: MarketplaceSpacing.small)
-            VStack(alignment: .trailing, spacing: 6) {
+        VStack(alignment: .leading, spacing: MarketplaceSpacing.small) {
+            DastakMerchantLocationView(model: model, presentation: .catalogue)
+            ViewThatFits(in: .horizontal) {
+              HStack(spacing: 6) {
                 DastakStatusPill(
                     text: snapshot.branch.operationalState.isOpen ? "Open" : "Closed",
                     emphasis: snapshot.branch.operationalState.isOpen
@@ -451,6 +452,11 @@ private struct DastakMerchantCanonicalCatalogueView: View {
                     text: snapshot.branch.operationalState.acceptingOrders ? "Accepting orders" : "Orders paused",
                     emphasis: snapshot.branch.operationalState.acceptingOrders
                 )
+              }
+              VStack(alignment: .leading, spacing: 6) {
+                DastakStatusPill(text: snapshot.branch.operationalState.isOpen ? "Open" : "Closed", emphasis: snapshot.branch.operationalState.isOpen)
+                DastakStatusPill(text: snapshot.branch.operationalState.acceptingOrders ? "Accepting orders" : "Orders paused", emphasis: snapshot.branch.operationalState.acceptingOrders)
+              }
             }
         }
         .padding(.top, MarketplaceSpacing.compact)
@@ -1152,7 +1158,7 @@ private struct DastakStoreEditor: View {
                         .textContentType(.fullStreetAddress)
                 }
 
-                Section("Location") {
+                Section("Pickup location") {
                     TextField("Latitude", text: $latitude)
                     TextField("Longitude", text: $longitude)
                     Button {

@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import SwiftUI
 import MarketplaceFoundation
 @testable import MarketplaceInfrastructure
 @testable import DastakUI
@@ -27,6 +28,64 @@ final class DastakMerchantLocationTests: XCTestCase {
         XCTAssertEqual(merchant.selectedLocation?.name, "Essentials")
         XCTAssertEqual(merchant.canonicalCatalogue?.branch.branchID, locationRetail)
         XCTAssertNil(merchant.restaurantMenu)
+    }
+
+    func testStoreHeaderRemainsCompactWithOneOrMultipleAuthorizedRecords() async throws {
+        let functions = LocationFunctions()
+        let merchant = model(functions)
+        await merchant.bootstrap()
+        XCTAssertEqual(merchant.merchantLocations.count, 2)
+        let multiple = try headerImage(merchant)
+        let singleFunctions = LocationFunctions()
+        await singleFunctions.disableFood()
+        let singleMerchant = model(singleFunctions)
+        await singleMerchant.bootstrap()
+        XCTAssertEqual(singleMerchant.merchantLocations.count, 1)
+        let single = try headerImage(singleMerchant)
+        XCTAssertEqual(multiple.width, 320)
+        XCTAssertEqual(multiple.height, single.height,
+            "Additional internal records must not introduce a selector or location-list controls.")
+        XCTAssertLessThan(single.height, 150)
+    }
+
+    func testStoreHeaderRendersLoadingAndAccessFailureWithoutASelector() async throws {
+        let functions = LocationFunctions(), merchant = model(functions)
+        XCTAssertGreaterThanOrEqual(try headerImage(merchant).height, 44)
+        await functions.failStores()
+        await merchant.bootstrap()
+        XCTAssertNotNil(merchant.locationMessage)
+        XCTAssertFalse(merchant.locationMessage?.contains("choose") == true)
+        XCTAssertGreaterThan(try headerImage(merchant, width: 180).height, 44)
+    }
+
+    func testInlineStoreHeaderReservesHeightForContentBelowIt() async throws {
+        let merchant = model(LocationFunctions())
+        await merchant.bootstrap()
+        for width: CGFloat in [180, 320, 768] {
+            for size: DynamicTypeSize in [.large, .accessibility3] {
+                let header = DastakMerchantLocationView(model: merchant)
+                    .environment(\.dynamicTypeSize, size)
+                    .frame(width: width)
+                let headerRenderer = ImageRenderer(content: header)
+                headerRenderer.scale = 1
+                let headerImage = try XCTUnwrap(headerRenderer.cgImage)
+                let page = VStack(spacing: 20) {
+                    header
+                    Color.red.frame(height: 80)
+                }.frame(width: width)
+                let pageRenderer = ImageRenderer(content: page)
+                pageRenderer.scale = 1
+                let pageImage = try XCTUnwrap(pageRenderer.cgImage)
+                XCTAssertEqual(pageImage.height, headerImage.height + 100, accuracy: 1,
+                    "The inline header must consume layout height, not cover the following content.")
+            }
+        }
+    }
+
+    private func headerImage(_ merchant: DastakMerchantModel, width: CGFloat = 320) throws -> CGImage {
+        let renderer = ImageRenderer(content: DastakMerchantLocationView(model: merchant).frame(width: width))
+        renderer.scale = 1
+        return try XCTUnwrap(renderer.cgImage)
     }
 
     func testOrdersAndStoreUseSameSelectedLocationAndService() async throws {
