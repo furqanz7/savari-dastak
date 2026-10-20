@@ -1,0 +1,41 @@
+ok 1 - ticket RLS enabled
+ok 2 - message RLS enabled
+ok 3 - anon cannot read tickets directly
+ok 4 - signed-in user cannot read messages directly
+ok 5 - service cannot insert tickets directly
+ok 6 - anon cannot call RPC
+ok 7 - signed-in user cannot call RPC
+ok 8 - service may call constrained RPC
+ok 9 - public wrapper is security invoker
+ok 10 - private command is security definer
+ok 11 - other support lock waits are bounded
+ok 12 - creation uses nonblocking admission lock
+ok 13 - mutation uses nonblocking row lock
+ok 14 - actual full-schema Admin bootstrap succeeds
+ok 15 - actual Executive Admin assignment succeeds
+ok 16 - public creation works through actual service role
+ok 17 - identical create replay has one message
+ok 18 - receipt does not expose hash
+ok 19 - changed create replay conflicts
+ok 20 - wrong capability cannot read
+ok 21 - missing Admin denied
+ok 22 - Customer cannot impersonate Admin
+ok 23 - actual active Admin can read
+ok 24 - actual Admin can list
+ok 25 - Admin reply advances version
+ok 26 - Admin retry is idempotent despite old version
+ok 27 - capability read sees resolution
+ok 28 - stale reply cannot overwrite
+ok 29 - Merchant cooldown enforced
+ok 30 - Merchant reply reopens conversation
+ok 31 - Merchant retry preserves one added message
+ok 32 - actual suspended membership revokes access
+ok 33 - actual email mismatch revokes access
+ok 34 - actual inactive account revokes access
+ok 35 - actual hourly admission cap enforced
+ok 36 - original create replay works after admission exhausted
+ok 37 - recovery read works after admission exhausted
+ok 38 - bounded fixture ticket count
+ok 39 - support commands did not create extra identities
+ok 40 - PostgreSQL also rejects NUL; Edge now rejects it before RPC
+1..40

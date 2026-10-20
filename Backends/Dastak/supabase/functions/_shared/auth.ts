@@ -1,7 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-export async function verifyBearerUser(bearerToken: string) {
-  const session = await verifyBearerSession(bearerToken);
+export async function verifyBearerUser(
+  bearerToken: string,
+  options: { signal?: AbortSignal } = {},
+) {
+  const session = await verifyBearerSession(bearerToken, options);
   return {
     accountId: session.accountId,
     oauthProviders: session.oauthProviders,
@@ -9,7 +12,10 @@ export async function verifyBearerUser(bearerToken: string) {
   };
 }
 
-export async function verifyBearerSession(bearerToken: string) {
+export async function verifyBearerSession(
+  bearerToken: string,
+  options: { signal?: AbortSignal } = {},
+) {
   const token = bearerToken.replace(/^Bearer\s+/i, "");
   const client = createClient(requiredEnv("SUPABASE_URL"), publishableKey(), {
     auth: {
@@ -17,6 +23,12 @@ export async function verifyBearerSession(bearerToken: string) {
       persistSession: false,
     },
     global: {
+      ...(options.signal
+        ? {
+          fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+            fetch(input, { ...init, signal: options.signal }),
+        }
+        : {}),
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -35,7 +47,7 @@ export async function verifyBearerSession(bearerToken: string) {
     throw new Error("The bearer token does not identify a session.");
   }
 
-  if (await isRevokedSession(data.user.id, sessionId)) {
+  if (await isRevokedSession(data.user.id, sessionId, options.signal)) {
     throw new Error("This Dastak session has been revoked.");
   }
 
@@ -107,12 +119,20 @@ function jwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
-async function isRevokedSession(accountId: string, sessionId: string) {
+async function isRevokedSession(accountId: string, sessionId: string, signal?: AbortSignal) {
   const serviceClient = createClient(
     requiredEnv("SUPABASE_URL"),
     requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
     {
       auth: { autoRefreshToken: false, persistSession: false },
+      ...(signal
+        ? {
+          global: {
+            fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+              fetch(input, { ...init, signal }),
+          },
+        }
+        : {}),
     },
   );
   const { data, error } = await serviceClient.rpc("is_account_session_revoked", {

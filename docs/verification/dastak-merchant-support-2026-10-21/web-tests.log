@@ -1,0 +1,11 @@
+
+ RUN  v5.0.3 /Users/Furqan/Documents/Savari/.worktrees/wave1-runtime-ci/Web/MarketplaceWeb
+
+
+ Test Files  153 passed (153)
+      Tests  1108 passed (1108)
+   Start at  01:27:50
+   Duration  21.31s (environment 38%, tests 28%, import 23%, transform 10%, worker 1%)
+
+    Isolate  153 workers spawned · ~155ms startup each (spawn + environment, per file)
+             at least ~11.72s faster with isolate: false — reuses workers across files instead of one per file

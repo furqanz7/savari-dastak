@@ -7,6 +7,7 @@ import {
   CircleAlert,
   Activity,
   Database,
+  Inbox,
   ExternalLink,
   FileText,
   LayoutDashboard,
@@ -62,6 +63,7 @@ import { AdminAuditHistoryPanel } from "./AdminAuditHistoryPanel";
 import { AdminMerchantGovernancePanel } from "./AdminMerchantGovernancePanel";
 import { AdminDeliveryPartnerGovernancePanel } from "./AdminDeliveryPartnerGovernancePanel";
 import { AdminCustomerRecoveryPanel } from "./AdminCustomerRecoveryPanel";
+import { AdminMerchantSupportPanel } from "./AdminMerchantSupportPanel";
 import {
   getV1AdminAccess,
   getV1AdminCommandCenter,
@@ -103,7 +105,7 @@ type Props = {
 type AdminTab =
   | "overview" | "approvals" | "exceptions" | "orders" | "network" | "audit"
   | "catalogue" | "merchants" | "safety" | "finance" | "health" | "access"
-  | "riders" | "customers" | "legacy" | "account";
+  | "riders" | "customers" | "legacy" | "account" | "merchantSupport";
 
 type AdminBootstrapFeed =
   | "merchantApprovals"
@@ -442,6 +444,7 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
     { id: "network", label: "Network", icon: <UsersRound size={18} /> },
     { id: "catalogue", label: "Catalogue", icon: <Database size={18} /> },
     { id: "exceptions", label: "Exceptions", icon: <CircleAlert size={18} />, badge: operations?.summary.totalExceptions },
+    { id: "merchantSupport", label: "Merchant support", icon: <Inbox size={18} /> },
   ];
   const controlNavigation: Array<{ id: AdminTab; label: string; icon: ReactNode }> = [
     { id: "audit", label: "Audit History", icon: <ScrollText size={18} /> },
@@ -457,7 +460,7 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
   ];
   const navigation = [...mainNavigation, ...controlNavigation];
   const navigationGroups = [
-    { label: "Daily operations", items: ["overview", "orders", "approvals", "exceptions", "safety"].flatMap((id) => navigation.filter((item) => item.id === id)) },
+    { label: "Daily operations", items: ["overview", "orders", "approvals", "exceptions", "merchantSupport", "safety"].flatMap((id) => navigation.filter((item) => item.id === id)) },
     { label: "Marketplace", items: ["merchants", "riders", "customers", "network", "catalogue"].flatMap((id) => navigation.filter((item) => item.id === id)) },
     { label: "Oversight", items: ["audit", "finance", "legacy", "health", "access", "account"].flatMap((id) => navigation.filter((item) => item.id === id)) },
   ];
@@ -482,6 +485,7 @@ export function AdminDashboard({ accessToken, client, displayName, email, phoneN
         : tab === "merchants" ? <AdminMerchantGovernancePanel auth={auth} />
         : tab === "riders" ? <AdminDeliveryPartnerGovernancePanel auth={auth} />
         : tab === "customers" ? <AdminCustomerRecoveryPanel auth={auth} />
+        : tab === "merchantSupport" ? <AdminMerchantSupportPanel auth={auth} />
         : tab === "catalogue" ? <AdminCataloguePanel auth={auth} />
         : tab === "orders" ? <AdminV1ExecutionPanel auth={auth} />
         : tab === "finance" ? <AdminRoyaltyPayoutPanel auth={auth} />
@@ -537,12 +541,14 @@ function tabTitle(tab: AdminTab) {
     audit: "Audit History", merchants: "Merchant governance", riders: "Rider governance", customers: "Customer recovery",
     safety: "Safety controls", finance: "Finance & payouts", health: "System health",
     access: "Admin access", legacy: "Historical orders", account: "My account",
+    merchantSupport: "Merchant support",
   } satisfies Record<AdminTab, string>)[tab];
 }
 
 function tabDescription(tab: AdminTab) {
   return ({
     overview: "A connected, real-time view of the Dastak marketplace.",
+    merchantSupport: "Review unverified reports and leave a private, tracked reply.",
     approvals: "Review Merchant and Delivery Partner evidence with a complete audit trail.",
     exceptions: "Resolve customer support, refunds, secure handoffs and stalled lifecycles.",
     orders: "Inspect matching, preparation, custody, collection, delivery and financial truth.",

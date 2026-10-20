@@ -19,7 +19,7 @@ export type AdminWorkspace =
   | "customerRecovery"
   | "catalogue";
 
-export type AdminRefreshWorkspace = AdminWorkspace | "legacyHistory";
+export type AdminRefreshWorkspace = AdminWorkspace | "legacyHistory" | "merchantSupport";
 
 export type AdminChangeSignal = {
   workspaces: AdminWorkspace[];

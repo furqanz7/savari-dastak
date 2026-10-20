@@ -1,0 +1,1 @@
+{"ok":true,"assertions":48,"fixture":"/private/tmp/dastak-support-fixture.G7SFWK","scope":"New migration + actual Admin role helper on minimal dependency schema; socket-only Postgres 14; not full Supabase replay"}

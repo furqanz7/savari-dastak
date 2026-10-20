@@ -264,7 +264,7 @@ export default function App() {
             message={view.message}
             onRetry={() => evaluate(view.session ?? null)}
             onSignOut={view.session ? signOut : undefined}
-            supportUrl={config.legalLinks?.support}
+            supportUrl={config.variant === "dastak-merchant" ? "/merchant-support" : config.legalLinks?.support}
           />
         )}
       </section>
@@ -343,6 +343,7 @@ function SignIn({ busy, signingInProvider, onSignIn }: {
         )}
       </div>
       <div className="auth-actions" aria-label="Sign in options" aria-busy={busy || undefined}>
+        {config.variant === "dastak-merchant" ? <a href="/merchant-support" target="_blank" rel="noreferrer">Need help signing in? Contact Merchant support</a> : null}
         <button className="provider-button apple" type="button" disabled={busy} onClick={() => onSignIn("apple")}>
           <AppleLogo /> {signingInProvider === "apple" ? "Opening Apple…" : "Continue with Apple"}
         </button>

@@ -1,0 +1,1 @@
+{"ok":true,"assertions":48,"fixture":"/private/tmp/dastak-support-fixture.KOoqex","scope":"Both support migrations + actual Admin role helper on minimal dependency schema; socket-only Postgres 14; not full Supabase replay"}

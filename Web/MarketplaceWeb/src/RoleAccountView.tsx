@@ -212,6 +212,8 @@ export function RoleAccountView({
 
     {notificationSurface ? <section className="role-account-section" aria-label={isDeliveryPartner ? "Browser delivery alerts" : "Browser order alerts"}><h2>{isDeliveryPartner ? "Delivery alerts" : "Order alerts"}</h2>{notificationSurface}</section> : null}
 
+    {persona === "MERCHANT" ? <section className="role-account-section" aria-labelledby="merchant-help-title"><h2 id="merchant-help-title">Merchant help</h2><a className="role-account-row" href="/merchant-support" target="_blank" rel="noreferrer"><span className="role-row-icon"><Mail size={19} /></span><span><strong>Contact Dastak support</strong><small>Open a private request or read a reply. Opens in a new tab.</small></span><ChevronRight size={18} /></a></section> : null}
+
     {isDeliveryPartner && <section className="role-account-section" aria-labelledby="role-support-title">
       <h2 id="role-support-title">Support and safety</h2>
       <div className="role-account-group">

@@ -1,0 +1,470 @@
+{
+  "ok": true,
+  "files": 76,
+  "assertions": 2081,
+  "hygiene": {
+    "users": 0,
+    "tickets": 0,
+    "cronRuns": 0,
+    "httpQueued": 0,
+    "httpResponses": 0
+  },
+  "results": [
+    {
+      "name": "001_identity.pgtap.sql",
+      "ok": true,
+      "assertions": 26,
+      "sha256": "941cdf8aa6cbf18eb61eabd8b7708e3263ea44484e4cb9fe8c4bf5439187d760"
+    },
+    {
+      "name": "002_security_audit_zones.pgtap.sql",
+      "ok": true,
+      "assertions": 42,
+      "sha256": "e2a9fb63a2d0afb760eda740a539d244e7281014c8cb726e21b17ea80ca61716"
+    },
+    {
+      "name": "003_app_access.pgtap.sql",
+      "ok": true,
+      "assertions": 16,
+      "sha256": "15c24c872889845dbf7057774364b52bbdd28950e830e6763482b208f8996477"
+    },
+    {
+      "name": "004_merchant_onboarding.pgtap.sql",
+      "ok": true,
+      "assertions": 36,
+      "sha256": "ef24df9897c1a03662bcaedfed83db767aec18338fa2c839fa8866259769e9b7"
+    },
+    {
+      "name": "005_merchant_catalogue.pgtap.sql",
+      "ok": true,
+      "assertions": 55,
+      "sha256": "5e06ef7091ef8eebd7e6ced47a309d6b9f386a4c71c58bbddc6e07394092bf13"
+    },
+    {
+      "name": "006_merchant_order_checkout.pgtap.sql",
+      "ok": true,
+      "assertions": 69,
+      "sha256": "2917a0721dca20b7df9776962168f63b4efffb50bca7602a2cd209cb83e03392"
+    },
+    {
+      "name": "007_delivery_partner_foundation.pgtap.sql",
+      "ok": true,
+      "assertions": 65,
+      "sha256": "b26b341567495833f1ee23eba441e979770244a5acfd22e324bb32f5dd0f9db2"
+    },
+    {
+      "name": "008_courier_dispatch_assignment.pgtap.sql",
+      "ok": true,
+      "assertions": 80,
+      "sha256": "8f58326bfc018f1aa2bd93933873e31b0cf9468c075b6a6faa56494f839069f3"
+    },
+    {
+      "name": "009_merchant_order_payment_ledger.pgtap.sql",
+      "ok": true,
+      "assertions": 37,
+      "sha256": "0805f89a9d79bd86c4e74437b82f5c6bbb7cd7fdb96e847d138907e19b2d4785"
+    },
+    {
+      "name": "010_parcel_delivery_foundation.pgtap.sql",
+      "ok": true,
+      "assertions": 47,
+      "sha256": "b1d4feded09abf204339106f3b138b7b2bcc2826016e3bcb00b3df0681e4f854"
+    },
+    {
+      "name": "011_controlled_categories.pgtap.sql",
+      "ok": true,
+      "assertions": 43,
+      "sha256": "b45319bfec389b6b38168b55f42b39e175c0c159cf3b854d4dc5955b2a023b3d"
+    },
+    {
+      "name": "012_city_marketplace_configuration.pgtap.sql",
+      "ok": true,
+      "assertions": 13,
+      "sha256": "8bbeeb1347ba1bb6b073bd72ea996dd2aaeb1242afdf30de0a397558584aa7b5"
+    },
+    {
+      "name": "013_geographic_enforcement.pgtap.sql",
+      "ok": true,
+      "assertions": 8,
+      "sha256": "05fcdc6820015ff388af0d21d26adfd037a440d32340729b6afd05e7134749ad"
+    },
+    {
+      "name": "014_distance_priced_checkout.pgtap.sql",
+      "ok": true,
+      "assertions": 7,
+      "sha256": "ab0a970704bda6849f3ac050fd6823a48779743db7c21bb615c3e8dc335fa2f3"
+    },
+    {
+      "name": "022_canonical_order_lifecycle.pgtap.sql",
+      "ok": true,
+      "assertions": 19,
+      "sha256": "f2d286e6f0447222a6e8c0f9e740eddecd8977b54d14703f77465de469140018"
+    },
+    {
+      "name": "025_dastak_v1_batch_1.pgtap.sql",
+      "ok": true,
+      "assertions": 40,
+      "sha256": "cfdd83019703d6a6d0ce487cbebfa000523d08647c2da5fba059ded653cdcaf5"
+    },
+    {
+      "name": "026_dastak_v1_wave_1.pgtap.sql",
+      "ok": true,
+      "assertions": 81,
+      "sha256": "b7237254c10916087afc1045ab9e83b83a5d63b2fa1a11eb03f3774b79d1431e"
+    },
+    {
+      "name": "027_dastak_v1_canonical_catalogue.pgtap.sql",
+      "ok": true,
+      "assertions": 30,
+      "sha256": "1009f3fddb2aa4202ba14808d9ef327229e5672cbaf7b30992b093c4603d31d5"
+    },
+    {
+      "name": "028_dastak_v1_wave_2_payment.pgtap.sql",
+      "ok": true,
+      "assertions": 46,
+      "sha256": "41de6f2eed5211a6944ebc8d68e45977c9149847f35bf0cbc153696223f1e324"
+    },
+    {
+      "name": "029_dastak_v1_preparation_ready.pgtap.sql",
+      "ok": true,
+      "assertions": 19,
+      "sha256": "8912fe974fd6dff9eb98052698b53e11a46e964eb473f7d693677b711e8d5f43"
+    },
+    {
+      "name": "030_dastak_v1_rider_pickup.pgtap.sql",
+      "ok": true,
+      "assertions": 25,
+      "sha256": "e6bfdedeac60b4a7ca897696e7a3efd66c71bbf96f094049b134a337e2526f1d"
+    },
+    {
+      "name": "031_dastak_v1_final_delivery.pgtap.sql",
+      "ok": true,
+      "assertions": 13,
+      "sha256": "be06a2d5103ad2f2efc861b0b34ccee86b838eed151814ca33577493a1d027a9"
+    },
+    {
+      "name": "032_dastak_v1_launch_failure_financial_completion.pgtap.sql",
+      "ok": true,
+      "assertions": 21,
+      "sha256": "4574e99c0f647595d8ee389ed09452d3612825e0e307e8b00f66c7ba9eef0ac7"
+    },
+    {
+      "name": "033_dastak_v1_launch_hardening.pgtap.sql",
+      "ok": true,
+      "assertions": 32,
+      "sha256": "59c0b5610791bda8a0b2b587f42d73949bdc93af34a096a587cd90396fa46121"
+    },
+    {
+      "name": "034_dastak_v1_rider_distance_payout.pgtap.sql",
+      "ok": true,
+      "assertions": 17,
+      "sha256": "3fe99c2bf81e70bd6c0a5f66b9809832acf5dd02b38dfa3e7bb0aa29acf28bf3"
+    },
+    {
+      "name": "035_dastak_v1_identity_merchant_control.pgtap.sql",
+      "ok": true,
+      "assertions": 50,
+      "sha256": "aa3adfdd6643369277c1546e7c42f205e325159f8c11c009b26423a02433f42c"
+    },
+    {
+      "name": "036_dastak_v1_transport_operational_safety.pgtap.sql",
+      "ok": true,
+      "assertions": 59,
+      "sha256": "1cb4d68ed2880891db6465ad348029114978baf343ae8eeb0007d7f38c639cf7"
+    },
+    {
+      "name": "037_dastak_v1_restaurant_cafe.pgtap.sql",
+      "ok": true,
+      "assertions": 55,
+      "sha256": "3c3e095df9f5db604a652b90eca9617bc1d5a13ea2853d1757aa9a73b342f0ce"
+    },
+    {
+      "name": "038_dastak_v1_configuration_acceptance_closure.pgtap.sql",
+      "ok": true,
+      "assertions": 25,
+      "sha256": "81681b0f0f9240354cda654a04d508d87780794d6abda3a7f29c41f3c10fd795"
+    },
+    {
+      "name": "039_dastak_v1_royalty_platform_fee.pgtap.sql",
+      "ok": true,
+      "assertions": 43,
+      "sha256": "b301198571f3c5cc6d1c77e9615e93c74bad1c4c89b395c608ca73e9a04f1a44"
+    },
+    {
+      "name": "040_dastak_v1_razorpayx_royalty.pgtap.sql",
+      "ok": true,
+      "assertions": 50,
+      "sha256": "dd8c0539270c66551f00a6541a9d0d5e0c3c4b31e3a9cff770eb2b67163c9012"
+    },
+    {
+      "name": "041_customer_onboarding_completion.pgtap.sql",
+      "ok": true,
+      "assertions": 20,
+      "sha256": "54295739064a7fb58092594a61a168f10f046ae6b8b3e647aa89edc9468b56ea"
+    },
+    {
+      "name": "042_customer_auth_orphan_recovery.pgtap.sql",
+      "ok": true,
+      "assertions": 18,
+      "sha256": "9148fd5501cc35c477fbad29a7722ec7f9156d3f06b7f19f7994175663a4e422"
+    },
+    {
+      "name": "043_customer_account_completion.pgtap.sql",
+      "ok": true,
+      "assertions": 24,
+      "sha256": "ea687926f35f0545c3d28869fdaf8a64d1ecfe40a6acbe7b8db00d4c69cf245d"
+    },
+    {
+      "name": "044_customer_orders_experience_completion.pgtap.sql",
+      "ok": true,
+      "assertions": 14,
+      "sha256": "432d8202278f5995b27ef8f3bb8e7c6361982ef5a8f3b43e6d9455d03cd1efab"
+    },
+    {
+      "name": "045_customer_wishlist_completion.pgtap.sql",
+      "ok": true,
+      "assertions": 8,
+      "sha256": "c050347d7c55fb97f2311c5d72be09816a0910561da9acb14df016b53421d22a"
+    },
+    {
+      "name": "046_admin_execution_projection_contract.pgtap.sql",
+      "ok": true,
+      "assertions": 11,
+      "sha256": "a5f52a13117868efa1add10d332b58ae553ba96a8c0aac192e0838286b0cac42"
+    },
+    {
+      "name": "047_dastak_v1_custom_checkout_completion.pgtap.sql",
+      "ok": true,
+      "assertions": 44,
+      "sha256": "a95198f7e91650afdf83ebe5a2b94eab9653e85fc573638a724e6a24ee86e9ae"
+    },
+    {
+      "name": "049_dastak_v1_launch_payment.pgtap.sql",
+      "ok": true,
+      "assertions": 53,
+      "sha256": "df24105c18b321acaf8909df432c6dc86acf83bdc3f384a5ec9d796c91815113"
+    },
+    {
+      "name": "050_admin_role_access_control.pgtap.sql",
+      "ok": true,
+      "assertions": 25,
+      "sha256": "3dfc2658ebb4cb8d4bc05a539e5193eb6e75d48f0ee4b8f2ede8c0de429b8451"
+    },
+    {
+      "name": "051_dastak_identity_persona_recovery.pgtap.sql",
+      "ok": true,
+      "assertions": 51,
+      "sha256": "569faa624d88fb58f9b796277bb183bcd7e120089d5c7fecfae9ea2ccc8c4721"
+    },
+    {
+      "name": "052_dastak_existing_identity_retirement.pgtap.sql",
+      "ok": true,
+      "assertions": 19,
+      "sha256": "df7e582d7246f55752145a68e40bc0aa1879dc61e5c85ddf2cd67fe404149815"
+    },
+    {
+      "name": "053_dastak_v1_admin_command_center.pgtap.sql",
+      "ok": true,
+      "assertions": 26,
+      "sha256": "fb7c8e8954d1bb2e92215ab84d52f8a96a65363473a17677f833b8a10de2562f"
+    },
+    {
+      "name": "054_admin_operational_safety_grants.pgtap.sql",
+      "ok": true,
+      "assertions": 6,
+      "sha256": "03b4c0e27e404167f953b16827385f92b0742f45351631fc355ccbf2c4977992"
+    },
+    {
+      "name": "055_close_unstaffed_merchant_branches.pgtap.sql",
+      "ok": true,
+      "assertions": 6,
+      "sha256": "acea599394cb4d8626d886d1f84887b39db97307ff34b4102ae5a92008c36863"
+    },
+    {
+      "name": "056_admin_royalty_snapshot_service_access.pgtap.sql",
+      "ok": true,
+      "assertions": 6,
+      "sha256": "5a90bd9de375ef8053b0fdfc15d5ebf6ee3d5b75a973c9d0f9cb9b792a54c52f"
+    },
+    {
+      "name": "057_admin_catalogue_presentation_contract.pgtap.sql",
+      "ok": true,
+      "assertions": 6,
+      "sha256": "c592a435dc673b6570fa08df6dbfacc4d6105757aa8df0d53e0eaa9976b9ab3b"
+    },
+    {
+      "name": "058_launch_cod_configuration_validity.pgtap.sql",
+      "ok": true,
+      "assertions": 3,
+      "sha256": "69af661780fb1b1e41a8cf3e9d870131c5a0f3b9708df06ef5ece0d1bd405f1a"
+    },
+    {
+      "name": "059_complete_partner_onboarding.pgtap.sql",
+      "ok": true,
+      "assertions": 36,
+      "sha256": "9ee893d24a9241d0d8bd46daa13691d906005546a30aba785d907f813df2967c"
+    },
+    {
+      "name": "060_retired_delivery_methods.pgtap.sql",
+      "ok": true,
+      "assertions": 38,
+      "sha256": "ded507b85b6c70a4c10b011473b653f0397dcd3365f9390a5847c9450d0dbb9c"
+    },
+    {
+      "name": "061_unified_catalogue_experience.pgtap.sql",
+      "ok": true,
+      "assertions": 8,
+      "sha256": "74484f863d012203be2ebc489ba8a89ef35ef80ba6907e98f989a1e36ca721c9"
+    },
+    {
+      "name": "062_admin_realtime_invalidation.pgtap.sql",
+      "ok": true,
+      "assertions": 9,
+      "sha256": "6f33569d8e11417b362f8bdfd8d0b3319cf9515cd6304f83969dbb2767c38420"
+    },
+    {
+      "name": "063_catalogue_taxonomy_parity.pgtap.sql",
+      "ok": true,
+      "assertions": 10,
+      "sha256": "e87ad0cbb44d78f1875068297ff6dd06f4be5f4712ed978d4f1834fb4c8e7e5f"
+    },
+    {
+      "name": "064_curated_catalogue_navigation.pgtap.sql",
+      "ok": true,
+      "assertions": 6,
+      "sha256": "69a93c9d872071913b0dfc947921da4cfa51bf901ec8a548bb5eaa2e593d4e6f"
+    },
+    {
+      "name": "065_admin_order_cancellation.pgtap.sql",
+      "ok": true,
+      "assertions": 40,
+      "sha256": "26ab99960d956942f0ba87c591f3872797ec84ff64e746ce13b7dc5e8f615701"
+    },
+    {
+      "name": "066_merchant_app_notifications.pgtap.sql",
+      "ok": true,
+      "assertions": 11,
+      "sha256": "4bf44c33a6f3d81b2e53fb4e6492663c43fef06bd65bcf9f262f8eecb74b84e5"
+    },
+    {
+      "name": "067_merchant_notification_route_repair.pgtap.sql",
+      "ok": true,
+      "assertions": 5,
+      "sha256": "19bded2b59d1d46037773793a530a3fe5f216a5b7ae8bcff3fede24b8697070a"
+    },
+    {
+      "name": "068_customer_delivery_notification_routes.pgtap.sql",
+      "ok": true,
+      "assertions": 7,
+      "sha256": "bd08a9cf5eeea8a6216744363ad554d5bdb374dc5d9763888520e2c54635c71c"
+    },
+    {
+      "name": "069_launch_ready_and_delivery_snapshot_permissions.pgtap.sql",
+      "ok": true,
+      "assertions": 4,
+      "sha256": "4bb8ae1d55045c3a305cc3b5a90b8a8c31b64c49d49d4930251b8484335731bb"
+    },
+    {
+      "name": "070_handoff_key_integrity.pgtap.sql",
+      "ok": true,
+      "assertions": 6,
+      "sha256": "462da05596393dac203c9f54fad353f53fcec0bd8d2e5e45c41c707b501918b9"
+    },
+    {
+      "name": "071_delivery_rpc_execution_boundary.pgtap.sql",
+      "ok": true,
+      "assertions": 5,
+      "sha256": "9fafc2481b5f7add639f3f824a65ab723810a32d567e2c4491ce0cb710ba6310"
+    },
+    {
+      "name": "072_preparation_notification_deduplication.pgtap.sql",
+      "ok": true,
+      "assertions": 3,
+      "sha256": "7d405f2572350d0b891e25fa95aaa95c6d8429d737ead59a1302eea544608e5e"
+    },
+    {
+      "name": "073_live_delivery_tracking.pgtap.sql",
+      "ok": true,
+      "assertions": 57,
+      "sha256": "281d4058adfbf23d3168ae051d1102bcca494ddd036b045064f43855bd5247cf"
+    },
+    {
+      "name": "074_delivery_group_a_integrity.pgtap.sql",
+      "ok": true,
+      "assertions": 23,
+      "sha256": "b9fa6755f53186f4ff8e9ee15315860556857040fca724c03766884783af4d36"
+    },
+    {
+      "name": "075_delivery_partner_work_history.pgtap.sql",
+      "ok": true,
+      "assertions": 4,
+      "sha256": "e91243504429a8ea9794273f28d5f102d1719898ff00552b9715dc5cb8f7314f"
+    },
+    {
+      "name": "076_admin_network_permission_hardening.pgtap.sql",
+      "ok": true,
+      "assertions": 25,
+      "sha256": "c1806658c23f260bcb3ee083d6f51c573bc0fd3c245b9c9ca16a3e4a03a120c0"
+    },
+    {
+      "name": "077_admin_operational_scale_pagination.pgtap.sql",
+      "ok": true,
+      "assertions": 10,
+      "sha256": "1002e70728db3e64992eb7d434c24da095877b51221ea88eb8f98e5612fc1103"
+    },
+    {
+      "name": "078_admin_c2_1_audit_history.pgtap.sql",
+      "ok": true,
+      "assertions": 26,
+      "sha256": "f03d36472ac3386647d2506cc7b459633cc1854049fafdf3f9210f07802387f8"
+    },
+    {
+      "name": "079_admin_c2_2_merchant_governance.pgtap.sql",
+      "ok": true,
+      "assertions": 51,
+      "sha256": "3f3b44dba70a9826d9e47214ccb71feac3dc09204ae45e54598b031bab541965"
+    },
+    {
+      "name": "079_delivery_partner_order_details.pgtap.sql",
+      "ok": true,
+      "assertions": 29,
+      "sha256": "a9379e6371862230e4baa1dee2db54bbee9434031b75bddda4681b49ed7807ef"
+    },
+    {
+      "name": "080_admin_c2_3_delivery_partner_governance.pgtap.sql",
+      "ok": true,
+      "assertions": 40,
+      "sha256": "67b0d7272715c33597903f7f59500c7f1653d7b73785ff61527a5d29a1def517"
+    },
+    {
+      "name": "081_admin_c2_4_customer_account_recovery.pgtap.sql",
+      "ok": true,
+      "assertions": 44,
+      "sha256": "0f74c245967fd7c84ab2ac89256239bbab8cc92988a03a3508270356c372fc46"
+    },
+    {
+      "name": "082_admin_c2_5_catalogue_asset_governance.pgtap.sql",
+      "ok": true,
+      "assertions": 28,
+      "sha256": "ffbc6d4335d06e99590bcd9510195e54f8e3929d9aef9b7d0d14ccfff3833d60"
+    },
+    {
+      "name": "082_reference_catalogue_parent_paths.pgtap.sql",
+      "ok": true,
+      "assertions": 12,
+      "sha256": "3c9f542b8af8bc39f5677742829bf89b863ac772d96f95453912fc548828d4ab"
+    },
+    {
+      "name": "084_reference_catalogue_browse_map.pgtap.sql",
+      "ok": true,
+      "assertions": 25,
+      "sha256": "d9fd9ca6919ab8e5b21bd98f7b3c53f61416f8a6fe8ea8bc327211d06d914244"
+    },
+    {
+      "name": "085_governed_media_hardening.pgtap.sql",
+      "ok": true,
+      "assertions": 10,
+      "sha256": "fd7bc98fddf07a0db47a179e8edd0fbdbdb492fe96796423d512998dba9f8e65"
+    }
+  ]
+}

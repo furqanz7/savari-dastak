@@ -1,0 +1,21 @@
+21 October 2026 local hardening verification teardown
+
+Final R9 database hygiene before shutdown:
+Auth users=0; support tickets=0; cron runs=0; HTTP queue=0; HTTP responses=0;
+cron.launch_active_jobs=off.
+
+R7 upgrade witness: synthetic ticket/message removed; hygiene passed;
+dastak_support_rebuild_20261021 stopped by the guarded upgrade script.
+R8 draft fixture: dastak_support_hardening_20261021 stopped; retained, not reset.
+Final R9 fixture: dastak_support_hardened_final_20261021 stopped successfully.
+supabase stop --project-id DastakRebuild20261016R9: exit 0; local volume retained.
+supabase stop --project-id DastakRebuild20261016R8: exit 0; local volume retained.
+Docker running-container list before Colima shutdown: empty.
+colima stop: exit 0.
+colima status afterward: not running (expected exit 1).
+
+Colima restored to original stopped state. No volume prune or personal/source/
+simulator/runtime deletion performed. Fast PG14 fixtures stopped automatically;
+their synthetic logs/data are retained. No real support tickets were deleted.
+No production migration, deployment, secret change, push/commit, App Store action
+or paid/external provider setup performed.

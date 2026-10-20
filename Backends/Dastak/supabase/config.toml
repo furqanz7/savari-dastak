@@ -4,6 +4,12 @@
 # working directory name when running `supabase init`.
 project_id = "Dastak"
 
+# Public recovery-capability help; only this function is public at the gateway.
+# Admin operations still verify OAuth session and active DB Admin role.
+# Handler defaults disabled until separate production activation approval.
+[functions.merchant-support]
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.

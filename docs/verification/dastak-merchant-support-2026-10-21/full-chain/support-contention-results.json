@@ -1,0 +1,8 @@
+{
+  "reproduced": true,
+  "requests": 2,
+  "wrongTokenWaitedOnRowLock": true,
+  "statementDeadlineMs": 150,
+  "afterLockRelease": "support_not_found",
+  "evidence": "Error: ERROR:  canceling statement due to statement timeout\nCONTEXT:  while locking tuple (0,39) in relation \"merchant_support_tickets\"\nSQL statement \"select *             from private.merchant_support_tickets where id=tid for update\"\nPL/pgSQL function private.merchant_support_command(uuid,jsonb) line 82 at SQL statement\nSQL function \"merchant_support_command\" statement 1\n"
+}

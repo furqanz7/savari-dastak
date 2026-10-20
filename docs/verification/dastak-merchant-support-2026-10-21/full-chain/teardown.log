@@ -1,0 +1,22 @@
+21 October 2026 local verification teardown
+
+Final database hygiene before shutdown:
+Auth users = 0
+Support tickets = 0
+Cron run records = 0
+Queued HTTP requests = 0
+HTTP responses = 0
+cron.launch_active_jobs = off
+
+Only running container before shutdown: dastak_support_rebuild_20261021
+docker stop dastak_support_rebuild_20261021: success
+supabase stop --project-id DastakRebuild20261016R7 --workdir /private/tmp/dastak-full-rebuild.qY49PW: exit 0
+CLI confirmed local data retained in Docker volume.
+Docker running-container list after shutdown: empty
+colima stop: exit 0
+colima status afterward: not running (exit 1 is the CLI's stopped-status result)
+
+Restored initial stopped Colima state. No volume prune, simulator/runtime
+deletion, source deletion or production action performed. R6 retained test
+volume and other existing volumes were not reset or deleted. Local fixture
+artifacts remain under /private/tmp/dastak-full-rebuild.qY49PW.

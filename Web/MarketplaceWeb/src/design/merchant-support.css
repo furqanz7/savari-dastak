@@ -1,0 +1,34 @@
+.merchant-support-page { --help-ink:#24362f; --help-muted:#53655a; --help-gold:#997344; color:var(--help-ink); background:radial-gradient(ellipse at 20% 0,#e2ebe1,transparent 48%),#f7f4ee; min-height:100dvh; font-family:Inter,system-ui,sans-serif; }
+.merchant-support-top { max-width:1100px; margin:auto; padding:28px 30px; display:flex; align-items:center; justify-content:space-between; gap:24px; }
+.merchant-support-page a { color:inherit; }
+.merchant-support-brand { font-family:Georgia,serif; font-size:28px; text-decoration:none; }.merchant-support-brand span { margin-left:8px; }
+.merchant-support { max-width:760px; padding:20px 28px 72px; margin:auto; }
+.merchant-support-hero { padding:22px 0 30px; }.merchant-support-hero .eyebrow { color:#695332; letter-spacing:.16em; font-size:11px; font-weight:700; margin-top:22px; }
+.merchant-support-hero h1 { color:var(--help-ink); font:clamp(42px,7vw,68px)/1.06 Georgia,serif; letter-spacing:-.045em; margin:18px 0 22px; }.merchant-support-hero em { font-weight:400; color:#53715f; }
+.merchant-support-hero>p:last-child { font-size:17px; line-height:1.7; max-width:560px; color:var(--help-muted); }
+.merchant-support-mark { width:52px; height:52px; display:grid; place-items:center; border-radius:18px; background:#2d493b; color:#f5dfb4; box-shadow:0 10px 26px #2845341a; }
+.merchant-support-safety { display:flex; gap:14px; padding:20px; color:#24362f; background:#e9eee5; border:1px solid #cfdbca; border-radius:18px; font-size:14px; line-height:1.65; }.merchant-support-safety svg { flex-shrink:0; }.merchant-support-safety p { margin:4px 0 0; }
+.merchant-support-tabs { display:flex; gap:8px; margin:28px 0 20px; padding:5px; background:#e7e8df; border-radius:16px; }.merchant-support .merchant-support-tabs button { flex:1; background:transparent; border:0; }.merchant-support .merchant-support-tabs button[aria-pressed=true] { background:#fffdf7; box-shadow:0 2px 7px #24362f14; }
+.merchant-support-card { margin:22px 0; border:1px solid #d9ddd1; border-radius:24px; background:#fffdf8; padding:28px; box-shadow:0 14px 42px #314e3710; }
+.merchant-support-card h2 { font:28px/1.15 Georgia,serif; letter-spacing:-.025em; color:#24362f; margin:0 0 14px; }
+.merchant-support-card p,.merchant-support footer { color:#53655a; line-height:1.65; }.merchant-support-card small { display:block; color:#53655a; line-height:1.5; overflow-wrap:anywhere; }
+.merchant-support fieldset { border:0; padding:0; margin:0; min-width:0; }
+.merchant-support label,.merchant-support-admin label { display:grid; gap:9px; font-weight:600; font-size:14px; margin:20px 0 10px; }
+.merchant-support input:not([type=checkbox]),.merchant-support textarea,.merchant-support select,.merchant-support-admin textarea,.merchant-support-admin select { width:100%; box-sizing:border-box; padding:13px 14px; border:1px solid #bac7b7; background:#fff; color:#24362f; border-radius:12px; font:inherit; min-height:48px; }
+.merchant-support textarea,.merchant-support-admin textarea { min-height:150px; resize:vertical; line-height:1.6; }
+.merchant-support input[readonly] { font-family:monospace; font-size:13px; }
+.merchant-support button,.merchant-support-admin button { display:inline-flex; align-items:center; justify-content:center; gap:10px; min-height:46px; padding:12px 18px; border-radius:12px; border:1px solid #bcc9ba; color:#24362f; background:#fffdf8; font:inherit; cursor:pointer; }
+.merchant-support button:disabled,.merchant-support-admin button:disabled { opacity:.55; cursor:not-allowed; }
+.merchant-support .merchant-support-primary,.merchant-support-admin .merchant-support-primary { display:flex; width:100%; margin-top:22px; background:#2d493b; color:#fff7e8; border-color:#2d493b; font-weight:650; }
+.merchant-support :focus-visible,.merchant-support-admin :focus-visible { outline:3px solid #a78045; outline-offset:3px; }
+.merchant-support label.merchant-support-consent { display:flex; align-items:flex-start; font-weight:400; line-height:1.6; }.merchant-support-consent input { width:22px; height:22px; margin:0; flex-shrink:0; accent-color:#2d493b; }
+.merchant-support-trap { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+.merchant-support-alert,.merchant-support-notice { border-radius:14px; padding:18px; line-height:1.6; background:#fff0e6; color:#78391e; overflow-wrap:anywhere; }.merchant-support-notice { background:#e7f0e7; color:#234a32; display:flex; gap:10px; }
+.merchant-support-ticket-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:18px 0; font-size:13px; }
+.merchant-support-status { padding:6px 12px; border-radius:100px; background:#eee8d6; color:#5c471f; }.merchant-support-status.resolved { background:#dcebdc; color:#265238; }
+.merchant-support-conversation { display:grid; gap:16px; list-style:none; padding:0; margin:24px 0; }.merchant-support-conversation li { padding:18px; border-radius:16px; background:#edf0e8; border:1px solid #dce2d5; color:#24362f; }.merchant-support-conversation li.support { background:#f2eadd; border-color:#e5d7bd; }.merchant-support-conversation li>div { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:13px; }.merchant-support-conversation time { color:#53655a; }.merchant-support-conversation p { white-space:pre-wrap; overflow-wrap:anywhere; margin-bottom:0; color:#24362f; }
+.merchant-support footer { text-align:center; font-size:13px; margin:30px 0; }.merchant-support footer a { display:inline-flex; align-items:center; gap:8px; }
+.merchant-support-admin h2 { display:flex; gap:12px; align-items:center; }.merchant-support-inbox-tools { display:flex; align-items:end; justify-content:space-between; flex-wrap:wrap; gap:16px; margin:20px 0; }.merchant-support-inbox-tools label { min-width:200px; margin:0; }
+.merchant-support-inbox { list-style:none; padding:0; margin:24px 0; display:grid; gap:12px; }.merchant-support-inbox button { width:100%; display:flex; justify-content:space-between; text-align:left; }.merchant-support-inbox button>span:first-child { display:grid; gap:8px; overflow-wrap:anywhere; min-width:0; }.merchant-support-admin small { overflow-wrap:anywhere; }
+@media(max-width:520px) { .merchant-support-top { padding:22px; }.merchant-support { padding:4px 18px 40px; }.merchant-support-card { border-radius:20px; padding:22px 18px; }.merchant-support-hero { padding-top:10px; }.merchant-support-ticket-head { align-items:start; } }
+@media(prefers-reduced-motion:no-preference) { .merchant-support-card { animation:help-arrive .28s ease-out; } @keyframes help-arrive { from { opacity:.6; transform:translateY(6px); } to { opacity:1; transform:none; } } }

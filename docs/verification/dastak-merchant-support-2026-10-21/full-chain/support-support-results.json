@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "files": 1,
+  "assertions": 37,
+  "hygiene": {
+    "users": 0,
+    "tickets": 0,
+    "cronRuns": 0,
+    "httpQueued": 0,
+    "httpResponses": 0
+  },
+  "results": [
+    {
+      "name": "merchant_support_full.sql",
+      "ok": true,
+      "assertions": 37,
+      "sha256": "bab4a1cd193b9a5510792ec23f3e2afd39fc821023b6f00b5af63efca1132de2"
+    }
+  ]
+}

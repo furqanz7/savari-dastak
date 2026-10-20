@@ -9,11 +9,14 @@ import "./design/v1-admin.css";
 import "./design/v1-merchant.css";
 
 const App = lazy(() => import("./App"));
+const MerchantSupport = lazy(() => import("./MerchantSupportPage").then(module => ({ default: module.MerchantSupportEntry })));
 const publicInformationKind = publicInformationKindForPath(window.location.pathname);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {publicInformationKind
+    {window.location.pathname.replace(/\/+$/, "") === "/merchant-support"
+      ? <Suspense fallback={<main aria-busy="true">Opening Merchant support…</main>}><MerchantSupport /></Suspense>
+      : publicInformationKind
       ? <PublicInformationPage kind={publicInformationKind} />
       : <Suspense fallback={<main className="app product-dastak"><div className="loading" role="status"><span /> Opening Dastak</div></main>}><App /></Suspense>}
   </StrictMode>,

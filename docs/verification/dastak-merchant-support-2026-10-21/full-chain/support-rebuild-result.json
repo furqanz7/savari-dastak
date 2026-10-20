@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "applied": 296,
+  "chainSha256": "2520d22baa28f1fc8dd137751360c51e691961ec22da72a84736c29cde8230e7",
+  "historyMatches": true,
+  "runtime": "PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit"
+}

@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "requests": 4,
+  "statementDeadlineMs": 150,
+  "wrongToken": "support_not_found",
+  "authorizedRead": "succeeded behind held write lock",
+  "contendedWrite": "support_busy",
+  "contendedAdmission": "support_busy",
+  "evidence": "Error: ERROR:  support_busy\nCONTEXT:  PL/pgSQL function private.merchant_support_command(uuid,jsonb) line 121 at RAISE\nSQL function \"merchant_support_command\" statement 1\n",
+  "admissionEvidence": "Error: ERROR:  support_busy\nCONTEXT:  PL/pgSQL function private.merchant_support_command(uuid,jsonb) line 121 at RAISE\nSQL function \"merchant_support_command\" statement 1\n"
+}

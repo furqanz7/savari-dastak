@@ -1,0 +1,62 @@
+{
+  "baseCommit": "61f51b7bcf691370c121e977b95b050311988267",
+  "sourceState": "tested working-tree snapshot; support-only Git publication subsequently authorized; initial deployment metadata identifies the base commit, not a committed support tree",
+  "files": [
+    {
+      "path": "Web/MarketplaceWeb/src/AdminDashboard.tsx",
+      "sha256": "c5732da2f00dd30878fb7c5400f1ace843c0fce266bbaab95803107f36d6e98f"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/App.tsx",
+      "sha256": "bd74edb49f32e2084fd1d077663be0181672e2beca4d1386113b881529367a76"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/RoleAccountView.tsx",
+      "sha256": "c2dcd52843cfc9c6d1976d6a5bdc684e6a6114f9dc5ee3ee186d250780a76f9a"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/adminRuntime.ts",
+      "sha256": "594f2d4c6fd382066923acc91bee1c1203d28f287ad7d44fd92a041c847aec5f"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/main.tsx",
+      "sha256": "e17d1597b9646ea16aadd6163259316a7cb208af0157a4f312e393d0d6c1a4d8"
+    },
+    {
+      "path": "Web/MarketplaceWeb/vercel.json",
+      "sha256": "0185310c9c972fc54b040fb1f5a5533f61c02c47530177bea58004cd5aa0b6d2"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/MerchantSupportPage.tsx",
+      "sha256": "71715df7530509b0d7c9c068a18cf8e0ff5ed1d743c3af142d8a8bcbdad2b2fd"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/AdminMerchantSupportPanel.tsx",
+      "sha256": "2ff83356513d82bbb7ad53e5427de908e13b14f34185afdbf69d6ae88f707c43"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/merchantSupport.ts",
+      "sha256": "7d2893ce04a8067f5663706791fba40e4eb6f2d2547d719b17632c3b15770d09"
+    },
+    {
+      "path": "Web/MarketplaceWeb/src/design/merchant-support.css",
+      "sha256": "d11088942d40a4288a9c4d1b23892803e132d1596f90c45e862f29bef7e135d6"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/_shared/auth.ts",
+      "sha256": "2cf42a2177af01707fd9a02323bceeb918b35d616d6d1317e29645cc7e204d92"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/merchant-support/index.ts",
+      "sha256": "3f9a357bc19427041a02980e375d95ee9cf157f9457bd8bafa854c2093098123"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/merchant-support/handler.ts",
+      "sha256": "91cb8f61514dfef05d82c338fdddbcada2097002f63789461142bc8a1fa94087"
+    },
+    {
+      "path": "Backends/Dastak/supabase/functions/merchant-support/limits.ts",
+      "sha256": "0ee34095614a7049b149f096d597e9479bc73aac7ed69c50a34f702501750642"
+    }
+  ]
+}
