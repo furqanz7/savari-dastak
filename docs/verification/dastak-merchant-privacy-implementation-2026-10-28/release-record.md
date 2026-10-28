@@ -126,3 +126,53 @@ stopping before privacy publication and review submission.
   upload, deployment or Customer listing mutation occurred in this follow-up.
   Only this verification record was changed locally; existing app/artwork edits
   remain preserved.
+
+## Subsequent age rating, rights and reviewer-access setup
+
+28 October 2026, Asia/Riyadh. The owner requested continuing the remaining listing
+setup, confirmed that current Merchant content includes alcohol/tobacco/drug-use
+references, and explicitly selected **Frequent — users encounter it regularly**.
+The owner also confirmed the necessary rights to third-party content in the
+selected regions and explicitly authorized saving Apple's Yes/rights answer.
+
+- Content Rights: selected **Yes, it contains, shows, or accesses third-party
+  content, and I have the necessary rights**, completed Done and saved App
+  Information. The saved page reads **Yes, this app has the necessary rights to
+  its third-party content**. This records the owner's declaration, not an
+  independent licensing audit of every product, brand or merchant image.
+- Age Ratings: User-Generated Content Yes because Merchant users publish menu
+  text/images. Parental Controls, Age Assurance, Unrestricted Web Access, Social
+  Media, Social Media Disabled for Users Under 13, Messaging and Chat, and
+  Advertising No for the inspected native Merchant features. The private support
+  link opens an external browser; no in-app general browsing or social feed was
+  identified. Business-identity verification is not evidence of age assurance.
+- Mature themes: profanity/crude humour and horror None; alcohol/tobacco/drug-use
+  references **Frequent**, explicitly confirmed by the owner. Medical/treatment
+  guidance None; Health/Wellness Topics No. Sexual/suggestive content, nudity,
+  violence and weapons None. Simulated gambling and contests None; gambling and
+  loot boxes No. No corresponding feature/content was identified in the inspected
+  native Merchant interface. This does not certify every future merchant upload.
+- Apple's calculated rating is **18+**. No lower rating or age-suitability URL was
+  imposed. The Mac locked at the final Save step; after the owner unlocked it,
+  Save completed. A full reload independently showed 18+ and the saved rights
+  declaration together. Existing Business category and country settings were
+  not changed.
+- App Review history currently says **Items you submit to App Review will appear
+  here**. No Merchant submission or message confirming demo acceptance was shown.
+  This is not proof about separate correspondence outside the inspected page.
+- Reviewer credential requirement: unchecked Sign-in required and saved, matching
+  the owner-approved public demo path. Full reload independently confirms the
+  checkbox off, Save disabled, Build 69 attached, Prepare for Submission, and the
+  unchanged Notes explaining normal Apple/Google sign-in/business approval versus
+  public Explore the demo access. No app authentication or server permission changed.
+- Apple's acceptance of the demo instead of a live reviewer account remains
+  unverified. Guideline 2.1 addresses prior approval for a demo replacing an account
+  because of legal/security obligations. No message requesting that approval was
+  sent, no reviewer account was granted and no approval is claimed.
+- App Privacy remains the completed unpublished 17-type draft; no Publish,
+  Add for Review, final review submission, new build, deployment or backend change.
+
+Primary definitions checked on 28 October:
+[age-rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/),
+[review access guidance](https://developer.apple.com/help/app-review/before-submitting-for-review/complete-review),
+[App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/).
