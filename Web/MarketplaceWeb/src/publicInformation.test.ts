@@ -44,6 +44,42 @@ describe("public Dastak information pages", () => {
     expect(terms).not.toMatch(/prepaid only|Cash on delivery, substitutions|before successful payment|before payment becomes available/);
   });
 
+  it("covers Merchant collection without promising live payouts or anonymous support", () => {
+    const page = publicInformationPages.privacy;
+    const section = (title: string) => JSON.stringify(page.sections.find((entry) => entry.title === title));
+    expect(page.summary).toContain("operate a Merchant store");
+    expect(section("Merchant applications and store verification")).toContain("government identity or business-registration document");
+    expect(section("Merchant applications and store verification")).toContain("precise coordinates");
+    expect(section("Merchant applications and store verification")).toContain("not a continuous background location-tracking feature");
+    expect(section("Operating a Merchant store")).toContain("Grocery catalogue search sends the search text");
+    expect(section("Merchant earnings and payout information")).toContain("RazorpayX where used");
+    expect(section("Merchant earnings and payout information")).toContain("does not guarantee that withdrawals are enabled");
+    expect(section("Merchant data kept on your device")).toContain("device-only Keychain storage");
+    expect(section("Exploring the Merchant demo")).toContain("simulated locally");
+    expect(section("Exploring the Merchant demo")).toContain("Merchant support is disabled inside the sample");
+    const support = section("Merchant support conversations");
+    expect(support).toContain("https://dastak-merchant.vercel.app/merchant-support");
+    expect(support).toContain("does not mean a message is anonymous");
+    expect(support).toContain("hashes its secret before sending it to ticket storage");
+    expect(support).toContain("We do not email replies or guarantee a response time");
+    expect(support).toContain("cannot authorize account approval");
+    expect(section("Merchant account and privacy choices")).toContain("does not by itself identify and erase every support conversation");
+    expect(section("Retention and security")).toContain("no automatic conversation-expiry schedule");
+    expect(section("Retention and security")).toContain("IP-derived network or approximate geographic information");
+    expect(JSON.stringify(page)).not.toContain("Approval checklist");
+  });
+
+  it("preserves Customer/Delivery distinctions and dates the approved privacy publication separately", () => {
+    const privacy = JSON.stringify(publicInformationPages.privacy);
+    expect(privacy).toContain("delivery-partner onboarding");
+    expect(privacy).toContain("rounds your nearby-area latitude and longitude to two decimal places");
+    expect(privacy).toContain("does not retain weather-location fixes");
+    expect(privacy).toContain("does not include Razorpay checkout");
+    expect(publicInformationPages.privacy.updated).toBe("28 October 2026");
+    expect(publicInformationPages.terms.updated).toBe("17 October 2026");
+    expect(publicInformationPages.support.updated).toBe("17 October 2026");
+  });
+
   it("provides current payment help without promising legacy retries or a fixed refund destination", () => {
     const support = JSON.stringify(publicInformationPages.support);
     expect(support).toContain("pay the assigned delivery partner by UPI or cash at the doorstep");

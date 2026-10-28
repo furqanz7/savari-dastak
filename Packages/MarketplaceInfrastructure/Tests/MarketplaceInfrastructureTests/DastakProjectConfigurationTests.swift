@@ -73,6 +73,61 @@ final class DastakProjectConfigurationTests: XCTestCase {
         )
     }
 
+    func testMerchantManifestMatchesApprovedOperationalCollectionWithoutCustomerPersonalization() throws {
+        let data = try Data(contentsOf: repositoryRoot.appendingPathComponent(
+            "Apps/Dastak/Supporting/Merchant/PrivacyInfo.xcprivacy"))
+        let manifest = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false)
+        XCTAssertEqual(manifest["NSPrivacyTrackingDomains"] as? [String], [])
+        let entries = try XCTUnwrap(manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
+        let types = try entries.map { try XCTUnwrap($0["NSPrivacyCollectedDataType"] as? String) }
+        XCTAssertEqual(types.count, Set(types).count)
+        XCTAssertEqual(Set(types), Set([
+            "CoarseLocation", "Name", "EmailAddress", "PhoneNumber", "PhysicalAddress", "PreciseLocation",
+            "PhotosorVideos", "CustomerSupport", "OtherUserContent", "UserID", "DeviceID", "OtherDataTypes",
+            "PaymentInfo", "OtherFinancialInfo", "ProductInteraction", "PerformanceData", "OtherDiagnosticData"
+        ].map { "NSPrivacyCollectedDataType" + $0 }))
+        for entry in entries {
+            XCTAssertEqual(entry["NSPrivacyCollectedDataTypeLinked"] as? Bool, true)
+            XCTAssertEqual(entry["NSPrivacyCollectedDataTypeTracking"] as? Bool, false)
+            XCTAssertEqual(entry["NSPrivacyCollectedDataTypePurposes"] as? [String],
+                           ["NSPrivacyCollectedDataTypePurposeAppFunctionality"])
+        }
+        let APIs = try XCTUnwrap(manifest["NSPrivacyAccessedAPITypes"] as? [[String: Any]])
+        let defaults = try XCTUnwrap(APIs.first {
+            $0["NSPrivacyAccessedAPIType"] as? String == "NSPrivacyAccessedAPICategoryUserDefaults"
+        })
+        XCTAssertEqual(defaults["NSPrivacyAccessedAPITypeReasons"] as? [String], ["CA92.1"])
+    }
+
+    func testOnlyMerchantTargetPackagesTheMerchantSpecificManifest() throws {
+        let data = try Data(contentsOf: repositoryRoot.appendingPathComponent(
+            "Apps/Dastak/Dastak.xcodeproj/project.pbxproj"))
+        let project = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let objects = try XCTUnwrap(project["objects"] as? [String: [String: Any]])
+        var merchantCount = 0
+        for target in objects.values where target["isa"] as? String == "PBXNativeTarget" {
+            let name = try XCTUnwrap(target["name"] as? String)
+            let phases = try XCTUnwrap(target["buildPhases"] as? [String])
+            let paths = phases.compactMap { objects[$0] }
+                .filter { $0["isa"] as? String == "PBXResourcesBuildPhase" }
+                .flatMap { $0["files"] as? [String] ?? [] }
+                .compactMap { objects[$0]?["fileRef"] as? String }
+                .compactMap { objects[$0]?["path"] as? String }
+                .filter { $0.hasSuffix("PrivacyInfo.xcprivacy") }
+            if name == "DastakMerchant" {
+                merchantCount += 1
+                XCTAssertEqual(paths, ["Merchant/PrivacyInfo.xcprivacy"])
+            } else {
+                XCTAssertFalse(paths.contains("Merchant/PrivacyInfo.xcprivacy"), name)
+                if name == "Dastak" || name == "DastakAdmin" {
+                    XCTAssertEqual(paths, ["PrivacyInfo.xcprivacy"], name)
+                }
+            }
+        }
+        XCTAssertEqual(merchantCount, 1)
+    }
+
     func testCustomerLegalLinksUseFirstPartyHTTPSPages() throws {
         let defaultsURL = repositoryRoot
             .appendingPathComponent("Apps/Dastak/Configuration/Defaults.xcconfig")
