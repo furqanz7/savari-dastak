@@ -88,3 +88,41 @@ publication, legal declarations and review submission are excluded.
   exhaustive monitoring, configured drains, or backend/provider health.
 - No migration, backend deployment, hosted environment change, paid service,
   personal-file cleanup or simulator-runtime deletion was performed.
+
+## Subsequent version and App Privacy draft preparation
+
+28 October 2026, Asia/Riyadh. After the owner requested continuing, the stated
+scope was to attach Build 69 and enter the approved privacy details as a draft,
+stopping before privacy publication and review submission.
+
+- Sell on Dastak / app ID `6796520415`: replaced only the version 1.0 draft's
+  Build 68 attachment with Build 69 and saved. Navigating away and returning
+  independently read back Build 69 with Save disabled. Version remains
+  **Prepare for Submission**.
+- Saved App Privacy's Privacy Policy URL as
+  `https://dastak-customer.vercel.app/privacy`, matching the native configuration
+  and the verified live shared policy. User Privacy Choices URL was left blank.
+- Saved Yes for data collection and exactly the 17 approved data types. For each
+  type, selected App Functionality as the sole purpose, linked to identity Yes,
+  and tracking No. No advertising, analytics, personalization or other purpose
+  was selected. Search History and Purchases were not selected.
+- A full Safari reload independently showed **17 data types collected**, exactly
+  matching the approved set, 17 App Functionality cards, 17 identity-linked cards,
+  zero remaining Set Up entries and no Used for Tracking entries. Publish is now
+  enabled but **was not clicked**. The declaration remains unpublished.
+- Safari's last Other Data Types link was exposed as a merged text block and
+  coordinate input returned `noWindowsAvailable`. After other native/keyboard
+  attempts, the owner opened that one setup dialog directly; the agent completed
+  its approved purpose/linkage/tracking answers and verified the saved state.
+  No hidden browser API or page-script workaround was used.
+- Read-only App Information check still shows **Set Up Age Ratings** and
+  **Set Up Content Rights Information**. Business category is saved. These
+  questionnaires were not answered or saved in this slice.
+- Review access still has Sign-in required checked and blank credential fields,
+  alongside existing demo Notes. This mismatch was identified and left unchanged;
+  no reviewer account, credential, permission grant or claim of Apple approval for
+  demo access was introduced.
+- No Publish, Add for Review, final submission, legal acceptance, new binary
+  upload, deployment or Customer listing mutation occurred in this follow-up.
+  Only this verification record was changed locally; existing app/artwork edits
+  remain preserved.
