@@ -8,8 +8,9 @@ payment/weather sections and Terms/Support content remain intact.
 
 Distribution and live verification:
 [release record](verification/dastak-merchant-privacy-implementation-2026-10-28/release-record.md).
-The instructions below preserve the reviewed publication plan; App Store privacy
-answers remain unpublished and no App Review submission is included.
+The instructions below preserve the reviewed publication plan. The App Store
+privacy answers were subsequently published on 28 October after the owner's
+explicit final confirmation. No App Review submission is included.
 
 Audit and proposed Apple answers:
 [Merchant privacy review pack](dastak-merchant-privacy-review-pack-2026-10-21.md).

@@ -1,5 +1,13 @@
 # Sell on Dastak — Merchant privacy review pack
 
+**Current distribution checkpoint, 28 October:** the owner explicitly confirmed
+Apple's final accuracy/compliance/update agreement and authorized publication.
+The 17-type App Store privacy declaration is now published. Build 69 remains
+Prepare for Submission, with age rating 18+ and the owner-confirmed Content Rights
+declaration saved. An authorized demo-access request was sent to Apple; acceptance
+is pending. See the [release record](verification/dastak-merchant-privacy-implementation-2026-10-28/release-record.md).
+Earlier draft/no-publication statements below describe their historical slices.
+
 Prepared 21 October 2026 for the owner's review. **Draft answers, not a published
 declaration, legal certification or claim of a completed live-provider audit.**
 No App Store answers, production settings, app source or public copy changed.

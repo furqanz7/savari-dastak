@@ -176,3 +176,39 @@ Primary definitions checked on 28 October:
 [age-rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/),
 [review access guidance](https://developer.apple.com/help/app-review/before-submitting-for-review/complete-review),
 [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/).
+
+## Owner-confirmed privacy publication and Apple demo-access request
+
+28 October 2026, Asia/Riyadh. The owner separately and explicitly confirmed
+Apple's final agreement that the saved privacy responses are accurate, comply
+with App Store Review Guidelines and applicable law, and will be promptly updated
+if data practices change, and authorized clicking Publish. The owner also
+authorized sending the prepared demo-access request to Apple App Review.
+
+- Opened the final **Publish Your App Privacy Responses?** dialog, presented its
+  agreement to the owner, and clicked its final Publish button only after that
+  confirmation. The dialog closed and App Store Connect displayed **Published a
+  few seconds ago** under the signed-in owner. The declaration is published;
+  this is not an App Review approval or submission.
+- Apple contact route: Developer Support → App Review → Other App Review questions
+  → Email. App name Sell on Dastak, app ID 6796520415, platform iOS. Related Apps
+  was left blank. Existing account contact details were not changed.
+- The [approved message](apple-demo-access-request.md) was entered with its subject
+  prepended because the form has no separate Subject field. Selected-text readback
+  matched the full approved message before sending. No actual customer records,
+  credentials, identity documents or bank details were included.
+- After Send message, Apple navigated to its `/submit` confirmation and displayed
+  **Thanks for contacting us. Your case ID for this conversation is … We’ll review
+  your message and get back to you as soon as possible.** A case ID was issued and
+  reported privately to the owner; it is not committed here. No duplicate message
+  or unrelated existing support case was submitted.
+- The owner-authorized request asks whether the public isolated demo is acceptable
+  under Guideline 2.1 and what additional resources Apple needs. Sending it is not
+  acceptance of the demo by Apple. No reply or approval is claimed.
+- A final attempt to reload App Privacy was blocked when the Mac locked again.
+  The successful publication confirmation above was directly observed before
+  that lock; no successful post-lock reload is claimed.
+- No Add for Review, final app-review submission, new binary, migration, backend
+  deployment, paid service or Customer listing change occurred. The latest
+  independently verified version state remains Prepare for Submission with
+  Build 69 attached and saved public-demo instructions.
