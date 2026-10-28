@@ -1,10 +1,15 @@
 # Merchant additions to the shared Dastak Privacy Policy
 
-Prepared 21 October 2026 for Merchant Build 68. **Owner approved the wording
-and local implementation on 28 October; not published or deployed.** The approved
-copy is now implemented locally in `publicInformation.ts`. Leave the live
-effective date unchanged until publication. Existing Customer and Delivery
+Prepared 21 October 2026 for Merchant Build 68. **Owner approved the wording,
+implementation and subsequent publication on 28 October. The policy is now live
+on Customer and Merchant, effective 28 October 2026.** Build 69 carries the new
+Merchant manifest. Existing Customer and Delivery
 payment/weather sections and Terms/Support content remain intact.
+
+Distribution and live verification:
+[release record](verification/dastak-merchant-privacy-implementation-2026-10-28/release-record.md).
+The instructions below preserve the reviewed publication plan; App Store privacy
+answers remain unpublished and no App Review submission is included.
 
 Audit and proposed Apple answers:
 [Merchant privacy review pack](dastak-merchant-privacy-review-pack-2026-10-21.md).

@@ -4,6 +4,14 @@ Prepared 21 October 2026 for the owner's review. **Draft answers, not a publishe
 declaration, legal certification or claim of a completed live-provider audit.**
 No App Store answers, production settings, app source or public copy changed.
 
+**28 October approved distribution:** the owner subsequently authorized the
+privacy-only source push, Merchant upload and policy deployments. Build 69 is
+processed and Ready to Submit after the owner completed encryption compliance;
+both public policy pages are live. See the
+[release record](verification/dastak-merchant-privacy-implementation-2026-10-28/release-record.md).
+The earlier no-change/no-distribution statements below are historical scope
+boundaries. App Store privacy answers remain unpublished; no review submission.
+
 **28 October implementation follow-up:** owner approved the policy/mappings and
 local implementation against the current project baseline. A Merchant-specific
 manifest and policy source changes are now local, with verification recorded in
