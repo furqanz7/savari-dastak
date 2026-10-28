@@ -200,8 +200,8 @@ authorized sending the prepared demo-access request to Apple App Review.
 - After Send message, Apple navigated to its `/submit` confirmation and displayed
   **Thanks for contacting us. Your case ID for this conversation is … We’ll review
   your message and get back to you as soon as possible.** A case ID was issued and
-  reported privately to the owner; it is not committed here. No duplicate message
-  or unrelated existing support case was submitted.
+  reported privately to the owner; it is not committed here. Only one successful
+  case confirmation was observed. No unrelated existing support case was changed.
 - The owner-authorized request asks whether the public isolated demo is acceptable
   under Guideline 2.1 and what additional resources Apple needs. Sending it is not
   acceptance of the demo by Apple. No reply or approval is claimed.
