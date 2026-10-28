@@ -1,5 +1,11 @@
 # Sell on Dastak — Merchant privacy review pack
 
+**29 October submission checkpoint:** at the owner's explicit instruction,
+Merchant Build 69 was submitted first for external TestFlight Beta App Review and
+then as version 1.0 for App Store Review. Both show Waiting for Review after
+independent reloads. No Apple approval or release is claimed. See
+[submission evidence](verification/dastak-merchant-privacy-implementation-2026-10-28/submission-2026-10-29.md).
+
 **Current distribution checkpoint, 28 October:** the owner explicitly confirmed
 Apple's final accuracy/compliance/update agreement and authorized publication.
 The 17-type App Store privacy declaration is now published. Build 69 remains

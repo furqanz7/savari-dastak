@@ -1,5 +1,11 @@
 # Merchant privacy release — 28 October 2026
 
+**29 October submission follow-up:** the owner subsequently instructed external
+TestFlight submission followed immediately by App Store submission. Both exact
+Build 69 submissions are now **Waiting for Review**, independently verified after
+refresh. See [submission evidence](submission-2026-10-29.md). Earlier no-submission
+statements below describe their historical scope, not the current queue status.
+
 Timezone: Asia/Riyadh. Owner explicitly authorized the Merchant upload, privacy-only
 source push and policy deployment to Customer and Merchant. App Store privacy
 publication, legal declarations and review submission are excluded.
