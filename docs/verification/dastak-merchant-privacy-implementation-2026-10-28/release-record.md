@@ -212,3 +212,39 @@ authorized sending the prepared demo-access request to Apple App Review.
   deployment, paid service or Customer listing change occurred. The latest
   independently verified version state remains Prepare for Submission with
   Build 69 attached and saved public-demo instructions.
+
+## Subsequent read-only saved-listing check
+
+28 October 2026, Asia/Riyadh. The owner requested continuing; the stated action
+was a read-only final check, without submission while the Apple demo-access reply
+is pending. No App Store setting was changed or saved in this check.
+
+- The Mac was available again. A full reload of Merchant App Privacy confirmed
+  Published status, the exact 17 approved types, 17 App Functionality cards,
+  17 identity-linked cards, zero pending Set Up entries and no Used for Tracking
+  entries. This closes the earlier post-lock reload limitation for the declaration.
+- Version 1.0: Prepare for Submission, Build 69, Save disabled, Sign-in required
+  off, existing demo instructions present, all four review-contact fields populated.
+  Contact values were not copied into this record.
+- Support URL is the Merchant support page; copyright is 2026 Dastak دستک.
+  Keywords, promotional text and description remain populated. Automatic release
+  on approval is selected. No change was made to release settings.
+- App Previews and Screenshots: selected the saved iPhone Dynamic Island medium
+  display and iPad 13-inch tabs; both show 4 of 10 App Screenshots, 0 of 3 previews.
+  This verifies presence/count, not a new exhaustive image-content or device audit.
+- Optional Header artwork slot is 0 of 1. It was not filled or removed in this
+  check. The current screenshot sets remain present.
+- App Information independently reads Business category, 18+ age rating and the
+  saved owner-confirmed third-party Content Rights declaration.
+- Pricing: opened the existing Current Price schedule's country-price detail;
+  United States base price and the displayed regional rows are $0.00. The separate
+  All Prices and Currencies view is a calculator and was not used as evidence of
+  saved pricing. No price was selected or changed.
+- Availability summary: 174 Available, 1 Not Available. Expanding the excluded
+  group identifies China mainland. Apple Silicon Mac availability unchecked;
+  Apple Vision Pro availability unchecked. No country/device setting changed.
+- Read-only HTTP requests returned 200 for both public Privacy routes, Merchant
+  support and the shared Terms route. No form/request/account/order action was made.
+- No new reply from Apple or demo approval was asserted, no monitoring automation
+  was created, and no Add for Review or submission-validation action was taken.
+  This is a saved-metadata check, not Apple's final submission validation or approval.
